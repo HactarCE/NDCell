@@ -9,12 +9,12 @@ use super::Grid;
 trait HashableIndex<D>: NdIndex<D> + std::cmp::Eq + std::hash::Hash {}
 impl<T, D> HashableIndex<D> for T where T: NdIndex<D> + std::cmp::Eq + std::hash::Hash {}
 
-struct ChunkedGrid<C, D: Dimension, I: NdIndex<D> + Eq + std::hash::Hash> {
+struct ChunkedGrid<C, D: Dimension, I: HashableIndex<D>> {
     chunks: HashMap<I, Array<C, D>>,
     chunk_size: usize,
 }
 
-impl<C, D: Dimension, I: HashableIndex<D> + Eq> ChunkedGrid<C, D, I> {
+impl<C, D: Dimension, I: HashableIndex<D>> ChunkedGrid<C, D, I> {
     fn empty() -> Self {
         ChunkedGrid {
             chunks: HashMap::new(),
@@ -23,9 +23,10 @@ impl<C, D: Dimension, I: HashableIndex<D> + Eq> ChunkedGrid<C, D, I> {
     }
 }
 
-impl<C, D: Dimension, I: HashableIndex<D> + Eq> Grid<C, D, I> for ChunkedGrid<C, D, I> {
+impl<C, D: Dimension, I: HashableIndex<D>> Grid<C, D, I> for ChunkedGrid<C, D, I> {
     fn get_cell(&self, index: I) -> Option<&C> {
-        panic!("Not yet implemented");
+        self.chunks.get(&index)?.get(index)
+        // panic!("Not yet implemented");
     }
 }
 

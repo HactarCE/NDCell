@@ -1,5 +1,4 @@
 use ndarray::{Array, Dimension, NdIndex};
-use std::cmp::Eq;
 use std::collections::HashMap;
 
 use super::Grid;

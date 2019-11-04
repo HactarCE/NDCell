@@ -1,28 +1,28 @@
 use ndarray::{Array, Dimension, NdIndex};
 use std::collections::HashMap;
 
-use super::Grid;
+use super::{Cell, Grid};
 
 /// A "trait alias" for something that is an NdIndex and can also be used as a
 /// key in a HashMap.
 trait HashableIndex<D>: NdIndex<D> + std::cmp::Eq + std::hash::Hash {}
 impl<T, D> HashableIndex<D> for T where T: NdIndex<D> + std::cmp::Eq + std::hash::Hash {}
 
-struct ChunkedGrid<C, D: Dimension, I: HashableIndex<D>> {
+struct ChunkedGrid<C: Cell, D: Dimension, I: HashableIndex<D>> {
     chunks: HashMap<I, Array<C, D>>,
     chunk_size: usize,
 }
 
-impl<C, D: Dimension, I: HashableIndex<D>> ChunkedGrid<C, D, I> {
-    fn empty() -> Self {
-        ChunkedGrid {
+impl<C: Cell, D: Dimension, I: HashableIndex<D>> ChunkedGrid<C, D, I> {
+    fn new() -> Self {
+        Self {
             chunks: HashMap::new(),
             chunk_size: 16,
         }
     }
 }
 
-impl<C, D: Dimension, I: HashableIndex<D>> Grid<C, D, I> for ChunkedGrid<C, D, I> {
+impl<C: Cell, D: Dimension, I: HashableIndex<D>> Grid<C, D, I> for ChunkedGrid<C, D, I> {
     fn get_cell(&self, index: I) -> Option<&C> {
         self.chunks.get(&index)?.get(index)
         // panic!("Not yet implemented");

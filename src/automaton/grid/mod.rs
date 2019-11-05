@@ -2,7 +2,7 @@ use std::cmp::Eq;
 use std::default::Default;
 use std::hash::Hash;
 
-mod chunked_grid;
+pub mod chunked_grid;
 
 /// A "trait alias" for ndarray::Dimension + std::cmp::Eq + std::hash::Hash so
 /// that it can be used in HashMaps.

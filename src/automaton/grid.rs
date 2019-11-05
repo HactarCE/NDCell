@@ -1,3 +1,5 @@
+//! The infinite grid used to simulate automata.
+
 use ndarray::ArcArray;
 use std::clone::Clone;
 use std::cmp::Eq;
@@ -10,10 +12,13 @@ use std::hash::Hash;
 pub trait Dimension: ndarray::Dimension + Eq + Hash {}
 impl<T: ndarray::Dimension + Eq + Hash> Dimension for T {}
 
-/// A "trait alias" for a cell type that has a "default" value.
+/// A "trait alias" for a cell type that has a "default" value and can be copied
+/// for free or near-free.
 pub trait Cell: Copy + Default + Eq {}
 impl<T: Copy + Default + Eq> Cell for T {}
 
+/// A generic array-like trait with methods for getting/setting cells, along
+/// with other conveniences.
 pub trait Grid<C: Cell, D: Dimension>: Clone {
     /// Returns the number of dimensions in this grid.
     fn ndim() -> usize {
@@ -32,8 +37,9 @@ pub trait Grid<C: Cell, D: Dimension>: Clone {
     fn set_cell(&mut self, index: D, cell_value: C) -> C;
 }
 
+/// An inifnite Grid, stored in chunks of ~4k cells.
 #[derive(Clone)]
-struct ChunkedGrid<C: Cell, D: Dimension> {
+pub struct ChunkedGrid<C: Cell, D: Dimension> {
     chunks: HashMap<D, ArcArray<C, D>>,
     chunk_size: usize,
     default_chunk: ArcArray<C, D>,

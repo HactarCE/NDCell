@@ -1,12 +1,12 @@
-use ndarray::Array;
+use ndarray::ArcArray;
 use std::collections::HashMap;
 
 use super::{Cell, Dimension, Grid};
 
 struct ChunkedGrid<C: Cell, D: Dimension> {
-    chunks: HashMap<D, Array<C, D>>,
+    chunks: HashMap<D, ArcArray<C, D>>,
     chunk_size: usize,
-    default_chunk: Array<C, D>,
+    default_chunk: ArcArray<C, D>,
 }
 
 /// Computes the "recommended" chunk size for a given dimension count.
@@ -47,15 +47,14 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
         Self {
             chunks: HashMap::new(),
             chunk_size: chunk_size,
-            // TODO: Consider using ArcArray for chunks.
-            default_chunk: Array::default(chunk_shape),
+            default_chunk: ArcArray::default(chunk_shape),
         }
     }
 
     /// Returns a reference to the chunk with the given chunk coordinates.
     ///
     /// If the chunk does not exist.
-    fn get_chunk(&self, chunk_index: &D) -> Option<&Array<C, D>> {
+    fn get_chunk(&self, chunk_index: &D) -> Option<&ArcArray<C, D>> {
         self.chunks.get(chunk_index)
     }
 
@@ -63,7 +62,7 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
     /// coordinates.
     ///
     /// If the chunk does not exist, return None.
-    fn get_chunk_mut(&mut self, chunk_index: &D) -> Option<&mut Array<C, D>> {
+    fn get_chunk_mut(&mut self, chunk_index: &D) -> Option<&mut ArcArray<C, D>> {
         self.chunks.get_mut(chunk_index)
     }
 
@@ -71,7 +70,7 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
     /// empty chunk if it does not exist.
     ///
     /// If the chunk does not exist, return a reference to a blank chunk.
-    fn infer_chunk(&self, chunk_index: &D) -> &Array<C, D> {
+    fn infer_chunk(&self, chunk_index: &D) -> &ArcArray<C, D> {
         self.get_chunk(chunk_index).unwrap_or(&self.default_chunk)
     }
 
@@ -80,7 +79,7 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
     ///
     /// If the chunk does not exist, create a new chunk at those coordinates and
     /// return a mutable reference to it.
-    fn infer_chunk_mut(&mut self, chunk_index: &D) -> &mut Array<C, D> {
+    fn infer_chunk_mut(&mut self, chunk_index: &D) -> &mut ArcArray<C, D> {
         self.make_chunk(chunk_index);
         self.get_chunk_mut(chunk_index)
             .expect("Just created chunk, but not present")

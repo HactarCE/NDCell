@@ -51,6 +51,38 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
         }
     }
 
+    /// Returns the coordinates of the chunk containing the cell at the given
+    /// position.
+    fn cell_to_chunk_index(&self, mut cell_index: D) -> D {
+        for axis in 0..cell_index.ndim() {
+            cell_index[axis] /= self.chunk_size;
+        }
+        cell_index
+    }
+
+    /// Returns the local (intra-chunk) coordinates of the cell at the given global coordinates.
+    fn cell_local_index(&self, mut cell_index: D) -> D {
+        for axis in 0..cell_index.ndim() {
+            cell_index[axis] %= self.chunk_size;
+        }
+        cell_index
+    }
+
+    /// Returns whether there is a chunk at the given chunk coordinates.
+    fn has_chunk(&self, chunk_index: &D) -> bool {
+        self.chunks.contains_key(chunk_index)
+    }
+
+    /// Returns whether the chunk at the given chunk coordinates is empty.
+    ///
+    /// Returns true if the chunk does not exist.
+    fn is_chunk_empty(&self, chunk_index: &D) -> bool {
+        match self.get_chunk(chunk_index) {
+            None => true,
+            Some(chunk) => chunk.iter().any(|&cell| cell == C::default()),
+        }
+    }
+
     /// Returns a reference to the chunk with the given chunk coordinates.
     ///
     /// If the chunk does not exist.
@@ -85,21 +117,6 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
             .expect("Just created chunk, but not present")
     }
 
-    /// Returns whether there is a chunk at the given chunk coordinates.
-    fn has_chunk(&self, chunk_index: &D) -> bool {
-        self.chunks.contains_key(chunk_index)
-    }
-
-    /// Returns whether the chunk at the given chunk coordinates is empty.
-    ///
-    /// Returns true if the chunk does not exist.
-    fn is_chunk_empty(&self, chunk_index: &D) -> bool {
-        match self.get_chunk(chunk_index) {
-            None => true,
-            Some(chunk) => chunk.iter().any(|&cell| cell == C::default()),
-        }
-    }
-
     /// Creates a chunk at the given chunk coordinates does not exist if there
     /// is none.
     ///
@@ -109,23 +126,6 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
             self.chunks
                 .insert(chunk_index.clone(), self.default_chunk.clone());
         }
-    }
-
-    /// Returns the coordinates of the chunk containing the cell at the given
-    /// position.
-    fn cell_to_chunk_index(&self, mut cell_index: D) -> D {
-        for axis in 0..cell_index.ndim() {
-            cell_index[axis] /= self.chunk_size;
-        }
-        cell_index
-    }
-
-    /// Returns the local (intra-chunk) coordinates of the cell at the given global coordinates.
-    fn cell_local_index(&self, mut cell_index: D) -> D {
-        for axis in 0..cell_index.ndim() {
-            cell_index[axis] %= self.chunk_size;
-        }
-        cell_index
     }
 }
 

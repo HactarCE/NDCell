@@ -17,6 +17,10 @@ impl<T: ndarray::Dimension + Eq + Hash> Dimension for T {}
 pub trait Cell: Copy + Default + Eq {}
 impl<T: Copy + Default + Eq> Cell for T {}
 
+pub struct GridConfig {
+    // size:
+}
+
 /// A generic array-like trait with methods for getting/setting cells, along
 /// with other conveniences.
 pub trait Grid<C: Cell, D: Dimension>: Clone {

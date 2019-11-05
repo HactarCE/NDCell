@@ -4,7 +4,7 @@
 //! without displaying, importing, or exporting them.
 
 mod algorithm;
-pub mod grid;
+pub mod space;
 
 use algorithm::Rule;
 use grid::{Cell, Dimension, Grid};

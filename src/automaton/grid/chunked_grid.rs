@@ -55,7 +55,7 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
     /// Returns a reference to the chunk with the given chunk coordinates.
     ///
     /// If the chunk does not exist.
-    pub fn get_chunk(&self, chunk_index: &D) -> Option<&Array<C, D>> {
+    fn get_chunk(&self, chunk_index: &D) -> Option<&Array<C, D>> {
         self.chunks.get(chunk_index)
     }
 
@@ -63,7 +63,7 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
     /// coordinates.
     ///
     /// If the chunk does not exist, return None.
-    pub fn get_chunk_mut(&mut self, chunk_index: &D) -> Option<&mut Array<C, D>> {
+    fn get_chunk_mut(&mut self, chunk_index: &D) -> Option<&mut Array<C, D>> {
         self.chunks.get_mut(chunk_index)
     }
 
@@ -71,23 +71,23 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
     /// empty chunk if it does not exist.
     ///
     /// If the chunk does not exist, return a reference to a blank chunk.
-    pub fn infer_chunk(&self, chunk_index: &D) -> &Array<C, D> {
+    fn infer_chunk(&self, chunk_index: &D) -> &Array<C, D> {
         self.get_chunk(chunk_index).unwrap_or(&self.default_chunk)
     }
 
     /// Returns a mutable reference to the chunk with the given chunk
     /// coordinates, creating it if it does not exist.
     ///
-    /// If the chunk does not exist, create a new chunk at that location and
+    /// If the chunk does not exist, create a new chunk at those coordinates and
     /// return a mutable reference to it.
-    pub fn infer_chunk_mut(&mut self, chunk_index: &D) -> &mut Array<C, D> {
+    fn infer_chunk_mut(&mut self, chunk_index: &D) -> &mut Array<C, D> {
         self.make_chunk(chunk_index);
         self.get_chunk_mut(chunk_index)
             .expect("Just created chunk, but not present")
     }
 
     /// Returns whether there is a chunk at the given chunk coordinates.
-    pub fn has_chunk(&self, chunk_index: &D) -> bool {
+    fn has_chunk(&self, chunk_index: &D) -> bool {
         self.chunks.contains_key(chunk_index)
     }
 
@@ -104,32 +104,50 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
 
     /// Returns the coordinates of the chunk containing the cell at the given
     /// position.
-    pub fn cell_to_chunk_index(&self, cell_index: &D) -> D {
-        let mut chunk_index = Self::origin();
-        chunk_index += cell_index;
-        for axis in 0..Self::ndim() {
-            chunk_index[axis] /= self.chunk_size;
+    fn cell_to_chunk_index(&self, mut cell_index: D) -> D {
+        for axis in 0..cell_index.ndim() {
+            cell_index[axis] /= self.chunk_size;
         }
-        chunk_index
+        cell_index
+    }
+
+    /// Returns the local (intra-chunk) coordinates of the cell at the given global coordinates.
+    fn cell_local_index(&self, mut cell_index: D) -> D {
+        for axis in 0..cell_index.ndim() {
+            cell_index[axis] %= self.chunk_size;
+        }
+        cell_index
     }
 }
 
 impl<C: Cell, D: Dimension> Grid<C, D> for ChunkedGrid<C, D> {
-    fn get_cell(&self, index: D) -> Option<&C> {
-        self.get_chunk(&self.cell_to_chunk_index(&index))?
-            .get(index)
+    fn get_cell(&self, index: D) -> C {
+        let chunk_index = self.cell_to_chunk_index(index.clone());
+        if let Some(chunk) = self.get_chunk(&chunk_index) {
+            let local_index = self.cell_local_index(index);
+            chunk[local_index]
+        } else {
+            C::default()
+        }
+    }
+
+    fn set_cell(&mut self, index: D, cell_value: C) -> C {
+        let chunk_index = self.cell_to_chunk_index(index.clone());
+        let local_index = self.cell_local_index(index);
+        let chunk = self.infer_chunk_mut(&chunk_index);
+        std::mem::replace(&mut chunk[local_index], cell_value)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[test]
-    fn test_grid_construct() {
-        // ChunkedGrid::<usize, ndarray::Dim<[ndarray::Ix; 2]>, ndarray::Ix2>::new();
-        // let mut chunks = HashMap::new();
-        // chunks.insert((0, 0), ndarray::Array2::<u8>::zeros((16, 16)));
-        // let grid = ChunkedGrid { chunks: chunks };
-    }
-}
+//     #[test]
+//     fn test_grid_construct() {
+//         // ChunkedGrid::<usize, ndarray::Dim<[ndarray::Ix; 2]>, ndarray::Ix2>::new();
+//         // let mut chunks = HashMap::new();
+//         // chunks.insert((0, 0), ndarray::Array2::<u8>::zeros((16, 16)));
+//         // let grid = ChunkedGrid { chunks: chunks };
+//     }
+// }

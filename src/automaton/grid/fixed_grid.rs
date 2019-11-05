@@ -1,6 +1,6 @@
-use ndarray::{Array, Dimension, NdIndex, Shape};
+use ndarray::{Array, Shape};
 
-use super::{Cell, Grid};
+use super::{Cell, Dimension, Grid};
 
 struct ArrayGrid<C: Cell, D: Dimension> {
     array: Array<C, D>,
@@ -14,8 +14,8 @@ impl<C: Cell, D: Dimension> ArrayGrid<C, D> {
     }
 }
 
-impl<C: Cell, D: Dimension, I: NdIndex<D>> Grid<C, D, I> for ArrayGrid<C, D> {
-    fn get_cell(&self, index: I) -> Option<&C> {
+impl<C: Cell, D: Dimension> Grid<C, D> for ArrayGrid<C, D> {
+    fn get_cell(&self, index: D) -> Option<&C> {
         self.array.get(index)
     }
 }

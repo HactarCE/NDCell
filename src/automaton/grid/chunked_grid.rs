@@ -1,20 +1,15 @@
-use ndarray::{Array, Dimension, NdIndex};
+use ndarray::{Array, NdIndex};
 use std::collections::HashMap;
 
-use super::{Cell, Grid};
+use super::{Cell, Dimension, Grid};
 
-/// A "trait alias" for something that is an NdIndex and can also be used as a
-/// key in a HashMap.
-trait HashableIndex<D>: NdIndex<D> + std::cmp::Eq + std::hash::Hash {}
-impl<T, D> HashableIndex<D> for T where T: NdIndex<D> + std::cmp::Eq + std::hash::Hash {}
-
-struct ChunkedGrid<C: Cell, D: Dimension, I: HashableIndex<D>> {
-    chunks: HashMap<I, Array<C, D>>,
+struct ChunkedGrid<C: Cell, D: Dimension> {
+    chunks: HashMap<D, Array<C, D>>,
     chunk_size: usize,
     default_chunk: Array<C, D>,
 }
 
-impl<C: Cell, D: Dimension, I: HashableIndex<D>> ChunkedGrid<C, D, I> {
+impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
     fn new() -> Self {
         let chunk_size = 16;
         // I don't know how else to generate an array shape from a Dimension
@@ -30,16 +25,27 @@ impl<C: Cell, D: Dimension, I: HashableIndex<D>> ChunkedGrid<C, D, I> {
             default_chunk: Array::default(chunk_shape),
         }
     }
-    fn get_chunk(&self, chunk_index: &I) -> Option<&Array<C, D>> {
+    pub fn get_chunk(&self, chunk_index: &D) -> Option<&Array<C, D>> {
         self.chunks.get(chunk_index)
     }
-    fn get_chunk_mut(&mut self, chunk_index: &I) -> Option<&mut Array<C, D>> {
+    pub fn get_chunk_mut(&mut self, chunk_index: &D) -> Option<&mut Array<C, D>> {
         self.chunks.get_mut(chunk_index)
+    }
+    pub fn make_chunk(&mut self, chunk_index: D) {
+        if !self.chunks.contains_key(&chunk_index) {
+            self.chunks.insert(chunk_index, self.default_chunk.clone());
+        }
+    }
+    pub fn cell_to_chunk_index(&self, cell_index: D) -> D {
+        for axis in 0..cell_index.ndim() {
+            cell_index[axis] /= self.chunk_size;
+        }
+        cell_index
     }
 }
 
-impl<C: Cell, D: Dimension, I: HashableIndex<D>> Grid<C, D, I> for ChunkedGrid<C, D, I> {
-    fn get_cell(&self, index: I) -> Option<&C> {
+impl<C: Cell, D: Dimension> Grid<C, D> for ChunkedGrid<C, D> {
+    fn get_cell(&self, index: D) -> Option<&C> {
         self.chunks.get(&index)?.get(index)
         // panic!("Not yet implemented");
     }
@@ -51,7 +57,7 @@ mod tests {
 
     #[test]
     fn test_grid_construct() {
-        ChunkedGrid::<usize, ndarray::Dim<[ndarray::Ix; 2]>, ndarray::Ix2>::new();
+        // ChunkedGrid::<usize, ndarray::Dim<[ndarray::Ix; 2]>, ndarray::Ix2>::new();
         // let mut chunks = HashMap::new();
         // chunks.insert((0, 0), ndarray::Array2::<u8>::zeros((16, 16)));
         // let grid = ChunkedGrid { chunks: chunks };

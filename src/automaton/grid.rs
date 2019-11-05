@@ -201,15 +201,18 @@ impl<C: Cell, D: Dimension> Grid<C, D> for ChunkedGrid<C, D> {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::prelude::*;
+    use proptest::prelude::*;
 
-//     #[test]
-//     fn test_grid_construct() {
-//         // ChunkedGrid::<usize, ndarray::Dim<[ndarray::Ix; 2]>, ndarray::Ix2>::new();
-//         // let mut chunks = HashMap::new();
-//         // chunks.insert((0, 0), ndarray::Array2::<u8>::zeros((16, 16)));
-//         // let grid = ChunkedGrid { chunks: chunks };
-//     }
-// }
+    proptest! {
+        #[test]
+        fn test_get_and_set_cell(position in (0..=50usize, 0..=50usize, 0..=50usize), cell_value: u8) {
+            let mut grid = ChunkedGrid::<u8, Ix3>::new();
+            grid.set_cell(Dim(position), cell_value);
+            assert_eq!(cell_value, grid.get_cell(Dim(position)));
+        }
+    }
+}

@@ -117,14 +117,31 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
             .expect("Just created chunk, but not present")
     }
 
-    /// Creates a chunk at the given chunk coordinates does not exist if there
-    /// is none.
+    /// Creates a chunk at the given chunk coordinates if there is none.
     ///
     /// If there is already a chunk there, this method does nothing.
     fn make_chunk(&mut self, chunk_index: &D) {
         if !self.has_chunk(chunk_index) {
             self.chunks
                 .insert(chunk_index.clone(), self.default_chunk.clone());
+        }
+    }
+
+    /// Removes the chunk at the given chunk coordinates and return it.
+    ///
+    /// If the chunk does not exist, this method does nothing and returns None.
+    fn remove_chunk(&mut self, chunk_index: &D) -> Option<ArcArray<C, D>> {
+        self.chunks.remove(chunk_index)
+    }
+
+    /// Removes the chunk at the given coordinates if it exists and is empty.
+    /// Returns true if the chunk was removed and false otherwise.
+    fn remove_chunk_if_empty(&mut self, chunk_index: &D) -> bool {
+        if self.has_chunk(chunk_index) && self.is_chunk_empty(chunk_index) {
+            self.remove_chunk(chunk_index);
+            true
+        } else {
+            false
         }
     }
 }

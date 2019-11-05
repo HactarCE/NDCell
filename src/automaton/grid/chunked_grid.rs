@@ -90,6 +90,16 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
         self.chunks.contains_key(chunk_index)
     }
 
+    /// Returns whether the chunk at the given chunk coordinates is empty.
+    ///
+    /// Returns true if the chunk does not exist.
+    fn is_chunk_empty(&self, chunk_index: &D) -> bool {
+        match self.get_chunk(chunk_index) {
+            None => true,
+            Some(chunk) => chunk.iter().any(|&cell| cell == C::default()),
+        }
+    }
+
     /// Creates a chunk at the given chunk coordinates does not exist if there
     /// is none.
     ///

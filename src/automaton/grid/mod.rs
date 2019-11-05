@@ -14,11 +14,16 @@ pub trait Cell: Clone + Default {}
 impl<T: Clone + Default> Cell for T {}
 
 pub trait Grid<C: Cell, D: Dimension> {
+    /// Returns the number of dimensions in this grid.
     fn ndim() -> usize {
         D::NDIM.unwrap()
     }
+
+    /// Returns the coordinates of the origin (0 on each axis).
     fn origin() -> D {
         D::zeros(Self::ndim())
     }
+
+    /// Returns the cell at the given position.
     fn get_cell(&self, index: D) -> Option<&C>;
 }

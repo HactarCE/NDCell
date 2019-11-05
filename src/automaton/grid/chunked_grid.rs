@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use super::{Cell, Dimension, Grid};
 
+#[derive(Clone)]
 struct ChunkedGrid<C: Cell, D: Dimension> {
     chunks: HashMap<D, ArcArray<C, D>>,
     chunk_size: usize,

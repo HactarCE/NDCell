@@ -1,3 +1,4 @@
+use std::clone::Clone;
 use std::cmp::Eq;
 use std::default::Default;
 use std::hash::Hash;
@@ -13,7 +14,7 @@ impl<T: ndarray::Dimension + Eq + Hash> Dimension for T {}
 pub trait Cell: Copy + Default + Eq {}
 impl<T: Copy + Default + Eq> Cell for T {}
 
-pub trait Grid<C: Cell, D: Dimension> {
+pub trait Grid<C: Cell, D: Dimension>: Clone {
     /// Returns the number of dimensions in this grid.
     fn ndim() -> usize {
         D::NDIM.unwrap()
@@ -29,6 +30,4 @@ pub trait Grid<C: Cell, D: Dimension> {
 
     /// Sets the cell at the given position and returns the previous value.
     fn set_cell(&mut self, index: D, cell_value: C) -> C;
-
-    // fn get_chunk_napkin(&mut self, index: D, cell_value: C);
 }

@@ -121,7 +121,7 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
     /// is none.
     ///
     /// If there is already a chunk there, this method does nothing.
-    pub fn make_chunk(&mut self, chunk_index: &D) {
+    fn make_chunk(&mut self, chunk_index: &D) {
         if !self.has_chunk(chunk_index) {
             self.chunks
                 .insert(chunk_index.clone(), self.default_chunk.clone());

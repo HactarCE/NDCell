@@ -1,115 +1,70 @@
 //! The infinite grid used to simulate automata.
 
 use ndarray::ArcArray;
+use ndarray::Dimension;
 use std::collections::HashMap;
 
-use super::{Cell, Dimension};
+use super::{Cell, CellVector, ChunkVector, LocalVector, Vector};
 
 /// An inifnite Grid, stored in chunks of ~4k cells.
 #[derive(Clone)]
-pub struct Grid<C: Cell, D: Dimension> {
-    chunks: HashMap<D, ArcArray<C, D>>,
-    chunk_size: usize,
-    default_chunk: ArcArray<C, D>,
-}
-
-/// Computes the "recommended" chunk size for a given dimension count.
-///
-/// This is based on trying to keep the chunk size big, but still reasonable
-/// (such that a full chunk is at most 4k) and always a power of 2.
-///
-/// Using a flat chunk size would either result in stupidly small chunks at
-/// lower dimensions (16 is silly for 1D CA that often densely span thousands of
-/// cells) or stupidly huge chunks at higher dimensions (even a 32^4 chunk in 4D would be 1 MiB, which is rather large to be copying around constantly)
-///
-/// Here are the values that this function outputs:
-///
-/// - 1D => 4096 = 4k
-/// - 2D => 64^2 = 4k
-/// - 3D => 16^3 = 4k
-/// - 4D =>  8^4 = 4k
-/// - 5D =>  4^5 = 1k (8^5 would be 32k)
-/// - 6D =>  4^6 = 4k
-fn get_recommended_chunk_size(ndim: usize) -> usize {
-    let max_power = 12; // 2^12 = 4096
-    1 << max_power / ndim
+pub struct Grid<C: Cell, V: Vector> {
+    chunks: HashMap<ChunkVector<V>, ArcArray<C, V::D>>,
+    default_chunk: ArcArray<C, V::D>,
 }
 
 /// A generic Grid consisting of a sparse ndarray of hypercubes, stored
 /// internally using a HashMap.
-impl<C: Cell, D: Dimension> Grid<C, D> {
+impl<C: Cell, V: Vector> Grid<C, V> {
+    const NDIM: usize = V::NDIM;
+
     /// Constructs an empty Grid with the default chunk size.
     pub fn new() -> Self {
-        let chunk_size = get_recommended_chunk_size(Self::ndim());
         // I don't know how else to generate an array shape from a Dimension
         // type, but this works: Generate a zero vector like [0, 0].
-        let mut chunk_shape = Self::origin();
+        let mut chunk_shape = V::D::zeros(Self::NDIM);
         // Turn it into a mutable 1D array.
         let mut chunk_shape_array = chunk_shape.as_array_view_mut();
         // Increment each member of the array (i.e. the size along each axis) by the chunk size.
-        chunk_shape_array += chunk_size;
+        chunk_shape_array += V::CHUNK_SIZE;
         Self {
             chunks: HashMap::new(),
-            chunk_size: chunk_size,
+            // chunk_size: chunk_size,
             default_chunk: ArcArray::default(chunk_shape),
         }
     }
 
-    /// Returns the number of dimensions in this grid.
-    fn ndim() -> usize {
-        D::NDIM.unwrap()
-    }
-
     /// Returns the coordinates of the origin (0 on each axis).
-    fn origin() -> D {
-        D::zeros(Self::ndim())
+    fn origin() -> CellVector<V> {
+        V::origin().into()
     }
 
     /// Returns the cell at the given position.
-    fn get_cell(&self, index: D) -> C {
-        let chunk_index = self.cell_to_chunk_index(index.clone());
-        if let Some(chunk) = self.get_chunk(&chunk_index) {
-            let local_index = self.cell_local_index(index);
-            chunk[local_index]
+    fn get_cell(&self, cell_vector: CellVector<V>) -> C {
+        if let Some(chunk) = self.get_chunk(&(&cell_vector).into()) {
+            let local_index: LocalVector<V> = (&cell_vector).into();
+            chunk[local_index.ndindex()]
         } else {
             C::default()
         }
     }
 
     /// Sets the cell at the given position and returns the previous value.
-    fn set_cell(&mut self, index: D, cell_value: C) -> C {
-        let chunk_index = self.cell_to_chunk_index(index.clone());
-        let local_index = self.cell_local_index(index);
-        let chunk = self.infer_chunk_mut(&chunk_index);
-        std::mem::replace(&mut chunk[local_index], cell_value)
-    }
-
-    /// Returns the coordinates of the chunk containing the cell at the given
-    /// position.
-    fn cell_to_chunk_index(&self, mut cell_index: D) -> D {
-        for axis in 0..cell_index.ndim() {
-            cell_index[axis] /= self.chunk_size;
-        }
-        cell_index
-    }
-
-    /// Returns the local (intra-chunk) coordinates of the cell at the given global coordinates.
-    fn cell_local_index(&self, mut cell_index: D) -> D {
-        for axis in 0..cell_index.ndim() {
-            cell_index[axis] %= self.chunk_size;
-        }
-        cell_index
+    fn set_cell(&mut self, cell_vector: &CellVector<V>, cell_value: C) -> C {
+        let local_index: LocalVector<V> = cell_vector.into();
+        let chunk = self.infer_chunk_mut(&cell_vector.into());
+        std::mem::replace(&mut chunk[local_index.ndindex()], cell_value)
     }
 
     /// Returns whether there is a chunk at the given chunk coordinates.
-    fn has_chunk(&self, chunk_index: &D) -> bool {
+    fn has_chunk(&self, chunk_index: &ChunkVector<V>) -> bool {
         self.chunks.contains_key(chunk_index)
     }
 
     /// Returns whether the chunk at the given chunk coordinates is empty.
     ///
     /// Returns true if the chunk does not exist.
-    fn is_chunk_empty(&self, chunk_index: &D) -> bool {
+    fn is_chunk_empty(&self, chunk_index: &ChunkVector<V>) -> bool {
         match self.get_chunk(chunk_index) {
             None => true,
             Some(chunk) => chunk.iter().any(|&cell| cell == C::default()),
@@ -119,7 +74,7 @@ impl<C: Cell, D: Dimension> Grid<C, D> {
     /// Returns a reference to the chunk with the given chunk coordinates.
     ///
     /// If the chunk does not exist.
-    fn get_chunk(&self, chunk_index: &D) -> Option<&ArcArray<C, D>> {
+    fn get_chunk(&self, chunk_index: &ChunkVector<V>) -> Option<&ArcArray<C, V::D>> {
         self.chunks.get(chunk_index)
     }
 
@@ -127,7 +82,7 @@ impl<C: Cell, D: Dimension> Grid<C, D> {
     /// coordinates.
     ///
     /// If the chunk does not exist, return None.
-    fn get_chunk_mut(&mut self, chunk_index: &D) -> Option<&mut ArcArray<C, D>> {
+    fn get_chunk_mut(&mut self, chunk_index: &ChunkVector<V>) -> Option<&mut ArcArray<C, V::D>> {
         self.chunks.get_mut(chunk_index)
     }
 
@@ -135,7 +90,7 @@ impl<C: Cell, D: Dimension> Grid<C, D> {
     /// empty chunk if it does not exist.
     ///
     /// If the chunk does not exist, return a reference to a blank chunk.
-    fn infer_chunk(&self, chunk_index: &D) -> &ArcArray<C, D> {
+    fn infer_chunk(&self, chunk_index: &ChunkVector<V>) -> &ArcArray<C, V::D> {
         self.get_chunk(chunk_index).unwrap_or(&self.default_chunk)
     }
 
@@ -144,7 +99,7 @@ impl<C: Cell, D: Dimension> Grid<C, D> {
     ///
     /// If the chunk does not exist, create a new chunk at those coordinates and
     /// return a mutable reference to it.
-    fn infer_chunk_mut(&mut self, chunk_index: &D) -> &mut ArcArray<C, D> {
+    fn infer_chunk_mut(&mut self, chunk_index: &ChunkVector<V>) -> &mut ArcArray<C, V::D> {
         self.make_chunk(chunk_index);
         self.get_chunk_mut(chunk_index)
             .expect("Just created chunk, but not present")
@@ -153,7 +108,7 @@ impl<C: Cell, D: Dimension> Grid<C, D> {
     /// Creates a chunk at the given chunk coordinates if there is none.
     ///
     /// If there is already a chunk there, this method does nothing.
-    fn make_chunk(&mut self, chunk_index: &D) {
+    fn make_chunk(&mut self, chunk_index: &ChunkVector<V>) {
         if !self.has_chunk(chunk_index) {
             self.chunks
                 .insert(chunk_index.clone(), self.default_chunk.clone());
@@ -163,13 +118,13 @@ impl<C: Cell, D: Dimension> Grid<C, D> {
     /// Removes the chunk at the given chunk coordinates and return it.
     ///
     /// If the chunk does not exist, this method does nothing and returns None.
-    fn remove_chunk(&mut self, chunk_index: &D) -> Option<ArcArray<C, D>> {
+    fn remove_chunk(&mut self, chunk_index: &ChunkVector<V>) -> Option<ArcArray<C, V::D>> {
         self.chunks.remove(chunk_index)
     }
 
     /// Removes the chunk at the given coordinates if it exists and is empty.
     /// Returns true if the chunk was removed and false otherwise.
-    fn remove_chunk_if_empty(&mut self, chunk_index: &D) -> bool {
+    fn remove_chunk_if_empty(&mut self, chunk_index: &ChunkVector<V>) -> bool {
         if self.has_chunk(chunk_index) && self.is_chunk_empty(chunk_index) {
             self.remove_chunk(chunk_index);
             true
@@ -182,15 +137,14 @@ impl<C: Cell, D: Dimension> Grid<C, D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::prelude::*;
     use proptest::prelude::*;
 
     proptest! {
         #[test]
-        fn test_get_and_set_cell(position in (0..=50usize, 0..=50usize, 0..=50usize), cell_value: u8) {
-            let mut grid = Grid::<u8, Ix3>::new();
-            grid.set_cell(Dim(position), cell_value);
-            assert_eq!(cell_value, grid.get_cell(Dim(position)));
+        fn test_get_and_set_cell(position in [-50..=50isize, -50..=50isize, -50..=50isize], cell_value: u8) {
+            let mut grid = Grid::<u8, [isize; 3]>::new();
+            grid.set_cell(&position.into(), cell_value);
+            assert_eq!(cell_value, grid.get_cell(position.into()));
         }
     }
 }

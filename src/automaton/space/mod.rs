@@ -9,7 +9,7 @@ mod grid;
 mod vector;
 
 pub use grid::Grid;
-pub use vector::Vector;
+pub use vector::{CellVector, ChunkVector, LocalVector, Vector};
 
 /// A "trait alias" for ndarray::Dimension + std::cmp::Eq + std::hash::Hash so
 /// that it can be used in HashMaps.

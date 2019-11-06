@@ -132,14 +132,6 @@ impl<V: Vector> LocalVector<V> {
     }
 }
 
-// impl<V: Vector> Vector for LocalVector<V> {
-//     type D = V::D;
-//     const NDIM: usize = V::NDIM;
-//     fn get(&self, index: usize) -> isize {
-//         self[index]
-//     }
-// }
-
 impl Vector for [isize; 1] {
     type D = Ix1;
     const NDIM: usize = 1;

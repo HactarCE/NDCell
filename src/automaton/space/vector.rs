@@ -206,7 +206,6 @@ impl Vector for [isize; 5] {
         [0; Self::NDIM]
     }
 }
-
 impl Vector for [isize; 6] {
     type D = Ix6;
     const NDIM: usize = 6;

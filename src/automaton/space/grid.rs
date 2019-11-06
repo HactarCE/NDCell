@@ -42,8 +42,8 @@ impl<C: Cell, V: Vector> Grid<C, V> {
     /// Returns the cell at the given position.
     fn get_cell(&self, cell_vector: CellVector<V>) -> C {
         if let Some(chunk) = self.get_chunk(&(&cell_vector).into()) {
-            let local_index: LocalVector<V> = (&cell_vector).into();
-            chunk[local_index.ndindex()]
+            let local_vector: LocalVector<V> = (&cell_vector).into();
+            chunk[local_vector.ndindex()]
         } else {
             C::default()
         }
@@ -51,9 +51,9 @@ impl<C: Cell, V: Vector> Grid<C, V> {
 
     /// Sets the cell at the given position and returns the previous value.
     fn set_cell(&mut self, cell_vector: &CellVector<V>, cell_value: C) -> C {
-        let local_index: LocalVector<V> = cell_vector.into();
+        let local_vector: LocalVector<V> = cell_vector.into();
         let chunk = self.infer_chunk_mut(&cell_vector.into());
-        std::mem::replace(&mut chunk[local_index.ndindex()], cell_value)
+        std::mem::replace(&mut chunk[local_vector.ndindex()], cell_value)
     }
 
     /// Returns whether there is a chunk at the given chunk coordinates.

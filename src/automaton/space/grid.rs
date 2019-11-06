@@ -1,49 +1,13 @@
 //! The infinite grid used to simulate automata.
 
 use ndarray::ArcArray;
-use std::clone::Clone;
-use std::cmp::Eq;
 use std::collections::HashMap;
-use std::default::Default;
-use std::hash::Hash;
 
-/// A "trait alias" for ndarray::Dimension + std::cmp::Eq + std::hash::Hash so
-/// that it can be used in HashMaps.
-pub trait Dimension: ndarray::Dimension + Eq + Hash {}
-impl<T: ndarray::Dimension + Eq + Hash> Dimension for T {}
-
-/// A "trait alias" for a cell type that has a "default" value and can be copied
-/// for free or near-free.
-pub trait Cell: Copy + Default + Eq {}
-impl<T: Copy + Default + Eq> Cell for T {}
-
-pub struct GridConfig {
-    // size:
-}
-
-/// A generic array-like trait with methods for getting/setting cells, along
-/// with other conveniences.
-pub trait Grid<C: Cell, D: Dimension>: Clone {
-    /// Returns the number of dimensions in this grid.
-    fn ndim() -> usize {
-        D::NDIM.unwrap()
-    }
-
-    /// Returns the coordinates of the origin (0 on each axis).
-    fn origin() -> D {
-        D::zeros(Self::ndim())
-    }
-
-    /// Returns the cell at the given position.
-    fn get_cell(&self, index: D) -> C;
-
-    /// Sets the cell at the given position and returns the previous value.
-    fn set_cell(&mut self, index: D, cell_value: C) -> C;
-}
+use super::{Cell, Dimension};
 
 /// An inifnite Grid, stored in chunks of ~4k cells.
 #[derive(Clone)]
-pub struct ChunkedGrid<C: Cell, D: Dimension> {
+pub struct Grid<C: Cell, D: Dimension> {
     chunks: HashMap<D, ArcArray<C, D>>,
     chunk_size: usize,
     default_chunk: ArcArray<C, D>,
@@ -73,9 +37,9 @@ fn get_recommended_chunk_size(ndim: usize) -> usize {
 
 /// A generic Grid consisting of a sparse ndarray of hypercubes, stored
 /// internally using a HashMap.
-impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
-    /// Constructs an empty ChunkedGrid with the default chunk size.
-    fn new() -> Self {
+impl<C: Cell, D: Dimension> Grid<C, D> {
+    /// Constructs an empty Grid with the default chunk size.
+    pub fn new() -> Self {
         let chunk_size = get_recommended_chunk_size(Self::ndim());
         // I don't know how else to generate an array shape from a Dimension
         // type, but this works: Generate a zero vector like [0, 0].
@@ -89,6 +53,35 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
             chunk_size: chunk_size,
             default_chunk: ArcArray::default(chunk_shape),
         }
+    }
+
+    /// Returns the number of dimensions in this grid.
+    fn ndim() -> usize {
+        D::NDIM.unwrap()
+    }
+
+    /// Returns the coordinates of the origin (0 on each axis).
+    fn origin() -> D {
+        D::zeros(Self::ndim())
+    }
+
+    /// Returns the cell at the given position.
+    fn get_cell(&self, index: D) -> C {
+        let chunk_index = self.cell_to_chunk_index(index.clone());
+        if let Some(chunk) = self.get_chunk(&chunk_index) {
+            let local_index = self.cell_local_index(index);
+            chunk[local_index]
+        } else {
+            C::default()
+        }
+    }
+
+    /// Sets the cell at the given position and returns the previous value.
+    fn set_cell(&mut self, index: D, cell_value: C) -> C {
+        let chunk_index = self.cell_to_chunk_index(index.clone());
+        let local_index = self.cell_local_index(index);
+        let chunk = self.infer_chunk_mut(&chunk_index);
+        std::mem::replace(&mut chunk[local_index], cell_value)
     }
 
     /// Returns the coordinates of the chunk containing the cell at the given
@@ -186,25 +179,6 @@ impl<C: Cell, D: Dimension> ChunkedGrid<C, D> {
     }
 }
 
-impl<C: Cell, D: Dimension> Grid<C, D> for ChunkedGrid<C, D> {
-    fn get_cell(&self, index: D) -> C {
-        let chunk_index = self.cell_to_chunk_index(index.clone());
-        if let Some(chunk) = self.get_chunk(&chunk_index) {
-            let local_index = self.cell_local_index(index);
-            chunk[local_index]
-        } else {
-            C::default()
-        }
-    }
-
-    fn set_cell(&mut self, index: D, cell_value: C) -> C {
-        let chunk_index = self.cell_to_chunk_index(index.clone());
-        let local_index = self.cell_local_index(index);
-        let chunk = self.infer_chunk_mut(&chunk_index);
-        std::mem::replace(&mut chunk[local_index], cell_value)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,7 +188,7 @@ mod tests {
     proptest! {
         #[test]
         fn test_get_and_set_cell(position in (0..=50usize, 0..=50usize, 0..=50usize), cell_value: u8) {
-            let mut grid = ChunkedGrid::<u8, Ix3>::new();
+            let mut grid = Grid::<u8, Ix3>::new();
             grid.set_cell(Dim(position), cell_value);
             assert_eq!(cell_value, grid.get_cell(Dim(position)));
         }

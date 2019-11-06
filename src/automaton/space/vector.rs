@@ -1,3 +1,4 @@
+use delegate::delegate;
 use ndarray::prelude::*;
 use std::cmp::Eq;
 use std::hash::Hash;
@@ -114,6 +115,34 @@ impl<V: Vector> From<V> for LocalVector<V> {
         Self(v)
     }
 }
+
+/// Given the name of a tuple struct whose only type parameter is a Vector type
+/// and whose first parameter is an instance of that Vector type, implement
+/// Vector by delegating to the methods of the contained Vector instance.
+macro_rules! delegate_vector_impl {
+    ($vector_container:ident) => {
+        impl<V: Vector> Vector for $vector_container<V> {
+            type D = V::D;
+            const NDIM: usize = V::NDIM;
+            const CHUNK_BITS: usize = V::CHUNK_BITS;
+            const CHUNK_SIZE: usize = V::CHUNK_SIZE;
+            delegate! {
+                target self.0 {
+                    fn get(&self, axis: usize) -> isize;
+                    fn set(&mut self, axis: usize, value: isize);
+                }
+            }
+            fn origin() -> Self {
+                Self(V::origin())
+            }
+        }
+    };
+}
+
+// Implement Vector for each of these structs.
+delegate_vector_impl!(CellVector);
+delegate_vector_impl!(ChunkVector);
+delegate_vector_impl!(LocalVector);
 
 impl<V: Vector> LocalVector<V> {
     /// Convert the vector to an ndindex.

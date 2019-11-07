@@ -6,14 +6,14 @@
 mod algorithm;
 pub mod space;
 
-use algorithm::Rule;
+use algorithm::Algorithm;
 use space::*;
 
 use std::marker::PhantomData;
 
 /// A cellular automaton simulation.
-pub struct Automaton<T: CellType, C: Coords, R: Rule<T, C>> {
+pub struct Automaton<T: CellType, C: Coords, A: Algorithm<T, C>> {
     phantom: PhantomData<(T, C)>,
     grid: Grid<T, C>,
-    rule: R,
+    algorithm: A,
 }

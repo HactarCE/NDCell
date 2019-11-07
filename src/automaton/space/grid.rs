@@ -1,7 +1,6 @@
 //! The infinite grid used to simulate automata.
 
 use ndarray::ArcArray;
-use ndarray::Dimension;
 use std::collections::HashMap;
 
 use super::{CellCoords, CellType, ChunkCoords, Coords, LocalCoords};
@@ -20,17 +19,10 @@ impl<T: CellType, C: Coords> Grid<T, C> {
 
     /// Constructs an empty Grid with the default chunk size.
     pub fn new() -> Self {
-        // I don't know how else to generate an array shape from a Dimension
-        // type, but this works: Generate a zero vector like [0, 0].
-        let mut chunk_shape = C::D::zeros(Self::NDIM);
-        // Turn it into a mutable 1D array.
-        let mut chunk_shape_array = chunk_shape.as_array_view_mut();
-        // Increment each member of the array (i.e. the size along each axis) by the chunk size.
-        chunk_shape_array += C::CHUNK_SIZE;
+        let chunk_shape = LocalCoords::<C>::get_chunk_shape();
         Self {
             chunks: HashMap::new(),
-            // chunk_size: chunk_size,
-            default_chunk: ArcArray::default(chunk_shape),
+            default_chunk: ArcArray::default(chunk_shape.ndindex()),
         }
     }
 

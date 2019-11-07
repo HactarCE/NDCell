@@ -17,6 +17,13 @@ pub struct CellCoords<C: Coords>(C);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LocalCoords<C: Coords>(C);
 
+impl<C: Coords> LocalCoords<C> {
+    /// Returns the shape of a chunk of this many dimensions.
+    pub fn get_chunk_shape() -> Self {
+        Self::origin() + Self::CHUNK_SIZE as isize
+    }
+}
+
 impl<C: Coords> From<CellCoords<C>> for ChunkCoords<C> {
     /// Return the coordinates of the chunk containing the given cell
     /// coordinates.

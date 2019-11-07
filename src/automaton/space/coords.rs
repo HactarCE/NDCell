@@ -46,6 +46,9 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
     /// Returns the coordinate along the given axis.
     fn get(&self, axis: usize) -> isize;
 
+    /// Returns a mutable reference to the coordinate along the given axis.
+    fn get_mut(&mut self, axis: usize) -> &mut isize;
+
     /// Sets the coordinate along the given axis.
     fn set(&mut self, axis: usize, value: isize);
 
@@ -69,6 +72,9 @@ impl Coords for [isize; 1] {
     fn get(&self, index: usize) -> isize {
         self[index]
     }
+    fn get_mut(&mut self, index: usize) -> &mut isize {
+        &mut self[index]
+    }
     fn set(&mut self, index: usize, value: isize) {
         self[index] = value;
     }
@@ -83,6 +89,9 @@ impl Coords for [isize; 2] {
     fn get(&self, index: usize) -> isize {
         self[index]
     }
+    fn get_mut(&mut self, index: usize) -> &mut isize {
+        &mut self[index]
+    }
     fn set(&mut self, index: usize, value: isize) {
         self[index] = value;
     }
@@ -95,6 +104,9 @@ impl Coords for [isize; 3] {
     const NDIM: usize = 3;
     fn get(&self, index: usize) -> isize {
         self[index]
+    }
+    fn get_mut(&mut self, index: usize) -> &mut isize {
+        &mut self[index]
     }
     fn set(&mut self, index: usize, value: isize) {
         self[index] = value;
@@ -109,6 +121,9 @@ impl Coords for [isize; 4] {
     fn get(&self, index: usize) -> isize {
         self[index]
     }
+    fn get_mut(&mut self, index: usize) -> &mut isize {
+        &mut self[index]
+    }
     fn set(&mut self, index: usize, value: isize) {
         self[index] = value;
     }
@@ -122,6 +137,9 @@ impl Coords for [isize; 5] {
     fn get(&self, index: usize) -> isize {
         self[index]
     }
+    fn get_mut(&mut self, index: usize) -> &mut isize {
+        &mut self[index]
+    }
     fn set(&mut self, index: usize, value: isize) {
         self[index] = value;
     }
@@ -134,6 +152,9 @@ impl Coords for [isize; 6] {
     const NDIM: usize = 6;
     fn get(&self, index: usize) -> isize {
         self[index]
+    }
+    fn get_mut(&mut self, index: usize) -> &mut isize {
+        &mut self[index]
     }
     fn set(&mut self, index: usize, value: isize) {
         self[index] = value;

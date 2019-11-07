@@ -160,8 +160,8 @@ mod tests {
             let pos2 = (position + offset).into();
             grid.set_cell(pos1, cell_value1);
             grid.set_cell(pos2, cell_value2);
-            assert_eq!(if offset.is_zero() {cell_value2} else {cell_value1}, grid.get_cell(pos1));
-            assert_eq!(cell_value2, grid.get_cell(pos2));
+            assert_eq!(if offset.is_zero() {cell_value2} else {cell_value1}, grid.get_cell(pos1), "First cell is wrong");
+            assert_eq!(cell_value2, grid.get_cell(pos2), "Second cell is wrong");
         }
     }
 }

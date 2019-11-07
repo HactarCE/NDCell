@@ -77,7 +77,7 @@ impl<C: Cell, V: Vector> Grid<C, V> {
     fn is_chunk_empty(&self, chunk_index: ChunkVector<V>) -> bool {
         match self.get_chunk(chunk_index) {
             None => true,
-            Some(chunk) => chunk.iter().any(|&cell| cell == C::default()),
+            Some(chunk) => chunk.iter().all(|&cell| cell == C::default()),
         }
     }
 
@@ -172,6 +172,25 @@ mod tests {
             grid.set_cell(pos2, cell_value2);
             assert_eq!(if offset.is_zero() {cell_value2} else {cell_value1}, grid.get_cell(pos1), "First cell is wrong");
             assert_eq!(cell_value2, grid.get_cell(pos2), "Second cell is wrong");
+        }
+
+        #[test]
+        fn test_grid_remove_chunk_if_empty(pos in cell_vector(-50..=50isize), cell_value: u8) {
+            let mut grid = Grid::<u8, [isize; 3]>::new();
+            grid.set_cell(pos, cell_value);
+            let chunk_vector: ChunkVector<[isize; 3]> = pos.into();
+            let value_is_zero = cell_value == 0;
+            let value_is_nonzero = cell_value != 0;
+            assert!(grid.has_chunk(chunk_vector));
+            assert_eq!(value_is_zero, grid.is_chunk_empty(chunk_vector));
+            assert_eq!(value_is_zero, grid.is_empty());
+            grid.remove_chunk_if_empty(chunk_vector);
+            assert_eq!(value_is_nonzero, grid.has_chunk(chunk_vector));
+            assert_eq!(value_is_zero, grid.is_chunk_empty(chunk_vector));
+            assert_eq!(value_is_zero, grid.is_empty());
+            grid.set_cell(pos, 0);
+            grid.remove_chunk_if_empty(chunk_vector);
+            assert!(! grid.has_chunk(chunk_vector));
         }
     }
 }

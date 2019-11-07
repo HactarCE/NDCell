@@ -6,13 +6,13 @@ use std::default::Default;
 use std::fmt::Debug;
 use std::hash::Hash;
 
+mod coords;
+mod coords_container;
 mod grid;
-mod vector;
-mod vector_container;
 
+pub use coords::Coords;
+pub use coords_container::{CellCoords, ChunkCoords, LocalCoords};
 pub use grid::Grid;
-pub use vector::Vector;
-pub use vector_container::{CellVector, ChunkVector, LocalVector};
 
 /// A "trait alias" for ndarray::Dimension + std::cmp::Eq + std::hash::Hash so
 /// that it can be used in HashMaps.
@@ -21,5 +21,5 @@ impl<T: ndarray::Dimension + Eq + Hash> Dimension for T {}
 
 /// A "trait alias" for a cell type that has a "default" value and can be copied
 /// for free or near-free.
-pub trait Cell: Debug + Copy + Default + Eq {}
-impl<T: Debug + Copy + Default + Eq> Cell for T {}
+pub trait CellType: Debug + Copy + Default + Eq {}
+impl<T: Debug + Copy + Default + Eq> CellType for T {}

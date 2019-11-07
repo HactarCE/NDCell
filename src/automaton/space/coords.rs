@@ -28,9 +28,9 @@ const fn get_chunk_bits_for_ndim(ndim: usize) -> usize {
     max_bits / ndim
 }
 
-/// A vector (in the gemoetrical sense) for a given dimensionality which allows
-/// negative values, unlike NdIndex.
-pub trait Vector: Debug + Clone + Eq + Hash + Copy {
+/// A set of coordinates for a given dimensionality which allows negative
+/// values, unlike NdIndex.
+pub trait Coords: Debug + Clone + Eq + Hash + Copy {
     /// The number of dimensions as an ndarray type.
     type D: Dimension;
 
@@ -43,13 +43,15 @@ pub trait Vector: Debug + Clone + Eq + Hash + Copy {
     /// The size (length along one axis) of a chunk of this many dimensions.
     const CHUNK_SIZE: usize = 1 << Self::CHUNK_BITS;
 
+    // TODO compute chunk shape here too
+
     /// Returns the coordinate along the given axis.
     fn get(&self, axis: usize) -> isize;
 
     /// Sets the coordinate along the given axis.
     fn set(&mut self, axis: usize, value: isize);
 
-    /// Returns whether the vector consists entirely of zeros.
+    /// Returns whether these coordinates consists entirely of zeros.
     fn is_zero(&self) -> bool {
         for i in 0..Self::NDIM {
             if self.get(i) != 0 {
@@ -59,11 +61,11 @@ pub trait Vector: Debug + Clone + Eq + Hash + Copy {
         true
     }
 
-    /// Returns a vector pointing to the origin (i.e. all zeros).
+    /// Returns the coordinates of the origin (i.e. all zeros).
     fn origin() -> Self;
 }
 
-impl Vector for [isize; 1] {
+impl Coords for [isize; 1] {
     type D = Ix1;
     const NDIM: usize = 1;
     fn get(&self, index: usize) -> isize {
@@ -77,7 +79,7 @@ impl Vector for [isize; 1] {
     }
 }
 
-impl Vector for [isize; 2] {
+impl Coords for [isize; 2] {
     type D = Ix2;
     const NDIM: usize = 2;
     fn get(&self, index: usize) -> isize {
@@ -90,7 +92,7 @@ impl Vector for [isize; 2] {
         [0; Self::NDIM]
     }
 }
-impl Vector for [isize; 3] {
+impl Coords for [isize; 3] {
     type D = Ix3;
     const NDIM: usize = 3;
     fn get(&self, index: usize) -> isize {
@@ -103,7 +105,7 @@ impl Vector for [isize; 3] {
         [0; Self::NDIM]
     }
 }
-impl Vector for [isize; 4] {
+impl Coords for [isize; 4] {
     type D = Ix4;
     const NDIM: usize = 4;
     fn get(&self, index: usize) -> isize {
@@ -116,7 +118,7 @@ impl Vector for [isize; 4] {
         [0; Self::NDIM]
     }
 }
-impl Vector for [isize; 5] {
+impl Coords for [isize; 5] {
     type D = Ix5;
     const NDIM: usize = 5;
     fn get(&self, index: usize) -> isize {
@@ -129,7 +131,7 @@ impl Vector for [isize; 5] {
         [0; Self::NDIM]
     }
 }
-impl Vector for [isize; 6] {
+impl Coords for [isize; 6] {
     type D = Ix6;
     const NDIM: usize = 6;
     fn get(&self, index: usize) -> isize {

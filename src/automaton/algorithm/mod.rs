@@ -1,3 +1,3 @@
-use crate::automaton::space::Vector;
+use crate::automaton::space::{CellType, Coords};
 
-pub trait Rule<C, D: Vector> {}
+pub trait Rule<T: CellType, C: Coords> {}

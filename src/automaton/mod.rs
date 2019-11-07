@@ -12,8 +12,8 @@ use space::*;
 use std::marker::PhantomData;
 
 /// A cellular automaton simulation.
-pub struct Automaton<C: Cell, V: Vector, R: Rule<C, V>> {
-    phantom: PhantomData<(C, V)>,
-    grid: Grid<C, V>,
+pub struct Automaton<T: CellType, C: Coords, R: Rule<T, C>> {
+    phantom: PhantomData<(T, C)>,
+    grid: Grid<T, C>,
     rule: R,
 }

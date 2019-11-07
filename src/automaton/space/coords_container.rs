@@ -278,19 +278,23 @@ mod tests {
     use proptest::proptest;
 
     proptest! {
-        /// Tests vector arithmetic against ndarray.
         #[test]
         fn test_ops(
             pos1 in cell_coords_strategy(50..=100isize),
             pos2 in cell_coords_strategy(0..=50isize),
             scalar in 0..=50usize
         ) {
-            let pos1: LocalCoords3D = pos1.into();
-            let pos2: LocalCoords3D = pos2.into();
+            // Do not use .into() because that would modulo the input, which
+            // could cause pos2 to be greater than pos1 along some axis (and
+            // thus pos1-pos2 could not be represented by an unsigned NdIndex).
+            let pos1: LocalCoords3D = LocalCoords(pos1.0);
+            let pos2: LocalCoords3D = LocalCoords(pos2.0);
             let iscalar: isize = scalar as isize;
             let uscalar: usize = scalar;
             let d1 = pos1.ndindex();
             let d2 = pos2.ndindex();
+            // Check addition, subtraction, and multiplication (scaling) against
+            // ndarray.
             assert_eq!(d1 + d2, (pos1 + pos2).ndindex());
             assert_eq!(d1 - d2, (pos1 - pos2).ndindex());
             assert_eq!(d1 * uscalar, (pos1 * iscalar).ndindex());

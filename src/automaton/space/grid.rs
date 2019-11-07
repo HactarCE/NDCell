@@ -138,26 +138,28 @@ impl<T: CellType, C: Coords> Grid<T, C> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::coords_container::cell_coords_strategy;
     use super::*;
     use proptest::prelude::*;
 
-    fn cell_coords<R: Strategy<Value = isize>>(
-        value_strategy: R,
-    ) -> impl Strategy<Value = CellCoords<[isize; 3]>> {
-        prop::collection::vec(value_strategy, 3)
-            .prop_flat_map(|vec| Just(CellCoords::from([vec[0], vec[1], vec[2]])))
-    }
-
     proptest! {
         #[test]
-        fn test_grid_set_get(pos in cell_coords(-50..=50isize), cell_value: u8) {
+        fn test_grid_set_get(
+            pos in cell_coords_strategy(-50..=50isize),
+            cell_value: u8
+        ) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
             grid.set_cell(pos, cell_value);
             assert_eq!(cell_value, grid.get_cell(pos));
         }
 
         #[test]
-        fn test_grid_multi_set(pos1 in cell_coords(-50..=50isize), offset in cell_coords(-2..=2isize), cell_value1: u8, cell_value2: u8) {
+        fn test_grid_multi_set(
+            pos1 in cell_coords_strategy(-50..=50isize),
+            offset in cell_coords_strategy(-2..=2isize),
+            cell_value1: u8,
+            cell_value2: u8,
+        ) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
             let pos2 = pos1 + offset;
             grid.set_cell(pos1, cell_value1);
@@ -167,7 +169,10 @@ mod tests {
         }
 
         #[test]
-        fn test_grid_remove_chunk_if_empty(pos in cell_coords(-50..=50isize), cell_value: u8) {
+        fn test_grid_remove_chunk_if_empty(
+            pos in cell_coords_strategy(-50..=50isize),
+            cell_value: u8
+        ) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
             grid.set_cell(pos, cell_value);
             let chunk_coords: ChunkCoords<[isize; 3]> = pos.into();

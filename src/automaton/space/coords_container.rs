@@ -223,6 +223,17 @@ impl<C: Coords> LocalCoords<C> {
 }
 
 #[cfg(test)]
+use proptest::prelude::*;
+
+#[cfg(test)]
+pub fn cell_coords_strategy<R: Strategy<Value = isize>>(
+    value_strategy: R,
+) -> impl Strategy<Value = CellCoords<[isize; 3]>> {
+    prop::collection::vec(value_strategy, 3)
+        .prop_flat_map(|vec| Just(CellCoords::from([vec[0], vec[1], vec[2]])))
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use proptest::proptest;
@@ -230,7 +241,11 @@ mod tests {
     proptest! {
         /// Test vector arithmetic against ndarray.
         #[test]
-        fn test_ops(v1 in [50..=100isize, 50..=100isize, 50..=100isize], v2 in [0..=50isize, 0..=50isize, 0..=50isize], scalar in 0..=50usize) {
+        fn test_ops(
+            v1 in cell_coords_strategy(50..=100isize),
+            v2 in cell_coords_strategy(0..=50isize),
+            scalar in 0..=50usize
+        ) {
             let v1: LocalCoords<[isize; 3]> = v1.into();
             let v2: LocalCoords<[isize; 3]> = v2.into();
             let iscalar: isize = scalar as isize;

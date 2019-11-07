@@ -3,9 +3,6 @@ use std::cmp::Eq;
 use std::hash::Hash;
 use std::ops::*;
 
-#[cfg(test)]
-use proptest::proptest;
-
 use super::Vector;
 
 /// A vector index for a chunk.
@@ -229,6 +226,7 @@ impl<V: Vector> LocalVector<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::proptest;
 
     proptest! {
         /// Test vector arithmetic against ndarray.

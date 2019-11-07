@@ -51,11 +51,11 @@ pub trait Vector: Clone + Eq + Hash + Copy {
     /// Returns whether the vector consists entirely of zeros.
     fn is_zero(&self) -> bool {
         for i in 0..Self::NDIM {
-            if i == 0 {
-                return true;
+            if self.get(i) != 0 {
+                return false;
             }
         }
-        false
+        true
     }
 
     /// Returns a vector pointing to the origin (i.e. all zeros).

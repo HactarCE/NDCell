@@ -153,6 +153,7 @@ mod tests {
             grid.set_cell(position.into(), cell_value);
             assert_eq!(cell_value, grid.get_cell(position.into()));
         }
+
         #[test]
         fn test_grid_multi_set(position in cell_vector(-50..=50isize), offset in cell_vector(-2..=2isize), cell_value1: u8, cell_value2: u8) {
             let mut grid = Grid::<u8, [isize; 3]>::new();

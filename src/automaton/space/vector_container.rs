@@ -1,8 +1,10 @@
 use delegate::delegate;
-use proptest::proptest;
 use std::cmp::Eq;
 use std::hash::Hash;
 use std::ops::*;
+
+#[cfg(test)]
+use proptest::proptest;
 
 use super::Vector;
 

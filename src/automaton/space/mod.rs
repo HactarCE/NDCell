@@ -7,9 +7,11 @@ use std::hash::Hash;
 
 mod grid;
 mod vector;
+mod vector_container;
 
 pub use grid::Grid;
-pub use vector::{CellVector, ChunkVector, LocalVector, Vector};
+pub use vector::Vector;
+pub use vector_container::{CellVector, ChunkVector, LocalVector};
 
 /// A "trait alias" for ndarray::Dimension + std::cmp::Eq + std::hash::Hash so
 /// that it can be used in HashMaps.

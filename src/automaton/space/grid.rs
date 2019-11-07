@@ -148,17 +148,16 @@ mod tests {
 
     proptest! {
         #[test]
-        fn test_grid_set_get(position in cell_vector(-50..=50isize), cell_value: u8) {
+        fn test_grid_set_get(pos in cell_vector(-50..=50isize), cell_value: u8) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
-            grid.set_cell(position.into(), cell_value);
-            assert_eq!(cell_value, grid.get_cell(position.into()));
+            grid.set_cell(pos, cell_value);
+            assert_eq!(cell_value, grid.get_cell(pos));
         }
 
         #[test]
-        fn test_grid_multi_set(position in cell_vector(-50..=50isize), offset in cell_vector(-2..=2isize), cell_value1: u8, cell_value2: u8) {
+        fn test_grid_multi_set(pos1 in cell_vector(-50..=50isize), offset in cell_vector(-2..=2isize), cell_value1: u8, cell_value2: u8) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
-            let pos1 = position.into();
-            let pos2 = (position + offset).into();
+            let pos2 = pos1 + offset;
             grid.set_cell(pos1, cell_value1);
             grid.set_cell(pos2, cell_value2);
             assert_eq!(if offset.is_zero() {cell_value2} else {cell_value1}, grid.get_cell(pos1), "First cell is wrong");

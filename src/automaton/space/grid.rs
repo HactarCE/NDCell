@@ -2,6 +2,7 @@
 
 use ndarray::ArcArray;
 use std::collections::HashMap;
+use std::ops::{Index, IndexMut};
 
 use super::*;
 
@@ -10,6 +11,7 @@ use super::*;
 pub struct Grid<T: CellType, C: Coords> {
     chunks: HashMap<ChunkCoords<C>, ArcArray<T, C::D>>,
     default_chunk: ArcArray<T, C::D>,
+    default_cell: T,
 }
 
 /// A generic Grid consisting of a sparse ndarray of hypercubes, stored
@@ -23,6 +25,7 @@ impl<T: CellType, C: Coords> Grid<T, C> {
         Self {
             chunks: HashMap::new(),
             default_chunk: ArcArray::default(chunk_shape.ndindex()),
+            default_cell: T::default(),
         }
     }
 
@@ -39,23 +42,6 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     /// Returns the coordinates of the origin (0 on each axis).
     pub fn origin() -> CellCoords<C> {
         C::origin().into()
-    }
-
-    /// Returns the cell at the given position.
-    pub fn get_cell(&self, cell_coords: CellCoords<C>) -> T {
-        if let Some(chunk) = self.get_chunk(cell_coords.into()) {
-            let local_coords: LocalCoords<C> = cell_coords.into();
-            chunk[local_coords.ndindex()]
-        } else {
-            T::default()
-        }
-    }
-
-    /// Sets the cell at the given position and returns the previous value.
-    pub fn set_cell(&mut self, cell_coords: CellCoords<C>, cell_value: T) -> T {
-        let local_coords: LocalCoords<C> = cell_coords.into();
-        let chunk = self.infer_chunk_mut(cell_coords.into());
-        std::mem::replace(&mut chunk[local_coords.ndindex()], cell_value)
     }
 
     /// Returns whether there is a chunk at the given chunk coordinates.
@@ -136,6 +122,26 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     }
 }
 
+impl<T: CellType, C: Coords> Index<CellCoords<C>> for Grid<T, C> {
+    type Output = T;
+    fn index(&self, cell_coords: CellCoords<C>) -> &T {
+        if let Some(chunk) = self.get_chunk(cell_coords.into()) {
+            let local_coords: LocalCoords<C> = cell_coords.into();
+            &chunk[local_coords.ndindex()]
+        } else {
+            &self.default_cell
+        }
+    }
+}
+
+impl<T: CellType, C: Coords> IndexMut<CellCoords<C>> for Grid<T, C> {
+    fn index_mut(&mut self, cell_coords: CellCoords<C>) -> &mut T {
+        let chunk = self.infer_chunk_mut(cell_coords.into());
+        let local_coords: LocalCoords<C> = cell_coords.into();
+        &mut chunk[local_coords.ndindex()]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,8 +156,8 @@ mod tests {
             cell_value: u8
         ) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
-            grid.set_cell(pos, cell_value);
-            assert_eq!(cell_value, grid.get_cell(pos));
+            grid[pos] = cell_value;
+            assert_eq!(cell_value, grid[pos]);
         }
 
         /// Tests setting and getting two cells on a grid, where the second may
@@ -165,10 +171,10 @@ mod tests {
         ) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
             let pos2 = pos1 + offset;
-            grid.set_cell(pos1, cell_value1);
-            grid.set_cell(pos2, cell_value2);
-            assert_eq!(if offset.is_zero() {cell_value2} else {cell_value1}, grid.get_cell(pos1), "First cell is wrong");
-            assert_eq!(cell_value2, grid.get_cell(pos2), "Second cell is wrong");
+            grid[pos1] = cell_value1;
+            grid[pos2] = cell_value2;
+            assert_eq!(if offset.is_zero() {cell_value2} else {cell_value1}, grid[pos1], "First cell is wrong");
+            assert_eq!(cell_value2, grid[pos2], "Second cell is wrong");
         }
 
         /// Tests removing a grid chunk if it is empty.
@@ -178,7 +184,7 @@ mod tests {
             cell_value: u8
         ) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
-            grid.set_cell(pos, cell_value);
+            grid[pos] = cell_value;
             let chunk_coords: ChunkCoords3D = pos.into();
             let value_is_zero = cell_value == 0;
             let value_is_nonzero = cell_value != 0;
@@ -189,7 +195,7 @@ mod tests {
             assert_eq!(value_is_nonzero, grid.has_chunk(chunk_coords));
             assert_eq!(value_is_zero, grid.is_chunk_empty(chunk_coords));
             assert_eq!(value_is_zero, grid.is_empty());
-            grid.set_cell(pos, 0);
+            grid[pos] = 0;
             grid.remove_chunk_if_empty(chunk_coords);
             assert!(! grid.has_chunk(chunk_coords));
         }

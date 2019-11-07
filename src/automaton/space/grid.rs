@@ -30,19 +30,19 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     ///
     /// If there is a single non-default cell, this method returns false;
     /// otherwise it returns true.
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.chunks
             .keys()
             .all(|&chunk_coords| self.is_chunk_empty(chunk_coords))
     }
 
     /// Returns the coordinates of the origin (0 on each axis).
-    fn origin() -> CellCoords<C> {
+    pub fn origin() -> CellCoords<C> {
         C::origin().into()
     }
 
     /// Returns the cell at the given position.
-    fn get_cell(&self, cell_coords: CellCoords<C>) -> T {
+    pub fn get_cell(&self, cell_coords: CellCoords<C>) -> T {
         if let Some(chunk) = self.get_chunk(cell_coords.into()) {
             let local_coords: LocalCoords<C> = cell_coords.into();
             chunk[local_coords.ndindex()]
@@ -52,7 +52,7 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     }
 
     /// Sets the cell at the given position and returns the previous value.
-    fn set_cell(&mut self, cell_coords: CellCoords<C>, cell_value: T) -> T {
+    pub fn set_cell(&mut self, cell_coords: CellCoords<C>, cell_value: T) -> T {
         let local_coords: LocalCoords<C> = cell_coords.into();
         let chunk = self.infer_chunk_mut(cell_coords.into());
         std::mem::replace(&mut chunk[local_coords.ndindex()], cell_value)

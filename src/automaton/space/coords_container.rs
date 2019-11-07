@@ -5,17 +5,56 @@ use std::ops::*;
 
 use super::Coords;
 
-/// The coordinates for a chunk.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ChunkCoords<C: Coords>(C);
-
 /// The coordinates for a cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CellCoords<C: Coords>(C);
 
+/// The coordinates for a chunk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ChunkCoords<C: Coords>(C);
+
 /// The coordinates for a cell within a chunk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LocalCoords<C: Coords>(C);
+
+/// A 1D CellCoords vector.
+pub type CellCoords1D = CellCoords<[isize; 1]>;
+/// A 2D CellCoords vector.
+pub type CellCoords2D = CellCoords<[isize; 2]>;
+/// A 3D CellCoords vector.
+pub type CellCoords3D = CellCoords<[isize; 3]>;
+/// A 4D CellCoords vector.
+pub type CellCoords4D = CellCoords<[isize; 4]>;
+/// A 5D CellCoords vector.
+pub type CellCoords5D = CellCoords<[isize; 5]>;
+/// A 6D CellCoords vector.
+pub type CellCoords6D = CellCoords<[isize; 6]>;
+
+/// A 1D ChunkCoords vector.
+pub type ChunkCoords1D = ChunkCoords<[isize; 1]>;
+/// A 2D ChunkCoords vector.
+pub type ChunkCoords2D = ChunkCoords<[isize; 2]>;
+/// A 3D ChunkCoords vector.
+pub type ChunkCoords3D = ChunkCoords<[isize; 3]>;
+/// A 4D ChunkCoords vector.
+pub type ChunkCoords4D = ChunkCoords<[isize; 4]>;
+/// A 5D ChunkCoords vector.
+pub type ChunkCoords5D = ChunkCoords<[isize; 5]>;
+/// A 6D ChunkCoords vector.
+pub type ChunkCoords6D = ChunkCoords<[isize; 6]>;
+
+/// A 1D LocalCoords vector.
+pub type LocalCoords1D = LocalCoords<[isize; 1]>;
+/// A 2D LocalCoords vector.
+pub type LocalCoords2D = LocalCoords<[isize; 2]>;
+/// A 3D LocalCoords vector.
+pub type LocalCoords3D = LocalCoords<[isize; 3]>;
+/// A 4D LocalCoords vector.
+pub type LocalCoords4D = LocalCoords<[isize; 4]>;
+/// A 5D LocalCoords vector.
+pub type LocalCoords5D = LocalCoords<[isize; 5]>;
+/// A 6D LocalCoords vector.
+pub type LocalCoords6D = LocalCoords<[isize; 6]>;
 
 impl<C: Coords> LocalCoords<C> {
     /// Returns the shape of a chunk of this many dimensions.
@@ -228,7 +267,7 @@ use proptest::prelude::*;
 #[cfg(test)]
 pub fn cell_coords_strategy<R: Strategy<Value = isize>>(
     value_strategy: R,
-) -> impl Strategy<Value = CellCoords<[isize; 3]>> {
+) -> impl Strategy<Value = CellCoords3D> {
     prop::collection::vec(value_strategy, 3)
         .prop_flat_map(|vec| Just(CellCoords::from([vec[0], vec[1], vec[2]])))
 }
@@ -242,30 +281,50 @@ mod tests {
         /// Tests vector arithmetic against ndarray.
         #[test]
         fn test_ops(
-            v1 in cell_coords_strategy(50..=100isize),
-            v2 in cell_coords_strategy(0..=50isize),
+            pos1 in cell_coords_strategy(50..=100isize),
+            pos2 in cell_coords_strategy(0..=50isize),
             scalar in 0..=50usize
         ) {
-            let v1: LocalCoords<[isize; 3]> = v1.into();
-            let v2: LocalCoords<[isize; 3]> = v2.into();
+            let pos1: LocalCoords3D = pos1.into();
+            let pos2: LocalCoords3D = pos2.into();
             let iscalar: isize = scalar as isize;
             let uscalar: usize = scalar;
-            let d1 = v1.ndindex();
-            let d2 = v2.ndindex();
-            assert_eq!(d1 + d2, (v1 + v2).ndindex());
-            assert_eq!(d1 - d2, (v1 - v2).ndindex());
-            assert_eq!(d1 * uscalar, (v1 * iscalar).ndindex());
+            let d1 = pos1.ndindex();
+            let d2 = pos2.ndindex();
+            assert_eq!(d1 + d2, (pos1 + pos2).ndindex());
+            assert_eq!(d1 - d2, (pos1 - pos2).ndindex());
+            assert_eq!(d1 * uscalar, (pos1 * iscalar).ndindex());
             // Check negation properties.
-            assert_eq!(v1, --v1);
-            assert_eq!(v2, --v2);
-            assert_ne!(v1, -v1); // Each element of v1 is >=50, so this should hold.
-            assert_eq!(-v1, v1 * -1);
-            assert_eq!(-v2, v2 * -1);
+            assert_eq!(pos1, --pos1);
+            assert_eq!(pos2, --pos2);
+            assert_ne!(pos1, -pos1); // Each element of pos1 is >=50, so this should hold.
+            assert_eq!(-pos1, pos1 * -1);
+            assert_eq!(-pos2, pos2 * -1);
             // Check some subtraction properties.
-            assert_eq!(LocalCoords::from([0, 0, 0]), v1 - v1);
-            assert_eq!(LocalCoords::from([0, 0, 0]), v2 - v2);
-            assert_eq!(-v1, v1 - v1 * 2);
-            assert_eq!(-v2, v2 - v2 * 2);
+            assert_eq!(LocalCoords::from([0, 0, 0]), pos1 - pos1);
+            assert_eq!(LocalCoords::from([0, 0, 0]), pos2 - pos2);
+            assert_eq!(-pos1, pos1 - pos1 * 2);
+            assert_eq!(-pos2, pos2 - pos2 * 2);
+        }
+
+        /// Tests CellCoords decomposition into LocalCoords and ChunkCoords.
+        #[test]
+        fn test_coords_split(
+            cell_coords in cell_coords_strategy(-100..=100isize),
+        ) {
+            let chunk_coords: ChunkCoords3D = cell_coords.into();
+            let local_coords: LocalCoords3D = cell_coords.into();
+            let chunk_size = CellCoords3D::CHUNK_SIZE as isize;
+            assert!(local_coords.get(0) < chunk_size);
+            assert!(local_coords.get(1) < chunk_size);
+            assert!(local_coords.get(2) < chunk_size);
+            unsafe {
+                assert_eq!(
+                    cell_coords,
+                    std::mem::transmute::<ChunkCoords3D, CellCoords3D>(chunk_coords * chunk_size)
+                        + std::mem::transmute::<LocalCoords3D, CellCoords3D>(local_coords)
+                );
+            }
         }
     }
 }

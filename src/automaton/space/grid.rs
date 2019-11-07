@@ -138,8 +138,8 @@ impl<T: CellType, C: Coords> Grid<T, C> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::coords_container::cell_coords_strategy;
     use super::*;
+    use crate::automaton::space::coords_container::{cell_coords_strategy, ChunkCoords3D};
     use proptest::prelude::*;
 
     proptest! {
@@ -179,7 +179,7 @@ mod tests {
         ) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
             grid.set_cell(pos, cell_value);
-            let chunk_coords: ChunkCoords<[isize; 3]> = pos.into();
+            let chunk_coords: ChunkCoords3D = pos.into();
             let value_is_zero = cell_value == 0;
             let value_is_nonzero = cell_value != 0;
             assert!(grid.has_chunk(chunk_coords));

@@ -11,7 +11,7 @@ mod coords_container;
 mod grid;
 
 pub use coords::Coords;
-pub use coords_container::{CellCoords, ChunkCoords, LocalCoords};
+pub use coords_container::*;
 pub use grid::Grid;
 
 /// A "trait alias" for ndarray::Dimension + std::cmp::Eq + std::hash::Hash so

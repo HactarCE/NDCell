@@ -143,7 +143,7 @@ mod tests {
     use proptest::prelude::*;
 
     proptest! {
-        /// Test setting and getting a single cell on a grid.
+        /// Tests setting and getting a single cell on a grid.
         #[test]
         fn test_grid_set_get(
             pos in cell_coords_strategy(-50..=50isize),
@@ -154,7 +154,7 @@ mod tests {
             assert_eq!(cell_value, grid.get_cell(pos));
         }
 
-        /// Test setting and getting two cells on a grid, where the second may
+        /// Tests setting and getting two cells on a grid, where the second may
         /// overwrite the first.
         #[test]
         fn test_grid_multi_set(
@@ -171,7 +171,7 @@ mod tests {
             assert_eq!(cell_value2, grid.get_cell(pos2), "Second cell is wrong");
         }
 
-        /// Test removing a grid chunk if it is empty.
+        /// Tests removing a grid chunk if it is empty.
         #[test]
         fn test_grid_remove_chunk_if_empty(
             pos in cell_coords_strategy(-50..=50isize),

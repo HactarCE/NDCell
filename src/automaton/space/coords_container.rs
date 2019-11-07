@@ -239,7 +239,7 @@ mod tests {
     use proptest::proptest;
 
     proptest! {
-        /// Test vector arithmetic against ndarray.
+        /// Tests vector arithmetic against ndarray.
         #[test]
         fn test_ops(
             v1 in cell_coords_strategy(50..=100isize),

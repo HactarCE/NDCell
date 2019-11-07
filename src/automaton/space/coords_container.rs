@@ -116,6 +116,7 @@ macro_rules! delegate_coords_impl {
             delegate! {
                 target self.0 {
                     fn get(&self, axis: usize) -> isize;
+                    fn get_mut(&mut self, axis: usize) -> &mut isize;
                     fn set(&mut self, axis: usize, value: isize);
                 }
             }

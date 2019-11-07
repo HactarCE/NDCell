@@ -1,5 +1,6 @@
 use ndarray::prelude::*;
 use std::cmp::Eq;
+use std::fmt::Debug;
 use std::hash::Hash;
 
 /// Computes the "recommended" number of bits in each axis of a chunk index for
@@ -29,7 +30,7 @@ const fn get_chunk_bits_for_ndim(ndim: usize) -> usize {
 
 /// A vector (in the gemoetrical sense) for a given dimensionality which allows
 /// negative values, unlike NdIndex.
-pub trait Vector: Clone + Eq + Hash + Copy {
+pub trait Vector: Debug + Clone + Eq + Hash + Copy {
     /// The number of dimensions as an ndarray type.
     type D: Dimension;
 

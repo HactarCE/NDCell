@@ -3,7 +3,7 @@
 use ndarray::ArcArray;
 use std::collections::HashMap;
 
-use super::{CellCoords, CellType, ChunkCoords, Coords, LocalCoords};
+use super::*;
 
 /// An inifnite Grid, stored in chunks of ~4k cells.
 #[derive(Clone)]

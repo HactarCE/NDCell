@@ -1,4 +1,5 @@
 use delegate::delegate;
+use proptest::proptest;
 use std::cmp::Eq;
 use std::hash::Hash;
 use std::ops::*;
@@ -6,15 +7,15 @@ use std::ops::*;
 use super::Vector;
 
 /// A vector index for a chunk.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkVector<V: Vector>(V);
 
 /// A vector index for a cell.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CellVector<V: Vector>(V);
 
 /// A vector index for a cell within a chunk.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LocalVector<V: Vector>(V);
 
 impl<V: Vector> From<&CellVector<V>> for ChunkVector<V> {
@@ -220,5 +221,37 @@ impl<V: Vector> LocalVector<V> {
             ret[i] = value as usize;
         }
         Dim(ret)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    proptest! {
+        /// Test vector arithmetic against ndarray.
+        #[test]
+        fn test_ops(v1 in [50..=100isize, 50..=100isize, 50..=100isize], v2 in [0..=50isize, 0..=50isize, 0..=50isize], scalar in 0..=50usize) {
+            let v1: LocalVector<[isize; 3]> = v1.into();
+            let v2: LocalVector<[isize; 3]> = v2.into();
+            let iscalar: isize = scalar as isize;
+            let uscalar: usize = scalar;
+            let d1 = v1.ndindex();
+            let d2 = v2.ndindex();
+            assert_eq!(d1 + d2, (v1 + v2).ndindex());
+            assert_eq!(d1 - d2, (v1 - v2).ndindex());
+            assert_eq!(d1 * uscalar, (v1 * iscalar).ndindex());
+            // Check negation properties.
+            assert_eq!(v1, --v1);
+            assert_eq!(v2, --v2);
+            assert_ne!(v1, -v1); // Each element of v1 is >=50, so this should hold.
+            assert_eq!(-v1, v1 * -1);
+            assert_eq!(-v2, v2 * -1);
+            // Check some subtraction properties.
+            assert_eq!(LocalVector::from([0, 0, 0]), v1 - v1);
+            assert_eq!(LocalVector::from([0, 0, 0]), v2 - v2);
+            assert_eq!(-v1, v1 - v1 * 2);
+            assert_eq!(-v2, v2 - v2 * 2);
+        }
     }
 }

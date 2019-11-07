@@ -34,6 +34,16 @@ impl<C: Cell, V: Vector> Grid<C, V> {
         }
     }
 
+    /// Returns whether the entire grid is empty.
+    ///
+    /// If there is a single non-default cell, this method returns false;
+    /// otherwise it returns true.
+    fn is_empty(&self) -> bool {
+        self.chunks
+            .keys()
+            .all(|&chunk_vector| self.is_chunk_empty(chunk_vector))
+    }
+
     /// Returns the coordinates of the origin (0 on each axis).
     fn origin() -> CellVector<V> {
         V::origin().into()

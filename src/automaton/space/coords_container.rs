@@ -63,7 +63,7 @@ impl<C: Coords> LocalCoords<C> {
     }
 }
 
-impl<C: Coords> From<CellCoords<C>> for ChunkCoords<C> {
+impl<C: Coords> CellCoords<C> {
     /// Return the coordinates of the chunk containing the given cell
     /// coordinates.
     ///
@@ -71,28 +71,37 @@ impl<C: Coords> From<CellCoords<C>> for ChunkCoords<C> {
     /// rounds toward zero rather than negative infinity), we instead use
     /// bitwise operators. `n // 2**k` is the same as `n >> k`. This may even be
     /// faster.
-    fn from(cell_coords: CellCoords<C>) -> Self {
+    pub fn chunk(self) -> ChunkCoords<C> {
         let mut ret = C::origin();
         for i in 0..C::NDIM {
-            ret.set(i, cell_coords.0.get(i) >> C::CHUNK_BITS);
+            ret.set(i, self.0.get(i) & ((1 << C::CHUNK_BITS) - 1))
         }
-        Self(ret)
+        ChunkCoords(ret)
     }
-}
-
-impl<C: Coords> From<CellCoords<C>> for LocalCoords<C> {
     /// Returns the local (within a chunk) coordinates for this position, given
     /// the base-2 log of the chunk size.
     ///
     /// Because Rust does not have a proper modulo operator (`%` may return
     /// negative values), we instead use bitwise operators. `n mod 2**k` is the
     /// same as `n & (2**k - 1)`. This may even be faster.
-    fn from(cell_coords: CellCoords<C>) -> Self {
+    pub fn local(self) -> LocalCoords<C> {
         let mut ret = C::origin();
         for i in 0..C::NDIM {
-            ret.set(i, cell_coords.0.get(i) & ((1 << C::CHUNK_BITS) - 1))
+            ret.set(i, self.0.get(i) & ((1 << C::CHUNK_BITS) - 1))
         }
-        Self(ret)
+        LocalCoords(ret)
+    }
+}
+
+impl<C: Coords> From<CellCoords<C>> for ChunkCoords<C> {
+    fn from(cell_coords: CellCoords<C>) -> Self {
+        cell_coords.chunk()
+    }
+}
+
+impl<C: Coords> From<CellCoords<C>> for LocalCoords<C> {
+    fn from(cell_coords: CellCoords<C>) -> Self {
+        cell_coords.local()
     }
 }
 
@@ -122,6 +131,18 @@ macro_rules! delegate_coords_impl {
             }
             fn origin() -> Self {
                 Self(C::origin())
+            }
+        }
+        // Implement indexing by usize.
+        impl<C: Coords> Index<usize> for $coords_container<C> {
+            type Output = isize;
+            fn index(&self, axis: usize) -> &isize {
+                &self.0.get(axis)
+            }
+        }
+        impl<C: Coords> IndexMut<usize> for $coords_container<C> {
+            fn index_mut(&mut self, axis: usize) -> &mut isize {
+                self.0.get_mut(axis)
             }
         }
         // Implement elementwise addition between two sets of coordinates.

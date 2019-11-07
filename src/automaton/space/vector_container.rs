@@ -17,14 +17,14 @@ pub struct CellVector<V: Vector>(V);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LocalVector<V: Vector>(V);
 
-impl<V: Vector> From<&CellVector<V>> for ChunkVector<V> {
+impl<V: Vector> From<CellVector<V>> for ChunkVector<V> {
     /// Return the chunk vector for the given cell vector.
     ///
     /// Because Rust does not have a proper floored division operator (`/`
     /// rounds toward zero rather than negative infinity), we instead use
     /// bitwise operators. `n // 2**k` is the same as `n >> k`. This may even be
     /// faster.
-    fn from(cell_vector: &CellVector<V>) -> Self {
+    fn from(cell_vector: CellVector<V>) -> Self {
         let mut ret = V::origin();
         for i in 0..V::NDIM {
             ret.set(i, cell_vector.0.get(i) >> V::CHUNK_BITS);
@@ -33,14 +33,14 @@ impl<V: Vector> From<&CellVector<V>> for ChunkVector<V> {
     }
 }
 
-impl<V: Vector> From<&CellVector<V>> for LocalVector<V> {
+impl<V: Vector> From<CellVector<V>> for LocalVector<V> {
     /// Returns the local (within a chunk) vector for this position, given the
     /// base-2 log of the chunk size.
     ///
     /// Because Rust does not have a proper modulo operator (`%` may return
     /// negative values), we instead use bitwise operators. `n mod 2**k` is the
     /// same as `n & (2**k - 1)`. This may even be faster.
-    fn from(cell_vector: &CellVector<V>) -> Self {
+    fn from(cell_vector: CellVector<V>) -> Self {
         let mut ret = V::origin();
         for i in 0..V::NDIM {
             ret.set(i, cell_vector.0.get(i) & ((1 << V::CHUNK_BITS) - 1))

@@ -139,12 +139,29 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
+    fn cell_vector<R: Strategy<Value = isize>>(
+        value_strategy: R,
+    ) -> impl Strategy<Value = CellVector<[isize; 3]>> {
+        prop::collection::vec(value_strategy, 3)
+            .prop_flat_map(|vec| Just(CellVector::from([vec[0], vec[1], vec[2]])))
+    }
+
     proptest! {
         #[test]
-        fn test_get_and_set_cell(position in [-50..=50isize, -50..=50isize, -50..=50isize], cell_value: u8) {
+        fn test_grid_set_get(position in cell_vector(-50..=50isize), cell_value: u8) {
             let mut grid = Grid::<u8, [isize; 3]>::new();
-            grid.set_cell(&position.into(), cell_value);
+            grid.set_cell(position.into(), cell_value);
             assert_eq!(cell_value, grid.get_cell(position.into()));
+        }
+        #[test]
+        fn test_grid_multi_set(position in cell_vector(-50..=50isize), offset in cell_vector(-2..=2isize), cell_value1: u8, cell_value2: u8) {
+            let mut grid = Grid::<u8, [isize; 3]>::new();
+            let pos1 = position.into();
+            let pos2 = (position + offset).into();
+            grid.set_cell(pos1, cell_value1);
+            grid.set_cell(pos2, cell_value2);
+            assert_eq!(if offset.is_zero() {cell_value2} else {cell_value1}, grid.get_cell(pos1));
+            assert_eq!(cell_value2, grid.get_cell(pos2));
         }
     }
 }

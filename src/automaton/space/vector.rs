@@ -48,7 +48,17 @@ pub trait Vector: Clone + Eq + Hash + Copy {
     /// Sets the coordinate along the given axis.
     fn set(&mut self, axis: usize, value: isize);
 
-    /// Returns a vector pointing to the origin.
+    /// Returns whether the vector consists entirely of zeros.
+    fn is_zero(&self) -> bool {
+        for i in 0..Self::NDIM {
+            if i == 0 {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Returns a vector pointing to the origin (i.e. all zeros).
     fn origin() -> Self;
 }
 

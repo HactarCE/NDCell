@@ -75,7 +75,7 @@ impl<C: Coords> CellCoords<C> {
     pub fn chunk(self) -> ChunkCoords<C> {
         let mut ret = C::origin();
         for i in 0..C::NDIM {
-            ret.set(i, self.0.get(i) & ((1 << C::CHUNK_BITS) - 1))
+            ret.set(i, self[i] >> C::CHUNK_BITS);
         }
         ChunkCoords(ret)
     }
@@ -88,7 +88,7 @@ impl<C: Coords> CellCoords<C> {
     pub fn local(self) -> LocalCoords<C> {
         let mut ret = C::origin();
         for i in 0..C::NDIM {
-            ret.set(i, self.0.get(i) & ((1 << C::CHUNK_BITS) - 1))
+            ret.set(i, self[i] & ((1 << C::CHUNK_BITS) - 1))
         }
         LocalCoords(ret)
     }
@@ -354,16 +354,13 @@ mod tests {
             let chunk_coords: ChunkCoords3D = cell_coords.into();
             let local_coords: LocalCoords3D = cell_coords.into();
             let chunk_size = CellCoords3D::CHUNK_SIZE as isize;
-            assert!(local_coords[0] < chunk_size);
-            assert!(local_coords[1] < chunk_size);
-            assert!(local_coords[2] < chunk_size);
-            unsafe {
-                assert_eq!(
-                    cell_coords,
-                    std::mem::transmute::<ChunkCoords3D, CellCoords3D>(chunk_coords * chunk_size)
-                        + std::mem::transmute::<LocalCoords3D, CellCoords3D>(local_coords)
-                );
-            }
+            // Check that the local coordinates are within the range of a chunk.
+            assert!(0 <= local_coords[0] && local_coords[0] < chunk_size);
+            assert!(0 <= local_coords[1] && local_coords[1] < chunk_size);
+            assert!(0 <= local_coords[2] && local_coords[2] < chunk_size);
+            // Check that chunk + local = global.
+            assert_eq!(cell_coords, chunk_coords + local_coords);
+            assert_eq!(cell_coords, local_coords + chunk_coords);
         }
     }
 }

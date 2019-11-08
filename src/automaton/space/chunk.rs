@@ -3,8 +3,10 @@ use std::ops::{Index, IndexMut};
 
 use super::*;
 
+/// A hypercubic chunk of a Grid holding ~4k cells.
 #[derive(Clone)]
 pub struct Chunk<T: CellType, C: Coords> {
+    /// The ndarray storing the cell contents of this chunk.
     pub array: ArcArray<T, C::D>,
 }
 

@@ -55,7 +55,7 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
     /// Returns whether these coordinates consists entirely of zeros.
     fn is_zero(&self) -> bool {
         for i in 0..Self::NDIM {
-            if self.get(i) != 0 {
+            if self.get(i) != &0 {
                 return false;
             }
         }

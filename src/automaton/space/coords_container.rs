@@ -340,9 +340,9 @@ mod tests {
             let chunk_coords: ChunkCoords3D = cell_coords.into();
             let local_coords: LocalCoords3D = cell_coords.into();
             let chunk_size = CellCoords3D::CHUNK_SIZE as isize;
-            assert!(local_coords.get(0) < chunk_size);
-            assert!(local_coords.get(1) < chunk_size);
-            assert!(local_coords.get(2) < chunk_size);
+            assert!(local_coords[0] < chunk_size);
+            assert!(local_coords[1] < chunk_size);
+            assert!(local_coords[2] < chunk_size);
             unsafe {
                 assert_eq!(
                     cell_coords,

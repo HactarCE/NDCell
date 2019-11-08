@@ -1,5 +1,6 @@
 use delegate::delegate;
 use std::cmp::Eq;
+use std::convert::TryInto;
 use std::hash::Hash;
 use std::ops::*;
 
@@ -273,11 +274,9 @@ impl<C: Coords> LocalCoords<C> {
 
         let mut ret = C::D::zeros(C::NDIM);
         for i in 0..Self::NDIM {
-            let value = self.0.get(i);
-            if value < 0 {
-                panic!("Cannot convert negative Coords to NdIndex");
-            }
-            ret[i] = value as usize;
+            ret[i] = self[i]
+                .try_into()
+                .expect("Cannot convert negative Coords to NdIndex");
         }
         Dim(ret)
     }

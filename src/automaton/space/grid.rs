@@ -27,6 +27,10 @@ impl<T: CellType, C: Coords> Grid<T, C> {
         }
     }
 
+    pub fn get_chunks(&self) -> &HashMap<ChunkCoords<C>, Chunk<T, C>> {
+        &self.chunks
+    }
+
     /// Returns whether the entire grid is empty.
     ///
     /// If there is a single non-default cell, this method returns false;

@@ -106,6 +106,20 @@ impl<C: Coords> From<CellCoords<C>> for LocalCoords<C> {
     }
 }
 
+impl<C: Coords> Add<LocalCoords<C>> for ChunkCoords<C> {
+    type Output = CellCoords<C>;
+    fn add(self, offset: LocalCoords<C>) -> CellCoords<C> {
+        CellCoords((self * Self::CHUNK_SIZE as isize).0) + CellCoords(offset.0)
+    }
+}
+
+impl<C: Coords> Add<ChunkCoords<C>> for LocalCoords<C> {
+    type Output = CellCoords<C>;
+    fn add(self, chunk: ChunkCoords<C>) -> CellCoords<C> {
+        chunk + self
+    }
+}
+
 /// Given the name of a tuple struct whose only type parameter is a Coords type
 /// and whose first parameter is an instance of that Coords type, implement
 /// Coords by delegating to the methods of the contained Coords instance.

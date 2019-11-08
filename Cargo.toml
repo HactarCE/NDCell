@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 delegate = "0.3.0"
 ndarray = "0.13.0"
+regex = "1"
 
 [dev-dependencies]
 proptest = "0.9.4"

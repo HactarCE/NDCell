@@ -108,9 +108,12 @@ impl<C: Coords> iter::Iterator for LocalCoordsIter<C> {
             return None;
         }
         let mut ret = Self::Item::origin();
-        for ax in C::axes() {
-            ret[ax] = self.current_idx as isize & C::CHUNK_BITMASK;
-            self.current_idx >>= C::CHUNK_BITS;
+        {
+            let mut current_idx = self.current_idx;
+            for ax in C::axes() {
+                ret[ax] = current_idx as isize & C::CHUNK_BITMASK;
+                current_idx >>= C::CHUNK_BITS;
+            }
         }
         self.current_idx += 1;
         Some(ret)

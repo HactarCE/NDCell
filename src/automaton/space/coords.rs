@@ -43,6 +43,9 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
     /// The size (length along one axis) of a chunk of this many dimensions.
     const CHUNK_SIZE: usize = 1 << Self::CHUNK_BITS;
 
+    /// The bitmask to apply to an index to get the corresponding chunk index.
+    const CHUNK_BITMASK: isize = Self::CHUNK_SIZE as isize - 1;
+
     /// Returns the coordinate along the given axis.
     fn get(&self, axis: usize) -> &isize;
 

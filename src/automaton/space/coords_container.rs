@@ -88,7 +88,7 @@ impl<C: Coords> CellCoords<C> {
     pub fn local(self) -> LocalCoords<C> {
         let mut ret = C::origin();
         for i in 0..C::NDIM {
-            ret.set(i, self[i] & ((1 << C::CHUNK_BITS) - 1))
+            ret.set(i, self[i] & Self::CHUNK_BITMASK);
         }
         LocalCoords(ret)
     }

@@ -81,27 +81,6 @@ impl<T: CellType, C: Coords> Grid<T, C> {
         self.get_chunk(chunk_index).unwrap_or(&self.default_chunk)
     }
 
-    /// Returns a mutable reference to the chunk with the given chunk
-    /// coordinates, creating it if it does not exist.
-    ///
-    /// If the chunk does not exist, create a new chunk at those coordinates and
-    /// return a mutable reference to it.
-    fn infer_chunk_mut(&mut self, chunk_index: ChunkCoords<C>) -> &mut ArcArray<T, C::D> {
-        self.make_chunk(chunk_index);
-        self.get_chunk_mut(chunk_index)
-            .expect("Just created chunk, but not present")
-    }
-
-    /// Creates a chunk at the given chunk coordinates if there is none.
-    ///
-    /// If there is already a chunk there, this method does nothing.
-    fn make_chunk(&mut self, chunk_index: ChunkCoords<C>) {
-        if !self.has_chunk(chunk_index) {
-            self.chunks
-                .insert(chunk_index.clone(), self.default_chunk.clone());
-        }
-    }
-
     /// Removes the chunk at the given chunk coordinates and return it.
     ///
     /// If the chunk does not exist, this method does nothing and returns None.
@@ -121,23 +100,34 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     }
 }
 
-impl<T: CellType, C: Coords> Index<CellCoords<C>> for Grid<T, C> {
-    type Output = T;
-    fn index(&self, cell_coords: CellCoords<C>) -> &T {
-        if let Some(chunk) = self.get_chunk(cell_coords.into()) {
-            let local_coords: LocalCoords<C> = cell_coords.into();
-            &chunk[local_coords.ndindex()]
-        } else {
-            &self.default_cell
+impl<T: CellType, C: Coords> Index<ChunkCoords<C>> for Grid<T, C> {
+    type Output = Chunk<T, C>;
+    fn index(&self, chunk_coords: ChunkCoords<C>) -> &Chunk<T, C> {
+        self.chunks
+            .get(&chunk_coords)
+            .unwrap_or(&self.default_chunk)
+    }
+}
+impl<T: CellType, C: Coords> IndexMut<ChunkCoords<C>> for Grid<T, C> {
+    fn index_mut(&mut self, chunk_coords: ChunkCoords<C>) -> &mut Chunk<T, C> {
+        if !self.has_chunk(chunk_coords) {
+            self.chunks.insert(chunk_coords, self.default_chunk.clone());
         }
+        self.chunks
+            .get_mut(&chunk_coords)
+            .expect("Just created chunk, but not present")
     }
 }
 
+impl<T: CellType, C: Coords> Index<CellCoords<C>> for Grid<T, C> {
+    type Output = T;
+    fn index(&self, cell_coords: CellCoords<C>) -> &T {
+        &self[cell_coords.chunk()][cell_coords.local()]
+    }
+}
 impl<T: CellType, C: Coords> IndexMut<CellCoords<C>> for Grid<T, C> {
     fn index_mut(&mut self, cell_coords: CellCoords<C>) -> &mut T {
-        let chunk = self.infer_chunk_mut(cell_coords.into());
-        let local_coords: LocalCoords<C> = cell_coords.into();
-        &mut chunk[local_coords.ndindex()]
+        &mut self[cell_coords.chunk()][cell_coords.local()]
     }
 }
 

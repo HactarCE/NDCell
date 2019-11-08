@@ -27,6 +27,7 @@ impl<T: CellType, C: Coords> Grid<T, C> {
         }
     }
 
+    /// Returns the hashmap mapping chunk coordinates to chunks.
     pub fn get_chunks(&self) -> &HashMap<ChunkCoords<C>, Chunk<T, C>> {
         &self.chunks
     }

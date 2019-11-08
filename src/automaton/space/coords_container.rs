@@ -21,43 +21,43 @@ pub struct ChunkCoords<C: Coords>(C);
 pub struct LocalCoords<C: Coords>(C);
 
 /// A 1D CellCoords vector.
-pub type CellCoords1D = CellCoords<[isize; 1]>;
+pub type CellCoords1D = CellCoords<Coords1D>;
 /// A 2D CellCoords vector.
-pub type CellCoords2D = CellCoords<[isize; 2]>;
+pub type CellCoords2D = CellCoords<Coords2D>;
 /// A 3D CellCoords vector.
-pub type CellCoords3D = CellCoords<[isize; 3]>;
+pub type CellCoords3D = CellCoords<Coords3D>;
 /// A 4D CellCoords vector.
-pub type CellCoords4D = CellCoords<[isize; 4]>;
+pub type CellCoords4D = CellCoords<Coords4D>;
 /// A 5D CellCoords vector.
-pub type CellCoords5D = CellCoords<[isize; 5]>;
+pub type CellCoords5D = CellCoords<Coords5D>;
 /// A 6D CellCoords vector.
-pub type CellCoords6D = CellCoords<[isize; 6]>;
+pub type CellCoords6D = CellCoords<Coords6D>;
 
 /// A 1D ChunkCoords vector.
-pub type ChunkCoords1D = ChunkCoords<[isize; 1]>;
+pub type ChunkCoords1D = ChunkCoords<Coords1D>;
 /// A 2D ChunkCoords vector.
-pub type ChunkCoords2D = ChunkCoords<[isize; 2]>;
+pub type ChunkCoords2D = ChunkCoords<Coords2D>;
 /// A 3D ChunkCoords vector.
-pub type ChunkCoords3D = ChunkCoords<[isize; 3]>;
+pub type ChunkCoords3D = ChunkCoords<Coords3D>;
 /// A 4D ChunkCoords vector.
-pub type ChunkCoords4D = ChunkCoords<[isize; 4]>;
+pub type ChunkCoords4D = ChunkCoords<Coords4D>;
 /// A 5D ChunkCoords vector.
-pub type ChunkCoords5D = ChunkCoords<[isize; 5]>;
+pub type ChunkCoords5D = ChunkCoords<Coords5D>;
 /// A 6D ChunkCoords vector.
-pub type ChunkCoords6D = ChunkCoords<[isize; 6]>;
+pub type ChunkCoords6D = ChunkCoords<Coords6D>;
 
 /// A 1D LocalCoords vector.
-pub type LocalCoords1D = LocalCoords<[isize; 1]>;
+pub type LocalCoords1D = LocalCoords<Coords1D>;
 /// A 2D LocalCoords vector.
-pub type LocalCoords2D = LocalCoords<[isize; 2]>;
+pub type LocalCoords2D = LocalCoords<Coords2D>;
 /// A 3D LocalCoords vector.
-pub type LocalCoords3D = LocalCoords<[isize; 3]>;
+pub type LocalCoords3D = LocalCoords<Coords3D>;
 /// A 4D LocalCoords vector.
-pub type LocalCoords4D = LocalCoords<[isize; 4]>;
+pub type LocalCoords4D = LocalCoords<Coords4D>;
 /// A 5D LocalCoords vector.
-pub type LocalCoords5D = LocalCoords<[isize; 5]>;
+pub type LocalCoords5D = LocalCoords<Coords5D>;
 /// A 6D LocalCoords vector.
-pub type LocalCoords6D = LocalCoords<[isize; 6]>;
+pub type LocalCoords6D = LocalCoords<Coords6D>;
 
 impl<C: Coords> LocalCoords<C> {
     /// Returns the shape of a chunk of this many dimensions.
@@ -351,7 +351,7 @@ mod tests {
     /// Tests iteration over all local coordinates in a chunk.
     #[test]
     fn test_local_coords_iter() {
-        let mut chunk: Chunk<u8, [isize; 3]> = Chunk::default();
+        let mut chunk: Chunk<u8, Coords3D> = Chunk::default();
         for local_coords in LocalCoords::all() {
             chunk[local_coords] += 1;
         }

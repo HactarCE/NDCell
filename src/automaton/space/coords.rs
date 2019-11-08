@@ -5,6 +5,13 @@ use std::hash::Hash;
 
 use super::{ndim_axes, Axis};
 
+pub type Coords1D = [isize; 1];
+pub type Coords2D = [isize; 2];
+pub type Coords3D = [isize; 3];
+pub type Coords4D = [isize; 4];
+pub type Coords5D = [isize; 5];
+pub type Coords6D = [isize; 6];
+
 /// Computes the "recommended" number of bits in each axis of a chunk index for
 /// a given dimension count. The chunk size (along each axis) is 1 << (chunk
 /// bits).
@@ -76,7 +83,7 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
     fn origin() -> Self;
 }
 
-impl Coords for [isize; 1] {
+impl Coords for Coords1D {
     type D = Ix1;
     const NDIM: usize = 1;
     fn get(&self, axis: Axis) -> &isize {
@@ -93,7 +100,7 @@ impl Coords for [isize; 1] {
     }
 }
 
-impl Coords for [isize; 2] {
+impl Coords for Coords2D {
     type D = Ix2;
     const NDIM: usize = 2;
     fn get(&self, axis: Axis) -> &isize {
@@ -109,7 +116,7 @@ impl Coords for [isize; 2] {
         [0; Self::NDIM]
     }
 }
-impl Coords for [isize; 3] {
+impl Coords for Coords3D {
     type D = Ix3;
     const NDIM: usize = 3;
     fn get(&self, axis: Axis) -> &isize {
@@ -125,7 +132,7 @@ impl Coords for [isize; 3] {
         [0; Self::NDIM]
     }
 }
-impl Coords for [isize; 4] {
+impl Coords for Coords4D {
     type D = Ix4;
     const NDIM: usize = 4;
     fn get(&self, axis: Axis) -> &isize {
@@ -141,7 +148,7 @@ impl Coords for [isize; 4] {
         [0; Self::NDIM]
     }
 }
-impl Coords for [isize; 5] {
+impl Coords for Coords5D {
     type D = Ix5;
     const NDIM: usize = 5;
     fn get(&self, axis: Axis) -> &isize {
@@ -157,7 +164,7 @@ impl Coords for [isize; 5] {
         [0; Self::NDIM]
     }
 }
-impl Coords for [isize; 6] {
+impl Coords for Coords6D {
     type D = Ix6;
     const NDIM: usize = 6;
     fn get(&self, axis: Axis) -> &isize {

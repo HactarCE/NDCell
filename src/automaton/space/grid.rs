@@ -148,7 +148,7 @@ mod tests {
             pos in cell_coords_strategy(-50..=50isize),
             cell_value: u8
         ) {
-            let mut grid = Grid::<u8, [isize; 3]>::new();
+            let mut grid = Grid::<u8, Coords3D>::new();
             grid[pos] = cell_value;
             assert_eq!(cell_value, grid[pos]);
         }
@@ -162,7 +162,7 @@ mod tests {
             cell_value1: u8,
             cell_value2: u8,
         ) {
-            let mut grid = Grid::<u8, [isize; 3]>::new();
+            let mut grid = Grid::<u8, Coords3D>::new();
             let pos2 = pos1 + offset;
             grid[pos1] = cell_value1;
             grid[pos2] = cell_value2;
@@ -176,7 +176,7 @@ mod tests {
             pos in cell_coords_strategy(-50..=50isize),
             cell_value: u8
         ) {
-            let mut grid = Grid::<u8, [isize; 3]>::new();
+            let mut grid = Grid::<u8, Coords3D>::new();
             grid[pos] = cell_value;
             let chunk_coords: ChunkCoords3D = pos.into();
             let value_is_zero = cell_value == 0;

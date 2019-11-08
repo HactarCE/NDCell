@@ -2,6 +2,8 @@ use delegate::delegate;
 use std::cmp::Eq;
 use std::convert::TryInto;
 use std::hash::Hash;
+use std::iter;
+use std::marker::PhantomData;
 use std::ops::*;
 
 use super::{Axis, Coords};
@@ -87,10 +89,41 @@ impl<C: Coords> CellCoords<C> {
     /// same as `n & (2**k - 1)`. This may even be faster.
     pub fn local(self) -> LocalCoords<C> {
         let mut ret = C::origin();
-        for i in 0..C::NDIM {
-            ret.set(i, self[i] & Self::CHUNK_BITMASK);
+        for ax in Self::axes() {
+            ret.set(ax, self[ax] & Self::CHUNK_BITMASK);
         }
         LocalCoords(ret)
+    }
+}
+
+/// An interator over all the local coordinates within a chunk.
+pub struct LocalCoordsIter<C> {
+    phantom: PhantomData<C>,
+    current_idx: usize,
+}
+impl<C: Coords> iter::Iterator for LocalCoordsIter<C> {
+    type Item = LocalCoords<C>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_idx >= C::CHUNK_SIZE.pow(C::NDIM as u32) {
+            return None;
+        }
+        let mut ret = Self::Item::origin();
+        for ax in C::axes() {
+            ret[ax] = self.current_idx as isize & C::CHUNK_BITMASK;
+            self.current_idx >>= C::CHUNK_BITS;
+        }
+        self.current_idx += 1;
+        Some(ret)
+    }
+}
+
+impl<C: Coords> LocalCoords<C> {
+    /// Return an iterator over all the local coordinates within a chunk.
+    pub fn all() -> LocalCoordsIter<C> {
+        LocalCoordsIter {
+            phantom: PhantomData,
+            current_idx: 0,
+        }
     }
 }
 

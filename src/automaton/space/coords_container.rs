@@ -124,7 +124,7 @@ macro_rules! delegate_coords_impl {
             const CHUNK_SIZE: usize = C::CHUNK_SIZE;
             delegate! {
                 target self.0 {
-                    fn get(&self, axis: usize) -> isize;
+                    fn get(&self, axis: usize) -> &isize;
                     fn get_mut(&mut self, axis: usize) -> &mut isize;
                     fn set(&mut self, axis: usize, value: isize);
                 }
@@ -137,12 +137,12 @@ macro_rules! delegate_coords_impl {
         impl<C: Coords> Index<usize> for $coords_container<C> {
             type Output = isize;
             fn index(&self, axis: usize) -> &isize {
-                &self.0.get(axis)
+                self.get(axis)
             }
         }
         impl<C: Coords> IndexMut<usize> for $coords_container<C> {
             fn index_mut(&mut self, axis: usize) -> &mut isize {
-                self.0.get_mut(axis)
+                self.get_mut(axis)
             }
         }
         // Implement elementwise addition between two sets of coordinates.

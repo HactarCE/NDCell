@@ -44,7 +44,7 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
     const CHUNK_SIZE: usize = 1 << Self::CHUNK_BITS;
 
     /// Returns the coordinate along the given axis.
-    fn get(&self, axis: usize) -> isize;
+    fn get(&self, axis: usize) -> &isize;
 
     /// Returns a mutable reference to the coordinate along the given axis.
     fn get_mut(&mut self, axis: usize) -> &mut isize;
@@ -69,8 +69,8 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
 impl Coords for [isize; 1] {
     type D = Ix1;
     const NDIM: usize = 1;
-    fn get(&self, index: usize) -> isize {
-        self[index]
+    fn get(&self, index: usize) -> &isize {
+        &self[index]
     }
     fn get_mut(&mut self, index: usize) -> &mut isize {
         &mut self[index]
@@ -86,8 +86,8 @@ impl Coords for [isize; 1] {
 impl Coords for [isize; 2] {
     type D = Ix2;
     const NDIM: usize = 2;
-    fn get(&self, index: usize) -> isize {
-        self[index]
+    fn get(&self, index: usize) -> &isize {
+        &self[index]
     }
     fn get_mut(&mut self, index: usize) -> &mut isize {
         &mut self[index]
@@ -102,8 +102,8 @@ impl Coords for [isize; 2] {
 impl Coords for [isize; 3] {
     type D = Ix3;
     const NDIM: usize = 3;
-    fn get(&self, index: usize) -> isize {
-        self[index]
+    fn get(&self, index: usize) -> &isize {
+        &self[index]
     }
     fn get_mut(&mut self, index: usize) -> &mut isize {
         &mut self[index]
@@ -118,8 +118,8 @@ impl Coords for [isize; 3] {
 impl Coords for [isize; 4] {
     type D = Ix4;
     const NDIM: usize = 4;
-    fn get(&self, index: usize) -> isize {
-        self[index]
+    fn get(&self, index: usize) -> &isize {
+        &self[index]
     }
     fn get_mut(&mut self, index: usize) -> &mut isize {
         &mut self[index]
@@ -134,8 +134,8 @@ impl Coords for [isize; 4] {
 impl Coords for [isize; 5] {
     type D = Ix5;
     const NDIM: usize = 5;
-    fn get(&self, index: usize) -> isize {
-        self[index]
+    fn get(&self, index: usize) -> &isize {
+        &self[index]
     }
     fn get_mut(&mut self, index: usize) -> &mut isize {
         &mut self[index]
@@ -150,8 +150,8 @@ impl Coords for [isize; 5] {
 impl Coords for [isize; 6] {
     type D = Ix6;
     const NDIM: usize = 6;
-    fn get(&self, index: usize) -> isize {
-        self[index]
+    fn get(&self, index: usize) -> &isize {
+        &self[index]
     }
     fn get_mut(&mut self, index: usize) -> &mut isize {
         &mut self[index]

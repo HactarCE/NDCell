@@ -6,7 +6,7 @@ use std::iter;
 use std::marker::PhantomData;
 use std::ops::*;
 
-use super::{Axis, Coords};
+use super::*;
 
 /// The coordinates for a cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -344,6 +344,18 @@ pub fn cell_coords_strategy<R: Strategy<Value = isize>>(
 mod tests {
     use super::*;
     use proptest::proptest;
+
+    /// Tests iteration over all local coordinates in a chunk.
+    #[test]
+    fn test_local_coords_iter() {
+        let mut chunk: Chunk<u8, [isize; 3]> = Chunk::default();
+        for local_coords in LocalCoords::all() {
+            chunk[local_coords] += 1;
+        }
+        for &value in chunk.array.iter() {
+            assert_eq!(1, value);
+        }
+    }
 
     proptest! {
         #[test]

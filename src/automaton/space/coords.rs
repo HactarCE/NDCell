@@ -3,7 +3,7 @@ use std::cmp::Eq;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use super::{Axis, AxisIter};
+use super::{ndim_axes, Axis};
 
 /// Computes the "recommended" number of bits in each axis of a chunk index for
 /// a given dimension count. The chunk size (along each axis) is 1 << (chunk
@@ -48,9 +48,9 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
     /// The bitmask to apply to an index to get the corresponding chunk index.
     const CHUNK_BITMASK: isize = Self::CHUNK_SIZE as isize - 1;
 
-    /// Returns an iterator over the axes of this dimensionality.
-    fn axes() -> AxisIter {
-        AxisIter::from_ndim(Self::NDIM)
+    /// Returns a Vector of the axes of this many dimensions.
+    fn axes() -> Vec<Axis> {
+        ndim_axes(Self::NDIM)
     }
 
     /// Returns the coordinate along the given axis.

@@ -9,8 +9,8 @@ use super::*;
 /// An inifnite Grid, stored in chunks of ~4k cells.
 #[derive(Clone)]
 pub struct Grid<T: CellType, C: Coords> {
-    chunks: HashMap<ChunkCoords<C>, ArcArray<T, C::D>>,
-    default_chunk: ArcArray<T, C::D>,
+    chunks: HashMap<ChunkCoords<C>, Chunk<T, C>>,
+    default_chunk: Chunk<T, C>,
     default_cell: T,
 }
 
@@ -21,10 +21,9 @@ impl<T: CellType, C: Coords> Grid<T, C> {
 
     /// Constructs an empty Grid with the default chunk size.
     pub fn new() -> Self {
-        let chunk_shape = LocalCoords::<C>::get_chunk_shape();
         Self {
             chunks: HashMap::new(),
-            default_chunk: ArcArray::default(chunk_shape.ndindex()),
+            default_chunk: Chunk::<T, C>::default(),
             default_cell: T::default(),
         }
     }
@@ -55,14 +54,14 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     fn is_chunk_empty(&self, chunk_index: ChunkCoords<C>) -> bool {
         match self.get_chunk(chunk_index) {
             None => true,
-            Some(chunk) => chunk.iter().all(|&cell| cell == T::default()),
+            Some(chunk) => chunk.array.iter().all(|&cell| cell == T::default()),
         }
     }
 
     /// Returns a reference to the chunk with the given chunk coordinates.
     ///
     /// If the chunk does not exist.
-    fn get_chunk(&self, chunk_index: ChunkCoords<C>) -> Option<&ArcArray<T, C::D>> {
+    fn get_chunk(&self, chunk_index: ChunkCoords<C>) -> Option<&Chunk<T, C>> {
         self.chunks.get(&chunk_index)
     }
 
@@ -70,7 +69,7 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     /// coordinates.
     ///
     /// If the chunk does not exist, return None.
-    fn get_chunk_mut(&mut self, chunk_index: ChunkCoords<C>) -> Option<&mut ArcArray<T, C::D>> {
+    fn get_chunk_mut(&mut self, chunk_index: ChunkCoords<C>) -> Option<&mut Chunk<T, C>> {
         self.chunks.get_mut(&chunk_index)
     }
 
@@ -78,7 +77,7 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     /// empty chunk if it does not exist.
     ///
     /// If the chunk does not exist, return a reference to a blank chunk.
-    fn infer_chunk(&self, chunk_index: ChunkCoords<C>) -> &ArcArray<T, C::D> {
+    fn infer_chunk(&self, chunk_index: ChunkCoords<C>) -> &Chunk<T, C> {
         self.get_chunk(chunk_index).unwrap_or(&self.default_chunk)
     }
 
@@ -106,7 +105,7 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     /// Removes the chunk at the given chunk coordinates and return it.
     ///
     /// If the chunk does not exist, this method does nothing and returns None.
-    fn remove_chunk(&mut self, chunk_index: ChunkCoords<C>) -> Option<ArcArray<T, C::D>> {
+    fn remove_chunk(&mut self, chunk_index: ChunkCoords<C>) -> Option<Chunk<T, C>> {
         self.chunks.remove(&chunk_index)
     }
 

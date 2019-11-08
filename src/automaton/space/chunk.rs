@@ -11,7 +11,7 @@ pub struct Chunk<T: CellType, C: Coords> {
 impl<T: CellType, C: Coords> Default for Chunk<T, C> {
     fn default() -> Self {
         Self {
-            array: ArcArray::<T, C::D>::default(LocalCoords::<C>::CHUNK_SHAPE.ndindex()),
+            array: ArcArray::<T, C::D>::default(LocalCoords::<C>::get_chunk_shape().ndindex()),
         }
     }
 }

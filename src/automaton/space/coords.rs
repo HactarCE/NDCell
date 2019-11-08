@@ -5,11 +5,17 @@ use std::hash::Hash;
 
 use super::{ndim_axes, Axis};
 
+/// Any 1D Coords vector.
 pub type Coords1D = [isize; 1];
+/// Any 2D Coords vector.
 pub type Coords2D = [isize; 2];
+/// Any 3D Coords vector.
 pub type Coords3D = [isize; 3];
+/// Any 4D Coords vector.
 pub type Coords4D = [isize; 4];
+/// Any 5D Coords vector.
 pub type Coords5D = [isize; 5];
+/// Any 6D Coords vector.
 pub type Coords6D = [isize; 6];
 
 /// Computes the "recommended" number of bits in each axis of a chunk index for

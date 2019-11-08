@@ -5,7 +5,7 @@ use std::ops::{Index, IndexMut};
 
 use super::*;
 
-/// An inifnite Grid, stored in chunks of ~4k cells.
+/// An infinite Grid, stored in chunks of ~4k cells.
 #[derive(Clone)]
 pub struct Grid<T: CellType, C: Coords> {
     chunks: HashMap<ChunkCoords<C>, Chunk<T, C>>,

@@ -57,10 +57,8 @@ pub type LocalCoords5D = LocalCoords<[isize; 5]>;
 pub type LocalCoords6D = LocalCoords<[isize; 6]>;
 
 impl<C: Coords> LocalCoords<C> {
-    /// Returns the shape of a chunk of this many dimensions.
-    pub fn get_chunk_shape() -> Self {
-        Self::origin() + Self::CHUNK_SIZE as isize
-    }
+    /// The shape of a chunk of this many dimensions.
+    pub const CHUNK_SHAPE: Self = Self::origin() + Self::CHUNK_SIZE as isize;
 }
 
 impl<C: Coords> CellCoords<C> {

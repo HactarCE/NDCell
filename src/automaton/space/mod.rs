@@ -6,12 +6,14 @@ use std::default::Default;
 use std::fmt::Debug;
 use std::hash::Hash;
 
+mod axis;
 mod chunk;
 mod coords;
 mod coords_container;
 mod grid;
 mod region;
 
+pub use axis::*;
 pub use chunk::*;
 pub use coords::*;
 pub use coords_container::*;

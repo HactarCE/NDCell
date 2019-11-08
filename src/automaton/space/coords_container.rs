@@ -4,7 +4,7 @@ use std::convert::TryInto;
 use std::hash::Hash;
 use std::ops::*;
 
-use super::Coords;
+use super::{Axis, Coords};
 
 /// The coordinates for a cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -74,8 +74,8 @@ impl<C: Coords> CellCoords<C> {
     /// faster.
     pub fn chunk(self) -> ChunkCoords<C> {
         let mut ret = C::origin();
-        for i in 0..C::NDIM {
-            ret.set(i, self[i] >> C::CHUNK_BITS);
+        for ax in Self::axes() {
+            ret.set(ax, self[ax] >> C::CHUNK_BITS);
         }
         ChunkCoords(ret)
     }
@@ -139,9 +139,9 @@ macro_rules! delegate_coords_impl {
             const CHUNK_SIZE: usize = C::CHUNK_SIZE;
             delegate! {
                 target self.0 {
-                    fn get(&self, axis: usize) -> &isize;
-                    fn get_mut(&mut self, axis: usize) -> &mut isize;
-                    fn set(&mut self, axis: usize, value: isize);
+                    fn get(&self, axis: Axis) -> &isize;
+                    fn get_mut(&mut self, axis: Axis) -> &mut isize;
+                    fn set(&mut self, axis: Axis, value: isize);
                 }
             }
             fn origin() -> Self {
@@ -149,14 +149,14 @@ macro_rules! delegate_coords_impl {
             }
         }
         // Implement indexing by usize.
-        impl<C: Coords> Index<usize> for $coords_container<C> {
+        impl<C: Coords> Index<Axis> for $coords_container<C> {
             type Output = isize;
-            fn index(&self, axis: usize) -> &isize {
+            fn index(&self, axis: Axis) -> &isize {
                 self.get(axis)
             }
         }
-        impl<C: Coords> IndexMut<usize> for $coords_container<C> {
-            fn index_mut(&mut self, axis: usize) -> &mut isize {
+        impl<C: Coords> IndexMut<Axis> for $coords_container<C> {
+            fn index_mut(&mut self, axis: Axis) -> &mut isize {
                 self.get_mut(axis)
             }
         }
@@ -171,8 +171,8 @@ macro_rules! delegate_coords_impl {
         }
         impl<C: Coords> AddAssign<Self> for $coords_container<C> {
             fn add_assign(&mut self, other: Self) {
-                for i in 0..Self::NDIM {
-                    self.set(i, self.get(i) + other.get(i));
+                for ax in Self::axes() {
+                    self.set(ax, self.get(ax) + other.get(ax));
                 }
             }
         }
@@ -188,8 +188,8 @@ macro_rules! delegate_coords_impl {
         }
         impl<C: Coords> AddAssign<isize> for $coords_container<C> {
             fn add_assign(&mut self, other: isize) {
-                for i in 0..Self::NDIM {
-                    self.set(i, self.get(i) + other);
+                for ax in Self::axes() {
+                    self.set(ax, self.get(ax) + other);
                 }
             }
         }
@@ -204,8 +204,8 @@ macro_rules! delegate_coords_impl {
         }
         impl<C: Coords> SubAssign<Self> for $coords_container<C> {
             fn sub_assign(&mut self, other: Self) {
-                for i in 0..Self::NDIM {
-                    self.set(i, self.get(i) - other.get(i));
+                for ax in Self::axes() {
+                    self.set(ax, self.get(ax) - other.get(ax));
                 }
             }
         }
@@ -221,8 +221,8 @@ macro_rules! delegate_coords_impl {
         }
         impl<C: Coords> SubAssign<isize> for $coords_container<C> {
             fn sub_assign(&mut self, other: isize) {
-                for i in 0..Self::NDIM {
-                    self.set(i, self.get(i) - other);
+                for ax in Self::axes() {
+                    self.set(ax, self.get(ax) - other);
                 }
             }
         }
@@ -238,8 +238,8 @@ macro_rules! delegate_coords_impl {
         }
         impl<C: Coords> MulAssign<isize> for $coords_container<C> {
             fn mul_assign(&mut self, other: isize) {
-                for i in 0..Self::NDIM {
-                    self.set(i, self.get(i) * other);
+                for ax in Self::axes() {
+                    self.set(ax, self.get(ax) * other);
                 }
             }
         }
@@ -255,8 +255,8 @@ macro_rules! delegate_coords_impl {
         }
         impl<C: Coords> DivAssign<isize> for $coords_container<C> {
             fn div_assign(&mut self, other: isize) {
-                for i in 0..Self::NDIM {
-                    self.set(i, self.get(i) / other);
+                for ax in Self::axes() {
+                    self.set(ax, self.get(ax) / other);
                 }
             }
         }
@@ -265,8 +265,8 @@ macro_rules! delegate_coords_impl {
         impl<C: Coords> Neg for $coords_container<C> {
             type Output = Self;
             fn neg(mut self) -> Self {
-                for i in 0..Self::NDIM {
-                    self.set(i, -self.get(i));
+                for ax in Self::axes() {
+                    self.set(ax, -self.get(ax));
                 }
                 self
             }
@@ -287,8 +287,8 @@ impl<C: Coords> LocalCoords<C> {
         use ndarray::prelude::*;
 
         let mut ret = C::D::zeros(C::NDIM);
-        for i in 0..Self::NDIM {
-            ret[i] = self[i]
+        for ax in Self::axes() {
+            ret[ax as usize] = self[ax]
                 .try_into()
                 .expect("Cannot convert negative Coords to NdIndex");
         }
@@ -355,9 +355,9 @@ mod tests {
             let local_coords: LocalCoords3D = cell_coords.into();
             let chunk_size = CellCoords3D::CHUNK_SIZE as isize;
             // Check that the local coordinates are within the range of a chunk.
-            assert!(0 <= local_coords[0] && local_coords[0] < chunk_size);
-            assert!(0 <= local_coords[1] && local_coords[1] < chunk_size);
-            assert!(0 <= local_coords[2] && local_coords[2] < chunk_size);
+            assert!(0 <= local_coords[Axis::X] && local_coords[Axis::X] < chunk_size);
+            assert!(0 <= local_coords[Axis::Y] && local_coords[Axis::Y] < chunk_size);
+            assert!(0 <= local_coords[Axis::Z] && local_coords[Axis::Z] < chunk_size);
             // Check that chunk + local = global.
             assert_eq!(cell_coords, chunk_coords + local_coords);
             assert_eq!(cell_coords, local_coords + chunk_coords);

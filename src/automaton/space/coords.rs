@@ -3,6 +3,8 @@ use std::cmp::Eq;
 use std::fmt::Debug;
 use std::hash::Hash;
 
+use super::{Axis, AxisIter};
+
 /// Computes the "recommended" number of bits in each axis of a chunk index for
 /// a given dimension count. The chunk size (along each axis) is 1 << (chunk
 /// bits).
@@ -46,19 +48,24 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
     /// The bitmask to apply to an index to get the corresponding chunk index.
     const CHUNK_BITMASK: isize = Self::CHUNK_SIZE as isize - 1;
 
+    /// Returns an iterator over the axes of this dimensionality.
+    fn axes() -> AxisIter {
+        AxisIter::from_ndim(Self::NDIM)
+    }
+
     /// Returns the coordinate along the given axis.
-    fn get(&self, axis: usize) -> &isize;
+    fn get(&self, axis: Axis) -> &isize;
 
     /// Returns a mutable reference to the coordinate along the given axis.
-    fn get_mut(&mut self, axis: usize) -> &mut isize;
+    fn get_mut(&mut self, axis: Axis) -> &mut isize;
 
     /// Sets the coordinate along the given axis.
-    fn set(&mut self, axis: usize, value: isize);
+    fn set(&mut self, axis: Axis, value: isize);
 
     /// Returns whether these coordinates consists entirely of zeros.
     fn is_zero(&self) -> bool {
-        for i in 0..Self::NDIM {
-            if self.get(i) != &0 {
+        for ax in Self::axes() {
+            if self.get(ax) != &0 {
                 return false;
             }
         }
@@ -72,14 +79,14 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
 impl Coords for [isize; 1] {
     type D = Ix1;
     const NDIM: usize = 1;
-    fn get(&self, index: usize) -> &isize {
-        &self[index]
+    fn get(&self, axis: Axis) -> &isize {
+        &self[axis as usize]
     }
-    fn get_mut(&mut self, index: usize) -> &mut isize {
-        &mut self[index]
+    fn get_mut(&mut self, axis: Axis) -> &mut isize {
+        &mut self[axis as usize]
     }
-    fn set(&mut self, index: usize, value: isize) {
-        self[index] = value;
+    fn set(&mut self, axis: Axis, value: isize) {
+        self[axis as usize] = value;
     }
     fn origin() -> Self {
         [0; Self::NDIM]
@@ -89,14 +96,14 @@ impl Coords for [isize; 1] {
 impl Coords for [isize; 2] {
     type D = Ix2;
     const NDIM: usize = 2;
-    fn get(&self, index: usize) -> &isize {
-        &self[index]
+    fn get(&self, axis: Axis) -> &isize {
+        &self[axis as usize]
     }
-    fn get_mut(&mut self, index: usize) -> &mut isize {
-        &mut self[index]
+    fn get_mut(&mut self, axis: Axis) -> &mut isize {
+        &mut self[axis as usize]
     }
-    fn set(&mut self, index: usize, value: isize) {
-        self[index] = value;
+    fn set(&mut self, axis: Axis, value: isize) {
+        self[axis as usize] = value;
     }
     fn origin() -> Self {
         [0; Self::NDIM]
@@ -105,14 +112,14 @@ impl Coords for [isize; 2] {
 impl Coords for [isize; 3] {
     type D = Ix3;
     const NDIM: usize = 3;
-    fn get(&self, index: usize) -> &isize {
-        &self[index]
+    fn get(&self, axis: Axis) -> &isize {
+        &self[axis as usize]
     }
-    fn get_mut(&mut self, index: usize) -> &mut isize {
-        &mut self[index]
+    fn get_mut(&mut self, axis: Axis) -> &mut isize {
+        &mut self[axis as usize]
     }
-    fn set(&mut self, index: usize, value: isize) {
-        self[index] = value;
+    fn set(&mut self, axis: Axis, value: isize) {
+        self[axis as usize] = value;
     }
     fn origin() -> Self {
         [0; Self::NDIM]
@@ -121,14 +128,14 @@ impl Coords for [isize; 3] {
 impl Coords for [isize; 4] {
     type D = Ix4;
     const NDIM: usize = 4;
-    fn get(&self, index: usize) -> &isize {
-        &self[index]
+    fn get(&self, axis: Axis) -> &isize {
+        &self[axis as usize]
     }
-    fn get_mut(&mut self, index: usize) -> &mut isize {
-        &mut self[index]
+    fn get_mut(&mut self, axis: Axis) -> &mut isize {
+        &mut self[axis as usize]
     }
-    fn set(&mut self, index: usize, value: isize) {
-        self[index] = value;
+    fn set(&mut self, axis: Axis, value: isize) {
+        self[axis as usize] = value;
     }
     fn origin() -> Self {
         [0; Self::NDIM]
@@ -137,14 +144,14 @@ impl Coords for [isize; 4] {
 impl Coords for [isize; 5] {
     type D = Ix5;
     const NDIM: usize = 5;
-    fn get(&self, index: usize) -> &isize {
-        &self[index]
+    fn get(&self, axis: Axis) -> &isize {
+        &self[axis as usize]
     }
-    fn get_mut(&mut self, index: usize) -> &mut isize {
-        &mut self[index]
+    fn get_mut(&mut self, axis: Axis) -> &mut isize {
+        &mut self[axis as usize]
     }
-    fn set(&mut self, index: usize, value: isize) {
-        self[index] = value;
+    fn set(&mut self, axis: Axis, value: isize) {
+        self[axis as usize] = value;
     }
     fn origin() -> Self {
         [0; Self::NDIM]
@@ -153,14 +160,14 @@ impl Coords for [isize; 5] {
 impl Coords for [isize; 6] {
     type D = Ix6;
     const NDIM: usize = 6;
-    fn get(&self, index: usize) -> &isize {
-        &self[index]
+    fn get(&self, axis: Axis) -> &isize {
+        &self[axis as usize]
     }
-    fn get_mut(&mut self, index: usize) -> &mut isize {
-        &mut self[index]
+    fn get_mut(&mut self, axis: Axis) -> &mut isize {
+        &mut self[axis as usize]
     }
-    fn set(&mut self, index: usize, value: isize) {
-        self[index] = value;
+    fn set(&mut self, axis: Axis, value: isize) {
+        self[axis as usize] = value;
     }
     fn origin() -> Self {
         [0; Self::NDIM]

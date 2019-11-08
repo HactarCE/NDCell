@@ -1,6 +1,5 @@
 //! The infinite grid used to simulate automata.
 
-use ndarray::ArcArray;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 

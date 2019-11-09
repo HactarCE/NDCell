@@ -1,5 +1,5 @@
 use super::Algorithm;
-use crate::automaton::space;
+use crate::automaton::space::*;
 use regex::Regex;
 use std::convert::TryFrom;
 
@@ -26,7 +26,26 @@ impl TryFrom<&str> for MooreTotalistic2D {
     }
 }
 
-impl Algorithm<bool, space::Coords3D> for MooreTotalistic2D {}
+impl Algorithm<bool, Coords2D> for MooreTotalistic2D {
+    type R = RectRegion<Coords2D>;
+    fn transition(&self, napkin: &Napkin<bool, Coords2D, Self::R>) -> bool {
+        // Count live neighbors.
+        let region = napkin.region;
+        let mut live_neighbors = 0;
+        for cell_coords in region.into_iter() {
+            if napkin[cell_coords] {
+                live_neighbors += 1;
+            }
+        }
+        // Index LUT to get next cell state.
+        if napkin[CellCoords2D::origin()] {
+            live_neighbors -= 1;
+            self.survival[live_neighbors]
+        } else {
+            self.birth[live_neighbors]
+        }
+    }
+}
 
 pub const LIFE: MooreTotalistic2D = MooreTotalistic2D {
     birth: [false, false, false, true, false, false, false, false, false],

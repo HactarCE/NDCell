@@ -19,7 +19,7 @@ pub struct Napkin<'a, T: CellType, D: Dim, R: Region<D>> {
     ///
     /// For example, if this is the napkin for a cell at (3, 2), then the
     /// transformation would be to add the vector (3, 2).
-    pub transformation: dyn Fn(CellCoords<D>) -> CellCoords<D>,
+    pub transformation: &'a dyn Fn(CellCoords<D>) -> CellCoords<D>,
 }
 
 impl<'a, T: CellType, D: Dim, R: Region<D>> Index<CellCoords<D>> for Napkin<'a, T, D, R> {

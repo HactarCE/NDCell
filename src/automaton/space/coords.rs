@@ -5,6 +5,19 @@ use std::hash::Hash;
 
 use super::{ndim_axes, Axis};
 
+/// A vector of a given dimensionality; mostly used as a type argument to convey
+/// the number of dimensions something has.
+///
+/// This is basically exactly the same as ndarray's Dimension trait, except it
+/// uses isize instead of usize (which is crucial for this application).
+pub trait Dim: Coords {}
+impl Dim for Coords1D {}
+impl Dim for Coords2D {}
+impl Dim for Coords3D {}
+impl Dim for Coords4D {}
+impl Dim for Coords5D {}
+impl Dim for Coords6D {}
+
 /// Any 1D Coords vector.
 pub type Coords1D = [isize; 1];
 /// Any 2D Coords vector.
@@ -17,31 +30,6 @@ pub type Coords4D = [isize; 4];
 pub type Coords5D = [isize; 5];
 /// Any 6D Coords vector.
 pub type Coords6D = [isize; 6];
-
-/// Computes the "recommended" number of bits in each axis of a chunk index for
-/// a given dimension count. The chunk size (along each axis) is 1 << (chunk
-/// bits).
-///
-/// This is based on trying to keep the chunk size big, but still reasonable
-/// (such that a full chunk is at most 4k) and always a power of 2.
-///
-/// Using a flat chunk size would either result in stupidly small chunks at
-/// lower dimensions (16 is silly for 1D CA that often densely span thousands of
-/// cells) or stupidly huge chunks at higher dimensions (even a 32^4 chunk in 4D
-/// would be 1 MiB, which is rather large to be copying around constantly).
-///
-/// Here are the values that this function outputs:
-///
-/// - 1D => 12 -> 4096 = 4k
-/// - 2D => 12 -> 64^2 = 4k
-/// - 3D => 12 -> 16^3 = 4k
-/// - 4D => 12 ->  8^4 = 4k
-/// - 5D => 12 ->  4^5 = 1k (8^5 would be 32k)
-/// - 6D => 12 ->  4^6 = 4k
-const fn get_chunk_bits_for_ndim(ndim: usize) -> usize {
-    let max_bits = 12; // 2^12 = 4096
-    max_bits / ndim
-}
 
 /// A set of coordinates for a given dimensionality which allows negative
 /// values, unlike NdIndex.
@@ -87,6 +75,31 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
 
     /// Returns the coordinates of the origin (i.e. all zeros).
     fn origin() -> Self;
+}
+
+/// Computes the "recommended" number of bits in each axis of a chunk index for
+/// a given dimension count. The chunk size (along each axis) is 1 << (chunk
+/// bits).
+///
+/// This is based on trying to keep the chunk size big, but still reasonable
+/// (such that a full chunk is at most 4k) and always a power of 2.
+///
+/// Using a flat chunk size would either result in stupidly small chunks at
+/// lower dimensions (16 is silly for 1D CA that often densely span thousands of
+/// cells) or stupidly huge chunks at higher dimensions (even a 32^4 chunk in 4D
+/// would be 1 MiB, which is rather large to be copying around constantly).
+///
+/// Here are the values that this function outputs:
+///
+/// - 1D => 12 -> 4096 = 4k
+/// - 2D => 12 -> 64^2 = 4k
+/// - 3D => 12 -> 16^3 = 4k
+/// - 4D => 12 ->  8^4 = 4k
+/// - 5D => 12 ->  4^5 = 1k (8^5 would be 32k)
+/// - 6D => 12 ->  4^6 = 4k
+const fn get_chunk_bits_for_ndim(ndim: usize) -> usize {
+    let max_bits = 12; // 2^12 = 4096
+    max_bits / ndim
 }
 
 impl Coords for Coords1D {

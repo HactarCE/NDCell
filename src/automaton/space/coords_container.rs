@@ -10,15 +10,15 @@ use super::*;
 
 /// The coordinates for a cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CellCoords<C: Coords>(C);
+pub struct CellCoords<D: Dim>(D);
 
 /// The coordinates for a chunk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ChunkCoords<C: Coords>(C);
+pub struct ChunkCoords<D: Dim>(D);
 
 /// The coordinates for a cell within a chunk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct LocalCoords<C: Coords>(C);
+pub struct LocalCoords<D: Dim>(D);
 
 /// A 1D CellCoords vector.
 pub type CellCoords1D = CellCoords<Coords1D>;
@@ -59,14 +59,14 @@ pub type LocalCoords5D = LocalCoords<Coords5D>;
 /// A 6D LocalCoords vector.
 pub type LocalCoords6D = LocalCoords<Coords6D>;
 
-impl<C: Coords> LocalCoords<C> {
+impl<D: Dim> LocalCoords<D> {
     /// Returns the shape of a chunk of this many dimensions.
     pub fn get_chunk_shape() -> Self {
         Self::origin() + Self::CHUNK_SIZE as isize
     }
 }
 
-impl<C: Coords> CellCoords<C> {
+impl<D: Dim> CellCoords<D> {
     /// Return the coordinates of the chunk containing the given cell
     /// coordinates.
     ///
@@ -74,10 +74,10 @@ impl<C: Coords> CellCoords<C> {
     /// rounds toward zero rather than negative infinity), we instead use
     /// bitwise operators. `n // 2**k` is the same as `n >> k`. This may even be
     /// faster.
-    pub fn chunk(self) -> ChunkCoords<C> {
-        let mut ret = C::origin();
+    pub fn chunk(self) -> ChunkCoords<D> {
+        let mut ret = D::origin();
         for ax in Self::axes() {
-            ret.set(ax, self[ax] >> C::CHUNK_BITS);
+            ret.set(ax, self[ax] >> D::CHUNK_BITS);
         }
         ChunkCoords(ret)
     }
@@ -87,8 +87,8 @@ impl<C: Coords> CellCoords<C> {
     /// Because Rust does not have a proper modulo operator (`%` may return
     /// negative values), we instead use bitwise operators. `n mod 2**k` is the
     /// same as `n & (2**k - 1)`. This may even be faster.
-    pub fn local(self) -> LocalCoords<C> {
-        let mut ret = C::origin();
+    pub fn local(self) -> LocalCoords<D> {
+        let mut ret = D::origin();
         for ax in Self::axes() {
             ret.set(ax, self[ax] & Self::CHUNK_BITMASK);
         }
@@ -97,22 +97,22 @@ impl<C: Coords> CellCoords<C> {
 }
 
 /// An interator over all the local coordinates within a chunk.
-pub struct LocalCoordsIter<C> {
-    phantom: PhantomData<C>,
+pub struct LocalCoordsIter<D> {
+    phantom: PhantomData<D>,
     current_idx: usize,
 }
-impl<C: Coords> iter::Iterator for LocalCoordsIter<C> {
-    type Item = LocalCoords<C>;
+impl<D: Dim> iter::Iterator for LocalCoordsIter<D> {
+    type Item = LocalCoords<D>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_idx >= C::CHUNK_SIZE.pow(C::NDIM as u32) {
+        if self.current_idx >= D::CHUNK_SIZE.pow(D::NDIM as u32) {
             return None;
         }
         let mut ret = Self::Item::origin();
         {
             let mut current_idx = self.current_idx;
-            for ax in C::axes() {
-                ret[ax] = current_idx as isize & C::CHUNK_BITMASK;
-                current_idx >>= C::CHUNK_BITS;
+            for ax in D::axes() {
+                ret[ax] = current_idx as isize & D::CHUNK_BITMASK;
+                current_idx >>= D::CHUNK_BITS;
             }
         }
         self.current_idx += 1;
@@ -120,9 +120,9 @@ impl<C: Coords> iter::Iterator for LocalCoordsIter<C> {
     }
 }
 
-impl<C: Coords> LocalCoords<C> {
+impl<D: Dim> LocalCoords<D> {
     /// Return an iterator over all the local coordinates within a chunk.
-    pub fn all() -> LocalCoordsIter<C> {
+    pub fn all() -> LocalCoordsIter<D> {
         LocalCoordsIter {
             phantom: PhantomData,
             current_idx: 0,
@@ -130,28 +130,28 @@ impl<C: Coords> LocalCoords<C> {
     }
 }
 
-impl<C: Coords> From<CellCoords<C>> for ChunkCoords<C> {
-    fn from(cell_coords: CellCoords<C>) -> Self {
+impl<D: Dim> From<CellCoords<D>> for ChunkCoords<D> {
+    fn from(cell_coords: CellCoords<D>) -> Self {
         cell_coords.chunk()
     }
 }
 
-impl<C: Coords> From<CellCoords<C>> for LocalCoords<C> {
-    fn from(cell_coords: CellCoords<C>) -> Self {
+impl<D: Dim> From<CellCoords<D>> for LocalCoords<D> {
+    fn from(cell_coords: CellCoords<D>) -> Self {
         cell_coords.local()
     }
 }
 
-impl<C: Coords> Add<LocalCoords<C>> for ChunkCoords<C> {
-    type Output = CellCoords<C>;
-    fn add(self, offset: LocalCoords<C>) -> CellCoords<C> {
+impl<D: Dim> Add<LocalCoords<D>> for ChunkCoords<D> {
+    type Output = CellCoords<D>;
+    fn add(self, offset: LocalCoords<D>) -> CellCoords<D> {
         CellCoords((self * Self::CHUNK_SIZE as isize).0) + CellCoords(offset.0)
     }
 }
 
-impl<C: Coords> Add<ChunkCoords<C>> for LocalCoords<C> {
-    type Output = CellCoords<C>;
-    fn add(self, chunk: ChunkCoords<C>) -> CellCoords<C> {
+impl<D: Dim> Add<ChunkCoords<D>> for LocalCoords<D> {
+    type Output = CellCoords<D>;
+    fn add(self, chunk: ChunkCoords<D>) -> CellCoords<D> {
         chunk + self
     }
 }
@@ -162,17 +162,17 @@ impl<C: Coords> Add<ChunkCoords<C>> for LocalCoords<C> {
 macro_rules! delegate_coords_impl {
     ($coords_container:ident) => {
         // Implement conversion from Coords trait.
-        impl<C: Coords> From<C> for $coords_container<C> {
-            fn from(coords: C) -> Self {
+        impl<D: Dim> From<D> for $coords_container<D> {
+            fn from(coords: D) -> Self {
                 Self(coords)
             }
         }
         // Implement generic vector operations.
-        impl<C: Coords> Coords for $coords_container<C> {
-            type D = C::D;
-            const NDIM: usize = C::NDIM;
-            const CHUNK_BITS: usize = C::CHUNK_BITS;
-            const CHUNK_SIZE: usize = C::CHUNK_SIZE;
+        impl<D: Dim> Coords for $coords_container<D> {
+            type D = D::D;
+            const NDIM: usize = D::NDIM;
+            const CHUNK_BITS: usize = D::CHUNK_BITS;
+            const CHUNK_SIZE: usize = D::CHUNK_SIZE;
             delegate! {
                 target self.0 {
                     fn get(&self, axis: Axis) -> &isize;
@@ -181,23 +181,23 @@ macro_rules! delegate_coords_impl {
                 }
             }
             fn origin() -> Self {
-                Self(C::origin())
+                Self(D::origin())
             }
         }
         // Implement indexing by usize.
-        impl<C: Coords> Index<Axis> for $coords_container<C> {
+        impl<D: Dim> Index<Axis> for $coords_container<D> {
             type Output = isize;
             fn index(&self, axis: Axis) -> &isize {
                 self.get(axis)
             }
         }
-        impl<C: Coords> IndexMut<Axis> for $coords_container<C> {
+        impl<D: Dim> IndexMut<Axis> for $coords_container<D> {
             fn index_mut(&mut self, axis: Axis) -> &mut isize {
                 self.get_mut(axis)
             }
         }
         // Implement elementwise addition between two sets of coordinates.
-        impl<C: Coords> Add<Self> for $coords_container<C> {
+        impl<D: Dim> Add<Self> for $coords_container<D> {
             type Output = Self;
             fn add(self, other: Self) -> Self {
                 let mut ret = self;
@@ -205,7 +205,7 @@ macro_rules! delegate_coords_impl {
                 ret
             }
         }
-        impl<C: Coords> AddAssign<Self> for $coords_container<C> {
+        impl<D: Dim> AddAssign<Self> for $coords_container<D> {
             fn add_assign(&mut self, other: Self) {
                 for ax in Self::axes() {
                     self.set(ax, self.get(ax) + other.get(ax));
@@ -214,7 +214,7 @@ macro_rules! delegate_coords_impl {
         }
         // Imlement addition between a set of coordinates and a scalar (i.e. add
         // the scalar to each coordinate).
-        impl<C: Coords> Add<isize> for $coords_container<C> {
+        impl<D: Dim> Add<isize> for $coords_container<D> {
             type Output = Self;
             fn add(self, other: isize) -> Self {
                 let mut ret = self;
@@ -222,7 +222,7 @@ macro_rules! delegate_coords_impl {
                 ret
             }
         }
-        impl<C: Coords> AddAssign<isize> for $coords_container<C> {
+        impl<D: Dim> AddAssign<isize> for $coords_container<D> {
             fn add_assign(&mut self, other: isize) {
                 for ax in Self::axes() {
                     self.set(ax, self.get(ax) + other);
@@ -230,7 +230,7 @@ macro_rules! delegate_coords_impl {
             }
         }
         // Implement elementwise subtraction between two sets of coordinates.
-        impl<C: Coords> Sub<Self> for $coords_container<C> {
+        impl<D: Dim> Sub<Self> for $coords_container<D> {
             type Output = Self;
             fn sub(self, other: Self) -> Self {
                 let mut ret = self;
@@ -238,7 +238,7 @@ macro_rules! delegate_coords_impl {
                 ret
             }
         }
-        impl<C: Coords> SubAssign<Self> for $coords_container<C> {
+        impl<D: Dim> SubAssign<Self> for $coords_container<D> {
             fn sub_assign(&mut self, other: Self) {
                 for ax in Self::axes() {
                     self.set(ax, self.get(ax) - other.get(ax));
@@ -247,7 +247,7 @@ macro_rules! delegate_coords_impl {
         }
         // Implement subtraction between a set of coordinates and a scalar (i.e.
         // subtract the scalar from each coordinate).
-        impl<C: Coords> Sub<isize> for $coords_container<C> {
+        impl<D: Dim> Sub<isize> for $coords_container<D> {
             type Output = Self;
             fn sub(self, other: isize) -> Self {
                 let mut ret = self;
@@ -255,7 +255,7 @@ macro_rules! delegate_coords_impl {
                 ret
             }
         }
-        impl<C: Coords> SubAssign<isize> for $coords_container<C> {
+        impl<D: Dim> SubAssign<isize> for $coords_container<D> {
             fn sub_assign(&mut self, other: isize) {
                 for ax in Self::axes() {
                     self.set(ax, self.get(ax) - other);
@@ -264,7 +264,7 @@ macro_rules! delegate_coords_impl {
         }
         // Implement multiplication between a set of coordinates and a scalar
         // (i.e. multiply each coordinate by the scalar).
-        impl<C: Coords> Mul<isize> for $coords_container<C> {
+        impl<D: Dim> Mul<isize> for $coords_container<D> {
             type Output = Self;
             fn mul(self, other: isize) -> Self {
                 let mut ret = self;
@@ -272,7 +272,7 @@ macro_rules! delegate_coords_impl {
                 ret
             }
         }
-        impl<C: Coords> MulAssign<isize> for $coords_container<C> {
+        impl<D: Dim> MulAssign<isize> for $coords_container<D> {
             fn mul_assign(&mut self, other: isize) {
                 for ax in Self::axes() {
                     self.set(ax, self.get(ax) * other);
@@ -281,7 +281,7 @@ macro_rules! delegate_coords_impl {
         }
         // Implement integer division between a set of coordinates and a scalar
         // (i.e. divide each coordinate by the scalar).
-        impl<C: Coords> Div<isize> for $coords_container<C> {
+        impl<D: Dim> Div<isize> for $coords_container<D> {
             type Output = Self;
             fn div(self, other: isize) -> Self {
                 let mut ret = self;
@@ -289,7 +289,7 @@ macro_rules! delegate_coords_impl {
                 ret
             }
         }
-        impl<C: Coords> DivAssign<isize> for $coords_container<C> {
+        impl<D: Dim> DivAssign<isize> for $coords_container<D> {
             fn div_assign(&mut self, other: isize) {
                 for ax in Self::axes() {
                     self.set(ax, self.get(ax) / other);
@@ -298,7 +298,7 @@ macro_rules! delegate_coords_impl {
         }
         // Implement negation of a set of coordinates (i.e. negate each
         // coordinate).
-        impl<C: Coords> Neg for $coords_container<C> {
+        impl<D: Dim> Neg for $coords_container<D> {
             type Output = Self;
             fn neg(mut self) -> Self {
                 for ax in Self::axes() {
@@ -315,14 +315,14 @@ delegate_coords_impl!(CellCoords);
 delegate_coords_impl!(ChunkCoords);
 delegate_coords_impl!(LocalCoords);
 
-impl<C: Coords> LocalCoords<C> {
+impl<D: Dim> LocalCoords<D> {
     /// Converts the coordinates to an NdIndex.
     ///
     /// Panics if any values are negative.
-    pub fn ndindex(&self) -> C::D {
+    pub fn ndindex(&self) -> D::D {
         use ndarray::prelude::*;
 
-        let mut ret = C::D::zeros(C::NDIM);
+        let mut ret = D::D::zeros(D::NDIM);
         for ax in Self::axes() {
             ret[ax as usize] = self[ax]
                 .try_into()

@@ -12,17 +12,17 @@ use space::*;
 use std::marker::PhantomData;
 
 /// A cellular automaton simulation.
-pub struct Automaton<T: CellType, C: Coords, A: Algorithm<T, C>> {
-    phantom: PhantomData<(T, C)>,
+pub struct Automaton<T: CellType, D: Dim, A: Algorithm<T, D>> {
+    phantom: PhantomData<(T, D)>,
     /// The algorithm to simulate.
     pub algorithm: A,
     /// The grid over which to simulate that algorithm.
-    pub grid: Grid<T, C>,
+    pub grid: Grid<T, D>,
 }
 
-impl<T: CellType, C: Coords, A: Algorithm<T, C>> Automaton<T, C, A> {
+impl<T: CellType, D: Dim, A: Algorithm<T, D>> Automaton<T, D, A> {
     /// Construct a new Automaton that simulates a given rule over a given grid.
-    pub fn new(algorithm: A, grid: Grid<T, C>) -> Self {
+    pub fn new(algorithm: A, grid: Grid<T, D>) -> Self {
         Self {
             phantom: PhantomData,
             algorithm,

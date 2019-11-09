@@ -7,28 +7,28 @@ use super::*;
 
 /// An infinite Grid, stored in chunks of ~4k cells.
 #[derive(Clone)]
-pub struct Grid<T: CellType, C: Coords> {
-    chunks: HashMap<ChunkCoords<C>, Chunk<T, C>>,
-    default_chunk: Chunk<T, C>,
+pub struct Grid<T: CellType, D: Dim> {
+    chunks: HashMap<ChunkCoords<D>, Chunk<T, D>>,
+    default_chunk: Chunk<T, D>,
     default_cell: T,
 }
 
 /// A generic Grid consisting of a sparse ndarray of hypercubes, stored
 /// internally using a HashMap.
-impl<T: CellType, C: Coords> Grid<T, C> {
-    const NDIM: usize = C::NDIM;
+impl<T: CellType, D: Dim> Grid<T, D> {
+    const NDIM: usize = D::NDIM;
 
     /// Constructs an empty Grid with the default chunk size.
     pub fn new() -> Self {
         Self {
             chunks: HashMap::new(),
-            default_chunk: Chunk::<T, C>::default(),
+            default_chunk: Chunk::<T, D>::default(),
             default_cell: T::default(),
         }
     }
 
     /// Returns the hashmap mapping chunk coordinates to chunks.
-    pub fn get_chunks(&self) -> &HashMap<ChunkCoords<C>, Chunk<T, C>> {
+    pub fn get_chunks(&self) -> &HashMap<ChunkCoords<D>, Chunk<T, D>> {
         &self.chunks
     }
 
@@ -43,19 +43,19 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     }
 
     /// Returns the coordinates of the origin (0 on each axis).
-    pub fn origin() -> CellCoords<C> {
-        C::origin().into()
+    pub fn origin() -> CellCoords<D> {
+        D::origin().into()
     }
 
     /// Returns whether there is a chunk at the given chunk coordinates.
-    fn has_chunk(&self, chunk_index: ChunkCoords<C>) -> bool {
+    fn has_chunk(&self, chunk_index: ChunkCoords<D>) -> bool {
         self.chunks.contains_key(&chunk_index)
     }
 
     /// Returns whether the chunk at the given chunk coordinates is empty.
     ///
     /// Returns true if the chunk does not exist.
-    fn is_chunk_empty(&self, chunk_index: ChunkCoords<C>) -> bool {
+    fn is_chunk_empty(&self, chunk_index: ChunkCoords<D>) -> bool {
         match self.get_chunk(chunk_index) {
             None => true,
             Some(chunk) => chunk.array.iter().all(|&cell| cell == T::default()),
@@ -65,7 +65,7 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     /// Returns a reference to the chunk with the given chunk coordinates.
     ///
     /// If the chunk does not exist.
-    fn get_chunk(&self, chunk_index: ChunkCoords<C>) -> Option<&Chunk<T, C>> {
+    fn get_chunk(&self, chunk_index: ChunkCoords<D>) -> Option<&Chunk<T, D>> {
         self.chunks.get(&chunk_index)
     }
 
@@ -73,7 +73,7 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     /// coordinates.
     ///
     /// If the chunk does not exist, return None.
-    fn get_chunk_mut(&mut self, chunk_index: ChunkCoords<C>) -> Option<&mut Chunk<T, C>> {
+    fn get_chunk_mut(&mut self, chunk_index: ChunkCoords<D>) -> Option<&mut Chunk<T, D>> {
         self.chunks.get_mut(&chunk_index)
     }
 
@@ -81,20 +81,20 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     /// empty chunk if it does not exist.
     ///
     /// If the chunk does not exist, return a reference to a blank chunk.
-    fn infer_chunk(&self, chunk_index: ChunkCoords<C>) -> &Chunk<T, C> {
+    fn infer_chunk(&self, chunk_index: ChunkCoords<D>) -> &Chunk<T, D> {
         self.get_chunk(chunk_index).unwrap_or(&self.default_chunk)
     }
 
     /// Removes the chunk at the given chunk coordinates and return it.
     ///
     /// If the chunk does not exist, this method does nothing and returns None.
-    fn remove_chunk(&mut self, chunk_index: ChunkCoords<C>) -> Option<Chunk<T, C>> {
+    fn remove_chunk(&mut self, chunk_index: ChunkCoords<D>) -> Option<Chunk<T, D>> {
         self.chunks.remove(&chunk_index)
     }
 
     /// Removes the chunk at the given coordinates if it exists and is empty.
     /// Returns true if the chunk was removed and false otherwise.
-    fn remove_chunk_if_empty(&mut self, chunk_index: ChunkCoords<C>) -> bool {
+    fn remove_chunk_if_empty(&mut self, chunk_index: ChunkCoords<D>) -> bool {
         if self.has_chunk(chunk_index) && self.is_chunk_empty(chunk_index) {
             self.remove_chunk(chunk_index);
             true
@@ -104,16 +104,16 @@ impl<T: CellType, C: Coords> Grid<T, C> {
     }
 }
 
-impl<T: CellType, C: Coords> Index<ChunkCoords<C>> for Grid<T, C> {
-    type Output = Chunk<T, C>;
-    fn index(&self, chunk_coords: ChunkCoords<C>) -> &Chunk<T, C> {
+impl<T: CellType, D: Dim> Index<ChunkCoords<D>> for Grid<T, D> {
+    type Output = Chunk<T, D>;
+    fn index(&self, chunk_coords: ChunkCoords<D>) -> &Chunk<T, D> {
         self.chunks
             .get(&chunk_coords)
             .unwrap_or(&self.default_chunk)
     }
 }
-impl<T: CellType, C: Coords> IndexMut<ChunkCoords<C>> for Grid<T, C> {
-    fn index_mut(&mut self, chunk_coords: ChunkCoords<C>) -> &mut Chunk<T, C> {
+impl<T: CellType, D: Dim> IndexMut<ChunkCoords<D>> for Grid<T, D> {
+    fn index_mut(&mut self, chunk_coords: ChunkCoords<D>) -> &mut Chunk<T, D> {
         if !self.has_chunk(chunk_coords) {
             self.chunks.insert(chunk_coords, self.default_chunk.clone());
         }
@@ -123,14 +123,14 @@ impl<T: CellType, C: Coords> IndexMut<ChunkCoords<C>> for Grid<T, C> {
     }
 }
 
-impl<T: CellType, C: Coords> Index<CellCoords<C>> for Grid<T, C> {
+impl<T: CellType, D: Dim> Index<CellCoords<D>> for Grid<T, D> {
     type Output = T;
-    fn index(&self, cell_coords: CellCoords<C>) -> &T {
+    fn index(&self, cell_coords: CellCoords<D>) -> &T {
         &self[cell_coords.chunk()][cell_coords.local()]
     }
 }
-impl<T: CellType, C: Coords> IndexMut<CellCoords<C>> for Grid<T, C> {
-    fn index_mut(&mut self, cell_coords: CellCoords<C>) -> &mut T {
+impl<T: CellType, D: Dim> IndexMut<CellCoords<D>> for Grid<T, D> {
+    fn index_mut(&mut self, cell_coords: CellCoords<D>) -> &mut T {
         &mut self[cell_coords.chunk()][cell_coords.local()]
     }
 }

@@ -54,9 +54,50 @@ impl<T: CellType, D: Dim, A: Algorithm<T, D>> Automaton<T, D, A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+
+    fn get_non_default_set<T: CellType, D: Dim>(grid: &Grid<T, D>) -> HashSet<CellCoords<D>> {
+        let mut ret = HashSet::new();
+        let default = T::default();
+        for (&chunk_coords, chunk) in grid.get_chunks().iter() {
+            for local_coords in LocalCoords::all() {
+                if chunk[local_coords] != default {
+                    ret.insert(chunk_coords + local_coords);
+                }
+            }
+        }
+        ret
+    }
+
+    fn make_cell_coords_set<D: Dim>(coords_vec: Vec<D>) -> HashSet<CellCoords<D>> {
+        coords_vec.into_iter().map(CellCoords).collect()
+    }
 
     #[test]
     fn test_cgol() {
-        // let sim = Automaton::new(algorithm::Totalistic());
+        let mut sim = Automaton::new(algorithm::LIFE, Grid::new());
+        // Make a glider
+        sim.grid[CellCoords([3, 3])] = true;
+        sim.grid[CellCoords([4, 3])] = true;
+        sim.grid[CellCoords([5, 3])] = true;
+        sim.grid[CellCoords([5, 2])] = true;
+        sim.grid[CellCoords([4, 1])] = true;
+        println!("{}", sim.grid[ChunkCoords([0, 0])]);
+        assert_eq!(
+            make_cell_coords_set(vec![[3, 3], [4, 3], [5, 3], [5, 2], [4, 1]]),
+            get_non_default_set(&sim.grid)
+        );
+        sim.step();
+        println!("{}", sim.grid[ChunkCoords([0, 0])]);
+        assert_eq!(
+            make_cell_coords_set(vec![[4, 4], [4, 3], [5, 3], [5, 2], [3, 2]]),
+            get_non_default_set(&sim.grid)
+        );
+        sim.step();
+        println!("{}", sim.grid[ChunkCoords([0, 0])]);
+        assert_eq!(
+            make_cell_coords_set(vec![[4, 4], [5, 4], [5, 3], [5, 2], [3, 3]]),
+            get_non_default_set(&sim.grid)
+        );
     }
 }

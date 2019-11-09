@@ -11,6 +11,7 @@ mod chunk;
 mod coords;
 mod coords_container;
 mod grid;
+mod napkin;
 mod region;
 
 pub use axis::*;
@@ -18,6 +19,7 @@ pub use chunk::*;
 pub use coords::*;
 pub use coords_container::*;
 pub use grid::*;
+pub use napkin::*;
 pub use region::*;
 
 /// A "trait alias" for ndarray::Dimension + std::cmp::Eq + std::hash::Hash so

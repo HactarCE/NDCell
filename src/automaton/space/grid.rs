@@ -48,14 +48,14 @@ impl<T: CellType, D: Dim> Grid<T, D> {
     }
 
     /// Returns whether there is a chunk at the given chunk coordinates.
-    fn has_chunk(&self, chunk_index: ChunkCoords<D>) -> bool {
+    pub fn has_chunk(&self, chunk_index: ChunkCoords<D>) -> bool {
         self.chunks.contains_key(&chunk_index)
     }
 
     /// Returns whether the chunk at the given chunk coordinates is empty.
     ///
     /// Returns true if the chunk does not exist.
-    fn is_chunk_empty(&self, chunk_index: ChunkCoords<D>) -> bool {
+    pub fn is_chunk_empty(&self, chunk_index: ChunkCoords<D>) -> bool {
         match self.get_chunk(chunk_index) {
             None => true,
             Some(chunk) => chunk.array.iter().all(|&cell| cell == T::default()),
@@ -65,7 +65,7 @@ impl<T: CellType, D: Dim> Grid<T, D> {
     /// Returns a reference to the chunk with the given chunk coordinates.
     ///
     /// If the chunk does not exist.
-    fn get_chunk(&self, chunk_index: ChunkCoords<D>) -> Option<&Chunk<T, D>> {
+    pub fn get_chunk(&self, chunk_index: ChunkCoords<D>) -> Option<&Chunk<T, D>> {
         self.chunks.get(&chunk_index)
     }
 
@@ -73,7 +73,7 @@ impl<T: CellType, D: Dim> Grid<T, D> {
     /// coordinates.
     ///
     /// If the chunk does not exist, return None.
-    fn get_chunk_mut(&mut self, chunk_index: ChunkCoords<D>) -> Option<&mut Chunk<T, D>> {
+    pub fn get_chunk_mut(&mut self, chunk_index: ChunkCoords<D>) -> Option<&mut Chunk<T, D>> {
         self.chunks.get_mut(&chunk_index)
     }
 
@@ -81,20 +81,20 @@ impl<T: CellType, D: Dim> Grid<T, D> {
     /// empty chunk if it does not exist.
     ///
     /// If the chunk does not exist, return a reference to a blank chunk.
-    fn infer_chunk(&self, chunk_index: ChunkCoords<D>) -> &Chunk<T, D> {
+    pub fn infer_chunk(&self, chunk_index: ChunkCoords<D>) -> &Chunk<T, D> {
         self.get_chunk(chunk_index).unwrap_or(&self.default_chunk)
     }
 
     /// Removes the chunk at the given chunk coordinates and return it.
     ///
     /// If the chunk does not exist, this method does nothing and returns None.
-    fn remove_chunk(&mut self, chunk_index: ChunkCoords<D>) -> Option<Chunk<T, D>> {
+    pub fn remove_chunk(&mut self, chunk_index: ChunkCoords<D>) -> Option<Chunk<T, D>> {
         self.chunks.remove(&chunk_index)
     }
 
     /// Removes the chunk at the given coordinates if it exists and is empty.
     /// Returns true if the chunk was removed and false otherwise.
-    fn remove_chunk_if_empty(&mut self, chunk_index: ChunkCoords<D>) -> bool {
+    pub fn remove_chunk_if_empty(&mut self, chunk_index: ChunkCoords<D>) -> bool {
         if self.has_chunk(chunk_index) && self.is_chunk_empty(chunk_index) {
             self.remove_chunk(chunk_index);
             true

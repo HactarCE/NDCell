@@ -29,6 +29,26 @@ impl<T: CellType, D: Dim, A: Algorithm<T, D>> Automaton<T, D, A> {
             grid,
         }
     }
+    /// Compute the next tick in the simulation.
+    pub fn tick(&mut self) {
+        let mut new_grid = Grid::new();
+        let neighborhood = self.algorithm.get_neighborhood();
+        for (&chunk_coords, old_chunk) in self.grid.get_chunks().iter() {
+            if old_chunk.is_empty() {
+                continue;
+            }
+            let new_chunk = &mut new_grid[chunk_coords];
+            for local_coords in LocalCoords::<D>::all() {
+                let center_cell = chunk_coords + local_coords;
+                new_chunk[local_coords] = self.algorithm.transition(&Napkin {
+                    grid: &self.grid,
+                    region: &neighborhood,
+                    transformation: &|neighbor_coords| center_cell + neighbor_coords,
+                });
+            }
+        }
+        self.grid = new_grid;
+    }
 }
 
 #[cfg(test)]

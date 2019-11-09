@@ -29,8 +29,8 @@ impl<T: CellType, D: Dim, A: Algorithm<T, D>> Automaton<T, D, A> {
             grid,
         }
     }
-    /// Compute the next tick in the simulation.
-    pub fn tick(&mut self) {
+    /// Compute the next step in the simulation.
+    pub fn step(&mut self) {
         let mut new_grid = Grid::new();
         let neighborhood = self.algorithm.get_neighborhood();
         for (&chunk_coords, old_chunk) in self.grid.get_chunks().iter() {

@@ -11,6 +11,7 @@ pub struct Chunk<T: CellType, D: Dim> {
 }
 
 impl<T: CellType, D: Dim> Chunk<T, D> {
+    /// Returns whether every cell in the chunk is in the default state.
     pub fn is_empty(&self) -> bool {
         let default_cell = T::default();
         self.array.iter().all(|&cell| cell == default_cell)

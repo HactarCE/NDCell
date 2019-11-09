@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 delegate = "0.3.0"
+glium = "0.26.0-alpha3"
 ndarray = "0.13.0"
 regex = "1"
 

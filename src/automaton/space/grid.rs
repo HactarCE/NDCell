@@ -77,14 +77,6 @@ impl<T: CellType, D: Dim> Grid<T, D> {
         self.chunks.get_mut(&chunk_index)
     }
 
-    /// Returns a reference to the chunk with the given chunk coordinates, or an
-    /// empty chunk if it does not exist.
-    ///
-    /// If the chunk does not exist, return a reference to a blank chunk.
-    pub fn infer_chunk(&self, chunk_index: ChunkCoords<D>) -> &Chunk<T, D> {
-        self.get_chunk(chunk_index).unwrap_or(&self.default_chunk)
-    }
-
     /// Removes the chunk at the given chunk coordinates and return it.
     ///
     /// If the chunk does not exist, this method does nothing and returns None.

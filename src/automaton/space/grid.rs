@@ -58,7 +58,7 @@ impl<T: CellType, D: Dim> Grid<T, D> {
     pub fn is_chunk_empty(&self, chunk_index: ChunkCoords<D>) -> bool {
         match self.get_chunk(chunk_index) {
             None => true,
-            Some(chunk) => chunk.array.iter().all(|&cell| cell == T::default()),
+            Some(chunk) => chunk.is_empty(),
         }
     }
 

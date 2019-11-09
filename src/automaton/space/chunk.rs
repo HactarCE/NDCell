@@ -10,6 +10,13 @@ pub struct Chunk<T: CellType, D: Dim> {
     pub array: ArcArray<T, D::NdarrayDim>,
 }
 
+impl<T: CellType, D: Dim> Chunk<T, D> {
+    pub fn is_empty(&self) -> bool {
+        let default_cell = T::default();
+        self.array.iter().all(|&cell| cell == default_cell)
+    }
+}
+
 impl<T: CellType, D: Dim> Default for Chunk<T, D> {
     fn default() -> Self {
         Self {

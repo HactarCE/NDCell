@@ -28,6 +28,10 @@ impl TryFrom<&str> for MooreTotalistic2D {
 
 impl Algorithm<bool, Coords2D> for MooreTotalistic2D {
     type R = RectRegion<Coords2D>;
+    fn get_neighborhood(&self) -> Self::R {
+        RectRegion::centered(CellCoords::origin(), 1)
+    }
+
     fn transition(&self, napkin: &Napkin<bool, Coords2D, Self::R>) -> bool {
         // Count live neighbors.
         let region = napkin.region;

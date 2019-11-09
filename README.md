@@ -14,7 +14,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ##### 2D
 
-- [ ] Conway's Game of Life
+- [x] Conway's Game of Life
 - [ ] Langton's Ant
 - [ ] Wireworld
 

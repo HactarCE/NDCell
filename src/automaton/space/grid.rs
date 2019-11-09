@@ -138,7 +138,6 @@ impl<T: CellType, D: Dim> IndexMut<CellCoords<D>> for Grid<T, D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::automaton::space::coords_container::{cell_coords_strategy, ChunkCoords3D};
     use proptest::prelude::*;
 
     proptest! {

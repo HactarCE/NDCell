@@ -10,15 +10,15 @@ use super::*;
 
 /// The coordinates for a cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CellCoords<D: Dim>(D);
+pub struct CellCoords<D: Dim>(pub D);
 
 /// The coordinates for a chunk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ChunkCoords<D: Dim>(D);
+pub struct ChunkCoords<D: Dim>(pub D);
 
 /// The coordinates for a cell within a chunk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct LocalCoords<D: Dim>(D);
+pub struct LocalCoords<D: Dim>(pub D);
 
 /// A 1D CellCoords vector.
 pub type CellCoords1D = CellCoords<Coords1D>;

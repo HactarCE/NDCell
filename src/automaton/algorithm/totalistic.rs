@@ -3,12 +3,12 @@ use crate::automaton::space;
 use regex::Regex;
 use std::convert::TryFrom;
 
-pub struct Totalistic2D {
+pub struct MooreTotalistic2D {
     birth: [bool; 9],
     survival: [bool; 9],
 }
 
-impl TryFrom<&str> for Totalistic2D {
+impl TryFrom<&str> for MooreTotalistic2D {
     type Error = ();
     fn try_from(s: &str) -> Result<Self, ()> {
         let regex = Regex::new(r"^[Bb](\d*)/?[Ss](\d*)$").unwrap();
@@ -26,4 +26,9 @@ impl TryFrom<&str> for Totalistic2D {
     }
 }
 
-impl Algorithm<bool, space::Coords3D> for Totalistic2D {}
+impl Algorithm<bool, space::Coords3D> for MooreTotalistic2D {}
+
+pub const LIFE: MooreTotalistic2D = MooreTotalistic2D {
+    birth: [false, false, false, true, false, false, false, false, false],
+    survival: [false, false, true, true, false, false, false, false, false],
+};

@@ -169,7 +169,7 @@ macro_rules! delegate_coords_impl {
         }
         // Implement generic vector operations.
         impl<D: Dim> Coords for $coords_container<D> {
-            type D = D::D;
+            type NdarrayDim = D::NdarrayDim;
             const NDIM: usize = D::NDIM;
             const CHUNK_BITS: usize = D::CHUNK_BITS;
             const CHUNK_SIZE: usize = D::CHUNK_SIZE;
@@ -319,10 +319,10 @@ impl<D: Dim> LocalCoords<D> {
     /// Converts the coordinates to an NdIndex.
     ///
     /// Panics if any values are negative.
-    pub fn ndindex(&self) -> D::D {
+    pub fn ndindex(&self) -> D::NdarrayDim {
         use ndarray::prelude::*;
 
-        let mut ret = D::D::zeros(D::NDIM);
+        let mut ret = D::NdarrayDim::zeros(D::NDIM);
         for ax in Self::axes() {
             ret[ax as usize] = self[ax]
                 .try_into()

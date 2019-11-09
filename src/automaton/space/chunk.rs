@@ -7,13 +7,15 @@ use super::*;
 #[derive(Clone)]
 pub struct Chunk<T: CellType, D: Dim> {
     /// The ndarray storing the cell contents of this chunk.
-    pub array: ArcArray<T, D::D>,
+    pub array: ArcArray<T, D::NdarrayDim>,
 }
 
 impl<T: CellType, D: Dim> Default for Chunk<T, D> {
     fn default() -> Self {
         Self {
-            array: ArcArray::<T, D::D>::default(LocalCoords::<D>::get_chunk_shape().ndindex()),
+            array: ArcArray::<T, D::NdarrayDim>::default(
+                LocalCoords::<D>::get_chunk_shape().ndindex(),
+            ),
         }
     }
 }

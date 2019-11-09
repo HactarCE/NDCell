@@ -35,7 +35,7 @@ pub type Coords6D = [isize; 6];
 /// values, unlike NdIndex.
 pub trait Coords: Debug + Clone + Eq + Hash + Copy {
     /// The number of dimensions as an ndarray type.
-    type D: Dimension;
+    type NdarrayDim: Dimension;
 
     /// The number of dimensions (number of axes).
     const NDIM: usize;
@@ -103,7 +103,7 @@ const fn get_chunk_bits_for_ndim(ndim: usize) -> usize {
 }
 
 impl Coords for Coords1D {
-    type D = Ix1;
+    type NdarrayDim = Ix1;
     const NDIM: usize = 1;
     fn get(&self, axis: Axis) -> &isize {
         &self[axis as usize]
@@ -120,7 +120,7 @@ impl Coords for Coords1D {
 }
 
 impl Coords for Coords2D {
-    type D = Ix2;
+    type NdarrayDim = Ix2;
     const NDIM: usize = 2;
     fn get(&self, axis: Axis) -> &isize {
         &self[axis as usize]
@@ -136,7 +136,7 @@ impl Coords for Coords2D {
     }
 }
 impl Coords for Coords3D {
-    type D = Ix3;
+    type NdarrayDim = Ix3;
     const NDIM: usize = 3;
     fn get(&self, axis: Axis) -> &isize {
         &self[axis as usize]
@@ -152,7 +152,7 @@ impl Coords for Coords3D {
     }
 }
 impl Coords for Coords4D {
-    type D = Ix4;
+    type NdarrayDim = Ix4;
     const NDIM: usize = 4;
     fn get(&self, axis: Axis) -> &isize {
         &self[axis as usize]
@@ -168,7 +168,7 @@ impl Coords for Coords4D {
     }
 }
 impl Coords for Coords5D {
-    type D = Ix5;
+    type NdarrayDim = Ix5;
     const NDIM: usize = 5;
     fn get(&self, axis: Axis) -> &isize {
         &self[axis as usize]
@@ -184,7 +184,7 @@ impl Coords for Coords5D {
     }
 }
 impl Coords for Coords6D {
-    type D = Ix6;
+    type NdarrayDim = Ix6;
     const NDIM: usize = 6;
     fn get(&self, axis: Axis) -> &isize {
         &self[axis as usize]

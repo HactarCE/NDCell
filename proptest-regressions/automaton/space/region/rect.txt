@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 616c0a8b000aaa1c888a2fa8ae1000bfbfcf1e37584ebdcc97c26265186e8354 # shrinks to pos = CellCoords([0, 0, 0])
+cc 8dca2d47d31248a1edb77fd74deb28321d2deebb4a543dee1c7bb88169950118 # shrinks to center = CellCoords([0, 0, 0]), radius = 1, test_offset = CellCoords([0, 0, 0])

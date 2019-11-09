@@ -86,7 +86,7 @@ impl<D: Dim> Iterator for RectRegionIter<D> {
                 return Some(coords);
             } else {
                 // ... otherwise, overflow this digit and carry to the next one.
-                self.next_coords[ax] = 0;
+                self.next_coords[ax] = rect.min[ax];
             }
         }
         // We just tried to overflow the last digit, so we've hit the end.
@@ -135,15 +135,9 @@ mod tests {
     use proptest::prelude::*;
     use std::collections::HashSet;
 
-    #[test]
-    fn test_rect_region() {
-        unimplemented!();
-    }
-
     fn test_iter_validity<D: Dim>(rect: RectRegion<D>) {
         // Test that the iterator agrees with len().
         let cells: Vec<CellCoords<D>> = rect.into_iter().collect();
-        println!("{:?}", cells);
         assert_eq!(rect.len(), cells.len());
         // Test that there are no duplicates.
         {
@@ -177,8 +171,8 @@ mod tests {
         /// Test RectRegion::span() and various methods.
         #[test]
         fn test_rect_region_span(
-            corner1 in cell_coords_strategy(-50..=50isize),
-            corner2 in cell_coords_strategy(-50..=50isize),
+            corner1 in cell_coords_strategy(-5..=5isize),
+            corner2 in cell_coords_strategy(-5..=5isize),
         ) {
             let rect = RectRegion::span(corner1, corner2);
             // There's no nice way to test contains() here; we'll leave that to
@@ -189,6 +183,8 @@ mod tests {
             test_iter_validity(rect);
         }
 
+        /// Test RectRegion::centered() and various methods.
+        #[test]
         fn test_rect_region_centered(
             center in cell_coords_strategy(-50..=50isize),
             radius in 0..2usize,
@@ -201,14 +197,14 @@ mod tests {
             {
                 let mut contains = true;
                 for ax in Coords3D::axes() {
-                    if test_offset[ax] > radius as isize {
+                    if test_offset[ax].abs() > radius as isize {
                         contains = false;
                     }
                 }
                 assert_eq!(contains, rect.contains(center + test_offset));
             }
             // Test len().
-            assert_eq!((radius * 2 + 1).pow(2), rect.len());
+            assert_eq!((radius * 2 + 1).pow(3), rect.len());
             // Test len() and iteration.
             test_iter_validity(rect);
         }

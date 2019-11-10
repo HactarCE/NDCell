@@ -4,7 +4,8 @@
 #![allow(dead_code)]
 
 pub mod automaton;
+pub mod ui;
 
 fn main() {
-    println!("Hello, world!");
+    ui::show_gui()
 }

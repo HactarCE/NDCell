@@ -6,6 +6,14 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "ndcell_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ndcell"
+path = "src/main.rs"
+
 [dependencies]
 delegate = "0.3.0"
 glium = "0.25"

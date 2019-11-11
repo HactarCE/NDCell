@@ -1,5 +1,8 @@
 use super::super::*;
 
+// TODO: When std::iter::Step becomes stable, replace most uses of RectRegion
+// with std::iter::Step.
+
 /// A (hyper)rectangular region of cells.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RectRegion<D: Dim> {

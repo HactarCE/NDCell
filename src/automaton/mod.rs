@@ -3,11 +3,11 @@
 //! This module contains everything needed to simulate cellular automata,
 //! without displaying, importing, or exporting them.
 
-mod algorithm;
+pub mod algorithm;
 pub mod space;
 
-use algorithm::Algorithm;
-use space::*;
+pub use algorithm::Algorithm;
+pub use space::*;
 
 use std::marker::PhantomData;
 

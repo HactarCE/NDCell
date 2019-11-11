@@ -11,9 +11,17 @@ use std::time::Instant;
 mod gui;
 mod render;
 
+use crate::automaton;
+
 /// The title of the program window (both the OS window, and the main imgui
 /// window).
 pub const TITLE: &str = "NDCell";
+
+/// The state of the program, including the automaton and any
+/// settings/configuration.
+pub struct State {
+    pub grid_view: render::GridView,
+}
 
 /// Display the main application window.
 pub fn show_gui() {
@@ -48,6 +56,16 @@ pub fn show_gui() {
     // Initialize imgui renderer.
     let mut renderer = Renderer::init(&mut imgui, &display).expect("Failed to initialize renderer");
 
+    // Initialize cellular automaton stuff.
+    let mut state = State {
+        grid_view: render::GridView::Grid2D(render::Grid2D {
+            slice: Box::new(automaton::Automaton::new(
+                automaton::algorithm::LIFE,
+                automaton::Grid::new(),
+            )),
+        }),
+    };
+
     // Main loop
     let mut last_frame_time = Instant::now();
     let mut closed = false;
@@ -73,10 +91,10 @@ pub fn show_gui() {
         last_frame_time = io.update_delta_time(last_frame_time);
 
         let ui = imgui.frame();
-        gui::build_windows(&ui);
+        gui::build_windows(&mut state, &ui);
 
         let mut target = display.draw();
-        render::draw_editor(&mut target);
+        render::draw_editor(&mut state, &mut target);
 
         platform.prepare_render(&ui, &window);
         let draw_data = ui.render();

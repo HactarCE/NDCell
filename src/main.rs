@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 
 pub mod automaton;
-pub mod ui;
+mod ui;
 
 fn main() {
     ui::show_gui()

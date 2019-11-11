@@ -44,7 +44,6 @@ pub fn show_gui() {
         size_pixels: font_size,
         config: None,
     }]);
-    // TODO: Load list of OS system fonts using another package
 
     // Initialize imgui renderer.
     let mut renderer = Renderer::init(&mut imgui, &display).expect("Failed to initialize renderer");

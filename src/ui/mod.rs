@@ -40,7 +40,7 @@ pub fn show_gui() {
     // Initialize imgui fonts.
     let font_size = 16.0 * hidpi_factor as f32;
     imgui.fonts().add_font(&[FontSource::TtfData {
-        data: include_bytes!("/usr/share/fonts/noto/NotoSans-Regular.ttf"),
+        data: include_bytes!("../../resources/font/NotoSans-Regular.ttf"),
         size_pixels: font_size,
         config: None,
     }]);

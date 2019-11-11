@@ -1,10 +1,18 @@
+//! The graphical frontend.
+//!
+//! This module contains everything needed to display NDCell's UI.
+
 use glium::glutin;
-use glium::Surface;
-use imgui::{im_str, Context, FontSource, Window};
+use imgui::{Context, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::time::Instant;
 
+mod gui;
+mod render;
+
+/// The title of the program window (both the OS window, and the main imgui
+/// window).
 pub const TITLE: &str = "NDCell";
 
 /// Display the main application window.
@@ -46,9 +54,12 @@ pub fn show_gui() {
     let mut closed = false;
     while !closed {
         events_loop.poll_events(|ev| {
+            // Let imgui handle events.
             platform.handle_event(imgui.io_mut(), &window, &ev);
+            // Handle events ourself.
             match ev {
                 glutin::Event::WindowEvent { event, .. } => match event {
+                    // Handle window close event.
                     glutin::WindowEvent::CloseRequested => closed = true,
                     _ => (),
                 },
@@ -61,14 +72,13 @@ pub fn show_gui() {
             .prepare_frame(io, &window)
             .expect("Failed to start frame");
         last_frame_time = io.update_delta_time(last_frame_time);
-        let ui = imgui.frame();
 
-        Window::new(im_str!("NDCell")).build(&ui, || {
-            ui.text(im_str!("Hello, world!"));
-        });
+        let ui = imgui.frame();
+        gui::build_windows(&ui);
 
         let mut target = display.draw();
-        target.clear_color_srgb(0.2, 0.2, 0.2, 1.0);
+        render::draw_editor(&mut target);
+
         platform.prepare_render(&ui, &window);
         let draw_data = ui.render();
         renderer

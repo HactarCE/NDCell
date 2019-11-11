@@ -118,7 +118,6 @@ impl Coords for Coords1D {
         [0; Self::NDIM]
     }
 }
-
 impl Coords for Coords2D {
     type NdarrayDim = Ix2;
     const NDIM: usize = 2;

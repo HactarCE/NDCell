@@ -9,6 +9,7 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::time::Instant;
 
 mod gui;
+mod input;
 mod render;
 
 use crate::automaton::*;
@@ -77,6 +78,8 @@ pub fn show_gui() {
         events_loop.poll_events(|ev| {
             // Let imgui handle events.
             platform.handle_event(imgui.io_mut(), &window, &ev);
+            // Let the grid handle events.
+            input::handle_event(&mut state, &ev);
             // Handle events ourself.
             match ev {
                 glutin::Event::WindowEvent { event, .. } => match event {
@@ -89,6 +92,9 @@ pub fn show_gui() {
         });
 
         let io = imgui.io_mut();
+        // TODO you'll probably want these
+        // io.want_capture_keyboard = true;
+        // io.want_capture_mouse = true;
         platform
             .prepare_frame(io, &window)
             .expect("Failed to start frame");

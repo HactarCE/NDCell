@@ -1,5 +1,7 @@
 use glium::*;
 
+mod controller;
+
 use super::shaders;
 use super::AutomatonSlice2D;
 use crate::automaton::*;
@@ -26,6 +28,7 @@ impl Grid2D {
             scale: 32.0f32,
         }
     }
+
     pub fn draw_editor(&mut self, display: &Display, target: &mut glium::Frame) {
         target.clear_color_srgb(0.2, 0.2, 0.2, 1.0);
 
@@ -62,10 +65,11 @@ impl Grid2D {
         let y_scale = self.scale * 2.0 / frame_h as f32;
         let x_offset = -self.x * x_scale;
         let y_offset = -self.y * y_scale;
-
-        // TODO this is just here for testing
-        self.x += 0.01;
-        self.y -= 0.005;
+        let border_size = if self.scale > 2.0 {
+            0.5 / self.scale
+        } else {
+            0.0
+        };
 
         target
             .draw(
@@ -79,8 +83,8 @@ impl Grid2D {
                         [0.0, 0.0, 1.0, 0.0],
                         [x_offset, y_offset, 0.0, 1.0],
                     ],
-                    low_offset: 0.5 / self.scale,
-                    high_offset: 1.0 - 0.5 / self.scale,
+                    low_offset: border_size,
+                    high_offset: 1.0 - border_size,
                 },
                 &Default::default(),
             )

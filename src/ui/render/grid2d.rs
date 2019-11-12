@@ -27,7 +27,7 @@ impl Grid2D {
         }
     }
     pub fn draw_editor(&mut self, display: &Display, target: &mut glium::Frame) {
-        target.clear_color_srgb(0.0, 0.0, 0.0, 1.0);
+        target.clear_color_srgb(0.2, 0.2, 0.2, 1.0);
 
         let (frame_w, frame_h) = target.get_dimensions();
         let (w, h) = (frame_w as f32 / self.scale, frame_h as f32 / self.scale);
@@ -48,7 +48,7 @@ impl Grid2D {
                     color: if self.slice.get_cell_state(CellCoords([x, y])) {
                         [0.5, 0.5, 0.5, 1.0]
                     } else {
-                        [0.05, 0.05, 0.05, 1.0]
+                        [0.005, 0.005, 0.005, 1.0]
                     },
                 });
             }

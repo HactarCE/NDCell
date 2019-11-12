@@ -49,7 +49,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
     + [ ] as squares
     + [ ] as 2D spacetime
 - [ ] A 2D grid
-    + [ ] as 2D space
+    + [x] as 2D space
     + [ ] as 3D spacetime
     + [ ] as 2D slice of spacetime
 - [ ] A 3D grid
@@ -63,10 +63,11 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ### Cell display
 
-- [ ] Cell borders (2D) or gaps (3D)
-- [ ] Color cell depending on state
+- [x] Cell borders (2D)
+- [ ] Cell gaps (3D)
+- [x] Color cell depending on state
 - [ ] Custom cell sprite (2D)
-- [ ] Cusotm cell shape (2D)
+- [ ] Custom cell shape (2D)
 - [ ] Custom cell model (3D)
 
 ### Editor

@@ -5,35 +5,30 @@ use std::hash::Hash;
 
 use super::{ndim_axes, Axis};
 
+// A set of coordinates for a given dimensionality.
+//
+// Unlike ndarray's NdIndex, this uses isize and so supports negative numbers.
+pub struct Coords<D>(D);
+
+/// Any 1D Coords vector.
+pub type Coords1D = Coords<[isize; 1]>;
+/// Any 2D Coords vector.
+pub type Coords2D = Coords<[isize; 2]>;
+/// Any 3D Coords vector.
+pub type Coords3D = Coords<[isize; 3]>;
+/// Any 4D Coords vector.
+pub type Coords4D = Coords<[isize; 4]>;
+/// Any 5D Coords vector.
+pub type Coords5D = Coords<[isize; 5]>;
+/// Any 6D Coords vector.
+pub type Coords6D = Coords<[isize; 6]>;
+
 /// A vector of a given dimensionality; mostly used as a type argument to convey
 /// the number of dimensions something has.
 ///
 /// This is basically exactly the same as ndarray's Dimension trait, except it
 /// uses isize instead of usize (which is crucial for this application).
-pub trait Dim: Coords {}
-impl Dim for Coords1D {}
-impl Dim for Coords2D {}
-impl Dim for Coords3D {}
-impl Dim for Coords4D {}
-impl Dim for Coords5D {}
-impl Dim for Coords6D {}
-
-/// Any 1D Coords vector.
-pub type Coords1D = [isize; 1];
-/// Any 2D Coords vector.
-pub type Coords2D = [isize; 2];
-/// Any 3D Coords vector.
-pub type Coords3D = [isize; 3];
-/// Any 4D Coords vector.
-pub type Coords4D = [isize; 4];
-/// Any 5D Coords vector.
-pub type Coords5D = [isize; 5];
-/// Any 6D Coords vector.
-pub type Coords6D = [isize; 6];
-
-/// A set of coordinates for a given dimensionality which allows negative
-/// values, unlike NdIndex.
-pub trait Coords: Debug + Clone + Eq + Hash + Copy {
+pub trait Dim: Debug + Clone + Eq + Hash + Copy {
     /// The number of dimensions as an ndarray type.
     type NdarrayDim: Dimension;
 
@@ -102,7 +97,7 @@ const fn get_chunk_bits_for_ndim(ndim: usize) -> usize {
     max_bits / ndim
 }
 
-impl Coords for Coords1D {
+impl Dim for Coords1D {
     type NdarrayDim = Ix1;
     const NDIM: usize = 1;
     fn get(&self, axis: Axis) -> &isize {
@@ -118,7 +113,7 @@ impl Coords for Coords1D {
         [0; Self::NDIM]
     }
 }
-impl Coords for Coords2D {
+impl Dim for Coords2D {
     type NdarrayDim = Ix2;
     const NDIM: usize = 2;
     fn get(&self, axis: Axis) -> &isize {
@@ -134,7 +129,7 @@ impl Coords for Coords2D {
         [0; Self::NDIM]
     }
 }
-impl Coords for Coords3D {
+impl Dim for Coords3D {
     type NdarrayDim = Ix3;
     const NDIM: usize = 3;
     fn get(&self, axis: Axis) -> &isize {
@@ -150,7 +145,7 @@ impl Coords for Coords3D {
         [0; Self::NDIM]
     }
 }
-impl Coords for Coords4D {
+impl Dim for Coords4D {
     type NdarrayDim = Ix4;
     const NDIM: usize = 4;
     fn get(&self, axis: Axis) -> &isize {
@@ -166,7 +161,7 @@ impl Coords for Coords4D {
         [0; Self::NDIM]
     }
 }
-impl Coords for Coords5D {
+impl Dim for Coords5D {
     type NdarrayDim = Ix5;
     const NDIM: usize = 5;
     fn get(&self, axis: Axis) -> &isize {
@@ -182,7 +177,7 @@ impl Coords for Coords5D {
         [0; Self::NDIM]
     }
 }
-impl Coords for Coords6D {
+impl Dim for Coords6D {
     type NdarrayDim = Ix6;
     const NDIM: usize = 6;
     fn get(&self, axis: Axis) -> &isize {

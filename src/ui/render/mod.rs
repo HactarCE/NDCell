@@ -1,5 +1,6 @@
 mod grid2d;
 mod grid3d;
+mod shaders;
 mod slice2d;
 
 use super::State;
@@ -13,9 +14,9 @@ pub enum GridView {
 }
 
 /// Draw the CA grid visualizer/editor.
-pub fn draw_editor(state: &mut State, target: &mut glium::Frame) {
+pub fn draw_editor(state: &mut State, display: &glium::Display, target: &mut glium::Frame) {
     match state.grid_view {
-        GridView::Grid2D(ref mut render_state) => render_state.draw_editor(target),
-        GridView::Grid3D(ref mut render_state) => render_state.draw_editor(target),
+        GridView::Grid2D(ref mut render_state) => render_state.draw_editor(display, target),
+        GridView::Grid3D(ref mut render_state) => render_state.draw_editor(display, target),
     }
 }

@@ -11,7 +11,7 @@ use std::time::Instant;
 mod gui;
 mod render;
 
-use crate::automaton;
+use crate::automaton::*;
 
 /// The title of the program window (both the OS window, and the main imgui
 /// window).
@@ -57,13 +57,17 @@ pub fn show_gui() {
     let mut renderer = Renderer::init(&mut imgui, &display).expect("Failed to initialize renderer");
 
     // Initialize cellular automaton stuff.
+    let mut grid = Grid::new();
+    grid[CellCoords([3, 3])] = true;
+    grid[CellCoords([4, 3])] = true;
+    grid[CellCoords([5, 3])] = true;
+    grid[CellCoords([5, 2])] = true;
+    grid[CellCoords([4, 1])] = true;
     let mut state = State {
-        grid_view: render::GridView::Grid2D(render::Grid2D {
-            slice: Box::new(automaton::Automaton::new(
-                automaton::algorithm::LIFE,
-                automaton::Grid::new(),
-            )),
-        }),
+        grid_view: render::GridView::Grid2D(render::Grid2D::new(Box::new(Automaton::new(
+            algorithm::LIFE,
+            grid,
+        )))),
     };
 
     // Main loop
@@ -94,7 +98,7 @@ pub fn show_gui() {
         gui::build_windows(&mut state, &ui);
 
         let mut target = display.draw();
-        render::draw_editor(&mut state, &mut target);
+        render::draw_editor(&mut state, &display, &mut target);
 
         platform.prepare_render(&ui, &window);
         let draw_data = ui.render();

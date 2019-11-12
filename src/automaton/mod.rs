@@ -3,6 +3,8 @@
 //! This module contains everything needed to simulate cellular automata,
 //! without displaying, importing, or exporting them.
 
+use std::collections::HashSet;
+
 pub mod algorithm;
 pub mod space;
 
@@ -33,10 +35,13 @@ impl<T: CellType, D: Dim, A: Algorithm<T, D>> Automaton<T, D, A> {
     pub fn step(&mut self) {
         let mut new_grid = Grid::new();
         let neighborhood = self.algorithm.get_neighborhood();
-        for (&chunk_coords, old_chunk) in self.grid.get_chunks().iter() {
-            if old_chunk.is_empty() {
-                continue;
+        let mut chunks_to_sim = HashSet::new();
+        for offset in space::RectRegion::<D>::centered(CellCoords::origin(), 1) {
+            for &chunk_coords in self.grid.get_chunks().keys() {
+                chunks_to_sim.insert(chunk_coords + ChunkCoords(offset.0));
             }
+        }
+        for chunk_coords in chunks_to_sim {
             let new_chunk = &mut new_grid[chunk_coords];
             for local_coords in LocalCoords::<D>::all() {
                 let center_cell = chunk_coords + local_coords;
@@ -47,6 +52,7 @@ impl<T: CellType, D: Dim, A: Algorithm<T, D>> Automaton<T, D, A> {
                 });
             }
         }
+
         self.grid = new_grid;
     }
 }
@@ -54,7 +60,6 @@ impl<T: CellType, D: Dim, A: Algorithm<T, D>> Automaton<T, D, A> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
 
     fn get_non_default_set<T: CellType, D: Dim>(grid: &Grid<T, D>) -> HashSet<CellCoords<D>> {
         let mut ret = HashSet::new();
@@ -76,28 +81,38 @@ mod tests {
     #[test]
     fn test_cgol() {
         let mut sim = Automaton::new(algorithm::LIFE, Grid::new());
+
         // Make a glider
         sim.grid[CellCoords([3, 3])] = true;
         sim.grid[CellCoords([4, 3])] = true;
         sim.grid[CellCoords([5, 3])] = true;
         sim.grid[CellCoords([5, 2])] = true;
         sim.grid[CellCoords([4, 1])] = true;
-        println!("{}", sim.grid[ChunkCoords([0, 0])]);
+        // println!("{}", sim.grid[ChunkCoords([0, 0])]);
+
+        // Simulate it for a few steps.
         assert_eq!(
             make_cell_coords_set(vec![[3, 3], [4, 3], [5, 3], [5, 2], [4, 1]]),
             get_non_default_set(&sim.grid)
         );
         sim.step();
-        println!("{}", sim.grid[ChunkCoords([0, 0])]);
+        // println!("{}", sim.grid[ChunkCoords([0, 0])]);
         assert_eq!(
             make_cell_coords_set(vec![[4, 4], [4, 3], [5, 3], [5, 2], [3, 2]]),
             get_non_default_set(&sim.grid)
         );
         sim.step();
-        println!("{}", sim.grid[ChunkCoords([0, 0])]);
+        // println!("{}", sim.grid[ChunkCoords([0, 0])]);
         assert_eq!(
             make_cell_coords_set(vec![[4, 4], [5, 4], [5, 3], [5, 2], [3, 3]]),
             get_non_default_set(&sim.grid)
         );
+
+        // Check that chunk boundaries work properly.
+        let old_chunk = sim.grid[ChunkCoords([0, 0])].clone();
+        for _ in 0..Coords2D::CHUNK_SIZE * 4 {
+            sim.step();
+        }
+        assert_eq!(old_chunk, sim.grid[ChunkCoords([1, 1])]);
     }
 }

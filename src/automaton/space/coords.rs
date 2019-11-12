@@ -98,7 +98,7 @@ pub trait Coords: Debug + Clone + Eq + Hash + Copy {
 /// - 5D => 12 ->  4^5 = 1k (8^5 would be 32k)
 /// - 6D => 12 ->  4^6 = 4k
 const fn get_chunk_bits_for_ndim(ndim: usize) -> usize {
-    let max_bits = 12; // 2^12 = 4096
+    let max_bits = 6; // 2^12 = 4096
     max_bits / ndim
 }
 

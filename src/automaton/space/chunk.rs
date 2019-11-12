@@ -6,7 +6,7 @@ use std::ops::{Index, IndexMut};
 use super::*;
 
 /// A hypercubic chunk of a Grid holding ~4k cells.
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chunk<T: CellType, D: Dim> {
     /// The ndarray storing the cell contents of this chunk.
     pub array: ArcArray<T, D::NdarrayDim>,

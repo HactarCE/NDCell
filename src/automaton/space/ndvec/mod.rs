@@ -1,7 +1,7 @@
 use std::cmp::Eq;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::{Index, IndexMut};
+use std::ops::*;
 
 mod axis;
 mod dim;
@@ -56,11 +56,15 @@ impl<D: Dim> IndexMut<Axis> for NdVec<D> {
 use proptest::prelude::*;
 
 #[cfg(test)]
-pub fn coords_strategy<R: Strategy<Value = isize>>(
-    value_strategy: R,
-) -> impl Strategy<Value = Vec3D> {
-    prop::collection::vec(value_strategy, 3)
-        .prop_flat_map(|vec| Just(NdVec([vec[0], vec[1], vec[2]])))
+impl proptest::arbitrary::Arbitrary for Vec3D {
+    type Parameters = Option<isize>;
+    type Strategy = BoxedStrategy<Self>;
+    fn arbitrary_with(max: Option<isize>) -> Self::Strategy {
+        let max = max.unwrap_or(100);
+        prop::collection::vec(-max..=max, Self::NDIM)
+            .prop_flat_map(|v| Just(NdVec([v[0], v[1], v[2]])))
+            .boxed()
+    }
 }
 
 #[cfg(test)]
@@ -71,8 +75,8 @@ mod tests {
     proptest! {
         #[test]
         fn test_ops(
-            pos1 in coords_strategy(-100..=100isize),
-            pos2 in coords_strategy(-100..=50isize),
+            pos1: Vec3D,
+            pos2: Vec3D,
             scalar in -100..=100isize,
             shift in 0..10isize,
         ) {

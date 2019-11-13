@@ -1,7 +1,6 @@
 // use std::collections::HashMap;
 use std::marker::PhantomData;
 // use std::num::Wrapping;
-use std::ops::Index;
 use std::sync::Arc;
 
 use super::*;
@@ -10,7 +9,7 @@ use super::*;
 
 // struct NDTreeHash
 
-pub type NDTree<T: CellType, D: Dim> = Arc<NDTreeNode<T, D>>;
+pub type NDTree<T, D> = Arc<NDTreeNode<T, D>>;
 
 pub struct NDTreeNode<T: CellType, D: Dim> {
     layer: usize,
@@ -26,12 +25,12 @@ pub enum NDTreeChild<T: CellType, D: Dim> {
     Branch(Vec<NDTree<T, D>>),
 }
 
-pub type NDTree1D<T> = NDTree<T, Coords1D>;
-pub type NDTree2D<T> = NDTree<T, Coords2D>;
-pub type NDTree3D<T> = NDTree<T, Coords3D>;
-pub type NDTree4D<T> = NDTree<T, Coords4D>;
-pub type NDTree5D<T> = NDTree<T, Coords5D>;
-pub type NDTree6D<T> = NDTree<T, Coords6D>;
+pub type NDTree1D<T> = NDTree<T, Vec1D>;
+pub type NDTree2D<T> = NDTree<T, Vec2D>;
+pub type NDTree3D<T> = NDTree<T, Vec3D>;
+pub type NDTree4D<T> = NDTree<T, Vec4D>;
+pub type NDTree5D<T> = NDTree<T, Vec5D>;
+pub type NDTree6D<T> = NDTree<T, Vec6D>;
 
 impl<T: CellType, D: Dim> NDTreeNode<T, D> {
     pub fn new() -> NDTree<T, D> {
@@ -46,7 +45,7 @@ impl<T: CellType, D: Dim> NDTreeNode<T, D> {
         // TODO implement hashing and interning
         Arc::new(self)
     }
-    fn get_branch_index(&self, coords: Coords<D>) -> usize {
+    fn get_branch_index(&self, coords: NdVec<D>) -> usize {
         // Take the Nth bit (where N = self.layer) of each coordinate, and use
         // those to form an integer index.
         let mut index: usize = 0;
@@ -66,7 +65,7 @@ impl<T: CellType, D: Dim> NDTreeNode<T, D> {
             1 << D::NDIM
         ])
     }
-    pub fn get_cell(&self, coords: Coords<D>) -> T {
+    pub fn get_cell(&self, coords: NdVec<D>) -> T {
         match &self.child {
             NDTreeChild::Leaf(cell) => *cell,
             NDTreeChild::Branch(children) => {
@@ -74,7 +73,7 @@ impl<T: CellType, D: Dim> NDTreeNode<T, D> {
             }
         }
     }
-    pub fn set_cell(&self, coords: Coords<D>, cell_value: T) -> NDTree<T, D> {
+    pub fn set_cell(&self, coords: NdVec<D>, cell_value: T) -> NDTree<T, D> {
         NDTreeNode {
             child: match &self.child {
                 NDTreeChild::Leaf(_) => NDTreeChild::Leaf(cell_value),
@@ -88,42 +87,15 @@ impl<T: CellType, D: Dim> NDTreeNode<T, D> {
             ..*self
         }
         .intern()
-        // let new_child = match self.child {
-        //     NDTreeChild::Branch(children) => children.clone()
-        //     // NDTreeChild::Leaf(cell) => NDTreeChild::Branch([; ]),
-        // }
-        // Self {
-        //     child: new_child,
-        //     ..*self
-        // }
     }
 }
 
-// impl<T: CellType, D: Dim> Index<Coords<D>> for NDTree<T, D> {
-//     type Output = T;
-//     fn index(&self, coords: Coords<D>) -> &T {
-//         match &self.child {
-//             NDTreeChild::Leaf(cell) => cell,
-//             NDTreeChild::Branch(children) => &children[self.get_branch_index(coords)][coords],
-//         }
-//     }
-// }
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-// pub struct NDBranch<T: CellType, D: Dim> {
-//     // hash: Wrapping<usize>,
-//     phantom: PhantomData<D>,
-//     layer: usize,
-//     children: [NDTree<T, D>],
-// }
-
-// impl<T: CellType, D: Dim> NDBranch<T, D> {
-//     fn new(layer: usize) -> Self {
-//         Self {
-//             phantom: PhantomData,
-//             layer: layer,
-//             children: [Arc::new(NDTree::Empty); 8],
-//             // children: [Arc::new(NDTree::Empty); D::NDIM],
-//         }
+//     #[test]
+//     fn () {
+//         unimplemented!();
 //     }
-//     fn get_cell()
 // }

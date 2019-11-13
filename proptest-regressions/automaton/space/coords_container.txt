@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 3a1ad492969e1199e7ba6e18d1058ef5c7dc73cf566b608fc09fa29c5fb18f5e # shrinks to pos1 = CellCoords([50, 50, 50]), pos2 = CellCoords([0, 0, 19]), scalar = 0

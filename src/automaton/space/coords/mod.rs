@@ -11,9 +11,9 @@ mod ops_vector;
 pub use axis::*;
 pub use dim::*;
 
-// A set of coordinates for a given dimensionality.
-//
-// Unlike ndarray's NdIndex, this uses isize and so supports negative numbers.
+/// A set of coordinates for a given dimensionality.
+///
+/// Unlike ndarray's NdIndex, this uses isize and so supports negative numbers.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Coords<D: Dim>(D);
 

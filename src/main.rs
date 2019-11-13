@@ -2,7 +2,6 @@
 
 #![allow(dead_code)]
 #![warn(missing_docs)]
-#![feature(generic_associated_types)]
 
 pub mod automaton;
 // mod ui;

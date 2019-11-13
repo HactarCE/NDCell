@@ -6,11 +6,11 @@ use std::default::Default;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-mod coords;
 mod ndtree;
+mod ndvec;
 
-pub use coords::*;
 pub use ndtree::*;
+pub use ndvec::*;
 
 /// A "trait alias" for a cell type that has a "default" value and can be copied
 /// for free or near-free.

@@ -1,4 +1,4 @@
-/// An enumeration of the six dimensions supported by the program.
+/// An enumeration of the six dimensions supported by this software.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Axis {
     /// The X axis (generally horizontal/"width").

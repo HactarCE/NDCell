@@ -73,6 +73,7 @@ mod tests {
     use proptest::proptest;
 
     proptest! {
+        /// Tests various vector operations.
         #[test]
         fn test_ops(
             pos1: Vec3D,

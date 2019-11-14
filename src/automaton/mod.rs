@@ -3,7 +3,7 @@
 //! This module contains everything needed to simulate cellular automata,
 //! without displaying, importing, or exporting them.
 
-use std::collections::HashSet;
+// use std::collections::HashSet;
 
 // pub mod algorithm;
 pub mod space;
@@ -11,7 +11,7 @@ pub mod space;
 // pub use algorithm::Algorithm;
 pub use space::*;
 
-use std::marker::PhantomData;
+// use std::marker::PhantomData;
 
 // /// A cellular automaton simulation.
 // pub struct Automaton<T: CellType, D: Dim, A: Algorithm<T, D>> {

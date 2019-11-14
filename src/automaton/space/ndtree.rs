@@ -7,8 +7,6 @@ use super::*;
 
 // const nodes: HashMap<>
 
-// struct NdTreeHash
-
 /// An N-dimensional generalization of a quadtree.
 #[derive(Debug)]
 pub struct NdTree<T: CellType, D: Dim>(NdSubTree<T, D>);

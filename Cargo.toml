@@ -15,12 +15,10 @@ name = "ndcell"
 path = "src/main.rs"
 
 [dependencies]
-delegate = "0.3.0"
 glium = "0.25"
 imgui = "0.2"
 imgui-glium-renderer = "0.2"
 imgui-winit-support = "0.2"
-ndarray = "0.13.0"
 regex = "1"
 
 [dev-dependencies]

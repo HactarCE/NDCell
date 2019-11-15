@@ -10,7 +10,6 @@ use cache::NdTreeCache;
 
 /// An N-dimensional generalization of a quadtree.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-// TODO: custom Debug implementation
 pub struct NdTree<T: CellType, D: Dim> {
     node: NdTreeNodeRef<T, D>,
 }
@@ -34,6 +33,7 @@ pub type NdTreeNodeRef<T, D> = Rc<NdTreeNode<T, D>>;
 /// A single node in the NdTree, which contains information about its layer
 /// (base-2 logarithm of hypercube side length) and its children.
 #[derive(Debug, Clone)]
+// TODO: custom Debug implementation
 pub struct NdTreeNode<T: CellType, D: Dim> {
     /// The "layer" of this node (base-2 logarithm of hypercube side length).
     layer: usize,

@@ -1,12 +1,10 @@
-use std::ops::Index;
-
 mod cache;
 mod index;
 mod subtree;
 
 use super::*;
 use cache::NdTreeCache;
-use subtree::*;
+use subtree::{NdSubTree, NdTreeNode};
 
 /// An N-dimensional generalization of a quadtree.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

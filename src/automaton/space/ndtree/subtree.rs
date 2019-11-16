@@ -14,8 +14,8 @@ impl<T: CellType, D: Dim> NdSubTree<T, D> {
     /// Constructs a new empty N-dimensional tree stucture with an empty node
     /// cache.
     pub fn new() -> Self {
-        let tree_set = NdTreeCache::default();
-        let node = NdTreeNode::empty(tree_set, 0).intern();
+        let cache = NdTreeCache::default();
+        let node = NdTreeNode::empty(cache, 0).intern();
         Self { node }
     }
 
@@ -50,7 +50,7 @@ pub struct NdTreeNode<T: CellType, D: Dim> {
 
     pub(super) hash_code: u64,
 
-    pub(super) tree_set: NdTreeCache<T, D>,
+    pub(super) cache: NdTreeCache<T, D>,
 
     phantom: PhantomData<D>,
 }
@@ -72,11 +72,11 @@ pub enum NdTreeChild<T: CellType, D: Dim> {
 
 impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Constructs a new empty NdTreeNode at a given layer.
-    fn empty(tree_set: NdTreeCache<T, D>, layer: usize) -> Self {
-        Self::with_child(tree_set, layer, NdTreeChild::default())
+    fn empty(cache: NdTreeCache<T, D>, layer: usize) -> Self {
+        Self::with_child(cache, layer, NdTreeChild::default())
     }
     /// Constructs a new NdTreeNode at a given layer and with a given child.
-    fn with_child(tree_set: NdTreeCache<T, D>, layer: usize, child: NdTreeChild<T, D>) -> Self {
+    fn with_child(cache: NdTreeCache<T, D>, layer: usize, child: NdTreeChild<T, D>) -> Self {
         let mut hasher = SeaHasher::new();
         layer.hash(&mut hasher);
         child.hash(&mut hasher);
@@ -84,7 +84,7 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
             layer,
             child,
             hash_code: hasher.finish(),
-            tree_set,
+            cache,
             phantom: PhantomData,
         };
         ret
@@ -93,10 +93,10 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// destroys this one and returns the equivalent node from the cache; if
     /// not, adds this node to the cache and returns it.
     fn intern(self) -> NdTreeNodeRef<T, D> {
-        let existing_node = self.tree_set.borrow().get(&self).clone();
+        let existing_node = self.cache.borrow().get(&self).clone();
         existing_node.unwrap_or_else(|| {
             let ret = Rc::new(self);
-            ret.tree_set.borrow_mut().insert(ret.clone());
+            ret.cache.borrow_mut().insert(ret.clone());
             ret
         })
     }
@@ -107,10 +107,12 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         1 << self.layer
     }
 
+    pub fn get_cell(&self, pos: NdVec<D>) -> T {}
+
     // fn get_subtree(&self, pos: NdVec<D>, layer: usize) -> NdSubTree<T, D> {
     //     match &self.child {
     //         NdTreeChild::Leaf(cell_state) => NdSubTree {
-    //             node: Self::with_child(self.tree_set, layer, self.child).intern(),
+    //             node: Self::with_child(self.cache, layer, self.child).intern(),
     //         },
     //         NdTreeChild::Branch(branches) => panic!(),
     //     }

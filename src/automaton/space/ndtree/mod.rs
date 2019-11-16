@@ -62,9 +62,14 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         }
     }
 
-    // pub fn get_cell(&self, pos: NdVec<D>) -> T {
-    //     self.root.get_cell(pos - self.offset)
-    // }
+    /// Returns the cell at the given position in this NdTree.
+    pub fn get_cell(&self, pos: NdVec<D>) -> T {
+        if self.rect().contains(pos) {
+            self.root.get_cell(pos - self.offset)
+        } else {
+            T::default()
+        }
+    }
 
     fn expand_layer(&mut self) {
         self.root = NdTreeNode::with_child(

@@ -81,7 +81,12 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         2 << self.layer
     }
 
-    // pub fn get_cell(&self, pos: NdVec<D>) -> T {}
+    pub fn get_cell(&self, pos: NdVec<D>) -> T {
+        match &self.child {
+            NdTreeChild::Leaf(cell_state) => *cell_state,
+            NdTreeChild::Branch(branches) => branches[pos.branch_index(self.layer)].get_cell(pos),
+        }
+    }
 
     // fn get_subtree(&self, pos: NdVec<D>, layer: usize) -> NdSubTree<T, D> {
     //     match &self.child {

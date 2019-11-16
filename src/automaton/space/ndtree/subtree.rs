@@ -1,3 +1,8 @@
+use seahash::SeaHasher;
+use std::hash::Hasher;
+use std::marker::PhantomData;
+use std::rc::Rc;
+
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

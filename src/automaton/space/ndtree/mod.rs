@@ -1,7 +1,4 @@
-use seahash::SeaHasher;
-use std::hash::Hasher;
-use std::marker::PhantomData;
-use std::rc::Rc;
+use std::ops::Index;
 
 mod cache;
 mod index;

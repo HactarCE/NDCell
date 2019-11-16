@@ -1,13 +1,11 @@
 use seahash::SeaHasher;
-use std::cell::RefCell;
 use std::hash::{BuildHasherDefault, Hasher};
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 use weak_table::WeakHashSet;
 
 use super::*;
 
-pub type NdTreeCache<T, D> =
-    Rc<RefCell<WeakHashSet<Weak<NdTreeNode<T, D>>, BuildHasherDefault<SeaHasher>>>>;
+pub type NdTreeCache<T, D> = WeakHashSet<Weak<NdTreeNode<T, D>>, BuildHasherDefault<SeaHasher>>;
 
 impl<T: CellType, D: Dim> Eq for NdTreeNode<T, D> {}
 impl<T: CellType, D: Dim> PartialEq for NdTreeNode<T, D> {

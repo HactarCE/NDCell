@@ -5,34 +5,6 @@ use std::rc::Rc;
 
 use super::*;
 
-// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-// pub struct NdSubTree<T: CellType, D: Dim> {
-//     pub node: NdTreeNodeRef<T, D>,
-// }
-
-// impl<T: CellType, D: Dim> NdSubTree<T, D> {
-//     /// Constructs a new empty N-dimensional tree stucture with an empty node
-//     /// cache.
-//     pub fn new() -> Self {
-//         let cache = NdTreeCache::default();
-//         let node = NdTreeNode::empty(cache, 0).intern();
-//         Self { node }
-//     }
-
-//     /// Expands the tree by one layer, encompassing 2^d times as many cells.
-//     pub fn expand() -> Self {
-//         Self {
-//             node: self.node.expand(),
-//         }
-//     }
-// }
-
-// impl<T: CellType, D: Dim> Default for NdSubTree<T, D> {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
-
 /// An interned NdTreeNode.
 pub type NdSubTree<T, D> = Rc<NdTreeNode<T, D>>;
 
@@ -51,8 +23,6 @@ pub struct NdTreeNode<T: CellType, D: Dim> {
     pub(super) child: NdTreeChild<T, D>,
 
     pub(super) hash_code: u64,
-
-    pub(super) cache: NdTreeCache<T, D>,
 
     phantom: PhantomData<D>,
 }
@@ -74,15 +44,11 @@ pub enum NdTreeChild<T: CellType, D: Dim> {
 
 impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Constructs a new empty NdTreeNode at a given layer.
-    pub(super) fn empty(cache: NdTreeCache<T, D>, layer: usize) -> Self {
-        Self::with_child(cache, layer, NdTreeChild::default())
+    pub(super) fn empty(layer: usize) -> Self {
+        Self::with_child(layer, NdTreeChild::default())
     }
     /// Constructs a new NdTreeNode at a given layer and with a given child.
-    pub(super) fn with_child(
-        cache: NdTreeCache<T, D>,
-        layer: usize,
-        child: NdTreeChild<T, D>,
-    ) -> Self {
+    pub(super) fn with_child(layer: usize, child: NdTreeChild<T, D>) -> Self {
         let mut hasher = SeaHasher::new();
         layer.hash(&mut hasher);
         child.hash(&mut hasher);
@@ -90,7 +56,6 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
             layer,
             child,
             hash_code: hasher.finish(),
-            cache,
             phantom: PhantomData,
         };
         ret
@@ -98,11 +63,10 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Checks whether an equivalent node is present in the cache. If it is,
     /// destroys this one and returns the equivalent node from the cache; if
     /// not, adds this node to the cache and returns it.
-    pub(super) fn intern(self) -> NdSubTree<T, D> {
-        let existing_node = self.cache.borrow().get(&self).clone();
-        existing_node.unwrap_or_else(|| {
+    pub(super) fn intern(self, cache: &mut NdTreeCache<T, D>) -> NdSubTree<T, D> {
+        cache.get(&self).clone().unwrap_or_else(|| {
             let ret = Rc::new(self);
-            ret.cache.borrow_mut().insert(ret.clone());
+            cache.insert(ret.clone());
             ret
         })
     }

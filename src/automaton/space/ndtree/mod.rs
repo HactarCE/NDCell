@@ -7,8 +7,9 @@ use cache::NdTreeCache;
 use subtree::{NdSubTree, NdTreeChild, NdTreeNode};
 
 /// An N-dimensional generalization of a quadtree.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct NdTree<T: CellType, D: Dim> {
+    cache: NdTreeCache<T, D>,
     root: NdSubTree<T, D>,
     offset: NdVec<D>,
 }
@@ -35,9 +36,14 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
     /// Constructs a new empty NdTree with an empty node cache centered on the
     /// origin.
     pub fn new() -> Self {
-        let root = NdTreeNode::empty(Default::default(), 0).intern();
+        let mut cache = Default::default();
+        let root = NdTreeNode::empty(0).intern(&mut cache);
         let offset = NdVec::origin() - (root.len() as isize / 2);
-        Self { root, offset }
+        Self {
+            cache,
+            root,
+            offset,
+        }
     }
 
     /// Returns the minimum position in this NdTree.
@@ -62,18 +68,15 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
 
     fn expand_layer(&mut self) {
         self.root = NdTreeNode::with_child(
-            self.root.cache.clone(),
             self.root.layer + 1,
             NdTreeChild::Branch({
                 let mut new_branches = Vec::with_capacity(NdVec::<D>::BRANCHES);
                 for branch_idx in 0..NdVec::<D>::BRANCHES {
                     new_branches[branch_idx] = match &self.root.child {
-                        NdTreeChild::Leaf(cell_state) => NdTreeNode::with_child(
-                            self.root.cache.clone(),
-                            self.root.layer,
-                            NdTreeChild::Leaf(*cell_state),
-                        )
-                        .intern(),
+                        NdTreeChild::Leaf(cell_state) => {
+                            NdTreeNode::with_child(self.root.layer, NdTreeChild::Leaf(*cell_state))
+                                .intern(&mut self.cache)
+                        }
                         NdTreeChild::Branch(old_branches) => {
                             old_branches[branch_idx ^ NdVec::<D>::BRANCH_IDX_BITMASK].clone()
                         }
@@ -82,7 +85,7 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
                 new_branches
             }),
         )
-        .intern()
+        .intern(&mut self.cache)
     }
 
     // pub fn set_cell(&self, pos: NdVec<D>, cell_state: T) {

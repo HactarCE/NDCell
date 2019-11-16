@@ -143,7 +143,7 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
             NdTreeChild::Branch({
                 let mut new_branches = Vec::with_capacity(Self::BRANCHES);
                 for branch_idx in 0..Self::BRANCHES {
-                    new_branches[branch_idx] = match &self.child {
+                    new_branches.push(match &self.child {
                         NdTreeChild::Leaf(cell_state) => {
                             NdTreeNode::with_child(self.layer, NdTreeChild::Leaf(*cell_state))
                                 .intern(cache)
@@ -151,7 +151,7 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
                         NdTreeChild::Branch(old_branches) => {
                             old_branches[branch_idx ^ Self::BRANCH_IDX_BITMASK].clone()
                         }
-                    }
+                    })
                 }
                 new_branches
             }),

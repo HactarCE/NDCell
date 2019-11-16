@@ -3,7 +3,7 @@ mod subtree;
 
 use super::*;
 use cache::NdTreeCache;
-use subtree::{NdSubTree, NdTreeChild, NdTreeNode};
+use subtree::{NdSubTree, NdTreeNode};
 
 /// An N-dimensional generalization of a quadtree.
 #[derive(Debug, Clone)]
@@ -37,7 +37,7 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
     pub fn new() -> Self {
         let mut cache = Default::default();
         let root = NdTreeNode::empty(0).intern(&mut cache);
-        let offset = NdVec::origin() - (root.len() as isize / 2);
+        let offset = NdVec::origin();
         Self {
             cache,
             root,
@@ -51,7 +51,7 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
     }
     /// Returns the maximum position in this NdTree.
     pub fn max(&self) -> NdVec<D> {
-        self.offset + (self.root.len() / 2 - 1) as isize
+        self.offset + (self.root.len() - 1) as isize
     }
     /// Returns the hyperrectangle that this NdTree spans.
     pub fn rect(&self) -> NdRect<D> {
@@ -64,6 +64,10 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
     fn expand_centered(&mut self) {
         self.root = self.root.expand_centered(&mut self.cache);
         self.offset -= self.root.len() as isize / 4;
+    }
+
+    fn contract(&mut self) {
+        // TODO become smaller if possible
     }
 
     /// Returns the state of the cell at the given position.
@@ -80,7 +84,41 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         while !self.rect().contains(pos) {
             self.expand_centered();
         }
+        println!("contains done");
         self.root
             .set_cell(&mut self.cache, pos - self.offset, cell_state);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+    use std::collections::HashMap;
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            max_shrink_iters: 4096,
+            ..Default::default()
+        })]
+
+        /// Tests setting and getting arbitrary grid cells by comparing against
+        /// a HashMap.
+        #[test]
+        fn test_ndtree_set_get(
+            cells_to_set: Vec<(Vec3D, u8)>,
+            cells_to_get: Vec<Vec3D>
+        ) {
+            let mut ndtree = NdTree::new();
+            let mut hashmap = HashMap::new();
+            for (pos, state) in cells_to_set {
+                hashmap.insert(pos, state);
+                ndtree.set_cell(pos, state);
+            }
+            println!("{:?}", ndtree);
+            for pos in cells_to_get {
+                assert_eq!(hashmap.get(&pos).unwrap_or(&0), &ndtree.get_cell(pos));
+            }
+        }
     }
 }

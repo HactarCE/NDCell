@@ -5,6 +5,27 @@ pub struct NdSubTree<T: CellType, D: Dim> {
     node: NdTreeNodeRef<T, D>,
 }
 
+impl<T: CellType, D: Dim> NdSubTree<T, D> {
+    /// Constructs a new empty N-dimensional tree stucture with an empty node
+    /// cache.
+    pub fn new() -> Self {
+        let tree_set = NdTreeCache::default();
+        let node = NdTreeNode::empty(tree_set, 0).intern();
+        Self { node }
+    }
+
+    /// Returns this subtree's node.
+    pub fn node(&self) -> &NdTreeNodeRef<T, D> {
+        &self.node
+    }
+}
+
+impl<T: CellType, D: Dim> Default for NdSubTree<T, D> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// An interned NdTreeNode.
 pub type NdTreeNodeRef<T, D> = Rc<NdTreeNode<T, D>>;
 
@@ -44,20 +65,6 @@ pub enum NdTreeChild<T: CellType, D: Dim> {
     Branch(Vec<NdSubTree<T, D>>),
 }
 
-impl<T: CellType, D: Dim> Default for NdSubTree<T, D> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-impl<T: CellType, D: Dim> NdSubTree<T, D> {
-    /// Create a new empty N-dimensional tree stucture with an empty node cache.
-    pub fn new() -> Self {
-        let tree_set = NdTreeCache::default();
-        let node = NdTreeNode::empty(tree_set, 0).intern();
-        Self { node }
-    }
-}
-
 impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Constructs a new empty NdTreeNode at a given layer.
     fn empty(tree_set: NdTreeCache<T, D>, layer: usize) -> Self {
@@ -87,6 +94,12 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
             ret.tree_set.borrow_mut().insert(ret.clone());
             ret
         })
+    }
+
+    /// Returns the length of a single side of the hypersquare contained in this
+    /// subtree.
+    pub fn len(&self) -> usize {
+        1 << self.layer
     }
 
     // fn get_subtree(&self, pos: NdVec<D>, layer: usize) -> NdSubTree<T, D> {

@@ -30,3 +30,21 @@ pub type NdTree4D<T> = NdTree<T, Vec4D>;
 pub type NdTree5D<T> = NdTree<T, Vec5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
 pub type NdTree6D<T> = NdTree<T, Vec6D>;
+
+impl<T: CellType, D: Dim> NdTree<T, D> {
+    /// Constructs a new empty NdTree with an empty node cache centered on the
+    /// origin.
+    pub fn new() -> Self {
+        let root = NdSubTree::default();
+        let offset = NdVec::origin() - (root.node().len() as isize / 2);
+        Self { root, offset }
+    }
+
+    /// Returns the hyperrectangle that this NdTree spans.
+    pub fn rect(&self) -> NdRect<D> {
+        NdRect {
+            a: self.offset,
+            b: self.offset + (self.root.node().len() / 2 - 1) as isize,
+        }
+    }
+}

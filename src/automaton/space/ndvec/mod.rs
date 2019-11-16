@@ -32,9 +32,9 @@ pub type Vec6D = NdVec<[isize; 6]>;
 
 // Implement generic vector operations.
 impl<D: Dim> NdVec<D> {
-    const NDIM: usize = D::NDIM;
-
-    fn origin() -> Self {
+    /// Returns the NdVec pointing to the origin; i.e. an NdVec consisting of
+    /// all zeros.
+    pub fn origin() -> Self {
         Self(D::origin())
     }
 }
@@ -61,7 +61,7 @@ impl proptest::arbitrary::Arbitrary for Vec3D {
     type Strategy = BoxedStrategy<Self>;
     fn arbitrary_with(max: Option<isize>) -> Self::Strategy {
         let max = max.unwrap_or(100);
-        prop::collection::vec(-max..=max, Self::NDIM)
+        prop::collection::vec(-max..=max, 3)
             .prop_flat_map(|v| Just(NdVec([v[0], v[1], v[2]])))
             .boxed()
     }

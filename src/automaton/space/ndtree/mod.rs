@@ -45,11 +45,6 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         }
     }
 
-    /// The number of branches for this many dimensions (2^d).
-    pub const BRANCHES: usize = NdTreeNode::<T, D>::BRANCHES;
-    /// The bitmask for branch indices.
-    const BRANCH_IDX_BITMASK: usize = NdTreeNode::<T, D>::BRANCH_IDX_BITMASK;
-
     /// Returns the minimum position in this NdTree.
     pub fn min(&self) -> NdVec<D> {
         self.offset
@@ -66,6 +61,14 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         }
     }
 
+    fn expand_centered(&mut self) {
+        self.root = self
+            .root
+            .expand_centered(&mut self.cache)
+            .intern(&mut self.cache);
+        self.offset -= self.root.len() as isize / 4;
+    }
+
     /// Returns the cell at the given position in this NdTree.
     pub fn get_cell(&self, pos: NdVec<D>) -> T {
         if self.rect().contains(pos) {
@@ -73,28 +76,6 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         } else {
             T::default()
         }
-    }
-
-    fn expand_layer(&mut self) {
-        self.root = NdTreeNode::with_child(
-            self.root.layer + 1,
-            NdTreeChild::Branch({
-                let mut new_branches = Vec::with_capacity(Self::BRANCHES);
-                for branch_idx in 0..Self::BRANCHES {
-                    new_branches[branch_idx] = match &self.root.child {
-                        NdTreeChild::Leaf(cell_state) => {
-                            NdTreeNode::with_child(self.root.layer, NdTreeChild::Leaf(*cell_state))
-                                .intern(&mut self.cache)
-                        }
-                        NdTreeChild::Branch(old_branches) => {
-                            old_branches[branch_idx ^ Self::BRANCH_IDX_BITMASK].clone()
-                        }
-                    }
-                }
-                new_branches
-            }),
-        )
-        .intern(&mut self.cache)
     }
 
     // pub fn set_cell(&self, pos: NdVec<D>, cell_state: T) {

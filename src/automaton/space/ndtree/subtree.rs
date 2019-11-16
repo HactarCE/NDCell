@@ -81,10 +81,29 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         2 << self.layer
     }
 
+    /// The number of branches for this many dimensions (2^d).
+    pub const BRANCHES: usize = 1 << D::NDIM;
+    /// The bitmask for branch indices.
+    pub const BRANCH_IDX_BITMASK: usize = Self::BRANCHES - 1;
+    /// Computes this node's "branch index" for the given position.
+    ///
+    /// Each nth layer corresponds to the nth bit of each axis, which can either
+    /// be 0 or 1. The "branch index" is a number between 0 and 2^d-1 composed
+    /// from these bits; each bit in the branch index is taken from a different
+    /// axis. It's like a bitwise NdVec.
+    pub fn branch_idx(&self, pos: NdVec<D>) -> usize {
+        let mut ret = 0;
+        for ax in D::axes() {
+            ret <<= 1;
+            ret |= (pos[ax] as usize >> self.layer) & 1;
+        }
+        ret
+    }
+
     pub fn get_cell(&self, pos: NdVec<D>) -> T {
         match &self.child {
             NdTreeChild::Leaf(cell_state) => *cell_state,
-            NdTreeChild::Branch(branches) => branches[pos.branch_index(self.layer)].get_cell(pos),
+            NdTreeChild::Branch(branches) => branches[self.branch_idx(pos)].get_cell(pos),
         }
     }
 

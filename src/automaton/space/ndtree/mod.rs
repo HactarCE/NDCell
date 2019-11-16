@@ -1,5 +1,4 @@
 mod cache;
-mod index;
 mod subtree;
 
 use super::*;
@@ -75,16 +74,16 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         self.root = NdTreeNode::with_child(
             self.root.layer + 1,
             NdTreeChild::Branch({
-                let mut new_branches = Vec::with_capacity(NdVec::<D>::BRANCHES);
-                for branch_idx in 0..NdVec::<D>::BRANCHES {
+                let mut new_branches = Vec::with_capacity(NdTreeNode::<T, D>::BRANCHES);
+                for branch_idx in 0..NdTreeNode::<T, D>::BRANCHES {
                     new_branches[branch_idx] = match &self.root.child {
                         NdTreeChild::Leaf(cell_state) => {
                             NdTreeNode::with_child(self.root.layer, NdTreeChild::Leaf(*cell_state))
                                 .intern(&mut self.cache)
                         }
-                        NdTreeChild::Branch(old_branches) => {
-                            old_branches[branch_idx ^ NdVec::<D>::BRANCH_IDX_BITMASK].clone()
-                        }
+                        NdTreeChild::Branch(old_branches) => old_branches
+                            [branch_idx ^ NdTreeNode::<T, D>::BRANCH_IDX_BITMASK]
+                            .clone(),
                     }
                 }
                 new_branches

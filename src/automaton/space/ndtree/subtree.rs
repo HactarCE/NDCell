@@ -84,7 +84,7 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// The number of branches for this many dimensions (2^d).
     pub const BRANCHES: usize = 1 << D::NDIM;
     /// The bitmask for branch indices.
-    pub const BRANCH_IDX_BITMASK: usize = Self::BRANCHES - 1;
+    pub(super) const BRANCH_IDX_BITMASK: usize = Self::BRANCHES - 1;
     /// Computes this node's "branch index" for the given position.
     ///
     /// Each nth layer corresponds to the nth bit of each axis, which can either

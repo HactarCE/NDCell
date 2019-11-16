@@ -5,34 +5,36 @@ use std::rc::Rc;
 
 use super::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct NdSubTree<T: CellType, D: Dim> {
-    node: NdTreeNodeRef<T, D>,
-}
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// pub struct NdSubTree<T: CellType, D: Dim> {
+//     pub node: NdTreeNodeRef<T, D>,
+// }
 
-impl<T: CellType, D: Dim> NdSubTree<T, D> {
-    /// Constructs a new empty N-dimensional tree stucture with an empty node
-    /// cache.
-    pub fn new() -> Self {
-        let cache = NdTreeCache::default();
-        let node = NdTreeNode::empty(cache, 0).intern();
-        Self { node }
-    }
+// impl<T: CellType, D: Dim> NdSubTree<T, D> {
+//     /// Constructs a new empty N-dimensional tree stucture with an empty node
+//     /// cache.
+//     pub fn new() -> Self {
+//         let cache = NdTreeCache::default();
+//         let node = NdTreeNode::empty(cache, 0).intern();
+//         Self { node }
+//     }
 
-    /// Returns this subtree's node.
-    pub fn node(&self) -> &NdTreeNodeRef<T, D> {
-        &self.node
-    }
-}
+//     /// Expands the tree by one layer, encompassing 2^d times as many cells.
+//     pub fn expand() -> Self {
+//         Self {
+//             node: self.node.expand(),
+//         }
+//     }
+// }
 
-impl<T: CellType, D: Dim> Default for NdSubTree<T, D> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// impl<T: CellType, D: Dim> Default for NdSubTree<T, D> {
+//     fn default() -> Self {
+//         Self::new()
+//     }
+// }
 
 /// An interned NdTreeNode.
-pub type NdTreeNodeRef<T, D> = Rc<NdTreeNode<T, D>>;
+pub type NdSubTree<T, D> = Rc<NdTreeNode<T, D>>;
 
 /// A single node in the NdTree, which contains information about its layer
 /// (base-2 logarithm of hypercube side length) and its children.
@@ -72,11 +74,15 @@ pub enum NdTreeChild<T: CellType, D: Dim> {
 
 impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Constructs a new empty NdTreeNode at a given layer.
-    fn empty(cache: NdTreeCache<T, D>, layer: usize) -> Self {
+    pub(super) fn empty(cache: NdTreeCache<T, D>, layer: usize) -> Self {
         Self::with_child(cache, layer, NdTreeChild::default())
     }
     /// Constructs a new NdTreeNode at a given layer and with a given child.
-    fn with_child(cache: NdTreeCache<T, D>, layer: usize, child: NdTreeChild<T, D>) -> Self {
+    pub(super) fn with_child(
+        cache: NdTreeCache<T, D>,
+        layer: usize,
+        child: NdTreeChild<T, D>,
+    ) -> Self {
         let mut hasher = SeaHasher::new();
         layer.hash(&mut hasher);
         child.hash(&mut hasher);
@@ -92,7 +98,7 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Checks whether an equivalent node is present in the cache. If it is,
     /// destroys this one and returns the equivalent node from the cache; if
     /// not, adds this node to the cache and returns it.
-    fn intern(self) -> NdTreeNodeRef<T, D> {
+    pub(super) fn intern(self) -> NdSubTree<T, D> {
         let existing_node = self.cache.borrow().get(&self).clone();
         existing_node.unwrap_or_else(|| {
             let ret = Rc::new(self);
@@ -104,10 +110,14 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Returns the length of a single side of the hypersquare contained in this
     /// subtree.
     pub fn len(&self) -> usize {
-        1 << self.layer
+        // layer = 0 => len = 2
+        // layer = 1 => len = 4
+        // layer = 2 => len = 8
+        // etc.
+        2 << self.layer
     }
 
-    pub fn get_cell(&self, pos: NdVec<D>) -> T {}
+    // pub fn get_cell(&self, pos: NdVec<D>) -> T {}
 
     // fn get_subtree(&self, pos: NdVec<D>, layer: usize) -> NdSubTree<T, D> {
     //     match &self.child {

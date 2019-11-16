@@ -4,7 +4,7 @@ mod subtree;
 
 use super::*;
 use cache::NdTreeCache;
-use subtree::{NdSubTree, NdTreeNode};
+use subtree::{NdSubTree, NdTreeChild, NdTreeNode};
 
 /// An N-dimensional generalization of a quadtree.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -26,12 +26,17 @@ pub type NdTree5D<T> = NdTree<T, Vec5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
 pub type NdTree6D<T> = NdTree<T, Vec6D>;
 
+impl<T: CellType, D: Dim> Default for NdTree<T, D> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl<T: CellType, D: Dim> NdTree<T, D> {
     /// Constructs a new empty NdTree with an empty node cache centered on the
     /// origin.
     pub fn new() -> Self {
-        let root = NdSubTree::default();
-        let offset = NdVec::origin() - (root.node().len() as isize / 2);
+        let root = NdTreeNode::empty(Default::default(), 0).intern();
+        let offset = NdVec::origin() - (root.len() as isize / 2);
         Self { root, offset }
     }
 
@@ -41,7 +46,7 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
     }
     /// Returns the maximum position in this NdTree.
     pub fn max(&self) -> NdVec<D> {
-        self.offset + (self.root.node().len() / 2 - 1) as isize
+        self.offset + (self.root.len() / 2 - 1) as isize
     }
     /// Returns the hyperrectangle that this NdTree spans.
     pub fn rect(&self) -> NdRect<D> {
@@ -50,4 +55,41 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
             b: self.max(),
         }
     }
+
+    // pub fn get_cell(&self, pos: NdVec<D>) -> T {
+    //     self.root.get_cell(pos - self.offset)
+    // }
+
+    fn expand_layer(&mut self) {
+        self.root = NdTreeNode::with_child(
+            self.root.cache.clone(),
+            self.root.layer + 1,
+            NdTreeChild::Branch({
+                let mut new_branches = Vec::with_capacity(NdVec::<D>::BRANCHES);
+                for branch_idx in 0..NdVec::<D>::BRANCHES {
+                    new_branches[branch_idx] = match &self.root.child {
+                        NdTreeChild::Leaf(cell_state) => NdTreeNode::with_child(
+                            self.root.cache.clone(),
+                            self.root.layer,
+                            NdTreeChild::Leaf(*cell_state),
+                        )
+                        .intern(),
+                        NdTreeChild::Branch(old_branches) => {
+                            old_branches[branch_idx ^ NdVec::<D>::BRANCH_IDX_BITMASK].clone()
+                        }
+                    }
+                }
+                new_branches
+            }),
+        )
+        .intern()
+    }
+
+    // pub fn set_cell(&self, pos: NdVec<D>, cell_state: T) {
+    //     while !self.rect().contains(pos) {
+    //         self.expand_layer();
+    //     }
+    //     // self.root.expand_to(pos.)
+    //     self.root.set_cell(pos - self.offset, cell_state);
+    // }
 }

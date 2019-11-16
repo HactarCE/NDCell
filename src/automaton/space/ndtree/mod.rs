@@ -37,11 +37,19 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         Self { root, offset }
     }
 
+    /// Returns the minimum position in this NdTree.
+    pub fn min(&self) -> NdVec<D> {
+        self.offset
+    }
+    /// Returns the maximum position in this NdTree.
+    pub fn max(&self) -> NdVec<D> {
+        self.offset + (self.root.node().len() / 2 - 1) as isize
+    }
     /// Returns the hyperrectangle that this NdTree spans.
     pub fn rect(&self) -> NdRect<D> {
         NdRect {
-            a: self.offset,
-            b: self.offset + (self.root.node().len() / 2 - 1) as isize,
+            a: self.min(),
+            b: self.max(),
         }
     }
 }

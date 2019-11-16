@@ -62,14 +62,11 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
     }
 
     fn expand_centered(&mut self) {
-        self.root = self
-            .root
-            .expand_centered(&mut self.cache)
-            .intern(&mut self.cache);
+        self.root = self.root.expand_centered(&mut self.cache);
         self.offset -= self.root.len() as isize / 4;
     }
 
-    /// Returns the cell at the given position in this NdTree.
+    /// Returns the state of the cell at the given position.
     pub fn get_cell(&self, pos: NdVec<D>) -> T {
         if self.rect().contains(pos) {
             self.root.get_cell(pos - self.offset)
@@ -78,11 +75,12 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         }
     }
 
-    // pub fn set_cell(&self, pos: NdVec<D>, cell_state: T) {
-    //     while !self.rect().contains(pos) {
-    //         self.expand_layer();
-    //     }
-    //     // self.root.expand_to(pos.)
-    //     self.root.set_cell(pos - self.offset, cell_state);
-    // }
+    /// Sets the state of the cell at the given position.
+    pub fn set_cell(&mut self, pos: NdVec<D>, cell_state: T) {
+        while !self.rect().contains(pos) {
+            self.expand_centered();
+        }
+        self.root
+            .set_cell(&mut self.cache, pos - self.offset, cell_state);
+    }
 }

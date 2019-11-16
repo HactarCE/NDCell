@@ -8,25 +8,6 @@ use super::*;
 /// An interned NdTreeNode.
 pub type NdSubTree<T, D> = Rc<NdTreeNode<T, D>>;
 
-/// A single node in the NdTree, which contains information about its layer
-/// (base-2 logarithm of hypercube side length) and its children.
-#[derive(Debug, Clone)]
-// TODO: custom Debug implementation
-pub struct NdTreeNode<T: CellType, D: Dim> {
-    /// The "layer" of this node (base-2 logarithm of hypercube side length).
-    pub(super) layer: usize,
-
-    /// The child of this node, which is either a single cell state or a 2^d
-    /// hypercube of nodes.
-    ///
-    /// If layer == 0, then it must be a single cell state.
-    pub(super) child: NdTreeChild<T, D>,
-
-    pub(super) hash_code: u64,
-
-    phantom: PhantomData<D>,
-}
-
 /// An NdTreeNode's child.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NdTreeChild<T: CellType, D: Dim> {
@@ -42,13 +23,38 @@ pub enum NdTreeChild<T: CellType, D: Dim> {
     Branch(Vec<NdSubTree<T, D>>),
 }
 
+impl<T: CellType, D: Dim> Default for NdTreeChild<T, D> {
+    fn default() -> Self {
+        Self::Leaf(T::default())
+    }
+}
+
+/// A single node in the NdTree, which contains information about its layer
+/// (base-2 logarithm of hypercube side length) and its children.
+#[derive(Debug, Clone)]
+// TODO: custom Debug implementation
+pub struct NdTreeNode<T: CellType, D: Dim> {
+    /// The "layer" of this node (base-2 logarithm of hypercube side length).
+    layer: usize,
+
+    /// The child of this node, which is either a single cell state or a 2^d
+    /// hypercube of nodes.
+    ///
+    /// If layer == 0, then it must be a single cell state.
+    child: NdTreeChild<T, D>,
+
+    hash_code: u64,
+
+    phantom: PhantomData<D>,
+}
+
 impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Constructs a new empty NdTreeNode at a given layer.
-    pub(super) fn empty(layer: usize) -> Self {
+    pub fn empty(layer: usize) -> Self {
         Self::with_child(layer, NdTreeChild::default())
     }
     /// Constructs a new NdTreeNode at a given layer and with a given child.
-    pub(super) fn with_child(layer: usize, child: NdTreeChild<T, D>) -> Self {
+    pub fn with_child(layer: usize, child: NdTreeChild<T, D>) -> Self {
         let mut hasher = SeaHasher::new();
         layer.hash(&mut hasher);
         child.hash(&mut hasher);
@@ -63,7 +69,26 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Checks whether an equivalent node is present in the cache. If it is,
     /// destroys this one and returns the equivalent node from the cache; if
     /// not, adds this node to the cache and returns it.
-    pub(super) fn intern(self, cache: &mut NdTreeCache<T, D>) -> NdSubTree<T, D> {
+    ///
+    /// Also simplifies this node: if all branches are identical leaves, sets
+    /// the child to a single leaf.
+    pub fn intern(mut self, cache: &mut NdTreeCache<T, D>) -> NdSubTree<T, D> {
+        // If this branch splits ...
+        if let NdTreeChild::Branch(branches) = &self.child {
+            // ... and the first split is a leaf ...
+            if let NdTreeChild::Leaf(_) = branches[0].child {
+                // ... and all the other splits are equivalent leaves ...
+                if branches
+                    .iter()
+                    .skip(1)
+                    .all(|branch| branch.child == branches[0].child)
+                {
+                    // ... then set this node's child to that same leaf.
+                    self.child = branches[0].child.clone();
+                }
+            }
+        }
+        // Now actually construct the Rc and add it to the cache.
         cache.get(&self).clone().unwrap_or_else(|| {
             let ret = Rc::new(self);
             cache.insert(ret.clone());
@@ -71,14 +96,24 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         })
     }
 
+    pub fn layer(&self) -> usize {
+        self.layer
+    }
+    pub fn child(&self) -> &NdTreeChild<T, D> {
+        &self.child
+    }
+    pub fn hash_code(&self) -> u64 {
+        self.hash_code
+    }
+
     /// Returns the length of a single side of the hypersquare contained in this
     /// subtree.
     pub fn len(&self) -> usize {
-        // layer = 0 => len = 2
-        // layer = 1 => len = 4
-        // layer = 2 => len = 8
+        // layer = 0 => len = 1
+        // layer = 1 => len = 2
+        // layer = 2 => len = 4
         // etc.
-        2 << self.layer
+        1 << self.layer
     }
 
     /// The number of branches for this many dimensions (2^d).
@@ -100,7 +135,9 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         ret
     }
 
-    pub fn expand_centered(&self, cache: &mut NdTreeCache<T, D>) -> Self {
+    /// "Zooms out" of the current tree; returns a new NdSubTree with the
+    /// contents of the existing one centered in an empty grid.
+    pub fn expand_centered(&self, cache: &mut NdTreeCache<T, D>) -> NdSubTree<T, D> {
         NdTreeNode::with_child(
             self.layer + 1,
             NdTreeChild::Branch({
@@ -119,6 +156,21 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
                 new_branches
             }),
         )
+        .intern(cache)
+    }
+
+    fn split_child(&self, cache: &mut NdTreeCache<T, D>) -> Vec<NdSubTree<T, D>> {
+        if self.layer == 0 {
+            panic!("Cannot split NdTreeNode child at layer 0");
+        }
+        match &self.child {
+            NdTreeChild::Leaf(_) => vec![
+                Self::with_child(self.layer - 1, self.child.clone())
+                    .intern(cache);
+                Self::BRANCHES
+            ],
+            NdTreeChild::Branch(branches) => branches.clone(),
+        }
     }
 
     pub fn get_cell(&self, pos: NdVec<D>) -> T {
@@ -128,36 +180,17 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         }
     }
 
-    // fn get_subtree(&self, pos: NdVec<D>, layer: usize) -> NdSubTree<T, D> {
-    //     match &self.child {
-    //         NdTreeChild::Leaf(cell_state) => NdSubTree {
-    //             node: Self::with_child(self.cache, layer, self.child).intern(),
-    //         },
-    //         NdTreeChild::Branch(branches) => panic!(),
-    //     }
-    // }
-
-    // pub fn get_subtree_inner(&self, pos: NdVec<D>, layer: usize) -> T {}
-
-    // pub fn get(&self, pos: NdVec<D>) -> T {
-    //     match &self.child {
-    //         NdTreeChild::Leaf(cell_state) => *cell_state,
-    //         NdTreeChild::Branch(branches) => branches[pos.branch_index_top()].node.get_inner(pos),
-    //     }
-    // }
-
-    // fn get_inner(&self, pos: NdVec<D>) -> T {
-    //     match &self.child {
-    //         NdTreeChild::Leaf(cell_state) => *cell_state,
-    //         NdTreeChild::Branch(branches) => {
-    //             branches[pos.branch_index(self.layer)].node.get_inner(pos)
-    //         }
-    //     }
-    // }
-}
-
-impl<T: CellType, D: Dim> Default for NdTreeChild<T, D> {
-    fn default() -> Self {
-        Self::Leaf(T::default())
+    pub fn set_cell(
+        &self,
+        cache: &mut NdTreeCache<T, D>,
+        pos: NdVec<D>,
+        cell_state: T,
+    ) -> NdSubTree<T, D> {
+        if self.layer == 0 {
+            Self::with_child(0, NdTreeChild::Leaf(cell_state)).intern(cache)
+        } else {
+            let branches = self.split_child(cache);
+            branches[self.branch_idx(pos)].set_cell(cache, pos, cell_state)
+        }
     }
 }

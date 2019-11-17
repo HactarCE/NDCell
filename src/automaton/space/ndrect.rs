@@ -12,17 +12,17 @@ pub struct NdRect<D: Dim> {
 }
 
 /// A 1D hyperrectangle (a linear range).
-pub type Rect1D = NdRect<Vec1D>;
+pub type Rect1D = NdRect<Dim1D>;
 /// A 2D hyperrectangle (a rectangle).
-pub type Rect2D = NdRect<Vec2D>;
+pub type Rect2D = NdRect<Dim2D>;
 /// A 3D hyperrectangle (a rectangular prism).
-pub type Rect3D = NdRect<Vec3D>;
+pub type Rect3D = NdRect<Dim3D>;
 /// A 4D hyperrectangle (a rectangular duoprism).
-pub type Rect4D = NdRect<Vec4D>;
+pub type Rect4D = NdRect<Dim4D>;
 /// A 5D hyperrectangle.
-pub type Rect5D = NdRect<Vec5D>;
+pub type Rect5D = NdRect<Dim5D>;
 /// A 6D hyperrectangle.
-pub type Rect6D = NdRect<Vec6D>;
+pub type Rect6D = NdRect<Dim6D>;
 
 impl<D: Dim> NdRect<D> {
     /// Returns the minimum (most negative) corner of this NdRect.

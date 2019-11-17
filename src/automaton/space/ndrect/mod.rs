@@ -1,14 +1,16 @@
-use std::cmp;
+mod iter;
+mod ops;
 
 use super::*;
+use iter::*;
 
 /// An N-dimensional hyperrectangle.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct NdRect<D: Dim> {
-    /// One corner of the hyperrectangle.
-    pub a: NdVec<D>,
-    /// The other corner of the hyperrectangle.
-    pub b: NdVec<D>,
+    /// The most negative corner of the hyperrectangle.
+    min: NdVec<D>,
+    /// The most positive corner of the hyperrectangle.
+    max: NdVec<D>,
 }
 
 /// A 1D hyperrectangle (a linear range).
@@ -25,52 +27,44 @@ pub type Rect5D = NdRect<Dim5D>;
 pub type Rect6D = NdRect<Dim6D>;
 
 impl<D: Dim> NdRect<D> {
-    pub fn span(a: NdVec<D>, b: NdVec<D>) -> Self {
-        Self { a, b }
+    /// Constructs an NdRect spanning the given positions (inclusive).
+    pub fn span(mut a: NdVec<D>, mut b: NdVec<D>) -> Self {
+        for ax in D::axes() {
+            if a[ax] > b[ax] {
+                std::mem::swap(&mut a[ax], &mut b[ax]);
+            }
+        }
+        Self { min: a, max: b }
     }
+    /// Constructs an NdRect consisting of a single cell.
     pub fn single_cell(pos: NdVec<D>) -> Self {
-        Self::span(pos, pos)
+        Self { min: pos, max: pos }
     }
+    /// Constructs an NdRect with size 2r+1, given a center point and a radius r.
     pub fn centered(center: NdVec<D>, radius: usize) -> Self {
         Self {
-            a: center - radius as isize,
-            b: center + radius as isize,
+            min: center - radius as isize,
+            max: center + radius as isize,
         }
     }
-    /// Returns the NdRect that describes a Moore neighborhood centered at the
-    /// origin.
+    /// Constructs an NdRect describing a Moore neighborhood of a given radius
+    /// centered at the origin.
     pub fn moore(radius: usize) -> Self {
         Self::centered(NdVec::origin(), radius)
     }
 
-    /// Returns the first corner of this NdRect.
-    pub fn a(&self) -> NdVec<D> {
-        self.a
-    }
-    /// Returns the second corner of this NdRect.
-    pub fn b(&self) -> NdVec<D> {
-        self.b
-    }
     /// Returns the minimum (most negative) corner of this NdRect.
     pub fn min(&self) -> NdVec<D> {
-        let mut ret = NdVec::origin();
-        for ax in D::axes() {
-            ret[ax] = cmp::min(self.a[ax], self.b[ax]);
-        }
-        ret
+        self.min
     }
     /// Returns the maximum (most positive) corner of this NdRect.
     pub fn max(&self) -> NdVec<D> {
-        let mut ret = NdVec::origin();
-        for ax in D::axes() {
-            ret[ax] = cmp::max(self.a[ax], self.b[ax]);
-        }
-        ret
+        self.max
     }
 
     /// Returns the length of this NdRect along the given axis.
     pub fn len(&self, axis: Axis) -> usize {
-        (self.a[axis] - self.b[axis]).abs() as usize + 1
+        (self.max[axis] - self.min[axis]) as usize + 1
     }
     /// Returns the number of cells in this NdRect.
     pub fn count(&self) -> usize {
@@ -84,69 +78,17 @@ impl<D: Dim> NdRect<D> {
     /// Returns true if the cell position is contained within this
     /// hyperrectangle.
     pub fn contains(&self, pos: NdVec<D>) -> bool {
-        let min = self.min();
-        let max = self.max();
         for ax in D::axes() {
-            if pos[ax] < min[ax] || pos[ax] > max[ax] {
+            if pos[ax] < self.min[ax] || pos[ax] > self.max[ax] {
                 return false;
             }
         }
         true
     }
 
-    /// Constructs and equivalent NdRect with its corners swapped.
-    pub fn swap(&self) -> Self {
-        Self {
-            a: self.b,
-            b: self.a,
-        }
-    }
-    /// Constructs an equivalent NdRect using the minimum and maximum corners.
-    pub fn order(&self) -> Self {
-        Self {
-            a: self.min(),
-            b: self.max(),
-        }
-    }
-
     /// Returns an iterator over all the positions in this hyperrectangle.
     pub fn iter(self) -> NdRectIter<D> {
-        NdRectIter {
-            rect: self.order(),
-            next: self.min(),
-            done: false,
-        }
-    }
-}
-
-// TODO implement addition/subtraction of NdVecs
-
-/// An iterator over a hyperrectangle of cell positions.
-#[derive(Debug, Copy, Clone)]
-pub struct NdRectIter<D: Dim> {
-    rect: NdRect<D>,
-    next: NdVec<D>,
-    done: bool,
-}
-
-impl<D: Dim> Iterator for NdRectIter<D> {
-    type Item = NdVec<D>;
-    fn next(&mut self) -> Option<NdVec<D>> {
-        if self.done {
-            None
-        } else {
-            let ret = self.next;
-            for ax in D::axes() {
-                self.next[ax] += 1;
-                if self.next[ax] > self.rect.b[ax] {
-                    self.next[ax] = self.rect.a[ax];
-                } else {
-                    return Some(ret);
-                }
-            }
-            self.done = true;
-            Some(ret)
-        }
+        self.into()
     }
 }
 
@@ -181,8 +123,6 @@ mod tests {
             // Test contains().
             assert!(rect.contains(pos));
             assert_eq!(offset.is_zero(), rect.contains(pos + offset));
-            // Test is_empty().
-            // assert!(!rect.is_empty()); // TODO remove
             // Test count().
             assert_eq!(1, rect.count());
             // Test iteration.
@@ -198,8 +138,6 @@ mod tests {
             let rect = NdRect::span(corner1, corner2);
             // There's no nice way to test contains() here; we'll leave that to
             // the other methods.
-            // Test is_empty().
-            // assert!(!rect.is_empty()); // TODO remove
             // Test count() and iteration.
             test_iter_validity(rect);
         }
@@ -212,8 +150,6 @@ mod tests {
             test_offset in Vec3D::arbitrary_with(Some(3)),
         ) {
             let rect = NdRect::centered(center, radius);
-            // Test is_empty().
-            // assert!(!rect.is_empty()); // TODO remove
             // Test contains()
             {
                 let mut contains = true;
@@ -228,6 +164,23 @@ mod tests {
             assert_eq!((radius * 2 + 1).pow(3), rect.count());
             // Test count() and iteration.
             test_iter_validity(rect);
+        }
+
+        /// Test addition and subtract of NdRect and NdVec.
+        #[test]
+        fn test_rect_ops(
+            corner1: Vec3D,
+            corner2: Vec3D,
+            offset: Vec3D,
+        ) {
+            assert_eq!(
+                NdRect::span(corner1, corner2) + offset,
+                NdRect::span(corner1 + offset, corner2 + offset),
+            );
+            assert_eq!(
+                NdRect::span(corner1, corner2) - offset,
+                NdRect::span(corner1 - offset, corner2 - offset),
+            );
         }
     }
 }

@@ -34,7 +34,7 @@ impl Rule<bool, Dim2D> for MooreTotalistic2D {
 
     fn transition(&self, napkin: &NdTree2D<bool>) -> bool {
         // Count live neighbors.
-        let nbhood = Rect2D::moore(self.get_radius());
+        let nbhood = Rect2D::moore(self.radius());
         let mut live_neighbors = 0;
         for cell_coords in nbhood.iter() {
             if napkin.get_cell(cell_coords) {

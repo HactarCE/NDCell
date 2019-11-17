@@ -3,6 +3,7 @@ use crate::automaton::space::*;
 use regex::Regex;
 use std::convert::TryFrom;
 
+/// A 2-state totalistic 2D range-1 Moore-neighborhood algorithm.
 pub struct MooreTotalistic2D {
     birth: [bool; 9],
     survival: [bool; 9],
@@ -26,22 +27,22 @@ impl TryFrom<&str> for MooreTotalistic2D {
     }
 }
 
-impl Algorithm<bool, Vec2D> for MooreTotalistic2D {
+impl Algorithm<bool, Dim2D> for MooreTotalistic2D {
     fn get_radius(&self) -> usize {
         1
     }
 
-    fn transition(&self, napkin: &NdTree<bool, Vec2D>) -> bool {
+    fn transition(&self, napkin: &NdTree2D<bool>) -> bool {
         // Count live neighbors.
-        let region = napkin.region;
+        let nbhood = Rect2D::moore(self.get_radius());
         let mut live_neighbors = 0;
-        for cell_coords in region.into_iter() {
-            if napkin[cell_coords] {
+        for cell_coords in nbhood.iter() {
+            if napkin.get_cell(cell_coords) {
                 live_neighbors += 1;
             }
         }
         // Index LUT to get next cell state.
-        if napkin[NdVec::origin()] {
+        if napkin.get_cell(NdVec::origin()) {
             live_neighbors -= 1;
             self.survival[live_neighbors]
         } else {
@@ -50,6 +51,8 @@ impl Algorithm<bool, Vec2D> for MooreTotalistic2D {
     }
 }
 
+/// Conway's Game of Life, simulated using a general 2-state totalistic
+/// 2D range-1 Moore-neighborhood algorithm.
 pub const LIFE: MooreTotalistic2D = MooreTotalistic2D {
     birth: [false, false, false, true, false, false, false, false, false],
     survival: [false, false, true, true, false, false, false, false, false],

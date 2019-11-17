@@ -1,9 +1,13 @@
+//! Everything related to the description of a cellular automaton rule,
+//! primarily the transition function.
+
 use crate::automaton::space::*;
 
 mod totalistic;
 
 pub use totalistic::*;
 
+/// A generalized algorithm for simulating cellular automata.
 pub trait Algorithm<T: CellType, D: Dim> {
     /// Returns the maximum distance away that a cell may need to see in order
     /// to compute its next state.

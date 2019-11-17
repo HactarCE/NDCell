@@ -98,44 +98,47 @@ mod tests {
     use proptest::prelude::*;
     use std::collections::HashMap;
 
-    #[test]
-    fn test_ndtree_set_get_tmp() {
-        let cells_to_set = vec![([0, 0, 0].into(), 1), ([0, 0, -17].into(), 0)];
-        let cells_to_get = vec![[-1, -1, -1].into()];
-        let mut ndtree = NdTree::new();
-        let mut hashmap = HashMap::new();
-        for (pos, state) in cells_to_set {
-            hashmap.insert(pos, state);
-            ndtree.set_cell(pos, state);
-        }
-        println!("{:?}", ndtree);
-        for pos in cells_to_get {
-            assert_eq!(hashmap.get(&pos).unwrap_or(&0), &ndtree.get_cell(pos));
-        }
-    }
+    // Proptest gives crummy tracebacks due to macro use, so uncomment this test
+    // and change the input values for debugging.
 
-    // proptest! {
-    //     #![proptest_config(ProptestConfig {
-    //         max_shrink_iters: 4096,
-    //         ..Default::default()
-    //     })]
-
-    //     /// Tests setting and getting arbitrary grid cells by comparing against
-    //     /// a HashMap.
-    //     #[test]
-    //     fn test_ndtree_set_get(
-    //         cells_to_set: Vec<(Vec3D, u8)>,
-    //         cells_to_get: Vec<Vec3D>
-    //     ) {
-    //         let mut ndtree = NdTree::new();
-    //         let mut hashmap = HashMap::new();
-    //         for (pos, state) in cells_to_set {
-    //             hashmap.insert(pos, state);
-    //             ndtree.set_cell(pos, state);
-    //         }
-    //         for pos in cells_to_get {
-    //             assert_eq!(hashmap.get(&pos).unwrap_or(&0), &ndtree.get_cell(pos));
-    //         }
+    // #[test]
+    // fn test_ndtree_set_get_tmp() {
+    //     let cells_to_set = vec![([0, 0, 0].into(), 1), ([0, 0, -17].into(), 0)];
+    //     let cells_to_get = vec![[-1, -1, -1].into()];
+    //     let mut ndtree = NdTree::new();
+    //     let mut hashmap = HashMap::new();
+    //     for (pos, state) in cells_to_set {
+    //         hashmap.insert(pos, state);
+    //         ndtree.set_cell(pos, state);
+    //     }
+    //     println!("{:?}", ndtree);
+    //     for pos in cells_to_get {
+    //         assert_eq!(hashmap.get(&pos).unwrap_or(&0), &ndtree.get_cell(pos));
     //     }
     // }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            max_shrink_iters: 4096,
+            ..Default::default()
+        })]
+
+        /// Tests setting and getting arbitrary grid cells by comparing against
+        /// a HashMap.
+        #[test]
+        fn test_ndtree_set_get(
+            cells_to_set: Vec<(Vec3D, u8)>,
+            cells_to_get: Vec<Vec3D>
+        ) {
+            let mut ndtree = NdTree::new();
+            let mut hashmap = HashMap::new();
+            for (pos, state) in cells_to_set {
+                hashmap.insert(pos, state);
+                ndtree.set_cell(pos, state);
+            }
+            for pos in cells_to_get {
+                assert_eq!(hashmap.get(&pos).unwrap_or(&0), &ndtree.get_cell(pos));
+            }
+        }
+    }
 }

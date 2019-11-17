@@ -75,9 +75,16 @@ impl<D: Dim> NdRect<D> {
         product
     }
 
+    /// Returns an iterator over all the positions in this hyperrectangle.
+    pub fn iter(self) -> NdRectIter<D> {
+        self.into()
+    }
+}
+
+impl<D: Dim> CanContain<NdVec<D>> for NdRect<D> {
     /// Returns true if the cell position is contained within this
     /// hyperrectangle.
-    pub fn contains(&self, pos: NdVec<D>) -> bool {
+    fn contains(&self, pos: NdVec<D>) -> bool {
         for ax in D::axes() {
             if pos[ax] < self.min[ax] || pos[ax] > self.max[ax] {
                 return false;
@@ -85,10 +92,12 @@ impl<D: Dim> NdRect<D> {
         }
         true
     }
-
-    /// Returns an iterator over all the positions in this hyperrectangle.
-    pub fn iter(self) -> NdRectIter<D> {
-        self.into()
+}
+impl<D: Dim> CanContain<NdRect<D>> for NdRect<D> {
+    /// Returns true if the cells of the given NdRect are a subset of this
+    /// one's; i.e. that hyperrectangle is contained within this one.
+    fn contains(&self, rect: NdRect<D>) -> bool {
+        self.contains(rect.min()) && self.contains(rect.max())
     }
 }
 

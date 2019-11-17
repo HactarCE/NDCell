@@ -18,3 +18,11 @@ pub use ndvec::*;
 /// for free or near-free.
 pub trait CellType: Debug + Copy + Default + Eq + Hash {}
 impl<T: Debug + Copy + Default + Eq + Hash> CellType for T {}
+
+/// A trait to allow overloading of the contains() method.
+pub trait CanContain<I> {
+    /// Returns true if `inner` is within `self`; usually implemented for
+    /// structs that range over a set of cells on a grid with respect to cell
+    /// position vectors.
+    fn contains(&self, inner: I) -> bool;
+}

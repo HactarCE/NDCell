@@ -25,6 +25,15 @@ pub type Rect5D = NdRect<Dim5D>;
 pub type Rect6D = NdRect<Dim6D>;
 
 impl<D: Dim> NdRect<D> {
+    /// Returns the NdRect that describes a Moore neighborhood centered at the
+    /// origin.
+    pub fn moore(radius: usize) -> Self {
+        Self {
+            a: NdVec::origin() - radius as isize,
+            b: NdVec::origin() + radius as isize,
+        }
+    }
+
     /// Returns the minimum (most negative) corner of this NdRect.
     pub fn min(&self) -> NdVec<D> {
         let mut ret = NdVec::origin();

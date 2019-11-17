@@ -66,6 +66,10 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         self.root = self.root.expand_centered(&mut self.cache);
         self.offset -= self.root.len() as isize / 4;
     }
+    /// Offsets the entire grid so that the given position is the new origin.
+    pub fn recenter(&mut self, pos: NdVec<D>) {
+        self.offset -= pos;
+    }
 
     /// Returns the state of the cell at the given position.
     pub fn get_cell(&self, pos: NdVec<D>) -> T {
@@ -75,7 +79,6 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
             T::default()
         }
     }
-
     /// Sets the state of the cell at the given position.
     pub fn set_cell(&mut self, pos: NdVec<D>, cell_state: T) {
         while !self.rect().contains(pos) {

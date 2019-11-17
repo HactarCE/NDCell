@@ -135,8 +135,9 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         ret
     }
 
-    /// "Zooms out" of the current tree; returns a new NdSubTree with the
-    /// contents of the existing one centered in an empty grid.
+    /// "Zooms out" of the current tree by a factor of two; returns a new
+    /// NdSubTree with the contents of the existing one centered in an empty
+    /// grid.
     pub fn expand_centered(&self, cache: &mut NdTreeCache<T, D>) -> NdSubTree<T, D> {
         NdTreeNode::with_child(
             self.layer + 1,

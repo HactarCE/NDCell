@@ -111,7 +111,6 @@ mod tests {
                 hashmap.insert(pos, state);
                 ndtree.set_cell(pos, state);
             }
-            println!("{:?}", ndtree);
             for pos in cells_to_get {
                 assert_eq!(hashmap.get(&pos).unwrap_or(&0), &ndtree.get_cell(pos));
             }

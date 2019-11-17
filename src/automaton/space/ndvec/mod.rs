@@ -30,12 +30,23 @@ pub type Vec5D = NdVec<[isize; 5]>;
 /// A 6D NdVec.
 pub type Vec6D = NdVec<[isize; 6]>;
 
-// Implement generic vector operations.
 impl<D: Dim> NdVec<D> {
     /// Returns the NdVec pointing to the origin; i.e. an NdVec consisting of
     /// all zeros.
     pub fn origin() -> Self {
         Self(D::origin())
+    }
+    /// Returns true if te NdVec is pointing to the origin; i.e. all components
+    /// of the NdVec are zero.
+    pub fn is_zero(self) -> bool {
+        self == Self::origin()
+    }
+}
+
+// Implement conversion from array.
+impl<D: Dim> From<D> for NdVec<D> {
+    fn from(dim: D) -> Self {
+        Self(dim)
     }
 }
 

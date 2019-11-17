@@ -61,6 +61,7 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         }
     }
 
+    /// "Zooms out" of the current tree by a factor of 2.
     fn expand_centered(&mut self) {
         self.root = self.root.expand_centered(&mut self.cache);
         self.offset -= self.root.len() as isize / 4;

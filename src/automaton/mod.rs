@@ -5,10 +5,10 @@
 
 // use std::collections::HashSet;
 
-// pub mod algorithm;
+pub mod algorithm;
 pub mod space;
 
-// pub use algorithm::Algorithm;
+pub use algorithm::Algorithm;
 pub use space::*;
 
 // use std::marker::PhantomData;

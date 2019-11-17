@@ -26,13 +26,12 @@ impl TryFrom<&str> for MooreTotalistic2D {
     }
 }
 
-impl Algorithm<bool, Coords2D> for MooreTotalistic2D {
-    type R = RectRegion<Coords2D>;
-    fn get_neighborhood(&self) -> Self::R {
-        RectRegion::centered(CellCoords::origin(), 1)
+impl Algorithm<bool, Vec2D> for MooreTotalistic2D {
+    fn get_radius(&self) -> usize {
+        1
     }
 
-    fn transition(&self, napkin: &Napkin<bool, Coords2D, Self::R>) -> bool {
+    fn transition(&self, napkin: &NdTree<bool, Vec2D>) -> bool {
         // Count live neighbors.
         let region = napkin.region;
         let mut live_neighbors = 0;
@@ -42,7 +41,7 @@ impl Algorithm<bool, Coords2D> for MooreTotalistic2D {
             }
         }
         // Index LUT to get next cell state.
-        if napkin[CellCoords2D::origin()] {
+        if napkin[NdVec::origin()] {
             live_neighbors -= 1;
             self.survival[live_neighbors]
         } else {

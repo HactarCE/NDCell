@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 3f425dd1366f8de89339f1c106dc637a17a6855e291a08a2cbead84afea69c17 # shrinks to cells_to_set = [], cells_to_get = [NdVec([0, 0, 0])]
+cc fd851a2fa02c36cb05c3dac24ffd5b93cc6a2589650416603da134c14a63bbbb # shrinks to cells_to_set = [(NdVec([0, 0, 0]), 1), (NdVec([0, 0, -17]), 0)], cells_to_get = [NdVec([-1, -41, -19])]

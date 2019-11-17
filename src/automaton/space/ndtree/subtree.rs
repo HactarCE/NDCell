@@ -1,4 +1,5 @@
 use seahash::SeaHasher;
+use std::fmt;
 use std::hash::Hasher;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -11,85 +12,119 @@ pub type NdSubTree<T, D> = Rc<NdTreeNode<T, D>>;
 
 /// An NdTreeNode's child.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum NdTreeChild<T: CellType, D: Dim> {
-    /// All cells within this node are the same cell state.
+pub enum NdTreeBranch<T: CellType, D: Dim> {
+    /// All cells within this branch are the same cell state.
     Leaf(T),
 
-    /// A 2^d hypercube of interned subnodes.
-    ///
-    /// Until rust-lang #44580 (RFC 2000) is resolved, there's no way to use
-    /// D::NDIM as the array size. It might be worth implementing a custom
-    /// unsafe type for this, but at the time of writing such an optimization
-    /// would be entirely premature.
-    Branch(Vec<NdSubTree<T, D>>),
+    /// An interned subnode.
+    Node(NdSubTree<T, D>),
 }
 
-impl<T: CellType, D: Dim> Default for NdTreeChild<T, D> {
+impl<T: CellType, D: Dim> Default for NdTreeBranch<T, D> {
     fn default() -> Self {
         Self::Leaf(T::default())
     }
 }
 
+impl<T: CellType, D: Dim> NdTreeBranch<T, D> {
+    fn empty(cache: &mut NdTreeCache<T, D>, layer: usize) -> Self {
+        if layer == 0 {
+            Self::Leaf(T::default())
+        } else {
+            Self::Node(NdTreeNode::empty(cache, layer))
+        }
+    }
+}
+
+// TODO TODO TODO resume here
+// TODO make layer 1 be 2x2; the field is always split
+// the enum choice moves _inside_ the vector; the vector is contained in the node
+
 /// A single node in the NdTree, which contains information about its layer
 /// (base-2 logarithm of hypercube side length) and its children.
-#[derive(Debug, Clone)]
-// TODO: custom Debug implementation
+#[derive(Clone)]
 pub struct NdTreeNode<T: CellType, D: Dim> {
     /// The "layer" of this node (base-2 logarithm of hypercube side length).
     layer: usize,
 
-    /// The child of this node, which is either a single cell state or a 2^d
-    /// hypercube of nodes.
+    /// The branches of this node, stored as a flattened 2^d hypercube of nodes
+    /// one layer lower.
     ///
-    /// If layer == 0, then it must be a single cell state.
-    child: NdTreeChild<T, D>,
+    /// If layer == 1, then all of these must be `NdTreeBranch::Leaf`s. If layer
+    /// > 1, then all of these must be `NdTreeBranch::Branch`es.
+    ///
+    /// Until rust-lang #44580 (RFC 2000) is resolved, there's no way to use
+    /// D::NDIM as the array size. It might be worth implementing a custom
+    /// unsafe type for this, but at the time of writing such an optimization
+    /// would be entirely premature.
+    branches: Vec<NdTreeBranch<T, D>>,
 
     hash_code: u64,
 
     phantom: PhantomData<D>,
 }
 
+impl<T: CellType, D: Dim> Debug for NdTreeNode<T, D> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "NdTreeNode {{ layer: {:?}, branches: {:?} }}",
+            self.layer, self.branches
+        )
+    }
+}
+
 impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Constructs a new empty NdTreeNode at a given layer.
-    pub fn empty(layer: usize) -> Self {
-        Self::with_child(layer, NdTreeChild::default())
+    pub fn empty(cache: &mut NdTreeCache<T, D>, layer: usize) -> NdSubTree<T, D> {
+        if layer == 0 {
+            panic!("Cannot construct NdTreeNode at layer 0.");
+        }
+        let branches = vec![NdTreeBranch::empty(cache, layer - 1); Self::BRANCHES];
+        Self::with_branches(cache, branches)
     }
-    /// Constructs a new NdTreeNode at a given layer and with a given child.
-    pub fn with_child(layer: usize, child: NdTreeChild<T, D>) -> Self {
+    /// Constructs a new NdTreeNode at a given layer and with the given branches.
+    pub fn with_branches(
+        cache: &mut NdTreeCache<T, D>,
+        branches: Vec<NdTreeBranch<T, D>>,
+    ) -> NdSubTree<T, D> {
+        // Check that there are the right number of branches.
+        if branches.len() != Self::BRANCHES {
+            panic!(
+                "NdTreeNode of {} dimensions must have {} branches; got {:?} instead.",
+                D::NDIM,
+                Self::BRANCHES,
+                branches
+            );
+        }
+        // Check that the branches are all at the same layer (and infer this
+        // node's layer based on them).
+        let mut branch_layers = branches.iter().map(|branch| match branch {
+            NdTreeBranch::Leaf(_) => 0,
+            NdTreeBranch::Node(node) => node.layer,
+        });
+        let layer = branch_layers.next().unwrap() + 1;
+        if !branch_layers.all(|branch_layer| branch_layer == layer - 1) {
+            panic!("NdTreeNode branches have different layers: {:?}", branches);
+        }
+        // Compute the hash code.
         let mut hasher = SeaHasher::new();
         layer.hash(&mut hasher);
-        child.hash(&mut hasher);
-        let ret = Self {
+        branches.hash(&mut hasher);
+        // Construct the node.
+        let node = Self {
             layer,
-            child,
+            branches,
             hash_code: hasher.finish(),
             phantom: PhantomData,
         };
-        ret
+        node.intern(cache)
     }
     /// Checks whether an equivalent node is present in the cache. If it is,
     /// destroys this one and returns the equivalent node from the cache; if
     /// not, adds this node to the cache and returns it.
-    ///
-    /// Also simplifies this node: if all branches are identical leaves, sets
-    /// the child to a single leaf.
-    pub fn intern(mut self, cache: &mut NdTreeCache<T, D>) -> NdSubTree<T, D> {
-        // If this branch splits ...
-        if let NdTreeChild::Branch(branches) = &self.child {
-            // ... and the first split is a leaf ...
-            if let NdTreeChild::Leaf(_) = branches[0].child {
-                // ... and all the other splits are equivalent leaves ...
-                if branches
-                    .iter()
-                    .skip(1)
-                    .all(|branch| branch.child == branches[0].child)
-                {
-                    // ... then set this node's child to that same leaf.
-                    self.child = branches[0].child.clone();
-                }
-            }
-        }
-        // Now actually construct the Rc and add it to the cache.
+    fn intern(self, cache: &mut NdTreeCache<T, D>) -> NdSubTree<T, D> {
+        // Construct the Rc and add it to the cache.
         cache.get_key(&self).clone().unwrap_or_else(|| {
             let ret = Rc::new(self);
             cache.insert(ret.clone(), Default::default());
@@ -100,8 +135,8 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     pub fn layer(&self) -> usize {
         self.layer
     }
-    pub fn child(&self) -> &NdTreeChild<T, D> {
-        &self.child
+    pub fn branches(&self) -> &Vec<NdTreeBranch<T, D>> {
+        &self.branches
     }
     pub fn hash_code(&self) -> u64 {
         self.hash_code
@@ -110,21 +145,32 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// Returns the length of a single side of the hypersquare contained in this
     /// subtree.
     pub fn len(&self) -> usize {
-        // layer = 0 => len = 1
         // layer = 1 => len = 2
         // layer = 2 => len = 4
+        // layer = 3 => len = 8
         // etc.
         1 << self.layer
+    }
+    /// Returns the bounding rectangle for this node, with the origin as the
+    /// lower bound.
+    pub fn rect(&self) -> NdRect<D> {
+        Self::rect_at_layer(self.layer)
+    }
+    /// Returns the bounding rectangle for a node at the given layer, with the
+    /// origin as the lower bound.
+    pub fn rect_at_layer(layer: usize) -> NdRect<D> {
+        NdRect::span(NdVec::origin(), NdVec::origin() + ((1 << layer) - 1))
     }
 
     /// The number of branches for this many dimensions (2^d).
     pub const BRANCHES: usize = 1 << D::NDIM;
     /// The bitmask for branch indices.
     const BRANCH_IDX_BITMASK: usize = Self::BRANCHES - 1;
-    /// Computes this node's "branch index" for the given position.
+    /// Computes the "branch index" corresponding to this node's child
+    /// containing the given position.
     ///
     /// Each nth layer corresponds to the nth bit of each axis, which can either
-    /// be 0 or 1. The "branch index" is a number between 0 and 2^d-1 composed
+    /// be 0 or 1. The "branch index" is a number in 0..(2 ** d) composed
     /// from these bits; each bit in the branch index is taken from a different
     /// axis. It's like a bitwise NdVec.
     fn branch_idx(&self, pos: NdVec<D>) -> usize {
@@ -135,65 +181,144 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         }
         ret
     }
+    /// Computes the vector offset for the given branch of this node.
+    fn branch_offset(&self, branch_idx: usize) -> NdVec<D> {
+        Self::branch_offset_at_layer(self.layer, branch_idx)
+    }
+    fn branch_offset_at_layer(layer: usize, branch_idx: usize) -> NdVec<D> {
+        let mut ret = NdVec::origin();
+        let halfway: isize = 1 << (layer - 1);
+        for ax in D::axes() {
+            // If the current bit of the branch index is 1, add half of the
+            // length of this node to the corresponding axis in the result.
+            let branch_bit = (branch_idx as isize >> ax as u8) & 1;
+            ret[ax] += halfway * branch_bit;
+        }
+        ret
+    }
 
     /// "Zooms out" of the current tree by a factor of two; returns a new
     /// NdSubTree with the contents of the existing one centered in an empty
     /// grid.
     pub fn expand_centered(&self, cache: &mut NdTreeCache<T, D>) -> NdSubTree<T, D> {
-        NdTreeNode::with_child(
-            self.layer + 1,
-            NdTreeChild::Branch({
-                let mut new_branches = Vec::with_capacity(Self::BRANCHES);
-                for branch_idx in 0..Self::BRANCHES {
-                    new_branches.push(match &self.child {
-                        NdTreeChild::Leaf(cell_state) => {
-                            NdTreeNode::with_child(self.layer, NdTreeChild::Leaf(*cell_state))
-                                .intern(cache)
-                        }
-                        NdTreeChild::Branch(old_branches) => {
-                            old_branches[branch_idx ^ Self::BRANCH_IDX_BITMASK].clone()
-                        }
-                    })
-                }
-                new_branches
-            }),
-        )
-        .intern(cache)
+        let new_branches = self
+            .branches
+            .iter()
+            .enumerate()
+            .map(|(branch_idx, old_branch)| {
+                // Create a new node with this node's Nth branch in the opposite
+                // corner. (Bitwise XOR of branch index produces the branch index of
+                // the opposite corner.) E.g. This node's northwest branch is placed
+                // in the southeast branch of a new node, which will be in the
+                // northwest branch of the result.
+                let mut inner_branches =
+                    vec![NdTreeBranch::empty(cache, self.layer - 1); Self::BRANCHES];
+                inner_branches[branch_idx ^ Self::BRANCH_IDX_BITMASK] = old_branch.clone();
+                NdTreeBranch::Node(Self::with_branches(cache, inner_branches))
+            })
+            .collect();
+        NdTreeNode::with_branches(cache, new_branches)
     }
 
-    fn split_child(&self, cache: &mut NdTreeCache<T, D>) -> Vec<NdSubTree<T, D>> {
-        if self.layer == 0 {
-            panic!("Cannot split NdTreeNode child at layer 0");
-        }
-        match &self.child {
-            NdTreeChild::Leaf(_) => vec![
-                Self::with_child(self.layer - 1, self.child.clone())
-                    .intern(cache);
-                Self::BRANCHES
-            ],
-            NdTreeChild::Branch(branches) => branches.clone(),
-        }
-    }
-
+    /// Returns the cell value at the given position, modulo the node size.
     pub fn get_cell(&self, pos: NdVec<D>) -> T {
-        match &self.child {
-            NdTreeChild::Leaf(cell_state) => *cell_state,
-            NdTreeChild::Branch(branches) => branches[self.branch_idx(pos)].get_cell(pos),
+        match &self.branches[self.branch_idx(pos)] {
+            NdTreeBranch::Leaf(cell_state) => *cell_state,
+            NdTreeBranch::Node(node) => node.get_cell(pos),
         }
     }
-
+    /// Constructs a new node with the cell at the given position, modulo the node
+    /// size, having the given value.
     pub fn set_cell(
         &self,
         cache: &mut NdTreeCache<T, D>,
         pos: NdVec<D>,
         cell_state: T,
     ) -> NdSubTree<T, D> {
-        if self.layer == 0 {
-            Self::with_child(0, NdTreeChild::Leaf(cell_state)).intern(cache)
-        } else {
-            let branches = self.split_child(cache);
-            branches[self.branch_idx(pos)].set_cell(cache, pos, cell_state)
+        let mut new_branches = self.branches.clone();
+        // Get the branch containing the given cell.
+        let branch = &mut new_branches[self.branch_idx(pos)];
+        match branch {
+            // The branch is a single cell, so set that cell.
+            NdTreeBranch::Leaf(old_cell_state) => *old_cell_state = cell_state,
+            // The branch is a node, so recurse on that node.
+            NdTreeBranch::Node(node) => *node = node.set_cell(cache, pos, cell_state),
         }
+        Self::with_branches(cache, new_branches)
+    }
+
+    pub fn get_subtree(
+        &self,
+        cache: &mut NdTreeCache<T, D>,
+        layer: usize,
+        offset: NdVec<D>,
+    ) -> NdSubTree<T, D> {
+        if layer == 0 {
+            panic!("Cannot get subtree at layer 0");
+        }
+        if let NdTreeBranch::Node(node) = self.get_subtree_branch(cache, layer, offset) {
+            node
+        } else {
+            panic!("Requested subtree at layer {}, but got single cell", layer);
+        }
+    }
+
+    /// Constructs a new node at the given layer whose lower bound is the given
+    /// offset. This operation may be expensive if coordinates of the offset
+    /// have prime factors other than 2.
+    pub fn get_subtree_branch(
+        &self,
+        cache: &mut NdTreeCache<T, D>,
+        layer: usize,
+        offset: NdVec<D>,
+    ) -> NdTreeBranch<T, D> {
+        let result_rect = Self::rect_at_layer(layer) + offset;
+        // Check bounds.
+        if !self.rect().contains(result_rect) {
+            panic!(
+                "Subtree {{ layer: {}, offset: {:?} }} out of bounds for layer {}",
+                layer, offset, self.layer
+            );
+        }
+        // If it fits within this node, and it's the same layer/size as this
+        // node, then it's exactly the same as this node.
+        if layer == self.layer {
+            return NdTreeBranch::Node(self.clone().intern(cache));
+        }
+        // Check whether the result is a subtree of a single branch of this
+        // node.
+        let min_branch_idx = self.branch_idx(result_rect.min());
+        let max_branch_idx = self.branch_idx(result_rect.max());
+        if min_branch_idx == max_branch_idx {
+            // If it is, just delegate to that branch.
+            let branch_idx = min_branch_idx;
+            match &self.branches[branch_idx] {
+                NdTreeBranch::Leaf(cell_state) => NdTreeBranch::Leaf(*cell_state),
+                NdTreeBranch::Node(node) => {
+                    node.get_subtree_branch(cache, layer, offset - self.branch_offset(branch_idx))
+                }
+            }
+        } else {
+            // If it isn't, then divide and conquer.
+            let mut new_branches = Vec::with_capacity(Self::BRANCHES);
+            for branch_idx in 0..Self::BRANCHES {
+                new_branches.push(self.get_subtree_branch(
+                    cache,
+                    layer - 1,
+                    offset + Self::branch_offset_at_layer(layer, branch_idx),
+                ));
+            }
+            NdTreeBranch::Node(Self::with_branches(cache, new_branches))
+        }
+    }
+
+    fn sim_subnode(
+        &self,
+        cache: &mut NdTreeCache<T, D>,
+        layer: usize,
+        offset: NdVec<D>,
+    ) -> NdSubTree<T, D> {
+        unimplemented!()
     }
 
     /// Returns the minimum layer that can compute the transition function for
@@ -202,31 +327,49 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// In general, a node at layer `L` can simulate any automaton with a radius
     /// `r` if `r <= 2**L / 4`. An exception is made for `r = 0`, which requires
     /// layer 1 rather than layer 0.
-    pub fn min_sim_layer<R: Rule<T, D>>(&self, rule: R) -> usize {
+    pub fn min_sim_layer<R: Rule<T, D>>(&self, rule: &R) -> usize {
         let r = rule.radius();
-        let mut min_layer = 2;
-        while r > (1 << min_layer) >> 2 {
+        let mut min_layer = 1;
+        while r > (1 << min_layer) / 4 {
             min_layer += 1;
         }
         min_layer
     }
-    /// Computes the offset node one layer lower after the given number of
-    /// generations.
+    /// Computes the offset node one layer lower after `2 ** gen_pow` generations.
     pub fn sim_inner<R: Rule<T, D>>(
         &self,
         cache: &mut NdTreeCache<T, D>,
-        rule: R,
-        generations: usize,
+        rule: &R,
+        gen_pow: usize,
     ) -> NdSubTree<T, D> {
         let max_gens = (1 << self.layer) >> self.min_sim_layer(rule);
+        let generations = gen_pow;
         if generations > max_gens {
             panic!(
-                "Cannot simulate {} generations at layer {} with radius {}; can only simulate {}",
+                "Cannot simulate {} generations at layer {} with radius {}; can only simulate {} generation(s) at this layer or 1 generation at layer {}",
                 generations,
                 self.layer,
                 rule.radius(),
-                max_gens
+                max_gens,
+                self.min_sim_layer(rule),
             );
+        }
+        // If we're currently at the minimum layer, then we have no choice but
+        // to simulate each cell individually. This is the recursive base case.
+        if max_gens == 1 {
+            //     for pos in NdRect {
+            //         a: NdVec::origin() + self.len() / 4,
+            //     b: NdVec::origin() + self.len() / 4 * 3 - 1
+            // }.iter() {
+
+            // let ret = Self::with_child(self.layer - 1, NdTreeBranch::Branch(branches));
+            unimplemented!()
+        }
+        // HashLife is much easier to explain using pictures; I'll be
+        // referencing Figure 4 in this blog post:
+        // https://www.drdobbs.com/184406478
+        for branch_idx in 0..Self::BRANCHES {
+            unimplemented!();
         }
         unimplemented!()
     }
@@ -241,7 +384,7 @@ impl<T: CellType, D: Dim> PartialEq for NdTreeNode<T, D> {
             || (self.hash_code() == rhs.hash_code()
                 // If neither of those worked, we have to check the hard way.
                 && self.layer() == rhs.layer()
-                && self.child() == rhs.child())
+                && self.branches() == rhs.branches())
     }
 }
 

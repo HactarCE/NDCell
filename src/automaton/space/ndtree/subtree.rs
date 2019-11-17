@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use super::*;
+use crate::automaton::Algorithm;
 
 /// An interned NdTreeNode.
 pub type NdSubTree<T, D> = Rc<NdTreeNode<T, D>>;
@@ -193,6 +194,41 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
             let branches = self.split_child(cache);
             branches[self.branch_idx(pos)].set_cell(cache, pos, cell_state)
         }
+    }
+
+    /// Returns the minimum layer that can compute the transition function for
+    /// its centered cells making up a node one layer smaller.
+    ///
+    /// In general, a node at layer `L` can simulate any automaton with a radius
+    /// `r` if `r <= 2**L / 4`. An exception is made for `r = 0`, which requires
+    /// layer 1 rather than layer 0.
+    pub fn min_sim_layer<A: Algorithm<T, D>>(&self, algo: A) -> usize {
+        let r = algo.radius();
+        let mut min_layer = 2;
+        while r > (1 << min_layer) >> 2 {
+            min_layer += 1;
+        }
+        min_layer
+    }
+    /// Computes the offset node one layer down after the given number of
+    /// generations.
+    pub fn get_future_inner<A: Algorithm<T, D>>(
+        &self,
+        cache: &mut NdTreeCache<T, D>,
+        algo: A,
+        generations: usize,
+    ) -> NdSubTree<T, D> {
+        let max_gens = (1 << self.layer) >> self.min_sim_layer(algo);
+        if generations > max_gens {
+            panic!(
+                "Cannot simulate {} generations at layer {} with radius {}; can only simulate {}",
+                generations,
+                self.layer,
+                algo.radius(),
+                max_gens
+            );
+        }
+        unimplemented!()
     }
 }
 

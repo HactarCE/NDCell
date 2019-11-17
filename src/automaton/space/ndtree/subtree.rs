@@ -210,9 +210,9 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         }
         min_layer
     }
-    /// Computes the offset node one layer down after the given number of
+    /// Computes the offset node one layer lower after the given number of
     /// generations.
-    pub fn get_future_inner<A: Algorithm<T, D>>(
+    pub fn sim_inner<A: Algorithm<T, D>>(
         &self,
         cache: &mut NdTreeCache<T, D>,
         algo: A,

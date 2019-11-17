@@ -1,4 +1,4 @@
-use super::Algorithm;
+use super::Rule;
 use crate::automaton::space::*;
 use regex::Regex;
 use std::convert::TryFrom;
@@ -27,8 +27,8 @@ impl TryFrom<&str> for MooreTotalistic2D {
     }
 }
 
-impl Algorithm<bool, Dim2D> for MooreTotalistic2D {
-    fn get_radius(&self) -> usize {
+impl Rule<bool, Dim2D> for MooreTotalistic2D {
+    fn radius(&self) -> usize {
         1
     }
 

@@ -1,28 +1,24 @@
 use seahash::SeaHasher;
-use std::hash::{BuildHasherDefault, Hasher};
+use std::hash::BuildHasherDefault;
 use std::rc::Weak;
-use weak_table::WeakHashSet;
+use weak_table::WeakKeyHashMap;
 
 use super::*;
 
-pub type NdTreeCache<T, D> = WeakHashSet<Weak<NdTreeNode<T, D>>, BuildHasherDefault<SeaHasher>>;
+pub type NdTreeCache<T, D> =
+    WeakKeyHashMap<Weak<NdTreeNode<T, D>>, CachedNodeInfo<T, D>, BuildHasherDefault<SeaHasher>>;
 
-impl<T: CellType, D: Dim> Eq for NdTreeNode<T, D> {}
-impl<T: CellType, D: Dim> PartialEq for NdTreeNode<T, D> {
-    fn eq(&self, rhs: &Self) -> bool {
-        // Check for pointer equality (very fast; guarantees true).
-        std::ptr::eq(self, rhs)
-            // If that fails, check hash codes (very fast; guarantees false).
-            || (self.hash_code() == rhs.hash_code()
-                // If neither of those worked, we have to check the hard way.
-                && self.layer() == rhs.layer()
-                && self.child() == rhs.child())
-    }
+#[derive(Debug, Clone)]
+pub struct CachedNodeInfo<T: CellType, D: Dim> {
+    population: Option<usize>,
+    futures: Vec<NdTreeNode<T, D>>,
 }
 
-impl<T: CellType, D: Dim> Hash for NdTreeNode<T, D> {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        // We already cached our own hash; just rehash that if you want to.
-        self.hash_code().hash(hasher);
+impl<T: CellType, D: Dim> Default for CachedNodeInfo<T, D> {
+    fn default() -> Self {
+        Self {
+            population: None,
+            futures: vec![],
+        }
     }
 }

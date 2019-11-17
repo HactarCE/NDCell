@@ -89,9 +89,9 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
             }
         }
         // Now actually construct the Rc and add it to the cache.
-        cache.get(&self).clone().unwrap_or_else(|| {
+        cache.get_key(&self).clone().unwrap_or_else(|| {
             let ret = Rc::new(self);
-            cache.insert(ret.clone());
+            cache.insert(ret.clone(), Default::default());
             ret
         })
     }
@@ -192,5 +192,25 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
             let branches = self.split_child(cache);
             branches[self.branch_idx(pos)].set_cell(cache, pos, cell_state)
         }
+    }
+}
+
+impl<T: CellType, D: Dim> Eq for NdTreeNode<T, D> {}
+impl<T: CellType, D: Dim> PartialEq for NdTreeNode<T, D> {
+    fn eq(&self, rhs: &Self) -> bool {
+        // Check for pointer equality (very fast; guarantees true).
+        std::ptr::eq(self, rhs)
+            // If that fails, check hash codes (very fast; guarantees false).
+            || (self.hash_code() == rhs.hash_code()
+                // If neither of those worked, we have to check the hard way.
+                && self.layer() == rhs.layer()
+                && self.child() == rhs.child())
+    }
+}
+
+impl<T: CellType, D: Dim> Hash for NdTreeNode<T, D> {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        // We already cached our own hash; just rehash that if you want to.
+        self.hash_code().hash(hasher);
     }
 }

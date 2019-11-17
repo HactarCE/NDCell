@@ -66,10 +66,6 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
         self.offset -= self.root.len() as isize / 4;
     }
 
-    fn contract(&mut self) {
-        // TODO become smaller if possible
-    }
-
     /// Returns the state of the cell at the given position.
     pub fn get_cell(&self, pos: NdVec<D>) -> T {
         if self.rect().contains(pos) {

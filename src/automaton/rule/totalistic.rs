@@ -31,7 +31,6 @@ impl Rule<bool, Dim2D> for MooreTotalistic2D {
     fn radius(&self) -> usize {
         1
     }
-
     fn transition(&self, napkin: &NdTree2D<bool>) -> bool {
         // Count live neighbors.
         let nbhood = Rect2D::moore(self.radius());

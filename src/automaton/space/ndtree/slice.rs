@@ -2,12 +2,26 @@ use std::ops::Index;
 
 use super::*;
 
+/// An immutable view into an NdTree.
 #[derive(Debug, Clone)]
 pub struct NdTreeSlice<T: CellType, D: Dim> {
     root: NdSubTree<T, D>,
     offset: NdVec<D>,
     rect: NdRect<D>,
 }
+
+/// A 1D grid represented as a bintree.
+pub type NdTreeSlice1D<T> = NdTreeSlice<T, Dim1D>;
+/// A 2D grid represented as a quadtree.
+pub type NdTreeSlice2D<T> = NdTreeSlice<T, Dim2D>;
+/// A 3D grid represented as an octree.
+pub type NdTreeSlice3D<T> = NdTreeSlice<T, Dim3D>;
+/// A 4D grid represented as a tree with nodes of degree 16.
+pub type NdTreeSlice4D<T> = NdTreeSlice<T, Dim4D>;
+/// A 5D grid represented as a tree with nodes of degree 32.
+pub type NdTreeSlice5D<T> = NdTreeSlice<T, Dim5D>;
+/// A 6D grid represented as a tree with nodes of degree 64.
+pub type NdTreeSlice6D<T> = NdTreeSlice<T, Dim6D>;
 
 impl<T: CellType, D: Dim> NdTreeSlice<T, D> {
     /// Constructs a new NdTreeSlice given a node and an offset from that node.
@@ -47,5 +61,12 @@ impl<T: CellType, D: Dim> NdTreeSlice<T, D> {
         } else {
             None
         }
+    }
+}
+
+impl<T: CellType, D: Dim> Index<NdVec<D>> for NdTreeSlice<T, D> {
+    type Output = T;
+    fn index(&self, pos: NdVec<D>) -> &T {
+        &self.root[pos]
     }
 }

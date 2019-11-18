@@ -2,6 +2,7 @@ use seahash::SeaHasher;
 use std::fmt;
 use std::hash::Hasher;
 use std::marker::PhantomData;
+use std::ops::Index;
 use std::rc::Rc;
 
 use super::*;
@@ -312,28 +313,43 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         }
     }
 
-    fn sim_subnode(
-        &self,
-        cache: &mut NdTreeCache<T, D>,
-        layer: usize,
-        offset: NdVec<D>,
-    ) -> NdSubTree<T, D> {
-        unimplemented!()
-    }
-
     /// Returns the minimum layer that can compute the transition function for
     /// its centered cells making up a node one layer smaller.
     ///
     /// In general, a node at layer `L` can simulate any automaton with a radius
     /// `r` if `r <= 2**L / 4`. An exception is made for `r = 0`, which requires
-    /// layer 1 rather than layer 0.
-    pub fn min_sim_layer<R: Rule<T, D>>(&self, rule: &R) -> usize {
+    /// layer 2 rather than layer 0 or 1.
+    pub fn min_sim_layer<R: Rule<T, D>>(rule: &R) -> usize {
         let r = rule.radius();
-        let mut min_layer = 1;
+        let mut min_layer = 2;
         while r > (1 << min_layer) / 4 {
             min_layer += 1;
         }
         min_layer
+    }
+    fn sim_subtree_one_gen<R: Rule<T, D>>(
+        &self,
+        cache: &mut NdTreeCache<T, D>,
+        rule: &R,
+        layer: usize,
+        offset: NdVec<D>,
+    ) -> NdTreeBranch<T, D> {
+        if layer == 0 {
+            NdTreeBranch::Leaf(
+                rule.transition(&NdTreeSlice::new(self.clone().intern(cache), offset)),
+            )
+        } else {
+            let mut branches = Vec::with_capacity(Self::BRANCHES);
+            for branch_idx in 0..Self::BRANCHES {
+                branches.push(self.sim_subtree_one_gen(
+                    cache,
+                    rule,
+                    layer - 1,
+                    offset + Self::branch_offset_at_layer(layer, branch_idx),
+                ));
+            }
+            NdTreeBranch::Node(NdTreeNode::with_branches(cache, branches))
+        }
     }
     /// Computes the offset node one layer lower after `2 ** gen_pow` generations.
     pub fn sim_inner<R: Rule<T, D>>(
@@ -342,8 +358,8 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
         rule: &R,
         gen_pow: usize,
     ) -> NdSubTree<T, D> {
-        let max_gens = (1 << self.layer) >> self.min_sim_layer(rule);
-        let generations = gen_pow;
+        let max_gens = (1 << self.layer) >> Self::min_sim_layer(rule);
+        let generations = 1 << gen_pow;
         if generations > max_gens {
             panic!(
                 "Cannot simulate {} generations at layer {} with radius {}; can only simulate {} generation(s) at this layer or 1 generation at layer {}",
@@ -351,27 +367,93 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
                 self.layer,
                 rule.radius(),
                 max_gens,
-                self.min_sim_layer(rule),
+                Self::min_sim_layer(rule),
             );
         }
-        // If we're currently at the minimum layer, then we have no choice but
-        // to simulate each cell individually. This is the recursive base case.
-        if max_gens == 1 {
-            //     for pos in NdRect {
-            //         a: NdVec::origin() + self.len() / 4,
-            //     b: NdVec::origin() + self.len() / 4 * 3 - 1
-            // }.iter() {
 
-            // let ret = Self::with_child(self.layer - 1, NdTreeBranch::Branch(branches));
-            unimplemented!()
-        }
         // HashLife is much easier to explain using pictures; I'll be
         // referencing Figure 4 in this blog post:
         // https://www.drdobbs.com/184406478
-        for branch_idx in 0..Self::BRANCHES {
-            unimplemented!();
+
+        // This is the blue rectangle in Figure 4.
+        let inner_rect = self.rect() / 2 + (self.len() as isize / 4);
+
+        if max_gens == 1 {
+            // If we're currently at the minimum layer, then we have no choice but
+            // to simulate each cell individually. This is the recursive base case.
+            let sim_result =
+                self.sim_subtree_one_gen(cache, rule, self.layer - 1, inner_rect.min());
+            if let NdTreeBranch::Node(node) = sim_result {
+                node
+            } else {
+                panic!("Simulation produced leaf when expecting node");
+            }
+        } else if generations < max_gens {
+            // If the timescale is short enough, delegate to each branch.
+            let mut branches = Vec::with_capacity(Self::BRANCHES);
+            for branch_idx in 0..Self::BRANCHES {
+                // Fetch the subtree whose inner square is one of the green
+                // squares in Figure 4, and then simulate it to get the green
+                // square.
+                branches.push(NdTreeBranch::Node(
+                    self.get_subtree(
+                        cache,
+                        self.layer - 1,
+                        inner_rect.min() / 2
+                            + Self::branch_offset_at_layer(self.layer - 1, branch_idx),
+                    )
+                    .sim_inner(cache, rule, gen_pow),
+                ));
+            }
+            Self::with_branches(cache, branches)
+        } else {
+            let mut branches = Vec::with_capacity(Self::BRANCHES);
+            // For each branch ...
+            for branch_idx in 0..Self::BRANCHES {
+                // Construct the subtree whose inner subtree is the green
+                // square, but we need to have it be 1/2 of the number of
+                // generations we want into the future.
+                let mut sub_branches = Vec::with_capacity(Self::BRANCHES);
+                for sub_branch_idx in 0..Self::BRANCHES {
+                    // Now each "sub branch" is one of the red squares. We need
+                    // to make a node out of red squares, which we will then
+                    // simulate into a green square. The red squares are
+                    // produced by simulating a square the size of the blue
+                    // square, but centered on the red square we want.
+
+                    // Get the blue-sized square centered on the red square.
+                    let sub_branch_outer = self.get_subtree(
+                        cache,
+                        self.layer - 1,
+                        Self::branch_offset_at_layer(self.layer - 2, branch_idx)
+                            + Self::branch_offset_at_layer(self.layer - 2, sub_branch_idx),
+                    );
+                    // Now simulate that blue-sized square into a red square.
+                    let sub_branch = sub_branch_outer.sim_inner(cache, rule, generations / 2);
+                    sub_branches.push(NdTreeBranch::Node(sub_branch));
+                }
+                // Now we have all the red squares for this green square in
+                // sub_branches. Combine them into one node and then simulate it
+                // to get the green square.
+                let branch_outer = Self::with_branches(cache, sub_branches);
+                // Now simulate to get the final fully-simulated green square.
+                let branch = branch_outer.sim_inner(cache, rule, generations / 2);
+                branches.push(NdTreeBranch::Node(branch));
+            }
+            // Now we have all of the green squares, so combine them into the
+            // blue square (the final result).
+            Self::with_branches(cache, branches)
         }
-        unimplemented!()
+    }
+}
+
+impl<T: CellType, D: Dim> Index<NdVec<D>> for NdTreeNode<T, D> {
+    type Output = T;
+    fn index(&self, pos: NdVec<D>) -> &T {
+        match &self.branches[self.branch_idx(pos)] {
+            NdTreeBranch::Leaf(cell_state) => cell_state,
+            NdTreeBranch::Node(node) => &node[pos],
+        }
     }
 }
 

@@ -4,7 +4,7 @@ mod subtree;
 
 use super::*;
 use cache::NdTreeCache;
-use slice::NdTreeSlice;
+pub use slice::*;
 use subtree::{NdSubTree, NdTreeNode};
 
 /// An N-dimensional generalization of a quadtree.

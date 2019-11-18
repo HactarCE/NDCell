@@ -7,7 +7,7 @@ use super::*;
 
 // Define addition, subtraction, multiplication, and division on NdRects for
 // anything that can be added/subtracted to/from an NdVec.
-impl<D: Dim, X> Add<X> for NdRect<D>
+impl<D: Dim, X: Copy> Add<X> for NdRect<D>
 where
     NdVec<D>: Add<X, Output = NdVec<D>>,
 {
@@ -19,7 +19,7 @@ where
         }
     }
 }
-impl<D: Dim, X> Sub<X> for NdRect<D>
+impl<D: Dim, X: Copy> Sub<X> for NdRect<D>
 where
     NdVec<D>: Sub<X, Output = NdVec<D>>,
 {
@@ -31,7 +31,7 @@ where
         }
     }
 }
-impl<D: Dim, X> Mul<X> for NdRect<D>
+impl<D: Dim, X: Copy> Mul<X> for NdRect<D>
 where
     NdVec<D>: Mul<X, Output = NdVec<D>>,
 {
@@ -43,7 +43,7 @@ where
         Self::span(self.min * operand, self.max * operand)
     }
 }
-impl<D: Dim, X> Div<X> for NdRect<D>
+impl<D: Dim, X: Copy> Div<X> for NdRect<D>
 where
     NdVec<D>: Div<X, Output = NdVec<D>>,
 {

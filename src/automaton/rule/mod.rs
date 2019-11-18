@@ -14,5 +14,5 @@ pub trait Rule<T: CellType, D: Dim> {
     fn radius(&self) -> usize;
 
     /// Computes the next state for the cell at the center of the napkin.
-    fn transition(&self, napkin: &NdTree<T, D>) -> T;
+    fn transition(&self, napkin: &NdTreeSlice<T, D>) -> T;
 }

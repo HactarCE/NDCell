@@ -289,5 +289,23 @@ mod tests {
             // Test that contraction preserves population and positions.
             assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
         }
+
+        /// Tests that NdTreeCache automatically caches identical nodes.
+        #[test]
+        fn test_ndtree_cache(
+            cells_to_set: Vec<(Vec3D, u8)>,
+        ) {
+            prop_assume!(!cells_to_set.is_empty());
+            let mut ndtree = NdTree::new();
+            for (pos, state) in cells_to_set {
+                ndtree.set_cell(pos - NdVec::from([256, 256, 256]), state);
+                ndtree.set_cell(pos + NdVec::from([256, 256, 256]), state);
+            }
+            let branches = &ndtree.slice.root.branches;
+            let subnode1 = branches[0].node().unwrap();
+            let subnode2 = branches[branches.len() - 1].node().unwrap();
+            assert_eq!(subnode1, subnode2);
+            assert!(std::ptr::eq(subnode1, subnode2));
+        }
     }
 }

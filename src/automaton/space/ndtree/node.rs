@@ -285,6 +285,14 @@ impl<C: CellType, D: Dim> NdTreeBranch<C, D> {
         }
     }
 
+    /// Returns the inner node if this is a node, or None if it is a leaf.
+    pub fn node(&self) -> Option<&NdTreeNode<C, D>> {
+        match self {
+            NdTreeBranch::Leaf(_) => None,
+            NdTreeBranch::Node(node) => Some(node),
+        }
+    }
+
     /// Returns the number of non-default cells in this branch, which is the
     /// same as its contained node (if it is a node) or 0 if it is a leaf with
     /// the default cell state or 1 if it is a leaf with a non-default cell

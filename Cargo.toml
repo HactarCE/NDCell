@@ -15,13 +15,13 @@ name = "ndcell"
 path = "src/main.rs"
 
 [dependencies]
-seahash = "3.0"
-weak-table = "0.2"
 glium = "0.25"
 imgui = "0.2"
 imgui-glium-renderer = "0.2"
 imgui-winit-support = "0.2"
 regex = "1"
+seahash = "3.0"
+weak-table = "0.2"
 
 [dev-dependencies]
 proptest = "0.9.4"

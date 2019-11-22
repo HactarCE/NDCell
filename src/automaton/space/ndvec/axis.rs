@@ -43,7 +43,7 @@ impl From<usize> for Axis {
     }
 }
 
-/// Return a vector of axes given a number of dimensions.
+/// Returns a vector of axes given a number of dimensions.
 pub fn ndim_axes(ndim: usize) -> Vec<Axis> {
     let mut ret = vec![Axis::X; ndim];
     for i in 1..ndim {

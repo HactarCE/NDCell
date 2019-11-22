@@ -14,25 +14,25 @@ pub use slice::*;
 
 /// An N-dimensional generalization of a quadtree.
 #[derive(Debug, Clone)]
-pub struct NdTree<T: CellType, D: Dim> {
+pub struct NdTree<C: CellType, D: Dim> {
     /// The cache for this tree's nodes.
-    pub cache: Rc<RefCell<NdTreeCache<T, D>>>,
+    pub cache: Rc<RefCell<NdTreeCache<C, D>>>,
     /// The slice describing the root node and offset.
-    pub slice: NdTreeSlice<T, D>,
+    pub slice: NdTreeSlice<C, D>,
 }
 
 /// A 1D grid represented as a bintree.
-pub type NdTree1D<T> = NdTree<T, Dim1D>;
+pub type NdTree1D<C> = NdTree<C, Dim1D>;
 /// A 2D grid represented as a quadtree.
-pub type NdTree2D<T> = NdTree<T, Dim2D>;
+pub type NdTree2D<C> = NdTree<C, Dim2D>;
 /// A 3D grid represented as an octree.
-pub type NdTree3D<T> = NdTree<T, Dim3D>;
+pub type NdTree3D<C> = NdTree<C, Dim3D>;
 /// A 4D grid represented as a tree with nodes of degree 16.
-pub type NdTree4D<T> = NdTree<T, Dim4D>;
+pub type NdTree4D<C> = NdTree<C, Dim4D>;
 /// A 5D grid represented as a tree with nodes of degree 32.
-pub type NdTree5D<T> = NdTree<T, Dim5D>;
+pub type NdTree5D<C> = NdTree<C, Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
-pub type NdTree6D<T> = NdTree<T, Dim6D>;
+pub type NdTree6D<C> = NdTree<C, Dim6D>;
 
 impl fmt::Display for NdTree<bool, Dim2D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -56,19 +56,19 @@ impl fmt::Display for NdTree<bool, Dim2D> {
     }
 }
 
-impl<T: CellType, D: Dim> Default for NdTree<T, D> {
+impl<C: CellType, D: Dim> Default for NdTree<C, D> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: CellType, D: Dim> Borrow<NdTreeSlice<T, D>> for NdTree<T, D> {
-    fn borrow(&self) -> &NdTreeSlice<T, D> {
+impl<C: CellType, D: Dim> Borrow<NdTreeSlice<C, D>> for NdTree<C, D> {
+    fn borrow(&self) -> &NdTreeSlice<C, D> {
         &self.slice
     }
 }
 
-impl<T: CellType, D: Dim> NdTree<T, D> {
+impl<C: CellType, D: Dim> NdTree<C, D> {
     /// Constructs a new empty NdTree with an empty node cache centered on the
     /// origin.
     pub fn new() -> Self {
@@ -83,7 +83,7 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
 
     /// Returns the immutable slice containing at least all of the nonzero cells
     /// in the grid.
-    pub fn slice(&self) -> &NdTreeSlice<T, D> {
+    pub fn slice(&self) -> &NdTreeSlice<C, D> {
         &self.slice
     }
 
@@ -123,11 +123,11 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
             .map(|(branch_idx, old_branch)| {
                 // Compute the index of the opposite branch (diagonally opposite
                 // on all axes).
-                let opposite_branch_idx = branch_idx ^ NdTreeNode::<T, D>::BRANCH_IDX_BITMASK;
+                let opposite_branch_idx = branch_idx ^ NdTreeNode::<C, D>::BRANCH_IDX_BITMASK;
                 // All branches of this node will be empty ...
                 let mut inner_branches = vec![
                     cache.get_empty_branch(old_branch.get_layer());
-                    NdTreeNode::<T, D>::BRANCHES
+                    NdTreeNode::<C, D>::BRANCHES
                 ];
                 // ... except for the opposite branch, which is closest to the center.
                 inner_branches[opposite_branch_idx] = old_branch.clone();
@@ -168,7 +168,7 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
             .map(|(branch_idx, old_branch)| {
                 // Do the opposite of NdTree::expand(). First compute the index
                 // of the opposite branch.
-                let opposite_branch_idx = branch_idx ^ NdTreeNode::<T, D>::BRANCH_IDX_BITMASK;
+                let opposite_branch_idx = branch_idx ^ NdTreeNode::<C, D>::BRANCH_IDX_BITMASK;
                 match old_branch {
                     NdTreeBranch::Leaf(_) => panic!("Cannot contract tree past layer 1"),
                     NdTreeBranch::Node(old_node) => old_node.branches[opposite_branch_idx].clone(),
@@ -193,11 +193,11 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
     }
 
     /// Returns the state of the cell at the given position.
-    pub fn get_cell(&self, pos: NdVec<D>) -> T {
+    pub fn get_cell(&self, pos: NdVec<D>) -> C {
         self.slice.get_cell(pos).unwrap_or_default()
     }
     /// Sets the state of the cell at the given position.
-    pub fn set_cell(&mut self, pos: NdVec<D>, cell_state: T) {
+    pub fn set_cell(&mut self, pos: NdVec<D>, cell_state: C) {
         self.expand_to(pos);
         self.slice.root = self.slice.root.set_cell(
             &mut self.cache.borrow_mut(),
@@ -207,7 +207,7 @@ impl<T: CellType, D: Dim> NdTree<T, D> {
     }
 
     // /// Simulate the grid for 2**gen_pow generations.
-    // pub fn sim<R: Rule<T, D>>(&mut self, rule: &R, gen_pow: usize) {
+    // pub fn sim<R: Rule<C, D>>(&mut self, rule: &R, gen_pow: usize) {
     //     // // Ensure that there is enough space to actually simulate all the cells that might change.
     //     // while self.slice.root().layer() < NdTreeNode::min_sim_layer(rule) {
     //     //     self.expand_centered();

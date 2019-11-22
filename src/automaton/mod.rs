@@ -12,17 +12,17 @@ pub use space::*;
 use std::marker::PhantomData;
 
 /// A cellular automaton simulation.
-pub struct Automaton<T: CellType, D: Dim, R: Rule<T, D>> {
-    phantom: PhantomData<(T, D)>,
+pub struct Automaton<C: CellType, D: Dim, R: Rule<C, D>> {
+    phantom: PhantomData<(C, D)>,
     /// The rule to simulate.
     pub rule: R,
     /// The grid over which to simulate that rule.
-    pub grid: NdTree<T, D>,
+    pub grid: NdTree<C, D>,
 }
 
-impl<T: CellType, D: Dim, R: Rule<T, D>> Automaton<T, D, R> {
+impl<C: CellType, D: Dim, R: Rule<C, D>> Automaton<C, D, R> {
     /// Construct a new Automaton that simulates a given rule over a given grid.
-    pub fn new(rule: R, grid: NdTree<T, D>) -> Self {
+    pub fn new(rule: R, grid: NdTree<C, D>) -> Self {
         Self {
             phantom: PhantomData,
             rule,
@@ -42,13 +42,13 @@ mod tests {
 
     use super::*;
 
-    fn get_non_default_set<T: CellType, D: Dim>(slice: &NdTreeSlice<T, D>) -> HashSet<NdVec<D>> {
+    fn get_non_default_set<C: CellType, D: Dim>(slice: &NdTreeSlice<C, D>) -> HashSet<NdVec<D>> {
         let mut ret = HashSet::new();
         for (branch_idx, branch) in slice.root.branches.iter().enumerate() {
             let branch_offset = slice.offset + slice.root.branch_offset(branch_idx);
             match branch {
                 NdTreeBranch::Leaf(cell_state) => {
-                    if *cell_state != T::default() {
+                    if *cell_state != C::default() {
                         ret.insert(branch_offset);
                     }
                 }

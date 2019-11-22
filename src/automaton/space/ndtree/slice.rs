@@ -5,36 +5,36 @@ use super::*;
 
 /// An immutable view into an NdTree.
 #[derive(Debug, Clone)]
-pub struct NdTreeSlice<T: CellType, D: Dim> {
+pub struct NdTreeSlice<C: CellType, D: Dim> {
     /// The root NdTreeNode of this slice.
-    pub root: Rc<NdTreeNode<T, D>>,
+    pub root: Rc<NdTreeNode<C, D>>,
     /// The position of the lower bound of the root node.
     pub offset: NdVec<D>,
 }
 
 /// A 1D grid represented as a bintree.
-pub type NdTreeSlice1D<T> = NdTreeSlice<T, Dim1D>;
+pub type NdTreeSlice1D<C> = NdTreeSlice<C, Dim1D>;
 /// A 2D grid represented as a quadtree.
-pub type NdTreeSlice2D<T> = NdTreeSlice<T, Dim2D>;
+pub type NdTreeSlice2D<C> = NdTreeSlice<C, Dim2D>;
 /// A 3D grid represented as an octree.
-pub type NdTreeSlice3D<T> = NdTreeSlice<T, Dim3D>;
+pub type NdTreeSlice3D<C> = NdTreeSlice<C, Dim3D>;
 /// A 4D grid represented as a tree with nodes of degree 16.
-pub type NdTreeSlice4D<T> = NdTreeSlice<T, Dim4D>;
+pub type NdTreeSlice4D<C> = NdTreeSlice<C, Dim4D>;
 /// A 5D grid represented as a tree with nodes of degree 32.
-pub type NdTreeSlice5D<T> = NdTreeSlice<T, Dim5D>;
+pub type NdTreeSlice5D<C> = NdTreeSlice<C, Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
-pub type NdTreeSlice6D<T> = NdTreeSlice<T, Dim6D>;
+pub type NdTreeSlice6D<C> = NdTreeSlice<C, Dim6D>;
 
-impl<T: CellType, D: Dim> Index<NdVec<D>> for NdTreeSlice<T, D> {
-    type Output = T;
-    fn index(&self, pos: NdVec<D>) -> &T {
+impl<C: CellType, D: Dim> Index<NdVec<D>> for NdTreeSlice<C, D> {
+    type Output = C;
+    fn index(&self, pos: NdVec<D>) -> &C {
         &self.root[pos]
     }
 }
 
-impl<T: CellType, D: Dim> NdTreeSlice<T, D> {
+impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
     /// Constructs a new NdTreeSlice centered on a given node.
-    pub fn centered(root: Rc<NdTreeNode<T, D>>) -> Self {
+    pub fn centered(root: Rc<NdTreeNode<C, D>>) -> Self {
         Self {
             offset: NdVec::origin() - root.len() as isize / 2,
             root,
@@ -47,7 +47,7 @@ impl<T: CellType, D: Dim> NdTreeSlice<T, D> {
     }
 
     /// Returns the cell at the given position, if it is within the bounds of the slice.
-    pub fn get_cell(&self, pos: NdVec<D>) -> Option<T> {
+    pub fn get_cell(&self, pos: NdVec<D>) -> Option<C> {
         if self.rect().contains(pos) {
             Some(self.root.get_cell(pos - self.offset))
         } else {

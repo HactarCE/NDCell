@@ -12,7 +12,7 @@ use crate::automaton::*;
 /// is guaranteed to have 2**d branches with the same layer, NdBaseTreeNode is
 /// not.
 #[derive(Debug, Clone)]
-pub struct NdBaseTreeNode<T: CellType, D: Dim> {
+pub struct NdBaseTreeNode<C: CellType, D: Dim> {
     /// The branches of this node, stored as a flattened 2^d hypercube of nodes
     /// one layer lower.
     ///
@@ -23,7 +23,7 @@ pub struct NdBaseTreeNode<T: CellType, D: Dim> {
     /// D::NDIM as the array size. It might be worth implementing a custom
     /// unsafe type for this, but at the time of writing such an optimization
     /// would be entirely premature.
-    pub branches: Vec<NdTreeBranch<T, D>>,
+    pub branches: Vec<NdTreeBranch<C, D>>,
 
     /// This node's hash, based solely on the hashes of its branches.
     pub hash_code: u64,
@@ -32,8 +32,8 @@ pub struct NdBaseTreeNode<T: CellType, D: Dim> {
     /// still definitely need to know it.
     phantom: PhantomData<D>,
 }
-impl<T: CellType, D: Dim> From<Vec<NdTreeBranch<T, D>>> for NdBaseTreeNode<T, D> {
-    fn from(branches: Vec<NdTreeBranch<T, D>>) -> Self {
+impl<C: CellType, D: Dim> From<Vec<NdTreeBranch<C, D>>> for NdBaseTreeNode<C, D> {
+    fn from(branches: Vec<NdTreeBranch<C, D>>) -> Self {
         let mut hasher = SeaHasher::new();
         branches.hash(&mut hasher);
         Self {
@@ -43,14 +43,14 @@ impl<T: CellType, D: Dim> From<Vec<NdTreeBranch<T, D>>> for NdBaseTreeNode<T, D>
         }
     }
 }
-impl<T: CellType, D: Dim> Hash for NdBaseTreeNode<T, D> {
+impl<C: CellType, D: Dim> Hash for NdBaseTreeNode<C, D> {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         // We already cached our own hash, so just rehash that if you want to.
         self.hash_code.hash(hasher);
     }
 }
-impl<T: CellType, D: Dim> Eq for NdBaseTreeNode<T, D> {}
-impl<T: CellType, D: Dim> PartialEq for NdBaseTreeNode<T, D> {
+impl<C: CellType, D: Dim> Eq for NdBaseTreeNode<C, D> {}
+impl<C: CellType, D: Dim> PartialEq for NdBaseTreeNode<C, D> {
     fn eq(&self, rhs: &Self) -> bool {
         // Check for pointer equality (very fast; guarantees true).
         std::ptr::eq(self, rhs)
@@ -64,9 +64,9 @@ impl<T: CellType, D: Dim> PartialEq for NdBaseTreeNode<T, D> {
 /// A single node in the NdTree, which contains information about its layer
 /// (base-2 logarithm of hypercube side length) and its children.
 #[derive(Clone)]
-pub struct NdTreeNode<T: CellType, D: Dim> {
+pub struct NdTreeNode<C: CellType, D: Dim> {
     /// The member containing the branches and hash code.
-    pub base: NdBaseTreeNode<T, D>,
+    pub base: NdBaseTreeNode<C, D>,
 
     /// The "layer" of this node (base-2 logarithm of hypercube side length).
     pub layer: usize,
@@ -76,22 +76,22 @@ pub struct NdTreeNode<T: CellType, D: Dim> {
 }
 
 // Implement Borrow so that NdBaseTreeNode can be used for HashSet lookups.
-impl<T: CellType, D: Dim> Borrow<NdBaseTreeNode<T, D>> for NdTreeNode<T, D> {
-    fn borrow(&self) -> &NdBaseTreeNode<T, D> {
+impl<C: CellType, D: Dim> Borrow<NdBaseTreeNode<C, D>> for NdTreeNode<C, D> {
+    fn borrow(&self) -> &NdBaseTreeNode<C, D> {
         &self.base
     }
 }
 
 // Allow use of NdTreeNode as if it's an NdBaseTreeNode.
-impl<T: CellType, D: Dim> Deref for NdTreeNode<T, D> {
-    type Target = NdBaseTreeNode<T, D>;
-    fn deref(&self) -> &NdBaseTreeNode<T, D> {
+impl<C: CellType, D: Dim> Deref for NdTreeNode<C, D> {
+    type Target = NdBaseTreeNode<C, D>;
+    fn deref(&self) -> &NdBaseTreeNode<C, D> {
         &self.base
     }
 }
 
-impl<T: CellType, D: Dim> From<NdBaseTreeNode<T, D>> for NdTreeNode<T, D> {
-    fn from(base: NdBaseTreeNode<T, D>) -> Self {
+impl<C: CellType, D: Dim> From<NdBaseTreeNode<C, D>> for NdTreeNode<C, D> {
+    fn from(base: NdBaseTreeNode<C, D>) -> Self {
         let branches = &base.branches;
         // Compute the layer based on the layer of the node's branches, and check
         // that all branches are at the same layer.
@@ -125,29 +125,29 @@ impl<T: CellType, D: Dim> From<NdBaseTreeNode<T, D>> for NdTreeNode<T, D> {
     }
 }
 
-impl<T: CellType, D: Dim> fmt::Debug for NdTreeNode<T, D> {
+impl<C: CellType, D: Dim> fmt::Debug for NdTreeNode<C, D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "NdTreeNode {{ branches: {:?} }}", self.branches)
     }
 }
 
-impl<T: CellType, D: Dim> Eq for NdTreeNode<T, D> {}
-impl<T: CellType, D: Dim> PartialEq for NdTreeNode<T, D> {
+impl<C: CellType, D: Dim> Eq for NdTreeNode<C, D> {}
+impl<C: CellType, D: Dim> PartialEq for NdTreeNode<C, D> {
     fn eq(&self, rhs: &Self) -> bool {
         // Delegate to NdBaseTreeNode.
         self.base == rhs.base
     }
 }
-impl<T: CellType, D: Dim> Hash for NdTreeNode<T, D> {
+impl<C: CellType, D: Dim> Hash for NdTreeNode<C, D> {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         // We already cached our own hash; just rehash that if you want to.
         self.hash_code.hash(hasher);
     }
 }
 
-impl<T: CellType, D: Dim> Index<NdVec<D>> for NdTreeNode<T, D> {
-    type Output = T;
-    fn index(&self, pos: NdVec<D>) -> &T {
+impl<C: CellType, D: Dim> Index<NdVec<D>> for NdTreeNode<C, D> {
+    type Output = C;
+    fn index(&self, pos: NdVec<D>) -> &C {
         match &self.branches[self.branch_idx(pos)] {
             NdTreeBranch::Leaf(cell_state) => cell_state,
             NdTreeBranch::Node(node) => &node[pos],
@@ -155,7 +155,7 @@ impl<T: CellType, D: Dim> Index<NdVec<D>> for NdTreeNode<T, D> {
     }
 }
 
-impl<T: CellType, D: Dim> NdTreeNode<T, D> {
+impl<C: CellType, D: Dim> NdTreeNode<C, D> {
     /// The number of branches for this many dimensions (2 ** d).
     pub const BRANCHES: usize = 1 << D::NDIM;
     /// The bitmask for branch indices.
@@ -238,7 +238,7 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     }
 
     /// Returns the cell value at the given position, modulo the node size.
-    pub fn get_cell(&self, pos: NdVec<D>) -> T {
+    pub fn get_cell(&self, pos: NdVec<D>) -> C {
         match &self.branches[self.branch_idx(pos)] {
             NdTreeBranch::Leaf(cell_state) => *cell_state,
             NdTreeBranch::Node(node) => node.get_cell(pos),
@@ -248,10 +248,10 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
     /// size, having the given cell state.
     pub fn set_cell(
         &self,
-        cache: &mut NdTreeCache<T, D>,
+        cache: &mut NdTreeCache<C, D>,
         pos: NdVec<D>,
-        cell_state: T,
-    ) -> NdCachedNode<T, D> {
+        cell_state: C,
+    ) -> NdCachedNode<C, D> {
         let mut new_branches = self.branches.clone();
         // Get the branch containing the given cell.
         let branch = &mut new_branches[self.branch_idx(pos)];
@@ -267,15 +267,15 @@ impl<T: CellType, D: Dim> NdTreeNode<T, D> {
 
 /// A single branch of an NdNode; an NdNode's child.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum NdTreeBranch<T: CellType, D: Dim> {
+pub enum NdTreeBranch<C: CellType, D: Dim> {
     /// All cells within this branch are the same cell state.
-    Leaf(T),
+    Leaf(C),
 
     /// An interned subnode.
-    Node(NdCachedNode<T, D>),
+    Node(NdCachedNode<C, D>),
 }
 
-impl<T: CellType, D: Dim> NdTreeBranch<T, D> {
+impl<C: CellType, D: Dim> NdTreeBranch<C, D> {
     /// Returns the layer of this tree branch, which is the same as its
     /// contained node (if it is a node) or 0 if it is a leaf.
     pub fn get_layer(&self) -> usize {
@@ -292,7 +292,7 @@ impl<T: CellType, D: Dim> NdTreeBranch<T, D> {
     pub fn population(&self) -> usize {
         match self {
             NdTreeBranch::Leaf(cell_state) => {
-                if *cell_state == T::default() {
+                if *cell_state == C::default() {
                     0
                 } else {
                     1

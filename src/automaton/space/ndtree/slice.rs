@@ -1,13 +1,15 @@
 use std::ops::Index;
+use std::rc::Rc;
 
 use super::*;
 
 /// An immutable view into an NdTree.
 #[derive(Debug, Clone)]
 pub struct NdTreeSlice<T: CellType, D: Dim> {
-    root: NdSubTree<T, D>,
-    offset: NdVec<D>,
-    rect: NdRect<D>,
+    /// The root NdTreeNode of this slice.
+    pub root: Rc<NdTreeNode<T, D>>,
+    /// The position of the lower bound of the root node.
+    pub offset: NdVec<D>,
 }
 
 /// A 1D grid represented as a bintree.
@@ -23,50 +25,45 @@ pub type NdTreeSlice5D<T> = NdTreeSlice<T, Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
 pub type NdTreeSlice6D<T> = NdTreeSlice<T, Dim6D>;
 
-impl<T: CellType, D: Dim> NdTreeSlice<T, D> {
-    /// Constructs a new NdTreeSlice given a node and an offset from that node.
-    pub fn new(node: NdSubTree<T, D>, offset: NdVec<D>) -> Self {
-        let rect = NdRect::span(offset, offset + node.len() as isize - 1);
-        Self::with_rect(node, offset, rect)
-    }
-    /// Constructs an NdTreeSlice that is restricted to a given hyperrectangle.
-    pub fn with_rect(node: NdSubTree<T, D>, offset: NdVec<D>, rect: NdRect<D>) -> Self {
-        // TODO check that rectangle bounds are valid according to node.len()
-        // and offset.
-        Self {
-            root: node,
-            offset,
-            rect,
-        }
-    }
-
-    /// Returns the root node of this slice.
-    pub fn root(&self) -> &NdSubTree<T, D> {
-        &self.root
-    }
-    /// Returns the offset of this slice.
-    pub fn offset(&self) -> NdVec<D> {
-        self.offset
-    }
-    /// Returns the NdRect bounding this slice.
-    pub fn rect(&self) -> NdRect<D> {
-        self.rect
-    }
-
-    /// Returns the cell at the given position, if it is within the bounds of the slice.
-    pub fn get_cell(&self, mut pos: NdVec<D>) -> Option<T> {
-        pos -= self.offset;
-        if self.rect.contains(pos) {
-            Some(self.root.get_cell(pos))
-        } else {
-            None
-        }
-    }
-}
-
 impl<T: CellType, D: Dim> Index<NdVec<D>> for NdTreeSlice<T, D> {
     type Output = T;
     fn index(&self, pos: NdVec<D>) -> &T {
         &self.root[pos]
     }
+}
+
+impl<T: CellType, D: Dim> NdTreeSlice<T, D> {
+    /// Constructs a new NdTreeSlice centered on a given node.
+    pub fn centered(root: Rc<NdTreeNode<T, D>>) -> Self {
+        Self {
+            offset: NdVec::origin() - root.len() as isize / 2,
+            root,
+        }
+    }
+
+    /// Returns the NdRect bounding this slice.
+    pub fn rect(&self) -> NdRect<D> {
+        self.root.rect() + self.offset
+    }
+
+    /// Returns the cell at the given position, if it is within the bounds of the slice.
+    pub fn get_cell(&self, pos: NdVec<D>) -> Option<T> {
+        if self.rect().contains(pos) {
+            Some(self.root.get_cell(pos - self.offset))
+        } else {
+            None
+        }
+    }
+
+    // /// Returns an NdTreeSlice containing the root node's branch with the given
+    // /// branch index.
+    // pub fn get_branch_slice(&self, branch_idx: usize) -> Self {
+    //     Self {
+    //         root: match &self.root.branches[branch_idx] {
+    //             NdTreeBranch::Leaf(_) => panic!("Cannot take slice of node at layer 1"),
+    //             NdTreeBranch::Node(node) => node.clone(),
+    //         },
+    //         offset: self.offset + self.root.branch_offset(branch_idx),
+    //     }
+    // }
 }

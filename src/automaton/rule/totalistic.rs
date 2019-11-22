@@ -4,6 +4,7 @@ use regex::Regex;
 use std::convert::TryFrom;
 
 /// A 2-state totalistic 2D range-1 Moore-neighborhood algorithm.
+#[derive(Debug)]
 pub struct MooreTotalistic2D {
     birth: [bool; 9],
     survival: [bool; 9],

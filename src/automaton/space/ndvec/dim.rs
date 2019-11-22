@@ -5,7 +5,7 @@ use super::*;
 ///
 /// This is basically exactly the same as ndarray's Dimension trait, except it
 /// uses isize instead of usize (which is crucial for this application).
-pub trait Dim: Debug + Clone + Eq + Hash + Copy {
+pub trait Dim: Debug + Clone + Copy + Default + Eq + Hash {
     /// The number of dimensions (number of axes).
     const NDIM: usize;
 

@@ -79,6 +79,12 @@ impl<D: Dim> NdRect<D> {
     pub fn iter(self) -> NdRectIter<D> {
         self.into()
     }
+
+    /// Return a range over all the values of the given axis in this
+    /// hyperrectangle.
+    pub fn axis_range(self, axis: Axis) -> std::ops::RangeInclusive<isize> {
+        self.min[axis]..=self.max[axis]
+    }
 }
 
 impl<D: Dim> CanContain<NdVec<D>> for NdRect<D> {

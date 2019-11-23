@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use super::*;
+use crate::math::ceil_log_base_2;
 
 /// A HashLife simulation of a given automaton that caches simulation results.
 pub struct Simulation<'a, C: CellType, D: Dim> {
@@ -16,7 +17,7 @@ impl<'a, C: CellType, D: Dim> Simulation<'a, C, D> {
     /// Constructs a new Simulation with the given rule and step size.
     pub fn new(rule: Box<&'a dyn Rule<C, D>>, step_size: usize) -> Self {
         // Determine the minimum layer at which we can simulate one generation
-        // of the automaton, using `n / 4 >= r * t`. (See the doumentation for
+        // of the automaton, using `n / 4 >= r`. (See the documentation for
         // Simulation::advance_inner_node() for an explanation.) Even at r=0 or
         // r=1, the minimum layer is 2 because we need to return the inner node
         // (which is at a lower layer) and the minimum layer is 1.
@@ -38,10 +39,12 @@ impl<'a, C: CellType, D: Dim> Simulation<'a, C, D> {
     pub fn step(&mut self, tree: &mut NdTree<C, D>) {
         // Expand as much as necessary to ensure that the sphere of influence of
         // the existing pattern is included in the inner node of the tree's root
-        // node, following `expansion_distance >= r * t`. This automatically
+        // node, following `expansion_distance >= r * t`. This naturally
         // guarantees that `n / 4 >= r * t` as well.
+        let min_expansion_distance =
+            1 << (ceil_log_base_2(self.rule.radius()) + ceil_log_base_2(self.step_size));
         let mut expansion_distance = 0;
-        while expansion_distance < self.rule.radius() * self.step_size {
+        while expansion_distance < min_expansion_distance {
             tree.expand();
             expansion_distance += tree.get_root().len() / 4;
         }
@@ -62,28 +65,150 @@ impl<'a, C: CellType, D: Dim> Simulation<'a, C, D> {
         tree.shrink();
     }
 
-    /// Computes the "inner" node for a given node after the given numebr of
+    /// Computes the inner node for a given node after the given numebr of
     /// generations.
     ///
-    /// A node's "inner" node is the node one layer down, centered on the
-    /// original node. For example, the inner node of a 16x16 node is the 8x8
-    /// node centered on it. HashLife always performs calculations like this; a
-    /// node is progressed some distance into the future, and the state of its
-    /// inner node is the result. This is because without outside information,
-    /// it is impossible to predict the state of the entire node (since adjacent
-    /// cells outside of the node could affect it), but it is always possible to
-    /// predict the inner node of a node with length `n` after `t` generations
-    /// using a rule with max neighborhood radius `r` if `n / 4 >= r * t`. (`r`
-    /// defines the maximum speed that information can travel, so `r * t` is the
-    /// distance that information can travel, and `n / 4` is the distance from
-    /// any edge of the inner node to the edge of the outer node.)
+    /// A node's inner node is the node one layer down, centered on the original
+    /// node. For example, the inner node of a 16x16 node (layer 4) is the 8x8
+    /// node (layer 3) centered on it. HashLife always performs calculations
+    /// like this; a node is progressed some distance into the future, and the
+    /// state of its inner node is the result. This is because without outside
+    /// information, it is impossible to predict the state of the entire node
+    /// (since adjacent cells outside of the node could affect it), but it is
+    /// always possible in theory to predict the inner node of a node with
+    /// length `n` after `t` generations using a rule with max neighborhood
+    /// radius `r` if `n / 4 >= r * t`. (`r` defines the maximum speed that
+    /// information can travel, so `r * t` is the distance that information can
+    /// travel, and `n / 4` is the distance from any edge of the inner node to
+    /// the edge of the outer node.) In practice, however, each layer must be
+    /// computed separately, so the `r` and `t` must each be replaced with their
+    /// next lowest power of two.
     fn advance_inner_node(
         &mut self,
         cache: &mut NdTreeCache<C, D>,
         node: &NdCachedNode<C, D>,
-        steps: usize,
+        generations: usize,
     ) -> NdCachedNode<C, D> {
-        unimplemented!()
+        // Handle the simplest case of just not simulating anything. This is one
+        // of the recursive base cases.
+        if generations == 0 {
+            return node.get_inner_node(cache);
+        }
+
+        // If the result is already in the cache, just return that.
+        if let Some(result) = self.results.get_result(node, generations) {
+            return result.clone();
+        }
+
+        // Otherwise make sure we're above the minimum layer.
+        assert!(
+            node.layer >= self.min_layer,
+            "Cannot advance inner node at layer below minimum simulation layer"
+        );
+
+        let mut ret;
+
+        // If this is the minimum layer, just compute each cell manually. This
+        // is the other recursive base case.
+        if node.layer == self.min_layer {
+            assert_eq!(
+                1, generations,
+                "Cannot simulate more than 1 generation at minimum layer"
+            );
+            ret = cache.get_empty_node(node.layer - 1);
+            let mut slice = NdTreeSlice::centered(node.clone());
+            for ret_pos in ret.rect().iter() {
+                slice.offset = -ret_pos - slice.root.len() as isize / 4;
+                ret = ret.set_cell(cache, ret_pos, self.rule.transition(&slice));
+            }
+        } else {
+            // In the algorithm described below, there are two `t/2`s that must
+            // add up to `t` (where `t` is the number of generations to
+            // simulate). But of course if `t` is odd, then this may not be the
+            // case. It hardly matters whether `t_outer` or `t_inner` is larger,
+            // as long as they differ by no more than `1` and they add up to
+            // `t`.
+            let t_inner = generations / 2;
+            let t_outer = generations - t_inner;
+
+            // Colors refer to Figure 4 in this article:
+            // https://www.drdobbs.com/jvm/_/184406478. Let `L` be the layer of
+            // the curernt node, and let `t` be the number of generations to
+            // simulate.
+            let branch_count: usize = NdTreeNode::<C, D>::BRANCHES;
+            let mut final_branches = Vec::with_capacity(branch_count);
+            for final_branch_idx in 0..branch_count {
+                let mut inner_branches = Vec::with_capacity(branch_count);
+                for inner_branch_idx in 0..branch_count {
+                    let mut outer_branches = Vec::with_capacity(branch_count);
+                    for outer_branch_idx in 0..branch_count {
+                        // 1. Grab sub-branches at layer `L-2` of the original
+                        //    node at time `0`.
+                        outer_branches.push(
+                            Self::get_quarter_branch(
+                                node,
+                                final_branch_idx,
+                                inner_branch_idx,
+                                outer_branch_idx,
+                            )
+                            .clone(),
+                        );
+                    }
+                    // 2. Use these branches to make a node at layer `L-1` and
+                    //    time `0`.
+                    let inner_branch_node = cache.get_node(outer_branches);
+                    // 3. Simulate that node to get a new node at layer `L-2`
+                    //    and time `t/2` (red squares).
+                    inner_branches.push(NdTreeBranch::Node(self.advance_inner_node(
+                        cache,
+                        &inner_branch_node,
+                        t_outer,
+                    )));
+                }
+                // 4. Using branches from step #3, create a node at layer `L-1`
+                //    and time `t/2`.
+                let final_branch_node = cache.get_node(inner_branches);
+                // 5. Simulate that node to get a new node at layer `L-2` and
+                //    time `t` (green squares).
+                final_branches.push(NdTreeBranch::Node(self.advance_inner_node(
+                    cache,
+                    &final_branch_node,
+                    t_inner,
+                )));
+            }
+            // 6. Using branches from step #5, create a new node at layer `L-1`
+            //    and time `t` (blue square). This is the final result.
+            ret = cache.get_node(final_branches);
+        }
+
+        // Add the result to the cache so we don't have to do all that work next
+        // time.
+        self.results
+            .set_result(node.clone(), generations, ret.clone());
+        ret
+    }
+
+    /// Adds three branch_indices together to get a sub-branch index and returns
+    /// the specified sub-branch which is two layers below the given node.
+    ///
+    /// This operation is only useful in this one wierd circumstance, which is
+    /// why it's implemented here rather than in NdTreeNode.
+    pub fn get_quarter_branch(
+        node: &NdTreeNode<C, D>,
+        branch_idx_1: usize,
+        branch_idx_2: usize,
+        branch_idx_3: usize,
+    ) -> &NdTreeBranch<C, D> {
+        // This is kind of like bitwise full addition; we want the "sum" in
+        // inner_branch_idx and the "carry" in outer_branch_idx. The carry is
+        // simply an XOR.
+        let inner_branch_idx = branch_idx_1 ^ branch_idx_2 ^ branch_idx_3;
+        // The sum is 1 if at least two inputs are 1.
+        let outer_branch_idx = (branch_idx_1 & branch_idx_2)
+            | (branch_idx_1 & branch_idx_3)
+            | (branch_idx_2 & branch_idx_3);
+        // Now use those to index into the node.
+        &node.branches[outer_branch_idx].node().unwrap().branches[inner_branch_idx]
     }
 }
 

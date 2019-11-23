@@ -5,6 +5,9 @@
 /// Put another way: returns the smallest number `p` (minimum `0`) such that `n <= 2
 /// ** p`.
 pub fn ceil_log_base_2(mut n: usize) -> usize {
+    if n <= 1 {
+        return 0;
+    }
     n -= 1;
     let total_bytes = std::mem::size_of::<usize>();
     let total_bits = total_bytes * 8;

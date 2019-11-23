@@ -45,7 +45,7 @@ impl fmt::Display for NdTreeSlice<bool, Dim2D> {
 impl<C: CellType, D: Dim> Index<NdVec<D>> for NdTreeSlice<C, D> {
     type Output = C;
     fn index(&self, pos: NdVec<D>) -> &C {
-        &self.root[pos]
+        &self.root[pos - self.offset]
     }
 }
 

@@ -24,6 +24,24 @@ pub type NdTreeSlice5D<C> = NdTreeSlice<C, Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
 pub type NdTreeSlice6D<C> = NdTreeSlice<C, Dim6D>;
 
+impl fmt::Display for NdTreeSlice<bool, Dim2D> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let rect = self.rect();
+        write!(
+            f,
+            "{}",
+            rect.axis_range(Axis::Y)
+                .map(|y| rect
+                    .axis_range(Axis::X)
+                    .map(|x| if self[[x, y].into()] { "#" } else { "." })
+                    .collect::<Vec<&str>>()
+                    .join(" "))
+                .collect::<Vec<String>>()
+                .join("\n")
+        )
+    }
+}
+
 impl<C: CellType, D: Dim> Index<NdVec<D>> for NdTreeSlice<C, D> {
     type Output = C;
     fn index(&self, pos: NdVec<D>) -> &C {

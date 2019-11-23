@@ -33,25 +33,12 @@ pub type NdTree5D<C> = NdTree<C, Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
 pub type NdTree6D<C> = NdTree<C, Dim6D>;
 
-impl fmt::Display for NdTree<bool, Dim2D> {
+impl<C: CellType, D: Dim> fmt::Display for NdTree<C, D>
+where
+    NdTreeSlice<C, D>: fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let rect = self.slice.rect();
-        write!(
-            f,
-            "{}",
-            rect.axis_range(Axis::Y)
-                .map(|y| rect
-                    .axis_range(Axis::X)
-                    .map(|x| if self.get_cell([x, y].into()) {
-                        "#"
-                    } else {
-                        "."
-                    })
-                    .collect::<Vec<&str>>()
-                    .join(" "))
-                .collect::<Vec<String>>()
-                .join("\n")
-        )
+        write!(f, "{}", self.slice)
     }
 }
 

@@ -209,9 +209,9 @@ mod tests {
     use std::collections::HashMap;
 
     fn assert_ndtree_valid(
-        expected_cells: &HashMap<Vec3D, u8>,
-        ndtree: &mut NdTree3D<u8>,
-        cells_to_check: &Vec<Vec3D>,
+        expected_cells: &HashMap<Vec2D, u8>,
+        ndtree: &mut NdTree2D<u8>,
+        cells_to_check: &Vec<Vec2D>,
     ) {
         assert_eq!(
             expected_cells
@@ -237,8 +237,8 @@ mod tests {
         /// Tests set_cell() and get_cell() by comparing against a HashMap.
         #[test]
         fn test_ndtree_set_get(
-            cells_to_set: Vec<(Vec3D, u8)>,
-            mut cells_to_get: Vec<Vec3D>,
+            cells_to_set: Vec<(Vec2D, u8)>,
+            mut cells_to_get: Vec<Vec2D>,
         ) {
             let mut ndtree = NdTree::new();
             let mut hashmap = HashMap::new();
@@ -264,13 +264,13 @@ mod tests {
         /// Tests that NdTreeCache automatically caches identical nodes.
         #[test]
         fn test_ndtree_cache(
-            cells_to_set: Vec<(Vec3D, u8)>,
+            cells_to_set: Vec<(Vec2D, u8)>,
         ) {
             prop_assume!(!cells_to_set.is_empty());
             let mut ndtree = NdTree::new();
             for (pos, state) in cells_to_set {
-                ndtree.set_cell(pos - NdVec::from([512, 512, 512]), state);
-                ndtree.set_cell(pos + NdVec::from([512, 512, 512]), state);
+                ndtree.set_cell(pos - 128, state);
+                ndtree.set_cell(pos + 128, state);
             }
             let branches = &ndtree.slice.root.branches;
             let subnode1 = branches[0].node().unwrap();

@@ -67,6 +67,18 @@ impl<D: Dim> IndexMut<Axis> for NdVec<D> {
 use proptest::prelude::*;
 
 #[cfg(test)]
+impl proptest::arbitrary::Arbitrary for Vec2D {
+    type Parameters = Option<isize>;
+    type Strategy = BoxedStrategy<Self>;
+    fn arbitrary_with(max: Option<isize>) -> Self::Strategy {
+        let max = max.unwrap_or(100);
+        prop::collection::vec(-max..=max, 2)
+            .prop_flat_map(|v| Just(NdVec([v[0], v[1]])))
+            .boxed()
+    }
+}
+
+#[cfg(test)]
 impl proptest::arbitrary::Arbitrary for Vec3D {
     type Parameters = Option<isize>;
     type Strategy = BoxedStrategy<Self>;

@@ -112,7 +112,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// node is replaced with a new node having the old NE node in its SW
     /// corner. The final result is that the entire tree contains the same
     /// contents as before, but with 25% padding on each edge.
-    fn expand(&mut self) {
+    pub fn expand(&mut self) {
         let mut cache = self.cache.borrow_mut();
         let new_branches = self
             .slice
@@ -141,7 +141,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// "Zooms out" by calling NdTree::expand() until the given position is
     /// contained in the known part of the tree, and return the number of calls
     /// to NdTree::expand() that were necessary.
-    fn expand_to(&mut self, pos: NdVec<D>) -> usize {
+    pub fn expand_to(&mut self, pos: NdVec<D>) -> usize {
         for i in 0.. {
             if self.rect().contains(pos) {
                 return i;
@@ -153,7 +153,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// "Zooms in" to the current tree as much as possible without losing
     /// non-empty cells. Returns the number of times the tree was contracted by
     /// a factor of 2.
-    fn contract(&mut self) -> usize {
+    pub fn contract(&mut self) -> usize {
         // If we are already at the minimum layer, do not contract further.
         if self.slice.root.layer == 1 {
             return 0;

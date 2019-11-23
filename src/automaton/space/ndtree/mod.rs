@@ -264,7 +264,7 @@ mod tests {
         /// Tests that NdTreeCache automatically caches identical nodes.
         #[test]
         fn test_ndtree_cache(
-            cells_to_set: Vec<(Vec2D, u8)>,
+            cells_to_set: Vec<(Vec2D, bool)>,
         ) {
             prop_assume!(!cells_to_set.is_empty());
             let mut ndtree = NdTree::new();

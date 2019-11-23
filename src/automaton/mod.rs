@@ -4,9 +4,11 @@
 //! without displaying, importing, or exporting them.
 
 pub mod rule;
+pub mod simulation;
 pub mod space;
 
 pub use rule::{DummyRule, Rule};
+pub use simulation::*;
 pub use space::*;
 
 use std::marker::PhantomData;
@@ -67,35 +69,37 @@ mod tests {
 
     #[test]
     fn test_cgol() {
-        let mut sim = Automaton::new(rule::LIFE, NdTree::new());
+        let mut grid = NdTree::new();
+        let rule = rule::LIFE;
+        let mut sim = Simulation::new(&rule, 1);
 
         // Make a glider
-        sim.grid.set_cell([3, 3].into(), true);
-        sim.grid.set_cell([4, 3].into(), true);
-        sim.grid.set_cell([5, 3].into(), true);
-        sim.grid.set_cell([5, 2].into(), true);
-        sim.grid.set_cell([4, 1].into(), true);
-        println!("{}", sim.grid);
+        grid.set_cell([3, 3].into(), true);
+        grid.set_cell([4, 3].into(), true);
+        grid.set_cell([5, 3].into(), true);
+        grid.set_cell([5, 2].into(), true);
+        grid.set_cell([4, 1].into(), true);
+        println!("{}", grid);
         println!();
 
         assert_eq!(
             make_cell_coords_set(vec![[3, 3], [4, 3], [5, 3], [5, 2], [4, 1]]),
-            get_non_default_set(&sim.grid.slice)
+            get_non_default_set(&grid.slice)
         );
         // Simulate it for a few steps.
-        sim.step();
-        println!("{}", sim.grid);
+        sim.step(&mut grid);
+        println!("{}", grid);
         println!();
         assert_eq!(
             make_cell_coords_set(vec![[4, 4], [4, 3], [5, 3], [5, 2], [3, 2]]),
-            get_non_default_set(&sim.grid.slice)
+            get_non_default_set(&grid.slice)
         );
-        sim.step();
-        println!("{}", sim.grid);
+        sim.step(&mut grid);
+        println!("{}", grid);
         println!();
         assert_eq!(
             make_cell_coords_set(vec![[4, 4], [5, 4], [5, 3], [5, 2], [3, 3]]),
-            get_non_default_set(&sim.grid.slice)
+            get_non_default_set(&grid.slice)
         );
     }
 }

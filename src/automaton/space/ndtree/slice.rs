@@ -44,6 +44,18 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
     pub fn rect(&self) -> NdRect<D> {
         self.root.rect() + self.offset
     }
+    /// Returns the minimum position in this NdTree.
+    pub fn min(&self) -> NdVec<D> {
+        self.rect().min()
+    }
+    /// Returns the maximum position in this NdTree.
+    pub fn max(&self) -> NdVec<D> {
+        self.rect().max()
+    }
+    // /// Returns the number of non-default cells in this NdTree.
+    // pub fn population(&mut self) -> usize {
+    //     self.root.population
+    // }
 
     /// Returns the cell at the given position, if it is within the bounds of the slice.
     pub fn get_cell(&self, pos: NdVec<D>) -> Option<C> {

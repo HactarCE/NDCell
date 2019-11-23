@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
@@ -36,7 +35,7 @@ pub type NdTree6D<C> = NdTree<C, Dim6D>;
 
 impl fmt::Display for NdTree<bool, Dim2D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let rect = self.rect();
+        let rect = self.slice.rect();
         write!(
             f,
             "{}",
@@ -62,8 +61,8 @@ impl<C: CellType, D: Dim> Default for NdTree<C, D> {
     }
 }
 
-impl<C: CellType, D: Dim> Borrow<NdTreeSlice<C, D>> for NdTree<C, D> {
-    fn borrow(&self) -> &NdTreeSlice<C, D> {
+impl<C: CellType, D: Dim> AsRef<NdTreeSlice<C, D>> for NdTree<C, D> {
+    fn as_ref(&self) -> &NdTreeSlice<C, D> {
         &self.slice
     }
 }
@@ -81,28 +80,19 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         }
     }
 
-    /// Returns the immutable slice containing at least all of the nonzero cells
-    /// in the grid.
-    pub fn slice(&self) -> &NdTreeSlice<C, D> {
-        &self.slice
+    /// Returns the root node of this tree.
+    pub fn get_root(&self) -> &NdCachedNode<C, D> {
+        &self.slice.root
     }
-
-    /// Returns the hyperrectangle that this NdTree spans.
-    pub fn rect(&self) -> NdRect<D> {
-        self.slice.rect()
+    /// Sets the root node of this tree.
+    pub fn set_root(&mut self, new_root: NdCachedNode<C, D>) {
+        self.slice.root = new_root;
     }
-    /// Returns the minimum position in this NdTree.
-    pub fn min(&self) -> NdVec<D> {
-        self.rect().min()
-    }
-    /// Returns the maximum position in this NdTree.
-    pub fn max(&self) -> NdVec<D> {
-        self.rect().max()
-    }
-
-    /// Returns the number of non-default cells in this NdTree.
-    pub fn population(&mut self) -> usize {
-        self.slice.root.population
+    /// Sets the root node of this tree and adjusts the offset so that the tree remains centered on the same point.
+    pub fn set_root_centered(&mut self, new_root: NdCachedNode<C, D>) {
+        self.slice.offset += self.get_root().len() as isize / 2;
+        self.slice.offset -= new_root.len() as isize / 2;
+        self.set_root(new_root);
     }
 
     /// "Zooms out" of the current tree by a factor of 2.
@@ -136,26 +126,26 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
             })
             .collect();
         self.slice.root = cache.get_node(new_branches);
-        self.slice.offset -= self.slice.root.len() as isize / 4;
+        self.slice.offset -= self.get_root().len() as isize / 4;
     }
     /// "Zooms out" by calling NdTree::expand() until the given position is
     /// contained in the known part of the tree, and return the number of calls
     /// to NdTree::expand() that were necessary.
     pub fn expand_to(&mut self, pos: NdVec<D>) -> usize {
         for i in 0.. {
-            if self.rect().contains(pos) {
+            if self.slice.rect().contains(pos) {
                 return i;
             }
             self.expand();
         }
-        0
+        unreachable!();
     }
     /// "Zooms in" to the current tree as much as possible without losing
-    /// non-empty cells. Returns the number of times the tree was contracted by
-    /// a factor of 2.
-    pub fn contract(&mut self) -> usize {
-        // If we are already at the minimum layer, do not contract further.
-        if self.slice.root.layer == 1 {
+    /// non-empty cells. Returns the number of times the tree was shrunk by a
+    /// factor of 2.
+    pub fn shrink(&mut self) -> usize {
+        // If we are already at the minimum layer, do not shrink further.
+        if self.get_root().layer == 1 {
             return 0;
         }
         let mut cache = self.cache.borrow_mut();
@@ -170,7 +160,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
                 // of the opposite branch.
                 let opposite_branch_idx = branch_idx ^ NdTreeNode::<C, D>::BRANCH_IDX_BITMASK;
                 match old_branch {
-                    NdTreeBranch::Leaf(_) => panic!("Cannot contract tree past layer 1"),
+                    NdTreeBranch::Leaf(_) => panic!("Cannot shrink tree past layer 1"),
                     NdTreeBranch::Node(old_node) => old_node.branches[opposite_branch_idx].clone(),
                 }
             })
@@ -179,10 +169,9 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         drop(cache);
         // Make sure the populations are the same (i.e. we haven't lost any
         // cells); otherwise don't do anything.
-        if new_node.population == self.slice.root.population {
-            self.slice.offset += new_node.len() as isize / 2;
-            self.slice.root = new_node;
-            1 + self.contract()
+        if new_node.population == self.get_root().population {
+            self.set_root_centered(new_node);
+            1 + self.shrink()
         } else {
             0
         }
@@ -209,24 +198,24 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     // /// Simulate the grid for 2**gen_pow generations.
     // pub fn sim<R: Rule<C, D>>(&mut self, rule: &R, gen_pow: usize) {
     //     // // Ensure that there is enough space to actually simulate all the cells that might change.
-    //     // while self.slice.root().layer() < NdTreeNode::min_sim_layer(rule) {
+    //     // while self.get_root().layer() < NdTreeNode::min_sim_layer(rule) {
     //     //     self.expand_centered();
     //     // }
     //     // for _ in 0..gen_pow {
     //     //     self.expand_centered();
     //     // }
     //     // let gen_pow = 0;
-    //     // let new_root = self.slice.root().sim_inner(&mut self.cache, rule, gen_pow);
-    //     // let new_offset = self.slice.offset() + new_root.len() as isize / 4;
-    //     // self.slice = NdTreeSlice::new(new_root, new_offset);
-    //     // self.contract();
+    //     // let new_root = self.get_root().sim_inner(&mut self.cache, rule, gen_pow);
+    //     // let new_offset = self.slice.offset + new_root.len() as isize / 4;
+    //     // self = NdTreeSlice::new(new_root, new_offset);
+    //     // self.shrink();
     //     unimplemented!()
     // }
 
     // pub fn get_non_default(&mut self) -> Vec<NdVec<D>> {
-    //     // self.slice
+    //     // self
     //     //     .root()
-    //     //     .get_non_default(&mut self.cache, self.slice.offset())
+    //     //     .get_non_default(&mut self.cache, self.slice.offset)
     //     unimplemented!()
     // }
 }
@@ -247,7 +236,7 @@ mod tests {
                 .iter()
                 .filter(|(_, &cell_state)| cell_state != 0)
                 .count(),
-            ndtree.population()
+            ndtree.get_root().population
         );
         for pos in cells_to_check {
             assert_eq!(
@@ -278,15 +267,15 @@ mod tests {
             }
             assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
             // Test that expansion preserves population and positions.
-            let old_rect = ndtree.rect();
+            let old_rect = ndtree.slice.rect();
             while ndtree.slice.root.layer < 5 {
                 ndtree.expand();
                 assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
             }
-            // Test that contraction actually contracts.
-            ndtree.contract();
-            assert!(ndtree.rect().len(Axis::X) <= old_rect.len(Axis::X));
-            // Test that contraction preserves population and positions.
+            // Test that shrinking actually shrinks.
+            ndtree.shrink();
+            assert!(ndtree.slice.rect().len(Axis::X) <= old_rect.len(Axis::X));
+            // Test that shrinking preserves population and positions.
             assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
         }
 

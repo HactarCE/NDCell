@@ -1,5 +1,4 @@
 use std::ops::Index;
-use std::rc::Rc;
 
 use super::*;
 
@@ -7,7 +6,7 @@ use super::*;
 #[derive(Debug, Clone)]
 pub struct NdTreeSlice<C: CellType, D: Dim> {
     /// The root NdTreeNode of this slice.
-    pub root: Rc<NdTreeNode<C, D>>,
+    pub root: NdCachedNode<C, D>,
     /// The position of the lower bound of the root node.
     pub offset: NdVec<D>,
 }
@@ -34,7 +33,7 @@ impl<C: CellType, D: Dim> Index<NdVec<D>> for NdTreeSlice<C, D> {
 
 impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
     /// Constructs a new NdTreeSlice centered on a given node.
-    pub fn centered(root: Rc<NdTreeNode<C, D>>) -> Self {
+    pub fn centered(root: NdCachedNode<C, D>) -> Self {
         Self {
             offset: NdVec::origin() - root.len() as isize / 2,
             root,

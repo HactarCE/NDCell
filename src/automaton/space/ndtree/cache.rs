@@ -5,7 +5,8 @@ use weak_table::WeakHashSet;
 
 use crate::automaton::*;
 
-type NodeHasher = BuildHasherDefault<SeaHasher>;
+/// Fast hasher used for NdTreeNodes.
+pub type NodeHasher = BuildHasherDefault<SeaHasher>;
 
 /// A cached NdTreeNode.
 pub type NdCachedNode<C, D> = Rc<NdTreeNode<C, D>>;

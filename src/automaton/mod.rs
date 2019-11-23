@@ -71,7 +71,7 @@ mod tests {
     fn test_cgol() {
         let mut grid = NdTree::new();
         let rule = rule::LIFE;
-        let mut sim = Simulation::new(&rule, 1);
+        let mut sim = Simulation::new(Box::new(&rule), 1);
 
         // Make a glider
         grid.set_cell([3, 3].into(), true);

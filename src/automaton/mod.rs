@@ -101,5 +101,23 @@ mod tests {
             make_cell_coords_set(vec![[4, 4], [5, 4], [5, 3], [5, 2], [3, 3]]),
             get_non_default_set(&grid.slice)
         );
+        sim = Simulation::new(Box::new(&rule), 64);
+        sim.step(&mut grid);
+        assert_eq!(
+            make_cell_coords_set(vec![[20, 20], [21, 20], [21, 19], [21, 18], [19, 19]]),
+            get_non_default_set(&grid.slice)
+        );
+        sim = Simulation::new(Box::new(&rule), 1024);
+        sim.step(&mut grid);
+        assert_eq!(
+            make_cell_coords_set(vec![
+                [276, 276],
+                [277, 276],
+                [277, 275],
+                [277, 274],
+                [275, 275]
+            ]),
+            get_non_default_set(&grid.slice)
+        );
     }
 }

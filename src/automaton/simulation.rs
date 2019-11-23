@@ -1,3 +1,5 @@
+//! The functions that apply a rule to each cell in a grid.
+
 use std::collections::HashMap;
 
 use super::*;

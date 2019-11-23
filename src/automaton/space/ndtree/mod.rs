@@ -269,8 +269,8 @@ mod tests {
             prop_assume!(!cells_to_set.is_empty());
             let mut ndtree = NdTree::new();
             for (pos, state) in cells_to_set {
-                ndtree.set_cell(pos - NdVec::from([256, 256, 256]), state);
-                ndtree.set_cell(pos + NdVec::from([256, 256, 256]), state);
+                ndtree.set_cell(pos - NdVec::from([512, 512, 512]), state);
+                ndtree.set_cell(pos + NdVec::from([512, 512, 512]), state);
             }
             let branches = &ndtree.slice.root.branches;
             let subnode1 = branches[0].node().unwrap();

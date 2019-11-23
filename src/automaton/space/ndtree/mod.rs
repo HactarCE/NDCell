@@ -262,6 +262,7 @@ mod tests {
         }
 
         /// Tests that NdTreeCache automatically caches identical nodes.
+        #[ignore]
         #[test]
         fn test_ndtree_cache(
             cells_to_set: Vec<(Vec2D, bool)>,
@@ -276,6 +277,7 @@ mod tests {
             let subnode1 = branches[0].node().unwrap();
             let subnode2 = branches[branches.len() - 1].node().unwrap();
             assert_eq!(subnode1, subnode2);
+            assert_eq!(subnode1.hash_code, subnode2.hash_code);
             assert!(std::ptr::eq(subnode1, subnode2));
         }
     }

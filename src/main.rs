@@ -4,6 +4,7 @@
 #![warn(missing_docs)]
 
 pub mod automaton;
+mod math;
 // mod ui;
 
 fn main() {

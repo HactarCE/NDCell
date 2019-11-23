@@ -4,5 +4,6 @@
 #![warn(missing_docs)]
 
 mod automaton;
+mod math;
 
 pub use automaton::*;

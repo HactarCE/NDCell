@@ -194,6 +194,28 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
         )
     }
 
+    /// Returns the bounding rectangle of this node's inner node.
+    pub fn inner_rect(&self) -> NdRect<D> {
+        self.rect() + self.len() as isize / 4
+    }
+    /// Returns the inner node of this one.
+    ///
+    /// A node's inner node is the node one layer down, centered on the original
+    /// node. For example, the inner node of a 16x16 node (layer 4) is the 8x8
+    /// node (layer 3) centered on it.
+    pub fn get_inner_node(&self, cache: &mut NdTreeCache<C, D>) -> NdCachedNode<C, D> {
+        assert_ne!(1, self.layer, "Cannot take inner node of node at layer 1");
+        let new_branches = self
+            .branches
+            .iter()
+            .enumerate()
+            .map(|(branch_idx, branch)| {
+                branch.node().unwrap().branches[branch_idx ^ Self::BRANCH_IDX_BITMASK].clone()
+            })
+            .collect();
+        cache.get_node(new_branches)
+    }
+
     /// Computes the "branch index" corresponding to the child of this node
     /// containing the given position.
     ///

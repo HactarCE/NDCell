@@ -148,25 +148,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         if self.get_root().layer == 1 {
             return 0;
         }
-        let mut cache = self.cache.borrow_mut();
-        let new_branches = self
-            .slice
-            .root
-            .branches
-            .iter()
-            .enumerate()
-            .map(|(branch_idx, old_branch)| {
-                // Do the opposite of NdTree::expand(). First compute the index
-                // of the opposite branch.
-                let opposite_branch_idx = branch_idx ^ NdTreeNode::<C, D>::BRANCH_IDX_BITMASK;
-                match old_branch {
-                    NdTreeBranch::Leaf(_) => panic!("Cannot shrink tree past layer 1"),
-                    NdTreeBranch::Node(old_node) => old_node.branches[opposite_branch_idx].clone(),
-                }
-            })
-            .collect();
-        let new_node = cache.get_node(new_branches);
-        drop(cache);
+        let new_node = self.get_root().get_inner_node(&mut self.cache.borrow_mut());
         // Make sure the populations are the same (i.e. we haven't lost any
         // cells); otherwise don't do anything.
         if new_node.population == self.get_root().population {

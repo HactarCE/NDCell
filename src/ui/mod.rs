@@ -58,17 +58,19 @@ pub fn show_gui() {
     let mut renderer = Renderer::init(&mut imgui, &display).expect("Failed to initialize renderer");
 
     // Initialize cellular automaton stuff.
-    let mut grid = Grid::new();
-    grid[CellCoords([3, 3])] = true;
-    grid[CellCoords([4, 3])] = true;
-    grid[CellCoords([5, 3])] = true;
-    grid[CellCoords([5, 2])] = true;
-    grid[CellCoords([4, 1])] = true;
+    let mut grid = NdTree::new();
+    grid.set_cell([3, 3].into(), true);
+    grid.set_cell([4, 3].into(), true);
+    grid.set_cell([5, 3].into(), true);
+    grid.set_cell([5, 2].into(), true);
+    grid.set_cell([4, 1].into(), true);
     let mut state = State {
-        grid_view: render::GridView::Grid2D(render::Grid2D::new(Box::new(Automaton::new(
-            algorithm::LIFE,
-            grid,
-        )))),
+        grid_view: render::GridView::Grid2D(render::Grid2D::new(Box::new(
+            render::AutomatonBool2D {
+                grid,
+                simulation: Simulation::new(Box::new(&rule::LIFE), 1),
+            },
+        ))),
     };
 
     // Main loop

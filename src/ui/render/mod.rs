@@ -6,7 +6,7 @@ mod slice2d;
 use super::State;
 pub use grid2d::*;
 pub use grid3d::*;
-use slice2d::*;
+pub use slice2d::*;
 
 pub enum GridView {
     Grid2D(Grid2D),

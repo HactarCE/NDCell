@@ -48,7 +48,7 @@ impl Grid2D {
             for x in left..right {
                 vertices.push(Vertex {
                     position: [x as f32, y as f32],
-                    color: if self.slice.get_cell_state(CellCoords([x, y])) {
+                    color: if self.slice.get_cell_state([x, y].into()) {
                         [0.5, 0.5, 0.5, 1.0]
                     } else {
                         [0.005, 0.005, 0.005, 1.0]

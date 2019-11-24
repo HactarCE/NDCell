@@ -5,8 +5,8 @@
 
 pub mod automaton;
 mod math;
-// mod ui;
+mod ui;
 
 fn main() {
-    // ui::show_gui()
+    ui::show_gui()
 }

@@ -43,7 +43,7 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
             },
 
             // Handle input on 3D grid view.
-            render::GridView::Grid3D(grid) => match event {
+            render::GridView::Grid3D(_grid) => match event {
                 _ => (),
             },
         },

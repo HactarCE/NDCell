@@ -4,7 +4,6 @@ mod controller;
 
 use super::shaders;
 use super::AutomatonSlice2D;
-use crate::automaton::*;
 
 #[derive(Copy, Clone)]
 pub struct Vertex {
@@ -33,7 +32,6 @@ impl Grid2D {
         target.clear_color_srgb(0.2, 0.2, 0.2, 1.0);
 
         let (frame_w, frame_h) = target.get_dimensions();
-        let (w, h) = (frame_w as f32 / self.scale, frame_h as f32 / self.scale);
 
         let cell_w = frame_w as f32 / 2.0 / self.scale;
         let cell_h = frame_h as f32 / 2.0 / self.scale;

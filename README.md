@@ -1,5 +1,12 @@
 # NDCell
 
+_Any number of dimensions_  
+_Any number of states_  
+_Any neighborhood range_  
+_Any computable transition function_
+
+**Simulate _any_ cellular automaton**
+
 An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ## Implementation status

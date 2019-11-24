@@ -25,7 +25,7 @@ impl<D: Dim> Iterator for NdRectIter<D> {
             None
         } else {
             let ret = self.next;
-            for ax in D::axes() {
+            for &ax in D::axes() {
                 self.next[ax] += 1;
                 if self.next[ax] > self.rect.max[ax] {
                     self.next[ax] = self.rect.min[ax];

@@ -43,13 +43,11 @@ impl From<usize> for Axis {
     }
 }
 
+const AXES: &'static [Axis] = &[Axis::X, Axis::Y, Axis::Z, Axis::W, Axis::U, Axis::V];
+
 /// Returns a vector of axes given a number of dimensions.
-pub fn ndim_axes(ndim: usize) -> Vec<Axis> {
-    let mut ret = vec![Axis::X; ndim];
-    for i in 1..ndim {
-        ret[i] = i.into();
-    }
-    ret
+pub fn ndim_axes(ndim: usize) -> &'static [Axis] {
+    &AXES[..ndim]
 }
 
 #[cfg(test)]

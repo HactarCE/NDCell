@@ -10,7 +10,7 @@ pub trait Dim: Debug + Clone + Copy + Default + Eq + Hash {
     const NDIM: usize;
 
     /// Returns a Vector of the axes of this many dimensions.
-    fn axes() -> Vec<Axis> {
+    fn axes() -> &'static [Axis] {
         ndim_axes(Self::NDIM)
     }
 
@@ -25,7 +25,7 @@ pub trait Dim: Debug + Clone + Copy + Default + Eq + Hash {
 
     /// Returns whether these coordinates consists entirely of zeros.
     fn is_zero(&self) -> bool {
-        for ax in Self::axes() {
+        for &ax in Self::axes() {
             if self.get(ax) != &0 {
                 return false;
             }

@@ -16,7 +16,7 @@ impl<D: Dim> Add<isize> for NdVec<D> {
 }
 impl<D: Dim> AddAssign<isize> for NdVec<D> {
     fn add_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) + other);
         }
     }
@@ -34,7 +34,7 @@ impl<D: Dim> Sub<isize> for NdVec<D> {
 }
 impl<D: Dim> SubAssign<isize> for NdVec<D> {
     fn sub_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) - other);
         }
     }
@@ -52,7 +52,7 @@ impl<D: Dim> Mul<isize> for NdVec<D> {
 }
 impl<D: Dim> MulAssign<isize> for NdVec<D> {
     fn mul_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) * other);
         }
     }
@@ -70,7 +70,7 @@ impl<D: Dim> Div<isize> for NdVec<D> {
 }
 impl<D: Dim> DivAssign<isize> for NdVec<D> {
     fn div_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) / other);
         }
     }
@@ -88,7 +88,7 @@ impl<D: Dim> Rem<isize> for NdVec<D> {
 }
 impl<D: Dim> RemAssign<isize> for NdVec<D> {
     fn rem_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) % other);
         }
     }
@@ -106,7 +106,7 @@ impl<D: Dim> BitAnd<isize> for NdVec<D> {
 }
 impl<D: Dim> BitAndAssign<isize> for NdVec<D> {
     fn bitand_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) & other);
         }
     }
@@ -124,7 +124,7 @@ impl<D: Dim> BitOr<isize> for NdVec<D> {
 }
 impl<D: Dim> BitOrAssign<isize> for NdVec<D> {
     fn bitor_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) | other);
         }
     }
@@ -142,7 +142,7 @@ impl<D: Dim> BitXor<isize> for NdVec<D> {
 }
 impl<D: Dim> BitXorAssign<isize> for NdVec<D> {
     fn bitxor_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) ^ other);
         }
     }
@@ -160,7 +160,7 @@ impl<D: Dim> Shl<isize> for NdVec<D> {
 }
 impl<D: Dim> ShlAssign<isize> for NdVec<D> {
     fn shl_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) << other);
         }
     }
@@ -178,7 +178,7 @@ impl<D: Dim> Shr<isize> for NdVec<D> {
 }
 impl<D: Dim> ShrAssign<isize> for NdVec<D> {
     fn shr_assign(&mut self, other: isize) {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             self.0.set(ax, self.0.get(ax) >> other);
         }
     }

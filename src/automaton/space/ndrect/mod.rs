@@ -29,7 +29,7 @@ pub type Rect6D = NdRect<Dim6D>;
 impl<D: Dim> NdRect<D> {
     /// Constructs an NdRect spanning the given positions (inclusive).
     pub fn span(mut a: NdVec<D>, mut b: NdVec<D>) -> Self {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             if a[ax] > b[ax] {
                 std::mem::swap(&mut a[ax], &mut b[ax]);
             }
@@ -69,7 +69,7 @@ impl<D: Dim> NdRect<D> {
     /// Returns the number of cells in this NdRect.
     pub fn count(&self) -> usize {
         let mut product = 1;
-        for ax in D::axes() {
+        for &ax in D::axes() {
             product *= self.len(ax);
         }
         product
@@ -91,7 +91,7 @@ impl<D: Dim> CanContain<NdVec<D>> for NdRect<D> {
     /// Returns true if the cell position is contained within this
     /// hyperrectangle.
     fn contains(&self, pos: NdVec<D>) -> bool {
-        for ax in D::axes() {
+        for &ax in D::axes() {
             if pos[ax] < self.min[ax] || pos[ax] > self.max[ax] {
                 return false;
             }
@@ -168,7 +168,7 @@ mod tests {
             // Test contains()
             {
                 let mut contains = true;
-                for ax in Dim3D::axes() {
+                for &ax in Dim3D::axes() {
                     if test_offset[ax].abs() > radius as isize {
                         contains = false;
                     }

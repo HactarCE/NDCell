@@ -13,31 +13,6 @@ pub use space::*;
 
 use std::marker::PhantomData;
 
-/// A cellular automaton simulation.
-pub struct Automaton<C: CellType, D: Dim, R: Rule<C, D>> {
-    phantom: PhantomData<(C, D)>,
-    /// The rule to simulate.
-    pub rule: R,
-    /// The grid over which to simulate that rule.
-    pub grid: NdTree<C, D>,
-}
-
-impl<C: CellType, D: Dim, R: Rule<C, D>> Automaton<C, D, R> {
-    /// Construct a new Automaton that simulates a given rule over a given grid.
-    pub fn new(rule: R, grid: NdTree<C, D>) -> Self {
-        Self {
-            phantom: PhantomData,
-            rule,
-            grid,
-        }
-    }
-    /// Compute the next step in the simulation.
-    pub fn step(&mut self) {
-        // self.grid.sim(&self.rule, 1);
-        unimplemented!()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;

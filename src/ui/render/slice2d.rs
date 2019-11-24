@@ -4,6 +4,8 @@ pub trait AutomatonSlice2D {
     fn get_cell_state(&self, pos: Vec2D) -> bool;
     fn set_cell_state(&mut self, pos: Vec2D, new_state: bool);
     fn step(&mut self);
+    fn get_population(&self) -> usize;
+    fn get_max_layer(&self) -> usize;
 }
 
 pub struct AutomatonBool2D<'a> {
@@ -20,5 +22,11 @@ impl<'a> AutomatonSlice2D for AutomatonBool2D<'a> {
     }
     fn step(&mut self) {
         self.simulation.step(&mut self.grid)
+    }
+    fn get_population(&self) -> usize {
+        self.grid.get_root().population
+    }
+    fn get_max_layer(&self) -> usize {
+        self.grid.get_root().layer
     }
 }

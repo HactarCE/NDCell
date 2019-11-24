@@ -24,6 +24,45 @@ pub struct State {
     pub grid_view: render::GridView,
 }
 
+const GOSPER_GLIDER_GUN: [Dim2D; 36] = [
+    [24, 0],
+    [22, 1],
+    [24, 1],
+    [12, 2],
+    [13, 2],
+    [20, 2],
+    [21, 2],
+    [34, 2],
+    [35, 2],
+    [11, 3],
+    [15, 3],
+    [20, 3],
+    [21, 3],
+    [34, 3],
+    [35, 3],
+    [0, 4],
+    [1, 4],
+    [10, 4],
+    [16, 4],
+    [20, 4],
+    [21, 4],
+    [0, 5],
+    [1, 5],
+    [10, 5],
+    [14, 5],
+    [16, 5],
+    [17, 5],
+    [22, 5],
+    [24, 5],
+    [10, 6],
+    [16, 6],
+    [24, 6],
+    [11, 7],
+    [15, 7],
+    [12, 8],
+    [13, 8],
+];
+
 /// Display the main application window.
 pub fn show_gui() {
     // Initialize all glium/glutin stuff.
@@ -59,16 +98,19 @@ pub fn show_gui() {
 
     // Initialize cellular automaton stuff.
     let mut grid = NdTree::new();
-    grid.set_cell([3, 3].into(), true);
-    grid.set_cell([4, 3].into(), true);
-    grid.set_cell([5, 3].into(), true);
-    grid.set_cell([5, 2].into(), true);
-    grid.set_cell([4, 1].into(), true);
+    for &pos in GOSPER_GLIDER_GUN.into_iter() {
+        grid.set_cell(pos.into(), true);
+    }
+    // grid.set_cell([3, 3].into(), true);
+    // grid.set_cell([4, 3].into(), true);
+    // grid.set_cell([5, 3].into(), true);
+    // grid.set_cell([5, 2].into(), true);
+    // grid.set_cell([4, 1].into(), true);
     let mut state = State {
         grid_view: render::GridView::Grid2D(render::Grid2D::new(Box::new(
             render::AutomatonBool2D {
                 grid,
-                simulation: Simulation::new(Box::new(&rule::LIFE), 1),
+                simulation: Simulation::new(Box::new(&rule::LIFE), 16),
             },
         ))),
     };

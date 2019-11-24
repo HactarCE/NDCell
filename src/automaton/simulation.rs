@@ -34,6 +34,18 @@ impl<'a, C: CellType, D: Dim> Simulation<'a, C, D> {
         }
     }
 
+    /// Returns the step size of this simulation.
+    pub fn get_step_size(&self) -> usize {
+        self.step_size
+    }
+    /// Sets the step size of this simulation to the given value.
+    pub fn set_step_size(&mut self, new_step_size: usize) {
+        self.step_size = new_step_size;
+        // TODO: set min_layer accordingly, and prune SingleStepResultsCaches
+        // that are no longer relevant.
+        unimplemented!()
+    }
+
     /// Advances the given NdTree by a number of generations equal to this
     /// simulation's step size.
     pub fn step(&mut self, tree: &mut NdTree<C, D>) {

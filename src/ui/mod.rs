@@ -110,7 +110,8 @@ pub fn show_gui() {
         grid_view: render::GridView::Grid2D(render::Grid2D::new(Box::new(
             render::AutomatonBool2D {
                 grid,
-                simulation: Simulation::new(Box::new(&rule::LIFE), 16),
+                simulation: Simulation::new(Box::new(&rule::LIFE), 1024),
+                generations: 0,
             },
         ))),
     };

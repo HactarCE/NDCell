@@ -37,10 +37,8 @@ impl<'a, C: CellType, D: Dim> Simulation<'a, C, D> {
     /// Advances the given NdTree by a number of generations equal to this
     /// simulation's step size.
     pub fn step(&mut self, tree: &mut NdTree<C, D>) {
-        // Expand as much as necessary to ensure that the sphere of influence of
-        // the existing pattern is included in the inner node of the tree's root
-        // node, following `expansion_distance >= r * t`. This naturally
-        // guarantees that `n / 4 >= r * t` as well.
+        // Expand out to the sphere of influence of the existing pattern,
+        // following `expansion_distance >= r * t`.
         let min_expansion_distance =
             1 << (ceil_log_base_2(self.rule.radius()) + ceil_log_base_2(self.step_size));
         let mut expansion_distance = 0;
@@ -48,12 +46,13 @@ impl<'a, C: CellType, D: Dim> Simulation<'a, C, D> {
             tree.expand();
             expansion_distance += tree.get_root().len() / 4;
         }
-        // If we are somehow still at layer 1, expand to layer 2 because
-        // Simulation::advance_inner_node() must return a node one layer lower
-        // than its input, and layer 1 is the minimum layer.
-        if tree.get_root().layer == 1 {
-            tree.expand();
-        }
+        // Now expand one more layer to guarantee that the sphere of influence
+        // is within the inner node, because Simulation::advance_inner_node()
+        // must always returns a node one layer lower than its input. (This also
+        // ensures that we aren't somehow still at layer 1; we need to be at at
+        // least layer 2 so that the result can be at layer 1, which is the
+        // minimum layer for a node.)
+        tree.expand();
         // Now do the actual simulation.
         let new_node = self.advance_inner_node(
             &mut tree.cache.borrow_mut(),

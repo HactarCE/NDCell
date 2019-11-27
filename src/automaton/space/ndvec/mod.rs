@@ -104,37 +104,38 @@ mod tests {
             scalar in -100..=100isize,
             shift in 0..10isize,
         ) {
-            for axis in Dim3D::axes() {
-                assert_eq!(-(pos1[axis]), (-pos1)[axis]);
-                assert_eq!(pos1[axis] + pos2[axis], (pos1 + pos2  )[axis]);
-                assert_eq!(pos1[axis] - pos2[axis], (pos1 - pos2  )[axis]);
-                assert_eq!(pos1[axis] + scalar,     (pos1 + scalar)[axis]);
-                assert_eq!(pos1[axis] - scalar,     (pos1 - scalar)[axis]);
-                assert_eq!(pos1[axis] * scalar,     (pos1 * scalar)[axis]);
+            for &ax in Dim3D::axes() {
+                assert_eq!(-(pos1[ax]), (-pos1)[ax]);
+                assert_eq!(pos1[ax] + pos2[ax],   (pos1 + pos2  )[ax]);
+                assert_eq!(pos1[ax] - pos2[ax],   (pos1 - pos2  )[ax]);
+                assert_eq!(pos1[ax] + scalar,     (pos1 + scalar)[ax]);
+                assert_eq!(pos1[ax] - scalar,     (pos1 - scalar)[ax]);
+                assert_eq!(pos1[ax] * scalar,     (pos1 * scalar)[ax]);
                 if scalar != 0 {
-                    assert_eq!(pos1[axis] / scalar, (pos1 / scalar)[axis]);
-                    assert_eq!(pos1[axis] % scalar, (pos1 % scalar)[axis]);
+                    assert_eq!(pos1[ax] / scalar, (pos1 / scalar)[ax]);
+                    assert_eq!(pos1[ax] % scalar, (pos1 % scalar)[ax]);
                 }
-                assert_eq!(pos1[axis] & scalar,     (pos1 & scalar)[axis]);
-                assert_eq!(pos1[axis] | scalar,     (pos1 | scalar)[axis]);
-                assert_eq!(pos1[axis] ^ scalar,     (pos1 ^ scalar)[axis]);
-                assert_eq!(pos1[axis] << shift,     (pos1 << shift)[axis]);
-                assert_eq!(pos1[axis] >> shift,     (pos1 >> shift)[axis]);
+                assert_eq!(pos1[ax] & scalar,     (pos1 & scalar)[ax]);
+                assert_eq!(pos1[ax] | scalar,     (pos1 | scalar)[ax]);
+                assert_eq!(pos1[ax] ^ scalar,     (pos1 ^ scalar)[ax]);
+                assert_eq!(pos1[ax] << shift,     (pos1 << shift)[ax]);
+                assert_eq!(pos1[ax] >> shift,     (pos1 >> shift)[ax]);
             }
-            let mut result = pos1; result += pos2;   assert_eq!(result, pos1 + pos2);
-            let mut result = pos1; result -= pos2;   assert_eq!(result, pos1 - pos2);
-            let mut result = pos1; result += scalar; assert_eq!(result, pos1 + scalar);
-            let mut result = pos1; result -= scalar; assert_eq!(result, pos1 - scalar);
-            let mut result = pos1; result *= scalar; assert_eq!(result, pos1 * scalar);
+            let mut result;
+            result = pos1; result += pos2;   assert_eq!(result, pos1 + pos2);
+            result = pos1; result -= pos2;   assert_eq!(result, pos1 - pos2);
+            result = pos1; result += scalar; assert_eq!(result, pos1 + scalar);
+            result = pos1; result -= scalar; assert_eq!(result, pos1 - scalar);
+            result = pos1; result *= scalar; assert_eq!(result, pos1 * scalar);
             if scalar != 0 {
-                let mut result = pos1; result /= scalar;  assert_eq!(result, pos1 / scalar);
-                let mut result = pos1; result %= scalar;  assert_eq!(result, pos1 % scalar);
+                result = pos1; result /= scalar;  assert_eq!(result, pos1 / scalar);
+                result = pos1; result %= scalar;  assert_eq!(result, pos1 % scalar);
             }
-            let mut result = pos1; result &= scalar; assert_eq!(result, pos1 & scalar);
-            let mut result = pos1; result |= scalar; assert_eq!(result, pos1 | scalar);
-            let mut result = pos1; result ^= scalar; assert_eq!(result, pos1 ^ scalar);
-            let mut result = pos1; result <<= shift; assert_eq!(result, pos1 << shift);
-            let mut result = pos1; result >>= shift; assert_eq!(result, pos1 >> shift);
+            result = pos1; result &= scalar; assert_eq!(result, pos1 & scalar);
+            result = pos1; result |= scalar; assert_eq!(result, pos1 | scalar);
+            result = pos1; result ^= scalar; assert_eq!(result, pos1 ^ scalar);
+            result = pos1; result <<= shift; assert_eq!(result, pos1 << shift);
+            result = pos1; result >>= shift; assert_eq!(result, pos1 >> shift);
         }
     }
 }

@@ -290,10 +290,9 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
 /// A single branch of an NdNode; an NdNode's child.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NdTreeBranch<C: CellType, D: Dim> {
-    /// All cells within this branch are the same cell state.
+    /// A "layer 0" node; i.e. a single cell.
     Leaf(C),
-
-    /// An interned subnode.
+    /// A cached node whose layer is >= 1.
     Node(NdCachedNode<C, D>),
 }
 

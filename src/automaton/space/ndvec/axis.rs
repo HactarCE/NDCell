@@ -27,6 +27,11 @@ impl Axis {
             Axis::V => "V",
         }
     }
+    /// Returns the bitmask of this axis in a branch index. (See
+    /// NdTreeNode::branch_idx_at_layer() for more info.)
+    pub fn branch_bit(self) -> usize {
+        1 << self as usize
+    }
 }
 
 impl From<usize> for Axis {

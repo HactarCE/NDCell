@@ -1,37 +1,36 @@
 //! The functions that apply a rule to each cell in a grid.
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use super::*;
 use crate::math::ceil_log_base_2;
 
 /// A HashLife simulation of a given automaton that caches simulation results.
-pub struct Simulation<'a, C: CellType, D: Dim> {
-    rule: Box<&'a dyn Rule<C, D>>,
+#[derive(Debug)]
+pub struct Simulation<C: CellType, D: Dim> {
+    rule: Rc<dyn Rule<C, D>>,
     step_size: usize,
     min_layer: usize,
     results: ResultsCache<C, D>,
 }
+impl<C: CellType, D: Dim> Default for Simulation<C, D> {
+    fn default() -> Self {
+        Self::new(Rc::new(DummyRule), 1)
+    }
+}
 
-impl<'a, C: CellType, D: Dim> Simulation<'a, C, D> {
+impl<C: CellType, D: Dim> Simulation<C, D> {
     /// Constructs a new Simulation with the given rule and step size.
-    pub fn new(rule: Box<&'a dyn Rule<C, D>>, step_size: usize) -> Self {
-        // Determine the minimum layer at which we can simulate one generation
-        // of the automaton, using `n / 4 >= r`. (See the documentation for
-        // Simulation::advance_inner_node() for an explanation.) Even at r=0 or
-        // r=1, the minimum layer is 2 because we need to return the inner node
-        // (which is at a lower layer) and the minimum layer is 1.
-        let mut min_layer = 2;
-        while NdTreeNode::<C, D>::len_at_layer(min_layer) / 4 > rule.radius() {
-            min_layer += 1;
-        }
-
-        Self {
+    pub fn new(rule: Rc<dyn Rule<C, D>>, step_size: usize) -> Self {
+        let mut ret = Self {
             rule,
-            step_size,
-            min_layer,
+            step_size: 0,
+            min_layer: 0,
             results: ResultsCache::default(),
-        }
+        };
+        ret.set_step_size(step_size);
+        ret
     }
 
     /// Returns the step size of this simulation.
@@ -40,10 +39,23 @@ impl<'a, C: CellType, D: Dim> Simulation<'a, C, D> {
     }
     /// Sets the step size of this simulation to the given value.
     pub fn set_step_size(&mut self, new_step_size: usize) {
+        if new_step_size != self.step_size {
+            // If the new step is different, recompute ResultsCache. This could
+            // be replaced with something smarter that only prunes the
+            // SingleStepResultsCaches that won't be used with this new step
+            // size.
+            self.results = ResultsCache::default();
+        }
         self.step_size = new_step_size;
-        // TODO: set min_layer accordingly, and prune SingleStepResultsCaches
-        // that are no longer relevant.
-        unimplemented!()
+        // Determine the minimum layer at which we can simulate one generation
+        // of the automaton, using `n / 4 >= r`. (See the documentation for
+        // Simulation::advance_inner_node() for an explanation.) Even at r=0 or
+        // r=1, the minimum layer is 2 because we need to return the inner node
+        // (which is at a lower layer) and the minimum layer is 1.
+        self.min_layer = 2;
+        while NdTreeNode::<C, D>::len_at_layer(self.min_layer) / 4 > self.rule.radius() {
+            self.min_layer += 1;
+        }
     }
 
     /// Advances the given NdTree by a number of generations equal to this
@@ -199,7 +211,7 @@ impl<'a, C: CellType, D: Dim> Simulation<'a, C, D> {
         ret
     }
 
-    /// Adds three branch_indices together to get a sub-branch index and returns
+    /// Adds three branch indices together to get a sub-branch index and returns
     /// the specified sub-branch which is two layers below the given node.
     ///
     /// This operation is only useful in this one wierd circumstance, which is

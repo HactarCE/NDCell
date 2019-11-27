@@ -3,6 +3,8 @@
 //! This module contains everything needed to simulate cellular automata,
 //! without displaying, importing, or exporting them.
 
+use std::marker::PhantomData;
+
 pub mod rule;
 pub mod simulation;
 pub mod space;
@@ -11,11 +13,10 @@ pub use rule::{DummyRule, Rule};
 pub use simulation::*;
 pub use space::*;
 
-use std::marker::PhantomData;
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::rc::Rc;
 
     use super::*;
 
@@ -46,7 +47,7 @@ mod tests {
     fn test_cgol() {
         let mut grid = NdTree::new();
         let rule = rule::LIFE;
-        let mut sim = Simulation::new(Box::new(&rule), 1);
+        let mut sim = Simulation::new(Rc::new(rule), 1);
 
         // Make a glider
         grid.set_cell([3, 3].into(), true);
@@ -76,13 +77,13 @@ mod tests {
             make_cell_coords_set(vec![[4, 4], [5, 4], [5, 3], [5, 2], [3, 3]]),
             get_non_default_set(&grid.slice)
         );
-        sim = Simulation::new(Box::new(&rule), 64);
+        sim.set_step_size(64);
         sim.step(&mut grid);
         assert_eq!(
             make_cell_coords_set(vec![[20, 20], [21, 20], [21, 19], [21, 18], [19, 19]]),
             get_non_default_set(&grid.slice)
         );
-        sim = Simulation::new(Box::new(&rule), 1024);
+        sim.set_step_size(1024);
         sim.step(&mut grid);
         assert_eq!(
             make_cell_coords_set(vec![

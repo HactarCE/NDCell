@@ -15,6 +15,7 @@ name = "ndcell"
 path = "src/main.rs"
 
 [dependencies]
+enum_dispatch = "0.2"
 glium = "0.25"
 imgui = "0.2"
 imgui-glium-renderer = "0.2"

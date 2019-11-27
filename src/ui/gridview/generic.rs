@@ -19,8 +19,14 @@ pub trait NdTreeViewMeta<D: Dim>: Default + Copy + Clone {
 
 /// A discrete-time simulation with some number of dimensions and undo history.
 pub trait NdSimulate {
-    /// The number of dimensions.
-    const NDIM: usize;
+    /// Returns the number of dimensions in the simulation.
+    ///
+    /// If this were a const value or static function, then it would be
+    /// impossible to make a trait object, which is half of the point of this
+    /// entire module. See
+    /// https://github.com/rust-lang/rust/pull/48026#issuecomment-363289757 for
+    /// an explanation.
+    fn get_ndim(&self) -> usize;
     /// Advances one variable-size (depending on `step_size`) step into the simulation.
     fn step(&mut self);
     /// Saves the current state in the undo history.
@@ -73,7 +79,9 @@ impl<C: CellType, D: Dim, M: NdTreeViewMeta<D>> From<NdTree<C, D>> for NdTreeVie
     }
 }
 impl<C: CellType, D: Dim, M: NdTreeViewMeta<D>> NdSimulate for NdTreeView<C, D, M> {
-    const NDIM: usize = D::NDIM;
+    fn get_ndim(&self) -> usize {
+        D::NDIM
+    }
     fn step(&mut self) {
         self.sim.step(&mut self.tree);
     }

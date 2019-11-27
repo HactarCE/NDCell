@@ -1,7 +1,46 @@
+use enum_dispatch::enum_dispatch;
+
 use super::*;
 
+#[enum_dispatch]
+pub enum QuadTree<C: CellType> {
+    Tree1D(NdTreeView<C, Dim1D, NdTreeViewMeta2D<Dim1D>>),
+    Tree2D(NdTreeView<C, Dim2D, NdTreeViewMeta2D<Dim2D>>),
+    Tree3D(NdTreeView<C, Dim3D, NdTreeViewMeta2D<Dim3D>>),
+    Tree4D(NdTreeView<C, Dim4D, NdTreeViewMeta2D<Dim4D>>),
+    Tree5D(NdTreeView<C, Dim5D, NdTreeViewMeta2D<Dim5D>>),
+    Tree6D(NdTreeView<C, Dim6D, NdTreeViewMeta2D<Dim6D>>),
+}
+
+#[enum_dispatch]
+pub enum QuadTreeSlice<C: CellType> {
+    TreeSlice1D(NdTreeSliceView<C, Dim1D, NdTreeViewMeta2D<Dim1D>>),
+    TreeSlice2D(NdTreeSliceView<C, Dim2D, NdTreeViewMeta2D<Dim2D>>),
+    TreeSlice3D(NdTreeSliceView<C, Dim3D, NdTreeViewMeta2D<Dim3D>>),
+    TreeSlice4D(NdTreeSliceView<C, Dim4D, NdTreeViewMeta2D<Dim4D>>),
+    TreeSlice5D(NdTreeSliceView<C, Dim5D, NdTreeViewMeta2D<Dim5D>>),
+    TreeSlice6D(NdTreeSliceView<C, Dim6D, NdTreeViewMeta2D<Dim6D>>),
+}
+
+#[enum_dispatch]
+pub enum QuadTreeNode<C: CellType> {
+    Node1D(NdTreeSliceView<C, Dim1D, NdTreeViewMeta2D<Dim1D>>),
+    Node2D(NdTreeSliceView<C, Dim2D, NdTreeViewMeta2D<Dim2D>>),
+    Node3D(NdTreeSliceView<C, Dim3D, NdTreeViewMeta2D<Dim3D>>),
+    Node4D(NdTreeSliceView<C, Dim4D, NdTreeViewMeta2D<Dim4D>>),
+    Node5D(NdTreeSliceView<C, Dim5D, NdTreeViewMeta2D<Dim5D>>),
+    Node6D(NdTreeSliceView<C, Dim6D, NdTreeViewMeta2D<Dim6D>>),
+}
+
+/// Anything that can act as a branch of a node in a quadtree of cells.
+pub enum QuadTreeBranch<C: CellType> {
+    Leaf(C),
+    Node(QuadTreeNode<C>),
+}
+
 /// Anything that can act as a mutable quadtree of cells.
-pub trait QuadTree<C: CellType>: QuadTreeSlice<C> + NdSimulate {
+#[enum_dispatch(QuadTree)]
+pub trait QuadTreeTrait<C: CellType>: QuadTreeSliceTrait<C> + NdSimulate {
     fn set_view_pos_on_axis(&mut self, axis: Axis, pos: isize);
     fn set_h_axis(&mut self, axis: Axis);
     fn set_v_axis(&mut self, axis: Axis);
@@ -9,30 +48,19 @@ pub trait QuadTree<C: CellType>: QuadTreeSlice<C> + NdSimulate {
 }
 
 /// Anything that can act as an immutable quadtree of cells.
-pub trait QuadTreeSlice<C: CellType> {
-    type Node: QuadTreeNode<C>;
-    fn get_root(&self) -> Self::Node;
+#[enum_dispatch(QuadTreeSlice)]
+pub trait QuadTreeSliceTrait<C: CellType> {
+    fn get_root(&self) -> QuadTreeNode<C>;
     fn get_cell(&self, pos: Vec2D) -> Option<C>;
-    fn get_population(&self) -> usize {
-        self.get_root().get_population()
-    }
 }
 
 /// Anything that can act as an immutable node in a quadtree of cells.
-pub trait QuadTreeNode<C: CellType>
-where
-    Self: std::marker::Sized,
-{
+#[enum_dispatch(QuadTreeNode)]
+pub trait QuadTreeNodeTrait<C: CellType> {
     fn get_cell(&self, pos: Vec2D) -> C;
     fn get_branch(&self, branch_idx: usize) -> QuadTreeBranch<C, Self>;
     fn get_branches(&self) -> [QuadTreeBranch<C, Self>; 4];
     fn get_population(&self) -> usize;
-}
-
-/// Anything that can act as a branch of a node in a quadtree of cells.
-pub enum QuadTreeBranch<C: CellType, Node: QuadTreeNode<C>> {
-    Leaf(C),
-    Node(Box<Node>),
 }
 
 /// Information describing how to slice an NdTree to get a 2D quadtree.
@@ -98,7 +126,7 @@ impl<D: Dim> NdTreeViewMeta2D<D> {
     }
 }
 
-impl<C: CellType, D: Dim> QuadTree<C> for NdTreeView<C, D, NdTreeViewMeta2D<D>> {
+impl<C: CellType, D: Dim> QuadTreeTrait<C> for NdTreeView<C, D, NdTreeViewMeta2D<D>> {
     fn set_view_pos_on_axis(&mut self, axis: Axis, pos: isize) {
         self.meta.slice_pos[axis] = pos;
     }
@@ -113,9 +141,8 @@ impl<C: CellType, D: Dim> QuadTree<C> for NdTreeView<C, D, NdTreeViewMeta2D<D>> 
     }
 }
 
-impl<C: CellType, D: Dim> QuadTreeSlice<C> for NdTreeView<C, D, NdTreeViewMeta2D<D>> {
-    type Node = NdTreeNodeView<C, D, NdTreeViewMeta2D<D>>;
-    fn get_root(&self) -> Self::Node {
+impl<C: CellType, D: Dim> QuadTreeSliceTrait<C> for NdTreeView<C, D, NdTreeViewMeta2D<D>> {
+    fn get_root(&self) -> QuadTreeNode<C> {
         self.slice().get_root()
     }
     fn get_cell(&self, pos: Vec2D) -> Option<C> {
@@ -123,24 +150,23 @@ impl<C: CellType, D: Dim> QuadTreeSlice<C> for NdTreeView<C, D, NdTreeViewMeta2D
     }
 }
 
-impl<C: CellType, D: Dim> QuadTreeSlice<C> for NdTreeSliceView<C, D, NdTreeViewMeta2D<D>> {
-    type Node = NdTreeNodeView<C, D, NdTreeViewMeta2D<D>>;
-    fn get_root(&self) -> Self::Node {
-        NdTreeNodeView {
+impl<C: CellType, D: Dim> QuadTreeSliceTrait<C> for NdTreeSliceView<C, D, NdTreeViewMeta2D<D>> {
+    fn get_root(&self) -> QuadTreeNode<C> {
+        Box::new(NdTreeNodeView {
             node: self.slice.root.clone(),
             meta: self.meta,
-        }
+        })
     }
     fn get_cell(&self, pos: Vec2D) -> Option<C> {
         self.slice.get_cell(self.meta.get_ndim_pos(pos))
     }
 }
 
-impl<C: CellType, D: Dim> QuadTreeNode<C> for NdTreeNodeView<C, D, NdTreeViewMeta2D<D>> {
+impl<C: CellType, D: Dim> QuadTreeNodeTrait<C> for NdTreeNodeView<C, D, NdTreeViewMeta2D<D>> {
     fn get_cell(&self, pos: Vec2D) -> C {
         self.node.get_cell(self.meta.get_ndim_pos(pos))
     }
-    fn get_branch(&self, branch_idx: usize) -> QuadTreeBranch<C, Self> {
+    fn get_branch(&self, branch_idx: usize) -> QuadTreeBranch<C> {
         // Get the index of the branch containing the slice position.
         let mut nd_branch_idx = self.node.branch_idx(self.meta.slice_pos);
         // For the horizontal and vertical axes, set or reset the proper bit in
@@ -158,13 +184,13 @@ impl<C: CellType, D: Dim> QuadTreeNode<C> for NdTreeNodeView<C, D, NdTreeViewMet
         // Now that we have the real N-dimensional branch index, convert the NdTreeBranch into a QuadTreeBranch.
         match &self.node.branches[nd_branch_idx] {
             NdTreeBranch::Leaf(cell_state) => QuadTreeBranch::Leaf(*cell_state),
-            NdTreeBranch::Node(node) => QuadTreeBranch::Node(Box::new(NdTreeNodeView {
+            NdTreeBranch::Node(node) => QuadTreeBranch::Node(NdTreeNodeView {
                 node: node.clone(),
                 meta: self.meta,
-            })),
+            }),
         }
     }
-    fn get_branches(&self) -> [QuadTreeBranch<C, Self>; 4] {
+    fn get_branches(&self) -> [QuadTreeBranch<C>; 4] {
         [
             self.get_branch(0),
             self.get_branch(1),

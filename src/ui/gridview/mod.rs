@@ -4,6 +4,6 @@ mod generic;
 mod oct;
 mod quad;
 
-use generic::*;
-use oct::*;
-use quad::*;
+pub use generic::*;
+pub use oct::*;
+pub use quad::*;

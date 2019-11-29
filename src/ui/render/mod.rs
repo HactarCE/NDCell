@@ -9,7 +9,7 @@ pub use grid3d::*;
 pub use slice2d::*;
 
 pub enum GridView {
-    Grid2D(Grid2D),
+    Grid2D(AutomatonView2D),
     Grid3D(Grid3D),
 }
 

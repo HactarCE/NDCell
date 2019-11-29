@@ -3,7 +3,7 @@ use glium::*;
 mod controller;
 
 use super::shaders;
-use super::AutomatonSlice2D;
+use crate::ui::gridview::*;
 
 #[derive(Copy, Clone)]
 pub struct Vertex {
@@ -12,16 +12,16 @@ pub struct Vertex {
 }
 implement_vertex!(Vertex, position, color);
 
-pub struct Grid2D {
-    pub slice: Box<dyn AutomatonSlice2D>,
+pub struct AutomatonView2D {
+    pub automaton: QuadTreeAutomaton<bool>,
     pub x: f32,
     pub y: f32,
     pub scale: f32,
 }
-impl Grid2D {
-    pub fn new(slice: Box<dyn AutomatonSlice2D>) -> Self {
+impl AutomatonView2D {
+    pub fn new(automaton: QuadTreeAutomaton<bool>) -> Self {
         Self {
-            slice,
+            automaton,
             x: 0.0f32,
             y: 0.0f32,
             scale: 32.0f32,
@@ -46,7 +46,7 @@ impl Grid2D {
             for x in left..right {
                 vertices.push(Vertex {
                     position: [x as f32, y as f32],
-                    color: if self.slice.get_cell_state([x, y].into()) {
+                    color: if self.automaton.get_cell([x, y].into()) {
                         [0.5, 0.5, 0.5, 1.0]
                     } else {
                         [0.005, 0.005, 0.005, 1.0]

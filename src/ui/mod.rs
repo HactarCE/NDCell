@@ -6,13 +6,17 @@ use glium::glutin;
 use imgui::{Context, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use std::rc::Rc;
 use std::time::Instant;
 
+mod gridview;
 mod gui;
 mod input;
+
 mod render;
 
 use crate::automaton::*;
+use crate::ui::gridview::*;
 
 /// The title of the program window (both the OS window, and the main imgui
 /// window).
@@ -106,14 +110,13 @@ pub fn show_gui() {
     // grid.set_cell([5, 3].into(), true);
     // grid.set_cell([5, 2].into(), true);
     // grid.set_cell([4, 1].into(), true);
+    let mut automaton: NdAutomaton<bool, Dim2D, NdProjectionInfo2D<Dim2D>> = NdAutomaton::default();
+    automaton.tree = grid;
+    automaton.sim = Simulation::new(Rc::new(rule::LIFE), 1024);
     let mut state = State {
-        grid_view: render::GridView::Grid2D(render::Grid2D::new(Box::new(
-            render::AutomatonBool2D {
-                grid,
-                simulation: Simulation::new(Box::new(&rule::LIFE), 1024),
-                generations: 0,
-            },
-        ))),
+        grid_view: render::GridView::Grid2D(render::AutomatonView2D::new(
+            QuadTreeAutomaton::Automaton2D(automaton.into()),
+        )),
     };
 
     // Main loop

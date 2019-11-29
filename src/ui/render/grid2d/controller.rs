@@ -1,6 +1,6 @@
 use super::*;
 
-impl Grid2D {
+impl AutomatonView2D {
     pub fn scroll(&mut self, dx: f32, dy: f32) {
         self.x += dx / self.scale;
         self.y += dy / self.scale;
@@ -9,6 +9,6 @@ impl Grid2D {
         self.scale *= 2.0f32.powf(dz);
     }
     pub fn step(&mut self) {
-        self.slice.step();
+        self.automaton.step();
     }
 }

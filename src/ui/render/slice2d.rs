@@ -9,13 +9,13 @@ pub trait AutomatonSlice2D {
     fn get_generations(&self) -> usize;
 }
 
-pub struct AutomatonBool2D<'a> {
+pub struct AutomatonBool2D {
     pub grid: NdTree<bool, Dim2D>,
-    pub simulation: Simulation<'a, bool, Dim2D>,
+    pub simulation: Simulation<bool, Dim2D>,
     pub generations: usize,
 }
 
-impl<'a> AutomatonSlice2D for AutomatonBool2D<'a> {
+impl AutomatonSlice2D for AutomatonBool2D {
     fn get_cell_state(&self, pos: Vec2D) -> bool {
         self.grid.get_cell(pos)
     }

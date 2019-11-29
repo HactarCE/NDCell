@@ -7,7 +7,7 @@ use super::*;
 use crate::math::ceil_log_base_2;
 
 /// A HashLife simulation of a given automaton that caches simulation results.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Simulation<C: CellType, D: Dim> {
     rule: Rc<dyn Rule<C, D>>,
     step_size: usize,
@@ -236,7 +236,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 }
 
 /// A cache of simulation results for a variety of step sizes.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct ResultsCache<C: CellType, D: Dim>(HashMap<usize, SingleStepResultsCache<C, D>, NodeHasher>);
 impl<C: CellType, D: Dim> ResultsCache<C, D> {
     fn get_result(
@@ -262,7 +262,7 @@ impl<C: CellType, D: Dim> ResultsCache<C, D> {
 }
 
 /// A cache of simulation results for a given step size.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct SingleStepResultsCache<C: CellType, D: Dim>(
     HashMap<NdCachedNode<C, D>, NdCachedNode<C, D>, NodeHasher>,
 );

@@ -11,6 +11,16 @@ pub struct NdTreeSlice<C: CellType, D: Dim> {
     pub offset: NdVec<D>,
 }
 
+/// The same as NdTreeBranch, but using NdTreeSlice instead of NdCachedNode (so
+/// it retains global location information).
+#[derive(Debug, Clone)]
+pub enum NdTreeSliceBranch<C: CellType, D: Dim> {
+    /// A "layer 0" node; i.e. a single cell.
+    Leaf(C, NdVec<D>),
+    /// A tree slice whose layer is >= 1.
+    Node(NdTreeSlice<C, D>),
+}
+
 /// A 1D grid represented as a bintree.
 pub type NdTreeSlice1D<C> = NdTreeSlice<C, Dim1D>;
 /// A 2D grid represented as a quadtree.
@@ -84,15 +94,18 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
         }
     }
 
-    // /// Returns an NdTreeSlice containing the root node's branch with the given
-    // /// branch index.
-    // pub fn get_branch_slice(&self, branch_idx: usize) -> Self {
-    //     Self {
-    //         root: match &self.root.branches[branch_idx] {
-    //             NdTreeBranch::Leaf(_) => panic!("Cannot take slice of node at layer 1"),
-    //             NdTreeBranch::Node(node) => node.clone(),
-    //         },
-    //         offset: self.offset + self.root.branch_offset(branch_idx),
-    //     }
-    // }
+    /// Returns an NdTreeSlice containing the root node's branch with the given
+    /// branch index.
+    pub fn get_branch(&self, branch_idx: usize) -> NdTreeSliceBranch<C, D> {
+        match &self.root.branches[branch_idx] {
+            NdTreeBranch::Leaf(cell_state) => NdTreeSliceBranch::Leaf(
+                *cell_state,
+                self.rect().min() + NdTreeNode::<C, D>::branch_offset_at_layer(1, branch_idx),
+            ),
+            NdTreeBranch::Node(node) => NdTreeSliceBranch::Node(Self {
+                root: node.clone(),
+                offset: self.offset + self.root.branch_offset(branch_idx),
+            }),
+        }
+    }
 }

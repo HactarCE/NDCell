@@ -13,7 +13,7 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                 x,
                 y,
                 automaton,
-                scale,
+                zoom,
             }) => {
                 ui.text(format!("X = {}", x));
                 ui.text(format!("Y = {}", y));
@@ -25,7 +25,7 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                     "Population = {}",
                     automaton.get_root().get_population()
                 ));
-                ui.text(format!("Scale = {}", scale));
+                ui.text(format!("Zoom = {}", zoom));
                 ui.text(format!(
                     "Max node layer = {}",
                     automaton.get_root().get_layer()

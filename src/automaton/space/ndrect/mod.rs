@@ -85,6 +85,19 @@ impl<D: Dim> NdRect<D> {
     pub fn axis_range(self, axis: Axis) -> std::ops::RangeInclusive<isize> {
         self.min[axis]..=self.max[axis]
     }
+
+    /// Returns true if the two hyperrectangles intersect at all.
+    pub fn intersects(self, other: NdRect<D>) -> bool {
+        for &ax in D::axes() {
+            // If the rectangles do not intersect along this axis, return false.
+            if other.max[ax] < self.min[ax] || self.max[ax] < other.min[ax] {
+                return false;
+            }
+        }
+        // If the rectangles intersect along each axis, then they must really
+        // intersect in N-dimensional space.
+        true
+    }
 }
 
 impl<D: Dim> CanContain<NdVec<D>> for NdRect<D> {

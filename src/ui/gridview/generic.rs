@@ -39,7 +39,7 @@ pub trait NdSimulate {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct NdAutomaton<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to project the grid to the correct number of
     /// dimensions.
@@ -113,6 +113,7 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdAutomaton<C, D, P> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct NdProjectedTreeSlice<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeSlice.
     pub projection_info: P,
@@ -120,6 +121,7 @@ pub struct NdProjectedTreeSlice<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     pub slice: NdTreeSlice<C, D>,
 }
 
+#[derive(Debug, Clone)]
 pub struct NdProjectedTreeNode<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeNode.
     pub projection_info: P,

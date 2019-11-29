@@ -19,11 +19,14 @@ impl<D: Dim> NdProjectionInfo<D> for NdProjectionInfo2D<D> {
     fn set_slice_pos(&mut self, slice_pos: NdVec<D>) {
         self.slice_pos = slice_pos
     }
-    fn get_ndim_pos(&self, pos: Vec2D) -> NdVec<D> {
+    fn pdim_to_ndim(&self, pos: Vec2D) -> NdVec<D> {
         let mut ret = self.slice_pos;
         ret[self.h] = pos[Axis::X];
         ret[self.v] = pos[Axis::Y];
         ret
+    }
+    fn ndim_to_pdim(&self, pos: NdVec<D>) -> Vec2D {
+        [pos[self.h], pos[self.v]].into()
     }
 }
 

@@ -101,6 +101,26 @@ impl<C: CellType> QuadTreeAutomatonTrait<C> for QuadTreeAutomaton<C> {
             Self::Automaton6D(inner) => inner.set_cell(pos, new_state),
         }
     }
+    fn expand_to(&mut self, pos: Vec2D) {
+        match self {
+            Self::Automaton1D(inner) => inner.expand_to(pos),
+            Self::Automaton2D(inner) => inner.expand_to(pos),
+            Self::Automaton3D(inner) => inner.expand_to(pos),
+            Self::Automaton4D(inner) => inner.expand_to(pos),
+            Self::Automaton5D(inner) => inner.expand_to(pos),
+            Self::Automaton6D(inner) => inner.expand_to(pos),
+        }
+    }
+    fn shrink(&mut self) {
+        match self {
+            Self::Automaton1D(inner) => inner.shrink(),
+            Self::Automaton2D(inner) => inner.shrink(),
+            Self::Automaton3D(inner) => inner.shrink(),
+            Self::Automaton4D(inner) => inner.shrink(),
+            Self::Automaton5D(inner) => inner.shrink(),
+            Self::Automaton6D(inner) => inner.shrink(),
+        }
+    }
 }
 
 impl<C: CellType> NdSimulate for QuadTreeAutomaton<C> {
@@ -258,6 +278,36 @@ impl<C: CellType> QuadTreeSliceTrait<C> for QuadTreeSlice<C> {
             Self::Slice4D(inner) => inner.get_cell(pos),
             Self::Slice5D(inner) => inner.get_cell(pos),
             Self::Slice6D(inner) => inner.get_cell(pos),
+        }
+    }
+    fn get_rect(&self) -> Rect2D {
+        match self {
+            Self::Slice1D(inner) => inner.get_rect(),
+            Self::Slice2D(inner) => inner.get_rect(),
+            Self::Slice3D(inner) => inner.get_rect(),
+            Self::Slice4D(inner) => inner.get_rect(),
+            Self::Slice5D(inner) => inner.get_rect(),
+            Self::Slice6D(inner) => inner.get_rect(),
+        }
+    }
+    fn get_branch(&self, branch_idx: usize) -> QuadTreeSliceBranch<C> {
+        match self {
+            Self::Slice1D(inner) => inner.get_branch(branch_idx),
+            Self::Slice2D(inner) => inner.get_branch(branch_idx),
+            Self::Slice3D(inner) => inner.get_branch(branch_idx),
+            Self::Slice4D(inner) => inner.get_branch(branch_idx),
+            Self::Slice5D(inner) => inner.get_branch(branch_idx),
+            Self::Slice6D(inner) => inner.get_branch(branch_idx),
+        }
+    }
+    fn get_branches(&self) -> [QuadTreeSliceBranch<C>; 4] {
+        match self {
+            Self::Slice1D(inner) => inner.get_branches(),
+            Self::Slice2D(inner) => inner.get_branches(),
+            Self::Slice3D(inner) => inner.get_branches(),
+            Self::Slice4D(inner) => inner.get_branches(),
+            Self::Slice5D(inner) => inner.get_branches(),
+            Self::Slice6D(inner) => inner.get_branches(),
         }
     }
 }

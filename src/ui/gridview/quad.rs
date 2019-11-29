@@ -3,6 +3,7 @@ use super::*;
 // See super::quad_impl for the actual implementation of these traits on these
 // enums.
 
+#[derive(Debug, Clone)]
 pub enum QuadTreeAutomaton<C: CellType> {
     Automaton1D(NdAutomaton<C, Dim1D, NdProjectionInfo2D<Dim1D>>),
     Automaton2D(NdAutomaton<C, Dim2D, NdProjectionInfo2D<Dim2D>>),
@@ -12,6 +13,7 @@ pub enum QuadTreeAutomaton<C: CellType> {
     Automaton6D(NdAutomaton<C, Dim6D, NdProjectionInfo2D<Dim6D>>),
 }
 
+#[derive(Debug, Clone)]
 pub enum QuadTreeSlice<C: CellType> {
     Slice1D(NdProjectedTreeSlice<C, Dim1D, NdProjectionInfo2D<Dim1D>>),
     Slice2D(NdProjectedTreeSlice<C, Dim2D, NdProjectionInfo2D<Dim2D>>),
@@ -21,6 +23,7 @@ pub enum QuadTreeSlice<C: CellType> {
     Slice6D(NdProjectedTreeSlice<C, Dim6D, NdProjectionInfo2D<Dim6D>>),
 }
 
+#[derive(Debug, Clone)]
 pub enum QuadTreeNode<C: CellType> {
     Node1D(NdProjectedTreeNode<C, Dim1D, NdProjectionInfo2D<Dim1D>>),
     Node2D(NdProjectedTreeNode<C, Dim2D, NdProjectionInfo2D<Dim2D>>),
@@ -31,9 +34,16 @@ pub enum QuadTreeNode<C: CellType> {
 }
 
 /// Anything that can act as a branch of a node in a quadtree of cells.
+#[derive(Debug, Clone)]
 pub enum QuadTreeBranch<C: CellType> {
     Leaf(C),
     Node(QuadTreeNode<C>),
+}
+
+#[derive(Debug, Clone)]
+pub enum QuadTreeSliceBranch<C: CellType> {
+    Leaf(C, Vec2D),
+    Node(QuadTreeSlice<C>),
 }
 
 /// Anything that can act as a mutable quadtree of cells.
@@ -44,12 +54,17 @@ pub trait QuadTreeAutomatonTrait<C: CellType>: NdSimulate {
     fn set_view_pos_on_axis(&mut self, axis: Axis, pos: isize);
     fn set_display_axes(&mut self, horizontal: Axis, vertical: Axis) -> Result<(), ()>;
     fn set_cell(&mut self, pos: Vec2D, new_state: C);
+    fn expand_to(&mut self, pos: Vec2D);
+    fn shrink(&mut self);
 }
 
 /// Anything that can act as an immutable quadtree of cells.
 pub trait QuadTreeSliceTrait<C: CellType> {
     fn get_root(&self) -> QuadTreeNode<C>;
     fn get_cell(&self, pos: Vec2D) -> Option<C>;
+    fn get_rect(&self) -> Rect2D;
+    fn get_branch(&self, branch_idx: usize) -> QuadTreeSliceBranch<C>;
+    fn get_branches(&self) -> [QuadTreeSliceBranch<C>; 4];
 }
 
 /// Anything that can act as an immutable node in a quadtree of cells.
@@ -83,7 +98,13 @@ where
     }
     fn set_cell(&mut self, pos: Vec2D, new_state: C) {
         self.tree
-            .set_cell(self.projection_info.get_ndim_pos(pos), new_state);
+            .set_cell(self.projection_info.pdim_to_ndim(pos), new_state);
+    }
+    fn expand_to(&mut self, pos: Vec2D) {
+        self.tree.expand_to(self.projection_info.pdim_to_ndim(pos));
+    }
+    fn shrink(&mut self) {
+        self.tree.shrink();
     }
 }
 
@@ -92,6 +113,7 @@ impl<C: CellType, D: Dim> QuadTreeSliceTrait<C>
     for NdProjectedTreeSlice<C, D, NdProjectionInfo2D<D>>
 where
     QuadTreeNode<C>: From<NdProjectedTreeNode<C, D, NdProjectionInfo2D<D>>>,
+    QuadTreeSlice<C>: From<NdProjectedTreeSlice<C, D, NdProjectionInfo2D<D>>>,
 {
     fn get_root(&self) -> QuadTreeNode<C> {
         NdProjectedTreeNode {
@@ -101,7 +123,36 @@ where
         .into()
     }
     fn get_cell(&self, pos: Vec2D) -> Option<C> {
-        self.slice.get_cell(self.projection_info.get_ndim_pos(pos))
+        self.slice.get_cell(self.projection_info.pdim_to_ndim(pos))
+    }
+    fn get_rect(&self) -> Rect2D {
+        let ndrect = self.slice.rect();
+        Rect2D::span(
+            self.projection_info.ndim_to_pdim(ndrect.min()),
+            self.projection_info.ndim_to_pdim(ndrect.max()),
+        )
+    }
+    fn get_branch(&self, branch_idx: usize) -> QuadTreeSliceBranch<C> {
+        match self.slice.get_branch(branch_idx) {
+            NdTreeSliceBranch::Leaf(cell_state, pos) => {
+                QuadTreeSliceBranch::Leaf(cell_state, self.projection_info.ndim_to_pdim(pos))
+            }
+            NdTreeSliceBranch::Node(slice) => QuadTreeSliceBranch::Node(
+                NdProjectedTreeSlice {
+                    projection_info: self.projection_info,
+                    slice,
+                }
+                .into(),
+            ),
+        }
+    }
+    fn get_branches(&self) -> [QuadTreeSliceBranch<C>; 4] {
+        [
+            self.get_branch(0),
+            self.get_branch(1),
+            self.get_branch(2),
+            self.get_branch(3),
+        ]
     }
 }
 
@@ -111,7 +162,7 @@ where
     QuadTreeNode<C>: From<NdProjectedTreeNode<C, D, NdProjectionInfo2D<D>>>,
 {
     fn get_cell(&self, pos: Vec2D) -> C {
-        self.node.get_cell(self.projection_info.get_ndim_pos(pos))
+        self.node.get_cell(self.projection_info.pdim_to_ndim(pos))
     }
     fn get_layer(&self) -> usize {
         self.node.layer

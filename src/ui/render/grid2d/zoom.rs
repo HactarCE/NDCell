@@ -14,6 +14,12 @@ pub enum Zoom2D {
     Far(usize),
 }
 
+impl Default for Zoom2D {
+    fn default() -> Self {
+        Self::Close(32)
+    }
+}
+
 impl fmt::Display for Zoom2D {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

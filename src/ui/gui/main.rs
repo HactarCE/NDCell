@@ -1,7 +1,8 @@
 use imgui::*;
 
+use crate::automaton::space::Axis;
 use crate::ui::gridview::*;
-use crate::ui::render::{AutomatonView2D, GridView};
+use crate::ui::render::{AutomatonView2D, GridView, Viewport2D};
 use crate::ui::State;
 
 /// Builds the main window.
@@ -10,13 +11,18 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
         ui.text(im_str!("Hello, world!"));
         match &state.grid_view {
             GridView::Grid2D(AutomatonView2D {
-                x,
-                y,
                 automaton,
-                zoom,
+                viewport:
+                    Viewport2D {
+                        pos,
+                        x_offset,
+                        y_offset,
+                        zoom,
+                    },
             }) => {
-                ui.text(format!("X = {}", x));
-                ui.text(format!("Y = {}", y));
+                ui.text(format!("Framerate = {} FPS", ui.io().framerate as usize));
+                ui.text(format!("X = {}", pos[Axis::X] as f32 + x_offset));
+                ui.text(format!("Y = {}", pos[Axis::Y] as f32 + y_offset));
                 ui.text(format!(
                     "Generations = {}",
                     automaton.get_generation_count()

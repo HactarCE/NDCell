@@ -1,11 +1,14 @@
 use glium::*;
 
+mod cells;
 mod controller;
+mod viewport;
 mod zoom;
 
 use super::shaders;
 use crate::automaton::space::{Axis, CanContain, Rect2D, Vec2D};
 use crate::ui::gridview::*;
+pub use viewport::Viewport2D;
 use zoom::Zoom2D;
 
 #[derive(Copy, Clone)]
@@ -21,17 +24,13 @@ const MAX_COLOR: [f32; 4] = [0.5, 0.5, 0.5, 1.0];
 
 pub struct AutomatonView2D {
     pub automaton: QuadTreeAutomaton<bool>,
-    pub x: f32,
-    pub y: f32,
-    pub zoom: Zoom2D,
+    pub viewport: Viewport2D,
 }
 impl AutomatonView2D {
     pub fn new(automaton: QuadTreeAutomaton<bool>) -> Self {
         Self {
             automaton,
-            x: 0.0f32,
-            y: 0.0f32,
-            zoom: Zoom2D::Close(32),
+            viewport: Viewport2D::default(),
         }
     }
 
@@ -46,30 +45,53 @@ impl AutomatonView2D {
         }
     }
 
-    fn make_vertices(
+    fn make_all_vertices(
         &self,
         vertices: &mut Vec<Vertex>,
         slice_branch: QuadTreeSliceBranch<bool>,
-        rect: Rect2D,
     ) {
         match slice_branch {
             QuadTreeSliceBranch::Leaf(cell_state, pos) => {
-                if rect.contains(pos) {
-                    vertices.push(self.make_vertex(if cell_state { 1.0 } else { 0.0 }, pos));
-                }
+                vertices.push(self.make_vertex(if cell_state { 1.0 } else { 0.0 }, pos))
             }
             QuadTreeSliceBranch::Node(slice) => {
-                if !rect.intersects(slice.get_rect()) {
-                    return;
-                }
-                if slice.get_root().get_layer() <= self.zoom.node_layer() {
+                if slice.get_root().get_layer() <= self.viewport.zoom.node_layer() {
                     let live_cells = slice.get_root().get_population() as f32;
                     let total_cells = 2.0f32.powf(slice.get_root().get_layer() as f32).powf(2.0);
                     let color_proportion = live_cells / total_cells;
                     vertices.push(self.make_vertex(color_proportion, slice.get_rect().min()));
                 } else {
                     for branch in slice.get_branches().into_iter() {
-                        self.make_vertices(vertices, branch.clone(), rect);
+                        self.make_all_vertices(vertices, branch.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    fn make_vertices(
+        &self,
+        vertices: &mut Vec<Vertex>,
+        slice_branch: QuadTreeSliceBranch<bool>,
+        rect: Rect2D,
+    ) {
+        match &slice_branch {
+            QuadTreeSliceBranch::Leaf(_, pos) => {
+                if rect.contains(*pos) {
+                    self.make_all_vertices(vertices, slice_branch);
+                }
+            }
+            QuadTreeSliceBranch::Node(slice) => {
+                let slice_rect = slice.get_rect();
+                if rect.contains(slice_rect) {
+                    self.make_all_vertices(vertices, slice_branch);
+                } else if rect.intersects(slice_rect) {
+                    if slice.get_root().get_layer() <= self.viewport.zoom.node_layer() {
+                        self.make_all_vertices(vertices, slice_branch);
+                    } else {
+                        for child_branch in slice.get_branches().into_iter() {
+                            self.make_vertices(vertices, child_branch.clone(), rect);
+                        }
                     }
                 }
             }
@@ -80,30 +102,30 @@ impl AutomatonView2D {
         target.clear_color_srgb(GRID_COLOR[0], GRID_COLOR[1], GRID_COLOR[2], GRID_COLOR[3]);
 
         let (frame_w, frame_h) = target.get_dimensions();
-        let frame_w = frame_w / 4;
-        let frame_h = frame_h / 4;
+        let frame_w = frame_w / 2;
+        let frame_h = frame_h / 2;
 
         let visible_rect: Rect2D;
         let mut vertices: Vec<Vertex>;
-        match self.zoom {
+        match self.viewport.zoom {
             Zoom2D::Close(pixels_per_cell) => {
                 let cell_w = frame_w as f32 / pixels_per_cell as f32;
                 let cell_h = frame_h as f32 / pixels_per_cell as f32;
-                let left = (self.x - cell_w / 2.0).floor() as isize;
-                let right = (self.x + cell_w / 2.0).ceil() as isize;
-                let bottom = (self.y - cell_h / 2.0).floor() as isize;
-                let top = (self.y + cell_h / 2.0).ceil() as isize;
+                let left = (self.viewport.pos[Axis::X] as f32 - cell_w / 2.0).floor() as isize;
+                let right = (self.viewport.pos[Axis::X] as f32 + cell_w / 2.0).ceil() as isize;
+                let bottom = (self.viewport.pos[Axis::Y] as f32 - cell_h / 2.0).floor() as isize;
+                let top = (self.viewport.pos[Axis::Y] as f32 + cell_h / 2.0).ceil() as isize;
                 visible_rect = Rect2D::span([left, bottom].into(), [right, top].into());
                 vertices = Vec::with_capacity(visible_rect.count());
             }
             Zoom2D::Far(_) => {
-                let cells_per_pixel = self.zoom.cells_per_pixel() as isize;
+                let cells_per_pixel = self.viewport.zoom.cells_per_pixel() as isize;
                 let cell_w = cells_per_pixel * frame_w as isize;
                 let cell_h = cells_per_pixel * frame_h as isize;
-                let left = self.x as isize - cell_w;
-                let right = self.x as isize + cell_w;
-                let bottom = self.y as isize - cell_h;
-                let top = self.y as isize + cell_h;
+                let left = self.viewport.pos[Axis::X] as f32 as isize - cell_w;
+                let right = self.viewport.pos[Axis::X] as f32 as isize + cell_w;
+                let bottom = self.viewport.pos[Axis::Y] as f32 as isize - cell_h;
+                let top = self.viewport.pos[Axis::Y] as f32 as isize + cell_h;
                 visible_rect = Rect2D::span([left, bottom].into(), [right, top].into());
                 vertices = Vec::with_capacity((frame_w * frame_h) as usize);
             }
@@ -119,16 +141,16 @@ impl AutomatonView2D {
             glium::VertexBuffer::new(display, &vertices).expect("Failed to create vertex buffer");
         let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
 
-        let x_scale = self.zoom.pixels_per_cell() as f32 * 2.0 / frame_w as f32;
-        let y_scale = self.zoom.pixels_per_cell() as f32 * 2.0 / frame_h as f32;
-        let x_offset = -self.x * x_scale;
-        let y_offset = -self.y * y_scale;
-        let cell_density = match self.zoom {
+        let x_scale = self.viewport.zoom.pixels_per_cell() as f32 * 2.0 / frame_w as f32;
+        let y_scale = self.viewport.zoom.pixels_per_cell() as f32 * 2.0 / frame_h as f32;
+        let x_offset = -self.viewport.pos[Axis::X] as f32 * x_scale;
+        let y_offset = -self.viewport.pos[Axis::Y] as f32 * y_scale;
+        let cell_density = match self.viewport.zoom {
             Zoom2D::Close(_) => 1.0,
             Zoom2D::Far(n) => 2.0f32.powf(n as f32),
         };
-        let border_size = if self.zoom.pixels_per_cell() > 2.0 {
-            0.5 / self.zoom.pixels_per_cell()
+        let border_size = if self.viewport.zoom.pixels_per_cell() > 2.0 {
+            0.5 / self.viewport.zoom.pixels_per_cell()
         } else {
             0.0
         };

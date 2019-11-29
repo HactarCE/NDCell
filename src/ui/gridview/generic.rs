@@ -2,21 +2,6 @@ use std::rc::Rc;
 
 use super::*;
 
-/// A description of how a D-dimensional NdTree is projected into a 2D or 3D
-/// environment.
-pub trait NdTreeViewMeta<D: Dim>: Default + Copy + Clone {
-    /// Returns the slice position of this TreeView.
-    ///
-    /// The slice position is the N-dimensional point in the automaton that is
-    /// always visible regardless of which axes are being displayed. For
-    /// example, when viewing a 2D slice along the X and Y axes of a 3D
-    /// automaton, the slice position would determine the Z coordinate of the 2D
-    /// slice being displayed.
-    fn get_slice_pos(&self) -> NdVec<D>;
-    /// Sets the slice position of this TreeView.
-    fn set_slice_pos(&mut self, new_slice_pos: NdVec<D>);
-}
-
 /// A discrete-time simulation with some number of dimensions and undo history.
 pub trait NdSimulate {
     /// Returns the number of dimensions in the simulation.
@@ -55,9 +40,10 @@ pub trait NdSimulate {
 }
 
 #[derive(Debug, Default)]
-pub struct NdTreeView<C: CellType, D: Dim, M: NdTreeViewMeta<D>> {
-    /// A description of how to slice the NdTree.
-    pub meta: M,
+pub struct NdAutomaton<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
+    /// A description of how to project the grid to the correct number of
+    /// dimensions.
+    pub projection_info: P,
     /// The actual NdTree behind the scenes.
     pub tree: NdTree<C, D>,
     /// A simulation of this tree.
@@ -67,18 +53,18 @@ pub struct NdTreeView<C: CellType, D: Dim, M: NdTreeViewMeta<D>> {
     /// The number of discrete timesteps that have elapsed in the simulation.
     pub generation_count: usize,
 }
-impl<C: CellType, D: Dim, M: NdTreeViewMeta<D>> From<NdTree<C, D>> for NdTreeView<C, D, M> {
+impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> From<NdTree<C, D>> for NdAutomaton<C, D, P> {
     fn from(tree: NdTree<C, D>) -> Self {
         Self {
             tree: tree,
-            meta: M::default(),
+            projection_info: P::default(),
             sim: Simulation::new(Rc::new(rule::DummyRule), 1),
             history: vec![],
             generation_count: 0,
         }
     }
 }
-impl<C: CellType, D: Dim, M: NdTreeViewMeta<D>> NdSimulate for NdTreeView<C, D, M> {
+impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdSimulate for NdAutomaton<C, D, P> {
     fn get_ndim(&self) -> usize {
         D::NDIM
     }
@@ -118,25 +104,25 @@ impl<C: CellType, D: Dim, M: NdTreeViewMeta<D>> NdSimulate for NdTreeView<C, D, 
         self.generation_count = new_generation_count;
     }
 }
-impl<C: CellType, D: Dim, M: NdTreeViewMeta<D>> NdTreeView<C, D, M> {
-    pub fn slice(&self) -> NdTreeSliceView<C, D, M> {
-        NdTreeSliceView {
+impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdAutomaton<C, D, P> {
+    pub fn nd_slice(&self) -> NdProjectedTreeSlice<C, D, P> {
+        NdProjectedTreeSlice {
             slice: self.tree.slice.clone(),
-            meta: self.meta,
+            projection_info: self.projection_info,
         }
     }
 }
 
-pub struct NdTreeSliceView<C: CellType, D: Dim, M: NdTreeViewMeta<D>> {
+pub struct NdProjectedTreeSlice<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeSlice.
-    pub meta: M,
+    pub projection_info: P,
     /// The actual NdTreeSlice behind the scenes.
     pub slice: NdTreeSlice<C, D>,
 }
 
-pub struct NdTreeNodeView<C: CellType, D: Dim, M: NdTreeViewMeta<D>> {
+pub struct NdProjectedTreeNode<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeNode.
-    pub meta: M,
+    pub projection_info: P,
     /// The actual NdTreeNode behind the scenes.
     pub node: NdCachedNode<C, D>,
 }

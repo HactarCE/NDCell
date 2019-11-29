@@ -53,7 +53,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         // r=1, the minimum layer is 2 because we need to return the inner node
         // (which is at a lower layer) and the minimum layer is 1.
         self.min_layer = 2;
-        while NdTreeNode::<C, D>::len_at_layer(self.min_layer) / 4 > self.rule.radius() {
+        while NdTreeNode::<C, D>::len_at_layer(self.min_layer) / 4 < self.rule.radius() {
             self.min_layer += 1;
         }
     }

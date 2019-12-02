@@ -259,6 +259,29 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
         ret
     }
 
+    /// Adds three branch indices together to get a sub-branch index and returns
+    /// the specified sub-branch which is two layers below the given node.
+    pub fn get_sub_branch(
+        &self,
+        branch_idx_1: usize,
+        branch_idx_2: usize,
+        branch_idx_3: usize,
+    ) -> &NdTreeBranch<C, D> {
+        // This is kind of like bitwise full addition; we want the "sum" in
+        // inner_branch_idx and the "carry" in outer_branch_idx. The carry is
+        // simply an XOR.
+        let inner_branch_idx = branch_idx_1 ^ branch_idx_2 ^ branch_idx_3;
+        // The sum is 1 if at least two inputs are 1.
+        let outer_branch_idx = (branch_idx_1 & branch_idx_2)
+            | (branch_idx_1 & branch_idx_3)
+            | (branch_idx_2 & branch_idx_3);
+        // Now use those to index into the node.
+        &self.branches[outer_branch_idx]
+            .node()
+            .expect("Cannot get sub-branch of node at layer 1")
+            .branches[inner_branch_idx]
+    }
+
     /// Returns the cell value at the given position, modulo the node size.
     pub fn get_cell(&self, pos: NdVec<D>) -> C {
         match &self.branches[self.branch_idx(pos)] {

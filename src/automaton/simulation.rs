@@ -168,8 +168,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
                         // 1. Grab sub-branches at layer `L-2` of the original
                         //    node at time `0`.
                         outer_branches.push(
-                            Self::get_quarter_branch(
-                                node,
+                            node.get_sub_branch(
                                 final_branch_idx,
                                 inner_branch_idx,
                                 outer_branch_idx,
@@ -209,29 +208,6 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         self.results
             .set_result(node.clone(), generations, ret.clone());
         ret
-    }
-
-    /// Adds three branch indices together to get a sub-branch index and returns
-    /// the specified sub-branch which is two layers below the given node.
-    ///
-    /// This operation is only useful in this one wierd circumstance, which is
-    /// why it's implemented here rather than in NdTreeNode.
-    pub fn get_quarter_branch(
-        node: &NdTreeNode<C, D>,
-        branch_idx_1: usize,
-        branch_idx_2: usize,
-        branch_idx_3: usize,
-    ) -> &NdTreeBranch<C, D> {
-        // This is kind of like bitwise full addition; we want the "sum" in
-        // inner_branch_idx and the "carry" in outer_branch_idx. The carry is
-        // simply an XOR.
-        let inner_branch_idx = branch_idx_1 ^ branch_idx_2 ^ branch_idx_3;
-        // The sum is 1 if at least two inputs are 1.
-        let outer_branch_idx = (branch_idx_1 & branch_idx_2)
-            | (branch_idx_1 & branch_idx_3)
-            | (branch_idx_2 & branch_idx_3);
-        // Now use those to index into the node.
-        &node.branches[outer_branch_idx].node().unwrap().branches[inner_branch_idx]
     }
 }
 

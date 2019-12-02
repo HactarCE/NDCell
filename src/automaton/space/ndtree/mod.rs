@@ -164,29 +164,77 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         );
     }
 
-    // /// Simulate the grid for 2**gen_pow generations.
-    // pub fn sim<R: Rule<C, D>>(&mut self, rule: &R, gen_pow: usize) {
-    //     // // Ensure that there is enough space to actually simulate all the cells that might change.
-    //     // while self.get_root().layer() < NdTreeNode::min_sim_layer(rule) {
-    //     //     self.expand_centered();
-    //     // }
-    //     // for _ in 0..gen_pow {
-    //     //     self.expand_centered();
-    //     // }
-    //     // let gen_pow = 0;
-    //     // let new_root = self.get_root().sim_inner(&mut self.cache, rule, gen_pow);
-    //     // let new_offset = self.slice.offset + new_root.len() as isize / 4;
-    //     // self = NdTreeSlice::new(new_root, new_offset);
-    //     // self.shrink();
-    //     unimplemented!()
-    // }
-
-    // pub fn get_non_default(&mut self) -> Vec<NdVec<D>> {
-    //     // self
-    //     //     .root()
-    //     //     .get_non_default(&mut self.cache, self.slice.offset)
-    //     unimplemented!()
-    // }
+    /// Returns an NdTreeSlice of the smallest node in the grid containing the given rectangle.
+    ///
+    /// The result may not directly correspond to an existing node; it may be
+    /// centered on an existing node, and thus composed out of smaller existing
+    /// nodes. The only guarantee is that the node will be less than twice as
+    /// big as it needs to be.
+    pub fn get_slice_containing(&mut self, rect: NdRect<D>) -> NdTreeSlice<C, D> {
+        // Ensure that the desired rectangle is contained in the whole tree.
+        self.expand_to(rect.min());
+        self.expand_to(rect.max());
+        let mut slice = self.slice.clone();
+        let mut smaller_slice = self.slice.clone();
+        self.shrink();
+        let mut cache = self.cache.borrow_mut();
+        // "Zoom in" on either a corner, an edge/face, or the center until it
+        // can't shrink any more. Each iteration of the loop "zooms in" by a
+        // factor of 2. If we've zoomed in too far, break out of the loop and
+        // use the previous one.
+        while smaller_slice.rect().contains(rect) {
+            slice = smaller_slice;
+            // If we can't shrink any further, don't.
+            if slice.root.layer == 1 {
+                break;
+            }
+            // These variables, together with new_branch_idx later on, form a
+            // single sub-branch index for use with
+            // NdTreeNode::get_sub_branch().
+            let mut sub_branch_idx_1 = 0;
+            let mut sub_branch_idx_2 = 0;
+            let mut offset_vec = slice.offset;
+            // Compute the "half" (negative, centered, or positive on each axis)
+            // of this node to "zoom in" to.
+            let slice_rect = slice.rect();
+            let pivot = (slice_rect.max() + 1 + slice_rect.min()) / 2;
+            for &ax in D::axes() {
+                if rect.max()[ax] < pivot[ax] {
+                    // If the target rect is entirely on the negative side, then
+                    // let this axis of the sub-branch index be 0.
+                } else if pivot[ax] <= rect.min()[ax] {
+                    // If the target rect is entirely on the positive side, then
+                    // let this axis of the sub-branch index be 2.
+                    sub_branch_idx_1 |= ax.branch_bit();
+                    sub_branch_idx_2 |= ax.branch_bit();
+                    offset_vec[ax] += slice.root.len() as isize / 2;
+                } else {
+                    // Otherwise, it must be in the middle, so let this axis of
+                    // the sub-branch index be 1.
+                    sub_branch_idx_1 |= ax.branch_bit();
+                    offset_vec[ax] += slice.root.len() as isize / 4;
+                }
+            }
+            // Now compose a new node from sub-branches selected using
+            // sub_branch_idx_1 and sub_branch_idx_2.
+            let branch_count = NdTreeNode::<C, D>::BRANCHES;
+            let mut new_branches = Vec::with_capacity(branch_count);
+            for new_branch_idx in 0..branch_count {
+                new_branches.push(
+                    slice
+                        .root
+                        .get_sub_branch(sub_branch_idx_1, sub_branch_idx_2, new_branch_idx)
+                        .clone(),
+                );
+            }
+            let smaller_node = cache.get_node(new_branches);
+            smaller_slice = NdTreeSlice {
+                root: smaller_node,
+                offset: offset_vec,
+            };
+        }
+        return slice;
+    }
 }
 
 #[cfg(test)]
@@ -266,6 +314,37 @@ mod tests {
             assert_eq!(subnode1, subnode2);
             assert_eq!(subnode1.hash_code, subnode2.hash_code);
             assert!(std::ptr::eq(subnode1, subnode2));
+        }
+
+        /// Tests NdTree::get_slice_containing().
+        #[test]
+        fn test_ndtree_get_slice_containing(
+            cells_to_set: Vec<(Vec2D, bool)>,
+            center: Vec2D,
+            x_radius in 0..20isize,
+            y_radius in 0..20isize,
+        ) {
+            let mut ndtree = NdTree::new();
+            for (pos, state) in &cells_to_set {
+                ndtree.set_cell(*pos, *state);
+            }
+            let half_diag = NdVec::from([x_radius, y_radius]);
+            let rect = NdRect::span(center - half_diag, center + half_diag);
+            let slice = ndtree.get_slice_containing(rect);
+            let slice_rect = slice.rect();
+            assert!(slice_rect.contains(rect));
+            assert!(
+                slice.root.layer == 1
+                || slice.root.len() < rect.len(Axis::X) * 4
+                || slice.root.len() < rect.len(Axis::Y) * 4
+            );
+            for (pos, state) in cells_to_set {
+                if slice_rect.contains(pos) {
+                    if let Some(cell_state) = slice.get_cell(pos) {
+                        assert_eq!(state, cell_state);
+                    }
+                }
+            }
         }
     }
 }

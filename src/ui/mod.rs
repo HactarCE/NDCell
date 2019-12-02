@@ -152,7 +152,7 @@ pub fn show_gui() {
         gui::build_windows(&mut state, &ui);
 
         let mut target = display.draw();
-        render::draw_editor(&mut state, &display, &mut target);
+        render::draw(&mut state, &display, &mut target);
 
         platform.prepare_render(&ui, &window);
         let draw_data = ui.render();

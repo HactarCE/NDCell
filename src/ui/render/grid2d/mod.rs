@@ -1,12 +1,11 @@
 use glium::*;
 
-mod cells;
 mod controller;
 mod viewport;
 mod zoom;
 
 use super::shaders;
-use crate::automaton::space::{Axis, CanContain, Rect2D, Vec2D};
+use crate::automaton::space::{Axis, Dim2D, NdTreeNode, Rect2D, Vec2D};
 use crate::ui::gridview::*;
 pub use viewport::Viewport2D;
 use zoom::Zoom2D;
@@ -14,13 +13,13 @@ use zoom::Zoom2D;
 #[derive(Copy, Clone)]
 pub struct Vertex {
     position: [f32; 2],
-    color: [f32; 4],
+    proportion_live: f32,
 }
-implement_vertex!(Vertex, position, color);
+implement_vertex!(Vertex, position, proportion_live);
 
 const GRID_COLOR: [f32; 4] = [0.2, 0.2, 0.2, 1.0];
-const MIN_COLOR: [f32; 4] = [0.005, 0.005, 0.005, 1.0];
-const MAX_COLOR: [f32; 4] = [0.5, 0.5, 0.5, 1.0];
+const DEAD_COLOR: [f32; 4] = [0.005, 0.005, 0.005, 1.0];
+const LIVE_COLOR: [f32; 4] = [0.5, 0.5, 0.5, 1.0];
 
 pub struct AutomatonView2D {
     pub automaton: QuadTreeAutomaton<bool>,
@@ -34,126 +33,74 @@ impl AutomatonView2D {
         }
     }
 
-    fn make_vertex(&self, color_proportion: f32, pos: Vec2D) -> Vertex {
-        let mut color = MIN_COLOR;
-        for i in 0..4 {
-            color[i] += (MAX_COLOR[i] - MIN_COLOR[i]) * color_proportion;
-        }
-        Vertex {
-            position: [pos[Axis::X] as f32, pos[Axis::Y] as f32],
-            color,
-        }
-    }
-
-    fn make_all_vertices(
-        &self,
-        vertices: &mut Vec<Vertex>,
-        slice_branch: QuadTreeSliceBranch<bool>,
-    ) {
-        match slice_branch {
-            QuadTreeSliceBranch::Leaf(cell_state, pos) => {
-                vertices.push(self.make_vertex(if cell_state { 1.0 } else { 0.0 }, pos))
-            }
-            QuadTreeSliceBranch::Node(slice) => {
-                if slice.get_root().get_layer() <= self.viewport.zoom.node_layer() {
-                    let live_cells = slice.get_root().get_population() as f32;
-                    let total_cells = 2.0f32.powf(slice.get_root().get_layer() as f32).powf(2.0);
-                    let color_proportion = live_cells / total_cells;
-                    vertices.push(self.make_vertex(color_proportion, slice.get_rect().min()));
-                } else {
-                    for branch in slice.get_branches().into_iter() {
-                        self.make_all_vertices(vertices, branch.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    fn make_vertices(
-        &self,
-        vertices: &mut Vec<Vertex>,
-        slice_branch: QuadTreeSliceBranch<bool>,
-        rect: Rect2D,
-    ) {
-        match &slice_branch {
-            QuadTreeSliceBranch::Leaf(_, pos) => {
-                if rect.contains(*pos) {
-                    self.make_all_vertices(vertices, slice_branch);
-                }
-            }
-            QuadTreeSliceBranch::Node(slice) => {
-                let slice_rect = slice.get_rect();
-                if rect.contains(slice_rect) {
-                    self.make_all_vertices(vertices, slice_branch);
-                } else if rect.intersects(slice_rect) {
-                    if slice.get_root().get_layer() <= self.viewport.zoom.node_layer() {
-                        self.make_all_vertices(vertices, slice_branch);
-                    } else {
-                        for child_branch in slice.get_branches().into_iter() {
-                            self.make_vertices(vertices, child_branch.clone(), rect);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn draw_editor(&mut self, display: &Display, target: &mut glium::Frame) {
+    pub fn draw(&mut self, display: &Display, target: &mut glium::Frame) {
         target.clear_color_srgb(GRID_COLOR[0], GRID_COLOR[1], GRID_COLOR[2], GRID_COLOR[3]);
+        self.draw_cells(display, target);
+    }
 
-        let (frame_w, frame_h) = target.get_dimensions();
-        let frame_w = frame_w / 2;
-        let frame_h = frame_h / 2;
+    /// Draw the cells that appear in the viewport.
+    ///
+    /// This algorithm is based loosely on the one used in Golly.
+    fn draw_cells(&mut self, display: &Display, target: &mut glium::Frame) {
+        // Find the number of cells that fit horizontally (cells_h) and
+        // vertically (cells_v) across the screen.
+        let pixels_per_cell = self.viewport.zoom.pixels_per_cell();
+        let (pixels_h, pixels_v) = target.get_dimensions();
+        let cells_h = pixels_h as f32 / pixels_per_cell;
+        let cells_v = pixels_v as f32 / pixels_per_cell;
 
-        let visible_rect: Rect2D;
-        let mut vertices: Vec<Vertex>;
-        match self.viewport.zoom {
-            Zoom2D::Close(pixels_per_cell) => {
-                let cell_w = frame_w as f32 / pixels_per_cell as f32;
-                let cell_h = frame_h as f32 / pixels_per_cell as f32;
-                let left = (self.viewport.pos[Axis::X] as f32 - cell_w / 2.0).floor() as isize;
-                let right = (self.viewport.pos[Axis::X] as f32 + cell_w / 2.0).ceil() as isize;
-                let bottom = (self.viewport.pos[Axis::Y] as f32 - cell_h / 2.0).floor() as isize;
-                let top = (self.viewport.pos[Axis::Y] as f32 + cell_h / 2.0).ceil() as isize;
-                visible_rect = Rect2D::span([left, bottom].into(), [right, top].into());
-                vertices = Vec::with_capacity(visible_rect.count());
-            }
-            Zoom2D::Far(_) => {
-                let cells_per_pixel = self.viewport.zoom.cells_per_pixel() as isize;
-                let cell_w = cells_per_pixel * frame_w as isize;
-                let cell_h = cells_per_pixel * frame_h as isize;
-                let left = self.viewport.pos[Axis::X] as f32 as isize - cell_w;
-                let right = self.viewport.pos[Axis::X] as f32 as isize + cell_w;
-                let bottom = self.viewport.pos[Axis::Y] as f32 as isize - cell_h;
-                let top = self.viewport.pos[Axis::Y] as f32 as isize + cell_h;
-                visible_rect = Rect2D::span([left, bottom].into(), [right, top].into());
-                vertices = Vec::with_capacity((frame_w * frame_h) as usize);
-            }
-        };
-        self.automaton.expand_to(visible_rect.min());
-        self.automaton.expand_to(visible_rect.max());
-        for branch in self.automaton.slice().get_branches().into_iter() {
-            self.make_vertices(&mut vertices, branch.clone(), visible_rect);
-        }
-        self.automaton.shrink();
+        // Find the lower and upper bounds on the cell positions that need to be
+        // displayed.
+        let half_visible_diagonal = Vec2D::from([
+            (cells_h.ceil() / 2.0) as isize,
+            (cells_v.ceil() / 2.0) as isize,
+        ]);
+        let lower_bound = self.viewport.pos - half_visible_diagonal;
+        let upper_bound = self.viewport.pos + half_visible_diagonal;
+        let visible_rect = Rect2D::span(lower_bound, upper_bound);
+
+        // Find the smallest quadtree node that will cover the screen, creating
+        // a new node by combining four others if need be.
+        let slice = self.automaton.get_slice_containing(visible_rect);
+
+        // Make a Vertex object for each cell in the slice.
+        let mut vertices = Vec::with_capacity(
+            1 << ((slice.get_root().get_layer() - self.viewport.zoom.node_layer()) * 2),
+        );
+        self.make_node_vertices(
+            &mut vertices,
+            &slice.get_root(),
+            [0, 0],
+            self.viewport.zoom.node_layer(),
+        );
 
         let vertex_buffer =
             glium::VertexBuffer::new(display, &vertices).expect("Failed to create vertex buffer");
         let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
 
-        let x_scale = self.viewport.zoom.pixels_per_cell() as f32 * 2.0 / frame_w as f32;
-        let y_scale = self.viewport.zoom.pixels_per_cell() as f32 * 2.0 / frame_h as f32;
-        let x_offset = -self.viewport.pos[Axis::X] as f32 * x_scale;
-        let y_offset = -self.viewport.pos[Axis::Y] as f32 * y_scale;
-        let cell_density = match self.viewport.zoom {
-            Zoom2D::Close(_) => 1.0,
-            Zoom2D::Far(n) => 2.0f32.powf(n as f32),
-        };
-        let border_size = if self.viewport.zoom.pixels_per_cell() > 2.0 {
-            0.5 / self.viewport.zoom.pixels_per_cell()
+        // Cell-space offset
+        let screen_space_lower_bound = slice.get_rect().min() - self.viewport.pos;
+        let mut x_offset = screen_space_lower_bound[Axis::X] as f32;
+        let mut y_offset = screen_space_lower_bound[Axis::Y] as f32;
+        // Offset within a cell (round to nearest pixel).
+        x_offset -= self.viewport.x_offset;
+        y_offset -= self.viewport.y_offset;
+        let pix_per_render_cell = self.viewport.zoom.pixels_per_render_cell() as f32 * 2.0;
+        x_offset = (x_offset * pix_per_render_cell).round() / pix_per_render_cell;
+        y_offset = (y_offset * pix_per_render_cell).round() / pix_per_render_cell;
+
+        // Multiply by 2 because the OpenGL screen space is 2x2.
+        let x_scale = pixels_per_cell as f32 / pixels_h as f32 * 2.0;
+        let y_scale = pixels_per_cell as f32 / pixels_v as f32 * 2.0;
+        let border_size = if pixels_per_cell > 2.0 {
+            0.5 / pixels_per_cell
         } else {
             0.0
         };
+
+        // Convert offset from cell-space to screen-space.
+        x_offset *= x_scale;
+        y_offset *= y_scale;
 
         target
             .draw(
@@ -169,10 +116,67 @@ impl AutomatonView2D {
                     ],
                     low_offset: border_size,
                     high_offset: 1.0 - border_size,
-                    cell_density: cell_density,
+                    color_dead: DEAD_COLOR,
+                    color_live: LIVE_COLOR,
                 },
                 &Default::default(),
             )
             .expect("Failed to draw grid");
+    }
+
+    /// Make a Vertex object for each cell (or pixel-level sub-node) in the
+    /// given node.
+    fn make_node_vertices(
+        &self,
+        vertices: &mut Vec<Vertex>,
+        node: &QuadTreeNode<bool>,
+        min_pos: [isize; 2],
+        lowest_layer: usize,
+    ) {
+        for branch_idx in 0..4 {
+            let branch_offset = NdTreeNode::<bool, Dim2D>::branch_offset_at_layer(
+                node.get_layer() - lowest_layer,
+                branch_idx,
+            );
+            let branch_min_pos = [
+                min_pos[0] + branch_offset[Axis::X],
+                min_pos[1] + branch_offset[Axis::Y],
+            ];
+            match node.get_branch(branch_idx) {
+                QuadTreeBranch::Leaf(cell_state) => vertices.push(self.make_vertex(
+                    if cell_state { 1.0 } else { 0.0 },
+                    [branch_min_pos[0] as f32, branch_min_pos[1] as f32],
+                )),
+                QuadTreeBranch::Node(child_node) => {
+                    if child_node.get_layer() <= lowest_layer {
+                        vertices.push(self.make_node_vertex(
+                            &child_node,
+                            [branch_min_pos[0] as f32, branch_min_pos[1] as f32],
+                        ));
+                    } else {
+                        self.make_node_vertices(
+                            vertices,
+                            &child_node,
+                            branch_min_pos,
+                            lowest_layer,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn make_node_vertex(&self, node: &QuadTreeNode<bool>, position: [f32; 2]) -> Vertex {
+        let live_cells = node.get_population() as f32;
+        let total_cells = 2.0f32.powf(node.get_layer() as f32).powf(2.0);
+        let proportion_live = live_cells / total_cells;
+        self.make_vertex(proportion_live, position)
+    }
+
+    fn make_vertex(&self, proportion_live: f32, position: [f32; 2]) -> Vertex {
+        Vertex {
+            position,
+            proportion_live,
+        }
     }
 }

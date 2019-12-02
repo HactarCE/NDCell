@@ -13,10 +13,10 @@ pub enum GridView {
     Grid3D(Grid3D),
 }
 
-/// Draw the CA grid visualizer/editor.
-pub fn draw_editor(state: &mut State, display: &glium::Display, target: &mut glium::Frame) {
+/// Draw the CA grid visualization/editor.
+pub fn draw(state: &mut State, display: &glium::Display, target: &mut glium::Frame) {
     match state.grid_view {
-        GridView::Grid2D(ref mut render_state) => render_state.draw_editor(display, target),
-        GridView::Grid3D(ref mut render_state) => render_state.draw_editor(display, target),
+        GridView::Grid2D(ref mut render_state) => render_state.draw(display, target),
+        GridView::Grid3D(ref mut render_state) => render_state.draw(display, target),
     }
 }

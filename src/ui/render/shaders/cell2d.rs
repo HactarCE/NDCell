@@ -15,12 +15,16 @@ pub const VERTEX_SHADER_SRC: &str = r#"
     #version 140
 
     in vec2 position;
-    in vec4 color;
+    in float proportion_live;
     out vec4 vColor;
+
+    uniform vec4 color_dead;
+    uniform vec4 color_live;
 
     void main() {
         gl_Position = vec4(position, 0.0, 1.0);
-        vColor = color;
+        float proportion_dead = 1 - proportion_live;
+        vColor = color_live * proportion_live + color_dead * proportion_dead;
     }
 "#;
 
@@ -43,19 +47,18 @@ pub const GEOMETRY_SHADER_SRC: &str = r#"
     uniform mat4 matrix;
     uniform float low_offset;
     uniform float high_offset;
-    uniform float cell_density;
 
     void main() {
         fColor = vColor[0];
-        gl_Position = matrix * (gl_in[0].gl_Position / cell_density + vec4(low_offset, low_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(low_offset, low_offset, 0.0, 0.0));
         EmitVertex();
-        gl_Position = matrix * (gl_in[0].gl_Position / cell_density + vec4(high_offset, low_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(high_offset, low_offset, 0.0, 0.0));
         EmitVertex();
-        gl_Position = matrix * (gl_in[0].gl_Position / cell_density + vec4(low_offset, high_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(low_offset, high_offset, 0.0, 0.0));
         EmitVertex();
-        gl_Position = matrix * (gl_in[0].gl_Position / cell_density + vec4(high_offset, high_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(high_offset, high_offset, 0.0, 0.0));
         EmitVertex();
-        gl_Position = matrix * (gl_in[0].gl_Position / cell_density + vec4(low_offset, low_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(low_offset, low_offset, 0.0, 0.0));
         EmitVertex();
         EndPrimitive();
     }
@@ -68,7 +71,6 @@ pub const FRAGMENT_SHADER_SRC: &str = r#"
     out vec4 color;
 
     void main() {
-        // color = vec4(1.0, 0.0, 1.0, 1.0);
         color = fColor;
     }
 "#;

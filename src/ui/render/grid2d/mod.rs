@@ -133,11 +133,10 @@ impl AutomatonView2D {
         min_pos: [isize; 2],
         lowest_layer: usize,
     ) {
+        let layer = node.get_layer();
         for branch_idx in 0..4 {
-            let branch_offset = NdTreeNode::<bool, Dim2D>::branch_offset_at_layer(
-                node.get_layer() - lowest_layer,
-                branch_idx,
-            );
+            let branch_offset =
+                NdTreeNode::<bool, Dim2D>::branch_offset_at_layer(layer - lowest_layer, branch_idx);
             let branch_min_pos = [
                 min_pos[0] + branch_offset[Axis::X],
                 min_pos[1] + branch_offset[Axis::Y],
@@ -148,7 +147,7 @@ impl AutomatonView2D {
                     [branch_min_pos[0] as f32, branch_min_pos[1] as f32],
                 )),
                 QuadTreeBranch::Node(child_node) => {
-                    if child_node.get_layer() <= lowest_layer {
+                    if layer - 1 <= lowest_layer {
                         vertices.push(self.make_node_vertex(
                             &child_node,
                             [branch_min_pos[0] as f32, branch_min_pos[1] as f32],

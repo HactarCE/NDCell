@@ -37,18 +37,35 @@ pub type NdTreeSlice6D<C> = NdTreeSlice<C, Dim6D>;
 impl fmt::Display for NdTreeSlice<bool, Dim2D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let rect = self.rect();
-        write!(
-            f,
-            "{}",
-            rect.axis_range(Axis::Y)
-                .map(|y| rect
-                    .axis_range(Axis::X)
-                    .map(|x| if self[[x, y].into()] { "#" } else { "." })
-                    .collect::<Vec<&str>>()
-                    .join(" "))
-                .collect::<Vec<String>>()
-                .join("\n")
-        )
+        let mut line = String::with_capacity(rect.len(Axis::X) * 2 - 1);
+        for y in rect.axis_range(Axis::Y).rev() {
+            line.clear();
+            for x in rect.axis_range(Axis::X) {
+                line.push(if self[[x, y].into()] { '#' } else { '.' });
+                line.push(' ');
+            }
+            line.pop();
+            writeln!(f, "{}", line)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for NdTreeSlice<char, Dim2D> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let rect = self.rect();
+        let mut line = String::with_capacity(rect.len(Axis::X) * 2 - 1);
+        for y in rect.axis_range(Axis::Y).rev() {
+            line.clear();
+            for x in rect.axis_range(Axis::X) {
+                let ch = self[[x, y].into()];
+                line.push(if ch == '\x00' { '.' } else { ch });
+                line.push(' ');
+            }
+            line.pop();
+            writeln!(f, "{}", line)?;
+        }
+        Ok(())
     }
 }
 

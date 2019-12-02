@@ -234,8 +234,8 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
     pub fn branch_idx_at_layer(layer: usize, pos: NdVec<D>) -> usize {
         let mut ret = 0;
         for &ax in D::axes() {
-            ret <<= 1;
-            ret |= (pos[ax] as usize >> (layer - 1)) & 1;
+            let bit = (pos[ax] as usize >> (layer - 1)) & 1;
+            ret |= bit * ax.branch_bit();
         }
         ret
     }
@@ -252,8 +252,11 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
         for &ax in D::axes() {
             // If the current bit of the branch index is 1, add half of the
             // length of this node to the corresponding axis in the result.
-            let axis_bit_idx = D::NDIM - 1 - ax as usize;
-            let axis_bit = (branch_idx as isize >> axis_bit_idx) & 1;
+            let axis_bit = if branch_idx & ax.branch_bit() == 0 {
+                0
+            } else {
+                1
+            };
             ret[ax] += halfway * axis_bit;
         }
         ret

@@ -94,8 +94,8 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
         }
     }
 
-    /// Returns an NdTreeSlice containing the root node's branch with the given
-    /// branch index.
+    /// Returns an NdTreeSlice of the root node's branch with the given branch
+    /// index.
     pub fn get_branch(&self, branch_idx: usize) -> NdTreeSliceBranch<C, D> {
         match &self.root.branches[branch_idx] {
             NdTreeBranch::Leaf(cell_state) => NdTreeSliceBranch::Leaf(

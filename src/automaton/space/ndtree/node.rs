@@ -99,7 +99,7 @@ impl<C: CellType, D: Dim> From<NdBaseTreeNode<C, D>> for NdTreeNode<C, D> {
         assert_eq!(
             Self::BRANCHES,
             branches.len(),
-            "Node with {} dimensions must have {} branches; got {} instead.",
+            "Node with {} dimensions must have {} branches; got {} instead",
             D::NDIM,
             Self::BRANCHES,
             branches.len()

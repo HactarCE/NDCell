@@ -102,10 +102,10 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
     /// length `n` after `t` generations using a rule with max neighborhood
     /// radius `r` if `n / 4 >= r * t`. (`r` defines the maximum speed that
     /// information can travel, so `r * t` is the distance that information can
-    /// travel, and `n / 4` is the distance from any edge of the inner node to
-    /// the edge of the outer node.) In practice, however, each layer must be
-    /// computed separately, so the `r` and `t` must each be replaced with their
-    /// next lowest power of two.
+    /// travel in time `t`, and `n / 4` is the distance from any edge of the
+    /// inner node to the edge of the outer node.) In practice, however, each
+    /// layer must be computed separately, so the `r` and `t` must each be
+    /// replaced with their next lowest power of two.
     fn advance_inner_node(
         &mut self,
         cache: &mut NdTreeCache<C, D>,
@@ -156,7 +156,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 
             // Colors refer to Figure 4 in this article:
             // https://www.drdobbs.com/jvm/_/184406478. Let `L` be the layer of
-            // the curernt node, and let `t` be the number of generations to
+            // the current node, and let `t` be the number of generations to
             // simulate.
             let branch_count: usize = NdTreeNode::<C, D>::BRANCHES;
             let mut final_branches = Vec::with_capacity(branch_count);

@@ -101,6 +101,16 @@ impl<C: CellType> QuadTreeAutomatonTrait<C> for QuadTreeAutomaton<C> {
             Self::Automaton6D(inner) => inner.set_cell(pos, new_state),
         }
     }
+    fn get_slice_containing(&mut self, rect: Rect2D) -> QuadTreeSlice<C> {
+        match self {
+            Self::Automaton1D(inner) => inner.get_slice_containing(rect),
+            Self::Automaton2D(inner) => inner.get_slice_containing(rect),
+            Self::Automaton3D(inner) => inner.get_slice_containing(rect),
+            Self::Automaton4D(inner) => inner.get_slice_containing(rect),
+            Self::Automaton5D(inner) => inner.get_slice_containing(rect),
+            Self::Automaton6D(inner) => inner.get_slice_containing(rect),
+        }
+    }
     fn expand_to(&mut self, pos: Vec2D) {
         match self {
             Self::Automaton1D(inner) => inner.expand_to(pos),

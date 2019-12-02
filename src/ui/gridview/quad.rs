@@ -54,6 +54,7 @@ pub trait QuadTreeAutomatonTrait<C: CellType>: NdSimulate {
     fn set_view_pos_on_axis(&mut self, axis: Axis, pos: isize);
     fn set_display_axes(&mut self, horizontal: Axis, vertical: Axis) -> Result<(), ()>;
     fn set_cell(&mut self, pos: Vec2D, new_state: C);
+    fn get_slice_containing(&mut self, rect: Rect2D) -> QuadTreeSlice<C>;
     fn expand_to(&mut self, pos: Vec2D);
     fn shrink(&mut self);
 }
@@ -99,6 +100,17 @@ where
     fn set_cell(&mut self, pos: Vec2D, new_state: C) {
         self.tree
             .set_cell(self.projection_info.pdim_to_ndim(pos), new_state);
+    }
+    fn get_slice_containing(&mut self, rect: Rect2D) -> QuadTreeSlice<C> {
+        let ndrect = NdRect::span(
+            self.projection_info.pdim_to_ndim(rect.min()),
+            self.projection_info.pdim_to_ndim(rect.max()),
+        );
+        NdProjectedTreeSlice {
+            projection_info: self.projection_info,
+            slice: self.tree.get_slice_containing(ndrect),
+        }
+        .into()
     }
     fn expand_to(&mut self, pos: Vec2D) {
         self.tree.expand_to(self.projection_info.pdim_to_ndim(pos));

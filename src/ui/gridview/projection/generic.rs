@@ -2,7 +2,7 @@ use super::*;
 
 /// A description of how a D-dimensional grid is displayed as a P-dimensional
 /// projection.
-pub trait NdProjectionInfo<D: Dim>: Default + Copy + Clone {
+pub trait NdProjectionInfo<D: Dim>: Default + Clone {
     /// The dimensionality of the result of the projection. For example, a 4D
     /// grid cannot be displayed directly; only a 2D or 3D slice of it can be
     /// displayed at a time. In the case of a displaying a 4D grid as a 3D

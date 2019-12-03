@@ -107,8 +107,8 @@ where
             self.projection_info.pdim_to_ndim(rect.max()),
         );
         NdProjectedTreeSlice {
-            projection_info: self.projection_info,
             slice: self.tree.get_slice_containing(ndrect),
+            projection_info: self.projection_info.clone(),
         }
         .into()
     }
@@ -130,7 +130,7 @@ where
     fn get_root(&self) -> QuadTreeNode<C> {
         NdProjectedTreeNode {
             node: self.slice.root.clone(),
-            projection_info: self.projection_info,
+            projection_info: self.projection_info.clone(),
         }
         .into()
     }
@@ -151,8 +151,8 @@ where
             }
             NdTreeSliceBranch::Node(slice) => QuadTreeSliceBranch::Node(
                 NdProjectedTreeSlice {
-                    projection_info: self.projection_info,
                     slice,
+                    projection_info: self.projection_info.clone(),
                 }
                 .into(),
             ),
@@ -187,7 +187,7 @@ where
             NdTreeBranch::Node(node) => QuadTreeBranch::Node(
                 NdProjectedTreeNode {
                     node: node.clone(),
-                    projection_info: self.projection_info,
+                    projection_info: self.projection_info.clone(),
                 }
                 .into(),
             ),

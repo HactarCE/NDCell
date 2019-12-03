@@ -1,7 +1,7 @@
 use super::*;
 
 /// Information describing how to slice an NdTree to get a 2D quadtree.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct NdProjectionInfo2D<D: Dim> {
     /// A vector determining where to slice the NdTree.
     pub slice_pos: NdVec<D>,

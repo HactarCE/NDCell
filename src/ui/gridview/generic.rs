@@ -108,7 +108,7 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdAutomaton<C, D, P> {
     pub fn nd_slice(&self) -> NdProjectedTreeSlice<C, D, P> {
         NdProjectedTreeSlice {
             slice: self.tree.slice.clone(),
-            projection_info: self.projection_info,
+            projection_info: self.projection_info.clone(),
         }
     }
 }

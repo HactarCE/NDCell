@@ -5,7 +5,7 @@ mod viewport;
 mod zoom;
 
 use super::shaders;
-use crate::automaton::space::{Axis, Dim2D, NdTreeNode, Rect2D, Vec2D};
+use crate::automaton::space::{Dim2D, NdTreeNode, Rect2D, Vec2D, VecXY};
 use crate::ui::gridview::*;
 pub use viewport::Viewport2D;
 use zoom::Zoom2D;
@@ -63,6 +63,14 @@ impl AutomatonView2D {
         // a new node by combining four others if need be.
         let slice = self.automaton.get_slice_containing(visible_rect);
 
+        // Compute the rectangle of the slice that is visible.
+        let screen_space_visible_rect = visible_rect - slice.get_rect().min();
+        // (Include some wiggle room on the edges.)
+        let screen_space_visible_rect = Rect2D::span(
+            screen_space_visible_rect.min() - 1,
+            screen_space_visible_rect.max() + 1,
+        );
+
         // Make a Vertex object for each cell in the slice.
         let mut vertices = Vec::with_capacity(
             1 << ((slice.get_root().get_layer() - self.viewport.zoom.node_layer()) * 2),
@@ -70,7 +78,8 @@ impl AutomatonView2D {
         self.make_node_vertices(
             &mut vertices,
             &slice.get_root(),
-            [0, 0],
+            Vec2D::origin(),
+            screen_space_visible_rect,
             self.viewport.zoom.node_layer(),
         );
 
@@ -79,16 +88,15 @@ impl AutomatonView2D {
         let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
 
         // Cell-space offset
-        let screen_space_lower_bound = slice.get_rect().min() - self.viewport.pos;
-        let mut x_offset = screen_space_lower_bound[Axis::X] as f32;
-        let mut y_offset = screen_space_lower_bound[Axis::Y] as f32;
+        let screen_space_center = slice.get_rect().min() - self.viewport.pos;
+        let mut x_offset = *screen_space_center.x() as f32;
+        let mut y_offset = *screen_space_center.y() as f32;
         // Offset within a cell (round to nearest pixel).
         x_offset -= self.viewport.x_offset;
         y_offset -= self.viewport.y_offset;
         let pix_per_render_cell = self.viewport.zoom.pixels_per_render_cell() as f32 * 2.0;
         x_offset = (x_offset * pix_per_render_cell).round() / pix_per_render_cell;
         y_offset = (y_offset * pix_per_render_cell).round() / pix_per_render_cell;
-
         // Multiply by 2 because the OpenGL screen space is 2x2.
         let x_scale = pixels_per_cell as f32 / pixels_h as f32 * 2.0;
         let y_scale = pixels_per_cell as f32 / pixels_v as f32 * 2.0;
@@ -130,33 +138,37 @@ impl AutomatonView2D {
         &self,
         vertices: &mut Vec<Vertex>,
         node: &QuadTreeNode<bool>,
-        min_pos: [isize; 2],
+        min_pos: Vec2D,
+        visible_rect: Rect2D,
         lowest_layer: usize,
     ) {
         let layer = node.get_layer();
         for branch_idx in 0..4 {
             let branch_offset =
                 NdTreeNode::<bool, Dim2D>::branch_offset_at_layer(layer - lowest_layer, branch_idx);
-            let branch_min_pos = [
-                min_pos[0] + branch_offset[Axis::X],
-                min_pos[1] + branch_offset[Axis::Y],
-            ];
+            let branch_min_pos = min_pos + branch_offset;
+            let branch_max_pos = branch_min_pos + (1 << (layer - 1));
+            let branch_rect = Rect2D::span(branch_min_pos, branch_max_pos);
+            if !visible_rect.intersects(branch_rect) {
+                continue;
+            }
             match node.get_branch(branch_idx) {
                 QuadTreeBranch::Leaf(cell_state) => vertices.push(self.make_vertex(
                     if cell_state { 1.0 } else { 0.0 },
-                    [branch_min_pos[0] as f32, branch_min_pos[1] as f32],
+                    [*branch_min_pos.x() as f32, *branch_min_pos.y() as f32],
                 )),
                 QuadTreeBranch::Node(child_node) => {
                     if layer - 1 <= lowest_layer {
                         vertices.push(self.make_node_vertex(
                             &child_node,
-                            [branch_min_pos[0] as f32, branch_min_pos[1] as f32],
+                            [*branch_min_pos.x() as f32, *branch_min_pos.y() as f32],
                         ));
                     } else {
                         self.make_node_vertices(
                             vertices,
                             &child_node,
                             branch_min_pos,
+                            visible_rect,
                             lowest_layer,
                         );
                     }

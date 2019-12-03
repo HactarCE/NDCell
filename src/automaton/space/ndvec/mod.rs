@@ -63,6 +63,27 @@ impl<D: Dim> IndexMut<Axis> for NdVec<D> {
     }
 }
 
+/// Hard-coded access to X/Y.
+pub trait VecXY: Index<Axis, Output = isize> + IndexMut<Axis> {
+    /// Returns the X value of this vector.
+    fn x(&self) -> &isize {
+        &self[Axis::X]
+    }
+    /// Returns a mutable reference to the X value of this vector.
+    fn x_mut(&mut self) -> &mut isize {
+        &mut self[Axis::X]
+    }
+    /// Returns the Y value of this vector.
+    fn y(&self) -> &isize {
+        &self[Axis::Y]
+    }
+    /// Returns a mutable reference to the Y value of this vector.
+    fn y_mut(&mut self) -> &mut isize {
+        &mut self[Axis::Y]
+    }
+}
+impl VecXY for Vec2D {}
+
 #[cfg(test)]
 use proptest::prelude::*;
 

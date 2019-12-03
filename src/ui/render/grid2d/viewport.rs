@@ -30,8 +30,8 @@ impl Viewport2D {
         self.x_offset -= int_dx;
         self.y_offset -= int_dy;
         // Add the integral part that we removed onto self.pos.
-        self.pos[Axis::X] += int_dx as isize;
-        self.pos[Axis::Y] += int_dy as isize;
+        *self.pos.x_mut() += int_dx as isize;
+        *self.pos.y_mut() += int_dy as isize;
     }
     pub fn zoom_in(&mut self) {
         self.zoom = self.zoom.closer();

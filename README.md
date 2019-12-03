@@ -9,6 +9,18 @@ _Any computable transition function_
 
 An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
+## Short-term to-do list
+
+- [x] Render 2D grids
+    + [ ] ... at any power-of-2 zoom level
+    + [ ] ... at 60 FPS
+- [ ] Control simulation from GUI
+    + [ ] Undo/reset
+    + [ ] Change sim step
+    + [ ] Jump to generation
+- [ ] Read simple 2D RLE files from Golly
+- [ ] Begin work on 3D rendering
+
 ## Implementation status
 
 ### Simulation

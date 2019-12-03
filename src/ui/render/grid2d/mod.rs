@@ -78,7 +78,7 @@ impl AutomatonView2D {
             &slice.get_root(),
             Vec2D::origin(),
             Some(screen_space_visible_rect),
-            self.viewport.zoom.node_layer(),
+            slice.get_root().get_layer() - self.viewport.zoom.node_layer(),
         );
 
         let vertex_buffer =
@@ -138,12 +138,12 @@ impl AutomatonView2D {
         node: &QuadTreeNode<bool>,
         min_pos: Vec2D,
         visible_rect: Option<Rect2D>,
-        lowest_layer: usize,
+        layers_remaining: usize,
     ) {
         let layer = node.get_layer();
         for branch_idx in 0..4 {
             let branch_offset =
-                NdTreeNode::<bool, Dim2D>::branch_offset_at_layer(layer - lowest_layer, branch_idx);
+                NdTreeNode::<bool, Dim2D>::branch_offset_at_layer(layers_remaining, branch_idx);
             let branch_min_pos = min_pos + branch_offset;
             let mut next_visible_rect = None;
             if let Some(r) = visible_rect {
@@ -162,7 +162,7 @@ impl AutomatonView2D {
                     [*branch_min_pos.x() as f32, *branch_min_pos.y() as f32],
                 )),
                 QuadTreeBranch::Node(child_node) => {
-                    if layer - 1 <= lowest_layer {
+                    if layers_remaining == 0 {
                         vertices.push(self.make_node_vertex(
                             &child_node,
                             [*branch_min_pos.x() as f32, *branch_min_pos.y() as f32],
@@ -173,7 +173,7 @@ impl AutomatonView2D {
                             &child_node,
                             branch_min_pos,
                             next_visible_rect,
-                            lowest_layer,
+                            layers_remaining - 1,
                         );
                     }
                 }

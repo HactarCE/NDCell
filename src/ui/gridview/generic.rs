@@ -22,7 +22,7 @@ pub trait NdSimulate {
     fn set_step_size(&mut self, new_step_size: usize);
     /// Restores the most recent state from the undo history.
     fn undo(&mut self) -> bool;
-    /// Restores the first state from the undo history.
+    /// Restores the most recent state from the undo history.
     fn reset(&mut self) -> bool;
     /// Returns the number of discrete timesteps that have elapsed in the
     /// simulation.

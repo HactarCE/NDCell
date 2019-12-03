@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::*;
 
 // See super::quad_impl for the actual implementation of these traits on these
@@ -91,11 +93,19 @@ where
     fn get_cell(&self, pos: Vec2D) -> C {
         self.slice().get_cell(pos).unwrap_or_default()
     }
-    fn set_view_pos_on_axis(&mut self, axis: Axis, pos: isize) {
-        self.projection_info.slice_pos[axis] = pos;
+    fn set_view_pos_on_axis(&mut self, axis: Axis, coordinate: isize) {
+        let mut slice_pos = self.projection_info.slice_pos;
+        slice_pos[axis] = coordinate;
+        self.projection_info = Rc::new(self.projection_info.with_slice_pos(slice_pos));
     }
     fn set_display_axes(&mut self, horizontal: Axis, vertical: Axis) -> Result<(), ()> {
-        self.projection_info.set_display_axes(horizontal, vertical)
+        match self.projection_info.with_display_axes(horizontal, vertical) {
+            Ok(new_projection_info) => {
+                self.projection_info = Rc::new(new_projection_info);
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
     }
     fn set_cell(&mut self, pos: Vec2D, new_state: C) {
         self.tree

@@ -16,8 +16,9 @@ impl<D: Dim> NdProjectionInfo<D> for NdProjectionInfo2D<D> {
     fn get_slice_pos(&self) -> NdVec<D> {
         self.slice_pos
     }
-    fn set_slice_pos(&mut self, slice_pos: NdVec<D>) {
-        self.slice_pos = slice_pos
+    fn with_slice_pos(&self, slice_pos: NdVec<D>) -> Self {
+        Self::new(slice_pos, self.h, self.v)
+            .expect("Changing the slice position invalidated an NdProjectionInfo")
     }
     fn pdim_to_ndim(&self, pos: Vec2D) -> NdVec<D> {
         let mut ret = self.slice_pos;
@@ -49,15 +50,25 @@ impl<D: Dim> NdProjectionInfo2D<D> {
     fn check_axes(h: Axis, v: Axis) -> bool {
         h != v && (h as usize) < D::NDIM && (v as usize) < D::NDIM
     }
-    /// Sets the axes displayed vertically and horizontally.
-    pub fn set_display_axes(&mut self, horizontal: Axis, vertical: Axis) -> Result<(), ()> {
-        if Self::check_axes(horizontal, vertical) {
-            self.h = horizontal;
-            self.v = vertical;
-            Ok(())
+    /// Constructs a new projection with the given slice position and display
+    /// axes. Returns Err(()) if the display axes are not valid.
+    pub fn new(
+        slice_pos: NdVec<D>,
+        horizontal_display_axis: Axis,
+        vertical_display_axis: Axis,
+    ) -> Result<Self, ()> {
+        let h = horizontal_display_axis;
+        let v = vertical_display_axis;
+        if Self::check_axes(h, v) {
+            Ok(Self { slice_pos, h, v })
         } else {
             Err(())
         }
+    }
+    /// Returns a new identical projection but with the given axes displayed
+    /// vertically and horizontally.
+    pub fn with_display_axes(&self, horizontal: Axis, vertical: Axis) -> Result<Self, ()> {
+        Self::new(self.slice_pos, horizontal, vertical)
     }
     /// Returns the axis displayed horizontally.
     pub fn get_horizontal_display_axis(&self) -> Axis {

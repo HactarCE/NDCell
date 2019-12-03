@@ -43,7 +43,7 @@ pub trait NdSimulate {
 pub struct NdAutomaton<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to project the grid to the correct number of
     /// dimensions.
-    pub projection_info: P,
+    pub projection_info: Rc<P>,
     /// The actual NdTree behind the scenes.
     pub tree: NdTree<C, D>,
     /// A simulation of this tree.
@@ -57,7 +57,7 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> From<NdTree<C, D>> for NdAutom
     fn from(tree: NdTree<C, D>) -> Self {
         Self {
             tree: tree,
-            projection_info: P::default(),
+            projection_info: Default::default(),
             sim: Simulation::new(Rc::new(rule::DummyRule), 1),
             history: vec![],
             generation_count: 0,
@@ -116,7 +116,7 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdAutomaton<C, D, P> {
 #[derive(Debug, Clone)]
 pub struct NdProjectedTreeSlice<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeSlice.
-    pub projection_info: P,
+    pub projection_info: Rc<P>,
     /// The actual NdTreeSlice behind the scenes.
     pub slice: NdTreeSlice<C, D>,
 }
@@ -124,7 +124,7 @@ pub struct NdProjectedTreeSlice<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
 #[derive(Debug, Clone)]
 pub struct NdProjectedTreeNode<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeNode.
-    pub projection_info: P,
+    pub projection_info: Rc<P>,
     /// The actual NdTreeNode behind the scenes.
     pub node: NdCachedNode<C, D>,
 }

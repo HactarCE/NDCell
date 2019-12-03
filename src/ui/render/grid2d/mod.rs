@@ -72,9 +72,7 @@ impl AutomatonView2D {
         );
 
         // Make a Vertex object for each cell in the slice.
-        let mut vertices = Vec::with_capacity(
-            1 << ((slice.get_root().get_layer() - self.viewport.zoom.node_layer()) * 2),
-        );
+        let mut vertices = Vec::with_capacity(screen_space_visible_rect.count());
         self.make_node_vertices(
             &mut vertices,
             &slice.get_root(),
@@ -147,7 +145,7 @@ impl AutomatonView2D {
             let branch_offset =
                 NdTreeNode::<bool, Dim2D>::branch_offset_at_layer(layer - lowest_layer, branch_idx);
             let branch_min_pos = min_pos + branch_offset;
-            let branch_max_pos = branch_min_pos + (1 << (layer - 1));
+            let branch_max_pos = branch_min_pos + (1 << (layer - 1)) - 1;
             let branch_rect = Rect2D::span(branch_min_pos, branch_max_pos);
             if !visible_rect.intersects(branch_rect) {
                 continue;

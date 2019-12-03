@@ -5,7 +5,7 @@ mod viewport;
 mod zoom;
 
 use super::shaders;
-use crate::automaton::space::{Dim2D, NdTreeNode, Rect2D, Vec2D, VecXY};
+use crate::automaton::space::{CanContain, Dim2D, NdTreeNode, Rect2D, Vec2D, VecXY};
 use crate::ui::gridview::*;
 pub use viewport::Viewport2D;
 use zoom::Zoom2D;
@@ -77,7 +77,7 @@ impl AutomatonView2D {
             &mut vertices,
             &slice.get_root(),
             Vec2D::origin(),
-            screen_space_visible_rect,
+            Some(screen_space_visible_rect),
             self.viewport.zoom.node_layer(),
         );
 
@@ -137,7 +137,7 @@ impl AutomatonView2D {
         vertices: &mut Vec<Vertex>,
         node: &QuadTreeNode<bool>,
         min_pos: Vec2D,
-        visible_rect: Rect2D,
+        visible_rect: Option<Rect2D>,
         lowest_layer: usize,
     ) {
         let layer = node.get_layer();
@@ -145,10 +145,16 @@ impl AutomatonView2D {
             let branch_offset =
                 NdTreeNode::<bool, Dim2D>::branch_offset_at_layer(layer - lowest_layer, branch_idx);
             let branch_min_pos = min_pos + branch_offset;
-            let branch_max_pos = branch_min_pos + (1 << (layer - 1)) - 1;
-            let branch_rect = Rect2D::span(branch_min_pos, branch_max_pos);
-            if !visible_rect.intersects(branch_rect) {
-                continue;
+            let mut next_visible_rect = None;
+            if let Some(r) = visible_rect {
+                let branch_max_pos = branch_min_pos + (1 << (layer - 1)) - 1;
+                let branch_rect = Rect2D::span(branch_min_pos, branch_max_pos);
+                if !r.intersects(branch_rect) {
+                    continue;
+                }
+                if !r.contains(branch_rect) {
+                    next_visible_rect = visible_rect;
+                }
             }
             match node.get_branch(branch_idx) {
                 QuadTreeBranch::Leaf(cell_state) => vertices.push(self.make_vertex(
@@ -166,7 +172,7 @@ impl AutomatonView2D {
                             vertices,
                             &child_node,
                             branch_min_pos,
-                            visible_rect,
+                            next_visible_rect,
                             lowest_layer,
                         );
                     }

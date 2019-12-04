@@ -113,7 +113,7 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdAutomaton<C, D, P> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NdProjectedTreeSlice<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeSlice.
     pub projection_info: Rc<P>,
@@ -121,7 +121,7 @@ pub struct NdProjectedTreeSlice<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     pub slice: NdTreeSlice<C, D>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NdProjectedTreeNode<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeNode.
     pub projection_info: Rc<P>,

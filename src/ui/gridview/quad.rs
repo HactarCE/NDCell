@@ -15,7 +15,7 @@ pub enum QuadTreeAutomaton<C: CellType> {
     Automaton6D(NdAutomaton<C, Dim6D, NdProjectionInfo2D<Dim6D>>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QuadTreeSlice<C: CellType> {
     Slice1D(NdProjectedTreeSlice<C, Dim1D, NdProjectionInfo2D<Dim1D>>),
     Slice2D(NdProjectedTreeSlice<C, Dim2D, NdProjectionInfo2D<Dim2D>>),
@@ -25,7 +25,7 @@ pub enum QuadTreeSlice<C: CellType> {
     Slice6D(NdProjectedTreeSlice<C, Dim6D, NdProjectionInfo2D<Dim6D>>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum QuadTreeNode<C: CellType> {
     Node1D(NdProjectedTreeNode<C, Dim1D, NdProjectionInfo2D<Dim1D>>),
     Node2D(NdProjectedTreeNode<C, Dim2D, NdProjectionInfo2D<Dim2D>>),
@@ -35,17 +35,18 @@ pub enum QuadTreeNode<C: CellType> {
     Node6D(NdProjectedTreeNode<C, Dim6D, NdProjectionInfo2D<Dim6D>>),
 }
 
-/// Anything that can act as a branch of a node in a quadtree of cells.
-#[derive(Debug, Clone)]
-pub enum QuadTreeBranch<C: CellType> {
-    Leaf(C),
-    Node(QuadTreeNode<C>),
-}
-
-#[derive(Debug, Clone)]
+/// A single branch of a quadtree node, with global positional information.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QuadTreeSliceBranch<C: CellType> {
     Leaf(C, Vec2D),
     Node(QuadTreeSlice<C>),
+}
+
+/// A single branch of quadtree node.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum QuadTreeBranch<C: CellType> {
+    Leaf(C),
+    Node(QuadTreeNode<C>),
 }
 
 /// Anything that can act as a mutable quadtree of cells.

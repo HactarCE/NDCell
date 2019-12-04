@@ -1,9 +1,10 @@
 use std::cell::RefCell;
+use std::hash::{Hash, Hasher};
 
 use super::*;
 
 /// Information describing how to slice an NdTree to get a 2D quadtree.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NdProjectionInfo2D<D: Dim> {
     /// A vector determining where to slice the NdTree.
     pub slice_pos: NdVec<D>,
@@ -13,6 +14,14 @@ pub struct NdProjectionInfo2D<D: Dim> {
     v: Axis,
     /// A cache of branch indices for the given layer.
     branch_idx_cache: RefCell<Vec<[usize; 4]>>,
+}
+
+impl<D: Dim> Hash for NdProjectionInfo2D<D> {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.slice_pos.hash(hasher);
+        self.h.hash(hasher);
+        self.v.hash(hasher);
+    }
 }
 
 impl<D: Dim> NdProjectionInfo<D> for NdProjectionInfo2D<D> {

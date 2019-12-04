@@ -3,7 +3,7 @@ use std::ops::Index;
 use super::*;
 
 /// An immutable view into an NdTree.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NdTreeSlice<C: CellType, D: Dim> {
     /// The root NdTreeNode of this slice.
     pub root: NdCachedNode<C, D>,
@@ -13,7 +13,7 @@ pub struct NdTreeSlice<C: CellType, D: Dim> {
 
 /// The same as NdTreeBranch, but using NdTreeSlice instead of NdCachedNode (so
 /// it retains global location information).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NdTreeSliceBranch<C: CellType, D: Dim> {
     /// A "layer 0" node; i.e. a single cell.
     Leaf(C, NdVec<D>),

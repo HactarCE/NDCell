@@ -191,7 +191,9 @@ where
     }
     fn get_branch(&self, branch_idx: usize) -> QuadTreeBranch<C> {
         // Now that we have the real N-dimensional branch index, convert the NdTreeBranch into a QuadTreeBranch.
-        let nd_branch_idx = self.compute_branch_idx(branch_idx);
+        let nd_branch_idx = self
+            .projection_info
+            .get_ndim_branch_idx(self.get_layer(), branch_idx);
         match &self.node.branches[nd_branch_idx] {
             NdTreeBranch::Leaf(cell_state) => QuadTreeBranch::Leaf(*cell_state),
             NdTreeBranch::Node(node) => QuadTreeBranch::Node(
@@ -213,31 +215,5 @@ where
     }
     fn get_population(&self) -> usize {
         self.node.population
-    }
-}
-
-impl<C: CellType, D: Dim> NdProjectedTreeNode<C, D, NdProjectionInfo2D<D>> {
-    fn compute_branch_idx(&self, branch_idx: usize) -> usize {
-        // Get the index of the branch containing the slice position.
-        let mut nd_branch_idx = self.node.branch_idx(self.projection_info.slice_pos);
-        // For the horizontal and vertical axes, set or reset the proper bit in
-        // the slice branch index.
-        let h_bit = self
-            .projection_info
-            .get_horizontal_display_axis()
-            .branch_bit();
-        nd_branch_idx &= !h_bit;
-        if branch_idx & 1 != 0 {
-            nd_branch_idx |= h_bit;
-        }
-        let v_bit = self
-            .projection_info
-            .get_vertical_display_axis()
-            .branch_bit();
-        nd_branch_idx &= !v_bit;
-        if branch_idx & 2 != 0 {
-            nd_branch_idx |= v_bit;
-        }
-        nd_branch_idx
     }
 }

@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use super::*;
 
 /// Information describing how to slice an NdTree to get a 2D quadtree.
@@ -9,6 +11,8 @@ pub struct NdProjectionInfo2D<D: Dim> {
     h: Axis,
     /// The axis of the NdTree to be displayed vertically.
     v: Axis,
+    /// A cache of branch indices for the given layer.
+    branch_idx_cache: RefCell<Vec<[usize; 4]>>,
 }
 
 impl<D: Dim> NdProjectionInfo<D> for NdProjectionInfo2D<D> {
@@ -34,13 +38,9 @@ impl<D: Dim> NdProjectionInfo<D> for NdProjectionInfo2D<D> {
 impl<D: Dim> Default for NdProjectionInfo2D<D> {
     fn default() -> Self {
         if D::NDIM < 2 {
-            panic!("");
+            panic!("Cannot create NdProjectionInfo2D for a grid with fewer than 2 dimensions.");
         }
-        Self {
-            slice_pos: NdVec::origin(),
-            h: Axis::X,
-            v: Axis::Y,
-        }
+        Self::new(NdVec::origin(), Axis::X, Axis::Y).unwrap()
     }
 }
 
@@ -60,7 +60,12 @@ impl<D: Dim> NdProjectionInfo2D<D> {
         let h = horizontal_display_axis;
         let v = vertical_display_axis;
         if Self::check_axes(h, v) {
-            Ok(Self { slice_pos, h, v })
+            Ok(Self {
+                slice_pos,
+                h,
+                v,
+                branch_idx_cache: RefCell::default(),
+            })
         } else {
             Err(())
         }
@@ -77,5 +82,37 @@ impl<D: Dim> NdProjectionInfo2D<D> {
     /// Returns the axis displayed vertically.
     pub fn get_vertical_display_axis(&self) -> Axis {
         self.v
+    }
+
+    pub fn get_ndim_branch_idx_for_pos(&self, layer: usize, pos: Vec2D) -> usize {
+        self.get_ndim_branch_idx(layer, ndtree_branch_idx::<Dim2D>(layer, pos))
+    }
+    pub fn get_ndim_branch_idx(&self, layer: usize, branch_idx_2d: usize) -> usize {
+        let cache = self.branch_idx_cache.borrow();
+        match cache.get(layer) {
+            Some(branch_indices) => branch_indices[branch_idx_2d],
+            None => {
+                drop(cache);
+                let mut cache = self.branch_idx_cache.borrow_mut();
+                if cache.is_empty() {
+                    // Add a dummy entry for layer 0.
+                    cache.push(Default::default());
+                }
+                let h_bit = self.h.branch_bit();
+                let v_bit = self.v.branch_bit();
+                for l in cache.len()..=layer {
+                    // Compute the branch index for layer l.
+                    let base_branch_idx =
+                        ndtree_branch_idx::<D>(l, self.slice_pos) & !h_bit & !v_bit;
+                    cache.push([
+                        base_branch_idx,
+                        base_branch_idx | h_bit,
+                        base_branch_idx | v_bit,
+                        base_branch_idx | h_bit | v_bit,
+                    ]);
+                }
+                cache[layer][branch_idx_2d]
+            }
+        }
     }
 }

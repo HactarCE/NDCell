@@ -219,47 +219,27 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
     /// Computes the "branch index" corresponding to the child of this node
     /// containing the given position.
     ///
-    /// See NdTreeNode::branch_idx_at_layer() for more info.
+    /// See ndtree_branch_idx() for more info.
     pub fn branch_idx(&self, pos: NdVec<D>) -> usize {
-        Self::branch_idx_at_layer(self.layer, pos)
+        ndtree_branch_idx(self.layer, pos)
     }
-    /// Computes the "branch index" corresponding to the child of a node the
-    /// given layer containing the given position.
+    /// Computes the "branch index" corresponding to the child of a node with
+    /// the same number of dimensions as this one but at the given layer
+    /// containing the given position.
     ///
-    /// The nth node layer corresponds to the (n - 1)th bit of each axis, which
-    /// can either be 0 or 1. The "branch index" is a number in 0..(2 ** d)
-    /// composed from these bits; each bit in the branch index is taken from a
-    /// different axis. It's like a bitwise NdVec that selects one
-    /// half/quadrant/etc. from the node's rectangle.
+    /// See ndtree_branch_idx() for more info.
     pub fn branch_idx_at_layer(layer: usize, pos: NdVec<D>) -> usize {
-        let mut ret = 0;
-        for &ax in D::axes() {
-            let bit = (pos[ax] as usize >> (layer - 1)) & 1;
-            ret |= bit * ax.branch_bit();
-        }
-        ret
+        ndtree_branch_idx(layer, pos)
     }
 
     /// Computes the vector offset for the given branch of this node.
     pub fn branch_offset(&self, branch_idx: usize) -> NdVec<D> {
-        Self::branch_offset_at_layer(self.layer, branch_idx)
+        ndtree_branch_offset(self.layer, branch_idx)
     }
-    /// Computes the vector offset for the given branch of a node at the given
-    /// layer.
+    /// Computes the vector offset for the given branch of a node with the same
+    /// number of dimesnions as this one but at the given layer.
     pub fn branch_offset_at_layer(layer: usize, branch_idx: usize) -> NdVec<D> {
-        let mut ret = NdVec::origin();
-        let halfway = 1 << (layer - 1);
-        for &ax in D::axes() {
-            // If the current bit of the branch index is 1, add half of the
-            // length of this node to the corresponding axis in the result.
-            let axis_bit = if branch_idx & ax.branch_bit() == 0 {
-                0
-            } else {
-                1
-            };
-            ret[ax] += halfway * axis_bit;
-        }
-        ret
+        ndtree_branch_offset(layer, branch_idx)
     }
 
     /// Adds three branch indices together to get a sub-branch index and returns
@@ -361,4 +341,39 @@ impl<C: CellType, D: Dim> NdTreeBranch<C, D> {
     pub fn is_empty(&self) -> bool {
         self.population() == 0
     }
+}
+
+/// Returns the "branch index" corresponding to the child of a node the given
+/// layer containing the given position.
+///
+/// The nth node layer corresponds to the (n - 1)th bit of each axis, which can
+/// either be 0 or 1. The "branch index" is a number in 0..(2 ** d) composed
+/// from these bits; each bit in the branch index is taken from a different
+/// axis. It's like a bitwise NdVec that selects one half/quadrant/etc. from the
+/// node's rectangle.
+pub fn ndtree_branch_offset<D: Dim>(layer: usize, branch_idx: usize) -> NdVec<D> {
+    let mut ret = NdVec::origin();
+    let halfway = 1 << (layer - 1);
+    for &ax in D::axes() {
+        // If the current bit of the branch index is 1, add half of the
+        // length of this node to the corresponding axis in the result.
+        let axis_bit = if branch_idx & ax.branch_bit() == 0 {
+            0
+        } else {
+            1
+        };
+        ret[ax] += halfway * axis_bit;
+    }
+    ret
+}
+
+/// Computes the vector offset for the given branch of a node at the given
+/// layer.
+pub fn ndtree_branch_idx<D: Dim>(layer: usize, pos: NdVec<D>) -> usize {
+    let mut ret = 0;
+    for &ax in D::axes() {
+        let bit = (pos[ax] as usize >> (layer - 1)) & 1;
+        ret |= bit * ax.branch_bit();
+    }
+    ret
 }

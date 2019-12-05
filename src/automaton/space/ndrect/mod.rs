@@ -101,6 +101,24 @@ impl<D: Dim> NdRect<D> {
         true
     }
 
+    /// Returns the intersection of the two hyperrectangles, or None if they do
+    /// not intersect.
+    pub fn intersection(self, other: NdRect<D>) -> Option<Self> {
+        let mut new_min = NdVec::origin();
+        let mut new_max = NdVec::origin();
+        for &ax in D::axes() {
+            new_min[ax] = std::cmp::max(self.min[ax], other.min[ax]);
+            new_max[ax] = std::cmp::min(self.max[ax], other.max[ax]);
+            if new_max[ax] < new_min[ax] {
+                return None;
+            }
+        }
+        Some(Self {
+            min: new_min,
+            max: new_max,
+        })
+    }
+
     /// Return a new NdRect with the minimum and maximum coordinates offset by the given amount.
     pub fn offset_min_max<T1, T2>(self, min_offset: T1, max_offset: T2) -> Self
     where

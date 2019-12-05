@@ -16,7 +16,10 @@ pub type NdCachedNode<C, D> = Rc<NdTreeNode<C, D>>;
 pub struct NdTreeCache<C: CellType, D: Dim> {
     /// A HashSet of all of the nodes.
     nodes: WeakHashSet<Weak<NdTreeNode<C, D>>, NodeHasher>,
-    phantom: PhantomData<D>,
+    /// A cache of empty nodes at various layers.
+    ///
+    /// The element at index N is the empty node at layer N-1.
+    empty_nodes: Vec<NdCachedNode<C, D>>,
 }
 
 impl<C: CellType, D: Dim> NdTreeCache<C, D> {
@@ -42,8 +45,18 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
     }
     /// Returns the NdTreeNode at the given layer with all default cells.
     pub fn get_empty_node(&mut self, layer: usize) -> NdCachedNode<C, D> {
-        let branches = vec![self.get_empty_branch(layer - 1); NdTreeNode::<C, D>::BRANCHES];
-        self.get_node(branches)
+        if let Some(ret) = self.empty_nodes.get(layer - 1) {
+            // Cache hit
+            ret.clone()
+        } else {
+            // Cache miss
+            let branches = vec![self.get_empty_branch(layer - 1); NdTreeNode::<C, D>::BRANCHES];
+            let ret = self.get_node(branches);
+            // All lower entries in the cache have been filled by the recursive
+            // call.
+            self.empty_nodes.push(ret.clone());
+            ret
+        }
     }
     /// Returns the NdTreeBranch containing a node at the given layer with all
     /// default cells (or just an NdTreeBranch::Leaf of the default cell state).

@@ -1,9 +1,14 @@
+use glium::program;
+
 pub fn compile(display: &glium::Display) -> glium::Program {
-    glium::Program::from_source(
+    program!(
         display,
-        VERTEX_SHADER_SRC,
-        FRAGMENT_SHADER_SRC,
-        Some(GEOMETRY_SHADER_SRC),
+        140 => {
+            vertex:VERTEX_SHADER_SRC,
+            geometry: GEOMETRY_SHADER_SRC,
+            fragment: FRAGMENT_SHADER_SRC,
+            outputs_srgb: true,
+        }
     )
     .expect(&format!(
         "Failed to compile shader in {}",

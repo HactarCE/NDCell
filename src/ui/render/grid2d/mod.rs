@@ -211,9 +211,9 @@ impl AutomatonView2D {
                     [*branch_min_pos.x() as f32, *branch_min_pos.y() as f32],
                 )),
                 QuadTreeBranch::Node(child_node) => {
-                    // if child_node.get_population() == 0 {
-                    //     continue;
-                    // }
+                    if child_node.get_population() == 0 {
+                        continue;
+                    }
                     if layers_remaining == 0 {
                         vertices.push(self.make_node_vertex(
                             &child_node,

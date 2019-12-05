@@ -73,7 +73,8 @@ pub fn show_gui() {
     let mut events_loop = glutin::EventsLoop::new();
     let wb = glutin::WindowBuilder::new().with_title(TITLE.to_owned());
     let cb = glutin::ContextBuilder::new();
-    let display = glium::Display::new(wb, cb, &events_loop).expect("Failed to initialize display");
+    let display =
+        Rc::new(glium::Display::new(wb, cb, &events_loop).expect("Failed to initialize display"));
 
     // Initialize imgui things.
     let mut imgui = Context::create();
@@ -98,7 +99,8 @@ pub fn show_gui() {
     }]);
 
     // Initialize imgui renderer.
-    let mut renderer = Renderer::init(&mut imgui, &display).expect("Failed to initialize renderer");
+    let mut renderer =
+        Renderer::init(&mut imgui, &*display).expect("Failed to initialize renderer");
 
     // Initialize cellular automaton stuff.
     let mut grid = NdTree::new();
@@ -115,6 +117,7 @@ pub fn show_gui() {
     automaton.sim = Simulation::new(Rc::new(rule::LIFE), 1024);
     let mut state = State {
         grid_view: render::GridView::Grid2D(render::AutomatonView2D::new(
+            display.clone(),
             QuadTreeAutomaton::Automaton2D(automaton.into()),
         )),
     };
@@ -152,7 +155,7 @@ pub fn show_gui() {
         gui::build_windows(&mut state, &ui);
 
         let mut target = display.draw();
-        render::draw(&mut state, &display, &mut target);
+        render::draw(&mut state, &mut target);
 
         platform.prepare_render(&ui, &window);
         let draw_data = ui.render();

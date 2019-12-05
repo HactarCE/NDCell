@@ -24,7 +24,6 @@ pub const VERTEX_SHADER_SRC: &str = r#"
 
     uniform vec2 chunk_pos;
     uniform float chunk_size;
-    uniform float resolution;
     uniform vec4 color_dead;
     uniform vec4 color_live;
 

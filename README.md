@@ -16,10 +16,11 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
     + [x] ... at 60 FPS
         * [x] Render grid separately from cells
         * [x] Skip empty nodes
-        * [ ] Render in chunks (how big?)
-        * [ ] Cache chunks between frames (i.e. only re-render what is needed)
+        * [x] Render in 256x256 chunks
+        * [x] Cache chunks between frames (i.e. only re-render what is needed)
         * [ ] Multithread rendering? should be possible
-        * [ ] LoD rendering? (render chunks at lower resolution initially, then improve resolution on the next frame)
+        * [ ] LoD rendering? (render chunks at lower resolution initially, then
+          improve resolution on the next frame)
 - [ ] Control simulation from GUI
     + [ ] Undo/reset
     + [ ] Change sim step

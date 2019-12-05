@@ -164,7 +164,8 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         );
     }
 
-    /// Returns an NdTreeSlice of the smallest node in the grid containing the given rectangle.
+    /// Returns an NdTreeSlice of the smallest node in the grid containing the
+    /// given rectangle.
     ///
     /// The result may not directly correspond to an existing node; it may be
     /// centered on an existing node, and thus composed out of smaller existing

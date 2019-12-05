@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 mod iter;
 mod ops;
 
@@ -97,6 +99,14 @@ impl<D: Dim> NdRect<D> {
         // If the rectangles intersect along each axis, then they must really
         // intersect in N-dimensional space.
         true
+    }
+
+    /// Return a new NdRect with the minimum and maximum coordinates offset by the given amount.
+    pub fn offset_min_max<T1, T2>(self, min_offset: T1, max_offset: T2) -> Self
+    where
+        NdVec<D>: Add<T1, Output = NdVec<D>> + Add<T2, Output = NdVec<D>>,
+    {
+        Self::span(self.min() + min_offset, self.max() + max_offset)
     }
 }
 

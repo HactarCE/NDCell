@@ -19,15 +19,18 @@ pub fn compile(display: &glium::Display) -> glium::Program {
 pub const VERTEX_SHADER_SRC: &str = r#"
     #version 140
 
-    in vec2 position;
     in float proportion_live;
     out vec4 vColor;
 
+    uniform vec2 chunk_pos;
+    uniform float chunk_size;
     uniform vec4 color_dead;
     uniform vec4 color_live;
 
     void main() {
-        gl_Position = vec4(position, 0.0, 1.0);
+        float x = mod(gl_VertexID, chunk_size);
+        float y = floor(gl_VertexID / chunk_size);
+        gl_Position = vec4(chunk_pos * chunk_size + vec2(x, y), 0.0, 1.0);
         float proportion_dead = 1 - proportion_live;
         vColor = color_live * proportion_live + color_dead * proportion_dead;
     }
@@ -50,8 +53,6 @@ pub const GEOMETRY_SHADER_SRC: &str = r#"
     } gl_in[];
 
     uniform mat4 matrix;
-    uniform float low_offset;
-    uniform float high_offset;
 
     void main() {
         fColor = vColor[0];

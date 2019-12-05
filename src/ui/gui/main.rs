@@ -19,6 +19,7 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                         y_offset,
                         zoom,
                     },
+                ..
             }) => {
                 ui.text(format!("Framerate = {} FPS", ui.io().framerate as usize));
                 ui.text(format!("X = {}", pos[Axis::X] as f32 + x_offset));

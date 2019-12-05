@@ -15,6 +15,15 @@ pub fn ceil_log_base_2(mut n: usize) -> usize {
     real_bits
 }
 
+/// Computes the quotient n / d, rounded up.
+pub fn ceil_division(n: isize, d: isize) -> isize {
+    let mut ret = n / d;
+    if n % d != 0 {
+        ret += 1;
+    }
+    ret
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -30,6 +39,12 @@ mod tests {
                 assert!(n <= 1 << p);
                 assert!(n > 1 << (p - 1));
             }
+        }
+
+        #[test]
+        fn test_ceil_division(n in -10000..10000isize, d in -10000..10000isize) {
+            prop_assume!(d != 0);
+            assert_eq!((n as f32 / d as f32).ceil() as isize, ceil_division(n, d));
         }
     }
 }

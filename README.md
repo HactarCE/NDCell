@@ -13,9 +13,9 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 - [x] Render 2D grids
     + [ ] ... at any power-of-2 zoom level
-    + [ ] ... at 60 FPS
-        * [ ] Render grid separately from cells
-        * [ ] Skip empty nodes
+    + [x] ... at 60 FPS
+        * [x] Render grid separately from cells
+        * [x] Skip empty nodes
         * [ ] Render in chunks (how big?)
         * [ ] Cache chunks between frames (i.e. only re-render what is needed)
         * [ ] Multithread rendering? should be possible

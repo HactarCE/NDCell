@@ -50,15 +50,15 @@ pub const GEOMETRY_SHADER_SRC: &str = r#"
 
     void main() {
         fColor = vColor[0];
-        gl_Position = matrix * (gl_in[0].gl_Position + vec4(low_offset, low_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(0.0, 0.0, 0.0, 0.0));
         EmitVertex();
-        gl_Position = matrix * (gl_in[0].gl_Position + vec4(high_offset, low_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(1.0, 0.0, 0.0, 0.0));
         EmitVertex();
-        gl_Position = matrix * (gl_in[0].gl_Position + vec4(low_offset, high_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(0.0, 1.0, 0.0, 0.0));
         EmitVertex();
-        gl_Position = matrix * (gl_in[0].gl_Position + vec4(high_offset, high_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(1.0, 1.0, 0.0, 0.0));
         EmitVertex();
-        gl_Position = matrix * (gl_in[0].gl_Position + vec4(low_offset, low_offset, 0.0, 0.0));
+        gl_Position = matrix * (gl_in[0].gl_Position + vec4(0.0, 0.0, 0.0, 0.0));
         EmitVertex();
         EndPrimitive();
     }

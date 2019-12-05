@@ -5,21 +5,27 @@ mod viewport;
 mod zoom;
 
 use super::shaders;
-use crate::automaton::space::{CanContain, Dim2D, NdTreeNode, Rect2D, Vec2D, VecXY};
+use crate::automaton::space::{Axis, CanContain, Dim2D, NdTreeNode, Rect2D, Vec2D, VecXY};
 use crate::ui::gridview::*;
 pub use viewport::Viewport2D;
 use zoom::Zoom2D;
 
-#[derive(Copy, Clone)]
-pub struct Vertex {
+#[derive(Debug, Copy, Clone)]
+struct CellVertex {
     position: [f32; 2],
     proportion_live: f32,
 }
-implement_vertex!(Vertex, position, proportion_live);
+implement_vertex!(CellVertex, position, proportion_live);
 
-const GRID_COLOR: [f32; 4] = [0.2, 0.2, 0.2, 1.0];
-const DEAD_COLOR: [f32; 4] = [0.005, 0.005, 0.005, 1.0];
-const LIVE_COLOR: [f32; 4] = [0.5, 0.5, 0.5, 1.0];
+#[derive(Debug, Copy, Clone)]
+struct GridlineVertex {
+    position: [f32; 2],
+}
+implement_vertex!(GridlineVertex, position);
+
+const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
+const DEAD_COLOR: [f32; 4] = [0.1, 0.1, 0.1, 1.0];
+const LIVE_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 pub struct AutomatonView2D {
     pub automaton: QuadTreeAutomaton<bool>,
@@ -34,7 +40,7 @@ impl AutomatonView2D {
     }
 
     pub fn draw(&mut self, display: &Display, target: &mut glium::Frame) {
-        target.clear_color_srgb(GRID_COLOR[0], GRID_COLOR[1], GRID_COLOR[2], GRID_COLOR[3]);
+        target.clear_color_srgb(DEAD_COLOR[0], DEAD_COLOR[1], DEAD_COLOR[2], DEAD_COLOR[3]);
         self.draw_cells(display, target);
     }
 
@@ -71,20 +77,6 @@ impl AutomatonView2D {
             screen_space_visible_rect.max() + 1,
         );
 
-        // Make a Vertex object for each cell in the slice.
-        let mut vertices = Vec::with_capacity(screen_space_visible_rect.count());
-        self.make_node_vertices(
-            &mut vertices,
-            &slice.get_root(),
-            Vec2D::origin(),
-            Some(screen_space_visible_rect),
-            slice.get_root().get_layer() - self.viewport.zoom.node_layer(),
-        );
-
-        let vertex_buffer =
-            glium::VertexBuffer::new(display, &vertices).expect("Failed to create vertex buffer");
-        let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
-
         // Cell-space offset
         let screen_space_center = slice.get_rect().min() - self.viewport.pos;
         let mut x_offset = *screen_space_center.x() as f32;
@@ -108,18 +100,34 @@ impl AutomatonView2D {
         x_offset *= x_scale;
         y_offset *= y_scale;
 
+        let view_matrix = [
+            [x_scale, 0.0, 0.0, 0.0],
+            [0.0, y_scale, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [x_offset, y_offset, 0.0, 1.0],
+        ];
+
+        // Make the VBO and indices for the cells.
+        let mut cell_vertices = Vec::with_capacity(screen_space_visible_rect.count());
+        self.make_node_vertices(
+            &mut cell_vertices,
+            &slice.get_root(),
+            Vec2D::origin(),
+            Some(screen_space_visible_rect),
+            slice.get_root().get_layer() - self.viewport.zoom.node_layer(),
+        );
+        let cells_vertex_buffer = glium::VertexBuffer::new(display, &cell_vertices)
+            .expect("Failed to create vertex buffer");
+        let cells_indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
+
+        // Draw cells.
         target
             .draw(
-                &vertex_buffer,
-                &indices,
+                &cells_vertex_buffer,
+                &cells_indices,
                 &shaders::cell2d::compile(display),
                 &uniform! {
-                    matrix: [
-                        [x_scale, 0.0, 0.0, 0.0],
-                        [0.0, y_scale, 0.0, 0.0],
-                        [0.0, 0.0, 1.0, 0.0],
-                        [x_offset, y_offset, 0.0, 1.0],
-                    ],
+                    matrix: view_matrix,
                     low_offset: border_size,
                     high_offset: 1.0 - border_size,
                     color_dead: DEAD_COLOR,
@@ -127,14 +135,55 @@ impl AutomatonView2D {
                 },
                 &Default::default(),
             )
-            .expect("Failed to draw grid");
+            .expect("Failed to draw cells");
+
+        // Make the VBO and indices for the gridlines.
+        let mut gridline_vertices = Vec::with_capacity(
+            (screen_space_visible_rect.len(Axis::X) + screen_space_visible_rect.len(Axis::Y)) * 2,
+        );
+        for x in screen_space_visible_rect.axis_range(Axis::X) {
+            gridline_vertices.push(GridlineVertex {
+                position: [x as f32, *screen_space_visible_rect.min().y() as f32],
+            });
+            gridline_vertices.push(GridlineVertex {
+                position: [x as f32, *screen_space_visible_rect.max().y() as f32],
+            });
+        }
+        for y in screen_space_visible_rect.axis_range(Axis::Y) {
+            gridline_vertices.push(GridlineVertex {
+                position: [*screen_space_visible_rect.min().x() as f32, y as f32],
+            });
+            gridline_vertices.push(GridlineVertex {
+                position: [*screen_space_visible_rect.max().x() as f32, y as f32],
+            });
+        }
+        let gridlines_vertex_buffer = glium::VertexBuffer::new(display, &gridline_vertices)
+            .expect("Failed to create vertex buffer");
+        let gridlines_indices = glium::index::NoIndices(glium::index::PrimitiveType::LinesList);
+
+        // Draw gridlines.
+        target
+            .draw(
+                &gridlines_vertex_buffer,
+                &gridlines_indices,
+                &shaders::lines2d::compile(display),
+                &uniform! {
+                    matrix: view_matrix,
+                    grid_color: GRID_COLOR,
+                },
+                &glium::DrawParameters {
+                    line_width: Some(1.0),
+                    ..Default::default()
+                },
+            )
+            .expect("Failed to draw gridlines");
     }
 
-    /// Make a Vertex object for each cell (or pixel-level sub-node) in the
+    /// Make a CellVertex object for each cell (or pixel-level sub-node) in the
     /// given node.
     fn make_node_vertices(
         &self,
-        vertices: &mut Vec<Vertex>,
+        vertices: &mut Vec<CellVertex>,
         node: &QuadTreeNode<bool>,
         min_pos: Vec2D,
         visible_rect: Option<Rect2D>,
@@ -184,15 +233,15 @@ impl AutomatonView2D {
         }
     }
 
-    fn make_node_vertex(&self, node: &QuadTreeNode<bool>, position: [f32; 2]) -> Vertex {
+    fn make_node_vertex(&self, node: &QuadTreeNode<bool>, position: [f32; 2]) -> CellVertex {
         let live_cells = node.get_population() as f32;
         let total_cells = 2.0f32.powf(node.get_layer() as f32).powf(2.0);
         let proportion_live = live_cells / total_cells;
         self.make_vertex(proportion_live, position)
     }
 
-    fn make_vertex(&self, proportion_live: f32, position: [f32; 2]) -> Vertex {
-        Vertex {
+    fn make_vertex(&self, proportion_live: f32, position: [f32; 2]) -> CellVertex {
+        CellVertex {
             position,
             proportion_live,
         }

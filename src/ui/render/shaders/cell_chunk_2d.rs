@@ -4,7 +4,7 @@ pub fn compile(display: &glium::Display) -> glium::Program {
     program!(
         display,
         140 => {
-            vertex:VERTEX_SHADER_SRC,
+            vertex: VERTEX_SHADER_SRC,
             geometry: GEOMETRY_SHADER_SRC,
             fragment: FRAGMENT_SHADER_SRC,
             outputs_srgb: true,
@@ -24,6 +24,7 @@ pub const VERTEX_SHADER_SRC: &str = r#"
 
     uniform vec2 chunk_pos;
     uniform float chunk_size;
+    uniform float resolution;
     uniform vec4 color_dead;
     uniform vec4 color_live;
 

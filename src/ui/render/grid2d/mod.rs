@@ -26,8 +26,8 @@ glium::implement_vertex!(GridlineVertex, position);
 const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
 const DEAD_COLOR: [f32; 4] = [0.1, 0.1, 0.1, 1.0];
 const LIVE_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-const CHUNK_POW: usize = 6;
-const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^6 = 64
+const CHUNK_POW: usize = 8;
+const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^8 = 256
 
 type CellVertexChunk = [CellVertex; CHUNK_SIZE * CHUNK_SIZE];
 type ChunkCache<C> = HashMap<QuadTreeNode<C>, CellVertexChunk, NodeHasher>;

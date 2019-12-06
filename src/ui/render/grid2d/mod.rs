@@ -30,7 +30,7 @@ const LIVE_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 const CHUNK_POW: usize = 8;
 const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^8 = 256
 
-type CellVertexChunk = Box<[CellVertex; CHUNK_SIZE * CHUNK_SIZE]>;
+type CellVertexChunk = [CellVertex; CHUNK_SIZE * CHUNK_SIZE];
 type ChunkCache<C> = HashMap<QuadTreeNode<C>, (CellVertexChunk, bool), NodeHasher>;
 
 pub struct AutomatonView2D {
@@ -170,9 +170,9 @@ impl AutomatonView2D {
     ) {
         for branch_idx in 0..4 {
             if let QuadTreeBranch::Node(child_node) = root_node.get_branch(branch_idx) {
-                if child_node.get_population() == 0 {
-                    continue;
-                }
+                // if child_node.get_population() == 0 {
+                //     continue;
+                // }
                 let child_node_offset =
                     root_node_offset + ndtree_branch_offset(layers_remaining, branch_idx);
                 if !chunk_visible_rect.contains(child_node_offset) {
@@ -182,7 +182,7 @@ impl AutomatonView2D {
                     // Populate the VBO for this chunk.
                     let cell_vertices =
                         Self::get_chunk_vertices(&mut self.cached_chunks, &child_node);
-                    self.cell_chunk_vertex_buffer.write(&**cell_vertices);
+                    self.cell_chunk_vertex_buffer.write(cell_vertices);
                     // Draw cells in the chunk.
                     let x = *child_node_offset.x() as f32;
                     let y = *child_node_offset.y() as f32;
@@ -230,7 +230,7 @@ impl AutomatonView2D {
                 *keep = true;
             })
             .or_insert_with(|| {
-                let mut vertices = Box::new([CellVertex::default(); CHUNK_SIZE * CHUNK_SIZE]);
+                let mut vertices = [CellVertex::default(); CHUNK_SIZE * CHUNK_SIZE];
                 Self::add_node_vertices(&mut vertices, node, Vec2D::origin(), CHUNK_POW);
                 (vertices, true)
             })

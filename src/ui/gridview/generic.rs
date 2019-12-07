@@ -70,6 +70,7 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdSimulate for NdAutomaton<C, 
     }
     fn step(&mut self) {
         self.sim.step(&mut self.tree);
+        self.generation_count += self.sim.get_step_size();
     }
     fn push_to_history(&mut self) {
         self.history.push(self.tree.slice.clone());

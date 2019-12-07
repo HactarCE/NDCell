@@ -24,7 +24,7 @@ impl fmt::Display for Zoom2D {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Zoom2D::Close(n) => write!(f, "1:{}", n),
-            Zoom2D::Far(n) => write!(f, "{}:1", 1 << n),
+            Zoom2D::Far(n) => write!(f, "{}:1", 1usize << n),
         }
     }
 }
@@ -33,7 +33,13 @@ impl Zoom2D {
     /// Zoom in by a factor of 2.
     pub fn closer(self) -> Self {
         match self {
-            Zoom2D::Close(n) => Zoom2D::Close(n * 2),
+            Zoom2D::Close(n) => {
+                if n >= 256 {
+                    self
+                } else {
+                    Zoom2D::Close(n * 2)
+                }
+            }
             Zoom2D::Far(1) => Zoom2D::Close(1),
             Zoom2D::Far(n) => Zoom2D::Far(n - 1),
         }
@@ -41,7 +47,13 @@ impl Zoom2D {
     /// Zoom out by a factor of 2.
     pub fn farther(self) -> Self {
         match self {
-            Zoom2D::Far(n) => Zoom2D::Far(n + 1),
+            Zoom2D::Far(n) => {
+                if n > 30 {
+                    self
+                } else {
+                    Zoom2D::Far(n + 1)
+                }
+            }
             Zoom2D::Close(1) => Zoom2D::Far(1),
             Zoom2D::Close(n) => Zoom2D::Close(n / 2),
         }

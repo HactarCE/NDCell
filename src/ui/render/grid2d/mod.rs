@@ -40,6 +40,7 @@ pub struct AutomatonView2D {
     cell_chunk_glsl_program: glium::Program,
     gridline_glsl_program: glium::Program,
     cell_chunk_vertex_buffer: glium::VertexBuffer<CellVertex>,
+    cell_vertex_buffer: glium::VertexBuffer<GridlineVertex>,
 
     pub display: Rc<glium::Display>,
 
@@ -56,6 +57,24 @@ impl AutomatonView2D {
             cell_chunk_vertex_buffer: glium::VertexBuffer::empty_dynamic(
                 &*display,
                 CHUNK_SIZE * CHUNK_SIZE,
+            )
+            .expect("Failed to create vertex buffer"),
+            cell_vertex_buffer: glium::VertexBuffer::new(
+                &*display,
+                &[
+                    GridlineVertex {
+                        position: [0.5, 0.5],
+                    },
+                    // GridlineVertex {
+                    //     position: [0.0, 1.0],
+                    // },
+                    // GridlineVertex {
+                    //     position: [1.0, 0.0],
+                    // },
+                    // GridlineVertex {
+                    //     position: [1.0, 1.0],
+                    // },
+                ],
             )
             .expect("Failed to create vertex buffer"),
 
@@ -188,7 +207,10 @@ impl AutomatonView2D {
                     let y = *child_node_offset.y() as f32;
                     target
                         .draw(
-                            &self.cell_chunk_vertex_buffer,
+                            (
+                                &self.cell_vertex_buffer,
+                                self.cell_chunk_vertex_buffer.per_instance().unwrap(),
+                            ),
                             indices,
                             &self.cell_chunk_glsl_program,
                             &uniform! {
@@ -198,7 +220,10 @@ impl AutomatonView2D {
                                 color_dead: DEAD_COLOR,
                                 color_live: LIVE_COLOR,
                             },
-                            &Default::default(),
+                            &glium::DrawParameters {
+                                point_size: Some(self.viewport.zoom.pixels_per_render_cell() as f32),
+                                ..Default::default()
+                            },
                         )
                         .expect("Failed to draw cell chunk");
                 } else {

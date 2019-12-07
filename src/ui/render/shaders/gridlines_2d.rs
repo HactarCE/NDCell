@@ -15,7 +15,7 @@ pub fn compile(display: &glium::Display) -> glium::Program {
     ))
 }
 
-pub const VERTEX_SHADER_SRC: &str = r#"
+const VERTEX_SHADER_SRC: &str = r#"
     #version 140
 
     in vec2 position;
@@ -27,7 +27,7 @@ pub const VERTEX_SHADER_SRC: &str = r#"
     }
 "#;
 
-pub const FRAGMENT_SHADER_SRC: &str = r#"
+const FRAGMENT_SHADER_SRC: &str = r#"
     #version 140
 
     out vec4 color;

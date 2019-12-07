@@ -183,3 +183,17 @@ impl<D: Dim> ShrAssign<isize> for NdVec<D> {
         }
     }
 }
+
+// Implement Euclidean division between an NdVec and a scalar (i.e. Euclidean
+// divide each coordinate by the scalar).
+impl<D: Dim> NdVec<D> {
+    /// Performs Euclidean division between each coordinate of the vector and
+    /// the given scalar.
+    pub fn div_euclid(&self, other: isize) -> Self {
+        let mut ret = *self;
+        for &ax in D::axes() {
+            ret.0.set(ax, ret.0.get(ax).div_euclid(other));
+        }
+        ret
+    }
+}

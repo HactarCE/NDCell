@@ -1,6 +1,7 @@
 use glium::glutin::*;
 
 use super::render;
+use crate::automaton::NdSimulate;
 
 pub fn handle_event(state: &mut super::State, ev: &Event) {
     match ev {
@@ -13,16 +14,62 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                     KeyboardInput {
                         state: ElementState::Pressed,
                         virtual_keycode,
+                        modifiers,
                         ..
-                    } => match virtual_keycode {
-                        // Handle spacebar press.
-                        Some(VirtualKeyCode::Space) => grid.step(),
-                        // Handle minus key press.
-                        Some(VirtualKeyCode::Subtract) => grid.zoom(-1.0),
-                        // Handle plus key press.
-                        Some(VirtualKeyCode::Equals) => grid.zoom(1.0),
-                        _ => (),
-                    },
+                    } => {
+                        if modifiers.ctrl {
+                            match virtual_keycode {
+                                // Handle undo and redo.
+                                Some(VirtualKeyCode::Z) => {
+                                    if modifiers.shift {
+                                        grid.automaton.redo();
+                                    } else {
+                                        grid.automaton.undo();
+                                    }
+                                }
+                                // Handle reset.
+                                Some(VirtualKeyCode::R) => {
+                                    grid.automaton.reset();
+                                }
+                                _ => (),
+                            }
+                        } else {
+                            match virtual_keycode {
+                                // Handle spacebar press.
+                                Some(VirtualKeyCode::Space) => {
+                                    grid.automaton.step_single();
+                                    state.grid_view.push_to_history();
+                                }
+                                // Handle tab key press.
+                                Some(VirtualKeyCode::Tab) => {
+                                    grid.automaton.step();
+                                    state.grid_view.push_to_history();
+                                }
+                                // Handle zooming out.
+                                Some(VirtualKeyCode::Subtract)
+                                | Some(VirtualKeyCode::Z)
+                                | Some(VirtualKeyCode::PageDown) => grid.zoom(-1.0),
+                                // Handle zooming in.
+                                Some(VirtualKeyCode::Equals)
+                                | Some(VirtualKeyCode::Q)
+                                | Some(VirtualKeyCode::PageUp) => grid.zoom(1.0),
+                                // Handle WASD or arrow keys.
+                                Some(VirtualKeyCode::W) | Some(VirtualKeyCode::Up) => {
+                                    grid.scroll(0.0, 64.0)
+                                }
+                                Some(VirtualKeyCode::A) | Some(VirtualKeyCode::Left) => {
+                                    grid.scroll(-64.0, 0.0)
+                                }
+                                Some(VirtualKeyCode::S) | Some(VirtualKeyCode::Down) => {
+                                    grid.scroll(0.0, -64.0)
+                                }
+                                Some(VirtualKeyCode::D) | Some(VirtualKeyCode::Right) => {
+                                    grid.scroll(64.0, 0.0)
+                                }
+                                _ => (),
+                            }
+                        }
+                    }
 
                     // Handle key release.
                     _ => (),

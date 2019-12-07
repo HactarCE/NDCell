@@ -117,7 +117,7 @@ Golly is able to simulate practically infinite grids that are upwards of 10^100 
 So why haven't I refactored NDCell to use BigInts everywhere? Well BigInts are a little heavier, a little slower to allocate (they live on the heap, not the stack), and a little harder to copy (they implement `Clone` but not `Copy`) than primitive integers, so I'd rather only use them where necessary. This wouldn't be a big deal in a simple 2D or 3D simulation; just make a few extra traits and structs for the new types. But because NDCell supports an arbitrary number of dimensions, I've made a type alias for each dimensionality (`Dim1D`, `Dim2D`, ..., `Dim6D`). That type alias corresponds to an array of coordinates; e.g. `Dim3D` is an alias for `[isize; 3]` (using an `isize` for each coordinate).
 
 ```rust
-trait Dim {
+pub trait Dim {
     const NDIM: usize,
     ...
 }
@@ -132,31 +132,36 @@ impl Dim for Dim1D {
     ...
 }
 ...
+
+pub struct NdVec<D: Dim>(D);
 ```
 
 Ideally, I would be able to use whatever index type suits the situation; so I could have one vector type `NdVec<T: Coordinate, D: Dim>` (as opposed to the current `NdVec<D: Dim>` that always stores `isize`s), where `T` could be `isize` or `BigInt` depending on the required precision. This could even result in a net _reduction_ in lines of code, since branch indices could be replaced with `NdVec<bool, D>`.
 
 ```rust
-trait Dim {
+pub trait Dim {
     const NDIM: usize,
     type Array<T>: Index<usize, Output = T> + IndexMut<usize>;
 }
 
-struct Dim1D;
-struct Dim2D;
+pub struct Dim1D;
+pub struct Dim2D;
 ...
-struct Dim6D;
+pub struct Dim6D;
 
 impl Dim for Dim1D {
     const NDIM: usize = 1;
     type Array<T> = [T; 1];
 }
+...
+
+pub struct NdVec<D: Dim, T>(D::Array<T>);
 ```
 
-Isn't that much nicer? It's much more general, at least. Now we can also convert between them; for example, the following trait `impl` would allow converting between `NdVec<BigInt>` and `NdVec<isize>` using `std::convert::From` and `std::convert::TryInto`:
+Isn't that much nicer? It's much more general, at least. Now we can also convert between them; for example, the following trait `impl` would allow converting between `NdVec<D, BigInt>` and `NdVec<D, isize>` using `std::convert::From` and `std::convert::TryInto`, as long as the dimensionalities are the same:
 
 ```rust
-impl<T1, T2> From<NdVec<T1>> for NdVec<T2> where T1: From<T2> { ... }
+impl<D: Dim, T1, T2> From<NdVec<D, T1>> for NdVec<D, T2> where T1: From<T2> { ... }
 ```
 
 ## Possible future optimizations

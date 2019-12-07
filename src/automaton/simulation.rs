@@ -23,14 +23,22 @@ impl<C: CellType, D: Dim> Default for Simulation<C, D> {
 impl<C: CellType, D: Dim> Simulation<C, D> {
     /// Constructs a new Simulation with the given rule and step size.
     pub fn new(rule: Rc<dyn Rule<C, D>>, step_size: usize) -> Self {
-        let mut ret = Self {
+        // Determine the minimum layer at which we can simulate one generation
+        // of the automaton, using `n / 4 >= r`. (See the documentation for
+        // Simulation::advance_inner_node() for an explanation.) Even at r=0 or
+        // r=1, the minimum layer is 2 because we need to return the inner node
+        // (which is at a lower layer) and the minimum layer is 1.
+        let mut min_layer = 2;
+        while (1 << min_layer) / 4 < rule.radius() {
+            min_layer += 1;
+        }
+
+        Self {
             rule,
-            step_size: 0,
-            min_layer: 0,
+            step_size,
+            min_layer,
             results: ResultsCache::default(),
-        };
-        ret.set_step_size(step_size);
-        ret
+        }
     }
 
     /// Returns the step size of this simulation.
@@ -40,22 +48,22 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
     /// Sets the step size of this simulation to the given value.
     pub fn set_step_size(&mut self, new_step_size: usize) {
         if new_step_size != self.step_size {
-            // If the new step is different, recompute ResultsCache. This could
-            // be replaced with something smarter that only prunes the
-            // SingleStepResultsCaches that won't be used with this new step
-            // size.
+            // If the new step is different, recompute ResultsCache. This is
+            // only present to prevent holding onto memory we don't need any
+            // more, and could probably be replaced with something smarter that
+            // only prunes the SingleStepResultsCaches that won't be used with
+            // this new step size.
             self.results = ResultsCache::default();
         }
         self.step_size = new_step_size;
-        // Determine the minimum layer at which we can simulate one generation
-        // of the automaton, using `n / 4 >= r`. (See the documentation for
-        // Simulation::advance_inner_node() for an explanation.) Even at r=0 or
-        // r=1, the minimum layer is 2 because we need to return the inner node
-        // (which is at a lower layer) and the minimum layer is 1.
-        self.min_layer = 2;
-        while NdTreeNode::<C, D>::len_at_layer(self.min_layer) / 4 < self.rule.radius() {
-            self.min_layer += 1;
-        }
+    }
+
+    /// Advances the given NdTree by a single generation.
+    pub fn step_single(&mut self, tree: &mut NdTree<C, D>) {
+        let old_step_size = self.step_size;
+        self.step_size = 1;
+        self.step(tree);
+        self.step_size = old_step_size;
     }
 
     /// Advances the given NdTree by a number of generations equal to this

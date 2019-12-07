@@ -195,66 +195,66 @@ impl AutomatonView2D {
         layers_remaining: usize,
         chunk_visible_rect: Rect2D,
     ) {
-        for branch_idx in 0..4 {
-            if let QuadTreeBranch::Node(child_node) = root_node.get_branch(branch_idx) {
-                let branch_offset = ndtree_branch_offset(layers_remaining, branch_idx);
-                let child_node_offset = root_node_offset + branch_offset;
-                let child_node_rect = Rect2D::span(
-                    child_node_offset,
-                    child_node_offset + (1 << layers_remaining) - 1,
-                );
-                if !chunk_visible_rect.intersects(child_node_rect) {
-                    continue;
-                }
-                if layers_remaining == 1 {
-                    // Populate the VBO for this chunk.
-                    self.cell_chunk_vb.write(Self::get_chunk_vertices(
-                        &mut self.cached_chunks,
-                        &child_node,
-                    ));
+        if layers_remaining == 0 {
+            // Populate the VBO for this chunk.
+            self.cell_chunk_vb.write(Self::get_chunk_vertices(
+                &mut self.cached_chunks,
+                &root_node,
+            ));
 
-                    // Decide whether to draw points or squares.
-                    let model_vb;
-                    let model_indices;
-                    let draw_parameters;
-                    if self.viewport.zoom.pixels_per_render_cell() > 4 {
-                        // Render rectangles
-                        model_vb = &self.cell_square_vb;
-                        model_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
-                        draw_parameters = Default::default();
-                    } else {
-                        // Render points.
-                        model_vb = &self.cell_point_vb;
-                        model_indices = glium::index::NoIndices(PrimitiveType::Points);
-                        draw_parameters = glium::DrawParameters {
-                            point_size: Some(self.viewport.zoom.pixels_per_render_cell() as f32),
-                            ..Default::default()
-                        };
+            // Decide whether to draw points or squares.
+            let model_vb;
+            let model_indices;
+            let draw_parameters;
+            if self.viewport.zoom.pixels_per_render_cell() > 4 {
+                // Render rectangles
+                model_vb = &self.cell_square_vb;
+                model_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
+                draw_parameters = Default::default();
+            } else {
+                // Render points.
+                model_vb = &self.cell_point_vb;
+                model_indices = glium::index::NoIndices(PrimitiveType::Points);
+                draw_parameters = glium::DrawParameters {
+                    point_size: Some(self.viewport.zoom.pixels_per_render_cell() as f32),
+                    ..Default::default()
+                };
+            }
+
+            // Convert the chunk position to f32.
+            let chunk_x = *root_node_offset.x() as f32;
+            let chunk_y = *root_node_offset.y() as f32;
+
+            target
+                .draw(
+                    (model_vb, self.cell_chunk_vb.per_instance().unwrap()),
+                    &model_indices,
+                    &self.cell_chunk_glsl_program,
+                    &uniform! {
+                        matrix: view_matrix,
+                        chunk_pos: [chunk_x, chunk_y],
+                        chunk_size: CHUNK_SIZE as f32,
+                        color1: DEAD_COLOR,
+                        color2: LIVE_COLOR,
+                        state1: 0u32,
+                        state2: 1u32,
+                        default_color: DEAD_COLOR,
+                    },
+                    &draw_parameters,
+                )
+                .expect("Failed to draw cell chunk");
+        } else {
+            for branch_idx in 0..4 {
+                if let QuadTreeBranch::Node(child_node) = root_node.get_branch(branch_idx) {
+                    let branch_offset = ndtree_branch_offset(layers_remaining, branch_idx);
+                    let child_node_offset = root_node_offset + branch_offset;
+                    let child_node_rect = Rect2D::span(
+                        child_node_offset,
+                        child_node_offset + (1 << layers_remaining) - 1,
+                    );
+                    if !chunk_visible_rect.intersects(child_node_rect) {
+                        continue;
                     }
-
-                    // Convert the chunk position to f32.
-                    let chunk_x = *child_node_offset.x() as f32;
-                    let chunk_y = *child_node_offset.y() as f32;
-
-                    target
-                        .draw(
-                            (model_vb, self.cell_chunk_vb.per_instance().unwrap()),
-                            &model_indices,
-                            &self.cell_chunk_glsl_program,
-                            &uniform! {
-                                matrix: view_matrix,
-                                chunk_pos: [chunk_x, chunk_y],
-                                chunk_size: CHUNK_SIZE as f32,
-                                color1: DEAD_COLOR,
-                                color2: LIVE_COLOR,
-                                state1: 0u32,
-                                state2: 1u32,
-                                default_color: DEAD_COLOR,
-                            },
-                            &draw_parameters,
-                        )
-                        .expect("Failed to draw cell chunk");
-                } else {
                     self.draw_cell_chunks(
                         target,
                         view_matrix,
@@ -263,9 +263,9 @@ impl AutomatonView2D {
                         layers_remaining - 1,
                         chunk_visible_rect,
                     );
+                } else {
+                    panic!();
                 }
-            } else {
-                panic!();
             }
         }
     }

@@ -1,11 +1,9 @@
 mod grid2d;
 mod grid3d;
-mod slice2d;
 
 use super::State;
 pub use grid2d::*;
 pub use grid3d::*;
-pub use slice2d::*;
 
 pub enum GridView {
     Grid2D(AutomatonView2D),

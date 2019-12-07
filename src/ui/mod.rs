@@ -9,14 +9,12 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::rc::Rc;
 use std::time::Instant;
 
-mod gridview;
 mod gui;
 mod input;
 
 mod render;
 
 use crate::automaton::*;
-use crate::ui::gridview::*;
 
 /// The title of the program window (both the OS window, and the main imgui
 /// window).

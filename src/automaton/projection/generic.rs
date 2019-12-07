@@ -39,6 +39,8 @@ pub trait NdSimulate {
     }
 }
 
+/// An N-dimensional automaton, complete with NdTree, Simulation, projection
+/// info, and more.
 #[derive(Debug, Default, Clone)]
 pub struct NdAutomaton<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to project the grid to the correct number of
@@ -106,6 +108,7 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdSimulate for NdAutomaton<C, 
     }
 }
 impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdAutomaton<C, D, P> {
+    /// Returns the NdProjectedTreeSlice at the root of this NdAutomaton.
     pub fn nd_slice(&self) -> NdProjectedTreeSlice<C, D, P> {
         NdProjectedTreeSlice {
             slice: self.tree.slice.clone(),
@@ -114,6 +117,7 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdAutomaton<C, D, P> {
     }
 }
 
+/// An NdTree with associated projection info.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NdProjectedTreeSlice<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeSlice.
@@ -122,6 +126,7 @@ pub struct NdProjectedTreeSlice<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     pub slice: NdTreeSlice<C, D>,
 }
 
+/// An NdTreeNode with associated projection info.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NdProjectedTreeNode<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A description of how to slice the NdTreeNode.

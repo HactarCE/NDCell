@@ -18,8 +18,8 @@ pub trait NdProjectionInfo<D: Dim>: Default + Clone {
     fn get_slice_pos(&self) -> NdVec<D>;
     /// Returns a new identical projection but with the given slice position.
     fn with_slice_pos(&self, new_slice_pos: NdVec<D>) -> Self;
-    // Given a cell position in the projection, returns the corresponding cell
-    // position in the original grid.
+    /// Given a cell position in the projection, returns the corresponding cell
+    /// position in the original grid.
     fn pdim_to_ndim(&self, pos: NdVec<Self::PDim>) -> NdVec<D>;
     /// Given a cell position in the original grid, returns the corresponding
     /// cell position in the projection.

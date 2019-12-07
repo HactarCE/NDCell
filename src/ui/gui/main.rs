@@ -1,7 +1,7 @@
 use imgui::*;
 
+use crate::automaton::projection::*;
 use crate::automaton::space::Axis;
-use crate::ui::gridview::*;
 use crate::ui::render::{AutomatonView2D, GridView, Viewport2D};
 use crate::ui::State;
 

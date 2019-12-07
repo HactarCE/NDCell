@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use std::rc::Rc;
 
 use super::*;
@@ -5,6 +7,7 @@ use super::*;
 // See super::quad_impl for the actual implementation of these traits on these
 // enums.
 
+/// A 2D quadtree interface for an N-dimensional automaton.
 #[derive(Debug, Clone)]
 pub enum QuadTreeAutomaton<C: CellType> {
     Automaton1D(NdAutomaton<C, Dim1D, NdProjectionInfo2D<Dim1D>>),
@@ -15,6 +18,7 @@ pub enum QuadTreeAutomaton<C: CellType> {
     Automaton6D(NdAutomaton<C, Dim6D, NdProjectionInfo2D<Dim6D>>),
 }
 
+/// A 2D quadtree interface for an N-dimensional NdTreeSlice.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QuadTreeSlice<C: CellType> {
     Slice1D(NdProjectedTreeSlice<C, Dim1D, NdProjectionInfo2D<Dim1D>>),
@@ -25,6 +29,7 @@ pub enum QuadTreeSlice<C: CellType> {
     Slice6D(NdProjectedTreeSlice<C, Dim6D, NdProjectionInfo2D<Dim6D>>),
 }
 
+/// A 2D quadtree interface for an N-dimensional NdTreeCachedNode.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum QuadTreeNode<C: CellType> {
     Node1D(NdProjectedTreeNode<C, Dim1D, NdProjectionInfo2D<Dim1D>>),

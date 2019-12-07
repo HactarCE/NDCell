@@ -93,9 +93,8 @@ impl<D: Dim> NdProjectionInfo2D<D> {
         self.v
     }
 
-    pub fn get_ndim_branch_idx_for_pos(&self, layer: usize, pos: Vec2D) -> usize {
-        self.get_ndim_branch_idx(layer, ndtree_branch_idx::<Dim2D>(layer, pos))
-    }
+    /// Convert an P-dimensional branch index at the given layer to an
+    /// N-dimensional branch index.
     pub fn get_ndim_branch_idx(&self, layer: usize, branch_idx_2d: usize) -> usize {
         let cache = self.branch_idx_cache.borrow();
         match cache.get(layer) {

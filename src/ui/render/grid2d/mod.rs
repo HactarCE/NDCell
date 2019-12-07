@@ -8,8 +8,8 @@ mod shaders;
 mod viewport;
 mod zoom;
 
+use crate::automaton::projection::*;
 use crate::automaton::space::*;
-use crate::ui::gridview::*;
 pub use viewport::Viewport2D;
 use zoom::Zoom2D;
 

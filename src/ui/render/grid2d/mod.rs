@@ -93,6 +93,9 @@ impl AutomatonView2D {
     ///
     /// This algorithm is based loosely on the one used in Golly.
     pub fn draw(&mut self, target: &mut glium::Frame) {
+        // // Clear the screen. (This should not be necessary.)
+        // target.clear_color_srgb(1.0, 0.0, 1.0, 1.0);
+
         // Find the number of cells that fit horizontally (cells_h) and
         // vertically (cells_v) across the screen.
         let pixels_per_cell = self.viewport.zoom.pixels_per_cell();
@@ -131,8 +134,10 @@ impl AutomatonView2D {
 
         // Offset with respect to render cells
         let screen_space_center = slice.get_rect().min() - self.viewport.pos;
-        let mut x_offset = *screen_space_center.x() as f32;
-        let mut y_offset = *screen_space_center.y() as f32;
+        let mut x_offset =
+            *screen_space_center.x() as f32 / self.viewport.zoom.cells_per_render_cell();
+        let mut y_offset =
+            *screen_space_center.y() as f32 / self.viewport.zoom.cells_per_render_cell();
         let pixels_per_render_cell = self.viewport.zoom.pixels_per_render_cell() as f32;
         if let Zoom2D::Close(_) = self.viewport.zoom {
             // Offset within a cell (round to nearest pixel).
@@ -312,7 +317,7 @@ impl AutomatonView2D {
                     if child_node.get_population() == 0 {
                         continue;
                     }
-                    if layers_remaining == 0 {
+                    if layers_remaining == 1 {
                         Self::add_vertex(vertices, branch_pos, branch);
                     } else {
                         Self::add_node_vertices(

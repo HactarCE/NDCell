@@ -154,14 +154,34 @@ impl<C: CellType> NdSimulate for QuadTreeAutomaton<C> {
             Self::Automaton6D(inner) => inner.step(),
         }
     }
-    fn push_to_history(&mut self) {
+    fn step_single(&mut self) {
         match self {
-            Self::Automaton1D(inner) => inner.push_to_history(),
-            Self::Automaton2D(inner) => inner.push_to_history(),
-            Self::Automaton3D(inner) => inner.push_to_history(),
-            Self::Automaton4D(inner) => inner.push_to_history(),
-            Self::Automaton5D(inner) => inner.push_to_history(),
-            Self::Automaton6D(inner) => inner.push_to_history(),
+            Self::Automaton1D(inner) => inner.step_single(),
+            Self::Automaton2D(inner) => inner.step_single(),
+            Self::Automaton3D(inner) => inner.step_single(),
+            Self::Automaton4D(inner) => inner.step_single(),
+            Self::Automaton5D(inner) => inner.step_single(),
+            Self::Automaton6D(inner) => inner.step_single(),
+        }
+    }
+    fn push_to_undo_history(&mut self) {
+        match self {
+            Self::Automaton1D(inner) => inner.push_to_undo_history(),
+            Self::Automaton2D(inner) => inner.push_to_undo_history(),
+            Self::Automaton3D(inner) => inner.push_to_undo_history(),
+            Self::Automaton4D(inner) => inner.push_to_undo_history(),
+            Self::Automaton5D(inner) => inner.push_to_undo_history(),
+            Self::Automaton6D(inner) => inner.push_to_undo_history(),
+        }
+    }
+    fn push_to_redo_history(&mut self) {
+        match self {
+            Self::Automaton1D(inner) => inner.push_to_redo_history(),
+            Self::Automaton2D(inner) => inner.push_to_redo_history(),
+            Self::Automaton3D(inner) => inner.push_to_redo_history(),
+            Self::Automaton4D(inner) => inner.push_to_redo_history(),
+            Self::Automaton5D(inner) => inner.push_to_redo_history(),
+            Self::Automaton6D(inner) => inner.push_to_redo_history(),
         }
     }
     fn get_step_size(&self) -> usize {
@@ -184,6 +204,26 @@ impl<C: CellType> NdSimulate for QuadTreeAutomaton<C> {
             Self::Automaton6D(inner) => inner.set_step_size(new_step_size),
         }
     }
+    fn has_undo(&self) -> bool {
+        match self {
+            Self::Automaton1D(inner) => inner.has_undo(),
+            Self::Automaton2D(inner) => inner.has_undo(),
+            Self::Automaton3D(inner) => inner.has_undo(),
+            Self::Automaton4D(inner) => inner.has_undo(),
+            Self::Automaton5D(inner) => inner.has_undo(),
+            Self::Automaton6D(inner) => inner.has_undo(),
+        }
+    }
+    fn has_redo(&self) -> bool {
+        match self {
+            Self::Automaton1D(inner) => inner.has_redo(),
+            Self::Automaton2D(inner) => inner.has_redo(),
+            Self::Automaton3D(inner) => inner.has_redo(),
+            Self::Automaton4D(inner) => inner.has_redo(),
+            Self::Automaton5D(inner) => inner.has_redo(),
+            Self::Automaton6D(inner) => inner.has_redo(),
+        }
+    }
     fn undo(&mut self) -> bool {
         match self {
             Self::Automaton1D(inner) => inner.undo(),
@@ -192,6 +232,16 @@ impl<C: CellType> NdSimulate for QuadTreeAutomaton<C> {
             Self::Automaton4D(inner) => inner.undo(),
             Self::Automaton5D(inner) => inner.undo(),
             Self::Automaton6D(inner) => inner.undo(),
+        }
+    }
+    fn redo(&mut self) -> bool {
+        match self {
+            Self::Automaton1D(inner) => inner.redo(),
+            Self::Automaton2D(inner) => inner.redo(),
+            Self::Automaton3D(inner) => inner.redo(),
+            Self::Automaton4D(inner) => inner.redo(),
+            Self::Automaton5D(inner) => inner.redo(),
+            Self::Automaton6D(inner) => inner.redo(),
         }
     }
     fn reset(&mut self) -> bool {

@@ -14,15 +14,25 @@ pub trait NdSimulate {
     fn get_ndim(&self) -> usize;
     /// Advances one variable-size (depending on `step_size`) step into the simulation.
     fn step(&mut self);
+    /// Advances a single step into the simulation.
+    fn step_single(&mut self);
     /// Saves the current state in the undo history.
-    fn push_to_history(&mut self);
+    fn push_to_undo_history(&mut self);
+    /// Saves the current state in the redo history.
+    fn push_to_redo_history(&mut self);
     /// Returns the step size of the simulation.
     fn get_step_size(&self) -> usize;
     /// Sets the step size of the simulation.
     fn set_step_size(&mut self, new_step_size: usize);
+    /// Returns true if there is something that can be undone; false otherwise.
+    fn has_undo(&self) -> bool;
+    /// Returns true if there is something that can be redone; false otherwise.
+    fn has_redo(&self) -> bool;
     /// Restores the most recent state from the undo history.
     fn undo(&mut self) -> bool;
-    /// Restores the most recent state from the undo history.
+    /// Restores the most recently undone state from the redo history.
+    fn redo(&mut self) -> bool;
+    /// Restores the first state from the undo history.
     fn reset(&mut self) -> bool;
     /// Returns the number of discrete timesteps that have elapsed in the
     /// simulation.
@@ -51,7 +61,9 @@ pub struct NdAutomaton<C: CellType, D: Dim, P: NdProjectionInfo<D>> {
     /// A simulation of this tree.
     pub sim: Simulation<C, D>,
     /// All previous states of this automaton ("undo history").
-    pub history: Vec<NdTreeSlice<C, D>>,
+    pub undo_history: Vec<(NdTreeSlice<C, D>, usize)>,
+    /// All undone future states of this automaton ("redo history").
+    pub redo_history: Vec<(NdTreeSlice<C, D>, usize)>,
     /// The number of discrete timesteps that have elapsed in the simulation.
     pub generation_count: usize,
 }
@@ -61,7 +73,8 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> From<NdTree<C, D>> for NdAutom
             tree: tree,
             projection_info: Default::default(),
             sim: Simulation::new(Rc::new(rule::DummyRule), 1),
-            history: vec![],
+            undo_history: vec![],
+            redo_history: vec![],
             generation_count: 0,
         }
     }
@@ -74,8 +87,17 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdSimulate for NdAutomaton<C, 
         self.sim.step(&mut self.tree);
         self.generation_count += self.sim.get_step_size();
     }
-    fn push_to_history(&mut self) {
-        self.history.push(self.tree.slice.clone());
+    fn step_single(&mut self) {
+        self.sim.step_single(&mut self.tree);
+        self.generation_count += 1;
+    }
+    fn push_to_undo_history(&mut self) {
+        self.undo_history
+            .push((self.tree.slice.clone(), self.generation_count));
+    }
+    fn push_to_redo_history(&mut self) {
+        self.redo_history
+            .push((self.tree.slice.clone(), self.generation_count));
     }
     fn get_step_size(&self) -> usize {
         self.sim.get_step_size()
@@ -83,18 +105,39 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdSimulate for NdAutomaton<C, 
     fn set_step_size(&mut self, new_step_size: usize) {
         self.sim.set_step_size(new_step_size);
     }
+    fn has_undo(&self) -> bool {
+        !self.undo_history.is_empty()
+    }
+    fn has_redo(&self) -> bool {
+        !self.redo_history.is_empty()
+    }
     fn undo(&mut self) -> bool {
-        if let Some(last_state) = self.history.pop() {
-            self.tree.slice = last_state;
+        if let Some((last_tree, last_generation_count)) = self.undo_history.pop() {
+            self.push_to_redo_history();
+            self.tree.slice = last_tree;
+            self.generation_count = last_generation_count;
+            true
+        } else {
+            false
+        }
+    }
+    fn redo(&mut self) -> bool {
+        if let Some((next_tree, next_generation_count)) = self.redo_history.pop() {
+            self.push_to_undo_history();
+            self.tree.slice = next_tree;
+            self.generation_count = next_generation_count;
             true
         } else {
             false
         }
     }
     fn reset(&mut self) -> bool {
-        let old_history = std::mem::replace(&mut self.history, vec![]);
-        if let Some(first_state) = old_history.into_iter().next() {
-            self.tree.slice = first_state;
+        while self.undo_history.len() > 1 {
+            self.redo_history.push(self.undo_history.pop().unwrap());
+        }
+        if let Some((first_tree, first_generation_count)) = self.undo_history.pop() {
+            self.tree.slice = first_tree;
+            self.generation_count = first_generation_count;
             true
         } else {
             false

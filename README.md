@@ -153,7 +153,7 @@ impl Dim for Dim1D {
 }
 ```
 
-Isn't that much nicer? It's much more general, at least Now we can also convert between them; for example, the following trait `impl` would allow converting between `NdVec<BigInt>` and `NdVec<isize>` using `std::convert::From` and `std::convert::TryInto`:
+Isn't that much nicer? It's much more general, at least. Now we can also convert between them; for example, the following trait `impl` would allow converting between `NdVec<BigInt>` and `NdVec<isize>` using `std::convert::From` and `std::convert::TryInto`:
 
 ```rust
 impl<T1, T2> From<NdVec<T1>> for NdVec<T2> where T1: From<T2> { ... }

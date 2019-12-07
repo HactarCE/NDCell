@@ -12,16 +12,13 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 ## Short-term to-do list
 
 - [x] Render 2D grids
-    + [ ] ... at any power-of-2 zoom level
-    + [ ] ... at 60 FPS
+    + [x] ... at any power-of-2 zoom level
+    + [x] ... at 60 FPS
         * [x] Render grid separately from cells
         * [x] Skip empty nodes
         * [x] Render in 256x256 chunks
-        * [ ] Skip empty chunks (implemented, but disabled to make sure other optimizations work)
-        * [ ] Cache chunk textures between frames (i.e. only re-render what is needed)
-        * [ ] Multithread rendering? should be possible
-        * [ ] LoD rendering? (render chunks at lower resolution initially, then
-          improve resolution on the next frame)
+        * [x] Skip empty chunks
+        * [x] Cache chunks between frames
 - [ ] Control simulation from GUI
     + [ ] Undo/reset
     + [ ] Change sim step
@@ -161,3 +158,9 @@ Isn't that much nicer? It's much more general, at least Now we can also convert 
 ```rust
 impl<T1, T2> From<NdVec<T1>> for NdVec<T2> where T1: From<T2> { ... }
 ```
+
+## Possible future optimizations
+
+- 2D rendering
+    + [ ] Multithread quadtree reading
+    + [ ] LoD rendering (render chunks at lower resolution initially, then improve resolution on the next frame)

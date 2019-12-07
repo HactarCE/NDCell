@@ -24,6 +24,7 @@ pub const TITLE: &str = "NDCell";
 /// settings/configuration.
 pub struct State {
     pub grid_view: render::GridView,
+    pub gui: gui::GuiWindows,
 }
 
 const GOSPER_GLIDER_GUN: [Dim2D; 36] = [
@@ -118,6 +119,7 @@ pub fn show_gui() {
             display.clone(),
             QuadTreeAutomaton::Automaton2D(automaton.into()),
         )),
+        gui: Default::default(),
     };
 
     // Main loop

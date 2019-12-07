@@ -5,6 +5,9 @@ use crate::automaton::space::Axis;
 use crate::ui::render::{AutomatonView2D, GridView, Viewport2D};
 use crate::ui::State;
 
+#[derive(Default)]
+pub struct WindowState {}
+
 /// Builds the main window.
 pub fn build(state: &mut State, ui: &imgui::Ui) {
     Window::new(&ImString::new(crate::ui::TITLE)).build(&ui, || {
@@ -40,5 +43,6 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
             }
             _ => unimplemented!(),
         };
+        ui.checkbox(im_str!("Simulation"), &mut state.gui.simulation.visible);
     });
 }

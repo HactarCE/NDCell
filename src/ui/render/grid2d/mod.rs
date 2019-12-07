@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 mod controller;
+mod shaders;
 mod viewport;
 mod zoom;
 

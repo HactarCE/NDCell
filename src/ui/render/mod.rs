@@ -1,6 +1,5 @@
 mod grid2d;
 mod grid3d;
-mod shaders;
 mod slice2d;
 
 use super::State;

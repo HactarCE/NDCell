@@ -16,14 +16,10 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
             if width < 100.0 {
                 width = 200.0;
             }
-            let running = &mut state.gui.simulation.running;
-            if ui.button(im_str!("Step 1 generation"), [width, 40.0]) {
-                if *running {
-                    *running = false;
-                } else {
-                    state.grid_view.push_to_history();
-                    state.grid_view.step_single();
-                }
+            if ui.button(im_str!("Step 1 generation"), [width, 40.0])
+                && !state.gui.simulation.halt_running()
+            {
+                state.grid_view.step_single(true);
             };
             ui.spacing();
             ui.spacing();
@@ -39,35 +35,32 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
             if sim_step_size <= 0 {
                 sim_step_size = 1;
             }
-            if old_sim_step_size as i32 != sim_step_size {
-                *running = false;
+            if old_sim_step_size as i32 != sim_step_size && !state.gui.simulation.halt_running() {
                 state.grid_view.set_sim_step_size(sim_step_size as usize);
             }
             if ui.button(
                 &ImString::new(format!("Step {} generations", sim_step_size)),
                 [width, 40.0],
-            ) {
-                if *running {
-                    *running = false;
-                } else {
-                    state.grid_view.push_to_history();
-                    state.grid_view.step();
-                }
+            ) && !state.gui.simulation.halt_running()
+            {
+                state.grid_view.step(true);
             }
             ui.spacing();
             ui.spacing();
-            if ui.button(
-                if *running {
-                    im_str!("Stop")
-                } else {
-                    im_str!("Start")
-                },
-                [width, 60.0],
-            ) {
-                if !*running {
+            {
+                let running = &mut state.gui.simulation.running;
+                if ui.button(
+                    if *running {
+                        im_str!("Stop")
+                    } else {
+                        im_str!("Start")
+                    },
+                    [width, 60.0],
+                ) && !state.gui.simulation.halt_running()
+                {
                     state.grid_view.push_to_history();
+                    state.gui.simulation.running = true;
                 }
-                *running = !*running;
             }
             ui.spacing();
             ui.spacing();
@@ -75,24 +68,36 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
             ui.spacing();
             ui.spacing();
             let button_width = (width - 20.0) / 2.0;
-            if ui.button(im_str!("Undo"), [button_width, 60.0]) {
-                *running = false;
+            if ui.button(im_str!("Undo"), [button_width, 60.0])
+                && !state.gui.simulation.halt_running()
+            {
                 state.grid_view.undo();
             }
             ui.same_line(button_width + 20.0);
-            if ui.button(im_str!("Redo"), [button_width, 60.0]) {
-                *running = false;
+            if ui.button(im_str!("Redo"), [button_width, 60.0])
+                && !state.gui.simulation.halt_running()
+            {
                 state.grid_view.redo();
             }
             ui.spacing();
             ui.spacing();
-            if ui.button(im_str!("Reset"), [width, 40.0]) {
+            if ui.button(im_str!("Reset"), [width, 40.0]) && !state.gui.simulation.halt_running() {
                 state.grid_view.reset();
             }
 
-            if *running {
-                state.grid_view.step();
+            if state.gui.simulation.running {
+                state.grid_view.step(false);
             }
         })
+    }
+}
+
+impl WindowState {
+    /// Halts the simulation if it is running and returns whether it was
+    /// running.
+    fn halt_running(&mut self) -> bool {
+        let ret = self.running;
+        self.running = false;
+        ret
     }
 }

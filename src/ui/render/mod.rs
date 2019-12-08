@@ -32,15 +32,15 @@ impl GridView {
             _ => unimplemented!(),
         }
     }
-    pub fn step(&mut self) {
+    pub fn step(&mut self, record_in_history: bool) {
         match self {
-            GridView::Grid2D(render_state) => render_state.automaton.step(),
+            GridView::Grid2D(render_state) => render_state.automaton.step(record_in_history),
             _ => unimplemented!(),
         }
     }
-    pub fn step_single(&mut self) {
+    pub fn step_single(&mut self, record_in_history: bool) {
         match self {
-            GridView::Grid2D(render_state) => render_state.automaton.step_single(),
+            GridView::Grid2D(render_state) => render_state.automaton.step_single(record_in_history),
             _ => unimplemented!(),
         }
     }

@@ -144,24 +144,24 @@ impl<C: CellType> NdSimulate for QuadTreeAutomaton<C> {
             Self::Automaton6D(inner) => inner.get_ndim(),
         }
     }
-    fn step(&mut self) {
+    fn step(&mut self, record_in_history: bool) {
         match self {
-            Self::Automaton1D(inner) => inner.step(),
-            Self::Automaton2D(inner) => inner.step(),
-            Self::Automaton3D(inner) => inner.step(),
-            Self::Automaton4D(inner) => inner.step(),
-            Self::Automaton5D(inner) => inner.step(),
-            Self::Automaton6D(inner) => inner.step(),
+            Self::Automaton1D(inner) => inner.step(record_in_history),
+            Self::Automaton2D(inner) => inner.step(record_in_history),
+            Self::Automaton3D(inner) => inner.step(record_in_history),
+            Self::Automaton4D(inner) => inner.step(record_in_history),
+            Self::Automaton5D(inner) => inner.step(record_in_history),
+            Self::Automaton6D(inner) => inner.step(record_in_history),
         }
     }
-    fn step_single(&mut self) {
+    fn step_single(&mut self, record_in_history: bool) {
         match self {
-            Self::Automaton1D(inner) => inner.step_single(),
-            Self::Automaton2D(inner) => inner.step_single(),
-            Self::Automaton3D(inner) => inner.step_single(),
-            Self::Automaton4D(inner) => inner.step_single(),
-            Self::Automaton5D(inner) => inner.step_single(),
-            Self::Automaton6D(inner) => inner.step_single(),
+            Self::Automaton1D(inner) => inner.step_single(record_in_history),
+            Self::Automaton2D(inner) => inner.step_single(record_in_history),
+            Self::Automaton3D(inner) => inner.step_single(record_in_history),
+            Self::Automaton4D(inner) => inner.step_single(record_in_history),
+            Self::Automaton5D(inner) => inner.step_single(record_in_history),
+            Self::Automaton6D(inner) => inner.step_single(record_in_history),
         }
     }
     fn push_to_undo_history(&mut self) {

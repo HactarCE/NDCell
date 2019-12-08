@@ -37,13 +37,11 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                             match virtual_keycode {
                                 // Handle spacebar press.
                                 Some(VirtualKeyCode::Space) => {
-                                    grid.automaton.step_single();
-                                    state.grid_view.push_to_history();
+                                    grid.automaton.step_single(true);
                                 }
                                 // Handle tab key press.
                                 Some(VirtualKeyCode::Tab) => {
-                                    grid.automaton.step();
-                                    state.grid_view.push_to_history();
+                                    grid.automaton.step(true);
                                 }
                                 // Handle zooming out.
                                 Some(VirtualKeyCode::Subtract)

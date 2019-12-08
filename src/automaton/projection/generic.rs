@@ -13,9 +13,9 @@ pub trait NdSimulate {
     /// an explanation.
     fn get_ndim(&self) -> usize;
     /// Advances one variable-size (depending on `step_size`) step into the simulation.
-    fn step(&mut self);
+    fn step(&mut self, record_in_history: bool);
     /// Advances a single step into the simulation.
-    fn step_single(&mut self);
+    fn step_single(&mut self, record_in_history: bool);
     /// Saves the current state in the undo history.
     fn push_to_undo_history(&mut self);
     /// Saves the current state in the redo history.
@@ -83,11 +83,17 @@ impl<C: CellType, D: Dim, P: NdProjectionInfo<D>> NdSimulate for NdAutomaton<C, 
     fn get_ndim(&self) -> usize {
         D::NDIM
     }
-    fn step(&mut self) {
+    fn step(&mut self, record_in_history: bool) {
+        if record_in_history {
+            self.push_to_undo_history();
+        }
         self.sim.step(&mut self.tree);
         self.generation_count += self.sim.get_step_size();
     }
-    fn step_single(&mut self) {
+    fn step_single(&mut self, record_in_history: bool) {
+        if record_in_history {
+            self.push_to_undo_history();
+        }
         self.sim.step_single(&mut self.tree);
         self.generation_count += 1;
     }

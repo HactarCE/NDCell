@@ -12,7 +12,4 @@ impl AutomatonView2D {
             self.viewport.zoom_out();
         }
     }
-    pub fn step(&mut self) {
-        self.automaton.step();
-    }
 }

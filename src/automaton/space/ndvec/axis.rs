@@ -44,7 +44,7 @@ impl From<usize> for Axis {
             3 => Axis::W,
             4 => Axis::U,
             5 => Axis::V,
-            _ => panic!("Axes above 6 are not supported"),
+            _ => panic!("Dimensions above 6 are not supported"),
         }
     }
 }

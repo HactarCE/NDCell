@@ -4,8 +4,10 @@ use super::*;
 /// the number of dimensions something has.
 ///
 /// This is basically exactly the same as ndarray's Dimension trait, except it
-/// uses isize instead of usize (which is crucial for this application).
-pub trait Dim: Debug + Clone + Copy + Default + Eq + Hash {
+/// uses isize instead of usize (which is crucial for this application). Similar
+/// to ndarray's Dimension trait, this trait should not and cannot be
+/// implemented outside of this crate.
+pub trait Dim: Debug + Clone + Copy + Default + Eq + Hash + private::Sealed {
     /// The number of dimensions (number of axes).
     const NDIM: usize;
 
@@ -139,4 +141,17 @@ impl Dim for Dim6D {
     fn origin() -> Self {
         [0; Self::NDIM]
     }
+}
+
+// Make Dim a "sealed trait" https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
+mod private {
+    use super::*;
+
+    pub trait Sealed {}
+    impl Sealed for Dim1D {}
+    impl Sealed for Dim2D {}
+    impl Sealed for Dim3D {}
+    impl Sealed for Dim4D {}
+    impl Sealed for Dim5D {}
+    impl Sealed for Dim6D {}
 }

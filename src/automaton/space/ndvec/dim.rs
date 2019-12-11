@@ -37,6 +37,11 @@ pub trait Dim: Debug + Clone + Copy + Default + Eq + Hash + private::Sealed {
 
     /// Returns the coordinates of the origin (i.e. all zeros).
     fn origin() -> Self;
+
+    /// Returns true if the given axis belongs to this dimensionality.
+    fn contains(axis: Axis) -> bool {
+        (axis as usize) < Self::NDIM
+    }
 }
 
 /// A basic 1D vector type.

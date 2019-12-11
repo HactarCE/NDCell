@@ -14,8 +14,10 @@ pub use slice3d::SliceProjection3D;
 pub struct NdProjection<C: CellType, D: Dim, P: Dim>(Box<dyn NdProjector<C, D, P>>);
 impl<C: CellType, D: Dim, P: Dim> Clone for NdProjection<C, D, P> {
     fn clone(&self) -> Self {
-        let params = self.0.get_params();
-        Self(params.try_into().expect("Failed to clone projection"))
+        self.0
+            .get_params()
+            .try_into()
+            .expect("Failed to clone projection")
     }
 }
 impl<C: CellType, D: Dim, P: Dim> NdProjection<C, D, P> {
@@ -38,9 +40,9 @@ pub enum ProjectionParams {
     Slice(NdVecEnum, AxesSelectEnum),
 }
 
-impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for ProjectionParams {
+impl<'a, C: CellType, D: Dim, P: Dim> TryInto<NdProjection<C, D, P>> for ProjectionParams {
     type Error = NdProjectionError;
-    fn try_into(self) -> Result<Box<dyn NdProjector<C, D, P>>, Self::Error> {
+    fn try_into(self) -> Result<NdProjection<C, D, P>, Self::Error> {
         // This method is a little Sketchy™; there's a lot of pointer (Box)
         // casting using std::mem::transmute(), using my own runtime value
         // checking instead of Rust's compile-time type checking. Although all
@@ -50,7 +52,7 @@ impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for
                 // Check that D = P.
                 if D::NDIM == P::NDIM {
                     let ret: Box<dyn NdProjector<C, D, D>> = Box::new(SimpleProjection);
-                    Ok(unsafe { std::mem::transmute(ret) })
+                    Ok(NdProjection(unsafe { std::mem::transmute(ret) }))
                 } else {
                     Err(NdProjectionError::WrongProjectedDim)
                 }
@@ -67,7 +69,7 @@ impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for
                         if P::NDIM == 2 {
                             let ret = SliceProjection2D::new(slice_pos, h, v);
                             let ret: Box<dyn NdProjector<C, D, Dim2D>> = Box::new(ret);
-                            Ok(unsafe { std::mem::transmute(ret) })
+                            Ok(NdProjection(unsafe { std::mem::transmute(ret) }))
                         } else {
                             Err(NdProjectionError::WrongProjectedDim)
                         }

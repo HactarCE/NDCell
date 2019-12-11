@@ -5,6 +5,7 @@
 
 use enum_dispatch::enum_dispatch;
 use std::cell::RefCell;
+use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -34,7 +35,7 @@ struct NdAutomaton<D: Dim, P: Dim> {
     pub tree: NdTree<u8, D>,
     pub sim: Rc<RefCell<Simulation<u8, D>>>,
     pub generations: usize,
-    projection: NdProjection<u8, D, P>,
+    pub projection: NdProjection<u8, D, P>,
 }
 
 trait NdAutomatonTrait<P: Dim> {
@@ -44,6 +45,8 @@ trait NdAutomatonTrait<P: Dim> {
     fn step(&mut self);
     fn step_single(&mut self);
     fn get_projected_tree(&self) -> NdTree<u8, P>;
+    fn get_projection_params(&self) -> ProjectionParams;
+    fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError>;
 }
 impl<D: Dim, P: Dim> NdAutomatonTrait<P> for NdAutomaton<D, P> {
     fn get_ndim(&self) -> usize {
@@ -67,6 +70,13 @@ impl<D: Dim, P: Dim> NdAutomatonTrait<P> for NdAutomaton<D, P> {
     }
     fn get_projected_tree(&self) -> NdTree<u8, P> {
         self.projection.project(&self.tree)
+    }
+    fn get_projection_params(&self) -> ProjectionParams {
+        self.projection.get_params()
+    }
+    fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError> {
+        self.projection = params.try_into()?;
+        Ok(())
     }
 }
 

@@ -11,7 +11,7 @@ impl<C: CellType, D: Dim> NdProjector<C, D, Dim2D> for SliceProjection2D<D> {
     fn project(&self, _tree: &NdTree<C, D>) -> NdTree<C, Dim2D> {
         unimplemented!()
     }
-    fn get_params(self) -> ProjectionParams {
+    fn get_params(&self) -> ProjectionParams {
         ProjectionParams::Slice(
             self.slice_pos.into(),
             AxesSelectEnum::Axes2D {

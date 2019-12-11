@@ -33,15 +33,40 @@ enum Automaton<P: Dim> {
 struct NdAutomaton<D: Dim, P: Dim> {
     pub tree: NdTree<u8, D>,
     pub sim: Rc<RefCell<Simulation<u8, D>>>,
+    pub generations: usize,
     projection: NdProjection<u8, D, P>,
 }
 
 trait NdAutomatonTrait<P: Dim> {
-    fn get_ndim() -> usize;
+    fn get_ndim(&self) -> usize;
+    fn set_step_size(&mut self, step_size: usize);
+    fn get_step_size(&self) -> usize;
+    fn step(&mut self);
+    fn step_single(&mut self);
+    fn get_projected_tree(&self) -> NdTree<u8, P>;
 }
 impl<D: Dim, P: Dim> NdAutomatonTrait<P> for NdAutomaton<D, P> {
-    fn get_ndim() -> usize {
+    fn get_ndim(&self) -> usize {
         D::NDIM
+    }
+    fn set_step_size(&mut self, step_size: usize) {
+        self.sim.borrow_mut().set_step_size(step_size);
+    }
+    fn get_step_size(&self) -> usize {
+        self.sim.borrow().get_step_size()
+    }
+    fn step(&mut self) {
+        let mut sim = self.sim.borrow_mut();
+        sim.step(&mut self.tree);
+        self.generations += sim.get_step_size();
+    }
+    fn step_single(&mut self) {
+        let mut sim = self.sim.borrow_mut();
+        sim.step_single(&mut self.tree);
+        self.generations += 1;
+    }
+    fn get_projected_tree(&self) -> NdTree<u8, P> {
+        self.projection.project(&self.tree)
     }
 }
 

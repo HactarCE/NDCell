@@ -11,26 +11,25 @@ pub use simple::SimpleProjection;
 pub use slice2d::SliceProjection2D;
 pub use slice3d::SliceProjection3D;
 
-pub struct NdProjection<C: CellType, D: Dim, P: Dim> {
-    params: ProjectionParams,
-    projector: Box<dyn NdProjector<C, D, P>>,
-}
+pub struct NdProjection<C: CellType, D: Dim, P: Dim>(Box<dyn NdProjector<C, D, P>>);
 impl<C: CellType, D: Dim, P: Dim> Clone for NdProjection<C, D, P> {
     fn clone(&self) -> Self {
-        Self {
-            params: self.params.clone(),
-            projector: self
-                .params
-                .clone()
-                .try_into()
-                .expect("Failed to clone projection"),
-        }
+        let params = self.0.get_params();
+        Self(params.try_into().expect("Failed to clone projection"))
+    }
+}
+impl<C: CellType, D: Dim, P: Dim> NdProjection<C, D, P> {
+    pub fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P> {
+        self.0.project(tree)
+    }
+    pub fn get_params(&self) -> ProjectionParams {
+        self.0.get_params()
     }
 }
 
 pub trait NdProjector<C: CellType, D: Dim, P: Dim> {
     fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P>;
-    fn get_params(self) -> ProjectionParams;
+    fn get_params(&self) -> ProjectionParams;
 }
 
 #[derive(Debug, Clone)]

@@ -245,20 +245,20 @@ mod tests {
     use std::collections::HashMap;
 
     fn assert_ndtree_valid(
-        expected_cells: &HashMap<Vec2D, u8>,
-        ndtree: &mut NdTree2D<u8>,
+        expected_cells: &HashMap<Vec2D, bool>,
+        ndtree: &mut NdTree2D<bool>,
         cells_to_check: &Vec<Vec2D>,
     ) {
         assert_eq!(
             expected_cells
                 .iter()
-                .filter(|(_, &cell_state)| cell_state != 0)
+                .filter(|(_, &cell_state)| cell_state)
                 .count(),
             ndtree.get_root().population
         );
         for pos in cells_to_check {
             assert_eq!(
-                *expected_cells.get(pos).unwrap_or(&0),
+                *expected_cells.get(pos).unwrap_or(&false),
                 ndtree.get_cell(*pos)
             );
         }
@@ -273,7 +273,7 @@ mod tests {
         /// Tests set_cell() and get_cell() by comparing against a HashMap.
         #[test]
         fn test_ndtree_set_get(
-            cells_to_set: Vec<(Vec2D, u8)>,
+            cells_to_set: Vec<(Vec2D, bool)>,
             mut cells_to_get: Vec<Vec2D>,
         ) {
             let mut ndtree = NdTree::new();
@@ -326,8 +326,10 @@ mod tests {
             y_radius in 0..20isize,
         ) {
             let mut ndtree = NdTree::new();
-            for (pos, state) in &cells_to_set {
-                ndtree.set_cell(*pos, *state);
+            let mut hashmap = HashMap::new();
+            for (pos, state) in cells_to_set {
+                hashmap.insert(pos, state);
+                ndtree.set_cell(pos, state);
             }
             let half_diag = NdVec::from([x_radius, y_radius]);
             let rect = NdRect::span(center - half_diag, center + half_diag);
@@ -339,7 +341,7 @@ mod tests {
                 || slice.root.len() < rect.len(Axis::X) * 4
                 || slice.root.len() < rect.len(Axis::Y) * 4
             );
-            for (pos, state) in cells_to_set {
+            for (pos, state) in hashmap {
                 if slice_rect.contains(pos) {
                     if let Some(cell_state) = slice.get_cell(pos) {
                         assert_eq!(state, cell_state);

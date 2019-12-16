@@ -34,14 +34,14 @@ pub type NdTreeSlice5D<C> = NdTreeSlice<C, Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
 pub type NdTreeSlice6D<C> = NdTreeSlice<C, Dim6D>;
 
-impl fmt::Display for NdTreeSlice<bool, Dim2D> {
+impl fmt::Display for NdTreeSlice<u8, Dim2D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let rect = self.rect();
         let mut line = String::with_capacity(rect.len(Axis::X) * 2 - 1);
         for y in rect.axis_range(Axis::Y).rev() {
             line.clear();
             for x in rect.axis_range(Axis::X) {
-                line.push(if self[[x, y].into()] { '#' } else { '.' });
+                line.push(if self[[x, y].into()] == 0 { '.' } else { '#' });
                 line.push(' ');
             }
             line.pop();

@@ -18,7 +18,7 @@ pub fn ceil_log_base_2(mut n: usize) -> usize {
 /// Computes the quotient n / d, rounded up.
 pub fn ceil_division(n: isize, d: isize) -> isize {
     let mut ret = n / d;
-    if n % d != 0 {
+    if n % d != 0 && ret >= 0 {
         ret += 1;
     }
     ret

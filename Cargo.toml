@@ -6,6 +6,9 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+debug = true
+
 [lib]
 name = "ndcell_lib"
 path = "src/lib.rs"
@@ -15,6 +18,7 @@ name = "ndcell"
 path = "src/main.rs"
 
 [dependencies]
+enum_dispatch = "0.2"
 glium = "0.25"
 imgui = "0.2"
 imgui-glium-renderer = "0.2"

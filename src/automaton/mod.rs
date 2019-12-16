@@ -4,10 +4,8 @@
 //! automata.
 
 use enum_dispatch::enum_dispatch;
-use std::cell::RefCell;
 use std::convert::TryInto;
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 pub mod projection;
 pub mod rule;
@@ -19,26 +17,8 @@ pub use rule::{DummyRule, Rule};
 pub use simulation::*;
 pub use space::*;
 
-#[enum_dispatch(NdAutomatonTrait)]
-#[derive(Clone)]
-enum Automaton<P: Dim> {
-    Automaton1D(NdAutomaton<Dim1D, P>),
-    Automaton2D(NdAutomaton<Dim2D, P>),
-    Automaton3D(NdAutomaton<Dim3D, P>),
-    Automaton4D(NdAutomaton<Dim4D, P>),
-    Automaton5D(NdAutomaton<Dim5D, P>),
-    Automaton6D(NdAutomaton<Dim6D, P>),
-}
-
-#[derive(Clone)]
-struct NdAutomaton<D: Dim, P: Dim> {
-    pub tree: NdTree<u8, D>,
-    pub sim: Rc<RefCell<Simulation<u8, D>>>,
-    pub generations: usize,
-    pub projection: NdProjection<u8, D, P>,
-}
-
-trait NdAutomatonTrait<P: Dim> {
+#[enum_dispatch]
+pub trait NdProjectedAutomatonTrait<P: Dim> {
     fn get_ndim(&self) -> usize;
     fn set_step_size(&mut self, step_size: usize);
     fn get_step_size(&self) -> usize;
@@ -47,37 +27,124 @@ trait NdAutomatonTrait<P: Dim> {
     fn get_projected_tree(&self) -> NdTree<u8, P>;
     fn get_projection_params(&self) -> ProjectionParams;
     fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError>;
+    fn get_population(&self) -> usize;
+    fn get_generation_count(&self) -> usize;
 }
-impl<D: Dim, P: Dim> NdAutomatonTrait<P> for NdAutomaton<D, P> {
+
+#[enum_dispatch(NdProjectedAutomatonTrait)]
+#[derive(Clone)]
+pub enum ProjectedAutomaton<P: Dim> {
+    From1D(NdProjectedAutomaton<Dim1D, P>),
+    From2D(NdProjectedAutomaton<Dim2D, P>),
+    From3D(NdProjectedAutomaton<Dim3D, P>),
+    From4D(NdProjectedAutomaton<Dim4D, P>),
+    From5D(NdProjectedAutomaton<Dim5D, P>),
+    From6D(NdProjectedAutomaton<Dim6D, P>),
+}
+impl<P: Dim> Default for ProjectedAutomaton<P> {
+    fn default() -> Self {
+        let inner = Box::new(NdProjectedAutomaton::<P, P>::default());
+        match P::NDIM {
+            1 => Self::From1D(unsafe {
+                *std::mem::transmute::<
+                    Box<NdProjectedAutomaton<P, P>>,
+                    Box<NdProjectedAutomaton<Dim1D, P>>,
+                >(inner)
+            }),
+            2 => Self::From2D(unsafe {
+                *std::mem::transmute::<
+                    Box<NdProjectedAutomaton<P, P>>,
+                    Box<NdProjectedAutomaton<Dim2D, P>>,
+                >(inner)
+            }),
+            3 => Self::From3D(unsafe {
+                *std::mem::transmute::<
+                    Box<NdProjectedAutomaton<P, P>>,
+                    Box<NdProjectedAutomaton<Dim3D, P>>,
+                >(inner)
+            }),
+            4 => Self::From4D(unsafe {
+                *std::mem::transmute::<
+                    Box<NdProjectedAutomaton<P, P>>,
+                    Box<NdProjectedAutomaton<Dim4D, P>>,
+                >(inner)
+            }),
+            5 => Self::From5D(unsafe {
+                *std::mem::transmute::<
+                    Box<NdProjectedAutomaton<P, P>>,
+                    Box<NdProjectedAutomaton<Dim5D, P>>,
+                >(inner)
+            }),
+            6 => Self::From6D(unsafe {
+                *std::mem::transmute::<
+                    Box<NdProjectedAutomaton<P, P>>,
+                    Box<NdProjectedAutomaton<Dim6D, P>>,
+                >(inner)
+            }),
+            _ => panic!("Dimensions above 6 are not supported"),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct NdProjectedAutomaton<D: Dim, P: Dim> {
+    pub automaton: NdAutomaton<D>,
+    pub projection: NdProjection<u8, D, P>,
+}
+impl<D: Dim> From<NdAutomaton<D>> for NdProjectedAutomaton<D, D> {
+    fn from(automaton: NdAutomaton<D>) -> Self {
+        Self {
+            automaton,
+            projection: Default::default(),
+        }
+    }
+}
+impl<D: Dim> Default for NdProjectedAutomaton<D, D> {
+    fn default() -> Self {
+        Self::from(NdAutomaton::default())
+    }
+}
+impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P> {
     fn get_ndim(&self) -> usize {
         D::NDIM
     }
     fn set_step_size(&mut self, step_size: usize) {
-        self.sim.borrow_mut().set_step_size(step_size);
+        self.automaton.sim.set_step_size(step_size);
     }
     fn get_step_size(&self) -> usize {
-        self.sim.borrow().get_step_size()
+        self.automaton.sim.get_step_size()
     }
     fn step(&mut self) {
-        let mut sim = self.sim.borrow_mut();
-        sim.step(&mut self.tree);
-        self.generations += sim.get_step_size();
+        self.automaton.sim.step(&mut self.automaton.tree);
+        self.automaton.generations += self.automaton.sim.get_step_size();
     }
     fn step_single(&mut self) {
-        let mut sim = self.sim.borrow_mut();
-        sim.step_single(&mut self.tree);
-        self.generations += 1;
+        self.automaton.sim.step_single(&mut self.automaton.tree);
+        self.automaton.generations += 1;
     }
     fn get_projected_tree(&self) -> NdTree<u8, P> {
-        self.projection.project(&self.tree)
+        self.projection.project(&self.automaton.tree)
     }
     fn get_projection_params(&self) -> ProjectionParams {
         self.projection.get_params()
     }
     fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError> {
-        self.projection = params.try_into()?;
+        self.projection = NdProjection(params.try_into()?);
         Ok(())
     }
+    fn get_population(&self) -> usize {
+        self.automaton.tree.get_root().population
+    }
+    fn get_generation_count(&self) -> usize {
+        self.automaton.generations
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct NdAutomaton<D: Dim> {
+    pub tree: NdTree<u8, D>,
+    pub sim: Simulation<u8, D>,
+    pub generations: usize,
 }
 
 #[cfg(test)]

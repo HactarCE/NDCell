@@ -34,6 +34,7 @@ impl<C: CellType, D: Dim, P: Dim> NdProjection<C, D, P> {
 
 pub trait NdProjector<C: CellType, D: Dim, P: Dim> {
     fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P>;
+    fn overwrite_projected(&self, destination: &mut NdTree<C, D>, source: &NdTree<C, P>);
     fn get_params(&self) -> ProjectionParams;
 }
 

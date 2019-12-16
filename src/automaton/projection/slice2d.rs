@@ -11,6 +11,9 @@ impl<C: CellType, D: Dim> NdProjector<C, D, Dim2D> for SliceProjection2D<D> {
     fn project(&self, _tree: &NdTree<C, D>) -> NdTree<C, Dim2D> {
         unimplemented!()
     }
+    fn overwrite_projected(&self, destination: &mut NdTree<C, D>, source: &NdTree<C, Dim2D>) {
+        unimplemented!()
+    }
     fn get_params(&self) -> ProjectionParams {
         ProjectionParams::Slice(
             self.slice_pos.into(),

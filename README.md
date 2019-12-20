@@ -13,6 +13,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 - [x] Render 2D grids
     + [x] ... at any power-of-2 zoom level
+    + [ ] ... at _any_ zoom level
     + [x] ... at 60 FPS
         * [x] Render grid separately from cells
         * [x] Skip empty nodes
@@ -169,3 +170,5 @@ impl<D: Dim, T1, T2> From<NdVec<D, T1>> for NdVec<D, T2> where T1: From<T2> { ..
 - 2D rendering
     + [ ] Multithread quadtree reading
     + [ ] LoD rendering (render chunks at lower resolution initially, then improve resolution on the next frame)
+- Simulation
+    + [ ] Multithread HashLife

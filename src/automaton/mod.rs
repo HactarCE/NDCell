@@ -85,6 +85,15 @@ impl<P: Dim> Default for ProjectedAutomaton<P> {
         }
     }
 }
+impl<D: Dim, P: Dim> From<NdAutomaton<D>> for ProjectedAutomaton<P>
+where
+    NdProjectedAutomaton<D, P>: From<NdAutomaton<D>>,
+    Self: From<NdProjectedAutomaton<D, P>>,
+{
+    fn from(automaton: NdAutomaton<D>) -> Self {
+        Self::from(NdProjectedAutomaton::from(automaton))
+    }
+}
 
 #[derive(Clone)]
 pub struct NdProjectedAutomaton<D: Dim, P: Dim> {

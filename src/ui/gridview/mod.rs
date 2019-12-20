@@ -1,18 +1,18 @@
 use enum_dispatch::enum_dispatch;
 use std::rc::Rc;
 
-mod grid2d;
-mod grid3d;
+mod view2d;
+mod view3d;
 
 use crate::automaton::{Dim, Dim2D, Dim3D, NdProjectedAutomaton, ProjectedAutomaton};
-pub use grid2d::{GridView2D, Viewport2D};
-pub use grid3d::GridView3D;
+pub use view2d::{GridView2D, Viewport2D};
+pub use view3d::GridView3D;
 
 /// The trait implemented by GridView by dispatching to the implementation of
 /// the GridView2D or GridView3D within.
 #[enum_dispatch]
 pub trait GridViewTrait {
-    fn draw(&mut self, display: &Rc<glium::Display>, target: &mut glium::Frame);
+    fn draw(&mut self, target: &mut glium::Frame);
     fn get_population(&self) -> usize;
     fn get_generation_count(&self) -> usize;
 }
@@ -24,15 +24,24 @@ pub enum GridView {
     View3D(GridView3D),
 }
 
-/// Conversions from a ProjectedAutomaton to a GridView.
-impl From<ProjectedAutomaton<Dim2D>> for GridView {
-    fn from(automaton: ProjectedAutomaton<Dim2D>) -> Self {
-        Self::View2D(GridView2D::from(automaton))
+impl GridView {
+    pub fn new_2d<T>(display: Rc<glium::Display>, automaton: T) -> Self
+    where
+        ProjectedAutomaton<Dim2D>: From<T>,
+    {
+        Self::View2D(GridView2D::new(
+            display,
+            ProjectedAutomaton::from(automaton),
+        ))
     }
-}
-impl From<ProjectedAutomaton<Dim3D>> for GridView {
-    fn from(automaton: ProjectedAutomaton<Dim3D>) -> Self {
-        Self::View3D(GridView3D::from(automaton))
+    pub fn new_3d<T>(display: Rc<glium::Display>, automaton: T) -> Self
+    where
+        ProjectedAutomaton<Dim3D>: From<T>,
+    {
+        Self::View3D(GridView3D::new(
+            display,
+            ProjectedAutomaton::from(automaton),
+        ))
     }
 }
 

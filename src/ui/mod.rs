@@ -114,7 +114,7 @@ pub fn show_gui() {
     automaton.tree = grid;
     automaton.sim = Simulation::new(Rc::new(rule::LIFE), 1024);
     let mut state = State {
-        grid_view: GridView::from(NdProjectedAutomaton::from(automaton)),
+        grid_view: GridView::new_2d(display.clone(), automaton),
         gui: Default::default(),
     };
 
@@ -151,7 +151,7 @@ pub fn show_gui() {
         gui::build_windows(&mut state, &ui);
 
         let mut target = display.draw();
-        state.grid_view.draw(&display, &mut target);
+        state.grid_view.draw(&mut target);
 
         platform.prepare_render(&ui, &window);
         let draw_data = ui.render();

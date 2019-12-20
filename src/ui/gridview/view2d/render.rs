@@ -2,9 +2,7 @@ use super::*;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use std::collections::HashMap;
-use std::rc::Rc;
 
-use crate::automaton::projection::*;
 use crate::automaton::space::*;
 pub use viewport::Viewport2D;
 use zoom::Zoom2D;
@@ -22,6 +20,17 @@ struct PointVertex {
     pos: [f32; 2],
 }
 glium::implement_vertex!(PointVertex, pos);
+impl<T> From<T> for PointVertex
+where
+    Vec2D: From<T>,
+{
+    fn from(pos: T) -> Self {
+        let vec = Vec2D::from(pos);
+        Self {
+            pos: [*vec.x() as f32, *vec.y() as f32],
+        }
+    }
+}
 
 /// The color of the grid. TODO: make this configurable
 const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
@@ -46,75 +55,109 @@ const CELL_SQUARE_VERTS: [PointVertex; 4] = [
     PointVertex { pos: [1.0, 1.0] },
 ];
 
+const GRIDLINE_BATCH_SIZE: usize = 256;
+
 type CellVertexChunk = [CellVertex; CHUNK_SIZE * CHUNK_SIZE];
 type CellVertexChunk2D = [[CellVertex; CHUNK_SIZE]; CHUNK_SIZE];
 type ChunkCache<C> = HashMap<NdCachedNode<C, Dim2D>, (CellVertexChunk, bool), NodeHasher>;
 
-pub struct RenderCache {
-    cell_chunk_glsl_program: glium::Program,
-    gridline_glsl_program: glium::Program,
-    cell_chunk_vb: glium::VertexBuffer<CellVertex>,
-    cell_point_vb: glium::VertexBuffer<PointVertex>,
-    cell_square_vb: glium::VertexBuffer<PointVertex>,
-
-    pub display: Rc<glium::Display>,
-    cached_chunks: ChunkCache<u8>,
+#[derive(Default)]
+pub(super) struct RenderCache {
+    chunks: ChunkCache<u8>,
 }
-impl RenderCache {
-    pub fn new(display: Rc<glium::Display>) -> Self {
-        Self {
-            cell_chunk_glsl_program: shaders::compile_cell_program(&*display),
-            gridline_glsl_program: shaders::compile_lines_program(&*display),
-            cell_chunk_vb: glium::VertexBuffer::empty_dynamic(&*display, CHUNK_SIZE * CHUNK_SIZE)
-                .expect("Failed to create vertex buffer"),
-            cell_point_vb: glium::VertexBuffer::new(&*display, &CELL_POINT_VERTS)
-                .expect("Failed to create vertex buffer"),
-            cell_square_vb: glium::VertexBuffer::new(&*display, &CELL_SQUARE_VERTS)
-                .expect("Failed to create vertex buffer"),
 
-            display,
-            cached_chunks: HashMap::default(),
+pub(super) struct Shaders {
+    cell_chunk: glium::Program,
+    gridlines: glium::Program,
+}
+impl Shaders {
+    pub fn compile(display: &glium::Display) -> Self {
+        Self {
+            cell_chunk: shaders::compile_cell_program(display),
+            gridlines: shaders::compile_lines_program(display),
         }
     }
 }
 
-impl GridView2D {
-    /// Draw the grid of cells that appear in the viewport.
-    ///
-    /// This algorithm is based loosely on the one used in Golly.
-    pub fn draw_internal(&mut self, target: &mut glium::Frame) {
-        // // Clear the screen. (This should not be necessary.)
-        // target.clear_color_srgb(1.0, 0.0, 1.0, 1.0);
+pub(super) struct VBOs {
+    cell_chunk: glium::VertexBuffer<CellVertex>,
+    cell_point: glium::VertexBuffer<PointVertex>,
+    cell_square: glium::VertexBuffer<PointVertex>,
+    gridlines: glium::VertexBuffer<PointVertex>,
+}
+impl VBOs {
+    pub fn new(display: &glium::Display) -> Self {
+        Self {
+            cell_chunk: glium::VertexBuffer::empty_dynamic(display, CHUNK_SIZE * CHUNK_SIZE)
+                .expect("Failed to create vertex buffer"),
+            cell_point: glium::VertexBuffer::new(display, &CELL_POINT_VERTS)
+                .expect("Failed to create vertex buffer"),
+            cell_square: glium::VertexBuffer::new(display, &CELL_SQUARE_VERTS)
+                .expect("Failed to create vertex buffer"),
+            gridlines: glium::VertexBuffer::empty_dynamic(display, GRIDLINE_BATCH_SIZE)
+                .expect("Failed to create vertex buffer"),
+        }
+    }
+}
 
-        // Find the number of cells that fit horizontally (cells_h) and
-        // vertically (cells_v) across the screen.
-        let pixels_per_cell = self.viewport.zoom.pixels_per_cell();
+pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
+    let mut rip = RenderInProgress::new(grid_view, target);
+    rip.draw_cells();
+    rip.draw_gridlines();
+}
+
+pub(super) struct RenderInProgress<'a> {
+    g: &'a mut GridView2D,
+    target: &'a mut glium::Frame,
+    view_matrix: [[f32; 4]; 4],
+    slice: NdTreeSlice<u8, Dim2D>,
+    visible_rect: Rect2D,
+    chunk_visible_rect: Rect2D,
+}
+impl<'a> RenderInProgress<'a> {
+    pub fn new(g: &'a mut GridView2D, target: &'a mut glium::Frame) -> Self {
         let (pixels_h, pixels_v) = target.get_dimensions();
-        let cells_h = pixels_h as f32 / pixels_per_cell;
-        let cells_v = pixels_v as f32 / pixels_per_cell;
-
-        // Find the lower and upper bounds on the cell positions that need to be
-        // displayed.
-        let half_visible_diagonal = Vec2D::from([
-            (cells_h.ceil() / 2.0) as isize,
-            (cells_v.ceil() / 2.0) as isize,
-        ]);
-        let global_lower_bound = self.viewport.pos - half_visible_diagonal;
-        let global_upper_bound = self.viewport.pos + half_visible_diagonal;
         let cells_per_chunk =
-            CHUNK_SIZE as isize * self.viewport.zoom.cells_per_render_cell() as isize;
-        // Round bounds to nearest chunk boundary.
-        let global_chunk_lower_bound = global_lower_bound.div_euclid(cells_per_chunk);
-        let global_chunk_upper_bound = global_upper_bound.div_euclid(cells_per_chunk);
-        let global_chunk_visible_rect =
-            Rect2D::span(global_chunk_lower_bound, global_chunk_upper_bound);
-        let global_visible_rect =
-            (global_chunk_visible_rect * cells_per_chunk).offset_min_max(0, cells_per_chunk - 1);
+            CHUNK_SIZE as isize * g.viewport.zoom.cells_per_render_cell() as isize;
+
+        // Compute the rectangular area of the whole grid that is visible.
+        let mut global_visible_rect: Rect2D;
+        {
+            // Find the number of cells that fit horizontally (cells_h) and
+            // vertically (cells_v) across the screen.
+            let pixels_per_cell = g.viewport.zoom.pixels_per_cell();
+            let cells_h = pixels_h as f32 / pixels_per_cell;
+            let cells_v = pixels_v as f32 / pixels_per_cell;
+
+            // Find the lower and upper bounds on the cell positions that need to be
+            // displayed.
+            let half_visible_diagonal = Vec2D::from([
+                (cells_h.ceil() / 2.0) as isize,
+                (cells_v.ceil() / 2.0) as isize,
+            ]);
+            let lower_bound = g.viewport.pos - half_visible_diagonal;
+            let upper_bound = g.viewport.pos + half_visible_diagonal;
+            global_visible_rect = Rect2D::span(lower_bound, upper_bound);
+        }
+
+        let global_chunk_visible_rect: Rect2D;
+        {
+            // Convert that rectangle into chunk coordinates, taking the smallest
+            // rectangle of chunks that contains everything visible.
+            let lower_chunk_bound = global_visible_rect.min().div_euclid(cells_per_chunk);
+            let upper_chunk_bound = global_visible_rect.max().div_euclid(cells_per_chunk);
+            global_chunk_visible_rect = Rect2D::span(lower_chunk_bound, upper_chunk_bound);
+
+            // Expand the rectangle of visible cells to encompass all visible chunks.
+            let lower_bound = lower_chunk_bound * cells_per_chunk;
+            let upper_bound = upper_chunk_bound * cells_per_chunk + (cells_per_chunk - 1);
+            global_visible_rect = Rect2D::span(lower_bound, upper_bound);
+        }
 
         // Find the smallest quadtree node that will cover the screen, creating
         // a new node by combining four others if need be. (This is the strategy
         // that Golly uses when rendering.)
-        let slice = self
+        let slice = g
             .automaton
             .get_projected_tree()
             .get_slice_containing(global_visible_rect);
@@ -126,16 +169,16 @@ impl GridView2D {
         let visible_rect = global_visible_rect - slice.rect().min();
 
         // Offset with respect to render cells
-        let screen_space_center = slice.rect().min() - self.viewport.pos;
+        let screen_space_center = slice.rect().min() - g.viewport.pos;
         let mut x_offset =
-            *screen_space_center.x() as f32 / self.viewport.zoom.cells_per_render_cell();
+            *screen_space_center.x() as f32 / g.viewport.zoom.cells_per_render_cell();
         let mut y_offset =
-            *screen_space_center.y() as f32 / self.viewport.zoom.cells_per_render_cell();
-        let pixels_per_render_cell = self.viewport.zoom.pixels_per_render_cell() as f32;
-        if let Zoom2D::Close(_) = self.viewport.zoom {
+            *screen_space_center.y() as f32 / g.viewport.zoom.cells_per_render_cell();
+        let pixels_per_render_cell = g.viewport.zoom.pixels_per_render_cell() as f32;
+        if let Zoom2D::Close(_) = g.viewport.zoom {
             // Offset within a cell (round to nearest pixel).
-            x_offset -= self.viewport.x_offset;
-            y_offset -= self.viewport.y_offset;
+            x_offset -= g.viewport.x_offset;
+            y_offset -= g.viewport.y_offset;
             x_offset = (x_offset * pixels_per_render_cell).round() / pixels_per_render_cell;
             y_offset = (y_offset * pixels_per_render_cell).round() / pixels_per_render_cell;
         }
@@ -154,69 +197,66 @@ impl GridView2D {
             [x_offset, y_offset, 0.0, 1.0],
         ];
 
-        // Determine how many layers down we need to go for each chunk.
-        let slice_layer = slice.root.layer;
-        let layer_at_chunk = self.viewport.zoom.node_layer() + CHUNK_POW;
-
-        self.draw_cell_chunks(
+        Self {
+            g,
             target,
             view_matrix,
-            &slice.root,
-            Vec2D::origin(),
-            slice_layer - layer_at_chunk,
+            slice,
+            visible_rect,
             chunk_visible_rect,
-        );
-        // Remove elements from the cache that we did not use this frame, and
-        // mark the rest as being unused (to prepare for the next frame).
-        self.render_cache
-            .as_mut()
-            .unwrap()
-            .cached_chunks
-            .retain(|_, (_, ref mut keep)| {
-                let ret = *keep;
-                *keep = false;
-                ret
-            });
-
-        if self.viewport.zoom.pixels_per_cell() >= 4.0 {
-            self.draw_gridlines(target, view_matrix, visible_rect);
         }
     }
 
+    /// Draw the cells that appear in the viewport.
+    pub fn draw_cells(&mut self) {
+        // Clear the screen. (TODO: This should not be necessary)
+        self.target.clear_color_srgb(1.0, 0.0, 1.0, 1.0);
+
+        // Determine how many layers down we need to go for each chunk.
+        let slice_layer = self.slice.root.layer;
+        let layer_at_chunk = self.g.viewport.zoom.node_layer() + CHUNK_POW;
+
+        self.draw_cell_chunks(
+            &self.slice.root.clone(),
+            Vec2D::origin(),
+            slice_layer - layer_at_chunk,
+        );
+        // Remove elements from the cache that we did not use this frame, and
+        // mark the rest as being unused (to prepare for the next frame).
+        self.g.render_cache.chunks.retain(|_, (_, ref mut keep)| {
+            let ret = *keep;
+            *keep = false;
+            ret
+        });
+    }
     fn draw_cell_chunks(
         &mut self,
-        target: &mut glium::Frame,
-        view_matrix: [[f32; 4]; 4],
         root_node: &NdCachedNode<u8, Dim2D>,
         root_node_offset: Vec2D,
         layers_remaining: usize,
-        chunk_visible_rect: Rect2D,
     ) {
         if layers_remaining == 0 {
             // Populate the VBO for this chunk.
-            {
-                let render_cache = self.render_cache.as_mut().unwrap();
-                render_cache.cell_chunk_vb.write(Self::get_chunk_vertices(
-                    &mut render_cache.cached_chunks,
-                    root_node,
-                ));
-            }
+            self.g.vbos.cell_chunk.write(Self::get_chunk_vertices(
+                &mut self.g.render_cache,
+                root_node,
+            ));
 
             // Decide whether to draw points or squares.
-            let model_vb;
             let model_indices;
+            let model_vb;
             let draw_parameters;
-            if self.viewport.zoom.pixels_per_render_cell() > 4 {
+            if self.g.viewport.zoom.pixels_per_render_cell() > 4 {
                 // Render rectangles
-                model_vb = &self.render_cache.as_ref().unwrap().cell_square_vb;
                 model_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
+                model_vb = &self.g.vbos.cell_square;
                 draw_parameters = Default::default();
             } else {
                 // Render points.
-                model_vb = &self.render_cache.as_ref().unwrap().cell_point_vb;
                 model_indices = glium::index::NoIndices(PrimitiveType::Points);
+                model_vb = &self.g.vbos.cell_point;
                 draw_parameters = glium::DrawParameters {
-                    point_size: Some(self.viewport.zoom.pixels_per_render_cell() as f32),
+                    point_size: Some(self.g.viewport.zoom.pixels_per_render_cell() as f32),
                     ..Default::default()
                 };
             }
@@ -225,21 +265,13 @@ impl GridView2D {
             let chunk_x = *root_node_offset.x() as f32;
             let chunk_y = *root_node_offset.y() as f32;
 
-            target
+            self.target
                 .draw(
-                    (
-                        model_vb,
-                        self.render_cache
-                            .as_ref()
-                            .unwrap()
-                            .cell_chunk_vb
-                            .per_instance()
-                            .unwrap(),
-                    ),
+                    (model_vb, self.g.vbos.cell_chunk.per_instance().unwrap()),
                     &model_indices,
-                    &self.render_cache.as_ref().unwrap().cell_chunk_glsl_program,
+                    &self.g.shaders.cell_chunk,
                     &uniform! {
-                        matrix: view_matrix,
+                        matrix: self.view_matrix,
                         chunk_pos: [chunk_x, chunk_y],
                         chunk_size: CHUNK_SIZE as f32,
                         color1: DEAD_COLOR,
@@ -260,31 +292,21 @@ impl GridView2D {
                         child_node_offset,
                         child_node_offset + (1 << layers_remaining) - 1,
                     );
-                    if !chunk_visible_rect.intersects(child_node_rect) {
-                        continue;
-                    }
-                    self.draw_cell_chunks(
-                        target,
-                        view_matrix,
-                        &child_node,
-                        child_node_offset,
-                        layers_remaining - 1,
-                        chunk_visible_rect,
-                    );
+                    self.draw_cell_chunks(&child_node, child_node_offset, layers_remaining - 1);
                 } else {
                     panic!();
                 }
             }
         }
     }
-
-    // Get a Vec of vertices for all the cells in the given chunk, making it if
-    // necessary.
-    fn get_chunk_vertices<'a>(
-        cached_chunks: &'a mut ChunkCache<u8>,
+    // Get a Vec of vertices for all the cells in the given chunk, creating a
+    // new one if necessary.
+    fn get_chunk_vertices<'b>(
+        render_cache: &'b mut RenderCache,
         node: &NdCachedNode<u8, Dim2D>,
-    ) -> &'a CellVertexChunk {
-        &cached_chunks
+    ) -> &'b CellVertexChunk {
+        &render_cache
+            .chunks
             .entry(node.clone())
             .and_modify(|(_, ref mut keep)| {
                 *keep = true;
@@ -295,13 +317,13 @@ impl GridView2D {
                 // Adding cells is easier with a 2D array, but the price of
                 // convenience if unsafety; we must use std::mem::transmute() to
                 // flatten it before putting it in a vertex buffer.
-                let flattened_vertices = unsafe { std::mem::transmute(vertices) };
+                let flattened_vertices =
+                    unsafe { std::mem::transmute::<CellVertexChunk2D, CellVertexChunk>(vertices) };
                 (flattened_vertices, true)
             })
             .0
     }
-
-    /// Make a CellVertex object for each cell (or pixel-level sub-node) in the
+    /// Make a CellVertex for each cell (or pixel-level sub-node) in the
     /// given node.
     fn add_node_vertices(
         vertices: &mut CellVertexChunk2D,
@@ -339,7 +361,7 @@ impl GridView2D {
             }
         }
     }
-
+    /// Make a CellVertex for the given pixel-level cell or sub-node.
     fn add_vertex(vertices: &mut CellVertexChunk2D, pos: Vec2D, branch: &NdTreeBranch<u8, Dim2D>) {
         let state;
         match branch {
@@ -353,66 +375,53 @@ impl GridView2D {
         vertices[cell_y][cell_x] = vertex;
     }
 
-    fn draw_gridlines(
-        &self,
-        target: &mut glium::Frame,
-        view_matrix: [[f32; 4]; 4],
-        visible_rect: Rect2D,
-    ) {
-        // Make the VBO and indices for the gridlines.
-        let gridline_vertices = self.make_gridline_vertices(visible_rect);
-        let gridlines_vb = glium::VertexBuffer::new(
-            &*self.render_cache.as_ref().unwrap().display,
-            &gridline_vertices,
-        )
-        .expect("Failed to create vertex buffer");
+    /// Draw the gridlines that appear in the viewport.
+    pub fn draw_gridlines(&mut self) {
+        // Don't bother drawing gridlines if we're zoomed out far enough.
+        if self.g.viewport.zoom.pixels_per_cell() < 4.0 {
+            return;
+        }
+        // Generate a pair of vertices for each gridline.
         let gridlines_indices = glium::index::NoIndices(PrimitiveType::LinesList);
-
-        // Draw gridlines.
-        target
-            .draw(
-                &gridlines_vb,
-                &gridlines_indices,
-                &self.render_cache.as_ref().unwrap().gridline_glsl_program,
-                &uniform! {
-                    matrix: view_matrix,
-                    lines_color: GRID_COLOR,
-                },
-                &glium::DrawParameters {
-                    line_width: Some(1.0),
-                    ..Default::default()
-                },
-            )
-            .expect("Failed to draw gridlines");
-    }
-
-    fn make_gridline_vertices(&self, visible_rect: Rect2D) -> Vec<PointVertex> {
-        let mut ret =
-            Vec::with_capacity((visible_rect.len(Axis::X) + visible_rect.len(Axis::Y)) * 2);
-        let min = visible_rect.min();
-        let max = visible_rect.max();
-        for x in visible_rect.axis_range(Axis::X) {
-            // if x.rem_euclid(CHUNK_SIZE as isize) != 0 {
-            //     continue;
-            // }
-            ret.push(PointVertex {
-                pos: [x as f32, *min.y() as f32],
-            });
-            ret.push(PointVertex {
-                pos: [x as f32, *max.y() as f32],
-            });
+        let mut gridline_vertices = Vec::with_capacity(
+            (self.visible_rect.len(Axis::X) + self.visible_rect.len(Axis::Y)) * 2,
+        );
+        let min = self.visible_rect.min();
+        let max = self.visible_rect.max();
+        let min_x = *min.x();
+        let min_y = *min.y();
+        let max_x = *max.x();
+        let max_y = *max.y();
+        for x in self.visible_rect.axis_range(Axis::X) {
+            gridline_vertices.push(PointVertex::from([x, min_y]));
+            gridline_vertices.push(PointVertex::from([x, max_y]));
         }
-        for y in visible_rect.axis_range(Axis::Y) {
-            // if y.rem_euclid(CHUNK_SIZE as isize) != 0 {
-            //     continue;
-            // }
-            ret.push(PointVertex {
-                pos: [*min.x() as f32, y as f32],
-            });
-            ret.push(PointVertex {
-                pos: [*max.x() as f32, y as f32],
-            });
+        for y in self.visible_rect.axis_range(Axis::Y) {
+            gridline_vertices.push(PointVertex::from([min_x, y]));
+            gridline_vertices.push(PointVertex::from([max_x, y]));
         }
-        ret
+
+        // Draw the gridlines in batches, because the VBO might not be able to
+        // hold all the points at once.
+        for batch in gridline_vertices.chunks(GRIDLINE_BATCH_SIZE) {
+            // Put the data in the VBO.
+            self.g.vbos.gridlines.write(batch);
+            // Draw gridlines.
+            self.target
+                .draw(
+                    &self.g.vbos.gridlines,
+                    &gridlines_indices,
+                    &self.g.shaders.gridlines,
+                    &uniform! {
+                        matrix: self.view_matrix,
+                        lines_color: GRID_COLOR,
+                    },
+                    &glium::DrawParameters {
+                        line_width: Some(1.0),
+                        ..Default::default()
+                    },
+                )
+                .expect("Failed to draw gridlines");
+        }
     }
 }

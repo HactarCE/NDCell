@@ -1,12 +1,8 @@
+use super::*;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use std::collections::HashMap;
 use std::rc::Rc;
-
-mod controller;
-mod shaders;
-mod viewport;
-mod zoom;
 
 use crate::automaton::projection::*;
 use crate::automaton::space::*;
@@ -52,12 +48,9 @@ const CELL_SQUARE_VERTS: [PointVertex; 4] = [
 
 type CellVertexChunk = [CellVertex; CHUNK_SIZE * CHUNK_SIZE];
 type CellVertexChunk2D = [[CellVertex; CHUNK_SIZE]; CHUNK_SIZE];
-type ChunkCache<C> = HashMap<QuadTreeNode<C>, (CellVertexChunk, bool), NodeHasher>;
+type ChunkCache<C> = HashMap<NdCachedNode<C, Dim2D>, (CellVertexChunk, bool), NodeHasher>;
 
-pub struct AutomatonView2D {
-    pub automaton: QuadTreeAutomaton<bool>,
-    pub viewport: Viewport2D,
-
+pub struct RenderCache {
     cell_chunk_glsl_program: glium::Program,
     gridline_glsl_program: glium::Program,
     cell_chunk_vb: glium::VertexBuffer<CellVertex>,
@@ -65,15 +58,11 @@ pub struct AutomatonView2D {
     cell_square_vb: glium::VertexBuffer<PointVertex>,
 
     pub display: Rc<glium::Display>,
-
-    cached_chunks: ChunkCache<bool>,
+    cached_chunks: ChunkCache<u8>,
 }
-impl AutomatonView2D {
-    pub fn new(display: Rc<glium::Display>, automaton: QuadTreeAutomaton<bool>) -> Self {
+impl RenderCache {
+    pub fn new(display: Rc<glium::Display>) -> Self {
         Self {
-            automaton,
-            viewport: Viewport2D::default(),
-
             cell_chunk_glsl_program: shaders::compile_cell_program(&*display),
             gridline_glsl_program: shaders::compile_lines_program(&*display),
             cell_chunk_vb: glium::VertexBuffer::empty_dynamic(&*display, CHUNK_SIZE * CHUNK_SIZE)
@@ -84,15 +73,16 @@ impl AutomatonView2D {
                 .expect("Failed to create vertex buffer"),
 
             display,
-
             cached_chunks: HashMap::default(),
         }
     }
+}
 
+impl GridView2D {
     /// Draw the grid of cells that appear in the viewport.
     ///
     /// This algorithm is based loosely on the one used in Golly.
-    pub fn draw(&mut self, target: &mut glium::Frame) {
+    pub fn draw_internal(&mut self, target: &mut glium::Frame) {
         // // Clear the screen. (This should not be necessary.)
         // target.clear_color_srgb(1.0, 0.0, 1.0, 1.0);
 
@@ -124,16 +114,19 @@ impl AutomatonView2D {
         // Find the smallest quadtree node that will cover the screen, creating
         // a new node by combining four others if need be. (This is the strategy
         // that Golly uses when rendering.)
-        let slice = self.automaton.get_slice_containing(global_visible_rect);
+        let slice = self
+            .automaton
+            .get_projected_tree()
+            .get_slice_containing(global_visible_rect);
 
         // Offset global_visible_rect and global_chunk_visible_rect to be relative to the
         // slice.
         let chunk_visible_rect =
-            global_chunk_visible_rect - slice.get_rect().min().div_euclid(cells_per_chunk);
-        let visible_rect = global_visible_rect - slice.get_rect().min();
+            global_chunk_visible_rect - slice.rect().min().div_euclid(cells_per_chunk);
+        let visible_rect = global_visible_rect - slice.rect().min();
 
         // Offset with respect to render cells
-        let screen_space_center = slice.get_rect().min() - self.viewport.pos;
+        let screen_space_center = slice.rect().min() - self.viewport.pos;
         let mut x_offset =
             *screen_space_center.x() as f32 / self.viewport.zoom.cells_per_render_cell();
         let mut y_offset =
@@ -162,27 +155,31 @@ impl AutomatonView2D {
         ];
 
         // Determine how many layers down we need to go for each chunk.
-        let slice_layer = slice.get_root().get_layer();
+        let slice_layer = slice.root.layer;
         let layer_at_chunk = self.viewport.zoom.node_layer() + CHUNK_POW;
 
         self.draw_cell_chunks(
             target,
             view_matrix,
-            slice.get_root(),
+            &slice.root,
             Vec2D::origin(),
             slice_layer - layer_at_chunk,
             chunk_visible_rect,
         );
         // Remove elements from the cache that we did not use this frame, and
         // mark the rest as being unused (to prepare for the next frame).
-        self.cached_chunks.retain(|_, (_, ref mut keep)| {
-            let ret = *keep;
-            *keep = false;
-            ret
-        });
+        self.render_cache
+            .as_mut()
+            .unwrap()
+            .cached_chunks
+            .retain(|_, (_, ref mut keep)| {
+                let ret = *keep;
+                *keep = false;
+                ret
+            });
 
         if self.viewport.zoom.pixels_per_cell() >= 4.0 {
-            self.draw_gridlines(&*self.display, target, view_matrix, visible_rect);
+            self.draw_gridlines(target, view_matrix, visible_rect);
         }
     }
 
@@ -190,17 +187,20 @@ impl AutomatonView2D {
         &mut self,
         target: &mut glium::Frame,
         view_matrix: [[f32; 4]; 4],
-        root_node: QuadTreeNode<bool>,
+        root_node: &NdCachedNode<u8, Dim2D>,
         root_node_offset: Vec2D,
         layers_remaining: usize,
         chunk_visible_rect: Rect2D,
     ) {
         if layers_remaining == 0 {
             // Populate the VBO for this chunk.
-            self.cell_chunk_vb.write(Self::get_chunk_vertices(
-                &mut self.cached_chunks,
-                &root_node,
-            ));
+            {
+                let render_cache = self.render_cache.as_mut().unwrap();
+                render_cache.cell_chunk_vb.write(Self::get_chunk_vertices(
+                    &mut render_cache.cached_chunks,
+                    root_node,
+                ));
+            }
 
             // Decide whether to draw points or squares.
             let model_vb;
@@ -208,12 +208,12 @@ impl AutomatonView2D {
             let draw_parameters;
             if self.viewport.zoom.pixels_per_render_cell() > 4 {
                 // Render rectangles
-                model_vb = &self.cell_square_vb;
+                model_vb = &self.render_cache.as_ref().unwrap().cell_square_vb;
                 model_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
                 draw_parameters = Default::default();
             } else {
                 // Render points.
-                model_vb = &self.cell_point_vb;
+                model_vb = &self.render_cache.as_ref().unwrap().cell_point_vb;
                 model_indices = glium::index::NoIndices(PrimitiveType::Points);
                 draw_parameters = glium::DrawParameters {
                     point_size: Some(self.viewport.zoom.pixels_per_render_cell() as f32),
@@ -227,9 +227,17 @@ impl AutomatonView2D {
 
             target
                 .draw(
-                    (model_vb, self.cell_chunk_vb.per_instance().unwrap()),
+                    (
+                        model_vb,
+                        self.render_cache
+                            .as_ref()
+                            .unwrap()
+                            .cell_chunk_vb
+                            .per_instance()
+                            .unwrap(),
+                    ),
                     &model_indices,
-                    &self.cell_chunk_glsl_program,
+                    &self.render_cache.as_ref().unwrap().cell_chunk_glsl_program,
                     &uniform! {
                         matrix: view_matrix,
                         chunk_pos: [chunk_x, chunk_y],
@@ -245,7 +253,7 @@ impl AutomatonView2D {
                 .expect("Failed to draw cell chunk");
         } else {
             for branch_idx in 0..4 {
-                if let QuadTreeBranch::Node(child_node) = root_node.get_branch(branch_idx) {
+                if let NdTreeBranch::Node(child_node) = &root_node.branches[branch_idx] {
                     let branch_offset = ndtree_branch_offset(layers_remaining, branch_idx);
                     let child_node_offset = root_node_offset + branch_offset;
                     let child_node_rect = Rect2D::span(
@@ -258,7 +266,7 @@ impl AutomatonView2D {
                     self.draw_cell_chunks(
                         target,
                         view_matrix,
-                        child_node,
+                        &child_node,
                         child_node_offset,
                         layers_remaining - 1,
                         chunk_visible_rect,
@@ -273,8 +281,8 @@ impl AutomatonView2D {
     // Get a Vec of vertices for all the cells in the given chunk, making it if
     // necessary.
     fn get_chunk_vertices<'a>(
-        cached_chunks: &'a mut ChunkCache<bool>,
-        node: &QuadTreeNode<bool>,
+        cached_chunks: &'a mut ChunkCache<u8>,
+        node: &NdCachedNode<u8, Dim2D>,
     ) -> &'a CellVertexChunk {
         &cached_chunks
             .entry(node.clone())
@@ -297,24 +305,24 @@ impl AutomatonView2D {
     /// given node.
     fn add_node_vertices(
         vertices: &mut CellVertexChunk2D,
-        node: &QuadTreeNode<bool>,
+        node: &NdCachedNode<u8, Dim2D>,
         pos_in_chunk: Vec2D,
         layers_remaining: usize,
     ) {
         // Skip this node if there are no cells in it.
-        if node.get_population() == 0 {
+        if node.population == 0 {
             return;
         }
         for branch_idx in 0..4 {
             let branch_offset = ndtree_branch_offset(layers_remaining, branch_idx);
             let branch_pos = pos_in_chunk + branch_offset;
-            let branch = node.get_branch(branch_idx);
+            let branch = &node.branches[branch_idx];
             match &branch {
-                QuadTreeBranch::Leaf(_) => {
+                NdTreeBranch::Leaf(_) => {
                     Self::add_vertex(vertices, branch_pos, branch);
                 }
-                QuadTreeBranch::Node(child_node) => {
-                    if child_node.get_population() == 0 {
+                NdTreeBranch::Node(child_node) => {
+                    if child_node.population == 0 {
                         continue;
                     }
                     if layers_remaining == 1 {
@@ -332,13 +340,13 @@ impl AutomatonView2D {
         }
     }
 
-    fn add_vertex(vertices: &mut CellVertexChunk2D, pos: Vec2D, branch: QuadTreeBranch<bool>) {
-        let live;
+    fn add_vertex(vertices: &mut CellVertexChunk2D, pos: Vec2D, branch: &NdTreeBranch<u8, Dim2D>) {
+        let state;
         match branch {
-            QuadTreeBranch::Leaf(cell_state) => live = cell_state,
-            QuadTreeBranch::Node(node) => live = node.get_population() != 0,
+            NdTreeBranch::Leaf(cell_state) => state = *cell_state,
+            NdTreeBranch::Node(node) => state = if node.population == 0 { 0 } else { 1 },
         };
-        let state = if live { 1 } else { 0 };
+        let state = state as u32;
         let vertex = CellVertex { state };
         let cell_x = *pos.x() as usize;
         let cell_y = *pos.y() as usize;
@@ -347,15 +355,17 @@ impl AutomatonView2D {
 
     fn draw_gridlines(
         &self,
-        display: &glium::Display,
         target: &mut glium::Frame,
         view_matrix: [[f32; 4]; 4],
         visible_rect: Rect2D,
     ) {
         // Make the VBO and indices for the gridlines.
         let gridline_vertices = self.make_gridline_vertices(visible_rect);
-        let gridlines_vb = glium::VertexBuffer::new(display, &gridline_vertices)
-            .expect("Failed to create vertex buffer");
+        let gridlines_vb = glium::VertexBuffer::new(
+            &*self.render_cache.as_ref().unwrap().display,
+            &gridline_vertices,
+        )
+        .expect("Failed to create vertex buffer");
         let gridlines_indices = glium::index::NoIndices(PrimitiveType::LinesList);
 
         // Draw gridlines.
@@ -363,7 +373,7 @@ impl AutomatonView2D {
             .draw(
                 &gridlines_vb,
                 &gridlines_indices,
-                &self.gridline_glsl_program,
+                &self.render_cache.as_ref().unwrap().gridline_glsl_program,
                 &uniform! {
                     matrix: view_matrix,
                     lines_color: GRID_COLOR,

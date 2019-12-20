@@ -1,8 +1,7 @@
 use imgui::*;
 
-use crate::automaton::projection::*;
 use crate::automaton::space::Axis;
-use crate::ui::render::{AutomatonView2D, GridView, Viewport2D};
+use crate::ui::gridview::{GridView, GridView2D, GridViewTrait, Viewport2D};
 use crate::ui::State;
 
 #[derive(Default)]
@@ -12,8 +11,14 @@ pub struct WindowState {}
 pub fn build(state: &mut State, ui: &imgui::Ui) {
     Window::new(&ImString::new(crate::ui::TITLE)).build(&ui, || {
         ui.text("Hello, world!");
+        ui.text(format!("Framerate = {} FPS", ui.io().framerate as usize));
+        ui.text(format!(
+            "Generations = {}",
+            state.grid_view.get_generation_count()
+        ));
+        ui.text(format!("Population = {}", state.grid_view.get_population()));
         match &state.grid_view {
-            GridView::Grid2D(AutomatonView2D {
+            GridView::View2D(GridView2D {
                 automaton,
                 viewport:
                     Viewport2D {
@@ -24,22 +29,13 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                     },
                 ..
             }) => {
-                ui.text(format!("Framerate = {} FPS", ui.io().framerate as usize));
                 ui.text(format!("X = {}", pos[Axis::X] as f32 + x_offset));
                 ui.text(format!("Y = {}", pos[Axis::Y] as f32 + y_offset));
-                ui.text(format!(
-                    "Generations = {}",
-                    automaton.get_generation_count()
-                ));
-                ui.text(format!(
-                    "Population = {}",
-                    automaton.get_root().get_population()
-                ));
                 ui.text(format!("Zoom = {}", zoom));
-                ui.text(format!(
-                    "Max node layer = {}",
-                    automaton.get_root().get_layer()
-                ));
+                // ui.text(format!(
+                //     "Max node layer = {}",
+                //     automaton.get_root().get_layer()
+                // ));
             }
             _ => unimplemented!(),
         };

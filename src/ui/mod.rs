@@ -9,21 +9,20 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::rc::Rc;
 use std::time::Instant;
 
+mod gridview;
 mod gui;
 mod input;
 
-mod render;
-
 use crate::automaton::*;
+use gridview::{GridView, GridViewTrait};
 
-/// The title of the program window (both the OS window, and the main imgui
-/// window).
+/// The title of the window (both the OS window, and the main imgui window).
 pub const TITLE: &str = "NDCell";
 
-/// The state of the program, including the automaton and any
-/// settings/configuration.
+/// The state of the program, including the automaton and any settings or
+/// configuration.
 pub struct State {
-    pub grid_view: render::GridView,
+    pub grid_view: GridView,
     pub gui: gui::GuiWindows,
 }
 
@@ -104,21 +103,18 @@ pub fn show_gui() {
     // Initialize cellular automaton stuff.
     let mut grid = NdTree::new();
     for &pos in GOSPER_GLIDER_GUN.into_iter() {
-        grid.set_cell(pos.into(), true);
+        grid.set_cell(pos.into(), 1);
     }
-    // grid.set_cell([3, 3].into(), true);
-    // grid.set_cell([4, 3].into(), true);
-    // grid.set_cell([5, 3].into(), true);
-    // grid.set_cell([5, 2].into(), true);
-    // grid.set_cell([4, 1].into(), true);
-    let mut automaton: NdAutomaton<bool, Dim2D, NdProjectionInfo2D<Dim2D>> = NdAutomaton::default();
+    // grid.set_cell([3, 3].into(), 1);
+    // grid.set_cell([4, 3].into(), 1);
+    // grid.set_cell([5, 3].into(), 1);
+    // grid.set_cell([5, 2].into(), 1);
+    // grid.set_cell([4, 1].into(), 1);
+    let mut automaton = NdAutomaton::default();
     automaton.tree = grid;
     automaton.sim = Simulation::new(Rc::new(rule::LIFE), 1024);
     let mut state = State {
-        grid_view: render::GridView::Grid2D(render::AutomatonView2D::new(
-            display.clone(),
-            QuadTreeAutomaton::Automaton2D(automaton.into()),
-        )),
+        grid_view: GridView::from(NdProjectedAutomaton::from(automaton)),
         gui: Default::default(),
     };
 
@@ -155,7 +151,7 @@ pub fn show_gui() {
         gui::build_windows(&mut state, &ui);
 
         let mut target = display.draw();
-        render::draw(&mut state, &mut target);
+        state.grid_view.draw(&display, &mut target);
 
         platform.prepare_render(&ui, &window);
         let draw_data = ui.render();

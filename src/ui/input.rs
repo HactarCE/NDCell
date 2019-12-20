@@ -1,14 +1,13 @@
 use glium::glutin::*;
 
-use super::render;
-use crate::automaton::NdSimulate;
+use super::gridview;
 
 pub fn handle_event(state: &mut super::State, ev: &Event) {
     match ev {
         // Handle WindowEvents.
         Event::WindowEvent { event, .. } => match &mut state.grid_view {
             // Handle input on 2D grid view.
-            render::GridView::Grid2D(grid) => match event {
+            gridview::GridView::View2D(grid) => match event {
                 WindowEvent::KeyboardInput { input, .. } => match input {
                     // Handle key press.
                     KeyboardInput {
@@ -22,14 +21,14 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                                 // Handle undo and redo.
                                 Some(VirtualKeyCode::Z) => {
                                     if modifiers.shift {
-                                        grid.automaton.redo();
+                                        // TODO redo
                                     } else {
-                                        grid.automaton.undo();
+                                        // TODO undo
                                     }
                                 }
                                 // Handle reset.
                                 Some(VirtualKeyCode::R) => {
-                                    grid.automaton.reset();
+                                    // TODO reset
                                 }
                                 _ => (),
                             }
@@ -37,32 +36,40 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                             match virtual_keycode {
                                 // Handle spacebar press.
                                 Some(VirtualKeyCode::Space) => {
-                                    grid.automaton.step_single(true);
+                                    // TODO single step with history
                                 }
                                 // Handle tab key press.
                                 Some(VirtualKeyCode::Tab) => {
-                                    grid.automaton.step(true);
+                                    // TODO step with history
                                 }
                                 // Handle zooming out.
                                 Some(VirtualKeyCode::Subtract)
                                 | Some(VirtualKeyCode::Z)
-                                | Some(VirtualKeyCode::PageDown) => grid.zoom(-1.0),
+                                | Some(VirtualKeyCode::PageDown) => {
+                                    // TODO zoom out 2x
+                                }
                                 // Handle zooming in.
                                 Some(VirtualKeyCode::Equals)
                                 | Some(VirtualKeyCode::Q)
-                                | Some(VirtualKeyCode::PageUp) => grid.zoom(1.0),
+                                | Some(VirtualKeyCode::PageUp) => {
+                                    // TODO zoom in 2x
+                                }
                                 // Handle WASD or arrow keys.
                                 Some(VirtualKeyCode::W) | Some(VirtualKeyCode::Up) => {
-                                    grid.scroll(0.0, 64.0)
+                                    // TODO scroll 64px up
+                                    // grid.scroll(0.0, 64.0)
                                 }
                                 Some(VirtualKeyCode::A) | Some(VirtualKeyCode::Left) => {
-                                    grid.scroll(-64.0, 0.0)
+                                    // TODO scroll 64px left
+                                    // grid.scroll(-64.0, 0.0)
                                 }
                                 Some(VirtualKeyCode::S) | Some(VirtualKeyCode::Down) => {
-                                    grid.scroll(0.0, -64.0)
+                                    // TODO scroll 64px down
+                                    // grid.scroll(0.0, -64.0)
                                 }
                                 Some(VirtualKeyCode::D) | Some(VirtualKeyCode::Right) => {
-                                    grid.scroll(64.0, 0.0)
+                                    // TODO scroll 64px right
+                                    // grid.scroll(64.0, 0.0)
                                 }
                                 _ => (),
                             }
@@ -74,21 +81,19 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                 },
                 WindowEvent::MouseWheel { delta, .. } => match delta {
                     MouseScrollDelta::LineDelta(dx, dy) => {
-                        // grid.zoom(*dy / 2.0);
-                        // println!("line delta");
-                        grid.scroll(*dx * 50.0, *dy * 50.0);
+                        // TODO scroll 50x
+                        // grid.scroll(*dx * 50.0, *dy * 50.0);
                     }
                     MouseScrollDelta::PixelDelta(dpi::LogicalPosition { x: dx, y: dy }) => {
-                        // grid.zoom(*dy as f32 / 2.0);
-                        // println!("pixel delta");
-                        grid.scroll(*dx as f32 * 50.0, *dy as f32 * 50.0);
+                        // TODO scroll 50x
+                        // grid.scroll(*dx as f32 * 50.0, *dy as f32 * 50.0);
                     }
                 },
                 _ => (),
             },
 
             // Handle input on 3D grid view.
-            render::GridView::Grid3D(_grid) => match event {
+            gridview::GridView::View3D(_grid) => match event {
                 _ => (),
             },
         },

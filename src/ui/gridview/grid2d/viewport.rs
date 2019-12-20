@@ -1,5 +1,7 @@
 use super::*;
 
+// TODO rewrite zoom
+
 #[derive(Debug, Default)]
 pub struct Viewport2D {
     /// Cell position that is at the center of the viewport.

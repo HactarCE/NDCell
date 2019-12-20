@@ -1,5 +1,7 @@
 use super::*;
 
+// TODO probably delete this
+
 impl AutomatonView2D {
     pub fn scroll(&mut self, dx: f32, dy: f32) {
         self.viewport.scroll(dx, dy);

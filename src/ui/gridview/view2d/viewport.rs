@@ -6,11 +6,9 @@ use super::*;
 pub struct Viewport2D {
     /// Cell position that is at the center of the viewport.
     pub pos: Vec2D,
-    /// Offset along the X axis (0..1). This is always rounded to the nearest
-    /// number of whole pixels when rendering.
+    /// Offset along the X axis (0..1).
     pub x_offset: f32,
-    /// Offset along the Y axis (0..1). This is always rounded to the nearest
-    /// number of whole pixels when rendering.
+    /// Offset along the Y axis (0..1).
     pub y_offset: f32,
     /// The zoom level.
     pub zoom: Zoom2D,

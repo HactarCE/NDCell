@@ -124,7 +124,7 @@ pub(super) struct RenderInProgress<'a> {
     target: &'a mut glium::Frame,
     cell_render_dimensions: (u32, u32),
     render_cell_layer: usize,
-    render_cell_pixels: usize,
+    render_cell_pixels: f32,
     view_matrix: [[f32; 4]; 4],
     slice: NdTreeSlice<u8, Dim2D>,
     visible_rect: Rect2D,
@@ -136,7 +136,7 @@ impl<'a> RenderInProgress<'a> {
         // drawn. At integer scale powers (i.e. scale factors that are a power
         // of 2) we render at the same resolution as the screen; at any other
         // scale, we render at a higher resolution and downscale the result.
-        let effective_zoom = g.viewport.zoom.floor();
+        let effective_zoom = g.viewport.zoom;
         let pixels_h: u32;
         let pixels_v: u32;
         {
@@ -148,12 +148,14 @@ impl<'a> RenderInProgress<'a> {
 
         // Compute the lowest layer that must be visited, which is the layer of
         // a "render cell," a node that is rendered as one unit.
-        let render_cell_layer: usize = std::cmp::max(0, -effective_zoom.power() as isize) as usize;
+        let render_cell_layer: usize =
+            std::cmp::max(0, -effective_zoom.power().floor() as isize) as usize;
         // Compute the width of cells represented by each "render cell."
         let render_cell_cells: usize = 1 << render_cell_layer;
         // Compute the width of pixels for each "render cell."
-        let render_cell_pixels: usize = effective_zoom.pixels_per_cell().ceil() as usize;
+        let render_cell_pixels: f32 = effective_zoom.pixels_per_cell();
 
+        // Compute the width of pixels for each chunk.
         let cell_chunk_size: isize = CHUNK_SIZE as isize * render_cell_cells as isize;
 
         // Compute the rectangular area of the whole grid that is visible.
@@ -211,11 +213,11 @@ impl<'a> RenderInProgress<'a> {
         // Comupte offset within a cell (round to nearest pixel).
         x_offset -= g.viewport.x_offset;
         y_offset -= g.viewport.y_offset;
-        x_offset = (x_offset * render_cell_pixels as f32).round() / render_cell_pixels as f32;
-        y_offset = (y_offset * render_cell_pixels as f32).round() / render_cell_pixels as f32;
+        // x_offset = (x_offset * render_cell_pixels).round() / render_cell_pixels;
+        // y_offset = (y_offset * render_cell_pixels).round() / render_cell_pixels;
         // Multiply by 2 because the OpenGL screen space ranged from -1 to +1.
-        let x_scale = render_cell_pixels as f32 / pixels_h as f32 * 2.0;
-        let y_scale = render_cell_pixels as f32 / pixels_v as f32 * 2.0;
+        let x_scale = render_cell_pixels / pixels_h as f32 * 2.0;
+        let y_scale = render_cell_pixels / pixels_v as f32 * 2.0;
 
         // Convert offset from render-cell-space to screen-space.
         x_offset *= x_scale;
@@ -319,7 +321,7 @@ impl<'a> RenderInProgress<'a> {
             let model_indices;
             let model_vb;
             let draw_parameters;
-            if self.render_cell_pixels > 4 {
+            if self.render_cell_pixels > 4.0 {
                 // Render rectangles
                 model_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
                 model_vb = &self.g.vbos.cell_square;
@@ -329,7 +331,7 @@ impl<'a> RenderInProgress<'a> {
                 model_indices = glium::index::NoIndices(PrimitiveType::Points);
                 model_vb = &self.g.vbos.cell_point;
                 draw_parameters = glium::DrawParameters {
-                    point_size: Some(self.render_cell_pixels as f32),
+                    point_size: Some(self.render_cell_pixels),
                     ..Default::default()
                 };
             }
@@ -456,7 +458,7 @@ impl<'a> RenderInProgress<'a> {
     /// Draw the gridlines that appear in the viewport.
     pub fn draw_gridlines(&mut self) {
         // Don't bother drawing gridlines if we're zoomed out far enough.
-        if self.g.viewport.zoom.pixels_per_cell() < 4.0 {
+        if self.g.viewport.zoom.pixels_per_cell() < 8.0 {
             return;
         }
         // Generate a pair of vertices for each gridline.

@@ -141,7 +141,7 @@ impl<'a> RenderInProgress<'a> {
         let pixels_v: u32;
         {
             let (target_h, target_v) = target.get_dimensions();
-            let mut scale_factor = effective_zoom / g.viewport.zoom;
+            let scale_factor = effective_zoom / g.viewport.zoom;
             pixels_h = (target_h as f32 * scale_factor) as u32;
             pixels_v = (target_v as f32 * scale_factor) as u32;
         }
@@ -244,7 +244,7 @@ impl<'a> RenderInProgress<'a> {
     /// Draw the cells that appear in the viewport.
     pub fn draw_cells(&mut self) {
         let (pixels_h, pixels_v) = self.cell_render_dimensions;
-        let cells_texture = glium::framebuffer::RenderBuffer::new(
+        let render_buffer = glium::framebuffer::RenderBuffer::new(
             &*self.g.display,
             glium::texture::UncompressedFloatFormat::U8U8U8,
             pixels_h,
@@ -252,11 +252,11 @@ impl<'a> RenderInProgress<'a> {
         )
         .expect("Failed to create render buffer");
         let mut cells_fbo =
-            glium::framebuffer::SimpleFrameBuffer::new(&*self.g.display, &cells_texture)
+            glium::framebuffer::SimpleFrameBuffer::new(&*self.g.display, &render_buffer)
                 .expect("Failed to create frame buffer");
 
-        // Clear the screen. (TODO: This should not be necessary)
-        self.target.clear_color_srgb(1.0, 0.0, 1.0, 1.0);
+        // Clear the frame buffer. (TODO: This should not be necessary)
+        cells_fbo.clear_color_srgb(1.0, 0.0, 1.0, 1.0);
 
         // Determine how many layers down we need to go for each chunk.
         let slice_layer = self.slice.root.layer;

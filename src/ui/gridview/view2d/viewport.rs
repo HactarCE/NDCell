@@ -16,10 +16,14 @@ pub struct Viewport2D {
 
 impl Viewport2D {
     /// Scroll the viewport by the given number of pixels along each axis.
-    pub fn scroll(&mut self, mut dx: f32, mut dy: f32) {
-        // Convert dx and dy from screen space into world space.
-        dx *= self.zoom.cells_per_pixel();
-        dy *= self.zoom.cells_per_pixel();
+    pub fn scroll_pixels(&mut self, mut dx: f32, mut dy: f32) {
+        self.scroll_cells(
+            dx * self.zoom.cells_per_pixel(),
+            dy * self.zoom.cells_per_pixel(),
+        );
+    }
+    /// Scroll the viewport by the given number of cells along each axis.
+    pub fn scroll_cells(&mut self, mut dx: f32, mut dy: f32) {
         // Add dx and dy.
         self.x_offset += dx;
         self.y_offset += dy;
@@ -34,9 +38,22 @@ impl Viewport2D {
         let int_dy = int_dy as isize;
         self.pos += Vec2D::from([int_dx, int_dy]);
     }
+    /// Snap to the nearest integer cell position.
+    pub fn snap_pos(&mut self) {
+        if self.x_offset >= 0.5 {
+            self.pos += Vec2D::from([1, 0]);
+        }
+        if self.y_offset >= 0.5 {
+            self.pos += Vec2D::from([0, 1]);
+        }
+        self.x_offset = 0.0;
+        self.y_offset = 0.0;
+    }
+    /// Set the zoom level.
     pub fn set_zoom(&mut self, new_zoom: Zoom2D) {
         self.zoom = new_zoom.clamp();
     }
+    /// Zoom in or out by the given factor.
     pub fn zoom_by(&mut self, factor: f32) {
         assert!(
             factor > 0.0,

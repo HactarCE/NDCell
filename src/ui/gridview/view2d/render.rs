@@ -103,6 +103,16 @@ impl VBOs {
     }
 }
 
+#[derive(Default)]
+pub(super) struct Textures {
+    cells: Option<glium::framebuffer::RenderBuffer>,
+}
+impl Textures {
+    pub fn new(_display: &glium::Display) -> Self {
+        Self::default()
+    }
+}
+
 pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
     let mut rip = RenderInProgress::new(grid_view, target);
     rip.draw_cells();
@@ -112,7 +122,7 @@ pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
 pub(super) struct RenderInProgress<'a> {
     g: &'a mut GridView2D,
     target: &'a mut glium::Frame,
-    // cells_texture: // TODO
+    cell_render_dimensions: (u32, u32),
     render_cell_layer: usize,
     render_cell_pixels: usize,
     view_matrix: [[f32; 4]; 4],
@@ -122,16 +132,28 @@ pub(super) struct RenderInProgress<'a> {
 }
 impl<'a> RenderInProgress<'a> {
     pub fn new(g: &'a mut GridView2D, target: &'a mut glium::Frame) -> Self {
+        // Compute the dimensions of the renderbuffer on which the cells will be
+        // drawn. At integer scale powers (i.e. scale factors that are a power
+        // of 2) we render at the same resolution as the screen; at any other
+        // scale, we render at a higher resolution and downscale the result.
+        let effective_zoom = g.viewport.zoom.floor();
+        let pixels_h: u32;
+        let pixels_v: u32;
+        {
+            let (target_h, target_v) = target.get_dimensions();
+            let mut scale_factor = effective_zoom / g.viewport.zoom;
+            pixels_h = (target_h as f32 * scale_factor) as u32;
+            pixels_v = (target_v as f32 * scale_factor) as u32;
+        }
+
         // Compute the lowest layer that must be visited, which is the layer of
         // a "render cell," a node that is rendered as one unit.
-        let render_cell_layer: usize =
-            std::cmp::max(0, -g.viewport.zoom.power().ceil() as isize) as usize;
+        let render_cell_layer: usize = std::cmp::max(0, -effective_zoom.power() as isize) as usize;
         // Compute the width of cells represented by each "render cell."
         let render_cell_cells: usize = 1 << render_cell_layer;
         // Compute the width of pixels for each "render cell."
-        let render_cell_pixels: usize = g.viewport.zoom.ceil().pixels_per_cell().ceil() as usize;
+        let render_cell_pixels: usize = effective_zoom.pixels_per_cell().ceil() as usize;
 
-        let (pixels_h, pixels_v) = target.get_dimensions();
         let cell_chunk_size: isize = CHUNK_SIZE as isize * render_cell_cells as isize;
 
         // Compute the rectangular area of the whole grid that is visible.
@@ -139,15 +161,15 @@ impl<'a> RenderInProgress<'a> {
         {
             // Find the number of cells that fit horizontally (cells_h) and
             // vertically (cells_v) across the screen.
-            let pixels_per_cell = g.viewport.zoom.pixels_per_cell();
+            let pixels_per_cell = effective_zoom.pixels_per_cell();
             let cells_h = pixels_h as f32 / pixels_per_cell;
             let cells_v = pixels_v as f32 / pixels_per_cell;
 
             // Find the lower and upper bounds on the cell positions that need to be
             // displayed.
             let half_visible_diagonal = Vec2D::from([
-                (cells_h.ceil() / 2.0) as isize,
-                (cells_v.ceil() / 2.0) as isize,
+                (cells_h / 2.0).ceil() as isize,
+                (cells_v / 2.0).ceil() as isize,
             ]);
             let lower_bound = g.viewport.pos - half_visible_diagonal;
             let upper_bound = g.viewport.pos + half_visible_diagonal;
@@ -209,6 +231,7 @@ impl<'a> RenderInProgress<'a> {
         Self {
             g,
             target,
+            cell_render_dimensions: (pixels_h, pixels_v),
             render_cell_layer,
             render_cell_pixels,
             view_matrix,
@@ -220,6 +243,18 @@ impl<'a> RenderInProgress<'a> {
 
     /// Draw the cells that appear in the viewport.
     pub fn draw_cells(&mut self) {
+        let (pixels_h, pixels_v) = self.cell_render_dimensions;
+        let cells_texture = glium::framebuffer::RenderBuffer::new(
+            &*self.g.display,
+            glium::texture::UncompressedFloatFormat::U8U8U8,
+            pixels_h,
+            pixels_v,
+        )
+        .expect("Failed to create render buffer");
+        let mut cells_fbo =
+            glium::framebuffer::SimpleFrameBuffer::new(&*self.g.display, &cells_texture)
+                .expect("Failed to create frame buffer");
+
         // Clear the screen. (TODO: This should not be necessary)
         self.target.clear_color_srgb(1.0, 0.0, 1.0, 1.0);
 
@@ -227,11 +262,37 @@ impl<'a> RenderInProgress<'a> {
         let slice_layer = self.slice.root.layer;
         let layer_at_chunk = self.render_cell_layer + CHUNK_POW;
 
+        // Draw to the frame buffer.
         self.draw_cell_chunks(
+            &mut cells_fbo,
             &self.slice.root.clone(),
             Vec2D::origin(),
             slice_layer - layer_at_chunk,
         );
+
+        // Blit the frame buffer to the display.
+        {
+            let source_rect = glium::Rect {
+                left: 0,
+                bottom: 0,
+                width: pixels_h,
+                height: pixels_v,
+            };
+            let (target_h, target_v) = self.target.get_dimensions();
+            let destination_rect = glium::BlitTarget {
+                left: 0,
+                bottom: 0,
+                width: target_h as i32,
+                height: target_v as i32,
+            };
+            self.target.blit_from_simple_framebuffer(
+                &cells_fbo,
+                &source_rect,
+                &destination_rect,
+                glium::uniforms::MagnifySamplerFilter::Nearest,
+            );
+        }
+
         // Remove elements from the cache that we did not use this frame, and
         // mark the rest as being unused (to prepare for the next frame).
         self.g.render_cache.chunks.retain(|_, (_, ref mut keep)| {
@@ -240,8 +301,9 @@ impl<'a> RenderInProgress<'a> {
             ret
         });
     }
-    fn draw_cell_chunks(
+    fn draw_cell_chunks<T: glium::Surface>(
         &mut self,
+        target: &mut T,
         root_node: &NdCachedNode<u8, Dim2D>,
         root_node_offset: Vec2D,
         layers_remaining: usize,
@@ -276,7 +338,7 @@ impl<'a> RenderInProgress<'a> {
             let chunk_x = *root_node_offset.x() as f32;
             let chunk_y = *root_node_offset.y() as f32;
 
-            self.target
+            target
                 .draw(
                     (model_vb, self.g.vbos.cell_chunk.per_instance().unwrap()),
                     &model_indices,
@@ -303,7 +365,12 @@ impl<'a> RenderInProgress<'a> {
                         child_node_offset,
                         child_node_offset + (1 << layers_remaining) - 1,
                     );
-                    self.draw_cell_chunks(&child_node, child_node_offset, layers_remaining - 1);
+                    self.draw_cell_chunks(
+                        target,
+                        &child_node,
+                        child_node_offset,
+                        layers_remaining - 1,
+                    );
                 } else {
                     panic!();
                 }

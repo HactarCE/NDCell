@@ -17,6 +17,7 @@ pub struct GridView2D {
     render_cache: render::RenderCache,
     shaders: render::Shaders,
     vbos: render::VBOs,
+    textures: render::Textures,
     display: Rc<glium::Display>,
 }
 impl GridView2D {
@@ -27,6 +28,7 @@ impl GridView2D {
             render_cache: render::RenderCache::default(),
             shaders: render::Shaders::compile(&*display),
             vbos: render::VBOs::new(&*display),
+            textures: render::Textures::new(&*display),
             display,
         }
     }

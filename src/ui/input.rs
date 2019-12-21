@@ -47,14 +47,14 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                                 | Some(VirtualKeyCode::Z)
                                 | Some(VirtualKeyCode::PageDown) => {
                                     // Zoom out by a factor of 2.
-                                    view2d.viewport.zoom_by(0.5);
+                                    view2d.viewport.zoom_by(2.0f32.powf(-0.1f32));
                                 }
                                 // Handle zooming in.
                                 Some(VirtualKeyCode::Equals)
                                 | Some(VirtualKeyCode::Q)
                                 | Some(VirtualKeyCode::PageUp) => {
                                     // Zoom in by a factor of 2.
-                                    view2d.viewport.zoom_by(2.0);
+                                    view2d.viewport.zoom_by(2.0f32.powf(0.1f32));
                                 }
                                 // Handle WASD or arrow keys.
                                 Some(VirtualKeyCode::W) | Some(VirtualKeyCode::Up) => {

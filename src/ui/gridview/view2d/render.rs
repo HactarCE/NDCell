@@ -40,9 +40,13 @@ const DEAD_COLOR: [f32; 4] = [0.1, 0.1, 0.1, 1.0];
 const LIVE_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 const CHUNK_POW: usize = 6;
-/// The number of render cells per chunk.
+/// The length of render cells per chunk; a render cell is a square of cells
+/// that is rendered as one unit.
 ///
-/// See Zoom2D::cells_per_render_cell() for an explanation of render cells.
+/// When zoomed in, each render cell is the same as a normal cell. When
+/// zoomed out beyond 1:1, each render cell is a single pixel, which can
+/// contain a large square of cells. For example, at zoom level 8:1, this
+/// method returns `8`.
 const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^8 = 256
 
 /// The vertex array for a single point, centered on a cell.
@@ -109,6 +113,9 @@ pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
 pub(super) struct RenderInProgress<'a> {
     g: &'a mut GridView2D,
     target: &'a mut glium::Frame,
+    // cells_texture: // TODO
+    render_cell_layer: usize,
+    render_cell_pixels: usize,
     view_matrix: [[f32; 4]; 4],
     slice: NdTreeSlice<u8, Dim2D>,
     visible_rect: Rect2D,
@@ -116,9 +123,17 @@ pub(super) struct RenderInProgress<'a> {
 }
 impl<'a> RenderInProgress<'a> {
     pub fn new(g: &'a mut GridView2D, target: &'a mut glium::Frame) -> Self {
+        // Compute the lowest layer that must be visited, which is the layer of
+        // a "render cell," a node that is rendered as one unit.
+        let render_cell_layer: usize =
+            std::cmp::max(0, -g.viewport.zoom.power().ceil() as isize) as usize;
+        // Compute the width of cells represented by each "render cell."
+        let render_cell_cells: usize = 1 << render_cell_layer;
+        // Compute the width of pixels for each "render cell."
+        let render_cell_pixels: usize = g.viewport.zoom.ceil().pixels_per_cell().ceil() as usize;
+
         let (pixels_h, pixels_v) = target.get_dimensions();
-        let cells_per_chunk =
-            CHUNK_SIZE as isize * g.viewport.zoom.cells_per_render_cell() as isize;
+        let cell_chunk_size: isize = CHUNK_SIZE as isize * render_cell_cells as isize;
 
         // Compute the rectangular area of the whole grid that is visible.
         let mut global_visible_rect: Rect2D;
@@ -144,13 +159,13 @@ impl<'a> RenderInProgress<'a> {
         {
             // Convert that rectangle into chunk coordinates, taking the smallest
             // rectangle of chunks that contains everything visible.
-            let lower_chunk_bound = global_visible_rect.min().div_euclid(cells_per_chunk);
-            let upper_chunk_bound = global_visible_rect.max().div_euclid(cells_per_chunk);
+            let lower_chunk_bound = global_visible_rect.min().div_euclid(cell_chunk_size);
+            let upper_chunk_bound = global_visible_rect.max().div_euclid(cell_chunk_size);
             global_chunk_visible_rect = Rect2D::span(lower_chunk_bound, upper_chunk_bound);
 
             // Expand the rectangle of visible cells to encompass all visible chunks.
-            let lower_bound = lower_chunk_bound * cells_per_chunk;
-            let upper_bound = upper_chunk_bound * cells_per_chunk + (cells_per_chunk - 1);
+            let lower_bound = lower_chunk_bound * cell_chunk_size;
+            let upper_bound = upper_chunk_bound * cell_chunk_size + (cell_chunk_size - 1);
             global_visible_rect = Rect2D::span(lower_bound, upper_bound);
         }
 
@@ -165,26 +180,21 @@ impl<'a> RenderInProgress<'a> {
         // Offset global_visible_rect and global_chunk_visible_rect to be relative to the
         // slice.
         let chunk_visible_rect =
-            global_chunk_visible_rect - slice.rect().min().div_euclid(cells_per_chunk);
+            global_chunk_visible_rect - slice.rect().min().div_euclid(cell_chunk_size);
         let visible_rect = global_visible_rect - slice.rect().min();
 
-        // Offset with respect to render cells
+        // Compute offset with respect to render cells.
         let screen_space_center = slice.rect().min() - g.viewport.pos;
-        let mut x_offset =
-            *screen_space_center.x() as f32 / g.viewport.zoom.cells_per_render_cell();
-        let mut y_offset =
-            *screen_space_center.y() as f32 / g.viewport.zoom.cells_per_render_cell();
-        let pixels_per_render_cell = g.viewport.zoom.pixels_per_render_cell() as f32;
-        if let Zoom2D::Close(_) = g.viewport.zoom {
-            // Offset within a cell (round to nearest pixel).
-            x_offset -= g.viewport.x_offset;
-            y_offset -= g.viewport.y_offset;
-            x_offset = (x_offset * pixels_per_render_cell).round() / pixels_per_render_cell;
-            y_offset = (y_offset * pixels_per_render_cell).round() / pixels_per_render_cell;
-        }
+        let mut x_offset: f32 = *screen_space_center.x() as f32 / render_cell_cells as f32;
+        let mut y_offset: f32 = *screen_space_center.y() as f32 / render_cell_cells as f32;
+        // Comupte offset within a cell (round to nearest pixel).
+        x_offset -= g.viewport.x_offset;
+        y_offset -= g.viewport.y_offset;
+        x_offset = (x_offset * render_cell_pixels as f32).round() / render_cell_pixels as f32;
+        y_offset = (y_offset * render_cell_pixels as f32).round() / render_cell_pixels as f32;
         // Multiply by 2 because the OpenGL screen space ranged from -1 to +1.
-        let x_scale = pixels_per_render_cell as f32 / pixels_h as f32 * 2.0;
-        let y_scale = pixels_per_render_cell as f32 / pixels_v as f32 * 2.0;
+        let x_scale = render_cell_pixels as f32 / pixels_h as f32 * 2.0;
+        let y_scale = render_cell_pixels as f32 / pixels_v as f32 * 2.0;
 
         // Convert offset from render-cell-space to screen-space.
         x_offset *= x_scale;
@@ -200,6 +210,8 @@ impl<'a> RenderInProgress<'a> {
         Self {
             g,
             target,
+            render_cell_layer,
+            render_cell_pixels,
             view_matrix,
             slice,
             visible_rect,
@@ -214,7 +226,7 @@ impl<'a> RenderInProgress<'a> {
 
         // Determine how many layers down we need to go for each chunk.
         let slice_layer = self.slice.root.layer;
-        let layer_at_chunk = self.g.viewport.zoom.node_layer() + CHUNK_POW;
+        let layer_at_chunk = self.render_cell_layer + CHUNK_POW;
 
         self.draw_cell_chunks(
             &self.slice.root.clone(),
@@ -246,7 +258,7 @@ impl<'a> RenderInProgress<'a> {
             let model_indices;
             let model_vb;
             let draw_parameters;
-            if self.g.viewport.zoom.pixels_per_render_cell() > 4 {
+            if self.render_cell_pixels > 4 {
                 // Render rectangles
                 model_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
                 model_vb = &self.g.vbos.cell_square;
@@ -256,7 +268,7 @@ impl<'a> RenderInProgress<'a> {
                 model_indices = glium::index::NoIndices(PrimitiveType::Points);
                 model_vb = &self.g.vbos.cell_point;
                 draw_parameters = glium::DrawParameters {
-                    point_size: Some(self.g.viewport.zoom.pixels_per_render_cell() as f32),
+                    point_size: Some(self.render_cell_pixels as f32),
                     ..Default::default()
                 };
             }

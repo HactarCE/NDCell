@@ -1,115 +1,113 @@
+use std::convert::TryInto;
 use std::fmt;
+use std::ops::*;
 
-/// How zoomed in the 2D viewport is.
+/// The zoom level of the 2D viewport, represented as a base-2 logarithm of the
+/// width of each individual cell in pixels.
 #[derive(Debug, Copy, Clone)]
-pub enum Zoom2D {
-    /// Each cell takes up a square this many pixels on a side. For example,
-    /// Zoom2D::Close(20) means that each cells takes up a 20x20 pixel space.
-    Close(usize),
-    /// Each pixel contains a square of cells with side length of this power of
-    /// 2. For example Zoom2D::Far(3) means that each pixel represents an 8x8 of
-    /// cells.
-    ///
-    /// Zoom2D::Close(1) and Zoom2D::Far(1) are theoretically equivalent.
-    Far(usize),
-}
+pub struct Zoom2D(f32);
 
 impl Default for Zoom2D {
     fn default() -> Self {
-        Self::Close(32)
+        Self(5.0)
     }
 }
 
 impl fmt::Display for Zoom2D {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Zoom2D::Close(n) => write!(f, "1:{}", n),
-            Zoom2D::Far(n) => write!(f, "{}:1", 1usize << n),
+        if self.0 > 0.0 {
+            // Zoomed in
+            write!(f, "1:{}", 2.0f32.powf(-self.0 as f32).round())
+        } else if self.0 >= -8.0 {
+            // Zoomed out a bit
+            write!(f, "{}:1", 2.0f32.powf(self.0 as f32).round())
+        } else {
+            // Zoomed out a lot
+            write!(f, "2^{}:1", self.0 as f32)
         }
     }
 }
 
+// Zoom in by a given factor.
+impl Mul<f32> for Zoom2D {
+    type Output = Self;
+    fn mul(self, factor: f32) -> Self {
+        Self(self.0 * factor)
+    }
+}
+impl MulAssign<f32> for Zoom2D {
+    fn mul_assign(&mut self, factor: f32) {
+        self.0 *= factor;
+    }
+}
+
+// Zoom out by a given factor.
+impl Div<f32> for Zoom2D {
+    type Output = Self;
+    fn div(self, factor: f32) -> Self {
+        Self(self.0 / factor)
+    }
+}
+impl DivAssign<f32> for Zoom2D {
+    fn div_assign(&mut self, factor: f32) {
+        self.0 /= factor;
+    }
+}
+
+// Compute the ratio between two zoom levels.
+impl Div<Zoom2D> for Zoom2D {
+    type Output = f32;
+    fn div(self, other: Self) -> f32 {
+        self.0 / other.0
+    }
+}
+
 impl Zoom2D {
-    /// Zoom in by a factor of 2.
-    pub fn closer(self) -> Self {
-        match self {
-            Zoom2D::Close(n) => {
-                if n >= 256 {
-                    self
-                } else {
-                    Zoom2D::Close(n * 2)
-                }
-            }
-            Zoom2D::Far(1) => Zoom2D::Close(1),
-            Zoom2D::Far(n) => Zoom2D::Far(n - 1),
-        }
-    }
-    /// Zoom out by a factor of 2.
-    pub fn farther(self) -> Self {
-        match self {
-            Zoom2D::Far(n) => {
-                if n > 30 {
-                    self
-                } else {
-                    Zoom2D::Far(n + 1)
-                }
-            }
-            Zoom2D::Close(1) => Zoom2D::Far(1),
-            Zoom2D::Close(n) => Zoom2D::Close(n / 2),
-        }
-    }
+    /// The lower limit on zoom level, restricting how far the user can zoom
+    /// out. This limit is not automatically enforced by Zoom2D; call
+    /// Zoom2D::clamp() to enforce it.
+    ///
+    /// The mantissa of a 32-bit float is 24 bits, so we don't allow zooming
+    /// out past 2^(2^20):1. This leaves ~4 fractional bits to represent zoom
+    /// levels that are not perfect powers of 2.
+    const LOWER_LIMIT: f32 = -(1 << 20) as f32;
+    /// The upper limit on zoom level, restricting how far the user can zoom in.
+    /// This limit is not automatically enforced by Zoom2D; call Zoom2D::clamp()
+    /// to enforce it.
+    ///
+    /// For zooming in, we do not allow zoom levels higher than 1:256, just
+    /// because we have to set a limit somewhere.
+    const UPPER_LIMIT: f32 = 8.0;
 
-    /// Returns the layer of the nodes that represent a single render cell.
-    ///
-    /// At zoom level 1:n (zoomed in), this is 1. At zoom level n:1 (zoomed
-    /// out), this is the log base 2 of n.
-    pub fn node_layer(self) -> usize {
-        match self {
-            Zoom2D::Close(_) => 0,
-            Zoom2D::Far(cell_pow) => cell_pow,
+    // TODO document these methods
+    pub fn clamp(self) -> Self {
+        if self.0 < Self::LOWER_LIMIT {
+            Self(Self::LOWER_LIMIT)
+        } else if self.0 > Self::UPPER_LIMIT {
+            Self(Self::UPPER_LIMIT)
+        } else {
+            self
         }
     }
-
-    /// Returns the length of cells per screen pixel.
-    ///
-    /// At zoom level 1:n (zoomed in), this method returns n. At zoom level n:1
-    /// (zoomed out), this method returns 1/n.
-    pub fn cells_per_pixel(self) -> f32 {
-        match self {
-            Zoom2D::Close(pixels) => 1.0 / pixels as f32,
-            Zoom2D::Far(cell_pow) => 2.0f32.powf(cell_pow as f32),
-        }
+    pub fn power(self) -> f32 {
+        self.0
     }
-    /// Returns the length of cells per screen pixel.
-    ///
-    /// At zoom level 1:n (zoomed in), this method returns 1/n. At zoom level
-    /// n:1 (zoomed out), this method returns n.
+    pub fn factor(self) -> f32 {
+        2.0f32.powf(self.power())
+    }
     pub fn pixels_per_cell(self) -> f32 {
-        match self {
-            Zoom2D::Close(pixels) => pixels as f32,
-            Zoom2D::Far(cell_pow) => 0.5f32.powf(cell_pow as f32),
-        }
+        2.0f32.powf(self.power())
     }
-    /// Returns the length of the square of cells that is rendered as one unit.
-    ///
-    /// When zoomed in, each render cell is the same as a normal cell. When
-    /// zoomed out beyond 1:1, each render cell is a single pixel, which can
-    /// contain a large square of cells. For example, at zoom level 8:1, this
-    /// method returns `8`.
-    pub fn cells_per_render_cell(self) -> f32 {
-        match self {
-            Zoom2D::Close(_) => 1.0,
-            Zoom2D::Far(_) => self.cells_per_pixel(),
-        }
+    pub fn cells_per_pixel(self) -> f32 {
+        2.0f32.powf(-self.power())
     }
-    /// Returns the length of pixels that is rendered per cell, minimum one.
-    ///
-    /// This is the same as pixels_per_cell except that it is never lower than
-    /// 1.0.
-    pub fn pixels_per_render_cell(self) -> usize {
-        match self {
-            Zoom2D::Close(pixels) => pixels,
-            Zoom2D::Far(_) => 1,
-        }
+    pub fn round(self) -> Self {
+        Self(self.0.round())
+    }
+    pub fn floor(self) -> Self {
+        Self(self.0.floor())
+    }
+    pub fn ceil(self) -> Self {
+        Self(self.0.ceil())
     }
 }

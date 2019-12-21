@@ -35,10 +35,11 @@ impl Viewport2D {
         *self.pos.x_mut() += int_dx as isize;
         *self.pos.y_mut() += int_dy as isize;
     }
-    pub fn zoom_in(&mut self) {
-        self.zoom = self.zoom.closer();
+    pub fn set_zoom(&mut self, new_zoom: Zoom2D) {
+        self.zoom = new_zoom.clamp();
     }
-    pub fn zoom_out(&mut self) {
-        self.zoom = self.zoom.farther();
+    pub fn zoom_by(&mut self, factor: f32) {
+        self.set_zoom(self.zoom * factor);
+        self.zoom *= factor;
     }
 }

@@ -42,11 +42,11 @@ const CHUNK_POW: usize = 6;
 /// The length of render cells per chunk; a render cell is a square of cells
 /// that is rendered as one unit.
 ///
-/// When zoomed in, each render cell is the same as a normal cell. When
-/// zoomed out beyond 1:1, each render cell is a single pixel, which can
-/// contain a large square of cells. For example, at zoom level 8:1, this
-/// method returns `8`.
-const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^8 = 256
+/// When zoomed in, each render cell is the same as a normal cell. When zoomed
+/// out beyond 1:1, each render cell is a single pixel, which can contain a
+/// large square of cells. A chunk is a groups of render cells that is passed to
+/// the graphics card at once.
+const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^6 = 64
 
 /// The vertex array for a single point, centered on a cell.
 const CELL_POINT_VERTS: [PointVertex; 1] = [PointVertex { pos: [0.5, 0.5] }];

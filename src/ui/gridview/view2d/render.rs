@@ -5,7 +5,6 @@ use std::collections::HashMap;
 
 use crate::automaton::space::*;
 pub use viewport::Viewport2D;
-use zoom::Zoom2D;
 
 /// A vertex containing just a cell state.
 #[derive(Debug, Default, Copy, Clone)]
@@ -324,13 +323,13 @@ impl<'a> RenderInProgress<'a> {
                 *keep = true;
             })
             .or_insert_with(|| {
-                let mut vertices = [[CellVertex::default(); CHUNK_SIZE]; CHUNK_SIZE];
+                let mut vertices: CellVertexChunk2D =
+                    [[CellVertex::default(); CHUNK_SIZE]; CHUNK_SIZE];
                 Self::add_node_vertices(&mut vertices, node, Vec2D::origin(), CHUNK_POW);
                 // Adding cells is easier with a 2D array, but the price of
                 // convenience if unsafety; we must use std::mem::transmute() to
                 // flatten it before putting it in a vertex buffer.
-                let flattened_vertices =
-                    unsafe { std::mem::transmute::<CellVertexChunk2D, CellVertexChunk>(vertices) };
+                let flattened_vertices: CellVertexChunk = unsafe { std::mem::transmute(vertices) };
                 (flattened_vertices, true)
             })
             .0
@@ -416,12 +415,13 @@ impl<'a> RenderInProgress<'a> {
         // Draw the gridlines in batches, because the VBO might not be able to
         // hold all the points at once.
         for batch in gridline_vertices.chunks(GRIDLINE_BATCH_SIZE) {
-            // Put the data in the VBO.
-            self.g.vbos.gridlines.write(batch);
+            // Put the data in a slice of the VBO.
+            let vbo_slice = self.g.vbos.gridlines.slice(0..batch.len()).unwrap();
+            vbo_slice.write(batch);
             // Draw gridlines.
             self.target
                 .draw(
-                    &self.g.vbos.gridlines,
+                    vbo_slice,
                     &gridlines_indices,
                     &self.g.shaders.gridlines,
                     &uniform! {

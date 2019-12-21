@@ -32,10 +32,6 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                 ui.text(format!("X = {}", pos[Axis::X] as f32 + x_offset));
                 ui.text(format!("Y = {}", pos[Axis::Y] as f32 + y_offset));
                 ui.text(format!("Zoom = {}", zoom));
-                // ui.text(format!(
-                //     "Max node layer = {}",
-                //     automaton.get_root().get_layer()
-                // ));
             }
             _ => unimplemented!(),
         };

@@ -7,7 +7,7 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
         // Handle WindowEvents.
         Event::WindowEvent { event, .. } => match &mut state.grid_view {
             // Handle input on 2D grid view.
-            gridview::GridView::View2D(grid) => match event {
+            gridview::GridView::View2D(view2d) => match event {
                 WindowEvent::KeyboardInput { input, .. } => match input {
                     // Handle key press.
                     KeyboardInput {
@@ -46,30 +46,32 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                                 Some(VirtualKeyCode::Subtract)
                                 | Some(VirtualKeyCode::Z)
                                 | Some(VirtualKeyCode::PageDown) => {
-                                    // TODO zoom out 2x
+                                    // Zoom out by a factor of 2.
+                                    view2d.viewport.zoom_by(0.5);
                                 }
                                 // Handle zooming in.
                                 Some(VirtualKeyCode::Equals)
                                 | Some(VirtualKeyCode::Q)
                                 | Some(VirtualKeyCode::PageUp) => {
-                                    // TODO zoom in 2x
+                                    // Zoom in by a factor of 2.
+                                    view2d.viewport.zoom_by(2.0);
                                 }
                                 // Handle WASD or arrow keys.
                                 Some(VirtualKeyCode::W) | Some(VirtualKeyCode::Up) => {
-                                    // TODO scroll 64px up
-                                    // grid.scroll(0.0, 64.0)
+                                    // Scroll 64px up.
+                                    view2d.viewport.scroll(0.0, 64.0)
                                 }
                                 Some(VirtualKeyCode::A) | Some(VirtualKeyCode::Left) => {
-                                    // TODO scroll 64px left
-                                    // grid.scroll(-64.0, 0.0)
+                                    // Scroll 64px left.
+                                    view2d.viewport.scroll(-64.0, 0.0)
                                 }
                                 Some(VirtualKeyCode::S) | Some(VirtualKeyCode::Down) => {
-                                    // TODO scroll 64px down
-                                    // grid.scroll(0.0, -64.0)
+                                    // Scroll 64px down.
+                                    view2d.viewport.scroll(0.0, -64.0)
                                 }
                                 Some(VirtualKeyCode::D) | Some(VirtualKeyCode::Right) => {
-                                    // TODO scroll 64px right
-                                    // grid.scroll(64.0, 0.0)
+                                    // Scroll 64px right.
+                                    view2d.viewport.scroll(64.0, 0.0)
                                 }
                                 _ => (),
                             }
@@ -81,12 +83,12 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                 },
                 WindowEvent::MouseWheel { delta, .. } => match delta {
                     MouseScrollDelta::LineDelta(dx, dy) => {
-                        // TODO scroll 50x
-                        // grid.scroll(*dx * 50.0, *dy * 50.0);
+                        // Scroll 64x
+                        view2d.viewport.scroll(*dx * 64.0, *dy * 64.0);
                     }
                     MouseScrollDelta::PixelDelta(dpi::LogicalPosition { x: dx, y: dy }) => {
-                        // TODO scroll 50x
-                        // grid.scroll(*dx as f32 * 50.0, *dy as f32 * 50.0);
+                        // Scroll 64x
+                        view2d.viewport.scroll(*dx as f32 * 64.0, *dy as f32 * 64.0);
                     }
                 },
                 _ => (),

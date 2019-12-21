@@ -32,14 +32,19 @@ impl Viewport2D {
         self.x_offset -= int_dx;
         self.y_offset -= int_dy;
         // Add the integral part that we removed onto self.pos.
-        *self.pos.x_mut() += int_dx as isize;
-        *self.pos.y_mut() += int_dy as isize;
+        let int_dx = int_dx as isize;
+        let int_dy = int_dy as isize;
+        self.pos += Vec2D::from([int_dx, int_dy]);
     }
     pub fn set_zoom(&mut self, new_zoom: Zoom2D) {
         self.zoom = new_zoom.clamp();
     }
     pub fn zoom_by(&mut self, factor: f32) {
+        assert!(
+            factor > 0.0,
+            "Zoom factor must be a positive number, not {}",
+            factor
+        );
         self.set_zoom(self.zoom * factor);
-        self.zoom *= factor;
     }
 }

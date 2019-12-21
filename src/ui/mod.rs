@@ -125,7 +125,7 @@ pub fn show_gui() {
         events_loop.poll_events(|ev| {
             // Let imgui handle events.
             platform.handle_event(imgui.io_mut(), &window, &ev);
-            // Let the grid handle events.
+            // Handle events for the grid view.
             input::handle_event(&mut state, &ev);
             // Handle events ourself.
             match ev {

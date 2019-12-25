@@ -79,7 +79,7 @@ const DEAD_COLOR: (u8, u8, u8) = (0, 0, 0);
 /// The color for live cells. This will be configurable in the future.
 const LIVE_COLOR: (u8, u8, u8) = (255, 255, 255);
 
-const CHUNK_POW: usize = 6;
+const CHUNK_POW: usize = 8;
 /// The length of render cells per chunk; a render cell is a square of cells
 /// that is rendered as one unit.
 ///
@@ -87,7 +87,7 @@ const CHUNK_POW: usize = 6;
 /// out beyond 1:1, each render cell is a single pixel, which can contain a
 /// large square of cells. A chunk is a groups of render cells that is passed to
 /// the graphics card at once.
-const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^6 = 64
+const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^8 = 256
 
 /// The vertex array for a single point, centered on a cell.
 const CELL_POINT_VERTS: [PointVertex; 1] = [PointVertex { pos: [0.5, 0.5] }];

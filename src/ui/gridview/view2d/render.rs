@@ -40,6 +40,7 @@
 use super::*;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use crate::automaton::space::*;
@@ -101,16 +102,30 @@ const CELL_SQUARE_VERTS: [PointVertex; 4] = [
 const GRIDLINE_BATCH_SIZE: usize = 256;
 
 #[derive(Clone)]
-struct CellPixelChunk(Vec<Vec<(u8, u8, u8)>>);
+struct CellPixelChunk([[(u8, u8, u8); CHUNK_SIZE]; CHUNK_SIZE]);
 impl Default for CellPixelChunk {
     fn default() -> Self {
-        Self(vec![vec![(0, 0, 0); CHUNK_SIZE]; CHUNK_SIZE])
+        Self([[(0, 0, 0); CHUNK_SIZE]; CHUNK_SIZE])
+    }
+}
+impl<'a> glium::texture::Texture2dDataSource<'a> for &'a CellPixelChunk {
+    type Data = (u8, u8, u8);
+    fn into_raw(self) -> glium::texture::RawImage2d<'a, (u8, u8, u8)> {
+        let flattened_pixels = unsafe {
+            std::mem::transmute::<
+                &[[(u8, u8, u8); CHUNK_SIZE]; CHUNK_SIZE],
+                &[(u8, u8, u8); CHUNK_SIZE * CHUNK_SIZE],
+            >(&self.0)
+        };
+        glium::texture::RawImage2d {
+            data: Cow::Borrowed(flattened_pixels),
+            width: CHUNK_SIZE as u32,
+            height: CHUNK_SIZE as u32,
+            format: glium::texture::ClientFormat::U8U8U8,
+        }
     }
 }
 impl CellPixelChunk {
-    pub fn data(self) -> Vec<Vec<(u8, u8, u8)>> {
-        self.0
-    }
     pub fn fill_with_quadtree_node<C: CellType, F>(
         &mut self,
         branch: &NdTreeBranch<C, Dim2D>,
@@ -520,7 +535,7 @@ impl<'a> RenderInProgress<'a> {
                     width: CHUNK_SIZE as u32,
                     height: CHUNK_SIZE as u32,
                 },
-                pixels.data(),
+                &pixels,
             );
         } else {
             // Recurse into each child node.

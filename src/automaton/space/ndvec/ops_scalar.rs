@@ -58,8 +58,9 @@ impl<D: Dim> MulAssign<isize> for NdVec<D> {
     }
 }
 
-// Implement integer division between an NdVec and a scalar (i.e. divide each
-// coordinate by the scalar).
+// Implement _euclidean_ integer division between an NdVec and a scalar (i.e.
+// divide each coordinate by the scalar). Note that this is not the same as
+// Rust's normal division.
 impl<D: Dim> Div<isize> for NdVec<D> {
     type Output = Self;
     fn div(self, other: isize) -> Self {
@@ -71,7 +72,7 @@ impl<D: Dim> Div<isize> for NdVec<D> {
 impl<D: Dim> DivAssign<isize> for NdVec<D> {
     fn div_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) / other);
+            self.0.set(ax, self.0.get(ax).div_euclid(other));
         }
     }
 }

@@ -44,7 +44,7 @@ impl From<usize> for Axis {
             3 => Axis::W,
             4 => Axis::U,
             5 => Axis::V,
-            _ => panic!("Dimensions above 6 are not supported"),
+            _ => unreachable!("Dimensions above 6 are not supported"),
         }
     }
 }

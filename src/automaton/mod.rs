@@ -81,7 +81,7 @@ impl<P: Dim> Default for ProjectedAutomaton<P> {
                     Box<NdProjectedAutomaton<Dim6D, P>>,
                 >(inner)
             }),
-            _ => panic!("Dimensions above 6 are not supported"),
+            _ => unreachable!("Dimensions above 6 are not supported"),
         }
     }
 }

@@ -144,7 +144,7 @@ impl<'a, D: Dim> From<NdVec<D>> for NdVecEnum {
             4 => Self::Vec4D(transmute_ndvec(inner)),
             5 => Self::Vec5D(transmute_ndvec(inner)),
             6 => Self::Vec6D(transmute_ndvec(inner)),
-            _ => panic!("Dimensions above 6 are not supported"),
+            _ => unreachable!("Dimensions above 6 are not supported"),
         }
     }
 }

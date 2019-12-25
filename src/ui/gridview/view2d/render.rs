@@ -266,7 +266,7 @@ pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
     }
     let mut rip = RenderInProgress::new(grid_view, target);
     rip.draw_cells();
-    // rip.draw_gridlines();
+    rip.draw_gridlines();
 }
 
 struct RenderInProgress<'a> {
@@ -391,7 +391,6 @@ impl<'a> RenderInProgress<'a> {
             target,
             render_cell_layer,
             render_cell_pixels,
-            // view_matrix,
             quadtree_slice,
             pos: (pos_x, pos_y),
             visible_rect,
@@ -430,11 +429,11 @@ impl<'a> RenderInProgress<'a> {
         // cells that are visible.
         let render_cell_visible_rect = self.visible_rect / (1 << self.render_cell_layer)
             - (self.chunk_visible_rect * CHUNK_SIZE as isize).min();
-        let integer_scale_factor = self.render_cell_pixels.ceil() as u32;
+        let integer_scale_factor = self.render_cell_pixels.ceil();
         let visible_cells_w = render_cell_visible_rect.len(Axis::X) as u32;
         let visible_cells_h = render_cell_visible_rect.len(Axis::Y) as u32;
-        let scaled_cells_w = visible_cells_w * integer_scale_factor;
-        let scaled_cells_h = visible_cells_h * integer_scale_factor;
+        let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
+        let scaled_cells_h = visible_cells_h * integer_scale_factor as u32;
         // let scaled_cells_texture = self
         //     .g
         //     .textures
@@ -466,8 +465,8 @@ impl<'a> RenderInProgress<'a> {
 
         // Step #4: blit that onto the screen.
         let (target_w, target_h) = self.target.get_dimensions();
-        let render_cells_w = (target_w as f32 / self.render_cell_pixels) as u32;
-        let render_cells_h = (target_h as f32 / self.render_cell_pixels) as u32;
+        let render_cells_w = target_w as f32 / self.render_cell_pixels;
+        let render_cells_h = target_h as f32 / self.render_cell_pixels;
         let render_cells_x = self.pos.0
             - *(self.visible_rect / (1 << self.render_cell_layer) as isize)
                 .min()
@@ -478,11 +477,20 @@ impl<'a> RenderInProgress<'a> {
                 .min()
                 .y() as f32
             - render_cells_h as f32 / 2.0;
+        let mut left = (render_cells_x * integer_scale_factor).ceil();
+        let mut bottom = (render_cells_y * integer_scale_factor).ceil();
+        // Occasionally, floating point errors cause the coordinates of the
+        // bottom left corner of the rectangle to be -1.0; since Glium
+        // doesn't allow negative coordinates for BlitTarget (not sure why),
+        // we'll just nudge it up to 0.0. This happens rarely enough that it
+        // souldn't be a big issue.
+        left = if left >= 0.0 { left } else { 0.0 };
+        bottom = if bottom >= 0.0 { bottom } else { 0.0 };
         let source_rect = glium::Rect {
-            left: (render_cells_x * integer_scale_factor as f32).round() as u32,
-            bottom: (render_cells_y * integer_scale_factor as f32).round() as u32,
-            width: render_cells_w * integer_scale_factor,
-            height: render_cells_h * integer_scale_factor,
+            left: left as u32,
+            bottom: bottom as u32,
+            width: (render_cells_w * integer_scale_factor).round() as u32,
+            height: (render_cells_h * integer_scale_factor).round() as u32,
         };
         self.target.blit_from_simple_framebuffer(
             &scaled_cells_fbo,
@@ -598,7 +606,7 @@ impl<'a> RenderInProgress<'a> {
             (self.visible_rect.len(Axis::X) + self.visible_rect.len(Axis::Y)) * 2,
         );
         let min = self.visible_rect.min();
-        let max = self.visible_rect.max();
+        let max = self.visible_rect.max() + 1;
         let min_x = *min.x();
         let min_y = *min.y();
         let max_x = *max.x();

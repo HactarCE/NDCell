@@ -56,6 +56,6 @@ impl Viewport2D {
             "Zoom factor must be a positive number, not {}",
             factor
         );
-        self.zoom *= factor;
+        self.zoom = (self.zoom * factor).clamp();
     }
 }

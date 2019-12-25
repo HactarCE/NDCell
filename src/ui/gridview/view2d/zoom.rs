@@ -76,17 +76,17 @@ impl Zoom2D {
 
     /// Construct a Zoom2D with the given zoom power (e.g. -2.0 = 4:1 zoom).
     pub fn from_power(power: f32) -> Self {
-        Self(power).clamp()
+        Self(power)
     }
     /// Construct a Zoom2D with the given zoom factor (e.g. 0.25 = 4:1 zoom).
     /// The zoom factor must be greater than 0.
     pub fn from_factor(factor: f32) -> Self {
-        Self(factor.log2()).clamp()
+        Self(factor.log2())
     }
 
-    /// Clamps the zoom level to the lower and upper limits. This is called
-    /// whenever a Zoom2D is constructed.
-    fn clamp(self) -> Self {
+    /// Clamps the zoom level to the lower and upper limits. This is not
+    /// automatically enforced by Zoom2D; it must be called manually.
+    pub fn clamp(self) -> Self {
         if self.0 < Self::LOWER_LIMIT {
             Self(Self::LOWER_LIMIT)
         } else if self.0 > Self::UPPER_LIMIT {

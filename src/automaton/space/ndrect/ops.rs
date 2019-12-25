@@ -33,14 +33,20 @@ where
 }
 impl<D: Dim, X: Copy> Mul<X> for NdRect<D>
 where
-    NdVec<D>: Mul<X, Output = NdVec<D>>,
+    NdVec<D>: Mul<X, Output = NdVec<D>> + Add<isize, Output = NdVec<D>>,
 {
     type Output = Self;
     fn mul(self, operand: X) -> Self {
         // Call span() rather than constructing directly because if we multiply
         // by a negative number then the min and max might swap, so we need to
         // double-check the bounds.
-        Self::span(self.min * operand, self.max * operand)
+
+        Self::span(
+            self.min * operand,
+            // For the upper bound, add 1 before division and subtract 1 afterwards
+            // because Rect2D::span() is inclusive.
+            (self.max + 1) * operand - 1,
+        )
     }
 }
 impl<D: Dim, X: Copy> Div<X> for NdRect<D>

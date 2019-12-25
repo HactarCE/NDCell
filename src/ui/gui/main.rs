@@ -29,8 +29,19 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                     },
                 ..
             }) => {
-                ui.text(format!("X = {}", pos[Axis::X] as f32 + x_offset));
-                ui.text(format!("Y = {}", pos[Axis::Y] as f32 + y_offset));
+                // TODO fix formatting to show 3.4 and 3, but not 3.0
+                let x = pos[Axis::X] as f32 + x_offset;
+                let y = pos[Axis::Y] as f32 + y_offset;
+                if format!("{:.1}", x).ends_with("0") {
+                    ui.text(format!("X = {:.0}", x))
+                } else {
+                    ui.text(format!("X = {:.1}", x));
+                }
+                if format!("{:.1}", y).ends_with("0") {
+                    ui.text(format!("Y = {:.0}", y))
+                } else {
+                    ui.text(format!("Y = {:.1}", y));
+                }
                 ui.text(format!("Zoom = {}", zoom));
             }
             _ => unimplemented!(),

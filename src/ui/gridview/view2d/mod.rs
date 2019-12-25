@@ -26,9 +26,9 @@ impl GridView2D {
             automaton: ProjectedAutomaton::from(automaton),
             viewport: Default::default(),
             render_cache: render::RenderCache::default(),
-            shaders: render::Shaders::compile(&*display),
-            vbos: render::VBOs::new(&*display),
-            textures: render::Textures::new(&*display),
+            shaders: render::Shaders::compile(&display),
+            vbos: render::VBOs::new(&display),
+            textures: render::Textures::new(&display),
             display,
         }
     }

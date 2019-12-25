@@ -1,13 +1,13 @@
 #version 140
 
-// Cell state
-in uint state;
+// Cell color
+in vec4 color;
 
 // The position of this vertex within the cell
 in vec2 pos;
 
 // Outputs for the fragment shader to determine the color of this vertex
-flat out uint cell_state;
+flat out vec4 vColor;
 
 // Coordinates of the chunk (in chunk-space)
 uniform vec2 chunk_pos;
@@ -30,5 +30,5 @@ void main() {
     gl_Position = matrix * vec4(cell_pos, 0.0, 1.0);
 
     // Pass the cell state to the fragment shader
-    cell_state = state;
+    vColor = color;
 }

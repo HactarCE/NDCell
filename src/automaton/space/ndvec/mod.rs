@@ -67,6 +67,7 @@ impl<D: Dim> IndexMut<Axis> for NdVec<D> {
 pub trait VecXY: Index<Axis, Output = isize> + IndexMut<Axis> {
     /// Returns the X value of this vector.
     fn x(&self) -> &isize {
+        // TODO maybe don't return a reference? isize is Copy.
         &self[Axis::X]
     }
     /// Returns a mutable reference to the X value of this vector.

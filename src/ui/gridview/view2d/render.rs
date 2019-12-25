@@ -302,7 +302,7 @@ impl<'a> RenderInProgress<'a> {
         // Compute the lowest layer that must be visited, which is the layer of
         // a "render cell," a node that is rendered as one unit (one pixel in
         // step #1).
-        let render_cell_layer: usize = std::cmp::max(0, -zoom.ceil().power() as isize) as usize;
+        let render_cell_layer: usize = std::cmp::max(0, -zoom.floor().power() as isize) as usize;
         // Compute the width of cells represented by each render cell.
         let render_cell_len: usize = 1 << render_cell_layer;
         // The render cell layer is also the power of two we should subtract from

@@ -16,14 +16,14 @@ pub struct Viewport2D {
 
 impl Viewport2D {
     /// Scroll the viewport by the given number of pixels along each axis.
-    pub fn scroll_pixels(&mut self, mut dx: f32, mut dy: f32) {
+    pub fn scroll_pixels(&mut self, dx: f32, dy: f32) {
         self.scroll_cells(
             dx * self.zoom.cells_per_pixel(),
             dy * self.zoom.cells_per_pixel(),
         );
     }
     /// Scroll the viewport by the given number of cells along each axis.
-    pub fn scroll_cells(&mut self, mut dx: f32, mut dy: f32) {
+    pub fn scroll_cells(&mut self, dx: f32, dy: f32) {
         // Add dx and dy.
         self.x_offset += dx;
         self.y_offset += dy;
@@ -49,10 +49,6 @@ impl Viewport2D {
         self.x_offset = 0.0;
         self.y_offset = 0.0;
     }
-    /// Set the zoom level.
-    pub fn set_zoom(&mut self, new_zoom: Zoom2D) {
-        self.zoom = new_zoom.clamp();
-    }
     /// Zoom in or out by the given factor.
     pub fn zoom_by(&mut self, factor: f32) {
         assert!(
@@ -60,6 +56,6 @@ impl Viewport2D {
             "Zoom factor must be a positive number, not {}",
             factor
         );
-        self.set_zoom(self.zoom * factor);
+        self.zoom *= factor;
     }
 }

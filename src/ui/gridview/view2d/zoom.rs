@@ -31,7 +31,7 @@ impl fmt::Display for Zoom2D {
 impl Mul<f32> for Zoom2D {
     type Output = Self;
     fn mul(self, factor: f32) -> Self {
-        Self(self.0 + factor.log2())
+        Self::from_power(self.0 + factor.log2())
     }
 }
 impl MulAssign<f32> for Zoom2D {
@@ -44,7 +44,7 @@ impl MulAssign<f32> for Zoom2D {
 impl Div<f32> for Zoom2D {
     type Output = Self;
     fn div(self, factor: f32) -> Self {
-        Self(self.0 - factor.log2())
+        Self::from_power(self.0 - factor.log2())
     }
 }
 impl DivAssign<f32> for Zoom2D {

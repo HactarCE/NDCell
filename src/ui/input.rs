@@ -47,31 +47,31 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                                 | Some(VirtualKeyCode::Z)
                                 | Some(VirtualKeyCode::PageDown) => {
                                     // Zoom out by a factor of 2.
-                                    view2d.viewport.zoom_by(2.0f32.powf(-0.1f32));
+                                    view2d.viewport.zoom_by(2.0f32.powf(-1f32));
                                 }
                                 // Handle zooming in.
                                 Some(VirtualKeyCode::Equals)
                                 | Some(VirtualKeyCode::Q)
                                 | Some(VirtualKeyCode::PageUp) => {
                                     // Zoom in by a factor of 2.
-                                    view2d.viewport.zoom_by(2.0f32.powf(0.1f32));
+                                    view2d.viewport.zoom_by(2.0f32.powf(1f32));
                                 }
                                 // Handle WASD or arrow keys.
                                 Some(VirtualKeyCode::W) | Some(VirtualKeyCode::Up) => {
                                     // Scroll 64px up.
-                                    view2d.viewport.scroll(0.0, 64.0)
+                                    view2d.viewport.scroll_pixels(0.0, 64.0);
                                 }
                                 Some(VirtualKeyCode::A) | Some(VirtualKeyCode::Left) => {
                                     // Scroll 64px left.
-                                    view2d.viewport.scroll(-64.0, 0.0)
+                                    view2d.viewport.scroll_pixels(-64.0, 0.0);
                                 }
                                 Some(VirtualKeyCode::S) | Some(VirtualKeyCode::Down) => {
                                     // Scroll 64px down.
-                                    view2d.viewport.scroll(0.0, -64.0)
+                                    view2d.viewport.scroll_pixels(0.0, -64.0);
                                 }
                                 Some(VirtualKeyCode::D) | Some(VirtualKeyCode::Right) => {
                                     // Scroll 64px right.
-                                    view2d.viewport.scroll(64.0, 0.0)
+                                    view2d.viewport.scroll_pixels(64.0, 0.0);
                                 }
                                 _ => (),
                             }
@@ -84,11 +84,13 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                 WindowEvent::MouseWheel { delta, .. } => match delta {
                     MouseScrollDelta::LineDelta(dx, dy) => {
                         // Scroll 64x
-                        view2d.viewport.scroll(*dx * 64.0, *dy * 64.0);
+                        view2d.viewport.scroll_pixels(*dx * 64.0, *dy * 64.0);
                     }
                     MouseScrollDelta::PixelDelta(dpi::LogicalPosition { x: dx, y: dy }) => {
                         // Scroll 64x
-                        view2d.viewport.scroll(*dx as f32 * 64.0, *dy as f32 * 64.0);
+                        view2d
+                            .viewport
+                            .scroll_pixels(*dx as f32 * 64.0, *dy as f32 * 64.0);
                     }
                 },
                 _ => (),

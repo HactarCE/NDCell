@@ -169,8 +169,7 @@ pub(super) struct Shaders {
     gridlines: glium::Program,
 }
 impl Shaders {
-    pub fn compile(display: &Rc<glium::Display>) -> Self {
-        let display = &**display;
+    pub fn compile(display: &glium::Display) -> Self {
         Self {
             gridlines: shaders::compile_lines_program(display),
         }
@@ -184,8 +183,7 @@ pub(super) struct VBOs {
     gridlines: glium::VertexBuffer<PointVertex>,
 }
 impl VBOs {
-    pub fn new(display: &Rc<glium::Display>) -> Self {
-        let display = &**display;
+    pub fn new(display: &glium::Display) -> Self {
         Self {
             cell_chunk: glium::VertexBuffer::empty_dynamic(display, CHUNK_SIZE * CHUNK_SIZE)
                 .expect("Failed to create vertex buffer"),
@@ -199,68 +197,7 @@ impl VBOs {
     }
 }
 
-struct CachedRenderBuffer<F: glium::backend::Facade> {
-    facade: Rc<F>,
-    format: glium::texture::UncompressedFloatFormat,
-    buffer: Option<glium::framebuffer::RenderBuffer>,
-}
-impl<F: glium::backend::Facade> CachedRenderBuffer<F> {
-    pub fn new(facade: Rc<F>, format: glium::texture::UncompressedFloatFormat) -> Self {
-        Self {
-            facade,
-            format,
-            buffer: None,
-        }
-    }
-    pub fn current_size(&self) -> Option<(u32, u32)> {
-        self.buffer.as_ref().map(|buffer| buffer.get_dimensions())
-    }
-    pub fn unwrap(&self) -> &glium::framebuffer::RenderBuffer {
-        if let Some(buffer) = &self.buffer {
-            buffer
-        } else {
-            panic!("Called .unwrap() on an empty CachedRenderBuffer")
-        }
-    }
-    pub fn at_size(&mut self, width: u32, height: u32) -> &glium::framebuffer::RenderBuffer {
-        if let Some((width, height)) = self.current_size() {
-            self.unwrap()
-        } else {
-            let ret =
-                glium::framebuffer::RenderBuffer::new(&*self.facade, self.format, width, height)
-                    .expect("Failed to create render buffer");
-            self.buffer = Some(ret);
-            self.unwrap()
-        }
-    }
-}
-
-pub(super) struct Textures {
-    cell_pixels: CachedRenderBuffer<glium::Display>,
-    scaled_cells: CachedRenderBuffer<glium::Display>,
-}
-impl Textures {
-    pub fn new(display: &Rc<glium::Display>) -> Self {
-        Self {
-            cell_pixels: CachedRenderBuffer::new(
-                display.clone(),
-                glium::texture::UncompressedFloatFormat::U8U8U8,
-            ),
-            scaled_cells: CachedRenderBuffer::new(
-                display.clone(),
-                glium::texture::UncompressedFloatFormat::U8U8U8,
-            ),
-        }
-    }
-}
-
 pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
-    #[cfg(debug_assertions)]
-    {
-        // In debug mode, clear the screen with magenta to highlight any gaps
-        // that are not updated.
-        target.clear_color_srgb(1.0, 0.0, 1.0, 1.0);
-    }
     let mut rip = RenderInProgress::new(grid_view, target);
     rip.draw_cells();
     rip.draw_gridlines();

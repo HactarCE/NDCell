@@ -12,7 +12,7 @@ impl<C: CellType, D: Dim> NdProjector<C, D, Dim3D> for SliceProjection3D<D> {
     fn project(&self, _tree: &NdTree<C, D>) -> NdTree<C, Dim3D> {
         unimplemented!()
     }
-    fn overwrite_projected(&self, destination: &mut NdTree<C, D>, source: &NdTree<C, Dim3D>) {
+    fn overwrite_projected(&self, _destination: &mut NdTree<C, D>, _source: &NdTree<C, Dim3D>) {
         unimplemented!()
     }
     fn get_params(&self) -> ProjectionParams {

@@ -67,7 +67,10 @@ impl Zoom2D {
     /// The mantissa of a 32-bit float is 24 bits, so we don't allow zooming
     /// out past 2^(2^20):1. This leaves ~4 fractional bits to represent zoom
     /// levels that are not perfect powers of 2.
-    const LOWER_LIMIT: f32 = -(1 << 20) as f32;
+    ///
+    /// ... at least, that's what we should do once we use BigInts for
+    /// everything. Until then, I'll be keeping this at 2^24:1 to avoid crashes.
+    const LOWER_LIMIT: f32 = -24.0 as f32;
     /// The upper limit on zoom level; i.e. the furthest the user can zoom in.
     ///
     /// For zooming in, we do not allow zoom levels higher than 1:256, just

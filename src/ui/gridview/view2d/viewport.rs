@@ -2,7 +2,7 @@ use super::*;
 
 // TODO rewrite zoom
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Viewport2D {
     /// Cell position that is at the center of the viewport.
     pub pos: Vec2D,
@@ -57,5 +57,37 @@ impl Viewport2D {
             factor
         );
         self.zoom = (self.zoom * factor).clamp();
+    }
+    /// Returns a viewport that is some fraction of the distance between two viewports.
+    pub fn interpolate(a: &Viewport2D, b: &Viewport2D, portion: f32) -> Viewport2D {
+        let mut ret = a.clone();
+
+        // Interpolate position.
+        let dx_int = b.pos.x() - a.pos.x();
+        let dy_int = b.pos.y() - a.pos.y();
+        let dx_offset = b.x_offset - a.x_offset;
+        let dy_offset = b.y_offset - a.y_offset;
+        let mut dx = dx_int as f32 + dx_offset;
+        let mut dy = dy_int as f32 + dy_offset;
+        if (dx.powf(2.0) + dy.powf(2.0)) * a.zoom.pixels_per_cell() < 0.01 {
+            // If there's less than 1% of a pixel left, snap into position.
+            ret.pos = b.pos;
+            ret.x_offset = b.x_offset;
+            ret.y_offset = b.y_offset;
+        } else {
+            ret.scroll_cells(dx * portion, dy * portion);
+        }
+
+        // Interpolate zoom level.
+        let mut dz = b.zoom / a.zoom;
+        if dz.log2().abs() < 0.01 {
+            // If there's less than 1% of a power of two left, snap to the zoom
+            // level.
+            ret.zoom = b.zoom;
+        } else {
+            ret.zoom_by(dz.powf(portion));
+        }
+
+        ret
     }
 }

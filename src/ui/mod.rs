@@ -138,6 +138,8 @@ pub fn show_gui() {
             }
         });
 
+        state.grid_view.do_frame();
+
         let io = imgui.io_mut();
         // TODO you'll probably want these
         // io.want_capture_keyboard = true;

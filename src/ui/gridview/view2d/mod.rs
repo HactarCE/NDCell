@@ -14,6 +14,7 @@ pub use zoom::Zoom2D;
 pub struct GridView2D {
     pub automaton: ProjectedAutomaton<Dim2D>,
     pub viewport: Viewport2D,
+    interpolating_viewport: Viewport2D,
     render_cache: render::RenderCache,
     shaders: render::Shaders,
     vbos: render::VBOs,
@@ -25,6 +26,7 @@ impl GridView2D {
         Self {
             automaton: ProjectedAutomaton::from(automaton),
             viewport: Default::default(),
+            interpolating_viewport: Default::default(),
             render_cache: render::RenderCache::default(),
             shaders: render::Shaders::compile(&display),
             vbos: render::VBOs::new(&display),
@@ -35,11 +37,24 @@ impl GridView2D {
     pub fn default(display: Rc<glium::Display>) -> Self {
         Self::new(display, ProjectedAutomaton::default())
     }
+    pub fn get_interpolating_viewport(&self) -> &Viewport2D {
+        &self.interpolating_viewport
+    }
 }
 
 impl GridViewTrait for GridView2D {
     fn draw(&mut self, target: &mut glium::Frame) {
         render::draw(self, target);
+    }
+    fn do_frame(&mut self) {
+        const DECAY_CONSTANT: f32 = 4.0;
+        if self.interpolating_viewport != self.viewport {
+            self.interpolating_viewport = Viewport2D::interpolate(
+                &self.interpolating_viewport,
+                &self.viewport,
+                1.0 / DECAY_CONSTANT,
+            );
+        }
     }
     fn get_population(&self) -> usize {
         self.automaton.get_population()

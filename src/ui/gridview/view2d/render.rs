@@ -45,7 +45,6 @@ use std::collections::HashMap;
 
 use crate::automaton::space::*;
 use crate::math;
-pub use viewport::Viewport2D;
 
 /// A vertex containing just a color.
 #[derive(Debug, Default, Copy, Clone)]
@@ -270,6 +269,8 @@ pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
 struct RenderInProgress<'a> {
     g: &'a mut GridView2D,
     target: &'a mut glium::Frame,
+    /// The viewport to use when rendering.
+    viewport: Viewport2D,
     /// The node layer of a render cell.
     render_cell_layer: usize,
     /// The width in pixels of a render cell.
@@ -292,7 +293,8 @@ impl<'a> RenderInProgress<'a> {
     /// Performs preliminary computations and returns a RenderInProgress.
     pub fn new(g: &'a mut GridView2D, target: &'a mut glium::Frame) -> Self {
         let (target_w, target_h) = target.get_dimensions();
-        let mut zoom = g.viewport.zoom;
+        let viewport = g.get_interpolating_viewport().clone();
+        let mut zoom = viewport.zoom;
 
         // Compute the width of pixels for each individual cell.
         let cell_pixels: f32 = zoom.pixels_per_cell();
@@ -342,8 +344,8 @@ impl<'a> RenderInProgress<'a> {
                 let half_diag =
                     Vec2D::from([half_cells_w.ceil() as isize, half_cells_h.ceil() as isize]);
 
-                let lower_bound = g.viewport.pos - half_diag;
-                let upper_bound = g.viewport.pos + half_diag;
+                let lower_bound = viewport.pos - half_diag;
+                let upper_bound = viewport.pos + half_diag;
                 global_visible_rect = Rect2D::span(lower_bound, upper_bound);
 
                 // Compute the chunk coordinates for the lower and upper bounds
@@ -369,15 +371,14 @@ impl<'a> RenderInProgress<'a> {
 
             // Subtract the slice offset from the viewport position and divide
             // by the size of a render cell.
-            // let integer_pos = g.viewport.pos - slice.offset;
-            let integer_pos = (g.viewport.pos - quadtree_slice.offset) / render_cell_len as isize;
+            let integer_pos = (viewport.pos - quadtree_slice.offset) / render_cell_len as isize;
             let integer_pos_x = *integer_pos.x() as f32;
             let integer_pos_y = *integer_pos.y() as f32;
             // viewport.x_offset and .y_offset are sub-cell offsets, so they
             // only matter when zoomed in more than 1:1.
-            if g.viewport.zoom.pixels_per_cell() > 1.0 {
-                pos_x = integer_pos_x + g.viewport.x_offset;
-                pos_y = integer_pos_y + g.viewport.y_offset;
+            if viewport.zoom.pixels_per_cell() > 1.0 {
+                pos_x = integer_pos_x + viewport.x_offset;
+                pos_y = integer_pos_y + viewport.y_offset;
             } else {
                 pos_x = integer_pos_x;
                 pos_y = integer_pos_y;
@@ -386,6 +387,7 @@ impl<'a> RenderInProgress<'a> {
 
         Self {
             g,
+            viewport,
             target,
             render_cell_layer,
             render_cell_pixels,
@@ -595,7 +597,7 @@ impl<'a> RenderInProgress<'a> {
     /// Draw the gridlines that appear in the viewport.
     pub fn draw_gridlines(&mut self) {
         // Don't bother drawing gridlines if we're zoomed out far enough.
-        if self.g.viewport.zoom.pixels_per_cell() < 8.0 {
+        if self.viewport.zoom.pixels_per_cell() < 8.0 {
             return;
         }
         // Generate a pair of vertices for each gridline.
@@ -620,8 +622,8 @@ impl<'a> RenderInProgress<'a> {
 
         let (target_w, target_h) = self.target.get_dimensions();
         // Multiply by 2 because the OpenGL screen space ranged from -1 to +1.
-        let x_scale = self.g.viewport.zoom.pixels_per_cell() / target_w as f32 * 2.0;
-        let y_scale = self.g.viewport.zoom.pixels_per_cell() / target_h as f32 * 2.0;
+        let x_scale = self.viewport.zoom.pixels_per_cell() / target_w as f32 * 2.0;
+        let y_scale = self.viewport.zoom.pixels_per_cell() / target_h as f32 * 2.0;
         let (x_render_cell_pos, y_render_cell_pos) = self.pos;
         let mut x_offset = x_render_cell_pos * (1 << self.render_cell_layer) as f32;
         let mut y_offset = y_render_cell_pos * (1 << self.render_cell_layer) as f32;

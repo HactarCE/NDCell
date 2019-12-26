@@ -17,6 +17,9 @@ impl GridViewTrait for GridView3D {
     fn draw(&mut self, target: &mut glium::Frame) {
         unimplemented!()
     }
+    fn do_frame(&mut self) {
+        unimplemented!()
+    }
     fn get_population(&self) -> usize {
         unimplemented!()
     }

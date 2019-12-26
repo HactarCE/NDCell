@@ -5,7 +5,7 @@ mod view2d;
 mod view3d;
 
 use crate::automaton::{Dim, Dim2D, Dim3D, NdProjectedAutomaton, ProjectedAutomaton};
-pub use view2d::{GridView2D, Viewport2D};
+pub use view2d::{GridView2D, Viewport2D, Zoom2D};
 pub use view3d::GridView3D;
 
 /// The trait implemented by GridView by dispatching to the implementation of
@@ -13,6 +13,7 @@ pub use view3d::GridView3D;
 #[enum_dispatch]
 pub trait GridViewTrait {
     fn draw(&mut self, target: &mut glium::Frame);
+    fn do_frame(&mut self);
     fn get_population(&self) -> usize;
     fn get_generation_count(&self) -> usize;
 }

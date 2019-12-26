@@ -3,7 +3,7 @@ use std::ops::*;
 
 /// The zoom level of the 2D viewport, represented as a base-2 logarithm of the
 /// width of each individual cell in pixels.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct Zoom2D(f32);
 
 impl Default for Zoom2D {

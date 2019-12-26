@@ -1,5 +1,7 @@
 use super::*;
 
+/// A basic no-op projection that simply returns the same automaton with the
+/// same number of dimensions.
 #[derive(Debug, Clone)]
 pub struct SimpleProjection;
 

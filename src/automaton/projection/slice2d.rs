@@ -1,9 +1,14 @@
 use super::*;
 
+/// A projection that takes a 2D slice out of a D-dimensional automaton where D
+/// >= 2.
 #[derive(Debug, Clone)]
 pub struct SliceProjection2D<D: Dim> {
+    /// The position at which to slice the NdTree.
     pub slice_pos: NdVec<D>,
+    /// The axis displayed horizontally.
     h: Axis,
+    /// The axis displayed vertically.
     v: Axis,
 }
 
@@ -15,13 +20,7 @@ impl<C: CellType, D: Dim> NdProjector<C, D, Dim2D> for SliceProjection2D<D> {
         unimplemented!()
     }
     fn get_params(&self) -> ProjectionParams {
-        ProjectionParams::Slice(
-            self.slice_pos.into(),
-            AxesSelectEnum::Axes2D {
-                h: self.h,
-                v: self.v,
-            },
-        )
+        ProjectionParams::Slice2D(self.slice_pos.into(), (self.h, self.v))
     }
 }
 
@@ -39,6 +38,8 @@ impl<D: Dim> Default for SliceProjection2D<D> {
 }
 
 impl<D: Dim> SliceProjection2D<D> {
+    /// Constructs a new SliceProjection2D, panicking if the display axes are
+    /// incompatible.
     pub fn new(slice_pos: NdVec<D>, h: Axis, v: Axis) -> Self {
         let mut ret = Self::default();
         ret.slice_pos = slice_pos;
@@ -46,6 +47,8 @@ impl<D: Dim> SliceProjection2D<D> {
         ret
     }
 
+    /// Attempts to construct a new SliceProjection2D, returning `Err(())` if the
+    /// display axes are incompatible.
     pub fn try_new(slice_pos: NdVec<D>, h: Axis, v: Axis) -> Result<Self, ()> {
         let mut ret = Self::default();
         ret.slice_pos = slice_pos;
@@ -56,10 +59,12 @@ impl<D: Dim> SliceProjection2D<D> {
         }
     }
 
+    /// Returns the display axes as a tuple, `(horizontal, vertical)`.
     pub fn get_display_axes(&self) -> (Axis, Axis) {
         (self.h, self.v)
     }
 
+    /// Sets the display axes, panicking if they are incompatible.
     pub fn set_display_axes(&mut self, h: Axis, v: Axis) {
         self.try_set_display_axes(h, v).unwrap_or_else(|_| {
             panic!(
@@ -69,6 +74,8 @@ impl<D: Dim> SliceProjection2D<D> {
         })
     }
 
+    /// Attempts to set the display axes, returning `Err(())` if they are
+    /// incompatible.
     pub fn try_set_display_axes(&mut self, h: Axis, v: Axis) -> Result<(), ()> {
         if D::contains(h) && D::contains(v) && h != v {
             self.h = h;

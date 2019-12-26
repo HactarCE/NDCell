@@ -1,11 +1,17 @@
 use super::*;
 
+/// A projection that takes a 3D slice out of a D-dimensional automaton where D
+/// >= 3.
 #[derive(Debug, Clone)]
 pub struct SliceProjection3D<D: Dim> {
+    /// The position at which to slice the NdTree.
     pub slice_pos: NdVec<D>,
-    pub h: Axis,
-    pub v: Axis,
-    pub n: Axis,
+    /// The axis displayed horizontally.
+    h: Axis,
+    /// The axis displayed vertically.
+    v: Axis,
+    /// The axis displayed along the "normal" (i.e. depthwise/front-back).
+    n: Axis,
 }
 
 impl<C: CellType, D: Dim> NdProjector<C, D, Dim3D> for SliceProjection3D<D> {
@@ -16,13 +22,6 @@ impl<C: CellType, D: Dim> NdProjector<C, D, Dim3D> for SliceProjection3D<D> {
         unimplemented!()
     }
     fn get_params(&self) -> ProjectionParams {
-        ProjectionParams::Slice(
-            self.slice_pos.into(),
-            AxesSelectEnum::Axes3D {
-                h: self.h,
-                v: self.v,
-                n: self.n,
-            },
-        )
+        ProjectionParams::Slice3D(self.slice_pos.into(), (self.h, self.v, self.n))
     }
 }

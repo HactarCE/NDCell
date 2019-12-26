@@ -17,20 +17,35 @@ pub use rule::{DummyRule, Rule};
 pub use simulation::*;
 pub use space::*;
 
+/// ProjectedAutomaton functionality implemented by dispatching to
+/// NdProjectedAutomaton.
 #[enum_dispatch]
 pub trait NdProjectedAutomatonTrait<P: Dim> {
+    /// Returns the number of dimensions of the underlying automaton.
     fn get_ndim(&self) -> usize;
+    /// Sets the simulation step size.
     fn set_step_size(&mut self, step_size: usize);
+    /// Returns the simulation step size.
     fn get_step_size(&self) -> usize;
+    /// Step forward in the simulation by the step size.
     fn step(&mut self);
+    /// Step forward one generation in the simulation.
     fn step_single(&mut self);
+    /// Returns the projected NdTree.
     fn get_projected_tree(&self) -> NdTree<u8, P>;
+    /// Returns the ProjectionParams used to create this projection.
     fn get_projection_params(&self) -> ProjectionParams;
+    /// Sets the projection from the ProjectionParams.
     fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError>;
+    /// Returns the population of the whole grid.
     fn get_population(&self) -> usize;
+    /// Returns the number of generations that have elapsed in the simulation.
     fn get_generation_count(&self) -> usize;
 }
 
+/// An automaton of an unknown dimensionality combined with a projection to a
+/// given dimensionality.
+#[allow(missing_docs)]
 #[enum_dispatch(NdProjectedAutomatonTrait)]
 #[derive(Clone)]
 pub enum ProjectedAutomaton<P: Dim> {
@@ -95,6 +110,9 @@ where
     }
 }
 
+/// A D-dimensional automaton with a projection from a D-dimensional grid to a
+/// P-dimensional one.
+#[allow(missing_docs)]
 #[derive(Clone)]
 pub struct NdProjectedAutomaton<D: Dim, P: Dim> {
     pub automaton: NdAutomaton<D>,
@@ -149,6 +167,9 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
     }
 }
 
+/// A fully-fledged cellular automaton, including a grid (NdTree), rule & step
+/// size (Simulation), and generation count.
+#[allow(missing_docs)]
 #[derive(Clone, Default)]
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<u8, D>,

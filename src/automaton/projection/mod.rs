@@ -11,6 +11,7 @@ pub use simple::SimpleProjection;
 pub use slice2d::SliceProjection2D;
 pub use slice3d::SliceProjection3D;
 
+/// A container for any type of NdProjector.
 pub struct NdProjection<C: CellType, D: Dim, P: Dim>(pub Box<dyn NdProjector<C, D, P>>);
 impl<C: CellType, D: Dim, P: Dim> Clone for NdProjection<C, D, P> {
     fn clone(&self) -> Self {
@@ -23,27 +24,42 @@ impl<C: CellType, D: Dim> Default for NdProjection<C, D, D> {
         Self(Box::new(SimpleProjection))
     }
 }
-impl<C: CellType, D: Dim, P: Dim> NdProjection<C, D, P> {
-    pub fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P> {
+impl<C: CellType, D: Dim, P: Dim> NdProjector<C, D, P> for NdProjection<C, D, P> {
+    fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P> {
         self.0.project(tree)
     }
-    pub fn get_params(&self) -> ProjectionParams {
+    fn overwrite_projected(&self, destination: &mut NdTree<C, D>, source: &NdTree<C, P>) {
+        self.0.overwrite_projected(destination, source);
+    }
+    fn get_params(&self) -> ProjectionParams {
         self.0.get_params()
     }
 }
 
+/// A method for extracting or constructing a P-dimensional slice from a
+/// D-dimensional automaton.
 pub trait NdProjector<C: CellType, D: Dim, P: Dim> {
+    /// Projects a D-dimensional NdTree into a P-dimensional NdTree.
     fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P>;
+    /// Modifies part of a projected NdTree.
     fn overwrite_projected(&self, destination: &mut NdTree<C, D>, source: &NdTree<C, P>);
+    /// Returns the ProjectionParams that describe this projection.
     fn get_params(&self) -> ProjectionParams;
 }
 
+/// A set of parameters that fully describes an NdProjection.
+///
+/// This provides a way to retrieve an NdProjector's parameters while still
+/// storing it as a trait object.
 #[derive(Debug, Clone)]
 pub enum ProjectionParams {
+    /// A SimpleProjection.
     Simple,
-    Slice(NdVecEnum, AxesSelectEnum),
+    /// A SliceProjection2D.
+    Slice2D(NdVecEnum, (Axis, Axis)),
+    /// A SliceProjection3D.
+    Slice3D(NdVecEnum, (Axis, Axis, Axis)),
 }
-
 impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for ProjectionParams {
     type Error = NdProjectionError;
     fn try_into(self) -> Result<Box<dyn NdProjector<C, D, P>>, Self::Error> {
@@ -61,30 +77,27 @@ impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for
                     Err(NdProjectionError::WrongProjectedDim)
                 }
             }
-
-            ProjectionParams::Slice(slice_pos, axes) => {
+            ProjectionParams::Slice2D(slice_pos, (h, v)) => {
                 // Check D.
                 let slice_pos: NdVec<D> = slice_pos
                     .try_into()
                     .map_err(|_| NdProjectionError::WrongNdTreeDim)?;
-                match axes {
-                    AxesSelectEnum::Axes2D { h, v } => {
-                        // Check P.
-                        if P::NDIM == 2 {
-                            let ret = SliceProjection2D::new(slice_pos, h, v);
-                            let ret: Box<dyn NdProjector<C, D, Dim2D>> = Box::new(ret);
-                            Ok(unsafe { std::mem::transmute(ret) })
-                        } else {
-                            Err(NdProjectionError::WrongProjectedDim)
-                        }
-                    }
-                    AxesSelectEnum::Axes3D { .. } => unimplemented!(),
+                // Check P.
+                if P::NDIM == 2 {
+                    let ret = SliceProjection2D::new(slice_pos, h, v);
+                    let ret: Box<dyn NdProjector<C, D, Dim2D>> = Box::new(ret);
+                    Ok(unsafe { std::mem::transmute(ret) })
+                } else {
+                    Err(NdProjectionError::WrongProjectedDim)?
                 }
             }
+            ProjectionParams::Slice3D(_slice_pos, (_h, _v, _n)) => unimplemented!(),
         }
     }
 }
 
+/// An error preventing conversion from ProjectionParams to NdProjector.
+#[allow(missing_docs)]
 #[derive(Debug, Copy, Clone)]
 pub enum NdProjectionError {
     WrongCellType,
@@ -92,6 +105,8 @@ pub enum NdProjectionError {
     WrongProjectedDim,
 }
 
+/// An NdVec of an unknown dimensionality, for use in ProjectionParams.
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub enum NdVecEnum {
     Vec1D(Vec1D),
@@ -102,6 +117,7 @@ pub enum NdVecEnum {
     Vec6D(Vec6D),
 }
 impl NdVecEnum {
+    /// Returns the number of dimensions of the NdVec.
     fn get_ndim(&self) -> usize {
         match self {
             Self::Vec1D(_) => 1,
@@ -164,10 +180,4 @@ impl<'a, D: Dim> TryInto<NdVec<D>> for NdVecEnum {
             Err(())
         }
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum AxesSelectEnum {
-    Axes2D { h: Axis, v: Axis },
-    Axes3D { h: Axis, v: Axis, n: Axis },
 }

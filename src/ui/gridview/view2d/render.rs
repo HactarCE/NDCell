@@ -167,14 +167,12 @@ pub(super) struct RenderCache {
 }
 
 pub(super) struct Shaders {
-    cell_chunk: glium::Program,
     gridlines: glium::Program,
 }
 impl Shaders {
     pub fn compile(display: &Rc<glium::Display>) -> Self {
         let display = &**display;
         Self {
-            cell_chunk: shaders::compile_cell_program(display),
             gridlines: shaders::compile_lines_program(display),
         }
     }

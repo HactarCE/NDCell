@@ -44,7 +44,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use crate::automaton::space::*;
-use crate::math;
 
 /// A vertex containing just a color.
 #[derive(Debug, Default, Copy, Clone)]

@@ -5,7 +5,7 @@ use crate::automaton::*;
 
 pub struct GridView3D {}
 impl GridView3D {
-    pub fn new(display: Rc<glium::Display>, automaton: ProjectedAutomaton<Dim3D>) -> Self {
+    pub fn new(_display: Rc<glium::Display>, _automaton: ProjectedAutomaton<Dim3D>) -> Self {
         unimplemented!()
     }
     pub fn default(display: Rc<glium::Display>) -> Self {
@@ -14,7 +14,7 @@ impl GridView3D {
 }
 
 impl GridViewTrait for GridView3D {
-    fn draw(&mut self, target: &mut glium::Frame) {
+    fn draw(&mut self, _target: &mut glium::Frame) {
         unimplemented!()
     }
     fn do_frame(&mut self) {

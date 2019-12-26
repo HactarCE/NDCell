@@ -19,7 +19,7 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
         ui.text(format!("Population = {}", state.grid_view.get_population()));
         match &state.grid_view {
             GridView::View2D(GridView2D {
-                automaton,
+                automaton: _,
                 viewport:
                     Viewport2D {
                         pos,

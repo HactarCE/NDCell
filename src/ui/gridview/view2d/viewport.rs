@@ -67,8 +67,8 @@ impl Viewport2D {
         let dy_int = b.pos.y() - a.pos.y();
         let dx_offset = b.x_offset - a.x_offset;
         let dy_offset = b.y_offset - a.y_offset;
-        let mut dx = dx_int as f32 + dx_offset;
-        let mut dy = dy_int as f32 + dy_offset;
+        let dx = dx_int as f32 + dx_offset;
+        let dy = dy_int as f32 + dy_offset;
         if (dx.powf(2.0) + dy.powf(2.0)) * a.zoom.pixels_per_cell() < 0.01 {
             // If there's less than 1% of a pixel left, snap into position.
             ret.pos = b.pos;
@@ -79,7 +79,7 @@ impl Viewport2D {
         }
 
         // Interpolate zoom level.
-        let mut dz = b.zoom / a.zoom;
+        let dz = b.zoom / a.zoom;
         if dz.log2().abs() < 0.01 {
             // If there's less than 1% of a power of two left, snap to the zoom
             // level.

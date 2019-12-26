@@ -351,7 +351,7 @@ impl<'a> RenderInProgress<'a> {
             unscaled_cells_h,
         )
         .expect("Failed to create texture");
-        let mut unscaled_cells_fbo =
+        let unscaled_cells_fbo =
             glium::framebuffer::SimpleFrameBuffer::new(&*self.g.display, unscaled_cells_texture)
                 .expect("Failed to create frame buffer");
         self.draw_cell_chunks(

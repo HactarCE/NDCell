@@ -24,6 +24,11 @@ pub fn ceil_division(n: isize, d: isize) -> isize {
     ret
 }
 
+/// Rounds a number to the nearest multiple of another number.
+pub fn round_to(n: f32, m: f32) -> f32 {
+    (n / m).round() * m
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

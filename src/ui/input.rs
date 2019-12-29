@@ -4,6 +4,7 @@ use std::ops::Index;
 
 use super::gridview;
 use crate::automaton::Vec2D;
+use gridview::GridViewTrait;
 
 const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;
@@ -127,13 +128,9 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                     logo: false,
                 } => match virtual_keycode {
                     // Handle spacebar press.
-                    Some(VirtualKeyCode::Space) => {
-                        // TODO single step with history
-                    }
+                    Some(VirtualKeyCode::Space) => state.step_single(true),
                     // Handle tab key press.
-                    Some(VirtualKeyCode::Tab) => {
-                        // TODO step with history
-                    }
+                    Some(VirtualKeyCode::Tab) => state.step(true),
                     _ => (),
                 },
 
@@ -155,7 +152,8 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                         }
                         // Reset.
                         Some(VirtualKeyCode::R) => {
-                            // TODO reset
+                            while state.grid_view.get_generation_count() > 0
+                                && state.history.undo(&mut state.grid_view) {}
                         }
                         _ => (),
                     }

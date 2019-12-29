@@ -140,37 +140,41 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                     ctrl: true,
                     alt: false,
                     logo: false,
-                } =>
-                    match virtual_keycode {
-                        // Undo.
-                        Some(VirtualKeyCode::Z) => {
-                            state.history.undo(&mut state.grid_view);
-                        }
-                        // Redo.
-                        Some(VirtualKeyCode::Y) => {
-                            state.history.redo(&mut state.grid_view);
-                        }
-                        // Reset.
-                        Some(VirtualKeyCode::R) => {
-                            while state.grid_view.get_generation_count() > 0
-                                && state.history.undo(&mut state.grid_view) {}
-                        }
-                        _ => (),
+                } => match virtual_keycode {
+                    // Undo.
+                    Some(VirtualKeyCode::Z) => {
+                        state.stop_running();
+                        state.history.undo(&mut state.grid_view);
                     }
-                ,
+                    // Redo.
+                    Some(VirtualKeyCode::Y) => {
+                        state.stop_running();
+                        state.history.redo(&mut state.grid_view);
+                    }
+                    // Reset.
+                    Some(VirtualKeyCode::R) => {
+                        state.stop_running();
+                        while state.grid_view.get_generation_count() > 0
+                            && state.history.undo(&mut state.grid_view)
+                        {}
+                    }
+                    _ => (),
+                },
                 // SHIFT + CTRL
                 ModifiersState {
                     shift: true,
                     ctrl: true,
                     alt: false,
                     logo: false,
-                } =>
-                    match virtual_keycode {
-                        // Redo.
-                        Some(VirtualKeyCode::Z) => {state.history.redo(&mut state.grid_view);},
-                        _ => (),
+                } => match virtual_keycode {
+                    // Redo.
+                    Some(VirtualKeyCode::Z) => {
+                        state.stop_running();
+                        state.history.redo(&mut state.grid_view);
                     }
-                ,_=>(),
+                    _ => (),
+                },
+                _ => (),
             }
         }
         // Ignore key release.

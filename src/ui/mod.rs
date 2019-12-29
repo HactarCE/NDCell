@@ -116,7 +116,7 @@ pub fn show_gui() {
     // grid.set_cell([4, 1].into(), 1);
     let mut automaton = NdAutomaton::default();
     automaton.tree = grid;
-    automaton.sim = Simulation::new(Rc::new(rule::LIFE), 1024);
+    automaton.sim = Simulation::new(Rc::new(rule::LIFE), 4);
     let mut state = State {
         grid_view: GridView::new_2d(display.clone(), automaton),
         history: Default::default(),

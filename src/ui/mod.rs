@@ -11,10 +11,12 @@ use std::time::Instant;
 
 mod gridview;
 mod gui;
+mod history;
 mod input;
 
 use crate::automaton::*;
 use gridview::{GridView, GridViewTrait};
+use history::*;
 
 /// The title of the window (both the OS window, and the main imgui window).
 pub const TITLE: &str = "NDCell";
@@ -23,6 +25,7 @@ pub const TITLE: &str = "NDCell";
 /// configuration.
 pub struct State {
     pub grid_view: GridView,
+    pub history: Vec<HistoryStack>,
     pub gui: gui::GuiWindows,
 }
 
@@ -115,6 +118,7 @@ pub fn show_gui() {
     automaton.sim = Simulation::new(Rc::new(rule::LIFE), 1024);
     let mut state = State {
         grid_view: GridView::new_2d(display.clone(), automaton),
+        history: Default::default(),
         gui: Default::default(),
     };
 

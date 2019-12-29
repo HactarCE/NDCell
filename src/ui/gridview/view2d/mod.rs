@@ -38,8 +38,9 @@ impl GridView2D {
     pub fn default(display: Rc<glium::Display>) -> Self {
         Self::new(display, ProjectedAutomaton::default())
     }
-    pub fn get_interpolating_viewport(&self) -> &Viewport2D {
-        &self.interpolating_viewport
+    pub fn use_viewport_from(&mut self, other: &Self) {
+        self.viewport = other.viewport.clone();
+        self.interpolating_viewport = other.interpolating_viewport.clone();
     }
 }
 

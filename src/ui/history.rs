@@ -1,41 +1,32 @@
-pub struct HistoryStack{
-    undo: Vec<HistoryEntry>
-    redo: Vec<HistoryEntry>
+use super::*;
+
+#[derive(Default)]
+pub struct HistoryStack {
+    undo: Vec<HistoryEntry>,
+    redo: Vec<HistoryEntry>,
 }
 
-// #[enum_dispatch(NdHistoryEntryTrait)]
-// pub enum HistoryEntry<D> {
-//     Tree1D(NdHistoryEntry<Dim1>),
-//     Tree2D(NdHistoryEntry<Dim2>),
-//     Tree3D(NdHistoryEntry<Dim3>),
-//     Tree4D(NdHistoryEntry<Dim4>),
-//     Tree5D(NdHistoryEntry<Dim5>),
-//     Tree6D(NdHistoryEntry<Dim6>),
-// }
+pub struct HistoryEntry(GridView);
 
-pub struct HistoryEntry {
-    grid_view: GridView
-}
-
-impl NdHistoryEntry{
+impl HistoryEntry {
     fn restore(self, current: GridView) -> GridView {
-        let ret = self;
+        let mut ret = self.0;
+        // Preserve viewport if possible
         match &mut ret {
-            GridView::View2D{automaton, viewport} => {
-                // Preserve viewport if possible
-                if let GridView::View2D{viewport: current_viewport, ..} = current {
-                    *viewport = current_viewport;
+            GridView::View2D(about_to_restore) => {
+                if let GridView::View2D(current_view) = &current {
+                    about_to_restore.use_viewport_from(current_view);
                 }
             }
-            GridView::View3D{..} => {
-                unimplemented!()
-            }
+            GridView::View3D { .. } => unimplemented!(),
         }
+        // Return the GridView.
+        ret
     }
 }
 
 impl From<GridView> for HistoryEntry {
     fn from(grid_view: GridView) -> Self {
-        Self {grid_view}
+        Self(grid_view)
     }
 }

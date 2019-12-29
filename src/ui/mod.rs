@@ -25,7 +25,8 @@ pub const TITLE: &str = "NDCell";
 /// configuration.
 pub struct State {
     pub grid_view: GridView,
-    pub history: Vec<HistoryStack>,
+    pub history: HistoryStack,
+    pub input_state: input::InputState,
     pub gui: gui::GuiWindows,
 }
 
@@ -119,6 +120,7 @@ pub fn show_gui() {
     let mut state = State {
         grid_view: GridView::new_2d(display.clone(), automaton),
         history: Default::default(),
+        input_state: Default::default(),
         gui: Default::default(),
     };
 
@@ -126,6 +128,8 @@ pub fn show_gui() {
     let mut last_frame_time = Instant::now();
     let mut closed = false;
     while !closed {
+        input::start_frame(&mut state);
+
         events_loop.poll_events(|ev| {
             // Let imgui handle events.
             platform.handle_event(imgui.io_mut(), &window, &ev);
@@ -141,6 +145,8 @@ pub fn show_gui() {
                 _ => (),
             }
         });
+
+        input::do_frame(&mut state);
 
         state.grid_view.do_frame();
 

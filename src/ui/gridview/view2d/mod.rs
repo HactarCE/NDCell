@@ -12,9 +12,12 @@ pub use viewport::Viewport2D;
 pub use zoom::Zoom2D;
 
 pub struct GridView2D {
+    /// Automaton being simulated and displayed.
     pub automaton: ProjectedAutomaton<Dim2D>,
+    /// Target viewport.
     pub viewport: Viewport2D,
-    interpolating_viewport: Viewport2D,
+    /// Viewport that interpolates to the target and is used for drawing.
+    pub interpolating_viewport: Viewport2D,
     render_cache: render::RenderCache,
     shaders: render::Shaders,
     vbos: render::VBOs,

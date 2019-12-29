@@ -229,7 +229,7 @@ impl<'a> RenderInProgress<'a> {
     /// Performs preliminary computations and returns a RenderInProgress.
     pub fn new(g: &'a mut GridView2D, target: &'a mut glium::Frame) -> Self {
         let (target_w, target_h) = target.get_dimensions();
-        let viewport = g.get_interpolating_viewport().clone();
+        let viewport = g.interpolating_viewport.clone();
         let mut zoom = viewport.zoom;
 
         // Compute the width of pixels for each individual cell.

@@ -1,6 +1,6 @@
 use glium::glutin::*;
 use std::collections::HashSet;
-use std::ops::{Index, IndexMut};
+use std::ops::Index;
 
 use super::gridview;
 use crate::automaton::Vec2D;

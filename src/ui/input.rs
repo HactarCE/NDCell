@@ -86,7 +86,7 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                     handle_key(state, input);
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
-                    // Pan 64x.
+                    // Pan 100x.
                     let (dx, dy) = match delta {
                         MouseScrollDelta::LineDelta(x, y) => (*x, *y),
                         MouseScrollDelta::PixelDelta(dpi::LogicalPosition { x, y }) => {
@@ -95,7 +95,7 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                     };
                     match &mut state.grid_view {
                         gridview::GridView::View2D(view2d) => {
-                            view2d.viewport.pan_pixels(dx * 64.0, dy * 64.0);
+                            view2d.viewport.pan_pixels(dx * 100.0, dy * 100.0);
                         }
                         _ => (),
                     }

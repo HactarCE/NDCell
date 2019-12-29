@@ -73,6 +73,8 @@ impl HistoryEntry {
             }
             GridView::View3D { .. } => unimplemented!(),
         }
+        // Preserve step size.
+        self.0.set_step_size(current.get_step_size());
         // Perform the replacement.
         std::mem::replace(current, self.0)
     }

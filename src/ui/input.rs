@@ -181,38 +181,48 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
 }
 
 pub fn do_frame(state: &mut super::State) {
+    let input_state = &mut state.input_state;
+    let no_modifiers_pressed = !(input_state[VirtualKeyCode::LAlt]
+        || input_state[VirtualKeyCode::LControl]
+        || input_state[VirtualKeyCode::LShift]
+        || input_state[VirtualKeyCode::LWin]
+        || input_state[VirtualKeyCode::RAlt]
+        || input_state[VirtualKeyCode::RControl]
+        || input_state[VirtualKeyCode::RShift]
+        || input_state[VirtualKeyCode::RWin]);
     match &mut state.grid_view {
         gridview::GridView::View2D(view2d) => {
-            let input_state = &mut state.input_state;
-            // 'A' or left arrow => pan west.
-            if input_state[30] || input_state[VirtualKeyCode::Left] {
-                view2d.viewport.pan_pixels(-50.0, 0.0);
-                input_state.moving = true;
-            }
-            // 'D' or right arrow => pan west.
-            if input_state[32] || input_state[VirtualKeyCode::Right] {
-                view2d.viewport.pan_pixels(50.0, 0.0);
-                input_state.moving = true;
-            }
-            // 'W' or up arrow => pan north.
-            if input_state[17] || input_state[VirtualKeyCode::Up] {
-                view2d.viewport.pan_pixels(0.0, 50.0);
-                input_state.moving = true;
-            }
-            // 'S' or down arrow => pan down.
-            if input_state[31] || input_state[VirtualKeyCode::Down] {
-                view2d.viewport.pan_pixels(0.0, -50.0);
-                input_state.moving = true;
-            }
-            // 'Q' or page up => zoom in.
-            if input_state[16] || input_state[VirtualKeyCode::PageUp] {
-                view2d.viewport.zoom_by(2.0f32.powf(0.1f32));
-                input_state.zooming = true;
-            }
-            // 'Z' or page down => zoom out.
-            if input_state[44] || input_state[VirtualKeyCode::PageDown] {
-                view2d.viewport.zoom_by(2.0f32.powf(-0.1f32));
-                input_state.zooming = true;
+            if no_modifiers_pressed {
+                // 'A' or left arrow => pan west.
+                if input_state[30] || input_state[VirtualKeyCode::Left] {
+                    view2d.viewport.pan_pixels(-50.0, 0.0);
+                    input_state.moving = true;
+                }
+                // 'D' or right arrow => pan west.
+                if input_state[32] || input_state[VirtualKeyCode::Right] {
+                    view2d.viewport.pan_pixels(50.0, 0.0);
+                    input_state.moving = true;
+                }
+                // 'W' or up arrow => pan north.
+                if input_state[17] || input_state[VirtualKeyCode::Up] {
+                    view2d.viewport.pan_pixels(0.0, 50.0);
+                    input_state.moving = true;
+                }
+                // 'S' or down arrow => pan down.
+                if input_state[31] || input_state[VirtualKeyCode::Down] {
+                    view2d.viewport.pan_pixels(0.0, -50.0);
+                    input_state.moving = true;
+                }
+                // 'Q' or page up => zoom in.
+                if input_state[16] || input_state[VirtualKeyCode::PageUp] {
+                    view2d.viewport.zoom_by(2.0f32.powf(0.1f32));
+                    input_state.zooming = true;
+                }
+                // 'Z' or page down => zoom out.
+                if input_state[44] || input_state[VirtualKeyCode::PageDown] {
+                    view2d.viewport.zoom_by(2.0f32.powf(-0.1f32));
+                    input_state.zooming = true;
+                }
             }
             if !input_state.moving {
                 // Snap to nearest position and zoom level.

@@ -3,8 +3,7 @@ use std::collections::HashSet;
 use std::ops::Index;
 
 use super::gridview;
-use crate::automaton::Vec2D;
-use gridview::GridViewTrait;
+use crate::automaton::{NdSimulate, Vec2D};
 
 const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;

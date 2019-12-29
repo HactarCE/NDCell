@@ -4,20 +4,16 @@ use std::rc::Rc;
 mod view2d;
 mod view3d;
 
-use crate::automaton::{Dim, Dim2D, Dim3D, NdProjectedAutomaton, ProjectedAutomaton};
+use crate::automaton::*;
 pub use view2d::{GridView2D, Viewport2D, Zoom2D};
 pub use view3d::GridView3D;
 
 /// The trait implemented by GridView by dispatching to the implementation of
 /// the GridView2D or GridView3D within.
 #[enum_dispatch]
-pub trait GridViewTrait: Clone {
+pub trait GridViewTrait: Clone + NdSimulate {
     fn draw(&mut self, target: &mut glium::Frame);
     fn do_frame(&mut self);
-    fn step(&mut self);
-    fn step_single(&mut self);
-    fn get_population(&self) -> usize;
-    fn get_generation_count(&self) -> usize;
 }
 
 /// An enum between 2D and 3D views that manages the automaton.
@@ -26,6 +22,32 @@ pub trait GridViewTrait: Clone {
 pub enum GridView {
     View2D(GridView2D),
     View3D(GridView3D),
+}
+
+/// Conversions from an NdProjectedAutomaton to a GridView.
+impl<D: Dim, P: Dim> From<NdProjectedAutomaton<D, P>> for GridView
+where
+    ProjectedAutomaton<P>: From<NdProjectedAutomaton<D, P>>,
+    Self: From<ProjectedAutomaton<P>>,
+{
+    fn from(automaton: NdProjectedAutomaton<D, P>) -> Self {
+        Self::from(ProjectedAutomaton::from(automaton))
+    }
+}
+
+impl IntoNdSimulate for GridView {
+    fn into(&self) -> &dyn NdSimulate {
+        match self {
+            Self::View2D(view2d) => view2d,
+            Self::View3D(view3d) => view3d,
+        }
+    }
+    fn into_mut(&mut self) -> &mut dyn NdSimulate {
+        match self {
+            Self::View2D(view2d) => view2d,
+            Self::View3D(view3d) => view3d,
+        }
+    }
 }
 
 impl GridView {
@@ -46,16 +68,5 @@ impl GridView {
             display,
             ProjectedAutomaton::from(automaton),
         ))
-    }
-}
-
-/// Conversions from an NdProjectedAutomaton to a GridView.
-impl<D: Dim, P: Dim> From<NdProjectedAutomaton<D, P>> for GridView
-where
-    ProjectedAutomaton<P>: From<NdProjectedAutomaton<D, P>>,
-    Self: From<ProjectedAutomaton<P>>,
-{
-    fn from(automaton: NdProjectedAutomaton<D, P>) -> Self {
-        Self::from(ProjectedAutomaton::from(automaton))
     }
 }

@@ -7,11 +7,13 @@ use enum_dispatch::enum_dispatch;
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
+mod ndsimulate;
 pub mod projection;
 pub mod rule;
 pub mod simulation;
 pub mod space;
 
+pub use ndsimulate::*;
 pub use projection::*;
 pub use rule::{DummyRule, Rule};
 pub use simulation::*;
@@ -21,26 +23,12 @@ pub use space::*;
 /// NdProjectedAutomaton.
 #[enum_dispatch]
 pub trait NdProjectedAutomatonTrait<P: Dim> {
-    /// Returns the number of dimensions of the underlying automaton.
-    fn get_ndim(&self) -> usize;
-    /// Sets the simulation step size.
-    fn set_step_size(&mut self, step_size: usize);
-    /// Returns the simulation step size.
-    fn get_step_size(&self) -> usize;
-    /// Step forward in the simulation by the step size.
-    fn step(&mut self);
-    /// Step forward one generation in the simulation.
-    fn step_single(&mut self);
     /// Returns the projected NdTree.
     fn get_projected_tree(&self) -> NdTree<u8, P>;
     /// Returns the ProjectionParams used to create this projection.
     fn get_projection_params(&self) -> ProjectionParams;
     /// Sets the projection from the ProjectionParams.
     fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError>;
-    /// Returns the population of the whole grid.
-    fn get_population(&self) -> usize;
-    /// Returns the number of generations that have elapsed in the simulation.
-    fn get_generation_count(&self) -> usize;
 }
 
 /// An automaton of an unknown dimensionality combined with a projection to a
@@ -109,6 +97,28 @@ where
         Self::from(NdProjectedAutomaton::from(automaton))
     }
 }
+impl<P: Dim> IntoNdSimulate for ProjectedAutomaton<P> {
+    fn into(&self) -> &dyn NdSimulate {
+        match self {
+            Self::From1D(inner) => inner,
+            Self::From2D(inner) => inner,
+            Self::From3D(inner) => inner,
+            Self::From4D(inner) => inner,
+            Self::From5D(inner) => inner,
+            Self::From6D(inner) => inner,
+        }
+    }
+    fn into_mut(&mut self) -> &mut dyn NdSimulate {
+        match self {
+            Self::From1D(inner) => inner,
+            Self::From2D(inner) => inner,
+            Self::From3D(inner) => inner,
+            Self::From4D(inner) => inner,
+            Self::From5D(inner) => inner,
+            Self::From6D(inner) => inner,
+        }
+    }
+}
 
 /// A D-dimensional automaton with a projection from a D-dimensional grid to a
 /// P-dimensional one.
@@ -131,24 +141,15 @@ impl<D: Dim> Default for NdProjectedAutomaton<D, D> {
         Self::from(NdAutomaton::default())
     }
 }
+impl<D: Dim, P: Dim> IntoNdSimulate for NdProjectedAutomaton<D, P> {
+    fn into(&self) -> &dyn NdSimulate {
+        &self.automaton
+    }
+    fn into_mut(&mut self) -> &mut dyn NdSimulate {
+        &mut self.automaton
+    }
+}
 impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P> {
-    fn get_ndim(&self) -> usize {
-        D::NDIM
-    }
-    fn set_step_size(&mut self, step_size: usize) {
-        self.automaton.sim.set_step_size(step_size);
-    }
-    fn get_step_size(&self) -> usize {
-        self.automaton.sim.get_step_size()
-    }
-    fn step(&mut self) {
-        self.automaton.sim.step(&mut self.automaton.tree);
-        self.automaton.generations += self.automaton.sim.get_step_size();
-    }
-    fn step_single(&mut self) {
-        self.automaton.sim.step_single(&mut self.automaton.tree);
-        self.automaton.generations += 1;
-    }
     fn get_projected_tree(&self) -> NdTree<u8, P> {
         self.projection.project(&self.automaton.tree)
     }
@@ -158,12 +159,6 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
     fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError> {
         self.projection = NdProjection(params.try_into()?);
         Ok(())
-    }
-    fn get_population(&self) -> usize {
-        self.automaton.tree.get_root().population
-    }
-    fn get_generation_count(&self) -> usize {
-        self.automaton.generations
     }
 }
 
@@ -175,6 +170,34 @@ pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<u8, D>,
     pub sim: Simulation<u8, D>,
     pub generations: usize,
+}
+impl<D: Dim> NdSimulate for NdAutomaton<D> {
+    fn get_ndim(&self) -> usize {
+        D::NDIM
+    }
+    fn get_population(&self) -> usize {
+        self.tree.get_root().population
+    }
+    fn get_step_size(&self) -> usize {
+        self.sim.get_step_size()
+    }
+    fn set_step_size(&mut self, step_size: usize) {
+        self.sim.set_step_size(step_size);
+    }
+    fn get_generation_count(&self) -> usize {
+        self.generations
+    }
+    fn set_generation_count(&mut self, generations: usize) {
+        self.generations = generations;
+    }
+    fn step(&mut self) {
+        self.sim.step(&mut self.tree);
+        self.generations += self.sim.get_step_size();
+    }
+    fn step_single(&mut self) {
+        self.sim.step_single(&mut self.tree);
+        self.generations += 1;
+    }
 }
 
 #[cfg(test)]

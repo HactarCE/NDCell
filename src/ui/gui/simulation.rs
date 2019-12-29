@@ -1,5 +1,6 @@
 use imgui::*;
 
+use crate::automaton::NdSimulate;
 use crate::ui::State;
 
 #[derive(Default)]

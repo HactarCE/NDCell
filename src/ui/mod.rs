@@ -177,17 +177,20 @@ pub fn show_gui() {
 impl State {
     /// Step forward a number of generations in the simulation.
     pub fn step(&mut self, record_history: bool) {
-        self.record_if(record_history);
+        if record_history {
+            self.record_state();
+        }
         self.grid_view.step();
     }
     /// Step forward one generation in the simulation.
     pub fn step_single(&mut self, record_history: bool) {
-        self.record_if(record_history);
+        if record_history {
+            self.record_state();
+        }
         self.grid_view.step_single();
     }
-    fn record_if(&mut self, do_it: bool) {
-        if do_it {
-            self.history.record(self.grid_view.clone());
-        }
+    /// Record the current state in the undo history.
+    fn record_state(&mut self) {
+        self.history.record(self.grid_view.clone());
     }
 }

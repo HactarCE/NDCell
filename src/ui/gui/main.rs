@@ -1,7 +1,7 @@
 use imgui::*;
 
-use crate::automaton::space::Axis;
-use crate::ui::gridview::{GridView, GridView2D, GridViewTrait, Viewport2D};
+use crate::automaton::{Axis, NdSimulate};
+use crate::ui::gridview::{GridView, GridView2D, Viewport2D};
 use crate::ui::State;
 
 #[derive(Default)]

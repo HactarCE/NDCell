@@ -186,22 +186,22 @@ pub fn do_frame(state: &mut super::State) {
             let input_state = &mut state.input_state;
             // 'A' or left arrow => scroll west.
             if input_state[30] || input_state[VirtualKeyCode::Left] {
-                view2d.viewport.scroll_pixels(-32.0, 0.0);
+                view2d.viewport.scroll_pixels(-50.0, 0.0);
                 input_state.moving = true;
             }
             // 'D' or right arrow => scroll west.
             if input_state[32] || input_state[VirtualKeyCode::Right] {
-                view2d.viewport.scroll_pixels(32.0, 0.0);
+                view2d.viewport.scroll_pixels(50.0, 0.0);
                 input_state.moving = true;
             }
             // 'W' or up arrow => scroll north.
             if input_state[17] || input_state[VirtualKeyCode::Up] {
-                view2d.viewport.scroll_pixels(0.0, 32.0);
+                view2d.viewport.scroll_pixels(0.0, 50.0);
                 input_state.moving = true;
             }
             // 'S' or down arrow => scroll down.
             if input_state[31] || input_state[VirtualKeyCode::Down] {
-                view2d.viewport.scroll_pixels(0.0, -32.0);
+                view2d.viewport.scroll_pixels(0.0, -50.0);
                 input_state.moving = true;
             }
             // 'Q' or page up => zoom in.

@@ -14,6 +14,8 @@ pub use view3d::GridView3D;
 pub trait GridViewTrait: Clone {
     fn draw(&mut self, target: &mut glium::Frame);
     fn do_frame(&mut self);
+    fn step(&mut self);
+    fn step_single(&mut self);
     fn get_population(&self) -> usize;
     fn get_generation_count(&self) -> usize;
 }

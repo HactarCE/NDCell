@@ -173,3 +173,21 @@ pub fn show_gui() {
         target.finish().expect("Failed to swap buffers");
     }
 }
+
+impl State {
+    /// Step forward a number of generations in the simulation.
+    pub fn step(&mut self, record_history: bool) {
+        self.record_if(record_history);
+        self.grid_view.step();
+    }
+    /// Step forward one generation in the simulation.
+    pub fn step_single(&mut self, record_history: bool) {
+        self.record_if(record_history);
+        self.grid_view.step_single();
+    }
+    fn record_if(&mut self, do_it: bool) {
+        if do_it {
+            self.history.record(self.grid_view.clone());
+        }
+    }
+}

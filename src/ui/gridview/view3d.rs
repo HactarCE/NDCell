@@ -21,6 +21,12 @@ impl GridViewTrait for GridView3D {
     fn do_frame(&mut self) {
         unimplemented!()
     }
+    fn step(&mut self) {
+        unimplemented!()
+    }
+    fn step_single(&mut self) {
+        unimplemented!()
+    }
     fn get_population(&self) -> usize {
         unimplemented!()
     }

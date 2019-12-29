@@ -54,6 +54,12 @@ impl GridViewTrait for GridView2D {
             );
         }
     }
+    fn step(&mut self) {
+        self.automaton.step();
+    }
+    fn step_single(&mut self) {
+        self.automaton.step_single();
+    }
     fn get_population(&self) -> usize {
         self.automaton.get_population()
     }

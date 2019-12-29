@@ -130,10 +130,11 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                     alt: false,
                     logo: false,
                 } => match virtual_keycode {
-                    // Handle spacebar press.
                     Some(VirtualKeyCode::Space) => state.step_single(true),
-                    // Handle tab key press.
                     Some(VirtualKeyCode::Tab) => state.step(true),
+                    Some(VirtualKeyCode::Return) => {
+                        state.toggle_running();
+                    }
                     _ => (),
                 },
 

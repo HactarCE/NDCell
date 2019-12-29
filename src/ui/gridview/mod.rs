@@ -11,7 +11,7 @@ pub use view3d::GridView3D;
 /// The trait implemented by GridView by dispatching to the implementation of
 /// the GridView2D or GridView3D within.
 #[enum_dispatch]
-pub trait GridViewTrait {
+pub trait GridViewTrait: Clone {
     fn draw(&mut self, target: &mut glium::Frame);
     fn do_frame(&mut self);
     fn get_population(&self) -> usize;
@@ -20,6 +20,7 @@ pub trait GridViewTrait {
 
 /// An enum between 2D and 3D views that manages the automaton.
 #[enum_dispatch(GridViewTrait)]
+#[derive(Clone)]
 pub enum GridView {
     View2D(GridView2D),
     View3D(GridView3D),

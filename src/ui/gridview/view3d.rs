@@ -3,6 +3,7 @@ use std::rc::Rc;
 use super::GridViewTrait;
 use crate::automaton::*;
 
+#[derive(Clone)]
 pub struct GridView3D {}
 impl GridView3D {
     pub fn new(_display: Rc<glium::Display>, _automaton: ProjectedAutomaton<Dim3D>) -> Self {

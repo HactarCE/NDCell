@@ -37,12 +37,13 @@
 //! lines is not at all trivial in OpenGL!). At non-integer zoom factors,
 //! however, this is not guaranteed.
 
-use super::*;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use std::borrow::Cow;
+use std::cell::RefMut;
 use std::collections::HashMap;
 
+use super::*;
 use crate::automaton::space::*;
 
 /// A vertex containing just a color.
@@ -159,12 +160,7 @@ impl CellPixelChunk {
     }
 }
 
-#[derive(Default)]
-pub(super) struct RenderCache {
-    chunks: HashMap<NdCachedNode<u8, Dim2D>, (CellPixelChunk, bool)>,
-}
-
-pub(super) struct Shaders {
+struct Shaders {
     gridlines: glium::Program,
 }
 impl Shaders {
@@ -175,7 +171,7 @@ impl Shaders {
     }
 }
 
-pub(super) struct VBOs {
+struct VBOs {
     cell_chunk: glium::VertexBuffer<SimpleColorVertex>,
     cell_point: glium::VertexBuffer<PointVertex>,
     cell_square: glium::VertexBuffer<PointVertex>,
@@ -196,6 +192,23 @@ impl VBOs {
     }
 }
 
+pub(super) struct RenderCache {
+    chunks: HashMap<NdCachedNode<u8, Dim2D>, (CellPixelChunk, bool)>,
+    shaders: Shaders,
+    vbos: VBOs,
+    display: Rc<glium::Display>,
+}
+impl RenderCache {
+    pub fn new(display: Rc<glium::Display>) -> Self {
+        Self {
+            chunks: HashMap::default(),
+            shaders: Shaders::compile(&*display),
+            vbos: VBOs::new(&*display),
+            display: display,
+        }
+    }
+}
+
 pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
     let mut rip = RenderInProgress::new(grid_view, target);
     rip.draw_cells();
@@ -203,10 +216,11 @@ pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
 }
 
 struct RenderInProgress<'a> {
-    g: &'a mut GridView2D,
-    target: &'a mut glium::Frame,
+    cache: RefMut<'a, RenderCache>,
     /// The viewport to use when rendering.
     viewport: Viewport2D,
+    /// The target to render to.
+    target: &'a mut glium::Frame,
     /// The node layer of a render cell.
     render_cell_layer: usize,
     /// The width in pixels of a render cell.
@@ -230,6 +244,7 @@ impl<'a> RenderInProgress<'a> {
     pub fn new(g: &'a mut GridView2D, target: &'a mut glium::Frame) -> Self {
         let (target_w, target_h) = target.get_dimensions();
         let viewport = g.interpolating_viewport.clone();
+        let cache = g.render_cache.borrow_mut();
         let mut zoom = viewport.zoom;
 
         // Compute the width of pixels for each individual cell.
@@ -322,7 +337,7 @@ impl<'a> RenderInProgress<'a> {
         }
 
         Self {
-            g,
+            cache,
             viewport,
             target,
             render_cell_layer,
@@ -346,14 +361,16 @@ impl<'a> RenderInProgress<'a> {
         //     .cell_pixels
         //     .at_size(unscaled_cells_w, unscaled_cells_h);
         let unscaled_cells_texture = &glium::texture::srgb_texture2d::SrgbTexture2d::empty(
-            &*self.g.display,
+            &*self.cache.display,
             unscaled_cells_w,
             unscaled_cells_h,
         )
         .expect("Failed to create texture");
-        let unscaled_cells_fbo =
-            glium::framebuffer::SimpleFrameBuffer::new(&*self.g.display, unscaled_cells_texture)
-                .expect("Failed to create frame buffer");
+        let unscaled_cells_fbo = glium::framebuffer::SimpleFrameBuffer::new(
+            &*self.cache.display,
+            unscaled_cells_texture,
+        )
+        .expect("Failed to create frame buffer");
         self.draw_cell_chunks(
             unscaled_cells_texture,
             &self.quadtree_slice.root.clone(),
@@ -376,7 +393,7 @@ impl<'a> RenderInProgress<'a> {
         //     .scaled_cells
         //     .at_size(scaled_cells_w, scaled_cells_h);
         let scaled_cells_texture = &glium::framebuffer::RenderBuffer::new(
-            &*self.g.display,
+            &*self.cache.display,
             glium::texture::UncompressedFloatFormat::U8U8U8,
             scaled_cells_w,
             scaled_cells_h,
@@ -384,7 +401,7 @@ impl<'a> RenderInProgress<'a> {
         .expect("Failed to create render buffer");
 
         let scaled_cells_fbo =
-            glium::framebuffer::SimpleFrameBuffer::new(&*self.g.display, scaled_cells_texture)
+            glium::framebuffer::SimpleFrameBuffer::new(&*self.cache.display, scaled_cells_texture)
                 .expect("Failed to create frame buffer");
         let source_rect = glium::Rect {
             left: *render_cell_visible_rect.min().x() as u32,
@@ -445,7 +462,7 @@ impl<'a> RenderInProgress<'a> {
 
         // Remove elements from the cache that we did not use this frame, and
         // mark the rest as being unused (to prepare for the next frame).
-        self.g.render_cache.chunks.retain(|_, (_, ref mut keep)| {
+        self.cache.chunks.retain(|_, (_, ref mut keep)| {
             let ret = *keep;
             *keep = false;
             ret
@@ -502,8 +519,7 @@ impl<'a> RenderInProgress<'a> {
     // Get a Vec of vertices for all the cells in the given chunk, creating a
     // new one if necessary.
     fn get_color_array(&mut self, node: &NdCachedNode<u8, Dim2D>) -> CellPixelChunk {
-        self.g
-            .render_cache
+        self.cache
             .chunks
             .entry(node.clone())
             .and_modify(|(_, ref mut keep)| {
@@ -578,14 +594,14 @@ impl<'a> RenderInProgress<'a> {
         // hold all the points at once.
         for batch in gridline_vertices.chunks(GRIDLINE_BATCH_SIZE) {
             // Put the data in a slice of the VBO.
-            let vbo_slice = self.g.vbos.gridlines.slice(0..batch.len()).unwrap();
+            let vbo_slice = self.cache.vbos.gridlines.slice(0..batch.len()).unwrap();
             vbo_slice.write(batch);
             // Draw gridlines.
             self.target
                 .draw(
                     vbo_slice,
                     &gridlines_indices,
-                    &self.g.shaders.gridlines,
+                    &self.cache.shaders.gridlines,
                     &uniform! {
                         matrix: view_matrix,
                         lines_color: GRID_COLOR,

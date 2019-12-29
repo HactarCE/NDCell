@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 mod render;
@@ -11,6 +12,7 @@ use crate::automaton::*;
 pub use viewport::Viewport2D;
 pub use zoom::Zoom2D;
 
+#[derive(Clone)]
 pub struct GridView2D {
     /// Automaton being simulated and displayed.
     pub automaton: ProjectedAutomaton<Dim2D>,
@@ -18,10 +20,7 @@ pub struct GridView2D {
     pub viewport: Viewport2D,
     /// Viewport that interpolates to the target and is used for drawing.
     pub interpolating_viewport: Viewport2D,
-    render_cache: render::RenderCache,
-    shaders: render::Shaders,
-    vbos: render::VBOs,
-    display: Rc<glium::Display>,
+    render_cache: Rc<RefCell<render::RenderCache>>,
 }
 impl GridView2D {
     pub fn new(display: Rc<glium::Display>, automaton: ProjectedAutomaton<Dim2D>) -> Self {
@@ -29,10 +28,7 @@ impl GridView2D {
             automaton: ProjectedAutomaton::from(automaton),
             viewport: Default::default(),
             interpolating_viewport: Default::default(),
-            render_cache: render::RenderCache::default(),
-            shaders: render::Shaders::compile(&*display),
-            vbos: render::VBOs::new(&*display),
-            display,
+            render_cache: Rc::new(RefCell::new(render::RenderCache::new(display))),
         }
     }
     pub fn default(display: Rc<glium::Display>) -> Self {

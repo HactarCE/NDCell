@@ -86,7 +86,7 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                     handle_key(state, input);
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
-                    // Scroll 64x.
+                    // Pan 64x.
                     let (dx, dy) = match delta {
                         MouseScrollDelta::LineDelta(x, y) => (*x, *y),
                         MouseScrollDelta::PixelDelta(dpi::LogicalPosition { x, y }) => {
@@ -95,7 +95,7 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                     };
                     match &mut state.grid_view {
                         gridview::GridView::View2D(view2d) => {
-                            view2d.viewport.scroll_pixels(dx * 64.0, dy * 64.0);
+                            view2d.viewport.pan_pixels(dx * 64.0, dy * 64.0);
                         }
                         _ => (),
                     }
@@ -184,24 +184,24 @@ pub fn do_frame(state: &mut super::State) {
     match &mut state.grid_view {
         gridview::GridView::View2D(view2d) => {
             let input_state = &mut state.input_state;
-            // 'A' or left arrow => scroll west.
+            // 'A' or left arrow => pan west.
             if input_state[30] || input_state[VirtualKeyCode::Left] {
-                view2d.viewport.scroll_pixels(-50.0, 0.0);
+                view2d.viewport.pan_pixels(-50.0, 0.0);
                 input_state.moving = true;
             }
-            // 'D' or right arrow => scroll west.
+            // 'D' or right arrow => pan west.
             if input_state[32] || input_state[VirtualKeyCode::Right] {
-                view2d.viewport.scroll_pixels(50.0, 0.0);
+                view2d.viewport.pan_pixels(50.0, 0.0);
                 input_state.moving = true;
             }
-            // 'W' or up arrow => scroll north.
+            // 'W' or up arrow => pan north.
             if input_state[17] || input_state[VirtualKeyCode::Up] {
-                view2d.viewport.scroll_pixels(0.0, 50.0);
+                view2d.viewport.pan_pixels(0.0, 50.0);
                 input_state.moving = true;
             }
-            // 'S' or down arrow => scroll down.
+            // 'S' or down arrow => pan down.
             if input_state[31] || input_state[VirtualKeyCode::Down] {
-                view2d.viewport.scroll_pixels(0.0, -50.0);
+                view2d.viewport.pan_pixels(0.0, -50.0);
                 input_state.moving = true;
             }
             // 'Q' or page up => zoom in.

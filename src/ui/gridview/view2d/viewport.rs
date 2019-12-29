@@ -15,15 +15,15 @@ pub struct Viewport2D {
 }
 
 impl Viewport2D {
-    /// Scroll the viewport by the given number of pixels along each axis.
-    pub fn scroll_pixels(&mut self, dx: f32, dy: f32) {
-        self.scroll_cells(
+    /// Pan the viewport by the given number of pixels along each axis.
+    pub fn pan_pixels(&mut self, dx: f32, dy: f32) {
+        self.pan_cells(
             dx * self.zoom.cells_per_pixel(),
             dy * self.zoom.cells_per_pixel(),
         );
     }
-    /// Scroll the viewport by the given number of cells along each axis.
-    pub fn scroll_cells(&mut self, dx: f32, dy: f32) {
+    /// Pan the viewport by the given number of cells along each axis.
+    pub fn pan_cells(&mut self, dx: f32, dy: f32) {
         // Add dx and dy.
         self.x_offset += dx;
         self.y_offset += dy;
@@ -75,7 +75,7 @@ impl Viewport2D {
             ret.x_offset = b.x_offset;
             ret.y_offset = b.y_offset;
         } else {
-            ret.scroll_cells(dx * portion, dy * portion);
+            ret.pan_cells(dx * portion, dy * portion);
         }
 
         // Interpolate zoom level.

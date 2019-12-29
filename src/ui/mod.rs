@@ -175,9 +175,28 @@ pub fn show_gui() {
 }
 
 impl State {
+    pub fn undo(&mut self) -> bool {
+        self.stop_running();
+        self.history.undo(&mut self.grid_view)
+    }
+    pub fn redo(&mut self) -> bool {
+        self.stop_running();
+        self.history.redo(&mut self.grid_view)
+    }
+    pub fn reset(&mut self) -> usize {
+        self.stop_running();
+        let mut i = 0;
+        while self.grid_view.get_generation_count() > 0 && self.undo() {
+            i += 1;
+        }
+        i
+    }
     /// Step forward a number of generations in the simulation.
     pub fn step(&mut self, record_history: bool) {
         if record_history {
+            if self.stop_running() {
+                return;
+            }
             self.record_state();
         }
         self.grid_view.step();
@@ -185,9 +204,28 @@ impl State {
     /// Step forward one generation in the simulation.
     pub fn step_single(&mut self, record_history: bool) {
         if record_history {
+            if self.stop_running() {
+                return;
+            }
             self.record_state();
         }
         self.grid_view.step_single();
+    }
+    pub fn toggle_running(&mut self) -> bool {
+        if self.input_state.is_running {
+            self.stop_running();
+            false
+        } else {
+            self.start_running();
+            true
+        }
+    }
+    pub fn start_running(&mut self) {
+        self.record_state();
+        self.input_state.is_running = true;
+    }
+    pub fn stop_running(&mut self) -> bool {
+        std::mem::replace(&mut self.input_state.is_running, false)
     }
     /// Record the current state in the undo history.
     fn record_state(&mut self) {

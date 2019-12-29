@@ -14,9 +14,13 @@ const TRUE_REF: &bool = &true;
 pub struct InputState {
     scancodes: HashSet<u32>,
     virtual_keycodes: HashSet<VirtualKeyCode>,
-    /// Whether user input directed the viewport to move this frame.
+    /// Whether the simulation is running.
+    pub is_running: bool,
+    /// Whether user input directed the viewport to move this frame. This is
+    /// reset at the beginning of each frame.
     pub moving: bool,
     /// Whether user input directed the viewport to zoom in or out this frame.
+    /// This is reset at the beginning of each frame.
     pub zooming: bool,
 }
 impl Index<u32> for InputState {
@@ -182,6 +186,10 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
 }
 
 pub fn do_frame(state: &mut super::State) {
+    if state.input_state.is_running {
+        state.step(false);
+    }
+
     let input_state = &mut state.input_state;
     let no_modifiers_pressed = !(input_state[VirtualKeyCode::LAlt]
         || input_state[VirtualKeyCode::LControl]

@@ -29,7 +29,6 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                     },
                 ..
             }) => {
-                // TODO fix formatting to show 3.4 and 3, but not 3.0
                 let x = pos[Axis::X] as f32 + x_offset;
                 let y = pos[Axis::Y] as f32 + y_offset;
                 if format!("{:.1}", x).ends_with("0") {

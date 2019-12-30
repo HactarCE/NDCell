@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CMakeRunConfigurationManager" shouldGenerate="true" shouldDeleteObsolete="true">
+    <generated />
+  </component>
+  <component name="CMakeSettings">
+    <configurations>
+      <configuration PROFILE_NAME="Debug" CONFIG_NAME="Debug" />
+    </configurations>
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="5718dc56-4827-4240-9ba5-264c4148bb5f" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/automaton/simulation.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/automaton/simulation.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/automaton/space/ndtree/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/automaton/space/ndtree/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/automaton/space/ndtree/node.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/automaton/space/ndtree/node.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/automaton/space/ndtree/slice.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/automaton/space/ndtree/slice.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/gridview/quad.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/gridview/quad.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/gridview/quad_impl.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/gridview/quad_impl.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/render/grid2d/cells.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/render/grid2d/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/render/grid2d/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/render/grid3d.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/render/grid3d.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/render/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/render/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ui/render/shaders/cell2d.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/ui/render/shaders/cell2d.rs" afterDir="false" />
+    </list>
+    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="MacroExpansionManager">
+    <option name="directoryName" value="GkwaMHGt" />
+  </component>
+  <component name="ProjectId" id="1UPZv1xgQTtgDd9rlRkhr0kre22" />
+  <component name="PropertiesComponent">
+    <property name="WebServerToolWindowFactoryState" value="false" />
+  </component>
+  <component name="RunDashboard">
+    <option name="ruleStates">
+      <list>
+        <RuleState>
+          <option name="name" value="ConfigurationTypeDashboardGroupingRule" />
+        </RuleState>
+        <RuleState>
+          <option name="name" value="StatusDashboardGroupingRule" />
+        </RuleState>
+      </list>
+    </option>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="5718dc56-4827-4240-9ba5-264c4148bb5f" name="Default Changelist" comment="" />
+      <created>1575260418454</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1575260418454</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

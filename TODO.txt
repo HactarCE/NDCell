@@ -1,0 +1,32 @@
+controls options:
+- zoom interpolation speed (0..5)
+- X/Y interpolation speed (0..5)
+
+render options:
+- smooth gridlines? (not supported on all graphics cards)
+- texture vs. icon render threshold (2, 4, 8, 16, never icons)
+- snap to integer position?
+- snap to power-of-2 zoom level?
+
+
+LSP analysis:
+- waiting on https://github.com/rust-lang/rls/issues/1212
+
+README:
+1. add table of contents
+
+1D rules:
+- hex/even neighborhood: https://www.youtube.com/watch?v=9JN5f7_3YmQ
+
+3D rules:
+- B3/S (for Heavpoot)
+- https://discordapp.com/channels/357922255553953794/466875732988264466/649033455476146196
+
+Tricky transition functions:
+- https://discordapp.com/channels/357922255553953794/466875732988264466/649965865852469268
+
+tools:
+- see Effortless Building mod for Minecraft for some inspiration
+
+edge cases:
+- handle HiDpiFactorChanged: https://docs.rs/glutin/0.22.0-alpha5/glutin/event/enum.WindowEvent.html#variant.HiDpiFactorChanged

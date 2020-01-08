@@ -20,11 +20,12 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
         * [x] Render in 256x256 chunks
         * [x] Skip empty chunks
         * [x] Cache chunks between frames
-- [ ] Control simulation from GUI
-    + [ ] Undo/reset
-    + [ ] Change sim step
+- [x] Control simulation from GUI
+    + [x] Undo/reset
+    + [x] Change sim step
     + [ ] Jump to generation
 - [ ] Read simple 2D RLE files from Golly
+- [ ] Edit patterns with the mouse
 - [ ] Begin work on 3D rendering
 
 ## Implementation status

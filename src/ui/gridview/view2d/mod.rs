@@ -39,10 +39,10 @@ impl GridViewTrait for GridView2D {
 }
 
 impl IntoNdSimulate for GridView2D {
-    fn into(&self) -> &dyn NdSimulate {
+    fn ndsim(&self) -> &dyn NdSimulate {
         &self.automaton
     }
-    fn into_mut(&mut self) -> &mut dyn NdSimulate {
+    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         &mut self.automaton
     }
 }

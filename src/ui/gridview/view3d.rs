@@ -16,10 +16,10 @@ impl GridView3D {
 }
 
 impl IntoNdSimulate for GridView3D {
-    fn into(&self) -> &dyn NdSimulate {
+    fn ndsim(&self) -> &dyn NdSimulate {
         unimplemented!()
     }
-    fn into_mut(&mut self) -> &mut dyn NdSimulate {
+    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         unimplemented!()
     }
 }

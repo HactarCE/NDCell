@@ -36,13 +36,13 @@ where
 }
 
 impl IntoNdSimulate for GridView {
-    fn into(&self) -> &dyn NdSimulate {
+    fn ndsim(&self) -> &dyn NdSimulate {
         match self {
             Self::View2D(view2d) => view2d,
             Self::View3D(view3d) => view3d,
         }
     }
-    fn into_mut(&mut self) -> &mut dyn NdSimulate {
+    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         match self {
             Self::View2D(view2d) => view2d,
             Self::View3D(view3d) => view3d,

@@ -26,9 +26,9 @@ pub trait NdSimulate {
 /// IntoNdSimulate.
 pub trait IntoNdSimulate {
     /// Convert to an immutable NdSimulate trait object.
-    fn into(&self) -> &dyn NdSimulate;
+    fn ndsim(&self) -> &dyn NdSimulate;
     /// Convert to a mutable NdSimulate trait object.
-    fn into_mut(&mut self) -> &mut dyn NdSimulate;
+    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate;
 }
 
 impl<T> NdSimulate for T
@@ -36,27 +36,27 @@ where
     T: IntoNdSimulate,
 {
     fn get_ndim(&self) -> usize {
-        self.into().get_ndim()
+        self.ndsim().get_ndim()
     }
     fn get_population(&self) -> usize {
-        self.into().get_population()
+        self.ndsim().get_population()
     }
     fn get_step_size(&self) -> usize {
-        self.into().get_step_size()
+        self.ndsim().get_step_size()
     }
     fn set_step_size(&mut self, step_size: usize) {
-        self.into_mut().set_step_size(step_size);
+        self.ndsim_mut().set_step_size(step_size);
     }
     fn get_generation_count(&self) -> usize {
-        self.into().get_generation_count()
+        self.ndsim().get_generation_count()
     }
     fn set_generation_count(&mut self, generations: usize) {
-        self.into_mut().set_generation_count(generations);
+        self.ndsim_mut().set_generation_count(generations);
     }
     fn step(&mut self) {
-        self.into_mut().step();
+        self.ndsim_mut().step();
     }
     fn step_single(&mut self) {
-        self.into_mut().step_single();
+        self.ndsim_mut().step_single();
     }
 }

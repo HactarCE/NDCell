@@ -100,7 +100,7 @@ where
     }
 }
 impl<P: Dim> IntoNdSimulate for ProjectedAutomaton<P> {
-    fn into(&self) -> &dyn NdSimulate {
+    fn ndsim(&self) -> &dyn NdSimulate {
         match self {
             Self::From1D(inner) => inner,
             Self::From2D(inner) => inner,
@@ -110,7 +110,7 @@ impl<P: Dim> IntoNdSimulate for ProjectedAutomaton<P> {
             Self::From6D(inner) => inner,
         }
     }
-    fn into_mut(&mut self) -> &mut dyn NdSimulate {
+    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         match self {
             Self::From1D(inner) => inner,
             Self::From2D(inner) => inner,
@@ -144,10 +144,10 @@ impl<D: Dim> Default for NdProjectedAutomaton<D, D> {
     }
 }
 impl<D: Dim, P: Dim> IntoNdSimulate for NdProjectedAutomaton<D, P> {
-    fn into(&self) -> &dyn NdSimulate {
+    fn ndsim(&self) -> &dyn NdSimulate {
         &self.automaton
     }
-    fn into_mut(&mut self) -> &mut dyn NdSimulate {
+    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         &mut self.automaton
     }
 }

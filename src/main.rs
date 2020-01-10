@@ -3,6 +3,9 @@
 #![allow(dead_code)]
 #![warn(missing_docs)]
 
+#[macro_use]
+extern crate pest_derive;
+
 pub mod automaton;
 mod math;
 mod ui;

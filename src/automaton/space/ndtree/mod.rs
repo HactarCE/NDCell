@@ -3,11 +3,13 @@ use std::fmt;
 use std::rc::Rc;
 
 mod cache;
+mod io;
 mod node;
 mod slice;
 
 use super::*;
 pub use cache::*;
+pub use io::*;
 pub use node::*;
 pub use slice::*;
 

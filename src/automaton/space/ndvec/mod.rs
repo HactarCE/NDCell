@@ -64,6 +64,8 @@ impl<D: Dim> IndexMut<Axis> for NdVec<D> {
 }
 
 /// Hard-coded access to X/Y.
+///
+/// TODO replace this with easier indexing (with `use Axis::{X, Y}`)
 pub trait VecXY: Index<Axis, Output = isize> + IndexMut<Axis> {
     /// Returns the X value of this vector.
     fn x(&self) -> &isize {

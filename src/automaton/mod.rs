@@ -171,6 +171,7 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<u8, D>,
     pub sim: Simulation<u8, D>,
+    // TODO make generation count be isize
     pub generations: usize,
 }
 impl<D: Dim> NdSimulate for NdAutomaton<D> {

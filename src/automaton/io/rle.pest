@@ -1,0 +1,29 @@
+main = { SOI ~ notes* ~ header ~ notes* ~ content ~ end_file? ~ notes* ~ EOI }
+
+comment = { ( "#" ~ ( !NEWLINE ~ ANY )* )? ~ NEWLINE }
+WHITESPACE = _{ !NEWLINE ~ PATTERN_WHITE_SPACE }
+
+header = { "x" ~ "=" ~ signed_int ~ ","
+         ~ "y" ~ "=" ~ signed_int
+         ~ ( "," ~ "rule" ~ "=" ~ token ) }
+
+signed_int = @{ "0" | "-"? ~ int }
+
+notes = { cxrle | comment }
+
+cxrle = { "#CXRLE" ~ key_value_pair* }
+key_value_pair = { token ~ "=" ~ token }
+token = @{ ( !PATTERN_WHITE_SPACE ~ !"=" ~ ANY )+ }
+
+content = !{ ( content_item ~ comment* )* }
+content_item = { int? ~ ( end_row | state ) }
+int = @{ '1'..'9' ~ '0'..'9'* }
+end_file = _{ "!" }
+end_row = @{ "$" }
+state = @{ "b"                 // false
+         | "o"                 // true
+         | "."                 // 0
+         |            'A'..'X' // 1..24
+         | 'p'..'x' ~ 'A'..'X' // 25..240
+         |      "y" ~ 'A'..'O' // 241..255
+         }

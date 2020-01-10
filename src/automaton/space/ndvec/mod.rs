@@ -134,7 +134,7 @@ mod tests {
                 assert_eq!(pos1[ax] - scalar,     (pos1 - scalar)[ax]);
                 assert_eq!(pos1[ax] * scalar,     (pos1 * scalar)[ax]);
                 if scalar != 0 {
-                    assert_eq!(pos1[ax] / scalar, (pos1 / scalar)[ax]);
+                    assert_eq!(pos1[ax].div_euclid(scalar), (pos1.div_euclid(scalar))[ax]);
                     assert_eq!(pos1[ax] % scalar, (pos1 % scalar)[ax]);
                 }
                 assert_eq!(pos1[ax] & scalar,     (pos1 & scalar)[ax]);

@@ -97,13 +97,13 @@ impl RleEncode for NdAutomaton<Dim2D> {
             pos = cxrle.pos;
             x_start = *pos.x();
         } else {
-            x_start = 0;
+            x_start = -1;
         }
 
         for row in cell_array {
             for cell in row {
                 ret.tree.set_cell(pos, cell);
-                *pos.x_mut() += 1;
+                *pos.x_mut() -= 1;
             }
             pos = Vec2D::from([x_start, pos.y() + 1])
         }

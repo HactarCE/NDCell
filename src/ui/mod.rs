@@ -2,6 +2,8 @@
 //!
 //! This module contains everything needed to display NDCell's UI.
 
+use clipboard;
+use clipboard::ClipboardProvider;
 use glium::glutin;
 use imgui::{Context, FontSource};
 use imgui_glium_renderer::Renderer;
@@ -24,6 +26,7 @@ pub const TITLE: &str = "NDCell";
 /// The state of the program, including the automaton and any settings or
 /// configuration.
 pub struct State {
+    pub display: Rc<glium::Display>,
     pub grid_view: GridView,
     pub history: HistoryStack,
     pub input_state: input::InputState,
@@ -119,6 +122,7 @@ pub fn show_gui() {
     automaton.tree = grid;
     automaton.sim = Simulation::new(Rc::new(rule::LIFE), 4);
     let mut state = State {
+        display: display.clone(),
         grid_view: GridView::new_2d(display.clone(), automaton),
         history: Default::default(),
         input_state: Default::default(),
@@ -232,5 +236,18 @@ impl State {
     /// Record the current state in the undo history.
     fn record_state(&mut self) {
         self.history.record(self.grid_view.clone());
+    }
+    pub fn load_rle_from_clipboard(&mut self) -> Result<(), String> {
+        let mut cb: clipboard::ClipboardContext =
+            clipboard::ClipboardProvider::new().map_err(|_| "Unable to access clipboard")?;
+        self.record_state();
+        let mut automaton: NdAutomaton<Dim2D> = rle::RleEncode::from_rle(
+            &cb.get_contents()
+                .map_err(|_| "Unable to access clipboard contents")?,
+        )?;
+        automaton.sim =
+            Simulation::new(Rc::new(rule::LIFE), self.grid_view.ndsim().get_step_size());
+        self.grid_view = GridView::new_2d(self.display.clone(), automaton);
+        Ok(())
     }
 }

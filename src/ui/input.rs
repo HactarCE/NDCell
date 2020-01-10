@@ -162,6 +162,11 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                             && state.history.undo(&mut state.grid_view)
                         {}
                     }
+                    // Paste.
+                    Some(VirtualKeyCode::V) => {
+                        state.stop_running();
+                        state.load_rle_from_clipboard();
+                    }
                     _ => (),
                 },
                 // SHIFT + CTRL

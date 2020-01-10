@@ -18,6 +18,7 @@ name = "ndcell"
 path = "src/main.rs"
 
 [dependencies]
+clipboard = "0.5"
 enum_dispatch = "0.2"
 glium = "0.25"
 imgui = "0.2"

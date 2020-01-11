@@ -8,16 +8,15 @@ use super::*;
 // coordinate).
 impl<D: Dim> Add<isize> for NdVec<D> {
     type Output = Self;
-    fn add(self, other: isize) -> Self {
-        let mut ret = self;
-        ret += other;
-        ret
+    fn add(mut self, other: isize) -> Self {
+        self += other;
+        self
     }
 }
 impl<D: Dim> AddAssign<isize> for NdVec<D> {
     fn add_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) + other);
+            self[ax] += other;
         }
     }
 }
@@ -26,16 +25,15 @@ impl<D: Dim> AddAssign<isize> for NdVec<D> {
 // from each coordinate).
 impl<D: Dim> Sub<isize> for NdVec<D> {
     type Output = Self;
-    fn sub(self, other: isize) -> Self {
-        let mut ret = self;
-        ret -= other;
-        ret
+    fn sub(mut self, other: isize) -> Self {
+        self -= other;
+        self
     }
 }
 impl<D: Dim> SubAssign<isize> for NdVec<D> {
     fn sub_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) - other);
+            self[ax] -= other;
         }
     }
 }
@@ -44,16 +42,15 @@ impl<D: Dim> SubAssign<isize> for NdVec<D> {
 // coordinate by the scalar).
 impl<D: Dim> Mul<isize> for NdVec<D> {
     type Output = Self;
-    fn mul(self, other: isize) -> Self {
-        let mut ret = self;
-        ret *= other;
-        ret
+    fn mul(mut self, other: isize) -> Self {
+        self *= other;
+        self
     }
 }
 impl<D: Dim> MulAssign<isize> for NdVec<D> {
     fn mul_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) * other);
+            self[ax] *= other;
         }
     }
 }
@@ -63,16 +60,15 @@ impl<D: Dim> MulAssign<isize> for NdVec<D> {
 // Rust's normal division.
 impl<D: Dim> Div<isize> for NdVec<D> {
     type Output = Self;
-    fn div(self, other: isize) -> Self {
-        let mut ret = self;
-        ret /= other;
-        ret
+    fn div(mut self, other: isize) -> Self {
+        self /= other;
+        self
     }
 }
 impl<D: Dim> DivAssign<isize> for NdVec<D> {
     fn div_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax).div_euclid(other));
+            self[ax] = self[ax].div_euclid(other);
         }
     }
 }
@@ -81,16 +77,15 @@ impl<D: Dim> DivAssign<isize> for NdVec<D> {
 // coordinate by the scalar).
 impl<D: Dim> Rem<isize> for NdVec<D> {
     type Output = Self;
-    fn rem(self, other: isize) -> Self {
-        let mut ret = self;
-        ret %= other;
-        ret
+    fn rem(mut self, other: isize) -> Self {
+        self %= other;
+        self
     }
 }
 impl<D: Dim> RemAssign<isize> for NdVec<D> {
     fn rem_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) % other);
+            self[ax] %= other;
         }
     }
 }
@@ -99,16 +94,15 @@ impl<D: Dim> RemAssign<isize> for NdVec<D> {
 // with the scalar).
 impl<D: Dim> BitAnd<isize> for NdVec<D> {
     type Output = Self;
-    fn bitand(self, other: isize) -> Self {
-        let mut ret = self;
-        ret &= other;
-        ret
+    fn bitand(mut self, other: isize) -> Self {
+        self &= other;
+        self
     }
 }
 impl<D: Dim> BitAndAssign<isize> for NdVec<D> {
     fn bitand_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) & other);
+            self[ax] &= other;
         }
     }
 }
@@ -117,16 +111,15 @@ impl<D: Dim> BitAndAssign<isize> for NdVec<D> {
 // with the scalar).
 impl<D: Dim> BitOr<isize> for NdVec<D> {
     type Output = Self;
-    fn bitor(self, other: isize) -> Self {
-        let mut ret = self;
-        ret |= other;
-        ret
+    fn bitor(mut self, other: isize) -> Self {
+        self |= other;
+        self
     }
 }
 impl<D: Dim> BitOrAssign<isize> for NdVec<D> {
     fn bitor_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) | other);
+            self[ax] |= other;
         }
     }
 }
@@ -135,16 +128,15 @@ impl<D: Dim> BitOrAssign<isize> for NdVec<D> {
 // with the scalar).
 impl<D: Dim> BitXor<isize> for NdVec<D> {
     type Output = Self;
-    fn bitxor(self, other: isize) -> Self {
-        let mut ret = self;
-        ret ^= other;
-        ret
+    fn bitxor(mut self, other: isize) -> Self {
+        self ^= other;
+        self
     }
 }
 impl<D: Dim> BitXorAssign<isize> for NdVec<D> {
     fn bitxor_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) ^ other);
+            self[ax] ^= other;
         }
     }
 }
@@ -153,16 +145,15 @@ impl<D: Dim> BitXorAssign<isize> for NdVec<D> {
 // each coordinate by the scalar).
 impl<D: Dim> Shl<isize> for NdVec<D> {
     type Output = Self;
-    fn shl(self, other: isize) -> Self {
-        let mut ret = self;
-        ret <<= other;
-        ret
+    fn shl(mut self, other: isize) -> Self {
+        self <<= other;
+        self
     }
 }
 impl<D: Dim> ShlAssign<isize> for NdVec<D> {
     fn shl_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) << other);
+            self[ax] <<= other;
         }
     }
 }
@@ -171,16 +162,15 @@ impl<D: Dim> ShlAssign<isize> for NdVec<D> {
 // each coordinate by the scalar).
 impl<D: Dim> Shr<isize> for NdVec<D> {
     type Output = Self;
-    fn shr(self, other: isize) -> Self {
-        let mut ret = self;
-        ret >>= other;
-        ret
+    fn shr(mut self, other: isize) -> Self {
+        self >>= other;
+        self
     }
 }
 impl<D: Dim> ShrAssign<isize> for NdVec<D> {
     fn shr_assign(&mut self, other: isize) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) >> other);
+            self[ax] >>= other;
         }
     }
 }
@@ -193,7 +183,7 @@ impl<D: Dim> NdVec<D> {
     pub fn div_euclid(&self, other: isize) -> Self {
         let mut ret = *self;
         for &ax in D::axes() {
-            ret.0.set(ax, ret.0.get(ax).div_euclid(other));
+            ret[ax] = ret[ax].div_euclid(other);
         }
         ret
     }

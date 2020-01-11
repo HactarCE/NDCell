@@ -9,7 +9,7 @@ impl<D: Dim> Neg for NdVec<D> {
     type Output = Self;
     fn neg(mut self) -> Self {
         for &ax in D::axes() {
-            self.0.set(ax, -self.0.get(ax));
+            self[ax] *= -1
         }
         self
     }
@@ -27,7 +27,7 @@ impl<D: Dim> Add<Self> for NdVec<D> {
 impl<D: Dim> AddAssign<Self> for NdVec<D> {
     fn add_assign(&mut self, other: Self) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) + other.0.get(ax));
+            self[ax] += other[ax];
         }
     }
 }
@@ -44,7 +44,7 @@ impl<D: Dim> Sub<Self> for NdVec<D> {
 impl<D: Dim> SubAssign<Self> for NdVec<D> {
     fn sub_assign(&mut self, other: Self) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) - other.0.get(ax));
+            self[ax] -= other[ax];
         }
     }
 }
@@ -61,7 +61,7 @@ impl<D: Dim> Mul<Self> for NdVec<D> {
 impl<D: Dim> MulAssign<Self> for NdVec<D> {
     fn mul_assign(&mut self, other: Self) {
         for &ax in D::axes() {
-            self.0.set(ax, self.0.get(ax) * other.0.get(ax));
+            self[ax] *= other[ax];
         }
     }
 }

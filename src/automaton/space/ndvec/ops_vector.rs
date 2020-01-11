@@ -48,3 +48,20 @@ impl<D: Dim> SubAssign<Self> for NdVec<D> {
         }
     }
 }
+
+// Implement elementwise multiplication between two NdVecs.
+impl<D: Dim> Mul<Self> for NdVec<D> {
+    type Output = Self;
+    fn mul(self, other: Self) -> Self {
+        let mut ret = self;
+        ret *= other;
+        ret
+    }
+}
+impl<D: Dim> MulAssign<Self> for NdVec<D> {
+    fn mul_assign(&mut self, other: Self) {
+        for &ax in D::axes() {
+            self.0.set(ax, self.0.get(ax) * other.0.get(ax));
+        }
+    }
+}

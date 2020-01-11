@@ -97,15 +97,18 @@ impl RleEncode for NdAutomaton<Dim2D> {
             pos = cxrle.pos;
             x_start = *pos.x();
         } else {
-            x_start = -1;
+            x_start = 0;
         }
 
         for row in cell_array {
             for cell in row {
-                ret.tree.set_cell(pos, cell);
-                *pos.x_mut() -= 1;
+                // Y coordinates increase upwards in NDCell, but downwards in RLE, so reflect over the Y axis.
+                ret.tree
+                    .set_cell(pos * NdVec::from([1, -1]) - NdVec::from([0, 1]), cell);
+                pos[Axis::X] += 1;
             }
-            pos = Vec2D::from([x_start, pos.y() + 1])
+            pos[Axis::X] = x_start;
+            pos[Axis::Y] += 1;
         }
 
         Ok(ret)
@@ -342,10 +345,10 @@ o$3o!
         )
         .unwrap();
         assert_eq!(5, result.tree.get_root().population);
-        assert_eq!(1, result.tree.get_cell([11, -15].into()));
-        assert_eq!(1, result.tree.get_cell([12, -14].into()));
-        assert_eq!(1, result.tree.get_cell([10, -13].into()));
-        assert_eq!(1, result.tree.get_cell([11, -13].into()));
-        assert_eq!(1, result.tree.get_cell([12, -13].into()));
+        assert_eq!(1, result.tree.get_cell([11, 14].into()));
+        assert_eq!(1, result.tree.get_cell([12, 13].into()));
+        assert_eq!(1, result.tree.get_cell([10, 12].into()));
+        assert_eq!(1, result.tree.get_cell([11, 12].into()));
+        assert_eq!(1, result.tree.get_cell([12, 12].into()));
     }
 }

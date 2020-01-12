@@ -274,6 +274,7 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
     }
     /// Returns a node with the cell at the given position, modulo the node
     /// size, having the given cell state.
+    #[must_use]
     pub fn set_cell(
         &self,
         cache: &mut NdTreeCache<C, D>,

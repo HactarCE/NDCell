@@ -114,6 +114,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
     /// inner node to the edge of the outer node.) In practice, however, each
     /// layer must be computed separately, so the `r` and `t` must each be
     /// replaced with their next lowest power of two.
+    #[must_use]
     fn advance_inner_node(
         &mut self,
         cache: &mut NdTreeCache<C, D>,

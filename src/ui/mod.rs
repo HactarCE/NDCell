@@ -2,8 +2,6 @@
 //!
 //! This module contains everything needed to display NDCell's UI.
 
-use clipboard;
-use clipboard::ClipboardProvider;
 use glium::glutin;
 use imgui::{Context, FontSource};
 use imgui_glium_renderer::Renderer;
@@ -11,12 +9,14 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::rc::Rc;
 use std::time::Instant;
 
+mod clipboard_compat;
 mod gridview;
 mod gui;
 mod history;
 mod input;
 
 use crate::automaton::*;
+use clipboard_compat::*;
 use gridview::{GridView, GridViewTrait};
 use history::*;
 
@@ -84,6 +84,7 @@ pub fn show_gui() {
 
     // Initialize imgui things.
     let mut imgui = Context::create();
+    imgui.set_clipboard_backend(Box::new(ClipboardCompat));
     imgui.set_ini_filename(None);
     let mut platform = WinitPlatform::init(&mut imgui);
     let gl_window = display.gl_window();
@@ -238,12 +239,8 @@ impl State {
         self.history.record(self.grid_view.clone());
     }
     pub fn load_rle_from_clipboard(&mut self) -> Result<(), String> {
-        let mut cb: clipboard::ClipboardContext =
-            clipboard::ClipboardProvider::new().map_err(|_| "Unable to access clipboard")?;
-        self.record_state();
         let mut automaton: NdAutomaton<Dim2D> = rle::RleEncode::from_rle(
-            &cb.get_contents()
-                .map_err(|_| "Unable to access clipboard contents")?,
+            &clipboard_get().map_err(|_| "Unable to access clipboard contents")?,
         )?;
         automaton.sim =
             Simulation::new(Rc::new(rule::LIFE), self.grid_view.ndsim().get_step_size());

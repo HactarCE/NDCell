@@ -46,14 +46,15 @@ use std::collections::HashMap;
 use super::*;
 use crate::automaton::space::*;
 
-/// A vertex containing just a color.
+/// A vertex containing a 2D floating-point position and a 2D texture coordinate.
 #[derive(Debug, Default, Copy, Clone)]
-struct SimpleColorVertex {
-    color: (u8, u8, u8),
+struct TexturePosVertex {
+    pos: [f32; 2],
+    tex_coords: [f32; 2],
 }
-glium::implement_vertex!(SimpleColorVertex, color);
+glium::implement_vertex!(TexturePosVertex, pos, tex_coords);
 
-/// A vertex containing just a floating-point position.
+/// A vertex containing just a 2D floating-point position.
 #[derive(Debug, Default, Copy, Clone)]
 struct PointVertex {
     pos: [f32; 2],
@@ -72,7 +73,7 @@ where
 }
 
 /// The color of the grid. This will be configurable in the future.
-const GRID_COLOR: [f32; 4] = [0.125, 0.125, 0.125, 1.0];
+const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
 /// The color for dead cells. This will be configurable in the future.
 const DEAD_COLOR: (u8, u8, u8) = (0, 0, 0);
 /// The color for live cells. This will be configurable in the future.
@@ -87,16 +88,6 @@ const CHUNK_POW: usize = 8;
 /// large square of cells. A chunk is a groups of render cells that is passed to
 /// the graphics card at once.
 const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^8 = 256
-
-/// The vertex array for a single point, centered on a cell.
-const CELL_POINT_VERTS: [PointVertex; 1] = [PointVertex { pos: [0.5, 0.5] }];
-/// The vertex array for a rectangle covering a cell.
-const CELL_SQUARE_VERTS: [PointVertex; 4] = [
-    PointVertex { pos: [0.0, 0.0] },
-    PointVertex { pos: [0.0, 1.0] },
-    PointVertex { pos: [1.0, 0.0] },
-    PointVertex { pos: [1.0, 1.0] },
-];
 
 const GRIDLINE_BATCH_SIZE: usize = 256;
 
@@ -161,30 +152,26 @@ impl CellPixelChunk {
 }
 
 struct Shaders {
+    cells: glium::Program,
     gridlines: glium::Program,
 }
 impl Shaders {
     pub fn compile(display: &glium::Display) -> Self {
         Self {
+            cells: shaders::compile_cells_program(display),
             gridlines: shaders::compile_lines_program(display),
         }
     }
 }
 
 struct VBOs {
-    cell_chunk: glium::VertexBuffer<SimpleColorVertex>,
-    cell_point: glium::VertexBuffer<PointVertex>,
-    cell_square: glium::VertexBuffer<PointVertex>,
+    cells: glium::VertexBuffer<TexturePosVertex>,
     gridlines: glium::VertexBuffer<PointVertex>,
 }
 impl VBOs {
     pub fn new(display: &glium::Display) -> Self {
         Self {
-            cell_chunk: glium::VertexBuffer::empty_dynamic(display, CHUNK_SIZE * CHUNK_SIZE)
-                .expect("Failed to create vertex buffer"),
-            cell_point: glium::VertexBuffer::new(display, &CELL_POINT_VERTS)
-                .expect("Failed to create vertex buffer"),
-            cell_square: glium::VertexBuffer::new(display, &CELL_SQUARE_VERTS)
+            cells: glium::VertexBuffer::empty_dynamic(display, 4)
                 .expect("Failed to create vertex buffer"),
             gridlines: glium::VertexBuffer::empty_dynamic(display, GRIDLINE_BATCH_SIZE)
                 .expect("Failed to create vertex buffer"),
@@ -355,12 +342,7 @@ impl<'a> RenderInProgress<'a> {
         let render_cells_rect = self.chunk_visible_rect * CHUNK_SIZE as isize;
         let unscaled_cells_w = render_cells_rect.len(Axis::X) as u32;
         let unscaled_cells_h = render_cells_rect.len(Axis::Y) as u32;
-        // let unscaled_cells_texture = self
-        //     .g
-        //     .textures
-        //     .cell_pixels
-        //     .at_size(unscaled_cells_w, unscaled_cells_h);
-        let unscaled_cells_texture = &glium::texture::srgb_texture2d::SrgbTexture2d::empty(
+        let unscaled_cells_texture = glium::texture::srgb_texture2d::SrgbTexture2d::empty(
             &*self.cache.display,
             unscaled_cells_w,
             unscaled_cells_h,
@@ -368,11 +350,11 @@ impl<'a> RenderInProgress<'a> {
         .expect("Failed to create texture");
         let unscaled_cells_fbo = glium::framebuffer::SimpleFrameBuffer::new(
             &*self.cache.display,
-            unscaled_cells_texture,
+            &unscaled_cells_texture,
         )
         .expect("Failed to create frame buffer");
         self.draw_cell_chunks(
-            unscaled_cells_texture,
+            &unscaled_cells_texture,
             &self.quadtree_slice.root.clone(),
             Vec2D::origin(),
             self.quadtree_slice.root.layer - self.render_cell_layer - CHUNK_POW,
@@ -387,21 +369,15 @@ impl<'a> RenderInProgress<'a> {
         let visible_cells_h = render_cell_visible_rect.len(Axis::Y) as u32;
         let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
         let scaled_cells_h = visible_cells_h * integer_scale_factor as u32;
-        // let scaled_cells_texture = self
-        //     .g
-        //     .textures
-        //     .scaled_cells
-        //     .at_size(scaled_cells_w, scaled_cells_h);
-        let scaled_cells_texture = &glium::framebuffer::RenderBuffer::new(
+        let scaled_cells_texture = glium::texture::SrgbTexture2d::empty(
             &*self.cache.display,
-            glium::texture::UncompressedFloatFormat::U8U8U8,
             scaled_cells_w,
             scaled_cells_h,
         )
         .expect("Failed to create render buffer");
 
         let scaled_cells_fbo =
-            glium::framebuffer::SimpleFrameBuffer::new(&*self.cache.display, scaled_cells_texture)
+            glium::framebuffer::SimpleFrameBuffer::new(&*self.cache.display, &scaled_cells_texture)
                 .expect("Failed to create frame buffer");
         let source_rect = glium::Rect {
             left: *render_cell_visible_rect.min().x() as u32,
@@ -416,7 +392,7 @@ impl<'a> RenderInProgress<'a> {
             glium::uniforms::MagnifySamplerFilter::Nearest,
         );
 
-        // Step #4: blit that onto the screen.
+        // Step #4: render that onto the screen.
         let (target_w, target_h) = self.target.get_dimensions();
         let render_cells_w = target_w as f32 / self.render_cell_pixels;
         let render_cells_h = target_h as f32 / self.render_cell_pixels;
@@ -430,27 +406,59 @@ impl<'a> RenderInProgress<'a> {
                 .min()
                 .y() as f32
             - render_cells_h as f32 / 2.0;
-        let mut left = (render_cells_x * integer_scale_factor).ceil();
-        let mut bottom = (render_cells_y * integer_scale_factor).ceil();
-        // Occasionally, floating point errors cause the coordinates of the
-        // bottom left corner of the rectangle to be -1.0; since Glium
-        // doesn't allow negative coordinates for BlitTarget (not sure why),
-        // we'll just nudge it up to 0.0. This happens rarely enough that it
-        // souldn't be a big issue.
-        left = if left >= 0.0 { left } else { 0.0 };
-        bottom = if bottom >= 0.0 { bottom } else { 0.0 };
-        let source_rect = glium::Rect {
-            left: left as u32,
-            bottom: bottom as u32,
-            width: (render_cells_w * integer_scale_factor).round() as u32,
-            height: (render_cells_h * integer_scale_factor).round() as u32,
-        };
-        self.target.blit_from_simple_framebuffer(
-            &scaled_cells_fbo,
-            &source_rect,
-            &entire_blit_target(self.target),
-            glium::uniforms::MagnifySamplerFilter::Linear,
-        );
+        let mut left = render_cells_x / visible_cells_w as f32;
+        let mut bottom = render_cells_y / visible_cells_h as f32;
+        let width = render_cells_w / visible_cells_w as f32;
+        let height = render_cells_h / visible_cells_h as f32;
+        // // Occasionally, floating point errors cause the coordinates of the
+        // // bottom left corner of the rectangle to be -1.0; since Glium
+        // // doesn't allow negative coordinates for BlitTarget (not sure why),
+        // // we'll just nudge it up to 0.0. This happens rarely enough that it
+        // // souldn't be a big issue.
+        // left = if left >= 0.0 { left } else { 0.0 };
+        // bottom = if bottom >= 0.0 { bottom } else { 0.0 };
+
+        self.cache.vbos.cells.write(&[
+            TexturePosVertex {
+                pos: [-1.0, -1.0],
+                tex_coords: [left, bottom],
+            },
+            TexturePosVertex {
+                pos: [1.0, -1.0],
+                tex_coords: [left + width, bottom],
+            },
+            TexturePosVertex {
+                pos: [-1.0, 1.0],
+                tex_coords: [left, bottom + height],
+            },
+            TexturePosVertex {
+                pos: [1.0, 1.0],
+                tex_coords: [left + width, bottom + height],
+            },
+        ]);
+        self.target
+            .draw(
+                &self.cache.vbos.cells,
+                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
+                &self.cache.shaders.cells,
+                &uniform! {
+                    cells_texture: scaled_cells_texture.sampled(),
+                },
+                &glium::DrawParameters::default(),
+            )
+            .expect("Failed to draw cells");
+        // let source_rect = glium::Rect {
+        //     left: left as u32,
+        //     bottom: bottom as u32,
+        //     width: (render_cells_w * integer_scale_factor).round() as u32,
+        //     height: (render_cells_h * integer_scale_factor).round() as u32,
+        // };
+        // self.target.blit_from_simple_framebuffer(
+        //     &scaled_cells_fbo,
+        //     &source_rect,
+        //     &entire_blit_target(self.target),
+        //     glium::uniforms::MagnifySamplerFilter::Linear,
+        // );
 
         // // minimap in corner
         // self.target.blit_from_simple_framebuffer(
@@ -530,15 +538,36 @@ impl<'a> RenderInProgress<'a> {
                 vertices.fill_with_quadtree_node(
                     &NdTreeBranch::Node(node.clone()),
                     &|branch: &NdTreeBranch<u8, Dim2D>| {
-                        let live = match branch {
-                            NdTreeBranch::Leaf(cell_state) => *cell_state != 0,
-                            NdTreeBranch::Node(node) => node.population != 0,
+                        // let live = match branch {
+                        //     NdTreeBranch::Leaf(cell_state) => *cell_state != 0,
+                        //     NdTreeBranch::Node(node) => node.population != 0,
+                        // };
+                        // if live {
+                        //     LIVE_COLOR
+                        // } else {
+                        //     DEAD_COLOR
+                        // }
+                        let ratio = match branch {
+                            NdTreeBranch::Leaf(cell_state) => *cell_state as f64,
+                            NdTreeBranch::Node(node) => {
+                                if node.population == 0 {
+                                    0.0
+                                } else {
+                                    node.population as f64 / 2.0 / (node.len() as f64).powf(2.0)
+                                        + 0.5
+                                }
+                            }
                         };
-                        if live {
-                            LIVE_COLOR
-                        } else {
-                            DEAD_COLOR
-                        }
+                        let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
+                            + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
+                            .powf(0.5);
+                        let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
+                            + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
+                            .powf(0.5);
+                        let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
+                            + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
+                            .powf(0.5);
+                        (r as u8, g as u8, b as u8)
                     },
                 );
                 (vertices, true)
@@ -608,6 +637,7 @@ impl<'a> RenderInProgress<'a> {
                     },
                     &glium::DrawParameters {
                         line_width: Some(1.0),
+                        blend: glium::Blend::alpha_blending(),
                         ..Default::default()
                     },
                 )

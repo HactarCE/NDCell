@@ -9,6 +9,33 @@ use crate::automaton::{NdSimulate, Vec2D};
 const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;
 
+// OSX scancodes are from https://www.win.tue.nl/~aeb/linux/kbd/scancodes-1.html
+#[cfg(target_os = "mac_os")]
+const SC_W: u32 = 0x11;
+#[cfg(target_os = "mac_os")]
+const SC_A: u32 = 0x1e;
+#[cfg(target_os = "mac_os")]
+const SC_S: u32 = 0x1f;
+#[cfg(target_os = "mac_os")]
+const SC_D: u32 = 0x20;
+#[cfg(target_os = "mac_os")]
+const SC_Q: u32 = 0x10;
+#[cfg(target_os = "mac_os")]
+const SC_Z: u32 = 0x2c;
+
+#[cfg(not(target_os = "mac_os"))]
+const SC_W: u32 = 17;
+#[cfg(not(target_os = "mac_os"))]
+const SC_A: u32 = 30;
+#[cfg(not(target_os = "mac_os"))]
+const SC_S: u32 = 32;
+#[cfg(not(target_os = "mac_os"))]
+const SC_D: u32 = 31;
+#[cfg(not(target_os = "mac_os"))]
+const SC_Q: u32 = 16;
+#[cfg(not(target_os = "mac_os"))]
+const SC_Z: u32 = 44;
+
 /// A struct tracking miscellaneous stateful things relating input, such as
 /// whether any given key is pressed.
 #[derive(Default)]
@@ -90,9 +117,11 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
         // Handle WindowEvents.
         Event::WindowEvent { event, .. } => {
             match event {
-                WindowEvent::KeyboardInput { input, .. } if !state.input_state.ignore_keyboard => {
+                WindowEvent::KeyboardInput { input, .. } => {
                     state.input_state.update(input);
-                    handle_key(state, input);
+                    if !state.input_state.ignore_keyboard {
+                        handle_key(state, input);
+                    }
                 }
                 WindowEvent::MouseWheel { delta, .. } if !state.input_state.ignore_mouse => {
                     // Pan 100x.
@@ -220,19 +249,19 @@ pub fn do_frame(state: &mut super::State) {
                 let mut pan_x = 0.0;
                 let mut pan_y = 0.0;
                 // 'A' or left arrow => pan west.
-                if input_state[30] || input_state[VirtualKeyCode::Left] {
+                if input_state[SC_A] || input_state[VirtualKeyCode::Left] {
                     pan_x -= move_speed;
                 }
                 // 'D' or right arrow => pan west.
-                if input_state[32] || input_state[VirtualKeyCode::Right] {
+                if input_state[SC_D] || input_state[VirtualKeyCode::Right] {
                     pan_x += move_speed;
                 }
                 // 'W' or up arrow => pan north.
-                if input_state[17] || input_state[VirtualKeyCode::Up] {
+                if input_state[SC_W] || input_state[VirtualKeyCode::Up] {
                     pan_y += move_speed;
                 }
                 // 'S' or down arrow => pan down.
-                if input_state[31] || input_state[VirtualKeyCode::Down] {
+                if input_state[SC_S] || input_state[VirtualKeyCode::Down] {
                     pan_y -= move_speed;
                 }
                 if pan_x != 0.0 || pan_y != 0.0 {
@@ -240,12 +269,12 @@ pub fn do_frame(state: &mut super::State) {
                     input_state.moving = true;
                 }
                 // 'Q' or page up => zoom in.
-                if input_state[16] || input_state[VirtualKeyCode::PageUp] {
+                if input_state[SC_Q] || input_state[VirtualKeyCode::PageUp] {
                     view2d.viewport.zoom_by(2.0f32.powf(zoom_speed));
                     input_state.zooming = true;
                 }
                 // 'Z' or page down => zoom out.
-                if input_state[44] || input_state[VirtualKeyCode::PageDown] {
+                if input_state[SC_Z] || input_state[VirtualKeyCode::PageDown] {
                     view2d.viewport.zoom_by(2.0f32.powf(-zoom_speed));
                     input_state.zooming = true;
                 }

@@ -10,30 +10,30 @@ const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;
 
 // OSX scancodes are from https://www.win.tue.nl/~aeb/linux/kbd/scancodes-1.html
-#[cfg(target_os = "mac_os")]
+#[cfg(target_os = "macos")]
 const SC_W: u32 = 0x11;
-#[cfg(target_os = "mac_os")]
+#[cfg(target_os = "macos")]
 const SC_A: u32 = 0x1e;
-#[cfg(target_os = "mac_os")]
+#[cfg(target_os = "macos")]
 const SC_S: u32 = 0x1f;
-#[cfg(target_os = "mac_os")]
+#[cfg(target_os = "macos")]
 const SC_D: u32 = 0x20;
-#[cfg(target_os = "mac_os")]
+#[cfg(target_os = "macos")]
 const SC_Q: u32 = 0x10;
-#[cfg(target_os = "mac_os")]
+#[cfg(target_os = "macos")]
 const SC_Z: u32 = 0x2c;
 
-#[cfg(not(target_os = "mac_os"))]
+#[cfg(not(target_os = "macos"))]
 const SC_W: u32 = 17;
-#[cfg(not(target_os = "mac_os"))]
+#[cfg(not(target_os = "macos"))]
 const SC_A: u32 = 30;
-#[cfg(not(target_os = "mac_os"))]
+#[cfg(not(target_os = "macos"))]
 const SC_S: u32 = 32;
-#[cfg(not(target_os = "mac_os"))]
+#[cfg(not(target_os = "macos"))]
 const SC_D: u32 = 31;
-#[cfg(not(target_os = "mac_os"))]
+#[cfg(not(target_os = "macos"))]
 const SC_Q: u32 = 16;
-#[cfg(not(target_os = "mac_os"))]
+#[cfg(not(target_os = "macos"))]
 const SC_Z: u32 = 44;
 
 /// A struct tracking miscellaneous stateful things relating input, such as

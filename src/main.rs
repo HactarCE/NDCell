@@ -11,5 +11,6 @@ mod math;
 mod ui;
 
 fn main() {
+    simple_logger::init().unwrap();
     ui::show_gui()
 }

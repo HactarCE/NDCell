@@ -3,6 +3,7 @@
 use clipboard;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use imgui;
+use log::warn;
 use std::cell::RefCell;
 
 thread_local!(
@@ -33,6 +34,8 @@ impl imgui::ClipboardBackend for ClipboardCompat {
         clipboard_get().ok().map(imgui::ImString::new)
     }
     fn set(&mut self, value: &imgui::ImStr) {
-        clipboard_set(value.to_string());
+        if clipboard_set(value.to_string()).is_err() {
+            warn!("Failed to set clipboard contents");
+        };
     }
 }

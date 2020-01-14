@@ -1,4 +1,5 @@
 use glium::glutin::*;
+use log::warn;
 use std::collections::HashSet;
 use std::ops::Index;
 
@@ -165,7 +166,9 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                     // Paste.
                     Some(VirtualKeyCode::V) => {
                         state.stop_running();
-                        state.load_rle_from_clipboard();
+                        if state.load_rle_from_clipboard().is_err() {
+                            warn!("Failed to load RLE from clipboard");
+                        };
                     }
                     _ => (),
                 },

@@ -20,11 +20,17 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
         * [x] Render in 256x256 chunks
         * [x] Skip empty chunks
         * [x] Cache chunks between frames
+    + [ ] ... by traversing the quadtree on the GPU
 - [x] Control simulation from GUI
     + [x] Undo/reset
     + [x] Change sim step
-    + [ ] Jump to generation
-- [x] Read simple 2D RLE files from Golly
+    + [x] Jump to generation
+- [x] Read 2D Extended RLE patterns from Golly
+    + [x] ... from clipboard
+    + [ ] ... from file
+- [ ] Write 2D Extended RLE patterns from Golly
+    + [ ] ... to clipboard
+    + [ ] ... to file
 - [ ] Edit patterns with the mouse
 - [ ] Begin work on 3D rendering
 
@@ -68,7 +74,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ### UI
 
-- [ ] "Root" window that can toggle other windows
+- [x] "Root" window that can toggle other windows
 
 ### Grid display
 
@@ -102,7 +108,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 - [ ] Movement
     + [ ] in 1D
-    + [ ] in 2D
+    + [x] in 2D
     + [ ] in 3D
 - [ ] Toggle/cycle cell state
     + [ ] in 1D

@@ -558,7 +558,7 @@ dependencies = [
 
 [[package]]
 name = "ndcell"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "clipboard 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "enum_dispatch 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",

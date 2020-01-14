@@ -112,7 +112,7 @@ impl RleEncode for NdAutomaton<Dim2D> {
         let x_start: isize;
 
         if let Some(cxrle) = cxrle {
-            ret.generations = cxrle.gen as usize;
+            ret.generations = cxrle.gen;
             pos = cxrle.pos;
             x_start = *pos.x();
         } else {

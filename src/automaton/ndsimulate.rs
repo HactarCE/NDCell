@@ -10,9 +10,9 @@ pub trait NdSimulate {
     /// Sets the simulation step size.
     fn set_step_size(&mut self, step_size: usize);
     /// Returns the number of generations that have elapsed in the simulation.
-    fn get_generation_count(&self) -> usize;
+    fn get_generation_count(&self) -> isize;
     /// Sets the number of generations that have elapsed in the simulation.
-    fn set_generation_count(&mut self, generations: usize);
+    fn set_generation_count(&mut self, generations: isize);
     /// Step forward in the simulation by the step size.
     fn step(&mut self);
     /// Step forward one generation in the simulation.
@@ -47,10 +47,10 @@ where
     fn set_step_size(&mut self, step_size: usize) {
         self.ndsim_mut().set_step_size(step_size);
     }
-    fn get_generation_count(&self) -> usize {
+    fn get_generation_count(&self) -> isize {
         self.ndsim().get_generation_count()
     }
-    fn set_generation_count(&mut self, generations: usize) {
+    fn set_generation_count(&mut self, generations: isize) {
         self.ndsim_mut().set_generation_count(generations);
     }
     fn step(&mut self) {

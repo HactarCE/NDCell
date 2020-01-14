@@ -172,7 +172,7 @@ pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<u8, D>,
     pub sim: Simulation<u8, D>,
     // TODO make generation count be isize
-    pub generations: usize,
+    pub generations: isize,
 }
 impl<D: Dim> NdSimulate for NdAutomaton<D> {
     fn get_ndim(&self) -> usize {
@@ -187,15 +187,15 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
     fn set_step_size(&mut self, step_size: usize) {
         self.sim.set_step_size(step_size);
     }
-    fn get_generation_count(&self) -> usize {
+    fn get_generation_count(&self) -> isize {
         self.generations
     }
-    fn set_generation_count(&mut self, generations: usize) {
+    fn set_generation_count(&mut self, generations: isize) {
         self.generations = generations;
     }
     fn step(&mut self) {
         self.sim.step(&mut self.tree);
-        self.generations += self.sim.get_step_size();
+        self.generations += self.sim.get_step_size() as isize;
     }
     fn step_single(&mut self) {
         self.sim.step_single(&mut self.tree);

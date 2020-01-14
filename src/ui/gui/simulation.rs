@@ -7,7 +7,7 @@ use crate::ui::State;
 pub struct WindowState {
     pub visible: bool,
     pub running: bool,
-    jump_to_gen: usize,
+    jump_to_gen: isize,
 }
 
 /// Builds the main window.
@@ -69,7 +69,7 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                 .step(16)
                 .step_fast(256)
                 .build();
-            *jump_to_gen = jump_to_gen_i32 as usize;
+            *jump_to_gen = jump_to_gen_i32 as isize;
             if *jump_to_gen <= state.grid_view.get_generation_count() {
                 *jump_to_gen = state.grid_view.get_generation_count();
             }
@@ -79,9 +79,9 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
             ) {
                 if state.grid_view.get_generation_count() < *jump_to_gen {
                     let old_sim_step_size = state.grid_view.get_step_size();
-                    state
-                        .grid_view
-                        .set_step_size(*jump_to_gen - state.grid_view.get_generation_count());
+                    state.grid_view.set_step_size(
+                        (*jump_to_gen - state.grid_view.get_generation_count()) as usize,
+                    );
                     state.step(true);
                     state.grid_view.set_step_size(old_sim_step_size);
                 }

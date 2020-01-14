@@ -36,6 +36,7 @@ pub struct State {
 }
 
 const GOSPER_GLIDER_GUN_SYNTH_RLE: &str = "
+#CXRLE Gen=-31
 x = 47, y = 14, rule = B3/S23
 16bo30b$16bobo16bo11b$16b2o17bobo9b$obo10bo21b2o10b$b2o11b2o31b$bo11b
 2o32b3$10b2o20b2o13b$11b2o19bobo9b3o$10bo21bo11bo2b$27bo17bob$27b2o18b

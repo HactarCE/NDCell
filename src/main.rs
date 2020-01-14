@@ -6,11 +6,37 @@
 #[macro_use]
 extern crate pest_derive;
 
+use log::{debug, info};
+
 pub mod automaton;
 mod math;
 mod ui;
 
 fn main() {
     simple_logger::init().unwrap();
-    ui::show_gui()
+    info!("Starting NDCell v{} ...", env!("CARGO_PKG_VERSION"));
+
+    // The default stack size on Windows is 1 MB, which is not enough for
+    // NDCell. The easiest workaround is to just spawn a new thread with a large
+    // enough stack (16 MB in this case).
+    #[cfg(windows)]
+    {
+        use std::thread;
+
+        const MSVC_STACK_SIZE_MB: usize = 16;
+
+        debug!("Spawning UI thread {} MB stack size", MSVC_STACK_SIZE_MB);
+        let _ = thread::Builder::new()
+            .stack_size(MSVC_STACK_SIZE_MB * 1024 * 1024)
+            .spawn(ui::show_gui)
+            .unwrap()
+            .join();
+    }
+
+    // On Unix-based systems there is no need to spawn a new thread.
+    #[cfg(unix)]
+    {
+        debug!("Launching UI");
+        ui::show_gui();
+    }
 }

@@ -8,6 +8,8 @@ use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use log::warn;
 use std::rc::Rc;
+use std::thread::sleep;
+use std::time::Duration;
 use std::time::Instant;
 
 mod clipboard_compat;
@@ -20,6 +22,8 @@ use crate::automaton::*;
 use clipboard_compat::*;
 use gridview::{GridView, GridViewTrait};
 use history::*;
+
+const FPS: f32 = 60.0;
 
 /// The title of the window (both the OS window, and the main imgui window).
 pub const TITLE: &str = "NDCell";
@@ -99,7 +103,22 @@ pub fn show_gui() {
     let mut last_frame_time = Instant::now();
     let mut closed = false;
     while !closed {
+        state.grid_view.do_frame();
+
+        let io = imgui.io_mut();
+        platform
+            .prepare_frame(io, &window)
+            .expect("Failed to start frame");
+        last_frame_time = io.update_delta_time(last_frame_time);
+        let sleep_time = 1.0 / FPS - io.delta_time;
+        if sleep_time > 0.0 {
+            sleep(Duration::from_secs_f32(sleep_time));
+        }
+
         input::start_frame(&mut state);
+
+        state.input_state.ignore_keyboard = io.want_capture_keyboard;
+        state.input_state.ignore_mouse = io.want_capture_mouse;
 
         events_loop.poll_events(|ev| {
             // Let imgui handle events.
@@ -118,17 +137,6 @@ pub fn show_gui() {
         });
 
         input::do_frame(&mut state);
-
-        state.grid_view.do_frame();
-
-        let io = imgui.io_mut();
-        // TODO you'll probably want these
-        // io.want_capture_keyboard = true;
-        // io.want_capture_mouse = true;
-        platform
-            .prepare_frame(io, &window)
-            .expect("Failed to start frame");
-        last_frame_time = io.update_delta_time(last_frame_time);
 
         let ui = imgui.frame();
         gui::build_windows(&mut state, &ui);

@@ -23,6 +23,10 @@ pub struct InputState {
     /// Whether user input directed the viewport to zoom in or out this frame.
     /// This is reset at the beginning of each frame.
     pub zooming: bool,
+    /// Whether to ignore mouse inputs.
+    pub ignore_mouse: bool,
+    /// Whether to ignore keyboard inputs.
+    pub ignore_keyboard: bool,
 }
 impl Index<u32> for InputState {
     type Output = bool;
@@ -86,11 +90,11 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
         // Handle WindowEvents.
         Event::WindowEvent { event, .. } => {
             match event {
-                WindowEvent::KeyboardInput { input, .. } => {
+                WindowEvent::KeyboardInput { input, .. } if !state.input_state.ignore_keyboard => {
                     state.input_state.update(input);
                     handle_key(state, input);
                 }
-                WindowEvent::MouseWheel { delta, .. } => {
+                WindowEvent::MouseWheel { delta, .. } if !state.input_state.ignore_mouse => {
                     // Pan 100x.
                     let (dx, dy) = match delta {
                         MouseScrollDelta::LineDelta(x, y) => (*x, *y),
@@ -105,7 +109,6 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                         _ => (),
                     }
                 }
-
                 _ => (),
             }
         }
@@ -213,7 +216,7 @@ pub fn do_frame(state: &mut super::State) {
     let zoom_speed = 0.1 * speed;
     match &mut state.grid_view {
         gridview::GridView::View2D(view2d) => {
-            if no_modifiers_pressed {
+            if no_modifiers_pressed && !input_state.ignore_keyboard {
                 let mut pan_x = 0.0;
                 let mut pan_y = 0.0;
                 // 'A' or left arrow => pan west.

@@ -14,7 +14,7 @@ pub fn clipboard_get() -> Result<String, ()> {
         ctx.borrow_mut()
             .as_mut()
             .ok_or(())
-            .and_then(|mut ctx| ctx.get_contents().map_err(|_| ()))
+            .and_then(|ctx| ctx.get_contents().map_err(|_| ()))
     })
 }
 
@@ -23,7 +23,7 @@ pub fn clipboard_set(new_contents: String) -> Result<(), ()> {
         ctx.borrow_mut()
             .as_mut()
             .ok_or(())
-            .and_then(|mut ctx| ctx.set_contents(new_contents).map_err(|_| ()))
+            .and_then(|ctx| ctx.set_contents(new_contents).map_err(|_| ()))
     })
 }
 

@@ -239,6 +239,7 @@ impl State {
         self.history.record(self.grid_view.clone());
     }
     pub fn load_rle_from_clipboard(&mut self) -> Result<(), String> {
+        self.record_state();
         let mut automaton: NdAutomaton<Dim2D> = rle::RleEncode::from_rle(
             &clipboard_get().map_err(|_| "Unable to access clipboard contents")?,
         )?;

@@ -406,17 +406,11 @@ impl<'a> RenderInProgress<'a> {
                 .min()
                 .y() as f32
             - render_cells_h as f32 / 2.0;
-        let mut left = render_cells_x / visible_cells_w as f32;
-        let mut bottom = render_cells_y / visible_cells_h as f32;
+
+        let left = render_cells_x / visible_cells_w as f32;
+        let bottom = render_cells_y / visible_cells_h as f32;
         let width = render_cells_w / visible_cells_w as f32;
         let height = render_cells_h / visible_cells_h as f32;
-        // // Occasionally, floating point errors cause the coordinates of the
-        // // bottom left corner of the rectangle to be -1.0; since Glium
-        // // doesn't allow negative coordinates for BlitTarget (not sure why),
-        // // we'll just nudge it up to 0.0. This happens rarely enough that it
-        // // souldn't be a big issue.
-        // left = if left >= 0.0 { left } else { 0.0 };
-        // bottom = if bottom >= 0.0 { bottom } else { 0.0 };
 
         self.cache.vbos.cells.write(&[
             TexturePosVertex {
@@ -447,26 +441,6 @@ impl<'a> RenderInProgress<'a> {
                 &glium::DrawParameters::default(),
             )
             .expect("Failed to draw cells");
-        // let source_rect = glium::Rect {
-        //     left: left as u32,
-        //     bottom: bottom as u32,
-        //     width: (render_cells_w * integer_scale_factor).round() as u32,
-        //     height: (render_cells_h * integer_scale_factor).round() as u32,
-        // };
-        // self.target.blit_from_simple_framebuffer(
-        //     &scaled_cells_fbo,
-        //     &source_rect,
-        //     &entire_blit_target(self.target),
-        //     glium::uniforms::MagnifySamplerFilter::Linear,
-        // );
-
-        // // minimap in corner
-        // self.target.blit_from_simple_framebuffer(
-        //     &scaled_cells_fbo,
-        //     &entire_rect(&scaled_cells_fbo),
-        //     &entire_blit_target(&scaled_cells_fbo),
-        //     glium::uniforms::MagnifySamplerFilter::Linear,
-        // );
 
         // Remove elements from the cache that we did not use this frame, and
         // mark the rest as being unused (to prepare for the next frame).

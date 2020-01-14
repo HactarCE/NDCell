@@ -1,5 +1,11 @@
 //! Code for reading and writing Golly's 2D RLE format, described here:
 //! http://golly.sourceforge.net/Help/formats.html#rle
+//!
+//! Note that RLEs always have Y values increasing downwards, while NDCell has Y
+//! values increasing upwards, so RLEs coordinates are reflected over the X
+//! axis.
+
+#![allow(missing_docs)]
 
 use pest::Parser;
 
@@ -9,24 +15,37 @@ use super::*;
 #[grammar = "automaton/io/rle.pest"]
 struct Grammar;
 
+/// Information contained in the header of an RLE pattern.
 struct RleHeader {
-    x: isize,
-    y: isize,
-    rule: Option<String>,
+    /// Pattern width.
+    pub x: isize,
+    /// Pattern height.
+    pub y: isize,
+    /// Automaton rule.
+    pub rule: Option<String>,
 }
+/// Information contained in the CXRLE header of a Golly Extended RLE pattern.
 struct CxrleHeader {
-    pos: Vec2D,
-    gen: isize,
+    /// Position of top-left of pattern (i.e. most negative coordinates).
+    pub pos: Vec2D,
+    /// Number of generations simulated.
+    pub gen: isize,
 }
+/// A single "content item" that may be repeated in an RLE pattern.
 enum RleItem<C> {
+    /// A cell state.
     Cell(C),
+    /// The end of a row.
     EndRow,
 }
 
 type TokenPair<'a> = pest::iterators::Pair<'a, Rule>;
 
+/// Methods for encoding/decoding patterns to/from Golly Extended RLE.
 pub trait RleEncode: std::marker::Sized {
+    /// Encode the pattern in Golly Extended RLE.
     fn to_rle(&self) -> String;
+    /// Decode a Golly Extended RLE pattern.
     fn from_rle(s: &str) -> Result<Self, String>;
 }
 impl RleEncode for NdAutomaton<Dim2D> {
@@ -102,7 +121,8 @@ impl RleEncode for NdAutomaton<Dim2D> {
 
         for row in cell_array {
             for cell in row {
-                // Y coordinates increase upwards in NDCell, but downwards in RLE, so reflect over the Y axis.
+                // Y coordinates increase upwards in NDCell, but downwards in
+                // RLE, so reflect over the Y axis.
                 ret.tree
                     .set_cell(pos * NdVec::from([1, -1]) - NdVec::from([0, 1]), cell);
                 pos[Axis::X] += 1;
@@ -112,15 +132,6 @@ impl RleEncode for NdAutomaton<Dim2D> {
         }
 
         Ok(ret)
-    }
-}
-
-pub trait CxrleEncode: RleEncode {
-    fn to_cxrle(&self) -> String;
-}
-impl CxrleEncode for NdAutomaton<Dim2D> {
-    fn to_cxrle(&self) -> String {
-        unimplemented!()
     }
 }
 
@@ -190,16 +201,19 @@ fn parse_content_item<C: RleCellType>(pair: TokenPair) -> Result<(usize, RleItem
     Ok((n, item.ok_or("Invalid RLE content")?))
 }
 
-pub type ParseResult<T> = Result<T, ParseError>;
+type ParseResult<T> = Result<T, ParseError>;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum ParseError {
+enum ParseError {
     InvalidCellState,
     CellStateOutOfRange,
 }
 
-pub trait RleCellType: CellType {
+/// Conversions from/to CellTypes to/from text-based RLE.
+trait RleCellType: CellType {
+    /// Append the RLE representation of this cell to the given string.
     fn push_to_string(self, chars: &mut String);
+    /// Decode the given string slice as a single cell.
     fn from_str(s: &str) -> ParseResult<Self>;
 }
 
@@ -253,6 +267,7 @@ impl RleCellType for u8 {
     }
 }
 
+/// Compute the signed "distance" between two characters such that, e.g., 'A' -> 'A' = 1 and 'A' -> 'Z' = 26.
 fn char_diff(ch1: char, ch2: char) -> u8 {
     ch2 as u8 - ch1 as u8 + 1
 }

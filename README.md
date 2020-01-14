@@ -24,7 +24,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
     + [x] Undo/reset
     + [x] Change sim step
     + [ ] Jump to generation
-- [ ] Read simple 2D RLE files from Golly
+- [x] Read simple 2D RLE files from Golly
 - [ ] Edit patterns with the mouse
 - [ ] Begin work on 3D rendering
 

@@ -6,6 +6,7 @@ use glium::glutin;
 use imgui::{Context, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use log::warn;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -34,44 +35,12 @@ pub struct State {
     pub dpi: f32,
 }
 
-const GOSPER_GLIDER_GUN: [Dim2D; 36] = [
-    [24, 0],
-    [22, 1],
-    [24, 1],
-    [12, 2],
-    [13, 2],
-    [20, 2],
-    [21, 2],
-    [34, 2],
-    [35, 2],
-    [11, 3],
-    [15, 3],
-    [20, 3],
-    [21, 3],
-    [34, 3],
-    [35, 3],
-    [0, 4],
-    [1, 4],
-    [10, 4],
-    [16, 4],
-    [20, 4],
-    [21, 4],
-    [0, 5],
-    [1, 5],
-    [10, 5],
-    [14, 5],
-    [16, 5],
-    [17, 5],
-    [22, 5],
-    [24, 5],
-    [10, 6],
-    [16, 6],
-    [24, 6],
-    [11, 7],
-    [15, 7],
-    [12, 8],
-    [13, 8],
-];
+const GOSPER_GLIDER_GUN_SYNTH_RLE: &str = "
+x = 47, y = 14, rule = B3/S23
+16bo30b$16bobo16bo11b$16b2o17bobo9b$obo10bo21b2o10b$b2o11b2o31b$bo11b
+2o32b3$10b2o20b2o13b$11b2o19bobo9b3o$10bo21bo11bo2b$27bo17bob$27b2o18b
+$26bobo!
+";
 
 /// Display the main application window.
 pub fn show_gui() {
@@ -110,17 +79,11 @@ pub fn show_gui() {
         Renderer::init(&mut imgui, &*display).expect("Failed to initialize renderer");
 
     // Initialize cellular automaton stuff.
-    let mut grid = NdTree::new();
-    for &pos in GOSPER_GLIDER_GUN.into_iter() {
-        grid.set_cell(pos.into(), 1);
-    }
-    // grid.set_cell([3, 3].into(), 1);
-    // grid.set_cell([4, 3].into(), 1);
-    // grid.set_cell([5, 3].into(), 1);
-    // grid.set_cell([5, 2].into(), 1);
-    // grid.set_cell([4, 1].into(), 1);
-    let mut automaton = NdAutomaton::default();
-    automaton.tree = grid;
+    let mut automaton: NdAutomaton<Dim2D> = rle::RleEncode::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE)
+        .unwrap_or_else(|_| {
+            warn!("Unable to parse default pattern; using empty pattern instead");
+            Default::default()
+        });
     automaton.sim = Simulation::new(Rc::new(rule::LIFE), 4);
     let mut state = State {
         display: display.clone(),

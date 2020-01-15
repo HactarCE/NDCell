@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+mod pixelation; // TODO move pixelation into render submodule
 mod render;
 mod shaders;
 mod viewport;

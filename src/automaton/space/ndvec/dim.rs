@@ -1,5 +1,4 @@
 use num::BigInt;
-use std::borrow::BorrowMut;
 
 use super::*;
 
@@ -25,59 +24,30 @@ pub trait Dim: Debug + Default + Copy + Eq + Hash + private::Sealed {
         ndim_axes(Self::NDIM)
     }
 
-    // /// Returns the coordinate along the given axis.
-    // fn get(&self, axis: Axis) -> &N;
-
-    // /// Returns a mutable reference to the coordinate along the given axis.
-    // fn get_mut(&mut self, axis: Axis) -> &mut N;
-
-    // /// Sets the coordinate along the given axis.
-    // fn set(&mut self, axis: Axis, value: N);
-
-    // /// Returns whether these coordinates consists entirely of zeros.
-    // fn is_zero(&self) -> bool {
-    //     for &ax in Self::axes() {
-    //         if self.get(ax) != N::zero() {
-    //             return false;
-    //         }
-    //     }
-    //     true
-    // }
-
-    // /// Returns the coordinates of the origin (i.e. all zeros).
-    // fn origin() -> Self;
-
-    // /// Returns true if the given axis belongs to this dimensionality.
-    // fn contains(axis: Axis) -> bool {
-    //     (axis as usize) < Self::NDIM
-    // }
+    /// Returns true if the given axis belongs to this dimensionality.
+    fn contains(axis: Axis) -> bool {
+        (axis as usize) < Self::NDIM
+    }
 }
 
+/// A type representing 1D things.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Dim1D;
+/// A type representing 2D things.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Dim2D;
+/// A type representing 3D things.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Dim3D;
+/// A type representing 4D things.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Dim4D;
+/// A type representing 5D things.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Dim5D;
+/// A type representing 6D things.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Dim6D;
-
-// /// A basic 1D vector type.
-// pub type Dim1D<N> = [N; 1];
-// /// A basic 2D vector type.
-// pub type Dim2D<N> = [N; 2];
-// /// A basic 3D vector type.
-// pub type Dim3D<N> = [N; 3];
-// /// A basic 4D vector type.
-// pub type Dim4D<N> = [N; 4];
-// /// A basic 5D vector type.
-// pub type Dim5D<N> = [N; 5];
-// /// A basic 6D vector type.
-// pub type Dim6D<N> = [N; 6];
 
 impl Dim for Dim1D {
     const NDIM: usize = 1;

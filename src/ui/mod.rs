@@ -8,9 +8,6 @@ use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use log::warn;
 use std::rc::Rc;
-use std::thread::sleep;
-use std::time::Duration;
-use std::time::Instant;
 
 mod clipboard_compat;
 mod gridview;
@@ -52,7 +49,7 @@ pub fn show_gui() {
     // Initialize all glium/glutin stuff.
     let mut events_loop = glutin::EventsLoop::new();
     let wb = glutin::WindowBuilder::new().with_title(TITLE.to_owned());
-    let cb = glutin::ContextBuilder::new();
+    let cb = glutin::ContextBuilder::new().with_vsync(true);
     let display =
         Rc::new(glium::Display::new(wb, cb, &events_loop).expect("Failed to initialize display"));
 
@@ -110,10 +107,6 @@ pub fn show_gui() {
             .prepare_frame(io, &window)
             .expect("Failed to start frame");
         last_frame_time = io.update_delta_time(last_frame_time);
-        let sleep_time = 1.0 / FPS - io.delta_time;
-        if sleep_time > 0.0 {
-            sleep(Duration::from_secs_f32(sleep_time));
-        }
 
         input::start_frame(&mut state);
 

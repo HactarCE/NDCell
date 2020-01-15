@@ -10,30 +10,30 @@ const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;
 
 // OSX scancodes are from https://eastmanreference.com/complete-list-of-applescript-key-codes
-#[cfg(any(target_os = "macos")]
+#[cfg(any(target_os = "macos"))]
 const SC_W: u32 = 13;
-#[cfg(any(target_os = "macos")]
+#[cfg(any(target_os = "macos"))]
 const SC_A: u32 = 0;
-#[cfg(any(target_os = "macos")]
+#[cfg(any(target_os = "macos"))]
 const SC_S: u32 = 1;
-#[cfg(any(target_os = "macos")]
+#[cfg(any(target_os = "macos"))]
 const SC_D: u32 = 2;
-#[cfg(any(target_os = "macos")]
+#[cfg(any(target_os = "macos"))]
 const SC_Q: u32 = 12;
-#[cfg(any(target_os = "macos")]
+#[cfg(any(target_os = "macos"))]
 const SC_Z: u32 = 6;
 
-#[cfg(not(any(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos")))]
 const SC_W: u32 = 17;
-#[cfg(not(any(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos")))]
 const SC_A: u32 = 30;
-#[cfg(not(any(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos")))]
 const SC_S: u32 = 32;
-#[cfg(not(any(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos")))]
 const SC_D: u32 = 31;
-#[cfg(not(any(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos")))]
 const SC_Q: u32 = 16;
-#[cfg(not(any(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos")))]
 const SC_Z: u32 = 44;
 
 /// A struct tracking miscellaneous stateful things relating input, such as

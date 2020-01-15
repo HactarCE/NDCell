@@ -8,6 +8,7 @@ use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use log::warn;
 use std::rc::Rc;
+use std::time::Instant;
 
 mod clipboard_compat;
 mod gridview;

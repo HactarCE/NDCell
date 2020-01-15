@@ -116,35 +116,49 @@ impl_ndvec_conversion!(FVec from IVec with (|x| x as f32));
 impl_ndvec_conversion!(FVec from ByteVec);
 impl_ndvec_conversion!(FVec from UVec with (|x| x as f32));
 
+// macro_rules! ndvec {
+//     ($vec_type: ident, $( $x: expr), *) => {};
+// }
+
 /// BigVec constructor using array notation; e.g. bigvec![1, -2, 3] or
 /// bigvec![-10; 2].
 #[macro_export]
 macro_rules! bigvec {
-    [$t:tt] => {BigVec([$t])}
+    ($($t:tt)*) => {
+        BigVec([$($t)*])
+    };
 }
 ///  IVec constructor using array notation; e.g. ivec![1, -2, 3] or ivec![-10;
 /// 2].
 #[macro_export]
 macro_rules! ivec {
-    [$t:tt] => {IVec([$t])}
+    ($($t:tt)*) => {
+        IVec([$($t)*])
+    };
 }
 ///  FVec constructor using array notation; e.g. fvec![1.1, -2.3, 3.0] or
 /// fvec![-9.8; 2].
 #[macro_export]
 macro_rules! fvec {
-    [$t:tt] => {FVec([$t])}
+    ($($t:tt)*) => {
+        FVec([$($t)*])
+    };
 }
 /// ByteVec constructor using array notation; e.g. bytevec![1, 2, 255] or
 /// bytevec![30; 2].
 #[macro_export]
 macro_rules! bytevec {
-    [$t:tt] => {ByteVec([$t])}
+    ($($t:tt)*) => {
+        ByteVec([$($t)*])
+    };
 }
 /// UVec constructor using array notation; e.g. uvec![1, 2, 1000] or uvec![30;
 /// 2].
 #[macro_export]
 macro_rules! uvec {
-    [$t:tt] => {UVec([$t])}
+    ($($t:tt)*) => {
+        UVec([$($t)*])
+    };
 }
 
 #[cfg(test)]

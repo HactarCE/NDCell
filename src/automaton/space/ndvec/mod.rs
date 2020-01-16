@@ -1,3 +1,10 @@
+//! N-dimensional vectors.
+//!
+//! Until generic associated types work (see rust-lang#44265), this module is
+//! kind of a mess. There's a ton of macros in order to implement all the
+//! various operations on NdVecs without writing thousands of lines of
+//! repetitive code.
+
 use num::{BigInt, FromPrimitive, Num, ToPrimitive};
 use std::cmp::Eq;
 use std::convert::TryFrom;

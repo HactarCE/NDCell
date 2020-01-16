@@ -8,7 +8,7 @@ use std::ops::*;
 mod aliases;
 mod axis;
 mod dim;
-// mod ops_scalar;
+mod ops_scalar;
 // mod ops_vector;
 
 pub use aliases::*;
@@ -17,12 +17,26 @@ pub use axis::*;
 pub use dim::*;
 
 /// A set of coordinates for a given dimensionality.
-pub trait NdVec<N: Num, D: Dim>: Sized + Default + PartialEq + AsRef<[N]> + AsMut<[N]> {
+pub trait NdVec<N: Num, D: Dim>:
+    Sized + Default + PartialEq + Index<Axis, Output = N> + IndexMut<Axis>
+{
     fn origin() -> Self {
         Self::default()
     }
     fn is_zero(&self) -> bool {
         *self == Self::origin()
+    }
+    fn map_fn<F: Fn(Axis, &mut N)>(&mut self, mutator: F) {
+        for &ax in D::axes() {
+            mutator(ax, &mut self[ax]);
+        }
+    }
+    fn from_fn<F: Fn(Axis) -> N>(generator: F) -> Self {
+        let mut ret: Self = Self::default();
+        for &ax in D::axes() {
+            ret[ax] = generator(ax);
+        }
+        ret
     }
 }
 
@@ -31,27 +45,17 @@ macro_rules! make_ndvec_struct {
         /// A vector type using $coord_type coordinates.
         #[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
         pub struct $vec_type_name<D: Dim>(D::$dim_array_type_name);
+        impl<D: Dim> NdVec<$coord_type, D> for $vec_type_name<D> {}
 
         impl<D: Dim> Index<Axis> for $vec_type_name<D> {
             type Output = $coord_type;
             fn index(&self, axis: Axis) -> &$coord_type {
-                &self.as_ref()[axis as usize]
+                &self.0.as_ref()[axis as usize]
             }
         }
         impl<D: Dim> IndexMut<Axis> for $vec_type_name<D> {
             fn index_mut(&mut self, axis: Axis) -> &mut $coord_type {
-                &mut self.as_mut()[axis as usize]
-            }
-        }
-
-        impl<D: Dim> AsRef<[$coord_type]> for $vec_type_name<D> {
-            fn as_ref(&self) -> &[$coord_type] {
-                self.0.as_ref()
-            }
-        }
-        impl<D: Dim> AsMut<[$coord_type]> for $vec_type_name<D> {
-            fn as_mut(&mut self) -> &mut [$coord_type] {
-                self.0.as_mut()
+                &mut self.0.as_mut()[axis as usize]
             }
         }
     };
@@ -62,6 +66,11 @@ make_ndvec_struct!(FVec, f32, F32Array);
 make_ndvec_struct!(IVec, isize, IsizeArray);
 make_ndvec_struct!(ByteVec, u8, U8Array);
 make_ndvec_struct!(UVec, usize, UsizeArray);
+
+impl<D: Dim> Copy for FVec<D> {}
+impl<D: Dim> Copy for IVec<D> {}
+impl<D: Dim> Copy for ByteVec<D> {}
+impl<D: Dim> Copy for UVec<D> {}
 
 macro_rules! impl_ndvec_conversion {
     ($ndvec1:ident from $ndvec2:ident with $converter:expr) => {
@@ -78,7 +87,7 @@ macro_rules! impl_ndvec_conversion {
     ($ndvec1:ident from $ndvec2:ident) => {
         impl_ndvec_conversion!($ndvec1 from $ndvec2 with std::convert::Into::into);
     };
-    ($ndvec1:ident try_from $ndvec2:ident with $converter: expr) => {
+    ($ndvec1:ident try_from $ndvec2:ident with $converter:expr) => {
         impl<D: Dim> TryFrom<&$ndvec2<D>> for $ndvec1<D> {
             type Error = ();
             fn try_from(vec2: &$ndvec2<D>) -> Result<$ndvec1<D>, ()> {
@@ -115,10 +124,6 @@ impl_ndvec_conversion!(FVec try_from BigVec with ToPrimitive::to_f32);
 impl_ndvec_conversion!(FVec from IVec with (|x| x as f32));
 impl_ndvec_conversion!(FVec from ByteVec);
 impl_ndvec_conversion!(FVec from UVec with (|x| x as f32));
-
-// macro_rules! ndvec {
-//     ($vec_type: ident, $( $x: expr), *) => {};
-// }
 
 /// BigVec constructor using array notation; e.g. bigvec![1, -2, 3] or
 /// bigvec![-10; 2].

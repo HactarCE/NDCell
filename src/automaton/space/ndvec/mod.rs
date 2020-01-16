@@ -9,7 +9,7 @@ mod aliases;
 mod axis;
 mod dim;
 mod ops_scalar;
-// mod ops_vector;
+mod ops_vector;
 
 pub use aliases::*;
 pub use axis::Axis::{U, V, W, X, Y, Z};

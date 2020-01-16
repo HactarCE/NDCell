@@ -9,9 +9,9 @@ macro_rules! impl_add_sub_mul {
     ($vec_type:ident with $coord_type:ident) => {
         // Implement addition between an NdVec and a scalar (i.e. add the scalar
         // to each coordinate).
-        impl<D: Dim, N: Copy> Add<N> for $vec_type<D>
+        impl<D: Dim, N> Add<N> for $vec_type<D>
         where
-            $coord_type: AddAssign<N>,
+            $vec_type<D>: AddAssign<N>,
         {
             type Output = Self;
             fn add(self, other: N) -> Self {
@@ -20,9 +20,9 @@ macro_rules! impl_add_sub_mul {
                 ret
             }
         }
-        impl<'a, D: Dim, N: Copy> Add<N> for &'a $vec_type<D>
+        impl<'a, D: Dim, N> Add<N> for &'a $vec_type<D>
         where
-            $coord_type: AddAssign<N>,
+            $vec_type<D>: AddAssign<N>,
         {
             type Output = $vec_type<D>;
             fn add(self, other: N) -> Self::Output {
@@ -42,9 +42,9 @@ macro_rules! impl_add_sub_mul {
 
         // Implement subtraction between an NdVec and a scalar (i.e. subtract
         // the scalar from each coordinate).
-        impl<D: Dim, N: Copy> Sub<N> for $vec_type<D>
+        impl<D: Dim, N> Sub<N> for $vec_type<D>
         where
-            $coord_type: SubAssign<N>,
+            $vec_type<D>: SubAssign<N>,
         {
             type Output = Self;
             fn sub(self, other: N) -> Self {
@@ -53,9 +53,9 @@ macro_rules! impl_add_sub_mul {
                 ret
             }
         }
-        impl<'a, D: Dim, N: Copy> Sub<N> for &'a $vec_type<D>
+        impl<'a, D: Dim, N> Sub<N> for &'a $vec_type<D>
         where
-            $coord_type: SubAssign<N>,
+            $vec_type<D>: SubAssign<N>,
         {
             type Output = $vec_type<D>;
             fn sub(self, other: N) -> Self::Output {
@@ -75,9 +75,9 @@ macro_rules! impl_add_sub_mul {
 
         // Implement multiplication between an NdVec and a scalar (i.e. multiply
         // each coordinate by the scalar).
-        impl<D: Dim, N: Copy> Mul<N> for $vec_type<D>
+        impl<D: Dim, N> Mul<N> for $vec_type<D>
         where
-            $coord_type: MulAssign<N>,
+            $vec_type<D>: MulAssign<N>,
         {
             type Output = Self;
             fn mul(self, other: N) -> Self {
@@ -86,9 +86,9 @@ macro_rules! impl_add_sub_mul {
                 ret
             }
         }
-        impl<'a, D: Dim, N: Copy> Mul<N> for &'a $vec_type<D>
+        impl<'a, D: Dim, N> Mul<N> for &'a $vec_type<D>
         where
-            $coord_type: MulAssign<N>,
+            $vec_type<D>: MulAssign<N>,
         {
             type Output = $vec_type<D>;
             fn mul(self, other: N) -> Self::Output {

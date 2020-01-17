@@ -29,7 +29,7 @@ where
         ret
     }
 }
-impl<D: DimFor<N>, N: NdVecNum, X: Copy> AddAssign<X> for NdVec<D, N>
+impl<D: DimFor<N>, N: NdVecNum, X: Num + Copy> AddAssign<X> for NdVec<D, N>
 where
     N: AddAssign<X>,
 {
@@ -62,7 +62,7 @@ where
         ret
     }
 }
-impl<D: DimFor<N>, N: NdVecNum, X: Copy> SubAssign<X> for NdVec<D, N>
+impl<D: DimFor<N>, N: NdVecNum, X: Num + Copy> SubAssign<X> for NdVec<D, N>
 where
     N: SubAssign<X>,
 {
@@ -95,7 +95,7 @@ where
         ret
     }
 }
-impl<D: DimFor<N>, N: NdVecNum, X: Copy> MulAssign<X> for NdVec<D, N>
+impl<D: DimFor<N>, N: NdVecNum, X: Num + Copy> MulAssign<X> for NdVec<D, N>
 where
     N: MulAssign<X>,
 {

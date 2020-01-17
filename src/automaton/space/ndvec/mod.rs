@@ -20,7 +20,7 @@ use std::ops::*;
 mod aliases;
 mod axis;
 mod dim;
-// mod ops_scalar;
+mod ops_scalar;
 // mod ops_vector;
 
 pub use aliases::*;
@@ -197,6 +197,11 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
 //         UVec([$($t)*])
 //     };
 // }
+
+#[macro_export]
+macro_rules! ndvec {
+    ($($t:tt)*) => {NdVec([$($t)*])};
+}
 
 #[cfg(test)]
 mod tests;

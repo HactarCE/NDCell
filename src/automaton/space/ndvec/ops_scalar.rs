@@ -1,350 +1,353 @@
 //! Operations between an NdVec and a scalar.
 
-use num::integer::Integer;
+use num::{Float, Integer};
 use std::ops::*;
 
 use super::*;
 
-macro_rules! impl_add_sub_mul {
-    ($vec_type:ident with $coord_type:ident) => {
-        // Implement addition between an NdVec and a scalar (i.e. add the scalar
-        // to each coordinate).
-        impl<D: Dim, N> Add<N> for $vec_type<D>
-        where
-            $vec_type<D>: AddAssign<N>,
-        {
-            type Output = Self;
-            fn add(self, other: N) -> Self {
-                let mut ret = self;
-                ret += other;
-                ret
-            }
-        }
-        impl<'a, D: Dim, N> Add<N> for &'a $vec_type<D>
-        where
-            $vec_type<D>: AddAssign<N>,
-        {
-            type Output = $vec_type<D>;
-            fn add(self, other: N) -> Self::Output {
-                let mut ret = self.clone();
-                ret += other;
-                ret
-            }
-        }
-        impl<D: Dim, N: Copy> AddAssign<N> for $vec_type<D>
-        where
-            $coord_type: AddAssign<N>,
-        {
-            fn add_assign(&mut self, other: N) {
-                self.map_fn(|_ax, ret| *ret += other);
-            }
-        }
-
-        // Implement subtraction between an NdVec and a scalar (i.e. subtract
-        // the scalar from each coordinate).
-        impl<D: Dim, N> Sub<N> for $vec_type<D>
-        where
-            $vec_type<D>: SubAssign<N>,
-        {
-            type Output = Self;
-            fn sub(self, other: N) -> Self {
-                let mut ret = self;
-                ret -= other;
-                ret
-            }
-        }
-        impl<'a, D: Dim, N> Sub<N> for &'a $vec_type<D>
-        where
-            $vec_type<D>: SubAssign<N>,
-        {
-            type Output = $vec_type<D>;
-            fn sub(self, other: N) -> Self::Output {
-                let mut ret = self.clone();
-                ret -= other;
-                ret
-            }
-        }
-        impl<D: Dim, N: Copy> SubAssign<N> for $vec_type<D>
-        where
-            $coord_type: SubAssign<N>,
-        {
-            fn sub_assign(&mut self, other: N) {
-                self.map_fn(|_ax, ret| *ret -= other);
-            }
-        }
-
-        // Implement multiplication between an NdVec and a scalar (i.e. multiply
-        // each coordinate by the scalar).
-        impl<D: Dim, N> Mul<N> for $vec_type<D>
-        where
-            $vec_type<D>: MulAssign<N>,
-        {
-            type Output = Self;
-            fn mul(self, other: N) -> Self {
-                let mut ret = self;
-                ret *= other;
-                ret
-            }
-        }
-        impl<'a, D: Dim, N> Mul<N> for &'a $vec_type<D>
-        where
-            $vec_type<D>: MulAssign<N>,
-        {
-            type Output = $vec_type<D>;
-            fn mul(self, other: N) -> Self::Output {
-                let mut ret = self.clone();
-                ret *= other;
-                ret
-            }
-        }
-        impl<D: Dim, N: Copy> MulAssign<N> for $vec_type<D>
-        where
-            $coord_type: MulAssign<N>,
-        {
-            fn mul_assign(&mut self, other: N) {
-                self.map_fn(|_ax, ret| *ret *= other);
-            }
-        }
-    };
-}
-
-impl_add_sub_mul!(BigVec with BigInt);
-impl_add_sub_mul!(FVec with R64);
-impl_add_sub_mul!(IVec with isize);
-impl_add_sub_mul!(UVec with usize);
-impl_add_sub_mul!(ByteVec with u8);
-
-macro_rules! impl_div_mod_floor {
-    ($vec_type:ident with $coord_type:ident) => {
-        // Implement floored euclidean division between an NdVec and a scalar
-        // (i.e. divide each coordinate by the scalar). Note that this is not
-        // the same as Rust's normal integer division operator.
-        //
-        // These are the only operations not implemented as traits.
-        impl<D: Dim> $vec_type<D> {
-            /// Floored integer division.
-            pub fn div_floor(self, other: &$coord_type) -> Self {
-                let mut ret = self;
-                ret.map_fn(|_ax, ret| *ret = ret.div_floor(other));
-                ret
-            }
-            /// Floored integer modulo.
-            pub fn mod_floor(self, other: &$coord_type) -> Self {
-                let mut ret = self;
-                ret.map_fn(|_ax, ret| *ret = ret.mod_floor(other));
-                ret
-            }
-        }
-    };
-}
-
-impl_div_mod_floor!(BigVec with BigInt);
-// impl_div_mod_floor!(FVec with R64);
-impl_div_mod_floor!(IVec with isize);
-impl_div_mod_floor!(UVec with usize);
-impl_div_mod_floor!(ByteVec with u8);
-
-impl<D: Dim, N: Copy> Div<N> for FVec<D>
+// Implement addition between an NdVec and a scalar (i.e. add the scalar
+// to each coordinate).
+impl<D: DimFor<N>, N: NdVecNum, X> Add<X> for NdVec<D, N>
 where
-    f32: DivAssign<N>,
+    NdVec<D, N>: AddAssign<X>,
 {
     type Output = Self;
-    fn div(self, other: N) -> Self {
+    fn add(self, other: X) -> Self {
+        let mut ret = self;
+        ret += other;
+        ret
+    }
+}
+impl<'a, D: DimFor<N>, N: NdVecNum, X> Add<X> for &'a NdVec<D, N>
+where
+    NdVec<D, N>: AddAssign<X>,
+{
+    type Output = NdVec<D, N>;
+    fn add(self, other: X) -> Self::Output {
+        let mut ret = self.clone();
+        ret += other;
+        ret
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> AddAssign<X> for NdVec<D, N>
+where
+    N: AddAssign<X>,
+{
+    fn add_assign(&mut self, other: X) {
+        self.map_fn(|_ax, ret| *ret += other);
+    }
+}
+
+// Implement subtraction between an NdVec and a scalar (i.e. subtract
+// the scalar from each coordinate).
+impl<D: DimFor<N>, N: NdVecNum, X> Sub<X> for NdVec<D, N>
+where
+    NdVec<D, N>: SubAssign<X>,
+{
+    type Output = Self;
+    fn sub(self, other: X) -> Self {
+        let mut ret = self;
+        ret -= other;
+        ret
+    }
+}
+impl<'a, D: DimFor<N>, N: NdVecNum, X> Sub<X> for &'a NdVec<D, N>
+where
+    NdVec<D, N>: SubAssign<X>,
+{
+    type Output = NdVec<D, N>;
+    fn sub(self, other: X) -> Self::Output {
+        let mut ret = self.clone();
+        ret -= other;
+        ret
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> SubAssign<X> for NdVec<D, N>
+where
+    N: SubAssign<X>,
+{
+    fn sub_assign(&mut self, other: X) {
+        self.map_fn(|_ax, ret| *ret -= other);
+    }
+}
+
+// Implement multiplication between an NdVec and a scalar (i.e. multiply
+// each coordinate by the scalar).
+impl<D: DimFor<N>, N: NdVecNum, X> Mul<X> for NdVec<D, N>
+where
+    NdVec<D, N>: MulAssign<X>,
+{
+    type Output = Self;
+    fn mul(self, other: X) -> Self {
+        let mut ret = self;
+        ret *= other;
+        ret
+    }
+}
+impl<'a, D: DimFor<N>, N: NdVecNum, X> Mul<X> for &'a NdVec<D, N>
+where
+    NdVec<D, N>: MulAssign<X>,
+{
+    type Output = NdVec<D, N>;
+    fn mul(self, other: X) -> Self::Output {
+        let mut ret = self.clone();
+        ret *= other;
+        ret
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> MulAssign<X> for NdVec<D, N>
+where
+    N: MulAssign<X>,
+{
+    fn mul_assign(&mut self, other: X) {
+        self.map_fn(|_ax, ret| *ret *= other);
+    }
+}
+
+// Implement floored euclidean division between an NdVec and a scalar
+// (i.e. divide each coordinate by the scalar). Note that this is not
+// the same as Rust's normal integer division operator.
+//
+// These are the only operations not implemented as traits.
+impl<D: DimFor<N>, N: NdVecNum + Integer> NdVec<D, N> {
+    /// Floored integer division.
+    pub fn div_floor(self, other: &N) -> Self {
+        let mut ret = self;
+        ret.map_fn(|_ax, ret| *ret = ret.div_floor(other));
+        ret
+    }
+    /// Floored integer modulo.
+    pub fn mod_floor(self, other: &N) -> Self {
+        let mut ret = self;
+        ret.map_fn(|_ax, ret| *ret = ret.mod_floor(other));
+        ret
+    }
+}
+
+// Implement division and modulo between an NdVec and a scalar (i.e. divide each
+// coordinate by the scalar). This is only implemented for floating point NdVecs
+// because integers will usually want div_floor instead.
+impl<D: DimFor<N>, N: NdVecNum + Float, X> Div<X> for NdVec<D, N>
+where
+    NdVec<D, N>: DivAssign<X>,
+{
+    type Output = Self;
+    fn div(self, other: X) -> Self {
         let mut ret = self;
         ret /= other;
         ret
     }
 }
-impl<'a, D: Dim, N: Copy> Div<N> for &'a FVec<D>
+impl<'a, D: DimFor<N>, N: NdVecNum + Float, X> Div<X> for &'a NdVec<D, N>
 where
-    f32: DivAssign<N>,
+    NdVec<D, N>: DivAssign<X>,
 {
-    type Output = FVec<D>;
-    fn div(self, other: N) -> FVec<D> {
+    type Output = NdVec<D, N>;
+    fn div(self, other: X) -> Self::Output {
         let mut ret = self.clone();
         ret /= other;
         ret
     }
 }
-impl<D: Dim, N: Copy> DivAssign<N> for FVec<D>
+impl<D: DimFor<N>, N: NdVecNum + Float, X: Copy> DivAssign<X> for NdVec<D, N>
 where
-    f32: DivAssign<N>,
+    N: DivAssign<X>,
 {
-    fn div_assign(&mut self, other: N) {
+    fn div_assign(&mut self, other: X) {
         self.map_fn(|_ax, ret| *ret /= other);
     }
 }
-
-macro_rules! impl_bit_ops {
-    ($vec_type:ident with $coord_type:ident) => {
-        // Implement bitwise AND between an NdVec and a scalar (i.e. AND each
-        // coordinate with the scalar).
-        impl<D: Dim, N: Copy> BitAnd<N> for $vec_type<D>
-        where
-            $coord_type: BitAndAssign<N>,
-        {
-            type Output = Self;
-            fn bitand(self, other: N) -> Self {
-                let mut ret = self;
-                ret &= other;
-                ret
-            }
-        }
-        impl<'a, D: Dim, N: Copy> BitAnd<N> for &'a $vec_type<D>
-        where
-            $coord_type: BitAndAssign<N>,
-        {
-            type Output = $vec_type<D>;
-            fn bitand(self, other: N) -> Self::Output {
-                let mut ret = self.clone();
-                ret &= other;
-                ret
-            }
-        }
-        impl<D: Dim, N: Copy> BitAndAssign<N> for $vec_type<D>
-        where
-            $coord_type: BitAndAssign<N>,
-        {
-            fn bitand_assign(&mut self, other: N) {
-                self.map_fn(|_ax, ret| *ret &= other);
-            }
-        }
-
-        // Implement bitwise OR between an NdVec and a scalar (i.e. OR each
-        // coordinate with the scalar).
-        impl<D: Dim, N: Copy> BitOr<N> for $vec_type<D>
-        where
-            $coord_type: BitOrAssign<N>,
-        {
-            type Output = Self;
-            fn bitor(self, other: N) -> Self {
-                let mut ret = self;
-                ret |= other;
-                ret
-            }
-        }
-        impl<'a, D: Dim, N: Copy> BitOr<N> for &'a $vec_type<D>
-        where
-            $coord_type: BitOrAssign<N>,
-        {
-            type Output = $vec_type<D>;
-            fn bitor(self, other: N) -> Self::Output {
-                let mut ret = self.clone();
-                ret |= other;
-                ret
-            }
-        }
-        impl<D: Dim, N: Copy> BitOrAssign<N> for $vec_type<D>
-        where
-            $coord_type: BitOrAssign<N>,
-        {
-            fn bitor_assign(&mut self, other: N) {
-                self.map_fn(|_ax, ret| *ret |= other);
-            }
-        }
-
-        // Implement bitwise XOR between an NdVec and a scalar (i.e. XOR each
-        // coordinate with the scalar).
-        impl<D: Dim, N: Copy> BitXor<N> for $vec_type<D>
-        where
-            $coord_type: BitXorAssign<N>,
-        {
-            type Output = Self;
-            fn bitxor(self, other: N) -> Self {
-                let mut ret = self;
-                ret ^= other;
-                ret
-            }
-        }
-        impl<'a, D: Dim, N: Copy> BitXor<N> for &'a $vec_type<D>
-        where
-            $coord_type: BitXorAssign<N>,
-        {
-            type Output = $vec_type<D>;
-            fn bitxor(self, other: N) -> Self::Output {
-                let mut ret = self.clone();
-                ret ^= other;
-                ret
-            }
-        }
-        impl<D: Dim, N: Copy> BitXorAssign<N> for $vec_type<D>
-        where
-            $coord_type: BitXorAssign<N>,
-        {
-            fn bitxor_assign(&mut self, other: N) {
-                self.map_fn(|_ax, ret| *ret ^= other);
-            }
-        }
-        // Implement bitwise left-shift between an NdVec and a scalar (i.e.
-        // left-shift each coordinate by the scalar).
-        impl<D: Dim, N: Copy> Shl<N> for $vec_type<D>
-        where
-            $coord_type: ShlAssign<N>,
-        {
-            type Output = Self;
-            fn shl(self, other: N) -> Self {
-                let mut ret = self;
-                ret <<= other;
-                ret
-            }
-        }
-        impl<'a, D: Dim, N: Copy> Shl<N> for &'a $vec_type<D>
-        where
-            $coord_type: ShlAssign<N>,
-        {
-            type Output = $vec_type<D>;
-            fn shl(self, other: N) -> Self::Output {
-                let mut ret = self.clone();
-                ret <<= other;
-                ret
-            }
-        }
-        impl<D: Dim, N: Copy> ShlAssign<N> for $vec_type<D>
-        where
-            $coord_type: ShlAssign<N>,
-        {
-            fn shl_assign(&mut self, other: N) {
-                self.map_fn(|_ax, ret| *ret <<= other);
-            }
-        }
-
-        // Implement bitwise right-shift between an NdVec and a scalar (i.e.
-        // right-shift each coordinate by the scalar).
-        impl<D: Dim, N: Copy> Shr<N> for $vec_type<D>
-        where
-            $coord_type: ShrAssign<N>,
-        {
-            type Output = Self;
-            fn shr(self, other: N) -> Self {
-                let mut ret = self;
-                ret >>= other;
-                ret
-            }
-        }
-        impl<'a, D: Dim, N: Copy> Shr<N> for &'a $vec_type<D>
-        where
-            $coord_type: ShrAssign<N>,
-        {
-            type Output = $vec_type<D>;
-            fn shr(self, other: N) -> Self::Output {
-                let mut ret = self.clone();
-                ret >>= other;
-                ret
-            }
-        }
-        impl<D: Dim, N: Copy> ShrAssign<N> for $vec_type<D>
-        where
-            $coord_type: ShrAssign<N>,
-        {
-            fn shr_assign(&mut self, other: N) {
-                self.map_fn(|_ax, ret| *ret >>= other);
-            }
-        }
-    };
+impl<D: DimFor<N>, N: NdVecNum + Float, X> Rem<X> for NdVec<D, N>
+where
+    NdVec<D, N>: RemAssign<X>,
+{
+    type Output = Self;
+    fn rem(self, other: X) -> Self {
+        let mut ret = self;
+        ret %= other;
+        ret
+    }
+}
+impl<'a, D: DimFor<N>, N: NdVecNum + Float, X> Rem<X> for &'a NdVec<D, N>
+where
+    NdVec<D, N>: RemAssign<X>,
+{
+    type Output = NdVec<D, N>;
+    fn rem(self, other: X) -> Self::Output {
+        let mut ret = self.clone();
+        ret %= other;
+        ret
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum + Float, X: Copy> RemAssign<X> for NdVec<D, N>
+where
+    N: RemAssign<X>,
+{
+    fn rem_assign(&mut self, other: X) {
+        self.map_fn(|_ax, ret| *ret %= other);
+    }
 }
 
-impl_bit_ops!(BigVec with BigInt);
-impl_bit_ops!(FVec with R64);
-impl_bit_ops!(IVec with isize);
-impl_bit_ops!(UVec with usize);
-impl_bit_ops!(ByteVec with u8);
+// Implement bitwise AND between an NdVec and a scalar (i.e. AND each
+// coordinate with the scalar).
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> BitAnd<X> for NdVec<D, N>
+where
+    N: BitAndAssign<X>,
+{
+    type Output = Self;
+    fn bitand(self, other: X) -> Self {
+        let mut ret = self;
+        ret &= other;
+        ret
+    }
+}
+impl<'a, D: DimFor<N>, N: NdVecNum, X: Copy> BitAnd<X> for &'a NdVec<D, N>
+where
+    N: BitAndAssign<X>,
+{
+    type Output = NdVec<D, N>;
+    fn bitand(self, other: X) -> Self::Output {
+        let mut ret = self.clone();
+        ret &= other;
+        ret
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> BitAndAssign<X> for NdVec<D, N>
+where
+    N: BitAndAssign<X>,
+{
+    fn bitand_assign(&mut self, other: X) {
+        self.map_fn(|_ax, ret| *ret &= other);
+    }
+}
+
+// Implement bitwise OR between an NdVec and a scalar (i.e. OR each
+// coordinate with the scalar).
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> BitOr<X> for NdVec<D, N>
+where
+    N: BitOrAssign<X>,
+{
+    type Output = Self;
+    fn bitor(self, other: X) -> Self {
+        let mut ret = self;
+        ret |= other;
+        ret
+    }
+}
+impl<'a, D: DimFor<N>, N: NdVecNum, X: Copy> BitOr<X> for &'a NdVec<D, N>
+where
+    N: BitOrAssign<X>,
+{
+    type Output = NdVec<D, N>;
+    fn bitor(self, other: X) -> Self::Output {
+        let mut ret = self.clone();
+        ret |= other;
+        ret
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> BitOrAssign<X> for NdVec<D, N>
+where
+    N: BitOrAssign<X>,
+{
+    fn bitor_assign(&mut self, other: X) {
+        self.map_fn(|_ax, ret| *ret |= other);
+    }
+}
+
+// Implement bitwise XOR between an NdVec and a scalar (i.e. XOR each
+// coordinate with the scalar).
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> BitXor<X> for NdVec<D, N>
+where
+    N: BitXorAssign<X>,
+{
+    type Output = Self;
+    fn bitxor(self, other: X) -> Self {
+        let mut ret = self;
+        ret ^= other;
+        ret
+    }
+}
+impl<'a, D: DimFor<N>, N: NdVecNum, X: Copy> BitXor<X> for &'a NdVec<D, N>
+where
+    N: BitXorAssign<X>,
+{
+    type Output = NdVec<D, N>;
+    fn bitxor(self, other: X) -> Self::Output {
+        let mut ret = self.clone();
+        ret ^= other;
+        ret
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> BitXorAssign<X> for NdVec<D, N>
+where
+    N: BitXorAssign<X>,
+{
+    fn bitxor_assign(&mut self, other: X) {
+        self.map_fn(|_ax, ret| *ret ^= other);
+    }
+}
+// Implement bitwise left-shift between an NdVec and a scalar (i.e.
+// left-shift each coordinate by the scalar).
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> Shl<X> for NdVec<D, N>
+where
+    N: ShlAssign<X>,
+{
+    type Output = Self;
+    fn shl(self, other: X) -> Self {
+        let mut ret = self;
+        ret <<= other;
+        ret
+    }
+}
+impl<'a, D: DimFor<N>, N: NdVecNum, X: Copy> Shl<X> for &'a NdVec<D, N>
+where
+    N: ShlAssign<X>,
+{
+    type Output = NdVec<D, N>;
+    fn shl(self, other: X) -> Self::Output {
+        let mut ret = self.clone();
+        ret <<= other;
+        ret
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> ShlAssign<X> for NdVec<D, N>
+where
+    N: ShlAssign<X>,
+{
+    fn shl_assign(&mut self, other: X) {
+        self.map_fn(|_ax, ret| *ret <<= other);
+    }
+}
+
+// Implement bitwise right-shift between an NdVec and a scalar (i.e.
+// right-shift each coordinate by the scalar).
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> Shr<X> for NdVec<D, N>
+where
+    N: ShrAssign<X>,
+{
+    type Output = Self;
+    fn shr(self, other: X) -> Self {
+        let mut ret = self;
+        ret >>= other;
+        ret
+    }
+}
+impl<'a, D: DimFor<N>, N: NdVecNum, X: Copy> Shr<X> for &'a NdVec<D, N>
+where
+    N: ShrAssign<X>,
+{
+    type Output = NdVec<D, N>;
+    fn shr(self, other: X) -> Self::Output {
+        let mut ret = self.clone();
+        ret >>= other;
+        ret
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> ShrAssign<X> for NdVec<D, N>
+where
+    N: ShrAssign<X>,
+{
+    fn shr_assign(&mut self, other: X) {
+        self.map_fn(|_ax, ret| *ret >>= other);
+    }
+}

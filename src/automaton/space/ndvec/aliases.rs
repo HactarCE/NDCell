@@ -2,6 +2,19 @@
 
 use super::*;
 
+/// A 1D vector.
+pub type Vec1D<N> = NdVec<Dim1D, N>;
+/// A 2D vector.
+pub type Vec2D<N> = NdVec<Dim2D, N>;
+/// A 3D vector.
+pub type Vec3D<N> = NdVec<Dim3D, N>;
+/// A 4D vector.
+pub type Vec4D<N> = NdVec<Dim4D, N>;
+/// A 5D vector.
+pub type Vec5D<N> = NdVec<Dim5D, N>;
+/// A 6D vector.
+pub type Vec6D<N> = NdVec<Dim6D, N>;
+
 /// An N-dimensional vector with BigInt coordinates.
 pub type BigVec<D> = NdVec<D, BigInt>;
 /// An N-dimensional vector with f32 coordinates.

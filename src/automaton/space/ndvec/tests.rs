@@ -3,6 +3,19 @@ use proptest::prelude::*;
 
 use super::*;
 
+#[test]
+fn test_ndvec_macro() {
+    let v1: IVec3D = ndvec![2, 10, -3];
+    assert_eq!(2, v1[X]);
+    assert_eq!(10, v1[Y]);
+    assert_eq!(-3, v1[Z]);
+
+    let v2: IVec3D = ndvec![6; 3];
+    assert_eq!(6, v2[X]);
+    assert_eq!(6, v2[Y]);
+    assert_eq!(6, v2[Z]);
+}
+
 impl proptest::arbitrary::Arbitrary for IVec2D {
     type Parameters = Option<isize>;
     type Strategy = BoxedStrategy<Self>;

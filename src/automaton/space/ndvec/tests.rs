@@ -1,3 +1,4 @@
+use noisy_float::types::r64;
 use num::integer::Integer;
 use proptest::prelude::*;
 
@@ -14,6 +15,33 @@ fn test_ndvec_macro() {
     assert_eq!(6, v2[X]);
     assert_eq!(6, v2[Y]);
     assert_eq!(6, v2[Z]);
+}
+
+#[test]
+fn test_bigvec() {
+    let x = BigInt::from(1i64 << 62);
+    let y = BigInt::from(-(1i64 << 62));
+    let z = BigInt::from(10);
+    let scalar = 1i64 << 20;
+    let mut v1: BigVec3D = ndvec![x.clone(), y.clone(), z.clone()];
+    v1 *= scalar;
+    v1 = v1.div_floor(&BigInt::from(scalar));
+    assert_eq!(x, v1[X]);
+    assert_eq!(y, v1[Y]);
+    assert_eq!(z, v1[Z]);
+}
+
+#[test]
+fn test_fvec() {
+    let x = r64(0.25);
+    let y = r64(2.0);
+    let z = r64(-4.5);
+    let scalar = 1.6;
+    let mut v1: FVec3D = ndvec![x, y, z];
+    v1 /= scalar;
+    assert_eq!(x / scalar, v1[X]);
+    assert_eq!(y / scalar, v1[Y]);
+    assert_eq!(z / scalar, v1[Z]);
 }
 
 impl proptest::arbitrary::Arbitrary for IVec2D {

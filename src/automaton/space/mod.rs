@@ -6,11 +6,12 @@ use std::default::Default;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-// mod ndrect;
+mod ndrect;
 // mod ndtree;
+#[macro_use]
 mod ndvec;
 
-// pub use ndrect::*;
+pub use ndrect::*;
 // pub use ndtree::*;
 pub use ndvec::*;
 

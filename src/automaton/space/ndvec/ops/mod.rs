@@ -4,5 +4,5 @@ use super::*;
 
 mod arithmetic;
 mod bitwise;
-mod divrem;
+mod divmod;
 mod vector;

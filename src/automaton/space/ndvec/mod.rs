@@ -10,7 +10,7 @@
 //! NdVecs.
 
 use noisy_float::types::R64;
-use num::{BigInt, Num};
+use num::{BigInt, Num, One, Zero};
 use std::cmp::Eq;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -26,9 +26,39 @@ pub use axis::Axis::{U, V, W, X, Y, Z};
 pub use axis::*;
 pub use dim::*;
 
-/// A "type alias" for types that can be used as coordinates in an NdVec.
-pub trait NdVecNum: Num + Default + Clone + Eq + Ord {}
-impl<T> NdVecNum for T where T: Num + Default + Clone + Eq + Ord {}
+/// A "trait alias" for types that can be used as coordinates in an NdVec.
+pub trait NdVecNum:
+    Debug + Default + Clone + Eq + Hash + Ord + Num + AddAssign + MulAssign
+{
+    /// The minimum size for an NdRect using this number type as coordinates.
+    /// For integers, this is 1; for floats, this is 0.
+    fn get_min_rect_size() -> Self;
+}
+impl NdVecNum for BigInt {
+    fn get_min_rect_size() -> Self {
+        Self::one()
+    }
+}
+impl NdVecNum for R64 {
+    fn get_min_rect_size() -> Self {
+        Self::zero()
+    }
+}
+impl NdVecNum for isize {
+    fn get_min_rect_size() -> Self {
+        1
+    }
+}
+impl NdVecNum for usize {
+    fn get_min_rect_size() -> Self {
+        1
+    }
+}
+impl NdVecNum for u8 {
+    fn get_min_rect_size() -> Self {
+        1
+    }
+}
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 /// A set of coordinates for a given dimensionality.
@@ -61,6 +91,11 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     pub fn is_zero(&self) -> bool {
         *self == Self::default()
     }
+    pub fn unit(axis: Axis) -> Self {
+        let mut ret = Self::default();
+        ret[axis] = N::one();
+        ret
+    }
 
     fn from_fn<F: Fn(Axis) -> N>(generator: F) -> Self {
         let mut ret: Self = Self::default();
@@ -88,6 +123,36 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
             ret[ax] = std::cmp::max(&v1[ax], &v2[ax]).clone();
         }
         ret
+    }
+}
+
+impl<D: DimFor<N>, N: NdVecNum> From<N> for NdVec<D, N> {
+    fn from(value: N) -> Self {
+        let mut ret = Self::default();
+        for &ax in D::Dim::axes() {
+            ret[ax] = value.clone();
+        }
+        ret
+    }
+}
+
+impl<D: DimFor<N>, N: NdVecNum> Zero for NdVec<D, N>
+where
+    NdVec<D, N>: AddAssign,
+{
+    fn zero() -> Self {
+        Self::default()
+    }
+    fn is_zero(&self) -> bool {
+        *self == Self::zero()
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum> One for NdVec<D, N>
+where
+    NdVec<D, N>: MulAssign + Add<N, Output = Self>,
+{
+    fn one() -> Self {
+        Self::default() + N::one()
     }
 }
 

@@ -31,10 +31,10 @@ macro_rules! impl_neg {
 }
 
 impl_neg!(BigVec with BigInt);
-impl_neg!(FVec with f32);
+impl_neg!(FVec with R64);
 impl_neg!(IVec with isize);
-// impl_neg!(ByteVec with u8);
 // impl_neg!(UVec with usize);
+// impl_neg!(ByteVec with u8);
 
 macro_rules! impl_add_sub_mul_copy {
     ($ndvec1:ident + $ndvec2:ident) => {
@@ -101,13 +101,13 @@ macro_rules! impl_add_sub_mul_ref {
 impl_add_sub_mul_ref!(BigVec + BigVec);
 // impl_add_sub_mul_copy!(BigVec + FVec);
 impl_add_sub_mul_copy!(BigVec + IVec);
-impl_add_sub_mul_copy!(BigVec + ByteVec);
 impl_add_sub_mul_copy!(BigVec + UVec);
+impl_add_sub_mul_copy!(BigVec + ByteVec);
 
 impl_add_sub_mul_copy!(FVec + FVec);
 
 impl_add_sub_mul_copy!(IVec + IVec);
 
-impl_add_sub_mul_copy!(ByteVec + ByteVec);
-
 impl_add_sub_mul_copy!(UVec + UVec);
+
+impl_add_sub_mul_copy!(ByteVec + ByteVec);

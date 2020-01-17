@@ -109,10 +109,10 @@ macro_rules! impl_add_sub_mul {
 }
 
 impl_add_sub_mul!(BigVec with BigInt);
-impl_add_sub_mul!(FVec with f32);
+impl_add_sub_mul!(FVec with R64);
 impl_add_sub_mul!(IVec with isize);
-impl_add_sub_mul!(ByteVec with u8);
 impl_add_sub_mul!(UVec with usize);
+impl_add_sub_mul!(ByteVec with u8);
 
 macro_rules! impl_div_mod_floor {
     ($vec_type:ident with $coord_type:ident) => {
@@ -139,10 +139,10 @@ macro_rules! impl_div_mod_floor {
 }
 
 impl_div_mod_floor!(BigVec with BigInt);
-// impl_div_mod_floor!(FVec with f32);
+// impl_div_mod_floor!(FVec with R64);
 impl_div_mod_floor!(IVec with isize);
-impl_div_mod_floor!(ByteVec with u8);
 impl_div_mod_floor!(UVec with usize);
+impl_div_mod_floor!(ByteVec with u8);
 
 impl<D: Dim, N: Copy> Div<N> for FVec<D>
 where
@@ -344,7 +344,7 @@ macro_rules! impl_bit_ops {
 }
 
 impl_bit_ops!(BigVec with BigInt);
-impl_bit_ops!(FVec with f32);
+impl_bit_ops!(FVec with R64);
 impl_bit_ops!(IVec with isize);
-impl_bit_ops!(ByteVec with u8);
 impl_bit_ops!(UVec with usize);
+impl_bit_ops!(ByteVec with u8);

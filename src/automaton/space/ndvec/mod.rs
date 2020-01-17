@@ -10,9 +10,8 @@
 //! NdVecs.
 
 use noisy_float::types::R64;
-use num::{BigInt, FromPrimitive, Num, ToPrimitive};
+use num::{BigInt, Num};
 use std::cmp::Eq;
-use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::*;

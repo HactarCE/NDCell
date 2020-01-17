@@ -2,6 +2,17 @@
 
 use super::*;
 
+/// An N-dimensional vector with BigInt coordinates.
+pub type BigVec<D> = NdVec<D, BigInt>;
+/// An N-dimensional vector with f32 coordinates.
+pub type FVec<D> = NdVec<D, R64>;
+/// An N-dimensional vector with isize coordinates.
+pub type IVec<D> = NdVec<D, isize>;
+/// An N-dimensional vector with usize coordinates.
+pub type UVec<D> = NdVec<D, usize>;
+/// An N-dimensional vector with u8 coordinates.
+pub type ByteVec<D> = NdVec<D, u8>;
+
 /// A 1D vector with BigInt coordinates.
 pub type BigVec1D = BigVec<Dim1D>;
 /// A 2D vector with BigInt coordinates.

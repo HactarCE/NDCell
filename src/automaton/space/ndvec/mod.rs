@@ -17,13 +17,13 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::*;
 
-// mod aliases;
+mod aliases;
 mod axis;
 mod dim;
 // mod ops_scalar;
 // mod ops_vector;
 
-// pub use aliases::*;
+pub use aliases::*;
 pub use axis::Axis::{U, V, W, X, Y, Z};
 pub use axis::*;
 pub use dim::*;
@@ -92,73 +92,6 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         ret
     }
 }
-
-// pub struct NdVec<D: Dim, N: NdVecNum>(generic_array::GenericArray<N, D::TypenumNDim>)
-// where
-//     D::TypenumNDim: generic_array::ArrayLength<N>;
-
-// impl<D: Dim, N: NdVecNum> NdVec<D, N>
-// where
-//     D::TypenumNDim: generic_array::ArrayLength<N>,
-// {
-//     fn origin() -> Self {
-//         Self::default()
-//     }
-//     fn is_zero(&self) -> bool {}
-// }
-
-// impl<D: Dim, N: NdVecNum> Copy for NdVec<D, N> where D::TypenumNDim: generic_array::ArrayLength<N> {}
-
-// /// A set of coordinates for a given dimensionality.
-// pub trait NdVec<D: Dim, N: Num>:
-//     Sized + Default + Clone + Eq + Ord + Index<Axis, Output = N> + IndexMut<Axis>
-// {
-//     const IS_CONTINUOUS: bool;
-//     fn origin() -> Self {
-//         Self::default()
-//     }
-//     fn is_zero(&self) -> bool {
-//         *self == Self::origin()
-//     }
-//     fn map_fn<F: Fn(Axis, &mut N)>(&mut self, mutator: F) {
-//         for &ax in D::axes() {
-//             mutator(ax, &mut self[ax]);
-//         }
-//     }
-//     fn from_fn<F: Fn(Axis) -> N>(generator: F) -> Self {
-//         let mut ret: Self = Self::default();
-//         for &ax in D::axes() {
-//             ret[ax] = generator(ax);
-//         }
-//         ret
-//     }
-// }
-
-// macro_rules! make_ndvec_struct {
-//     ($vec_type_name:ident, $coord_type:ty, $dim_array_type_name:ident, $continuous:ident) => {
-//         /// A vector type using $coord_type coordinates.
-//         #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-//         pub struct $vec_type_name<D: Dim>(D::$dim_array_type_name);
-//         impl<D: Dim> NdVec<D, $coord_type> for $vec_type_name<D> {
-//             const IS_CONTINUOUS: bool = $continuous;
-//         }
-
-//         impl<D: Dim> Index<Axis> for $vec_type_name<D> {
-//             type Output = $coord_type;
-//             fn index(&self, axis: Axis) -> &$coord_type {
-//                 &self.0.as_ref()[axis as usize]
-//             }
-//         }
-//         impl<D: Dim> IndexMut<Axis> for $vec_type_name<D> {
-//             fn index_mut(&mut self, axis: Axis) -> &mut $coord_type {
-//                 &mut self.0.as_mut()[axis as usize]
-//             }
-//         }
-//     };
-//     ($vec_type_name:ident, $coord_type:ty, $dim_array_type_name:ident) => {
-//         make_ndvec_struct!($vec_type_name, $coord_type, $dim_array_type_name, false);
-//     };
-// }
 
 // make_ndvec_struct!(BigVec, BigInt, BigIntArray);
 // make_ndvec_struct!(FVec, R64, R64Array, true);

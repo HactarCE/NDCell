@@ -11,8 +11,8 @@ fn test_iter_validity<D: Dim>(rect: IRect<D>) {
         let cell_set: HashSet<IVec<D>> = rect.clone().into_iter().collect();
         assert_eq!(rect.count() as usize, cell_set.len());
     }
-    for cell in cells {
-        assert!(rect.contains(cell));
+    for pos in cells {
+        assert!(rect.contains(&pos));
     }
 }
 
@@ -25,8 +25,8 @@ proptest! {
     ) {
         let rect = NdRect::single_cell(pos);
         // Test contains().
-        assert!(rect.contains(pos));
-        assert_eq!(offset.is_zero(), rect.contains(pos + offset));
+        assert!(rect.contains(&pos));
+        assert_eq!(offset.is_zero(), rect.contains(&pos + &offset));
         // Test min() and max().
         assert_eq!(pos, rect.min());
         assert_eq!(pos, rect.max());
@@ -67,7 +67,7 @@ proptest! {
                     contains = false;
                 }
             }
-            assert_eq!(contains, rect.contains(center + test_offset));
+            assert_eq!(contains, rect.contains(&center + &test_offset));
         }
         // Test count().
         assert_eq!((radius * 2 + 1).pow(3), rect.count());

@@ -8,19 +8,20 @@ pub struct NdRectIter<D: DimFor<N>, N: NdVecNum + Integer>
 where
     NdVec<D, N>: NdRectVec,
 {
-    rect: NdRect<D, N>,
-    next: NdVec<D, N>,
-    done: bool,
+    start: NdVec<D, N>,
+    end: NdVec<D, N>,
+    next: Option<NdVec<D, N>>,
 }
 
-impl<D: DimFor<N>, N: NdVecNum + Integer> From<NdRect<D, N>> for NdRectIter<D, N>
+impl<D: DimFor<N>, N: NdVecNum + Integer> From<&NdRect<D, N>> for NdRectIter<D, N>
 where
     NdVec<D, N>: NdRectVec,
 {
-    fn from(rect: NdRect<D, N>) -> Self {
-        let next = rect.min();
-        let done = false;
-        Self { rect, next, done }
+    fn from(rect: &NdRect<D, N>) -> Self {
+        let start = rect.min();
+        let end = rect.max();
+        let next = Some(start.clone());
+        Self { start, end, next }
     }
 }
 
@@ -30,20 +31,18 @@ where
 {
     type Item = NdVec<D, N>;
     fn next(&mut self) -> Option<NdVec<D, N>> {
-        if self.done {
-            None
-        } else {
-            let ret = self.next.clone();
+        let ret = self.next.clone();
+        if let Some(ref mut next) = &mut self.next {
             for &ax in D::Dim::axes() {
-                self.next[ax] += N::one();
-                if self.next[ax] > self.rect.max()[ax] {
-                    self.next[ax] = self.rect.min[ax].clone();
+                next[ax] += N::one();
+                if next[ax] > self.end[ax] {
+                    next[ax] = self.start[ax].clone();
                 } else {
-                    return Some(ret);
+                    return ret;
                 }
             }
-            self.done = true;
-            Some(ret)
+            self.next = None;
         }
+        return ret;
     }
 }

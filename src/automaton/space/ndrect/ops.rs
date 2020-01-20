@@ -14,9 +14,17 @@ where
     type Output = Self;
     fn add(self, operand: X) -> Self {
         Self {
-            min: self.min + operand,
+            start: self.start + operand,
             size: self.size,
         }
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X> AddAssign<X> for NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec + AddAssign<X>,
+{
+    fn add_assign(&mut self, operand: X) {
+        self.start += operand
     }
 }
 impl<D: DimFor<N>, N: NdVecNum, X> Sub<X> for NdRect<D, N>
@@ -26,13 +34,22 @@ where
     type Output = Self;
     fn sub(self, operand: X) -> Self {
         Self {
-            min: self.min - operand,
+            start: self.start - operand,
             size: self.size,
         }
     }
 }
+impl<D: DimFor<N>, N: NdVecNum, X> SubAssign<X> for NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec + SubAssign<X>,
+{
+    fn sub_assign(&mut self, operand: X) {
+        self.start -= operand
+    }
+}
 
 // Integer multiplication is special, because bounds are inclusive.
+// Multiplication by a negative number panics.
 impl<D: DimFor<N>, N: NdVecNum, X: Copy> Mul<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + Mul<X, Output = NdVec<D, N>>,
@@ -42,10 +59,15 @@ where
         // Call span() rather than constructing directly because if we multiply
         // by a negative number then the min and max might swap, so we need to
         // double-check the bounds.
-        Self {
-            min: self.min * operand,
-            size: self.size * operand,
+        let start = self.start * operand;
+        let size = self.size * operand;
+        for &ax in D::Dim::axes() {
+            assert!(
+                size[ax] > N::zero(),
+                "Cannot multiply an NdRect by a negative value"
+            );
         }
+        Self { start, size }
     }
 }
 
@@ -60,14 +82,7 @@ where
     where
         N: Copy,
     {
-        Self {
-            min: self.min().div_floor(&other),
-            size: (self.min + self.size).div_floor(&other),
-        }
-    }
-    /// "Outward-rounded" integer modulo; returns the other part of div_outward.
-    pub fn mod_outward(self, other: N) -> NdVec<D, N> {
-        (self.min + self.size + NdVec::from(N::get_min_rect_size())).mod_floor(&other)
+        Self::span(self.min().div_floor(&other), self.max().div_ceil(&other))
     }
 }
 

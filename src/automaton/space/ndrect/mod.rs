@@ -1,4 +1,4 @@
-use num::{Float, Integer, One, Zero};
+use num::{Float, Integer};
 use std::ops::{Add, AddAssign, MulAssign, Sub, SubAssign};
 
 mod aliases;
@@ -6,16 +6,16 @@ mod iter;
 mod ops;
 
 use super::*;
-use aliases::*;
+pub use aliases::*;
 use iter::*;
 
 /// A "trait alias" for types that can be used as vectors in an NdRect.
 pub trait NdRectVec:
-    Sized + Add<Self, Output = Self> + Sub<Self, Output = Self> + AddAssign + SubAssign + Zero + One
+    Sized + Add<Self, Output = Self> + Sub<Self, Output = Self> + AddAssign + SubAssign
 {
 }
 impl<T> NdRectVec for T where
-    T: Add<Self, Output = Self> + Sub<Self, Output = Self> + AddAssign + SubAssign + Zero + One
+    T: Add<Self, Output = Self> + Sub<Self, Output = Self> + AddAssign + SubAssign
 {
 }
 
@@ -26,7 +26,7 @@ where
     NdVec<D, N>: NdRectVec,
 {
     /// The most negative corner of the hyperrectangle.
-    min: NdVec<D, N>,
+    start: NdVec<D, N>,
     /// The size of the hyperrectangle.
     size: NdVec<D, N>,
 }
@@ -37,6 +37,11 @@ impl<D: DimFor<N>, N: NdVecNum> NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec,
 {
+    /// Constructs a new NdRect with the given starting position and the given
+    /// size.
+    pub fn new(start: NdVec<D, N>, size: NdVec<D, N>) -> Self {
+        NdRect { start, size }
+    }
     /// Constructs an NdRect spanning the given positions (inclusive).
     pub fn span(mut a: NdVec<D, N>, mut b: NdVec<D, N>) -> Self {
         for &ax in D::Dim::axes() {
@@ -47,13 +52,13 @@ where
         let mut size = b;
         size -= a.clone();
         size += NdVec::from(N::get_min_rect_size());
-        Self { min: a, size }
+        Self { start: a, size }
     }
     /// Constructs an NdRect consisting of a single cell.
     pub fn single_cell(pos: NdVec<D, N>) -> Self {
         Self {
-            min: pos,
-            size: NdVec::one(),
+            start: pos,
+            size: NdVec::from(N::one()),
         }
     }
     /// Constructs an NdRect with size 2r+1, given a center point and a radius r.
@@ -62,9 +67,9 @@ where
         NdVec<D, N>: Sub<X, Output = NdVec<D, N>>,
         N: Add<X, Output = N>,
     {
-        let min = center - radius;
+        let start = center - radius;
         let size = NdVec::from(N::get_min_rect_size() + radius + radius);
-        Self { min, size }
+        Self { start, size }
     }
     /// Constructs an NdRect describing a Moore neighborhood of a given radius
     /// centered at the origin.
@@ -78,11 +83,11 @@ where
 
     /// Returns the minimum (most negative) corner of this NdRect.
     pub fn min(&self) -> NdVec<D, N> {
-        self.min.clone()
+        self.start.clone()
     }
     /// Returns the maximum (most positive) corner of this NdRect.
     pub fn max(&self) -> NdVec<D, N> {
-        self.min.clone() + self.size.clone() - NdVec::from(N::get_min_rect_size())
+        self.start.clone() + self.size.clone() - NdVec::from(N::get_min_rect_size())
     }
 
     /// Returns an NdVec representing the length of this NdRect along each axis.
@@ -106,7 +111,7 @@ where
     }
 
     /// Returns an iterator over all the positions in this hyperrectangle.
-    pub fn into_iter(self) -> NdRectIter<D, N>
+    pub fn iter(&self) -> NdRectIter<D, N>
     where
         N: Integer,
     {
@@ -115,11 +120,11 @@ where
 
     /// Returns a range over all the values of the given axis in this
     /// hyperrectangle.
-    pub fn axis_range(self, axis: Axis) -> std::ops::RangeInclusive<N>
+    pub fn axis_range(&self, axis: Axis) -> num::iter::RangeInclusive<N>
     where
         N: Integer,
     {
-        self.min[axis].clone()..=self.max()[axis].clone()
+        num::range_inclusive(self.start[axis].clone(), self.max()[axis].clone())
     }
 
     /// Returns true if the two hyperrectangles intersect at all.
@@ -155,15 +160,26 @@ where
     {
         Self::span(self.min() + min_offset, self.max() + max_offset)
     }
+
+    pub fn convert<N2: NdVecNum>(&self) -> NdRect<D, N2>
+    where
+        D: DimFor<N2>,
+        NdVec<D, N2>: NdRectVec,
+        N2: std::convert::From<N>,
+    {
+        let start = self.start.convert();
+        let size = self.size.convert();
+        NdRect { start, size }
+    }
 }
 
-impl<D: DimFor<N>, N: NdVecNum> CanContain<NdVec<D, N>> for NdRect<D, N>
+impl<D: DimFor<N>, N: NdVecNum> CanContain<&NdVec<D, N>> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec,
 {
     /// Returns true if the cell position is contained within this
     /// hyperrectangle.
-    fn contains(&self, pos: NdVec<D, N>) -> bool {
+    fn contains(&self, pos: &NdVec<D, N>) -> bool {
         for &ax in D::Dim::axes() {
             if pos[ax] < self.min()[ax] || pos[ax] > self.max()[ax] {
                 return false;
@@ -172,13 +188,13 @@ where
         true
     }
 }
-impl<D: DimFor<N>, N: NdVecNum> CanContain<Self> for NdRect<D, N>
+impl<D: DimFor<N>, N: NdVecNum> CanContain<&Self> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec,
 {
     /// Returns true if the cells of the given NdRect are a subset of this
     /// one's; i.e. that hyperrectangle is contained within this one.
-    fn contains(&self, rect: Self) -> bool {
-        self.contains(rect.min()) && self.contains(rect.max())
+    fn contains(&self, rect: &Self) -> bool {
+        self.contains(&rect.min()) && self.contains(&rect.max())
     }
 }

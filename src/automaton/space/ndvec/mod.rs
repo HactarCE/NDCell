@@ -134,8 +134,9 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     }
 }
 
-impl<D: DimFor<N>, N: NdVecNum> From<N> for NdVec<D, N> {
-    fn from(value: N) -> Self {
+impl<D: DimFor<N>, N: NdVecNum, X: Num + Into<N>> From<X> for NdVec<D, N> {
+    fn from(value: X) -> Self {
+        let value = value.into();
         let mut ret = Self::default();
         for &ax in D::Dim::axes() {
             ret[ax] = value.clone();

@@ -28,11 +28,16 @@ where
         ret
     }
 }
-impl<D: DimFor<N>, N: NdVecNum, X: Num + Copy> AddAssign<X> for NdVec<D, N>
+impl<D: DimFor<N>, N: NdVecNum> AddAssign<N> for NdVec<D, N>
 where
-    N: AddAssign<X>,
+    N: AddAssign<N> + Copy,
 {
-    fn add_assign(&mut self, other: X) {
+    fn add_assign(&mut self, other: N) {
+        self.map_fn(|_ax, ret| *ret += other);
+    }
+}
+impl<'a, D: Dim> AddAssign<&'a BigInt> for BigVec<D> {
+    fn add_assign(&mut self, other: &BigInt) {
         self.map_fn(|_ax, ret| *ret += other);
     }
 }
@@ -61,11 +66,16 @@ where
         ret
     }
 }
-impl<D: DimFor<N>, N: NdVecNum, X: Num + Copy> SubAssign<X> for NdVec<D, N>
+impl<D: DimFor<N>, N: NdVecNum> SubAssign<N> for NdVec<D, N>
 where
-    N: SubAssign<X>,
+    N: SubAssign<N> + Copy,
 {
-    fn sub_assign(&mut self, other: X) {
+    fn sub_assign(&mut self, other: N) {
+        self.map_fn(|_ax, ret| *ret -= other);
+    }
+}
+impl<'a, D: Dim> SubAssign<&'a BigInt> for BigVec<D> {
+    fn sub_assign(&mut self, other: &BigInt) {
         self.map_fn(|_ax, ret| *ret -= other);
     }
 }
@@ -94,11 +104,16 @@ where
         ret
     }
 }
-impl<D: DimFor<N>, N: NdVecNum, X: Num + Copy> MulAssign<X> for NdVec<D, N>
+impl<D: DimFor<N>, N: NdVecNum> MulAssign<N> for NdVec<D, N>
 where
-    N: MulAssign<X>,
+    N: MulAssign<N> + Copy,
 {
-    fn mul_assign(&mut self, other: X) {
+    fn mul_assign(&mut self, other: N) {
+        self.map_fn(|_ax, ret| *ret *= other);
+    }
+}
+impl<'a, D: Dim> MulAssign<&'a BigInt> for BigVec<D> {
+    fn mul_assign(&mut self, other: &BigInt) {
         self.map_fn(|_ax, ret| *ret *= other);
     }
 }

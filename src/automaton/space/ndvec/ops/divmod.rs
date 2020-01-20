@@ -5,9 +5,9 @@ use std::ops::*;
 
 use super::*;
 
-// Implement floored euclidean division between an NdVec and a scalar
-// (i.e. divide each coordinate by the scalar). Note that this is not
-// the same as Rust's normal integer division operator.
+// Implement floored and ceiled euclidean division between an NdVec and a scalar
+// (i.e. divide each coordinate by the scalar). Note that these are not the same
+// as Rust's normal integer division operator.
 //
 // These are the only operations not implemented as traits.
 impl<D: DimFor<N>, N: NdVecNum + Integer> NdVec<D, N> {
@@ -15,6 +15,12 @@ impl<D: DimFor<N>, N: NdVecNum + Integer> NdVec<D, N> {
     pub fn div_floor(self, other: &N) -> Self {
         let mut ret = self;
         ret.map_fn(|_ax, ret| *ret = ret.div_floor(other));
+        ret
+    }
+    /// Ceiled integer division.
+    pub fn div_ceil(self, other: &N) -> Self {
+        let mut ret = self;
+        ret.map_fn(|_ax, ret| *ret = ret.div_ceil(other));
         ret
     }
     /// Floored integer modulo.

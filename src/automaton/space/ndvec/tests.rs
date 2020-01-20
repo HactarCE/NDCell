@@ -6,12 +6,12 @@ use super::*;
 
 #[test]
 fn test_ndvec_macro() {
-    let v1: IVec3D = ndvec![2, 10, -3];
+    let v1: IVec3D = NdVec([2, 10, -3]);
     assert_eq!(2, v1[X]);
     assert_eq!(10, v1[Y]);
     assert_eq!(-3, v1[Z]);
 
-    let v2: IVec3D = ndvec![6; 3];
+    let v2: IVec3D = NdVec([6; 3]);
     assert_eq!(6, v2[X]);
     assert_eq!(6, v2[Y]);
     assert_eq!(6, v2[Z]);
@@ -22,10 +22,10 @@ fn test_bigvec() {
     let x = BigInt::from(1i64 << 62);
     let y = BigInt::from(-(1i64 << 62));
     let z = BigInt::from(10);
-    let scalar = 1i64 << 20;
-    let mut v1: BigVec3D = ndvec![x.clone(), y.clone(), z.clone()];
-    v1 *= scalar;
-    v1 = v1.div_floor(&BigInt::from(scalar));
+    let scalar = BigInt::from(1) << 20;
+    let mut v1: BigVec3D = NdVec([x.clone(), y.clone(), z.clone()]);
+    v1 *= &scalar;
+    v1 = v1.div_floor(&scalar);
     assert_eq!(x, v1[X]);
     assert_eq!(y, v1[Y]);
     assert_eq!(z, v1[Z]);
@@ -37,7 +37,7 @@ fn test_fvec() {
     let y = r64(2.0);
     let z = r64(-4.5);
     let scalar = 1.6;
-    let mut v1: FVec3D = ndvec![x, y, z];
+    let mut v1: FVec3D = NdVec([x, y, z]);
     v1 /= scalar;
     assert_eq!(x / scalar, v1[X]);
     assert_eq!(y / scalar, v1[Y]);
@@ -50,7 +50,7 @@ impl proptest::arbitrary::Arbitrary for IVec2D {
     fn arbitrary_with(max: Option<isize>) -> Self::Strategy {
         let max = max.unwrap_or(100);
         prop::collection::vec(-max..=max, 2)
-            .prop_flat_map(|v| Just(ndvec![v[0], v[1]]))
+            .prop_flat_map(|v| Just(NdVec([v[0], v[1]])))
             .boxed()
     }
 }
@@ -61,7 +61,7 @@ impl proptest::arbitrary::Arbitrary for IVec3D {
     fn arbitrary_with(max: Option<isize>) -> Self::Strategy {
         let max = max.unwrap_or(100);
         prop::collection::vec(-max..=max, 3)
-            .prop_flat_map(|v| Just(ndvec![v[0], v[1], v[2]]))
+            .prop_flat_map(|v| Just(NdVec([v[0], v[1], v[2]])))
             .boxed()
     }
 }

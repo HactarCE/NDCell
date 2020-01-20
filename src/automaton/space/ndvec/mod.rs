@@ -145,32 +145,5 @@ impl<D: DimFor<N>, N: NdVecNum, X: Num + Into<N>> From<X> for NdVec<D, N> {
     }
 }
 
-impl<D: DimFor<N>, N: NdVecNum> Zero for NdVec<D, N>
-where
-    NdVec<D, N>: AddAssign,
-{
-    fn zero() -> Self {
-        Self::default()
-    }
-    fn is_zero(&self) -> bool {
-        *self == Self::zero()
-    }
-}
-impl<D: DimFor<N>, N: NdVecNum> One for NdVec<D, N>
-where
-    NdVec<D, N>: MulAssign + Add<N, Output = Self>,
-{
-    fn one() -> Self {
-        Self::default() + N::one()
-    }
-}
-
-/// NdVec constructor using array notation; e.g. ndvec![1, 2, 1000] or
-/// ndvec![30; 2].
-#[macro_export]
-macro_rules! ndvec {
-    ($($t:tt)*) => { NdVec([$($t)*]) };
-}
-
 #[cfg(test)]
 mod tests;

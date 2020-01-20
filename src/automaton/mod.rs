@@ -19,7 +19,7 @@ pub mod space;
 // pub use projection::*;
 // pub use rule::{DummyRule, Rule};
 // pub use simulation::*;
-// pub use space::*;
+pub use space::*;
 
 // /// ProjectedAutomaton functionality implemented by dispatching to
 // /// NdProjectedAutomaton.

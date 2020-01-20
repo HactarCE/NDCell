@@ -1,3 +1,4 @@
+use num::ToPrimitive;
 use std::ops::Index;
 
 use super::*;
@@ -8,7 +9,7 @@ pub struct NdTreeSlice<C: CellType, D: Dim> {
     /// The root NdTreeNode of this slice.
     pub root: NdCachedNode<C, D>,
     /// The position of the lower bound of the root node.
-    pub offset: NdVec<D>,
+    pub offset: BigVec<D>,
 }
 
 /// The same as NdTreeBranch, but using NdTreeSlice instead of NdCachedNode (so
@@ -16,7 +17,7 @@ pub struct NdTreeSlice<C: CellType, D: Dim> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NdTreeSliceBranch<C: CellType, D: Dim> {
     /// A "layer 0" node; i.e. a single cell.
-    Leaf(C, NdVec<D>),
+    Leaf(C, BigVec<D>),
     /// A tree slice whose layer is >= 1.
     Node(NdTreeSlice<C, D>),
 }
@@ -34,14 +35,40 @@ pub type NdTreeSlice5D<C> = NdTreeSlice<C, Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
 pub type NdTreeSlice6D<C> = NdTreeSlice<C, Dim6D>;
 
-impl fmt::Display for NdTreeSlice<u8, Dim2D> {
+pub trait DisplayCell: CellType {
+    fn cell_char(&self) -> char;
+}
+impl DisplayCell for u8 {
+    fn cell_char(&self) -> char {
+        match self {
+            0 => '.',
+            1 => '#',
+            2 => '2',
+            3 => '3',
+            _ => '?',
+        }
+    }
+}
+impl DisplayCell for bool {
+    fn cell_char(&self) -> char {
+        match *self {
+            false => '.',
+            true => '#',
+        }
+    }
+}
+
+impl<C: DisplayCell> fmt::Display for NdTreeSlice<C, Dim2D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.root.layer > 8 {
+            panic!("Cannot display node larger than 256x256");
+        }
         let rect = self.rect();
-        let mut line = String::with_capacity(rect.len(Axis::X) * 2 - 1);
+        let mut line = String::with_capacity(self.root.len().to_usize().unwrap() * 2);
         for y in rect.axis_range(Axis::Y).rev() {
             line.clear();
             for x in rect.axis_range(Axis::X) {
-                line.push(if self[[x, y].into()] == 0 { '.' } else { '#' });
+                line.push(self[NdVec([x, y.clone()])].cell_char());
                 line.push(' ');
             }
             line.pop();
@@ -51,28 +78,10 @@ impl fmt::Display for NdTreeSlice<u8, Dim2D> {
     }
 }
 
-impl fmt::Display for NdTreeSlice<char, Dim2D> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let rect = self.rect();
-        let mut line = String::with_capacity(rect.len(Axis::X) * 2 - 1);
-        for y in rect.axis_range(Axis::Y).rev() {
-            line.clear();
-            for x in rect.axis_range(Axis::X) {
-                let ch = self[[x, y].into()];
-                line.push(if ch == '\x00' { '.' } else { ch });
-                line.push(' ');
-            }
-            line.pop();
-            writeln!(f, "{}", line)?;
-        }
-        Ok(())
-    }
-}
-
-impl<C: CellType, D: Dim> Index<NdVec<D>> for NdTreeSlice<C, D> {
+impl<C: CellType, D: Dim> Index<BigVec<D>> for NdTreeSlice<C, D> {
     type Output = C;
-    fn index(&self, pos: NdVec<D>) -> &C {
-        &self.root[pos - self.offset]
+    fn index(&self, pos: BigVec<D>) -> &C {
+        &self.root[&(pos - &self.offset)]
     }
 }
 
@@ -80,48 +89,47 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
     /// Constructs a new NdTreeSlice centered on a given node.
     pub fn centered(root: NdCachedNode<C, D>) -> Self {
         Self {
-            offset: NdVec::origin() - root.len() as isize / 2,
+            offset: NdVec::origin() - &(root.len() / 2),
             root,
         }
     }
 
     /// Returns the NdRect bounding this slice.
-    pub fn rect(&self) -> NdRect<D> {
-        self.root.rect() + self.offset
+    pub fn rect(&self) -> BigRect<D> {
+        self.root.rect() + &self.offset
     }
     /// Returns the minimum position in this NdTree.
-    pub fn min(&self) -> NdVec<D> {
+    pub fn min(&self) -> BigVec<D> {
         self.rect().min()
     }
     /// Returns the maximum position in this NdTree.
-    pub fn max(&self) -> NdVec<D> {
+    pub fn max(&self) -> BigVec<D> {
         self.rect().max()
     }
-    // /// Returns the number of non-default cells in this NdTree.
-    // pub fn population(&mut self) -> usize {
-    //     self.root.population
-    // }
 
-    /// Returns the cell at the given position, if it is within the bounds of the slice.
-    pub fn get_cell(&self, pos: NdVec<D>) -> Option<C> {
+    pub fn get_cell_ref(&self, pos: &BigVec<D>) -> Option<&C> {
         if self.rect().contains(pos) {
-            Some(self.root.get_cell(pos - self.offset))
+            Some(self.root.get_cell_ref(&(pos - &self.offset)))
         } else {
             None
         }
     }
+    /// Returns the cell at the given position, if it is within the bounds of the slice.
+    pub fn get_cell(&self, pos: &BigVec<D>) -> Option<C> {
+        self.get_cell_ref(pos).map(|cell| cell.clone())
+    }
 
     /// Returns an NdTreeSlice of the root node's branch with the given branch
     /// index.
-    pub fn get_branch(&self, branch_idx: usize) -> NdTreeSliceBranch<C, D> {
-        match &self.root.branches[branch_idx] {
+    pub fn get_branch(&self, branch_idx: ByteVec<D>) -> NdTreeSliceBranch<C, D> {
+        match &self.root[branch_idx.clone()] {
             NdTreeBranch::Leaf(cell_state) => NdTreeSliceBranch::Leaf(
                 *cell_state,
-                self.rect().min() + NdTreeNode::<C, D>::branch_offset_at_layer(1, branch_idx),
+                self.rect().min() + branch_idx.branch_offset(1),
             ),
             NdTreeBranch::Node(node) => NdTreeSliceBranch::Node(Self {
                 root: node.clone(),
-                offset: self.offset + self.root.branch_offset(branch_idx),
+                offset: &self.offset + branch_idx.branch_offset(self.root.layer),
             }),
         }
     }

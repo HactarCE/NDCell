@@ -50,7 +50,7 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
             ret.clone()
         } else {
             // Cache miss
-            let branches = vec![self.get_empty_branch(layer - 1); NdTreeNode::<C, D>::BRANCHES];
+            let branches = vec![self.get_empty_branch(layer - 1); D::TREE_BRANCHES];
             let ret = self.get_node(branches);
             // All lower entries in the cache have been filled by the recursive
             // call.
@@ -65,5 +65,15 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
             0 => NdTreeBranch::Leaf(C::default()),
             _ => NdTreeBranch::Node(self.get_empty_node(layer)),
         }
+    }
+    pub fn get_node_from_fn<F: Fn(&mut Self, ByteVec<D>) -> NdTreeBranch<C, D>>(
+        &mut self,
+        generator: F,
+    ) -> NdCachedNode<C, D> {
+        let mut branches = Vec::with_capacity(D::TREE_BRANCHES);
+        for branch_idx in branch_idx_iter() {
+            branches.push(generator(self, branch_idx));
+        }
+        self.get_node(branches)
     }
 }

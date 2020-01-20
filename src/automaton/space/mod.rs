@@ -7,12 +7,12 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 mod ndrect;
-// mod ndtree;
+mod ndtree;
 #[macro_use]
 mod ndvec;
 
 pub use ndrect::*;
-// pub use ndtree::*;
+pub use ndtree::*;
 pub use ndvec::*;
 
 /// A "trait alias" for a cell type that has a "default" value and can be copied

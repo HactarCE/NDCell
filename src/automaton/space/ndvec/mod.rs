@@ -62,7 +62,7 @@ impl NdVecNum for u8 {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 /// A set of coordinates for a given dimensionality.
-pub struct NdVec<D: DimFor<N>, N: NdVecNum>(D::Array);
+pub struct NdVec<D: DimFor<N>, N: NdVecNum>(pub D::Array);
 
 // Implement Copy when coordinate type is Copy.
 //
@@ -97,17 +97,25 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         ret
     }
 
-    fn from_fn<F: Fn(Axis) -> N>(generator: F) -> Self {
+    pub fn from_fn<F: FnMut(Axis) -> N>(mut generator: F) -> Self {
         let mut ret: Self = Self::default();
         for &ax in D::Dim::axes() {
             ret[ax] = generator(ax);
         }
         ret
     }
-    pub fn map_fn<F: Fn(Axis, &mut N)>(&mut self, f: F) {
+    pub fn map_fn<F: FnMut(Axis, &mut N)>(&mut self, mut f: F) {
         for &ax in D::Dim::axes() {
             f(ax, &mut self[ax]);
         }
+    }
+
+    pub fn convert<N2: NdVecNum>(&self) -> NdVec<D, N2>
+    where
+        D: DimFor<N2>,
+        N2: From<N>,
+    {
+        NdVec::from_fn(|ax| N2::from(self[ax].clone().into()))
     }
 
     pub fn min(v1: &Self, v2: &Self) -> Self {

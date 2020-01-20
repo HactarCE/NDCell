@@ -14,6 +14,10 @@ pub trait Dim: DimFor<BigInt> + DimFor<R64> + DimFor<isize> + DimFor<usize> + Di
     /// The number of dimensions (number of axes).
     const NDIM: usize;
 
+    /// The number of branches for each node in an NdTree of this
+    /// dimensionality.
+    const TREE_BRANCHES: usize = 1 << Self::NDIM;
+
     /// Returns a Vector of the axes of this many dimensions.
     fn axes() -> &'static [Axis] {
         ndim_axes(Self::NDIM)

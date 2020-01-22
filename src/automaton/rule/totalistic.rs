@@ -37,7 +37,7 @@ impl Rule<u8, Dim2D> for MooreTotalistic2D {
         let nbhood = Rect2D::moore(self.radius());
         let mut live_neighbors = 0;
         for cell_coords in nbhood.iter() {
-            if napkin[cell_coords] != 0 {
+            if napkin[cell_coords.convert()] != 0 {
                 live_neighbors += 1;
             }
         }

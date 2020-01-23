@@ -201,7 +201,7 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
     /// Returns a hyperrectangle the size of a node at the given layer with the
     /// origin as the lower bound.
     pub fn rect_at_layer(layer: usize) -> BigRect<D> {
-        NdRect::new(NdVec::origin(), NdVec::from(Self::len_at_layer(layer)))
+        NdRect::new(NdVec::origin(), NdVec::repeat(Self::len_at_layer(layer)))
     }
 
     /// Returns the bounding rectangle of this node's inner node.

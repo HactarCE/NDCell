@@ -51,14 +51,14 @@ where
         }
         let mut size = b;
         size -= a.clone();
-        size += NdVec::from(N::get_min_rect_size());
+        size += NdVec::repeat(N::get_min_rect_size());
         Self { start: a, size }
     }
     /// Constructs an NdRect consisting of a single cell.
     pub fn single_cell(pos: NdVec<D, N>) -> Self {
         Self {
             start: pos,
-            size: NdVec::from(N::one()),
+            size: NdVec::repeat(N::one()),
         }
     }
     /// Constructs an NdRect with size 2r+1, given a center point and a radius r.
@@ -68,7 +68,7 @@ where
         N: Add<X, Output = N>,
     {
         let start = center - radius;
-        let size = NdVec::from(N::get_min_rect_size() + radius + radius);
+        let size = NdVec::repeat(N::get_min_rect_size() + radius + radius);
         Self { start, size }
     }
     /// Constructs an NdRect describing a Moore neighborhood of a given radius
@@ -87,7 +87,7 @@ where
     }
     /// Returns the maximum (most positive) corner of this NdRect.
     pub fn max(&self) -> NdVec<D, N> {
-        self.start.clone() + self.size.clone() - NdVec::from(N::get_min_rect_size())
+        self.start.clone() + self.size.clone() - NdVec::repeat(N::get_min_rect_size())
     }
 
     /// Returns an NdVec representing the length of this NdRect along each axis.

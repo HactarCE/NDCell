@@ -60,7 +60,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     pub fn new() -> Self {
         let mut cache = NdTreeCache::default();
         let root = cache.get_empty_node(1);
-        let offset = NdVec::from(-1);
+        let offset = NdVec::repeat(-1);
         Self {
             cache: Rc::new(RefCell::new(cache)),
             slice: NdTreeSlice { root, offset },

@@ -110,6 +110,10 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
             f(ax, &mut self[ax]);
         }
     }
+    pub fn repeat<X: Into<N>>(value: X) -> Self {
+        let value = value.into();
+        Self::from_fn(|_| value.clone())
+    }
 
     pub fn convert<N2: NdVecNum>(&self) -> NdVec<D, N2>
     where

@@ -74,7 +74,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         // following `expansion_distance >= r * t`.
         let min_expansion_distance = BigInt::from(1)
             << (ceil_log_base_2(self.rule.radius()) + ceil_log_base_2(self.step_size));
-        let mut expansion_distance: BigInt = BigInt::from(0);
+        let mut expansion_distance = BigInt::from(0);
         while expansion_distance < min_expansion_distance {
             tree.expand();
             expansion_distance += tree.get_root().len() / 4;

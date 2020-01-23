@@ -18,7 +18,7 @@ impl<C: CellType, D: Dim> From<&NdTreeNode<C, D>> for NdArray<C, D> {
             .pow(D::NDIM)
             .to_usize()
             .expect("Cannot make NdArray using such a large node");
-        let size = UVec::from(node.len().to_usize().unwrap());
+        let size = UVec::repeat(node.len().to_usize().unwrap());
 
         let mut data = Vec::with_capacity(count);
         for idx in 0..count {

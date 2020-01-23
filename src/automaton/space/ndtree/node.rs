@@ -366,7 +366,10 @@ impl<D: Dim> NdTreeIndex<D> for UVec<D> {
 /// This is only implemented by ByteVec<D>.
 pub trait NdTreeBranchIndex<D: Dim>: NdRectVec {
     /// Returns the vector offset for this branch of a node at the given layer.
-    fn branch_offset(self, layer: usize) -> BigVec<D>;
+    fn branch_offset<N: NdVecNum>(self, layer: usize) -> NdVec<D, N>
+    where
+        N: From<u8> + std::ops::ShlAssign<usize>,
+        D: DimFor<N>;
     /// Returns the "flat" index of the corresponding branch in an array;
     fn to_array_idx(self) -> usize;
     /// Returns the NdTreeBranchIndex given an array index.
@@ -380,8 +383,12 @@ pub trait NdTreeBranchIndex<D: Dim>: NdRectVec {
     fn opposite(self) -> Self;
 }
 impl<D: Dim> NdTreeBranchIndex<D> for ByteVec<D> {
-    fn branch_offset(self, layer: usize) -> BigVec<D> {
-        self.convert() << layer
+    fn branch_offset<N: NdVecNum>(self, layer: usize) -> NdVec<D, N>
+    where
+        N: From<u8> + std::ops::ShlAssign<usize>,
+        D: DimFor<N>,
+    {
+        self.convert() << (layer - 1)
     }
     fn to_array_idx(self) -> usize {
         let mut ret = 0;

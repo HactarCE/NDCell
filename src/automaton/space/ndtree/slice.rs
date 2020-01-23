@@ -125,11 +125,11 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
         match &self.root[branch_idx.clone()] {
             NdTreeBranch::Leaf(cell_state) => NdTreeSliceBranch::Leaf(
                 *cell_state,
-                self.rect().min() + branch_idx.branch_offset(1),
+                self.rect().min() + &branch_idx.branch_offset(1),
             ),
             NdTreeBranch::Node(node) => NdTreeSliceBranch::Node(Self {
                 root: node.clone(),
-                offset: &self.offset + branch_idx.branch_offset(self.root.layer),
+                offset: &self.offset + &branch_idx.branch_offset(self.root.layer),
             }),
         }
     }

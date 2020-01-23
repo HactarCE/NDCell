@@ -3,10 +3,10 @@ use std::rc::Rc;
 
 use super::*;
 
-fn get_non_default_set<C: CellType, D: Dim>(slice: &NdTreeSlice<C, D>) -> HashSet<NdVec<D>> {
+fn get_non_default_set<C: CellType, D: Dim>(slice: &NdTreeSlice<C, D>) -> HashSet<BigVec<D>> {
     let mut ret = HashSet::new();
-    for (branch_idx, branch) in slice.root.branches.iter().enumerate() {
-        let branch_offset = slice.offset + slice.root.branch_offset(branch_idx);
+    for (branch_idx, branch) in slice.root.branch_iter() {
+        let branch_offset = &slice.offset + slice.root.branch_offset(branch_idx);
         match branch {
             NdTreeBranch::Leaf(cell_state) => {
                 if *cell_state != C::default() {
@@ -22,8 +22,8 @@ fn get_non_default_set<C: CellType, D: Dim>(slice: &NdTreeSlice<C, D>) -> HashSe
     ret
 }
 
-fn make_cell_coords_set<D: Dim>(coords_vec: Vec<D>) -> HashSet<NdVec<D>> {
-    coords_vec.into_iter().map(Into::into).collect()
+fn make_cell_coords_set<D: Dim>(coords_vec: Vec<IVec<D>>) -> HashSet<BigVec<D>> {
+    coords_vec.iter().map(NdVec::convert).collect()
 }
 
 #[test]
@@ -33,16 +33,22 @@ fn test_cgol() {
     let mut sim = Simulation::new(Rc::new(rule), 1);
 
     // Make a glider
-    grid.set_cell([3, 3].into(), 1);
-    grid.set_cell([4, 3].into(), 1);
-    grid.set_cell([5, 3].into(), 1);
-    grid.set_cell([5, 2].into(), 1);
-    grid.set_cell([4, 1].into(), 1);
+    grid.set_cell(NdVec([3isize, 3]).convert(), 1);
+    grid.set_cell(NdVec([4isize, 3]).convert(), 1);
+    grid.set_cell(NdVec([5isize, 3]).convert(), 1);
+    grid.set_cell(NdVec([5isize, 2]).convert(), 1);
+    grid.set_cell(NdVec([4isize, 1]).convert(), 1);
     println!("{}", grid);
     println!();
 
     assert_eq!(
-        make_cell_coords_set(vec![[3, 3], [4, 3], [5, 3], [5, 2], [4, 1]]),
+        make_cell_coords_set(vec![
+            NdVec([3, 3]),
+            NdVec([4, 3]),
+            NdVec([5, 3]),
+            NdVec([5, 2]),
+            NdVec([4, 1])
+        ]),
         get_non_default_set(&grid.slice)
     );
     // Simulate it for a few steps.
@@ -50,31 +56,49 @@ fn test_cgol() {
     println!("{}", grid);
     println!();
     assert_eq!(
-        make_cell_coords_set(vec![[4, 4], [4, 3], [5, 3], [5, 2], [3, 2]]),
+        make_cell_coords_set(vec![
+            NdVec([4, 4]),
+            NdVec([4, 3]),
+            NdVec([5, 3]),
+            NdVec([5, 2]),
+            NdVec([3, 2])
+        ]),
         get_non_default_set(&grid.slice)
     );
     sim.step(&mut grid);
     println!("{}", grid);
     println!();
     assert_eq!(
-        make_cell_coords_set(vec![[4, 4], [5, 4], [5, 3], [5, 2], [3, 3]]),
+        make_cell_coords_set(vec![
+            NdVec([4, 4]),
+            NdVec([5, 4]),
+            NdVec([5, 3]),
+            NdVec([5, 2]),
+            NdVec([3, 3])
+        ]),
         get_non_default_set(&grid.slice)
     );
     sim.set_step_size(64);
     sim.step(&mut grid);
     assert_eq!(
-        make_cell_coords_set(vec![[20, 20], [21, 20], [21, 19], [21, 18], [19, 19]]),
+        make_cell_coords_set(vec![
+            NdVec([20, 20]),
+            NdVec([21, 20]),
+            NdVec([21, 19]),
+            NdVec([21, 18]),
+            NdVec([19, 19])
+        ]),
         get_non_default_set(&grid.slice)
     );
     sim.set_step_size(1024);
     sim.step(&mut grid);
     assert_eq!(
         make_cell_coords_set(vec![
-            [276, 276],
-            [277, 276],
-            [277, 275],
-            [277, 274],
-            [275, 275]
+            NdVec([276, 276]),
+            NdVec([277, 276]),
+            NdVec([277, 275]),
+            NdVec([277, 274]),
+            NdVec([275, 275])
         ]),
         get_non_default_set(&grid.slice)
     );

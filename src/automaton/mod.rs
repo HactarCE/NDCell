@@ -11,14 +11,14 @@ use std::marker::PhantomData;
 // mod ndsimulate;
 // pub mod projection;
 pub mod rule;
-// pub mod simulation;
+pub mod simulation;
 pub mod space;
 
 // pub use io::*;
 // pub use ndsimulate::*;
 // pub use projection::*;
 pub use rule::{DummyRule, Rule};
-// pub use simulation::*;
+pub use simulation::*;
 pub use space::*;
 
 // /// ProjectedAutomaton functionality implemented by dispatching to
@@ -203,5 +203,5 @@ pub use space::*;
 //     }
 // }
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;

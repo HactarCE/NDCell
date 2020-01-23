@@ -224,9 +224,10 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use proptest::prelude::*;
     use std::collections::HashMap;
+
+    use super::*;
 
     fn assert_ndtree_valid(
         expected_cells: &HashMap<IVec2D, bool>,

@@ -33,11 +33,11 @@ fn test_cgol() {
     let mut sim = Simulation::new(Rc::new(rule), 1);
 
     // Make a glider
-    grid.set_cell(NdVec([3isize, 3]).convert(), 1);
-    grid.set_cell(NdVec([4isize, 3]).convert(), 1);
-    grid.set_cell(NdVec([5isize, 3]).convert(), 1);
-    grid.set_cell(NdVec([5isize, 2]).convert(), 1);
-    grid.set_cell(NdVec([4isize, 1]).convert(), 1);
+    grid.set_cell(&NdVec([3isize, 3]).convert(), 1);
+    grid.set_cell(&NdVec([4isize, 3]).convert(), 1);
+    grid.set_cell(&NdVec([5isize, 3]).convert(), 1);
+    grid.set_cell(&NdVec([5isize, 2]).convert(), 1);
+    grid.set_cell(&NdVec([4isize, 1]).convert(), 1);
     println!("{}", grid);
     println!();
 

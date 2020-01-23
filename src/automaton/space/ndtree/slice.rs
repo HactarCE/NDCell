@@ -65,9 +65,9 @@ impl<C: DisplayCell> fmt::Display for NdTreeSlice<C, Dim2D> {
         }
         let rect = self.rect();
         let mut line = String::with_capacity(self.root.len().to_usize().unwrap() * 2);
-        for y in rect.axis_range(Axis::Y).rev() {
+        for y in rect.axis_range(Y).rev() {
             line.clear();
-            for x in rect.axis_range(Axis::X) {
+            for x in rect.axis_range(X) {
                 line.push(self[NdVec([x, y.clone()])].cell_char());
                 line.push(' ');
             }

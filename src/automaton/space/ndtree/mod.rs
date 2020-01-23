@@ -146,7 +146,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         self.slice.get_cell(pos).unwrap_or_default()
     }
     /// Sets the state of the cell at the given position.
-    pub fn set_cell(&mut self, pos: BigVec<D>, cell_state: C) {
+    pub fn set_cell(&mut self, pos: &BigVec<D>, cell_state: C) {
         self.expand_to(&pos);
         self.slice.root = self.slice.root.set_cell(
             &mut self.cache.borrow_mut(),
@@ -266,7 +266,7 @@ mod tests {
             let do_it = cells_to_set.len() <= 3;
             for (pos, state) in cells_to_set {
                 hashmap.insert(pos.convert(), state);
-                ndtree.set_cell(pos.convert(), state);
+                ndtree.set_cell(&pos.convert(), state);
                 if do_it {
                 }
                 cells_to_get.push(pos);
@@ -280,7 +280,7 @@ mod tests {
             }
             // Test that shrinking actually shrinks.
             ndtree.shrink();
-            assert!(ndtree.slice.rect().len(Axis::X) <= old_rect.len(Axis::X));
+            assert!(ndtree.slice.rect().len(X) <= old_rect.len(X));
             // Test that shrinking preserves population and positions.
             assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
         }
@@ -294,8 +294,8 @@ mod tests {
             prop_assume!(!cells_to_set.is_empty());
             let mut ndtree = NdTree::new();
             for (pos, state) in cells_to_set {
-                ndtree.set_cell((pos - 128).convert(), state);
-                ndtree.set_cell((pos + 128).convert(), state);
+                ndtree.set_cell(&(pos - 128).convert(), state);
+                ndtree.set_cell(&(pos + 128).convert(), state);
             }
             let branches = &ndtree.slice.root.branches;
             let subnode1 = branches[0].node().unwrap();
@@ -317,7 +317,7 @@ mod tests {
             let mut hashmap = HashMap::new();
             for (pos, state) in cells_to_set {
                 hashmap.insert(pos, state);
-                ndtree.set_cell(pos.convert(), state);
+                ndtree.set_cell(&pos.convert(), state);
             }
             let half_diag = NdVec([x_radius, y_radius]);
             let rect = NdRect::span(center - half_diag, center + half_diag).convert();
@@ -326,8 +326,8 @@ mod tests {
             assert!(slice_rect.contains(&rect));
             assert!(
                 slice.root.layer == 1
-                || slice.root.len() < rect.len(Axis::X) * 4
-                || slice.root.len() < rect.len(Axis::Y) * 4
+                || slice.root.len() < rect.len(X) * 4
+                || slice.root.len() < rect.len(Y) * 4
             );
             for (pos, state) in hashmap {
                 if slice_rect.contains(&pos.convert()) {

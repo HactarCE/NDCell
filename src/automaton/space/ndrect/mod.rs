@@ -103,11 +103,7 @@ where
     where
         N: Integer + MulAssign,
     {
-        let mut product = N::one();
-        for &ax in D::Dim::axes() {
-            product *= self.len(ax);
-        }
-        product
+        self.size.product()
     }
 
     /// Returns an iterator over all the positions in this hyperrectangle.

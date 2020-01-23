@@ -5,7 +5,7 @@ use super::*;
 #[derive(Debug, Clone)]
 pub struct SliceProjection3D<D: Dim> {
     /// The position at which to slice the NdTree.
-    pub slice_pos: NdVec<D>,
+    pub slice_pos: BigVec<D>,
     /// The axis displayed horizontally.
     h: Axis,
     /// The axis displayed vertically.
@@ -22,6 +22,6 @@ impl<C: CellType, D: Dim> NdProjector<C, D, Dim3D> for SliceProjection3D<D> {
         unimplemented!()
     }
     fn get_params(&self) -> ProjectionParams {
-        ProjectionParams::Slice3D(self.slice_pos.into(), (self.h, self.v, self.n))
+        ProjectionParams::Slice3D(self.slice_pos.clone().into(), (self.h, self.v, self.n))
     }
 }

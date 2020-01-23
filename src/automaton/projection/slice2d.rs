@@ -5,7 +5,7 @@ use super::*;
 #[derive(Debug, Clone)]
 pub struct SliceProjection2D<D: Dim> {
     /// The position at which to slice the NdTree.
-    pub slice_pos: NdVec<D>,
+    pub slice_pos: BigVec<D>,
     /// The axis displayed horizontally.
     h: Axis,
     /// The axis displayed vertically.
@@ -20,7 +20,7 @@ impl<C: CellType, D: Dim> NdProjector<C, D, Dim2D> for SliceProjection2D<D> {
         unimplemented!()
     }
     fn get_params(&self) -> ProjectionParams {
-        ProjectionParams::Slice2D(self.slice_pos.into(), (self.h, self.v))
+        ProjectionParams::Slice2D(self.slice_pos.clone().into(), (self.h, self.v))
     }
 }
 
@@ -40,7 +40,7 @@ impl<D: Dim> Default for SliceProjection2D<D> {
 impl<D: Dim> SliceProjection2D<D> {
     /// Constructs a new SliceProjection2D, panicking if the display axes are
     /// incompatible.
-    pub fn new(slice_pos: NdVec<D>, h: Axis, v: Axis) -> Self {
+    pub fn new(slice_pos: BigVec<D>, h: Axis, v: Axis) -> Self {
         let mut ret = Self::default();
         ret.slice_pos = slice_pos;
         ret.set_display_axes(h, v);
@@ -49,7 +49,7 @@ impl<D: Dim> SliceProjection2D<D> {
 
     /// Attempts to construct a new SliceProjection2D, returning `Err(())` if the
     /// display axes are incompatible.
-    pub fn try_new(slice_pos: NdVec<D>, h: Axis, v: Axis) -> Result<Self, ()> {
+    pub fn try_new(slice_pos: BigVec<D>, h: Axis, v: Axis) -> Result<Self, ()> {
         let mut ret = Self::default();
         ret.slice_pos = slice_pos;
         if let Ok(()) = ret.try_set_display_axes(h, v) {

@@ -76,4 +76,24 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
         }
         self.get_node(branches)
     }
+    pub fn get_small_node_from_cell_fn<F: Fn(IVec<D>) -> C>(
+        &mut self,
+        layer: usize,
+        offset: IVec<D>,
+        generator: &F,
+    ) -> NdCachedNode<C, D> {
+        self.get_node_from_fn(|cache, branch_idx| {
+            let branch_offset: IVec<D> = branch_idx.branch_offset(layer);
+            let total_offset = &offset + branch_offset;
+            if layer == 1 {
+                NdTreeBranch::Leaf(generator(total_offset))
+            } else {
+                NdTreeBranch::Node(cache.get_small_node_from_cell_fn(
+                    layer - 1,
+                    total_offset,
+                    generator,
+                ))
+            }
+        })
+    }
 }

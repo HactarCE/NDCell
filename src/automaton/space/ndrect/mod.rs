@@ -169,6 +169,23 @@ where
     }
 }
 
+impl<D: Dim + DimFor<N>, N: NdVecNum> NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec + AsUVec<D>,
+{
+    pub fn as_urect(&self) -> URect<D> {
+        URect::new(self.start.as_uvec(), self.size.as_uvec())
+    }
+}
+impl<D: Dim + DimFor<N>, N: NdVecNum> NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec + AsIVec<D>,
+{
+    pub fn as_irect(&self) -> IRect<D> {
+        IRect::new(self.start.as_ivec(), self.size.as_ivec())
+    }
+}
+
 impl<D: DimFor<N>, N: NdVecNum> CanContain<&NdVec<D, N>> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec,

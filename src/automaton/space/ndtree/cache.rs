@@ -66,9 +66,9 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
             _ => NdTreeBranch::Node(self.get_empty_node(layer)),
         }
     }
-    pub fn get_node_from_fn<F: Fn(&mut Self, ByteVec<D>) -> NdTreeBranch<C, D>>(
+    pub fn get_node_from_fn<F: FnMut(&mut Self, ByteVec<D>) -> NdTreeBranch<C, D>>(
         &mut self,
-        generator: F,
+        mut generator: F,
     ) -> NdCachedNode<C, D> {
         let mut branches = Vec::with_capacity(D::TREE_BRANCHES);
         for branch_idx in branch_idx_iter() {

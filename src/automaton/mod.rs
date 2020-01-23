@@ -7,14 +7,14 @@ use enum_dispatch::enum_dispatch;
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
-// mod io;
+mod io;
 mod ndsimulate;
 pub mod projection;
 pub mod rule;
 pub mod simulation;
 pub mod space;
 
-// pub use io::*;
+pub use io::*;
 pub use ndsimulate::*;
 pub use projection::*;
 pub use rule::{DummyRule, Rule};

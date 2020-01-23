@@ -362,10 +362,10 @@ o$3o!
         )
         .unwrap();
         assert_eq!(5, result.tree.get_root().population);
-        assert_eq!(1, result.tree.get_cell(&NdVec([11isize, 14]).convert()));
-        assert_eq!(1, result.tree.get_cell(&NdVec([12isize, 13]).convert()));
-        assert_eq!(1, result.tree.get_cell(&NdVec([10isize, 12]).convert()));
-        assert_eq!(1, result.tree.get_cell(&NdVec([11isize, 12]).convert()));
-        assert_eq!(1, result.tree.get_cell(&NdVec([12isize, 12]).convert()));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([11, 14])));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([12, 13])));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([10, 12])));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([11, 12])));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([12, 12])));
     }
 }

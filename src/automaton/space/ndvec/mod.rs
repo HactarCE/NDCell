@@ -186,14 +186,9 @@ impl<D: Dim> AsIVec<D> for BigVec<D> {
     }
 }
 
-impl<D: DimFor<N>, N: NdVecNum, X: Num + Into<N>> From<X> for NdVec<D, N> {
-    fn from(value: X) -> Self {
-        let value = value.into();
-        let mut ret = Self::default();
-        for &ax in D::Dim::axes() {
-            ret[ax] = value.clone();
-        }
-        ret
+impl<D: Dim> BigVec<D> {
+    pub fn big(isize_array: <D as DimFor<isize>>::Array) -> Self {
+        NdVec::<D, isize>(isize_array).convert()
     }
 }
 

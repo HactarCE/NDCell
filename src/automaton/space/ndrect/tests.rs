@@ -17,7 +17,7 @@ fn test_iter_validity<D: Dim>(rect: IRect<D>) {
 }
 
 proptest! {
-    /// Test NdRect::single_cell() and various methods.
+    /// Tests NdRect::single_cell() and various methods.
     #[test]
     fn test_rect_region_single_cell(
         pos: IVec3D,
@@ -38,7 +38,7 @@ proptest! {
         test_iter_validity(rect);
     }
 
-    /// Test NdRect::span() and various methods.
+    /// Tests NdRect::span() and various methods.
     #[test]
     fn test_rect_region_span(
         corner1 in IVec3D::arbitrary_with(Some(5)),
@@ -51,7 +51,7 @@ proptest! {
         test_iter_validity(rect);
     }
 
-    /// Test NdRect::centered() and various methods.
+    /// Tests NdRect::centered() and various methods.
     #[test]
     fn test_rect_region_centered(
         center: IVec3D,
@@ -75,7 +75,7 @@ proptest! {
         test_iter_validity(rect);
     }
 
-    /// Test addition and subtract of NdRect and NdVec.
+    /// Tests addition and subtract of NdRect and NdVec.
     #[test]
     fn test_rect_ops(
         corner1: IVec3D,

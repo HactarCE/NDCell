@@ -149,7 +149,7 @@ where
         Some(Self::span(new_min, new_max))
     }
 
-    /// Return a new NdRect with the minimum and maximum coordinates offset by the given amount.
+    /// Returns a new NdRect with the minimum and maximum coordinates offset by the given amount.
     pub fn offset_min_max<T1, T2>(self, min_offset: T1, max_offset: T2) -> Self
     where
         NdVec<D, N>: Add<T1, Output = NdVec<D, N>> + Add<T2, Output = NdVec<D, N>>,
@@ -157,6 +157,8 @@ where
         Self::span(self.min() + min_offset, self.max() + max_offset)
     }
 
+    /// Converts this NdRect from one numeric type to another using
+    /// NdVec::convert().
     pub fn convert<N2: NdVecNum>(&self) -> NdRect<D, N2>
     where
         D: DimFor<N2>,
@@ -173,6 +175,7 @@ impl<D: Dim + DimFor<N>, N: NdVecNum> NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + AsUVec<D>,
 {
+    /// Converts this NdRect into one using usize.
     pub fn as_urect(&self) -> URect<D> {
         URect::new(self.start.as_uvec(), self.size.as_uvec())
     }
@@ -181,6 +184,7 @@ impl<D: Dim + DimFor<N>, N: NdVecNum> NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + AsIVec<D>,
 {
+    /// Converts this NdRect into one using isize.
     pub fn as_irect(&self) -> IRect<D> {
         IRect::new(self.start.as_ivec(), self.size.as_ivec())
     }

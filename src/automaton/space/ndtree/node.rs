@@ -250,14 +250,15 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
             .expect("Cannot get sub-branch of node at layer 1")[inner_branch_idx]
     }
 
+    /// Returns a reference to the cell value at the given position, modulo the
+    /// node size. This is the same as indexing the node using the vector.
     pub fn get_cell_ref<I: NdTreeIndex<D>>(&self, pos: &I) -> &C {
         match &self[self.branch_idx(pos)] {
             NdTreeBranch::Leaf(cell_state) => cell_state,
             NdTreeBranch::Node(node) => node.get_cell_ref(pos),
         }
     }
-    /// Returns the cell value at the given position, modulo the node size. This
-    /// is the same as indexing the node using the vector.
+    /// Returns the cell value at the given position, modulo the node size.
     pub fn get_cell<I: NdTreeIndex<D>>(&self, pos: &I) -> C {
         self.get_cell_ref(pos).clone()
     }
@@ -281,6 +282,7 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
         }
         cache.get_node(new_branches)
     }
+    /// Returns an iterator over the branches of this node.
     pub fn branch_iter(&self) -> impl Iterator<Item = (ByteVec<D>, &NdTreeBranch<C, D>)> {
         self.branches
             .iter()
@@ -408,10 +410,6 @@ impl<D: Dim> NdTreeBranchIndex<D> for ByteVec<D> {
     fn opposite(self) -> Self {
         Self::from_fn(|ax| 1 - self[ax])
     }
-}
-
-pub fn branch_idx_iter<D: Dim>() -> impl Iterator<Item = ByteVec<D>> {
-    (0..(D::TREE_BRANCHES)).map(ByteVec::from_array_idx)
 }
 
 #[cfg(test)]

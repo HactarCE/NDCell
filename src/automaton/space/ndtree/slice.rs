@@ -35,7 +35,9 @@ pub type NdTreeSlice5D<C> = NdTreeSlice<C, Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
 pub type NdTreeSlice6D<C> = NdTreeSlice<C, Dim6D>;
 
+/// A cell type that can be printed as a single char to stdout for debugging.
 pub trait DisplayCell: CellType {
+    /// Returns the char that is used to display this cell state.
     fn cell_char(&self) -> char;
 }
 impl DisplayCell for u8 {
@@ -107,6 +109,8 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
         self.rect().max()
     }
 
+    /// Returns a reference to the cell value at the given position, if it is
+    /// within the bounds of the slice.
     pub fn get_cell_ref(&self, pos: &BigVec<D>) -> Option<&C> {
         if self.rect().contains(pos) {
             Some(self.root.get_cell_ref(&(pos - &self.offset)))
@@ -114,7 +118,8 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
             None
         }
     }
-    /// Returns the cell at the given position, if it is within the bounds of the slice.
+    /// Returns the cell value at the given position, if it is within the bounds
+    /// of the slice.
     pub fn get_cell(&self, pos: &BigVec<D>) -> Option<C> {
         self.get_cell_ref(pos).map(|cell| cell.clone())
     }

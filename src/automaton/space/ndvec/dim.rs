@@ -74,7 +74,9 @@ impl Dim for Dim6D {
 pub trait DimFor<T: Default + Clone + Eq>:
     Debug + Default + Copy + Eq + Hash + private::Sealed
 {
+    /// The pure Dim type associated with this DimFor (i.e. Self)
     type Dim: Dim;
+    /// The array type used for vectors.
     type Array: Debug + Default + Clone + Eq + Hash + AsRef<[T]> + AsMut<[T]>;
 }
 

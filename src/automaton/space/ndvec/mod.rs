@@ -1,9 +1,9 @@
 //! N-dimensional vectors.
 //!
 //! Until generic associated types work (see rust-lang#44265), this module and
-//! ndrect are kind of a mess. There's a ton of macros in order to implement all
-//! the various operations on NdVecs without writing thousands of lines of
-//! repetitive code.
+//! ndrect are kind of a mess. We have to use a hacky DimFor trait to get
+//! generic vectors to work, and generic-dimensioned vectors can't implement
+//! Copy.
 //!
 //! Note that we use noisy_float's R64 type here instead of f64 so that we don't
 //! have to deal with infinities and NaN, which really should NEVER show up in
@@ -86,18 +86,23 @@ impl<D: DimFor<N>, N: NdVecNum> IndexMut<Axis> for NdVec<D, N> {
 }
 
 impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
+    /// Returns a vector consisting of all zeros.
     pub fn origin() -> Self {
         Self::default()
     }
+    /// Returns true if the vector is all zeros, or false otherwise.
     pub fn is_zero(&self) -> bool {
         *self == Self::default()
     }
+    /// Returns the unit vector pointing along the given axis.
     pub fn unit(axis: Axis) -> Self {
         let mut ret = Self::default();
         ret[axis] = N::one();
         ret
     }
 
+    /// Constructs an NdVec using a function of an axis to generate each
+    /// component.
     pub fn from_fn<F: FnMut(Axis) -> N>(mut generator: F) -> Self {
         let mut ret: Self = Self::default();
         for &ax in D::Dim::axes() {
@@ -105,24 +110,31 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         }
         ret
     }
+    /// Applies a function to each component of this vector, constructing a new
+    /// NdVec.
     pub fn map_fn<F: FnMut(Axis, &mut N)>(&mut self, mut f: F) {
         for &ax in D::Dim::axes() {
             f(ax, &mut self[ax]);
         }
     }
+    /// Constructs an NdVec using the given value for all components.
     pub fn repeat<X: Into<N>>(value: X) -> Self {
         let value = value.into();
         Self::from_fn(|_| value.clone())
     }
 
+    /// Converts an NdVec from one number type to another using
+    /// std::convert::Into.
     pub fn convert<N2: NdVecNum>(&self) -> NdVec<D, N2>
     where
         D: DimFor<N2>,
-        N2: From<N>,
+        N: Into<N2>,
     {
         NdVec::from_fn(|ax| N2::from(self[ax].clone().into()))
     }
 
+    /// Constructs an NdVec where each component is the minimum of the
+    /// corresponding components in the two given vectors.
     pub fn min(v1: &Self, v2: &Self) -> Self {
         let mut ret = Self::default();
         for &ax in D::Dim::axes() {
@@ -130,6 +142,8 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         }
         ret
     }
+    /// Constructs an NdVec where each component is the maximum of the
+    /// corresponding components in the two given vectors.
     pub fn max(v1: &Self, v2: &Self) -> Self {
         let mut ret = Self::default();
         for &ax in D::Dim::axes() {
@@ -148,10 +162,12 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     }
 }
 
+/// NdVecs that can be converted to UVecs.
 pub trait AsUVec<D: Dim> {
     /// Converts the NdVec to a UVec, panicking if it does not fit.
     fn as_uvec(&self) -> UVec<D>;
 }
+/// NdVecs that can be converted to IVecs.
 pub trait AsIVec<D: Dim> {
     /// Converts the NdVec to an IVec, panicking if it does not fit.
     fn as_ivec(&self) -> IVec<D>;
@@ -187,6 +203,7 @@ impl<D: Dim> AsIVec<D> for BigVec<D> {
 }
 
 impl<D: Dim> BigVec<D> {
+    /// Constructs a new BigVec using isize components.
     pub fn big(isize_array: <D as DimFor<isize>>::Array) -> Self {
         NdVec::<D, isize>(isize_array).convert()
     }

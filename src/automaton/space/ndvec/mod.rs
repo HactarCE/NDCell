@@ -10,8 +10,9 @@
 //! NdVecs.
 
 use noisy_float::types::R64;
-use num::{BigInt, Num, One, Zero};
+use num::{BigInt, Num, One, ToPrimitive, Zero};
 use std::cmp::Eq;
+use std::convert::TryInto;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::*;
@@ -131,6 +132,53 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
             ret[ax] = std::cmp::max(&v1[ax], &v2[ax]).clone();
         }
         ret
+    }
+
+    /// Multiplies together all the coordinates of the vector.
+    pub fn product(&self) -> N {
+        let mut ret = N::one();
+        for &ax in D::Dim::axes() {
+            ret *= self[ax].clone();
+        }
+        ret
+    }
+}
+
+pub trait AsUVec<D: Dim> {
+    /// Converts the NdVec to a UVec, panicking if it does not fit.
+    fn as_uvec(&self) -> UVec<D>;
+}
+pub trait AsIVec<D: Dim> {
+    /// Converts the NdVec to an IVec, panicking if it does not fit.
+    fn as_ivec(&self) -> IVec<D>;
+}
+
+impl<D: Dim> AsUVec<D> for IVec<D> {
+    fn as_uvec(&self) -> UVec<D> {
+        UVec::from_fn(|ax| {
+            self[ax]
+                .try_into()
+                .expect("Cannot convert this IVec into a UVec")
+        })
+    }
+}
+impl<D: Dim> AsIVec<D> for UVec<D> {
+    fn as_ivec(&self) -> IVec<D> {
+        IVec::from_fn(|ax| {
+            self[ax]
+                .try_into()
+                .expect("Cannot convert this UVec into an IVec")
+        })
+    }
+}
+
+impl<D: Dim> AsIVec<D> for BigVec<D> {
+    fn as_ivec(&self) -> IVec<D> {
+        IVec::from_fn(|ax| {
+            self[ax]
+                .to_isize()
+                .expect("Cannot convert such a large BigVec into an IVec")
+        })
     }
 }
 

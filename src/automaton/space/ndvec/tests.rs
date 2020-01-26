@@ -1,4 +1,4 @@
-use noisy_float::types::r64;
+use noisy_float::prelude::r64;
 use num::integer::Integer;
 use proptest::prelude::*;
 

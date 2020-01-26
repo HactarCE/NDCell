@@ -9,7 +9,7 @@
 //! have to deal with infinities and NaN, which really should NEVER show up in
 //! NdVecs.
 
-use noisy_float::types::R64;
+use noisy_float::prelude::R64;
 use num::{BigInt, Num, One, ToPrimitive, Zero};
 use std::cmp::Eq;
 use std::convert::TryInto;

@@ -1,4 +1,4 @@
-use noisy_float::types::R64;
+use noisy_float::prelude::R64;
 use num::BigInt;
 
 use super::*;

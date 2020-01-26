@@ -1,4 +1,4 @@
-use num::{BigInt, One, ToPrimitive};
+use num::{BigInt, One, ToPrimitive, Zero};
 use seahash::SeaHasher;
 use std::borrow::Borrow;
 use std::convert::From;
@@ -73,7 +73,7 @@ pub struct NdTreeNode<C: CellType, D: Dim> {
     pub layer: usize,
 
     /// The population of this node.
-    pub population: usize,
+    pub population: BigInt,
 }
 
 // Implement Borrow so that NdBaseTreeNode can be used for HashSet lookups.
@@ -117,7 +117,21 @@ impl<C: CellType, D: Dim> From<NdBaseTreeNode<C, D>> for NdTreeNode<C, D> {
         let layer = branch_layer + 1;
         // Compute the population based on the population of each of the node's
         // branches.
-        let population = branches.iter().map(NdTreeBranch::population).sum();
+        let big_zero = BigInt::zero();
+        let big_one = BigInt::one();
+        let population = branches
+            .iter()
+            .map(|branch| match branch {
+                NdTreeBranch::Leaf(cell_state) => {
+                    if *cell_state == C::default() {
+                        &big_zero
+                    } else {
+                        &big_one
+                    }
+                }
+                NdTreeBranch::Node(node) => &node.population,
+            })
+            .sum();
         Self {
             base,
             layer,
@@ -177,7 +191,7 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
     /// Returns false if this node contains at least one non-default cell, or
     /// true if it contains only default cells.
     pub fn is_empty(&self) -> bool {
-        self.population == 0
+        self.population.is_zero()
     }
 
     /// Returns the side length of the rectangle encompassing this node.
@@ -311,33 +325,20 @@ impl<C: CellType, D: Dim> NdTreeBranch<C, D> {
     }
 
     /// Returns the inner node if this is a node, or None if it is a leaf.
-    pub fn node(&self) -> Option<&NdTreeNode<C, D>> {
+    pub fn node(&self) -> Option<&NdCachedNode<C, D>> {
         match self {
             NdTreeBranch::Leaf(_) => None,
             NdTreeBranch::Node(node) => Some(node),
         }
     }
 
-    /// Returns the number of non-default cells in this branch, which is the
-    /// same as its contained node (if it is a node) or 0 if it is a leaf with
-    /// the default cell state or 1 if it is a leaf with a non-default cell
-    /// state.
-    pub fn population(&self) -> usize {
-        match self {
-            NdTreeBranch::Leaf(cell_state) => {
-                if *cell_state == C::default() {
-                    0
-                } else {
-                    1
-                }
-            }
-            NdTreeBranch::Node(node) => node.population,
-        }
-    }
     /// Returns false if this branch contains at least one non-default cell, or
     /// true if it contains only default cells.
     pub fn is_empty(&self) -> bool {
-        self.population() == 0
+        match self {
+            NdTreeBranch::Leaf(cell_state) => *cell_state != C::default(),
+            NdTreeBranch::Node(node) => node.is_empty(),
+        }
     }
 }
 

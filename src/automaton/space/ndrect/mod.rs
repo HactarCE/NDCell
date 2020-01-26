@@ -64,21 +64,19 @@ where
     /// Constructs an NdRect with size 2r+1, given a center point and a radius r.
     pub fn centered<X: Copy>(center: NdVec<D, N>, radius: X) -> Self
     where
-        NdVec<D, N>: Sub<X, Output = NdVec<D, N>>,
-        N: Add<X, Output = N>,
+        NdVec<D, N>: Add<X, Output = NdVec<D, N>> + Sub<X, Output = NdVec<D, N>>,
     {
         let start = center - radius;
-        let size = NdVec::repeat(N::get_min_rect_size() + radius + radius);
+        let size = NdVec::repeat(N::get_min_rect_size()) + radius + radius;
         Self { start, size }
     }
     /// Constructs an NdRect describing a Moore neighborhood of a given radius
     /// centered at the origin.
-    pub fn moore<X: Copy>(radius: X) -> Self
+    pub fn moore<X: Into<N>>(radius: X) -> Self
     where
-        NdVec<D, N>: Sub<X, Output = NdVec<D, N>>,
-        N: Add<X, Output = N>,
+        NdVec<D, N>: Copy + Add<X, Output = NdVec<D, N>> + Sub<X, Output = NdVec<D, N>>,
     {
-        Self::centered(NdVec::origin(), radius)
+        Self::centered(NdVec::origin(), NdVec::repeat(radius))
     }
 
     /// Returns the minimum (most negative) corner of this NdRect.

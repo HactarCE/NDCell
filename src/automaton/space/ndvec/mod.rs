@@ -152,7 +152,15 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         ret
     }
 
-    /// Multiplies together all the coordinates of the vector.
+    /// Adds together all the components of this vector.
+    pub fn sum(&self) -> N {
+        let mut ret = N::zero();
+        for &ax in D::Dim::axes() {
+            ret += self[ax].clone();
+        }
+        ret
+    }
+    /// Multiplies together all the components of this vector.
     pub fn product(&self) -> N {
         let mut ret = N::one();
         for &ax in D::Dim::axes() {

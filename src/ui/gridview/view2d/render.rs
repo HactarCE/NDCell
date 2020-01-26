@@ -39,6 +39,8 @@
 
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
+use noisy_float::prelude::r64;
+use num::{BigInt, ToPrimitive, Zero};
 use std::borrow::Cow;
 use std::cell::RefMut;
 use std::collections::HashMap;
@@ -60,14 +62,10 @@ struct PointVertex {
     pos: [f32; 2],
 }
 glium::implement_vertex!(PointVertex, pos);
-impl<T> From<T> for PointVertex
-where
-    Vec2D: From<T>,
-{
-    fn from(pos: T) -> Self {
-        let vec = Vec2D::from(pos);
+impl From<[isize; 2]> for PointVertex {
+    fn from(pos: [isize; 2]) -> Self {
         Self {
-            pos: [*vec.x() as f32, *vec.y() as f32],
+            pos: [pos[0] as f32, pos[1] as f32],
         }
     }
 }
@@ -130,21 +128,22 @@ impl CellPixelChunk {
         branch: &NdTreeBranch<C, Dim2D>,
         branch_to_pixel: &F,
         layers_remaining: usize,
-        offset: Vec2D,
+        offset: UVec2D,
     ) where
         F: Fn(&NdTreeBranch<C, Dim2D>) -> (u8, u8, u8),
     {
         if layers_remaining == 0 {
-            let x = *offset.x() as usize;
-            let y = *offset.y() as usize;
+            let x = offset[X];
+            let y = offset[Y];
             self.0[y][x] = branch_to_pixel(branch);
-        } else if let NdTreeBranch::Node(node) = branch {
-            for branch_idx in 0..4 {
+        } else {
+            for (sub_branch_idx, sub_branch) in branch.node().unwrap().branch_iter() {
+                let sub_branch_offset: UVec2D = sub_branch_idx.branch_offset(layers_remaining);
                 self.fill_part_with_quadtree_node(
-                    &node.branches[branch_idx],
+                    &sub_branch,
                     branch_to_pixel,
                     layers_remaining - 1,
-                    offset + ndtree_branch_offset(layers_remaining, branch_idx),
+                    offset + sub_branch_offset,
                 );
             }
         }
@@ -211,16 +210,17 @@ struct RenderInProgress<'a> {
     /// The node layer of a render cell.
     render_cell_layer: usize,
     /// The width in pixels of a render cell.
-    render_cell_pixels: f32,
+    render_cell_pixels: f64,
     /// A slice of the quadtree that encompasses all visible cells.
     quadtree_slice: NdTreeSlice<u8, Dim2D>,
     /// The render cell position within quadtree_slice that is centered on the screen.
-    pos: (f32, f32),
+    pos: FVec2D,
     /// A rectangle of render cells within quadtree_slice that is visible.
-    visible_rect: Rect2D,
+    visible_rect: BigRect2D,
     /// A rectangle of chunk coordinates (i.e. cell coordinates divided by the
-    /// number of cells in a chunk) for the chunks that are visible.
-    chunk_visible_rect: Rect2D,
+    /// number of cells in a chunk) within quadtree_slice for the chunks that
+    /// are visible.
+    chunk_visible_rect: IRect2D,
     // /// The view matrix converting from quadtree_slice space (1 unit = 1 render
     // /// cell; (0, 0) = bottom left) to screen space ((-1, -1) = bottom left; (1,
     // /// 1) = top right).
@@ -230,33 +230,34 @@ impl<'a> RenderInProgress<'a> {
     /// Performs preliminary computations and returns a RenderInProgress.
     pub fn new(g: &'a mut GridView2D, target: &'a mut glium::Frame) -> Self {
         let (target_w, target_h) = target.get_dimensions();
+        let target_pixels_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let viewport = g.interpolating_viewport.clone();
         let cache = g.render_cache.borrow_mut();
         let mut zoom = viewport.zoom;
 
         // Compute the width of pixels for each individual cell.
-        let cell_pixels: f32 = zoom.pixels_per_cell();
+        let cell_pixels: f64 = zoom.pixels_per_cell();
 
         // Compute the lowest layer that must be visited, which is the layer of
         // a "render cell," a node that is rendered as one unit (one pixel in
         // step #1).
         let render_cell_layer: usize = std::cmp::max(0, -zoom.floor().power() as isize) as usize;
         // Compute the width of cells represented by each render cell.
-        let render_cell_len: usize = 1 << render_cell_layer;
+        let render_cell_len: BigInt = BigInt::from(1) << render_cell_layer;
         // The render cell layer is also the power of two we should subtract from
         // the zoom level.
-        zoom = Zoom2D::from_power(zoom.power() + render_cell_layer as f32);
+        zoom = Zoom2D::from_power(zoom.power() + render_cell_layer as f64);
         // Now the zoom power should be greater than -1.0 (since -1.0 or
         // anything lower should be handled by having a higher render cell
         // layer).
         assert!(zoom.power() > -1.0);
 
         // Compute the width of pixels for each render cell.
-        let render_cell_pixels: f32 = zoom.pixels_per_cell();
+        let render_cell_pixels: f64 = zoom.pixels_per_cell();
 
         // Compute the width of cells for each chunk. (Note that CHUNK_SIZE
         // is the number of render cells per chunk, not individual cells.)
-        let chunk_cell_len: isize = (CHUNK_SIZE * (1 << render_cell_layer)) as isize;
+        let chunk_cell_len: BigInt = CHUNK_SIZE * BigInt::from(1 << render_cell_layer);
 
         // Get an NdCachedNode that covers the entire visible area, a rectangle
         // of visible chunks relative to that node (using cell coordinates
@@ -264,62 +265,61 @@ impl<'a> RenderInProgress<'a> {
         // node, and a floating-point position relative to that node that will
         // be in the center of the screen.
         let quadtree_slice: NdTreeSlice<u8, Dim2D>;
-        let visible_rect: Rect2D;
-        let chunk_visible_rect: Rect2D;
-        let pos_x: f32;
-        let pos_y: f32;
+        let visible_rect: BigRect2D;
+        let chunk_visible_rect: IRect2D;
+        let pos: FVec2D;
         {
             // Before computing the rectangles relative to the slice, get the
             // rectangles in global space.
-            let global_visible_rect: Rect2D;
-            let global_chunk_visible_rect: Rect2D;
+            let global_visible_rect: BigRect2D;
+            let global_chunk_visible_rect: BigRect2D;
             {
-                // Compute half the width and height of individual cells that
-                // fit on the screen. (This ends up being more useful than the
-                // full number.)
-                let half_cells_w = target_w as f32 / cell_pixels / 2.0;
-                let half_cells_h = target_h as f32 / cell_pixels / 2.0;
-                let half_diag =
-                    Vec2D::from([half_cells_w.ceil() as isize, half_cells_h.ceil() as isize]);
+                // Compute the width and height of individual cells that fit on
+                // the screen. Because this number is stored in an f64, which
+                // cannot represent values above around 2^1022, zoom levels past
+                // 2^1000 can overflow this. This is handled by Zoom2D::clamp().
+                let target_cells_size: FVec2D = target_pixels_size.convert() / r64(cell_pixels);
+                // Compute the cell vector pointing from the origin to the top
+                // right corner of the screen; i.e. the "half diagonal."
+                let half_diag: FVec2D = target_cells_size / 2.0;
 
-                let lower_bound = viewport.pos - half_diag;
-                let upper_bound = viewport.pos + half_diag;
-                global_visible_rect = Rect2D::span(lower_bound, upper_bound);
+                global_visible_rect =
+                    BigRect2D::centered(viewport.pos.clone(), &half_diag.ceil().as_bigvec());
 
                 // Compute the chunk coordinates for the lower and upper bounds
-                // using simple floor division.
-                global_chunk_visible_rect = global_visible_rect / chunk_cell_len;
+                // using division that rounds "outward."
+                global_chunk_visible_rect = global_visible_rect.div_outward(&chunk_cell_len);
+                // TODO: see what happenes if you divide "inward" instead.
             }
 
             // Now fetch the NdTreeSlice containing all of the visible chunks.
             quadtree_slice = g.automaton.get_projected_tree().get_slice_containing(
                 // Convert chunk coordinates into normal cell coordinates.
-                global_chunk_visible_rect * chunk_cell_len,
+                &(global_chunk_visible_rect.clone() * &chunk_cell_len),
             );
             // That slice should line up along chunk boundaries.
-            assert_eq!(Vec2D::origin(), quadtree_slice.min() % chunk_cell_len);
-            assert_eq!(Vec2D::origin(), (quadtree_slice.max() + 1) % chunk_cell_len);
+            assert!(quadtree_slice.min().mod_floor(&chunk_cell_len).is_zero());
+            assert!(quadtree_slice.size().mod_floor(&chunk_cell_len).is_zero());
 
             // Subtract the slice offset from global_visible_rect and
             // global_chunk_visible_rect so that they are relative to the slice.
-            // TODO: This is where you should convert from BigInts to isize, at
-            // least for chunk_visible_rect.
-            visible_rect = global_visible_rect - quadtree_slice.offset;
-            chunk_visible_rect = global_chunk_visible_rect - quadtree_slice.offset / chunk_cell_len;
+            // This is where we can convert from BigInt to isize, since the
+            // quadtree slice should be relatively close to the visible rect.
+            visible_rect = global_visible_rect.clone() - &quadtree_slice.offset;
+            chunk_visible_rect = (global_chunk_visible_rect.clone()
+                - quadtree_slice.offset.clone().div_floor(&chunk_cell_len))
+            .as_irect();
 
             // Subtract the slice offset from the viewport position and divide
             // by the size of a render cell.
-            let integer_pos = (viewport.pos - quadtree_slice.offset) / render_cell_len as isize;
-            let integer_pos_x = *integer_pos.x() as f32;
-            let integer_pos_y = *integer_pos.y() as f32;
-            // viewport.x_offset and .y_offset are sub-cell offsets, so they
-            // only matter when zoomed in more than 1:1.
+            let integer_pos =
+                (viewport.pos.clone() - &quadtree_slice.offset).div_floor(&render_cell_len);
+            // viewport.offset is a sub-cell offset, so they only matter when
+            // zoomed in more than 1:1.
             if viewport.zoom.pixels_per_cell() > 1.0 {
-                pos_x = integer_pos_x + viewport.x_offset;
-                pos_y = integer_pos_y + viewport.y_offset;
+                pos = integer_pos.as_fvec() + viewport.offset;
             } else {
-                pos_x = integer_pos_x;
-                pos_y = integer_pos_y;
+                pos = integer_pos.as_fvec();
             }
         }
 
@@ -330,7 +330,7 @@ impl<'a> RenderInProgress<'a> {
             render_cell_layer,
             render_cell_pixels,
             quadtree_slice,
-            pos: (pos_x, pos_y),
+            pos,
             visible_rect,
             chunk_visible_rect,
         }
@@ -340,8 +340,8 @@ impl<'a> RenderInProgress<'a> {
     pub fn draw_cells(&mut self) {
         // Steps #1 and #2: draw at 1 pixel per render cell.
         let render_cells_rect = self.chunk_visible_rect * CHUNK_SIZE as isize;
-        let unscaled_cells_w = render_cells_rect.len(Axis::X) as u32;
-        let unscaled_cells_h = render_cells_rect.len(Axis::Y) as u32;
+        let unscaled_cells_w = render_cells_rect.len(X) as u32;
+        let unscaled_cells_h = render_cells_rect.len(Y) as u32;
         let unscaled_cells_texture = glium::texture::srgb_texture2d::SrgbTexture2d::empty(
             &*self.cache.display,
             unscaled_cells_w,
@@ -361,12 +361,15 @@ impl<'a> RenderInProgress<'a> {
         );
 
         // Step #3: resize that texture by an integer factor, only including the
-        // cells that are visible.
-        let render_cell_visible_rect = self.visible_rect / (1 << self.render_cell_layer)
-            - (self.chunk_visible_rect * CHUNK_SIZE as isize).min();
+        // cells that are visible.target_pixels_
+        let render_cell_visible_rect: IRect2D = (self
+            .visible_rect
+            .div_outward(&(BigInt::from(1) << self.render_cell_layer))
+            - self.chunk_visible_rect.min() * CHUNK_SIZE as isize)
+            .as_irect();
         let integer_scale_factor = self.render_cell_pixels.ceil();
-        let visible_cells_w = render_cell_visible_rect.len(Axis::X) as u32;
-        let visible_cells_h = render_cell_visible_rect.len(Axis::Y) as u32;
+        let visible_cells_w = render_cell_visible_rect.len(X) as u32;
+        let visible_cells_h = render_cell_visible_rect.len(Y) as u32;
         let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
         let scaled_cells_h = visible_cells_h * integer_scale_factor as u32;
         let scaled_cells_texture = glium::texture::SrgbTexture2d::empty(
@@ -380,10 +383,10 @@ impl<'a> RenderInProgress<'a> {
             glium::framebuffer::SimpleFrameBuffer::new(&*self.cache.display, &scaled_cells_texture)
                 .expect("Failed to create frame buffer");
         let source_rect = glium::Rect {
-            left: *render_cell_visible_rect.min().x() as u32,
-            bottom: *render_cell_visible_rect.min().y() as u32,
-            width: render_cell_visible_rect.len(Axis::X) as u32,
-            height: render_cell_visible_rect.len(Axis::Y) as u32,
+            left: render_cell_visible_rect.min()[X] as u32,
+            bottom: render_cell_visible_rect.min()[Y] as u32,
+            width: render_cell_visible_rect.len(X) as u32,
+            height: render_cell_visible_rect.len(Y) as u32,
         };
         scaled_cells_fbo.blit_from_simple_framebuffer(
             &unscaled_cells_fbo,
@@ -394,23 +397,20 @@ impl<'a> RenderInProgress<'a> {
 
         // Step #4: render that onto the screen.
         let (target_w, target_h) = self.target.get_dimensions();
-        let render_cells_w = target_w as f32 / self.render_cell_pixels;
-        let render_cells_h = target_h as f32 / self.render_cell_pixels;
-        let render_cells_x = self.pos.0
-            - *(self.visible_rect / (1 << self.render_cell_layer) as isize)
+        let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
+        let render_cells_size = target_size / r64(self.render_cell_pixels);
+        let render_cells_center = self.pos
+            - self
+                .visible_rect
+                .div_outward(&(BigInt::from(1) << self.render_cell_layer))
                 .min()
-                .x() as f32
-            - render_cells_w as f32 / 2.0;
-        let render_cells_y = self.pos.1
-            - *(self.visible_rect / (1 << self.render_cell_layer) as isize)
-                .min()
-                .y() as f32
-            - render_cells_h as f32 / 2.0;
+                .as_fvec();
+        let render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size);
 
-        let left = render_cells_x / visible_cells_w as f32;
-        let bottom = render_cells_y / visible_cells_h as f32;
-        let width = render_cells_w / visible_cells_w as f32;
-        let height = render_cells_h / visible_cells_h as f32;
+        let left = render_cells_rect.min()[X].raw() as f32;
+        let right = render_cells_rect.max()[X].raw() as f32;
+        let bottom = render_cells_rect.min()[Y].raw() as f32;
+        let top = render_cells_rect.max()[Y].raw() as f32;
 
         self.cache.vbos.cells.write(&[
             TexturePosVertex {
@@ -419,15 +419,15 @@ impl<'a> RenderInProgress<'a> {
             },
             TexturePosVertex {
                 pos: [1.0, -1.0],
-                tex_coords: [left + width, bottom],
+                tex_coords: [right, bottom],
             },
             TexturePosVertex {
                 pos: [-1.0, 1.0],
-                tex_coords: [left, bottom + height],
+                tex_coords: [left, top],
             },
             TexturePosVertex {
                 pos: [1.0, 1.0],
-                tex_coords: [left + width, bottom + height],
+                tex_coords: [right, top],
             },
         ]);
         self.target
@@ -454,7 +454,7 @@ impl<'a> RenderInProgress<'a> {
         &mut self,
         target: &glium::texture::srgb_texture2d::SrgbTexture2d,
         root_node: &NdCachedNode<u8, Dim2D>,
-        root_node_offset: Vec2D,
+        root_node_offset: IVec2D,
         layers_remaining: usize,
     ) {
         let lower_chunk_bound = root_node_offset;
@@ -473,8 +473,8 @@ impl<'a> RenderInProgress<'a> {
                 (root_node_offset - self.chunk_visible_rect.min()) * CHUNK_SIZE as isize;
             target.write(
                 glium::Rect {
-                    left: *offset_in_texture.x() as u32,
-                    bottom: *offset_in_texture.y() as u32,
+                    left: offset_in_texture[X] as u32,
+                    bottom: offset_in_texture[Y] as u32,
                     width: CHUNK_SIZE as u32,
                     height: CHUNK_SIZE as u32,
                 },
@@ -482,19 +482,11 @@ impl<'a> RenderInProgress<'a> {
             );
         } else {
             // Recurse into each child node.
-            for branch_idx in 0..4 {
-                if let NdTreeBranch::Node(child_node) = &root_node.branches[branch_idx] {
-                    let branch_offset = ndtree_branch_offset(layers_remaining, branch_idx);
-                    let child_node_offset = root_node_offset + branch_offset;
-                    self.draw_cell_chunks(
-                        target,
-                        &child_node,
-                        child_node_offset,
-                        layers_remaining - 1,
-                    );
-                } else {
-                    unreachable!();
-                }
+            for (branch_idx, branch) in root_node.branch_iter() {
+                let child_node = branch.node().unwrap();
+                let branch_offset: IVec2D = branch_idx.branch_offset(layers_remaining);
+                let child_node_offset: IVec2D = root_node_offset + branch_offset;
+                self.draw_cell_chunks(target, child_node, child_node_offset, layers_remaining - 1);
             }
         }
     }
@@ -524,11 +516,13 @@ impl<'a> RenderInProgress<'a> {
                         let ratio = match branch {
                             NdTreeBranch::Leaf(cell_state) => *cell_state as f64,
                             NdTreeBranch::Node(node) => {
-                                if node.population == 0 {
+                                if node.population.is_zero() {
                                     0.0
+                                } else if let Some(node_len) = node.len().to_f64() {
+                                    let population = node.population.to_f64().unwrap();
+                                    (population / 2.0) / node_len.powf(2.0) + 0.5
                                 } else {
-                                    node.population as f64 / 2.0 / (node.len() as f64).powf(2.0)
-                                        + 0.5
+                                    1.0
                                 }
                             }
                         };
@@ -555,36 +549,41 @@ impl<'a> RenderInProgress<'a> {
         if self.viewport.zoom.pixels_per_cell() < 8.0 {
             return;
         }
+        // Convert visible_rect from a BigVec to an UVec, which is only safe
+        // because we're zoomed in enough that far less than isize::MAX cells
+        // are in self.quadtree_slice.
+        let visible_rect: IRect2D = self.visible_rect.as_irect();
         // Generate a pair of vertices for each gridline.
         let gridlines_indices = glium::index::NoIndices(PrimitiveType::LinesList);
-        let mut gridline_vertices = Vec::with_capacity(
-            (self.visible_rect.len(Axis::X) + self.visible_rect.len(Axis::Y)) * 2,
-        );
-        let min = self.visible_rect.min();
-        let max = self.visible_rect.max() + 1;
-        let min_x = *min.x();
-        let min_y = *min.y();
-        let max_x = *max.x();
-        let max_y = *max.y();
-        for x in self.visible_rect.axis_range(Axis::X) {
+        let mut gridline_vertices =
+            Vec::with_capacity((visible_rect.len(X) + visible_rect.len(Y)) as usize * 2);
+        let min = visible_rect.min();
+        let max = visible_rect.max() + 1;
+        let min_x = min[X];
+        let min_y = min[Y];
+        let max_x = max[X];
+        let max_y = max[Y];
+        for x in visible_rect.axis_range(X) {
             gridline_vertices.push(PointVertex::from([x, min_y]));
             gridline_vertices.push(PointVertex::from([x, max_y]));
         }
-        for y in self.visible_rect.axis_range(Axis::Y) {
+        for y in visible_rect.axis_range(Y) {
             gridline_vertices.push(PointVertex::from([min_x, y]));
             gridline_vertices.push(PointVertex::from([max_x, y]));
         }
 
         let (target_w, target_h) = self.target.get_dimensions();
+        let target_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
+        let pixels_per_cell = r64(self.viewport.zoom.pixels_per_cell());
         // Multiply by 2 because the OpenGL screen space ranged from -1 to +1.
-        let x_scale = self.viewport.zoom.pixels_per_cell() / target_w as f32 * 2.0;
-        let y_scale = self.viewport.zoom.pixels_per_cell() / target_h as f32 * 2.0;
-        let (x_render_cell_pos, y_render_cell_pos) = self.pos;
-        let mut x_offset = x_render_cell_pos * (1 << self.render_cell_layer) as f32;
-        let mut y_offset = y_render_cell_pos * (1 << self.render_cell_layer) as f32;
+        let scale = FVec2D::repeat(pixels_per_cell) / target_size * r64(2.0);
+        let mut offset: FVec2D = self.pos * r64(1.0f64.powf(self.render_cell_layer as f64));
         // Convert offset from render-cell-space to screen-space.
-        x_offset *= x_scale;
-        y_offset *= y_scale;
+        offset *= scale;
+        let x_offset = offset[X].raw() as f32;
+        let y_offset = offset[Y].raw() as f32;
+        let x_scale = scale[X].raw() as f32;
+        let y_scale = scale[Y].raw() as f32;
         // Compute the view matrix.
         let view_matrix = [
             [x_scale, 0.0, 0.0, 0.0],

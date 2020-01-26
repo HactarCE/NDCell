@@ -27,7 +27,7 @@ impl GridViewTrait for GridView2D {
         render::draw(self, target);
     }
     fn do_frame(&mut self) {
-        const DECAY_CONSTANT: f32 = 4.0;
+        const DECAY_CONSTANT: f64 = 4.0;
         if self.interpolating_viewport != self.viewport {
             self.interpolating_viewport = Viewport2D::interpolate(
                 &self.interpolating_viewport,

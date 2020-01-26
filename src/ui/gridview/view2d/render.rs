@@ -405,7 +405,8 @@ impl<'a> RenderInProgress<'a> {
                 .div_outward(&(BigInt::from(1) << self.render_cell_layer))
                 .min()
                 .as_fvec();
-        let render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size);
+        let mut render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size / 2.0);
+        render_cells_rect /= render_cell_visible_rect.size().as_fvec();
 
         let left = render_cells_rect.min()[X].raw() as f32;
         let right = render_cells_rect.max()[X].raw() as f32;

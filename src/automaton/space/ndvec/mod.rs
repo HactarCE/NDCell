@@ -235,6 +235,16 @@ impl<D: Dim> AsFVec<D> for BigVec<D> {
         })
     }
 }
+impl<D: Dim> AsFVec<D> for IVec<D> {
+    fn as_fvec(&self) -> FVec<D> {
+        FVec::from_fn(|ax| {
+            self[ax]
+                .to_f64()
+                .map(r64)
+                .expect("Cannot convert such a large BigVec into an FVec")
+        })
+    }
+}
 
 impl<D: Dim> AsBigVec<D> for FVec<D> {
     fn as_bigvec(&self) -> BigVec<D> {

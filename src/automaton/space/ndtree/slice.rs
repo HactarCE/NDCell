@@ -108,6 +108,10 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
     pub fn max(&self) -> BigVec<D> {
         self.rect().max()
     }
+    /// Returns the vector size of this NdTree.
+    pub fn size(&self) -> BigVec<D> {
+        self.rect().size()
+    }
 
     /// Returns a reference to the cell value at the given position, if it is
     /// within the bounds of the slice.

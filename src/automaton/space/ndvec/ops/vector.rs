@@ -1,5 +1,6 @@
 //! Operations between two NdVecs (and unary negation operator).
 
+use noisy_float::prelude::R64;
 use std::iter::IntoIterator;
 use std::ops::*;
 
@@ -73,5 +74,13 @@ where
 impl<D: Dim> MulAssign<&BigVec<D>> for BigVec<D> {
     fn mul_assign(&mut self, other: &BigVec<D>) {
         self.map_fn(|ax, ret| *ret *= &other[ax]);
+    }
+}
+
+// Implement elementwise division between two FVecs.
+impl<D: DimFor<R64>> DivAssign<FVec<D>> for FVec<D> {
+    fn div_assign(&mut self, other: FVec<D>) {
+        let mut other_iter = Vec::from(other.0.as_ref()).into_iter();
+        self.map_fn(|_ax, ret| *ret /= other_iter.next().unwrap());
     }
 }

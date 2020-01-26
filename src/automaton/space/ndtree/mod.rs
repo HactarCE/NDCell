@@ -60,7 +60,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     pub fn new() -> Self {
         let mut cache = NdTreeCache::default();
         let root = cache.get_empty_node(1);
-        let offset = NdVec::origin() - 1;
+        let offset = NdVec::repeat(-1);
         Self {
             cache: Rc::new(RefCell::new(cache)),
             slice: NdTreeSlice { root, offset },
@@ -77,8 +77,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     }
     /// Sets the root node of this tree and adjusts the offset so that the tree remains centered on the same point.
     pub fn set_root_centered(&mut self, new_root: NdCachedNode<C, D>) {
-        self.slice.offset += self.get_root().len() as isize / 2;
-        self.slice.offset -= new_root.len() as isize / 2;
+        self.slice.offset += &((self.get_root().len() - new_root.len()) / 2);
         self.set_root(new_root);
     }
 
@@ -91,34 +90,26 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// contents as before, but with 25% padding on each edge.
     pub fn expand(&mut self) {
         let mut cache = self.cache.borrow_mut();
-        let new_branches = self
-            .slice
-            .root
-            .branches
-            .iter()
-            .enumerate()
-            .map(|(branch_idx, old_branch)| {
-                // Compute the index of the opposite branch (diagonally opposite
-                // on all axes).
-                let opposite_branch_idx = branch_idx ^ NdTreeNode::<C, D>::BRANCH_IDX_BITMASK;
-                // All branches of this node will be empty ...
-                let mut inner_branches = vec![
-                    cache.get_empty_branch(old_branch.get_layer());
-                    NdTreeNode::<C, D>::BRANCHES
-                ];
-                // ... except for the opposite branch, which is closest to the center.
-                inner_branches[opposite_branch_idx] = old_branch.clone();
-                // And return a branch with that node.
-                NdTreeBranch::Node(cache.get_node(inner_branches))
-            })
-            .collect();
-        self.slice.root = cache.get_node(new_branches);
-        self.slice.offset -= self.get_root().len() as isize / 4;
+        let empty_sub_branch = cache.get_empty_branch(self.slice.root.layer - 1);
+        let old_root = self.slice.root.clone();
+        self.slice.root = cache.get_node_from_fn(move |cache, branch_idx| {
+            let old_branch = &old_root[branch_idx.clone()];
+            // Compute the index of the opposite branch (diagonally opposite
+            // on all axes).
+            let opposite_branch_idx = branch_idx.opposite();
+            // All branches of this node will be empty ...
+            let mut inner_branches = vec![empty_sub_branch.clone(); D::TREE_BRANCHES];
+            // ... except for the opposite branch, which is closest to the center.
+            inner_branches[opposite_branch_idx.to_array_idx()] = old_branch.clone();
+            // And return a branch with that node.
+            NdTreeBranch::Node(cache.get_node(inner_branches))
+        });
+        self.slice.offset -= &(self.get_root().len() / 4);
     }
     /// "Zooms out" by calling NdTree::expand() until the given position is
     /// contained in the known part of the tree, and return the number of calls
     /// to NdTree::expand() that were necessary.
-    pub fn expand_to(&mut self, pos: NdVec<D>) -> usize {
+    pub fn expand_to(&mut self, pos: &BigVec<D>) -> usize {
         for i in 0.. {
             if self.slice.rect().contains(pos) {
                 return i;
@@ -146,20 +137,20 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         }
     }
     /// Offsets the entire grid so that the given position is the new origin.
-    pub fn recenter(&mut self, pos: NdVec<D>) {
+    pub fn recenter(&mut self, pos: BigVec<D>) {
         self.slice.offset -= pos;
     }
 
     /// Returns the state of the cell at the given position.
-    pub fn get_cell(&self, pos: NdVec<D>) -> C {
+    pub fn get_cell(&self, pos: &BigVec<D>) -> C {
         self.slice.get_cell(pos).unwrap_or_default()
     }
     /// Sets the state of the cell at the given position.
-    pub fn set_cell(&mut self, pos: NdVec<D>, cell_state: C) {
-        self.expand_to(pos);
+    pub fn set_cell(&mut self, pos: &BigVec<D>, cell_state: C) {
+        self.expand_to(&pos);
         self.slice.root = self.slice.root.set_cell(
             &mut self.cache.borrow_mut(),
-            pos - self.slice.offset,
+            &(pos - &self.slice.offset),
             cell_state,
         );
     }
@@ -171,10 +162,10 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// centered on an existing node, and thus composed out of smaller existing
     /// nodes. The only guarantee is that the node will be less than twice as
     /// big as it needs to be.
-    pub fn get_slice_containing(&mut self, rect: NdRect<D>) -> NdTreeSlice<C, D> {
+    pub fn get_slice_containing(&mut self, rect: &BigRect<D>) -> NdTreeSlice<C, D> {
         // Ensure that the desired rectangle is contained in the whole tree.
-        self.expand_to(rect.min());
-        self.expand_to(rect.max());
+        self.expand_to(&rect.min());
+        self.expand_to(&rect.max());
         let mut slice = self.slice.clone();
         let mut smaller_slice = self.slice.clone();
         self.shrink();
@@ -192,13 +183,12 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
             // These variables, together with new_branch_idx later on, form a
             // single sub-branch index for use with
             // NdTreeNode::get_sub_branch().
-            let mut sub_branch_idx_1 = 0;
-            let mut sub_branch_idx_2 = 0;
-            let mut offset_vec = slice.offset;
+            let mut min_sub_branch_idx = ByteVec::origin();
+            let mut offset_vec = slice.offset.clone();
             // Compute the "half" (negative, centered, or positive on each axis)
             // of this node to "zoom in" to.
             let slice_rect = slice.rect();
-            let pivot = (slice_rect.max() + 1 + slice_rect.min()) / 2;
+            let pivot = slice_rect.min() + &(slice.root.len() / 2);
             for &ax in D::axes() {
                 if rect.max()[ax] < pivot[ax] {
                     // If the target rect is entirely on the negative side, then
@@ -206,29 +196,23 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
                 } else if pivot[ax] <= rect.min()[ax] {
                     // If the target rect is entirely on the positive side, then
                     // let this axis of the sub-branch index be 2.
-                    sub_branch_idx_1 |= ax.branch_bit();
-                    sub_branch_idx_2 |= ax.branch_bit();
-                    offset_vec[ax] += slice.root.len() as isize / 2;
+                    min_sub_branch_idx[ax] = 2;
+                    offset_vec[ax] += slice.root.len() / 2;
                 } else {
                     // Otherwise, it must be in the middle, so let this axis of
                     // the sub-branch index be 1.
-                    sub_branch_idx_1 |= ax.branch_bit();
-                    offset_vec[ax] += slice.root.len() as isize / 4;
+                    min_sub_branch_idx[ax] = 1;
+                    offset_vec[ax] += slice.root.len() / 4;
                 }
             }
             // Now compose a new node from sub-branches selected using
             // sub_branch_idx_1 and sub_branch_idx_2.
-            let branch_count = NdTreeNode::<C, D>::BRANCHES;
-            let mut new_branches = Vec::with_capacity(branch_count);
-            for new_branch_idx in 0..branch_count {
-                new_branches.push(
-                    slice
-                        .root
-                        .get_sub_branch(sub_branch_idx_1, sub_branch_idx_2, new_branch_idx)
-                        .clone(),
-                );
-            }
-            let smaller_node = cache.get_node(new_branches);
+            let smaller_node = cache.get_node_from_fn(|_cache, new_branch_idx| {
+                slice
+                    .root
+                    .get_sub_branch(&min_sub_branch_idx + new_branch_idx)
+                    .clone()
+            });
             smaller_slice = NdTreeSlice {
                 root: smaller_node,
                 offset: offset_vec,
@@ -240,14 +224,15 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use proptest::prelude::*;
     use std::collections::HashMap;
 
+    use super::*;
+
     fn assert_ndtree_valid(
-        expected_cells: &HashMap<Vec2D, bool>,
+        expected_cells: &HashMap<IVec2D, bool>,
         ndtree: &mut NdTree2D<bool>,
-        cells_to_check: &Vec<Vec2D>,
+        cells_to_check: &Vec<IVec2D>,
     ) {
         assert_eq!(
             expected_cells
@@ -259,7 +244,7 @@ mod tests {
         for pos in cells_to_check {
             assert_eq!(
                 *expected_cells.get(pos).unwrap_or(&false),
-                ndtree.get_cell(*pos)
+                ndtree.get_cell(&pos.convert())
             );
         }
     }
@@ -273,14 +258,17 @@ mod tests {
         /// Tests set_cell() and get_cell() by comparing against a HashMap.
         #[test]
         fn test_ndtree_set_get(
-            cells_to_set: Vec<(Vec2D, bool)>,
-            mut cells_to_get: Vec<Vec2D>,
+            cells_to_set: Vec<(IVec2D, bool)>,
+            mut cells_to_get: Vec<IVec2D>,
         ) {
             let mut ndtree = NdTree::new();
             let mut hashmap = HashMap::new();
+            let do_it = cells_to_set.len() <= 3;
             for (pos, state) in cells_to_set {
-                hashmap.insert(pos, state);
-                ndtree.set_cell(pos, state);
+                hashmap.insert(pos.convert(), state);
+                ndtree.set_cell(&pos.convert(), state);
+                if do_it {
+                }
                 cells_to_get.push(pos);
             }
             assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
@@ -292,7 +280,7 @@ mod tests {
             }
             // Test that shrinking actually shrinks.
             ndtree.shrink();
-            assert!(ndtree.slice.rect().len(Axis::X) <= old_rect.len(Axis::X));
+            assert!(ndtree.slice.rect().len(X) <= old_rect.len(X));
             // Test that shrinking preserves population and positions.
             assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
         }
@@ -301,13 +289,13 @@ mod tests {
         #[ignore]
         #[test]
         fn test_ndtree_cache(
-            cells_to_set: Vec<(Vec2D, bool)>,
+            cells_to_set: Vec<(IVec2D, bool)>,
         ) {
             prop_assume!(!cells_to_set.is_empty());
             let mut ndtree = NdTree::new();
             for (pos, state) in cells_to_set {
-                ndtree.set_cell(pos - 128, state);
-                ndtree.set_cell(pos + 128, state);
+                ndtree.set_cell(&(pos - 128).convert(), state);
+                ndtree.set_cell(&(pos + 128).convert(), state);
             }
             let branches = &ndtree.slice.root.branches;
             let subnode1 = branches[0].node().unwrap();
@@ -320,8 +308,8 @@ mod tests {
         /// Tests NdTree::get_slice_containing().
         #[test]
         fn test_ndtree_get_slice_containing(
-            cells_to_set: Vec<(Vec2D, bool)>,
-            center: Vec2D,
+            cells_to_set: Vec<(IVec2D, bool)>,
+            center: IVec2D,
             x_radius in 0..20isize,
             y_radius in 0..20isize,
         ) {
@@ -329,21 +317,21 @@ mod tests {
             let mut hashmap = HashMap::new();
             for (pos, state) in cells_to_set {
                 hashmap.insert(pos, state);
-                ndtree.set_cell(pos, state);
+                ndtree.set_cell(&pos.convert(), state);
             }
-            let half_diag = NdVec::from([x_radius, y_radius]);
-            let rect = NdRect::span(center - half_diag, center + half_diag);
-            let slice = ndtree.get_slice_containing(rect);
+            let half_diag = NdVec([x_radius, y_radius]);
+            let rect = NdRect::span(center - half_diag, center + half_diag).convert();
+            let slice = ndtree.get_slice_containing(&rect);
             let slice_rect = slice.rect();
-            assert!(slice_rect.contains(rect));
+            assert!(slice_rect.contains(&rect));
             assert!(
                 slice.root.layer == 1
-                || slice.root.len() < rect.len(Axis::X) * 4
-                || slice.root.len() < rect.len(Axis::Y) * 4
+                || slice.root.len() < rect.len(X) * 4
+                || slice.root.len() < rect.len(Y) * 4
             );
             for (pos, state) in hashmap {
-                if slice_rect.contains(pos) {
-                    if let Some(cell_state) = slice.get_cell(pos) {
+                if slice_rect.contains(&pos.convert()) {
+                    if let Some(cell_state) = slice.get_cell(&pos.convert()) {
                         assert_eq!(state, cell_state);
                     }
                 }

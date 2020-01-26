@@ -1,42 +1,27 @@
+use noisy_float::prelude::R64;
+use num::BigInt;
+
 use super::*;
 
 /// A vector of a given dimensionality; mostly used as a type argument to convey
 /// the number of dimensions something has.
 ///
 /// This is basically exactly the same as ndarray's Dimension trait, except it
-/// uses isize instead of usize (which is crucial for this application). Similar
-/// to ndarray's Dimension trait, this trait should not and cannot be
-/// implemented outside of this crate.
-pub trait Dim: Debug + Clone + Copy + Default + Eq + Hash + private::Sealed {
+/// uses any number type instead of usize (which is crucial for this
+/// application). Similar to ndarray's Dimension trait, this trait should not
+/// and cannot be implemented outside of this crate.
+pub trait Dim: DimFor<BigInt> + DimFor<R64> + DimFor<isize> + DimFor<usize> + DimFor<u8> {
     /// The number of dimensions (number of axes).
     const NDIM: usize;
+
+    /// The number of branches for each node in an NdTree of this
+    /// dimensionality.
+    const TREE_BRANCHES: usize = 1 << Self::NDIM;
 
     /// Returns a Vector of the axes of this many dimensions.
     fn axes() -> &'static [Axis] {
         ndim_axes(Self::NDIM)
     }
-
-    /// Returns the coordinate along the given axis.
-    fn get(&self, axis: Axis) -> &isize;
-
-    /// Returns a mutable reference to the coordinate along the given axis.
-    fn get_mut(&mut self, axis: Axis) -> &mut isize;
-
-    /// Sets the coordinate along the given axis.
-    fn set(&mut self, axis: Axis, value: isize);
-
-    /// Returns whether these coordinates consists entirely of zeros.
-    fn is_zero(&self) -> bool {
-        for &ax in Self::axes() {
-            if self.get(ax) != &0 {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Returns the coordinates of the origin (i.e. all zeros).
-    fn origin() -> Self;
 
     /// Returns true if the given axis belongs to this dimensionality.
     fn contains(axis: Axis) -> bool {
@@ -44,108 +29,80 @@ pub trait Dim: Debug + Clone + Copy + Default + Eq + Hash + private::Sealed {
     }
 }
 
-/// A basic 1D vector type.
-pub type Dim1D = [isize; 1];
-/// A basic 2D vector type.
-pub type Dim2D = [isize; 2];
-/// A basic 3D vector type.
-pub type Dim3D = [isize; 3];
-/// A basic 4D vector type.
-pub type Dim4D = [isize; 4];
-/// A basic 5D vector type.
-pub type Dim5D = [isize; 5];
-/// A basic 6D vector type.
-pub type Dim6D = [isize; 6];
+/// A type representing 1D things.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Dim1D;
+/// A type representing 2D things.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Dim2D;
+/// A type representing 3D things.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Dim3D;
+/// A type representing 4D things.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Dim4D;
+/// A type representing 5D things.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Dim5D;
+/// A type representing 6D things.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Dim6D;
 
 impl Dim for Dim1D {
     const NDIM: usize = 1;
-    fn get(&self, axis: Axis) -> &isize {
-        &self[axis as usize]
-    }
-    fn get_mut(&mut self, axis: Axis) -> &mut isize {
-        &mut self[axis as usize]
-    }
-    fn set(&mut self, axis: Axis, value: isize) {
-        self[axis as usize] = value;
-    }
-    fn origin() -> Self {
-        [0; Self::NDIM]
-    }
 }
 impl Dim for Dim2D {
     const NDIM: usize = 2;
-    fn get(&self, axis: Axis) -> &isize {
-        &self[axis as usize]
-    }
-    fn get_mut(&mut self, axis: Axis) -> &mut isize {
-        &mut self[axis as usize]
-    }
-    fn set(&mut self, axis: Axis, value: isize) {
-        self[axis as usize] = value;
-    }
-    fn origin() -> Self {
-        [0; Self::NDIM]
-    }
 }
 impl Dim for Dim3D {
     const NDIM: usize = 3;
-    fn get(&self, axis: Axis) -> &isize {
-        &self[axis as usize]
-    }
-    fn get_mut(&mut self, axis: Axis) -> &mut isize {
-        &mut self[axis as usize]
-    }
-    fn set(&mut self, axis: Axis, value: isize) {
-        self[axis as usize] = value;
-    }
-    fn origin() -> Self {
-        [0; Self::NDIM]
-    }
 }
 impl Dim for Dim4D {
     const NDIM: usize = 4;
-    fn get(&self, axis: Axis) -> &isize {
-        &self[axis as usize]
-    }
-    fn get_mut(&mut self, axis: Axis) -> &mut isize {
-        &mut self[axis as usize]
-    }
-    fn set(&mut self, axis: Axis, value: isize) {
-        self[axis as usize] = value;
-    }
-    fn origin() -> Self {
-        [0; Self::NDIM]
-    }
 }
 impl Dim for Dim5D {
     const NDIM: usize = 5;
-    fn get(&self, axis: Axis) -> &isize {
-        &self[axis as usize]
-    }
-    fn get_mut(&mut self, axis: Axis) -> &mut isize {
-        &mut self[axis as usize]
-    }
-    fn set(&mut self, axis: Axis, value: isize) {
-        self[axis as usize] = value;
-    }
-    fn origin() -> Self {
-        [0; Self::NDIM]
-    }
 }
 impl Dim for Dim6D {
     const NDIM: usize = 6;
-    fn get(&self, axis: Axis) -> &isize {
-        &self[axis as usize]
-    }
-    fn get_mut(&mut self, axis: Axis) -> &mut isize {
-        &mut self[axis as usize]
-    }
-    fn set(&mut self, axis: Axis, value: isize) {
-        self[axis as usize] = value;
-    }
-    fn origin() -> Self {
-        [0; Self::NDIM]
-    }
+}
+
+/// A trait providing an array type to create a generic N-length array.
+///
+/// Once generic associated types come along, this can be merged into Dim to
+/// simplify things.
+pub trait DimFor<T: Default + Clone + Eq>:
+    Debug + Default + Copy + Eq + Hash + private::Sealed
+{
+    /// The pure Dim type associated with this DimFor (i.e. Self)
+    type Dim: Dim;
+    /// The array type used for vectors.
+    type Array: Debug + Default + Clone + Eq + Hash + AsRef<[T]> + AsMut<[T]>;
+}
+
+impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim1D {
+    type Dim = Dim1D;
+    type Array = [T; 1];
+}
+impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim2D {
+    type Dim = Dim2D;
+    type Array = [T; 2];
+}
+impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim3D {
+    type Dim = Dim3D;
+    type Array = [T; 3];
+}
+impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim4D {
+    type Dim = Dim4D;
+    type Array = [T; 4];
+}
+impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim5D {
+    type Dim = Dim5D;
+    type Array = [T; 5];
+}
+impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim6D {
+    type Dim = Dim6D;
+    type Array = [T; 6];
 }
 
 // Make Dim a "sealed trait" https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed

@@ -1,10 +1,11 @@
 use glium::glutin::*;
 use log::warn;
+use noisy_float::prelude::r64;
 use std::collections::HashSet;
 use std::ops::Index;
 
 use super::gridview;
-use crate::automaton::{NdSimulate, Vec2D};
+use crate::automaton::{NdSimulate, NdVec};
 
 const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;
@@ -126,14 +127,14 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                 WindowEvent::MouseWheel { delta, .. } if !state.input_state.ignore_mouse => {
                     // Pan 100x.
                     let (dx, dy) = match delta {
-                        MouseScrollDelta::LineDelta(x, y) => (*x, *y),
-                        MouseScrollDelta::PixelDelta(dpi::LogicalPosition { x, y }) => {
-                            (*x as f32, *y as f32)
-                        }
+                        MouseScrollDelta::LineDelta(x, y) => (*x as f64, *y as f64),
+                        MouseScrollDelta::PixelDelta(dpi::LogicalPosition { x, y }) => (*x, *y),
                     };
                     match &mut state.grid_view {
                         gridview::GridView::View2D(view2d) => {
-                            view2d.viewport.pan_pixels(dx * 100.0, dy * 100.0);
+                            view2d
+                                .viewport
+                                .pan_pixels(NdVec([r64(dx * 100.0), r64(dy * 100.0)]));
                         }
                         _ => (),
                     }
@@ -265,28 +266,23 @@ pub fn do_frame(state: &mut super::State) {
                     pan_y -= move_speed;
                 }
                 if pan_x != 0.0 || pan_y != 0.0 {
-                    view2d.viewport.pan_pixels(pan_x, pan_y);
+                    view2d.viewport.pan_pixels(NdVec([r64(pan_x), r64(pan_y)]));
                     input_state.moving = true;
                 }
                 // 'Q' or page up => zoom in.
                 if input_state[SC_Q] || input_state[VirtualKeyCode::PageUp] {
-                    view2d.viewport.zoom_by(2.0f32.powf(zoom_speed));
+                    view2d.viewport.zoom_by(2.0f64.powf(zoom_speed));
                     input_state.zooming = true;
                 }
                 // 'Z' or page down => zoom out.
                 if input_state[SC_Z] || input_state[VirtualKeyCode::PageDown] {
-                    view2d.viewport.zoom_by(2.0f32.powf(-zoom_speed));
+                    view2d.viewport.zoom_by(2.0f64.powf(-zoom_speed));
                     input_state.zooming = true;
                 }
             }
             if !input_state.moving {
                 // Snap to nearest position and zoom level.
-                view2d.viewport.pos += Vec2D::from([
-                    view2d.viewport.x_offset.round() as isize,
-                    view2d.viewport.y_offset.round() as isize,
-                ]);
-                view2d.viewport.x_offset = 0.0;
-                view2d.viewport.y_offset = 0.0;
+                view2d.viewport.snap_pos();
             }
             if !input_state.zooming {
                 view2d.viewport.zoom = view2d.viewport.zoom.round();

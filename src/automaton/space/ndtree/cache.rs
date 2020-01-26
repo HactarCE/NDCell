@@ -50,7 +50,7 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
             ret.clone()
         } else {
             // Cache miss
-            let branches = vec![self.get_empty_branch(layer - 1); NdTreeNode::<C, D>::BRANCHES];
+            let branches = vec![self.get_empty_branch(layer - 1); D::TREE_BRANCHES];
             let ret = self.get_node(branches);
             // All lower entries in the cache have been filled by the recursive
             // call.
@@ -65,5 +65,39 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
             0 => NdTreeBranch::Leaf(C::default()),
             _ => NdTreeBranch::Node(self.get_empty_node(layer)),
         }
+    }
+    /// Returns a cached node, using a function to generate each branch.
+    pub fn get_node_from_fn<F: FnMut(&mut Self, ByteVec<D>) -> NdTreeBranch<C, D>>(
+        &mut self,
+        mut generator: F,
+    ) -> NdCachedNode<C, D> {
+        let branches = (0..D::TREE_BRANCHES)
+            .map(ByteVec::from_array_idx)
+            .map(|branch_idx| generator(self, branch_idx))
+            .collect();
+        self.get_node(branches)
+    }
+    /// Returns a cached node, using a function of the cell position to generate
+    /// each cell state. This can only be used for relatively small nodes, since
+    /// an IVec is used for the position vector.
+    pub fn get_small_node_from_cell_fn<F: Fn(IVec<D>) -> C>(
+        &mut self,
+        layer: usize,
+        offset: IVec<D>,
+        generator: &F,
+    ) -> NdCachedNode<C, D> {
+        self.get_node_from_fn(|cache, branch_idx| {
+            let branch_offset: IVec<D> = branch_idx.branch_offset(layer);
+            let total_offset = &offset + branch_offset;
+            if layer == 1 {
+                NdTreeBranch::Leaf(generator(total_offset))
+            } else {
+                NdTreeBranch::Node(cache.get_small_node_from_cell_fn(
+                    layer - 1,
+                    total_offset,
+                    generator,
+                ))
+            }
+        })
     }
 }

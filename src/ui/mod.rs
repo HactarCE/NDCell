@@ -34,7 +34,7 @@ pub struct State {
     pub history: HistoryStack,
     pub input_state: input::InputState,
     pub gui: gui::GuiWindows,
-    pub dpi: f32,
+    pub dpi: f64,
 }
 
 const GOSPER_GLIDER_GUN_SYNTH_RLE: &str = "
@@ -94,7 +94,7 @@ pub fn show_gui() {
         history: Default::default(),
         input_state: Default::default(),
         gui: Default::default(),
-        dpi: hidpi_factor as f32,
+        dpi: hidpi_factor,
     };
 
     // Main loop

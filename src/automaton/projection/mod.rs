@@ -56,9 +56,9 @@ pub enum ProjectionParams {
     /// A SimpleProjection.
     Simple,
     /// A SliceProjection2D.
-    Slice2D(NdVecEnum, (Axis, Axis)),
+    Slice2D(BigVecEnum, (Axis, Axis)),
     /// A SliceProjection3D.
-    Slice3D(NdVecEnum, (Axis, Axis, Axis)),
+    Slice3D(BigVecEnum, (Axis, Axis, Axis)),
 }
 impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for ProjectionParams {
     type Error = NdProjectionError;
@@ -79,7 +79,7 @@ impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for
             }
             ProjectionParams::Slice2D(slice_pos, (h, v)) => {
                 // Check D.
-                let slice_pos: NdVec<D> = slice_pos
+                let slice_pos: BigVec<D> = slice_pos
                     .try_into()
                     .map_err(|_| NdProjectionError::WrongNdTreeDim)?;
                 // Check P.
@@ -105,19 +105,19 @@ pub enum NdProjectionError {
     WrongProjectedDim,
 }
 
-/// An NdVec of an unknown dimensionality, for use in ProjectionParams.
+/// A BigVec of an unknown dimensionality, for use in ProjectionParams.
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
-pub enum NdVecEnum {
-    Vec1D(Vec1D),
-    Vec2D(Vec2D),
-    Vec3D(Vec3D),
-    Vec4D(Vec4D),
-    Vec5D(Vec5D),
-    Vec6D(Vec6D),
+pub enum BigVecEnum {
+    Vec1D(BigVec1D),
+    Vec2D(BigVec2D),
+    Vec3D(BigVec3D),
+    Vec4D(BigVec4D),
+    Vec5D(BigVec5D),
+    Vec6D(BigVec6D),
 }
-impl NdVecEnum {
-    /// Returns the number of dimensions of the NdVec.
+impl BigVecEnum {
+    /// Returns the number of dimensions of the BigVec.
     fn get_ndim(&self) -> usize {
         match self {
             Self::Vec1D(_) => 1,
@@ -139,20 +139,22 @@ impl NdVecEnum {
 /// "runtime" checking is almost certianly compile-time-optimized away.
 ///
 /// If the dimensionalities do not match, panics.
-fn transmute_ndvec<D1: Dim, D2: Dim>(ndvec: NdVec<D1>) -> NdVec<D2> {
+fn transmute_ndvec<D1: Dim + DimFor<N>, D2: Dim + DimFor<N>, N: NdVecNum>(
+    ndvec: NdVec<D1, N>,
+) -> NdVec<D2, N> {
     if D1::NDIM == D2::NDIM {
-        unsafe { *std::mem::transmute::<Box<NdVec<D1>>, Box<NdVec<D2>>>(Box::new(ndvec)) }
+        unsafe { *std::mem::transmute::<Box<NdVec<D1, N>>, Box<NdVec<D2, N>>>(Box::new(ndvec)) }
     } else {
         panic!(
-            "Cannot convert NdVec<Dim{}D> into NdVec<Dim{}D>",
+            "Cannot convert NdVec<_, Dim{}D> into NdVec<_, Dim{}D>",
             D1::NDIM,
             D2::NDIM
         )
     }
 }
 
-impl<'a, D: Dim> From<NdVec<D>> for NdVecEnum {
-    fn from(inner: NdVec<D>) -> Self {
+impl<'a, D: Dim> From<BigVec<D>> for BigVecEnum {
+    fn from(inner: BigVec<D>) -> Self {
         match D::NDIM {
             1 => Self::Vec1D(transmute_ndvec(inner)),
             2 => Self::Vec2D(transmute_ndvec(inner)),
@@ -164,9 +166,9 @@ impl<'a, D: Dim> From<NdVec<D>> for NdVecEnum {
         }
     }
 }
-impl<'a, D: Dim> TryInto<NdVec<D>> for NdVecEnum {
+impl<'a, D: Dim> TryInto<BigVec<D>> for BigVecEnum {
     type Error = ();
-    fn try_into(self) -> Result<NdVec<D>, ()> {
+    fn try_into(self) -> Result<BigVec<D>, ()> {
         if self.get_ndim() == D::NDIM {
             Ok(match self {
                 Self::Vec1D(inner) => transmute_ndvec(inner),

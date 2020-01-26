@@ -7,6 +7,7 @@
 
 #![allow(missing_docs)]
 
+use num::BigInt;
 use pest::Parser;
 
 use super::*;
@@ -27,7 +28,7 @@ struct RleHeader {
 /// Information contained in the CXRLE header of a Golly Extended RLE pattern.
 struct CxrleHeader {
     /// Position of top-left of pattern (i.e. most negative coordinates).
-    pub pos: Vec2D,
+    pub pos: BigVec2D,
     /// Number of generations simulated.
     pub gen: isize,
 }
@@ -108,27 +109,28 @@ impl RleEncode for NdAutomaton<Dim2D> {
         let _header = header.ok_or("Missing RLE header")?;
 
         let mut ret = NdAutomaton::default();
-        let mut pos = Vec2D::origin();
-        let x_start: isize;
+        let mut pos = BigVec2D::origin();
+        let x_start: BigInt;
 
         if let Some(cxrle) = cxrle {
             ret.generations = cxrle.gen;
             pos = cxrle.pos;
-            x_start = *pos.x();
+            x_start = pos[X].clone();
         } else {
-            x_start = 0;
+            x_start = 0.into();
         }
+        // Y coordinates increase upwards in NDCell, but downwards in RLE, so
+        // reflect over the Y axis.
+        pos[Y] *= -1;
+        pos[Y] -= 1;
 
         for row in cell_array {
             for cell in row {
-                // Y coordinates increase upwards in NDCell, but downwards in
-                // RLE, so reflect over the Y axis.
-                ret.tree
-                    .set_cell(pos * NdVec::from([1, -1]) - NdVec::from([0, 1]), cell);
-                pos[Axis::X] += 1;
+                ret.tree.set_cell(&pos, cell);
+                pos[X] += 1;
             }
-            pos[Axis::X] = x_start;
-            pos[Axis::Y] += 1;
+            pos[X] = x_start.clone();
+            pos[Y] -= 1;
         }
 
         Ok(ret)
@@ -154,7 +156,7 @@ fn parse_header(pair: TokenPair) -> Result<RleHeader, String> {
 }
 
 fn parse_cxrle(pair: TokenPair) -> Result<CxrleHeader, String> {
-    let mut pos: Vec2D = Vec2D::origin();
+    let mut pos: BigVec2D = BigVec2D::origin();
     let mut gen: isize = 0;
     for kv_pair in pair.into_inner() {
         let mut inners = kv_pair.into_inner();
@@ -163,18 +165,18 @@ fn parse_cxrle(pair: TokenPair) -> Result<CxrleHeader, String> {
         match k {
             "Pos" => {
                 let mut split_iter = v.split(',');
-                let x: isize = split_iter
+                let x: BigInt = split_iter
                     .next()
                     .and_then(|s| s.parse().ok())
                     .ok_or("Invalid CXRLE Pos")?;
-                let y: isize = split_iter
+                let y: BigInt = split_iter
                     .next()
                     .and_then(|s| s.parse().ok())
                     .ok_or("Invalid CXRLE Pos")?;
                 if let Some(_) = split_iter.next() {
                     Err("Invalid CXRLE Pos")?
                 }
-                pos = Vec2D::from([x, y]);
+                pos = NdVec([x, y]);
             }
             "Gen" => gen = v.parse().ok().ok_or("Invalid CXRLE Gen")?,
             _ => Err("Unknown CXRLE string")?,
@@ -360,10 +362,10 @@ o$3o!
         )
         .unwrap();
         assert_eq!(5, result.tree.get_root().population);
-        assert_eq!(1, result.tree.get_cell([11, 14].into()));
-        assert_eq!(1, result.tree.get_cell([12, 13].into()));
-        assert_eq!(1, result.tree.get_cell([10, 12].into()));
-        assert_eq!(1, result.tree.get_cell([11, 12].into()));
-        assert_eq!(1, result.tree.get_cell([12, 12].into()));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([11, 14])));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([12, 13])));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([10, 12])));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([11, 12])));
+        assert_eq!(1, result.tree.get_cell(&NdVec::big([12, 12])));
     }
 }

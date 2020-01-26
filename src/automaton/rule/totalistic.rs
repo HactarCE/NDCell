@@ -32,17 +32,17 @@ impl Rule<u8, Dim2D> for MooreTotalistic2D {
     fn radius(&self) -> usize {
         1
     }
-    fn transition(&self, napkin: &NdTreeSlice2D<u8>) -> u8 {
+    fn transition(&self, napkin: &ArraySlice2D<u8>) -> u8 {
         // Count live neighbors.
-        let nbhood = Rect2D::moore(self.radius());
+        let nbhood = Rect2D::moore(self.radius() as isize);
         let mut live_neighbors = 0;
         for cell_coords in nbhood.iter() {
-            if napkin[cell_coords] != 0 {
+            if napkin[&cell_coords] != 0 {
                 live_neighbors += 1;
             }
         }
         // Index LUT to get next cell state.
-        if napkin[NdVec::origin()] != 0 {
+        if napkin[&NdVec::origin()] != 0 {
             live_neighbors -= 1;
             self.survival[live_neighbors]
         } else {

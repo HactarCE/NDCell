@@ -22,8 +22,9 @@ pub fn round_to(n: f32, m: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]

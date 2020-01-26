@@ -1,9 +1,10 @@
+use num::{BigInt, One, ToPrimitive, Zero};
 use seahash::SeaHasher;
 use std::borrow::Borrow;
+use std::convert::From;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::ops::Deref;
-use std::ops::Index;
+use std::ops::{Deref, Index};
 
 use crate::automaton::*;
 
@@ -63,7 +64,7 @@ impl<C: CellType, D: Dim> PartialEq for NdBaseTreeNode<C, D> {
 
 /// A single node in the NdTree, which contains information about its layer
 /// (base-2 logarithm of hypercube side length) and its children.
-#[derive(Clone)]
+#[derive(Clone, Eq)]
 pub struct NdTreeNode<C: CellType, D: Dim> {
     /// The member containing the branches and hash code.
     pub base: NdBaseTreeNode<C, D>,
@@ -72,7 +73,7 @@ pub struct NdTreeNode<C: CellType, D: Dim> {
     pub layer: usize,
 
     /// The population of this node.
-    pub population: usize,
+    pub population: BigInt,
 }
 
 // Implement Borrow so that NdBaseTreeNode can be used for HashSet lookups.
@@ -97,11 +98,11 @@ impl<C: CellType, D: Dim> From<NdBaseTreeNode<C, D>> for NdTreeNode<C, D> {
         // that all branches are at the same layer.
         // Check that there are the correct number of branches.
         assert_eq!(
-            Self::BRANCHES,
+            D::TREE_BRANCHES,
             branches.len(),
             "Node with {} dimensions must have {} branches; got {} instead",
             D::NDIM,
-            Self::BRANCHES,
+            D::TREE_BRANCHES,
             branches.len()
         );
         // Check that all branches are at the same layer.
@@ -116,7 +117,21 @@ impl<C: CellType, D: Dim> From<NdBaseTreeNode<C, D>> for NdTreeNode<C, D> {
         let layer = branch_layer + 1;
         // Compute the population based on the population of each of the node's
         // branches.
-        let population = branches.iter().map(|branch| branch.population()).sum();
+        let big_zero = BigInt::zero();
+        let big_one = BigInt::one();
+        let population = branches
+            .iter()
+            .map(|branch| match branch {
+                NdTreeBranch::Leaf(cell_state) => {
+                    if *cell_state == C::default() {
+                        &big_zero
+                    } else {
+                        &big_one
+                    }
+                }
+                NdTreeBranch::Node(node) => &node.population,
+            })
+            .sum();
         Self {
             base,
             layer,
@@ -131,7 +146,6 @@ impl<C: CellType, D: Dim> fmt::Debug for NdTreeNode<C, D> {
     }
 }
 
-impl<C: CellType, D: Dim> Eq for NdTreeNode<C, D> {}
 impl<C: CellType, D: Dim> PartialEq for NdTreeNode<C, D> {
     fn eq(&self, rhs: &Self) -> bool {
         // Delegate to NdBaseTreeNode.
@@ -145,58 +159,68 @@ impl<C: CellType, D: Dim> Hash for NdTreeNode<C, D> {
     }
 }
 
-impl<C: CellType, D: Dim> Index<NdVec<D>> for NdTreeNode<C, D> {
+// Implement indexing a cell of an NdTreeNode.
+impl<C: CellType, D: Dim> Index<&BigVec<D>> for NdTreeNode<C, D> {
     type Output = C;
-    fn index(&self, pos: NdVec<D>) -> &C {
-        match &self.branches[self.branch_idx(pos)] {
-            NdTreeBranch::Leaf(cell_state) => cell_state,
-            NdTreeBranch::Node(node) => &node[pos],
-        }
+    fn index(&self, pos: &BigVec<D>) -> &C {
+        self.get_cell_ref(pos)
+    }
+}
+impl<C: CellType, D: Dim> Index<IVec<D>> for NdTreeNode<C, D> {
+    type Output = C;
+    fn index(&self, pos: IVec<D>) -> &C {
+        self.get_cell_ref(&pos)
+    }
+}
+impl<C: CellType, D: Dim> Index<UVec<D>> for NdTreeNode<C, D> {
+    type Output = C;
+    fn index(&self, pos: UVec<D>) -> &C {
+        self.get_cell_ref(&pos)
+    }
+}
+
+// Implement indexing a branch of an NdTreeNode.
+impl<C: CellType, D: Dim> Index<ByteVec<D>> for NdTreeNode<C, D> {
+    type Output = NdTreeBranch<C, D>;
+    fn index(&self, branch_idx: ByteVec<D>) -> &NdTreeBranch<C, D> {
+        &self.branches[branch_idx.to_array_idx()]
     }
 }
 
 impl<C: CellType, D: Dim> NdTreeNode<C, D> {
-    /// The number of branches for this many dimensions (2 ** d).
-    pub const BRANCHES: usize = 1 << D::NDIM;
-    /// The bitmask for branch indices.
-    pub const BRANCH_IDX_BITMASK: usize = Self::BRANCHES - 1;
-
     /// Returns false if this node contains at least one non-default cell, or
     /// true if it contains only default cells.
     pub fn is_empty(&self) -> bool {
-        self.population == 0
+        self.population.is_zero()
     }
 
     /// Returns the side length of the rectangle encompassing this node.
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> BigInt {
         Self::len_at_layer(self.layer)
     }
     /// Returns the side length of the rectangle encompassing a node at the
     /// given layer.
-    pub fn len_at_layer(layer: usize) -> usize {
+    pub fn len_at_layer(layer: usize) -> BigInt {
         // layer = 1 => len = 2
         // layer = 2 => len = 4
         // layer = 3 => len = 8
         // etc.
-        1 << layer
+        BigInt::one() << layer
     }
     /// Returns a hyperrectangle the size of this node with the origin as the
     /// lower bound.
-    pub fn rect(&self) -> NdRect<D> {
+    pub fn rect(&self) -> BigRect<D> {
         Self::rect_at_layer(self.layer)
     }
     /// Returns a hyperrectangle the size of a node at the given layer with the
     /// origin as the lower bound.
-    pub fn rect_at_layer(layer: usize) -> NdRect<D> {
-        NdRect::span(
-            NdVec::origin(),
-            NdVec::origin() + (Self::len_at_layer(layer) as isize - 1),
-        )
+    pub fn rect_at_layer(layer: usize) -> BigRect<D> {
+        NdRect::new(NdVec::origin(), NdVec::repeat(Self::len_at_layer(layer)))
     }
 
     /// Returns the bounding rectangle of this node's inner node.
-    pub fn inner_rect(&self) -> NdRect<D> {
-        self.rect() + self.len() as isize / 4
+    pub fn inner_rect(&self) -> BigRect<D> {
+        self.rect() + &(self.len() / 4)
     }
     /// Returns the inner node of this one.
     ///
@@ -210,80 +234,60 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
             .iter()
             .enumerate()
             .map(|(branch_idx, branch)| {
-                branch.node().unwrap().branches[branch_idx ^ Self::BRANCH_IDX_BITMASK].clone()
+                branch.node().unwrap()[ByteVec::from_array_idx(branch_idx).opposite()].clone()
             })
             .collect();
         cache.get_node(new_branches)
     }
 
-    /// Computes the "branch index" corresponding to the child of this node
-    /// containing the given position.
-    ///
-    /// See ndtree_branch_idx() for more info.
-    pub fn branch_idx(&self, pos: NdVec<D>) -> usize {
-        ndtree_branch_idx(self.layer, pos)
-    }
-    /// Computes the "branch index" corresponding to the child of a node with
-    /// the same number of dimensions as this one but at the given layer
-    /// containing the given position.
-    ///
-    /// See ndtree_branch_idx() for more info.
-    pub fn branch_idx_at_layer(layer: usize, pos: NdVec<D>) -> usize {
-        ndtree_branch_idx(layer, pos)
+    /// Returns the NdTreeBranchIndex of the branch of this node containing the
+    /// given position.
+    pub fn branch_idx<I: NdTreeIndex<D>>(&self, pos: &I) -> ByteVec<D> {
+        pos.branch_idx(self.layer)
     }
 
     /// Computes the vector offset for the given branch of this node.
-    pub fn branch_offset(&self, branch_idx: usize) -> NdVec<D> {
-        ndtree_branch_offset(self.layer, branch_idx)
-    }
-    /// Computes the vector offset for the given branch of a node with the same
-    /// number of dimesnions as this one but at the given layer.
-    pub fn branch_offset_at_layer(layer: usize, branch_idx: usize) -> NdVec<D> {
-        ndtree_branch_offset(layer, branch_idx)
+    pub fn branch_offset<I: NdTreeBranchIndex<D>>(&self, branch_idx: I) -> BigVec<D> {
+        branch_idx.branch_offset(self.layer)
     }
 
-    /// Adds three branch indices together to get a sub-branch index and returns
-    /// the specified sub-branch which is two layers below the given node.
-    pub fn get_sub_branch(
-        &self,
-        branch_idx_1: usize,
-        branch_idx_2: usize,
-        branch_idx_3: usize,
-    ) -> &NdTreeBranch<C, D> {
-        // This is kind of like bitwise full addition; we want the "sum" in
-        // inner_branch_idx and the "carry" in outer_branch_idx. The carry is
-        // simply an XOR.
-        let inner_branch_idx = branch_idx_1 ^ branch_idx_2 ^ branch_idx_3;
-        // The sum is 1 if at least two inputs are 1.
-        let outer_branch_idx = (branch_idx_1 & branch_idx_2)
-            | (branch_idx_1 & branch_idx_3)
-            | (branch_idx_2 & branch_idx_3);
+    /// Returns the specified sub-branch which is two layers below the given
+    /// node, given a ByteVec with values in the range 0..=3.
+    pub fn get_sub_branch(&self, sub_branch_idx: ByteVec<D>) -> &NdTreeBranch<C, D> {
+        // Get the more significant bit.
+        let outer_branch_idx = sub_branch_idx.clone() >> 1;
+        // Get the less significant bit.
+        let inner_branch_idx = sub_branch_idx & 1;
         // Now use those to index into the node.
-        &self.branches[outer_branch_idx]
+        &self[outer_branch_idx]
             .node()
-            .expect("Cannot get sub-branch of node at layer 1")
-            .branches[inner_branch_idx]
+            .expect("Cannot get sub-branch of node at layer 1")[inner_branch_idx]
     }
 
-    /// Returns the cell value at the given position, modulo the node size.
-    pub fn get_cell(&self, pos: NdVec<D>) -> C {
-        match &self.branches[self.branch_idx(pos)] {
-            NdTreeBranch::Leaf(cell_state) => *cell_state,
-            NdTreeBranch::Node(node) => node.get_cell(pos),
+    /// Returns a reference to the cell value at the given position, modulo the
+    /// node size. This is the same as indexing the node using the vector.
+    pub fn get_cell_ref<I: NdTreeIndex<D>>(&self, pos: &I) -> &C {
+        match &self[self.branch_idx(pos)] {
+            NdTreeBranch::Leaf(cell_state) => cell_state,
+            NdTreeBranch::Node(node) => node.get_cell_ref(pos),
         }
+    }
+    /// Returns the cell value at the given position, modulo the node size.
+    pub fn get_cell<I: NdTreeIndex<D>>(&self, pos: &I) -> C {
+        self.get_cell_ref(pos).clone()
     }
     /// Returns a node with the cell at the given position, modulo the node
     /// size, having the given cell state.
     #[must_use]
-    pub fn set_cell(
+    pub fn set_cell<I: NdTreeIndex<D>>(
         &self,
         cache: &mut NdTreeCache<C, D>,
-        pos: NdVec<D>,
+        pos: &I,
         cell_state: C,
     ) -> NdCachedNode<C, D> {
         let mut new_branches = self.branches.clone();
         // Get the branch containing the given cell.
-        let branch = &mut new_branches[self.branch_idx(pos)];
+        let branch = &mut new_branches[self.branch_idx(pos).to_array_idx()];
         match branch {
             // The branch is a single cell, so set that cell.
             NdTreeBranch::Leaf(old_cell_state) => *old_cell_state = cell_state,
@@ -291,6 +295,13 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
             NdTreeBranch::Node(node) => *node = node.set_cell(cache, pos, cell_state),
         }
         cache.get_node(new_branches)
+    }
+    /// Returns an iterator over the branches of this node.
+    pub fn branch_iter(&self) -> impl Iterator<Item = (ByteVec<D>, &NdTreeBranch<C, D>)> {
+        self.branches
+            .iter()
+            .enumerate()
+            .map(|(array_idx, branch)| (ByteVec::from_array_idx(array_idx), branch))
     }
 }
 
@@ -314,67 +325,114 @@ impl<C: CellType, D: Dim> NdTreeBranch<C, D> {
     }
 
     /// Returns the inner node if this is a node, or None if it is a leaf.
-    pub fn node(&self) -> Option<&NdTreeNode<C, D>> {
+    pub fn node(&self) -> Option<&NdCachedNode<C, D>> {
         match self {
             NdTreeBranch::Leaf(_) => None,
             NdTreeBranch::Node(node) => Some(node),
         }
     }
 
-    /// Returns the number of non-default cells in this branch, which is the
-    /// same as its contained node (if it is a node) or 0 if it is a leaf with
-    /// the default cell state or 1 if it is a leaf with a non-default cell
-    /// state.
-    pub fn population(&self) -> usize {
-        match self {
-            NdTreeBranch::Leaf(cell_state) => {
-                if *cell_state == C::default() {
-                    0
-                } else {
-                    1
-                }
-            }
-            NdTreeBranch::Node(node) => node.population,
-        }
-    }
     /// Returns false if this branch contains at least one non-default cell, or
     /// true if it contains only default cells.
     pub fn is_empty(&self) -> bool {
-        self.population() == 0
+        match self {
+            NdTreeBranch::Leaf(cell_state) => *cell_state != C::default(),
+            NdTreeBranch::Node(node) => node.is_empty(),
+        }
     }
 }
 
-/// Returns the "branch index" corresponding to the child of a node the given
-/// layer containing the given position.
-///
-/// The nth node layer corresponds to the (n - 1)th bit of each axis, which can
-/// either be 0 or 1. The "branch index" is a number in 0..(2 ** d) composed
-/// from these bits; each bit in the branch index is taken from a different
-/// axis. It's like a bitwise NdVec that selects one half/quadrant/etc. from the
-/// node's rectangle.
-pub fn ndtree_branch_offset<D: Dim>(layer: usize, branch_idx: usize) -> NdVec<D> {
-    let mut ret = NdVec::origin();
-    let halfway = 1 << (layer - 1);
-    for &ax in D::axes() {
-        // If the current bit of the branch index is 1, add half of the
-        // length of this node to the corresponding axis in the result.
-        let axis_bit = if branch_idx & ax.branch_bit() == 0 {
-            0
-        } else {
-            1
-        };
-        ret[ax] += halfway * axis_bit;
+/// A trait for NdVecs that can be used to select a cell from an NdTree.
+pub trait NdTreeIndex<D: Dim> {
+    /// Returns the "branch index" corresponding to the child of a node at the
+    /// given layer that contains the position defined by this vector. Each axis
+    /// of a branch index is either 0 or 1.
+    fn branch_idx(&self, layer: usize) -> ByteVec<D>;
+}
+impl<D: Dim> NdTreeIndex<D> for BigVec<D> {
+    fn branch_idx(&self, layer: usize) -> ByteVec<D> {
+        ByteVec::from_fn(|ax| (&self[ax] >> (layer - 1)).to_u8().unwrap() & 1)
     }
-    ret
+}
+impl<D: Dim> NdTreeIndex<D> for IVec<D> {
+    fn branch_idx(&self, layer: usize) -> ByteVec<D> {
+        ByteVec::from_fn(|ax| (self[ax] >> (layer - 1)) as u8 & 1)
+    }
+}
+impl<D: Dim> NdTreeIndex<D> for UVec<D> {
+    fn branch_idx(&self, layer: usize) -> ByteVec<D> {
+        ByteVec::from_fn(|ax| (self[ax] >> (layer - 1)) as u8 & 1)
+    }
 }
 
-/// Computes the vector offset for the given branch of a node at the given
-/// layer.
-pub fn ndtree_branch_idx<D: Dim>(layer: usize, pos: NdVec<D>) -> usize {
-    let mut ret = 0;
-    for &ax in D::axes() {
-        let bit = (pos[ax] as usize >> (layer - 1)) & 1;
-        ret |= bit * ax.branch_bit();
+/// A trait for NdVecs that can be used to select a branch of an NdTreeNode.
+/// This is only implemented by ByteVec<D>.
+pub trait NdTreeBranchIndex<D: Dim>: NdRectVec {
+    /// Returns the vector offset for this branch of a node at the given layer.
+    fn branch_offset<N: NdVecNum>(self, layer: usize) -> NdVec<D, N>
+    where
+        N: From<u8> + std::ops::ShlAssign<usize>,
+        D: DimFor<N>;
+    /// Returns the "flat" index of the corresponding branch in an array;
+    fn to_array_idx(self) -> usize;
+    /// Returns the NdTreeBranchIndex given an array index.
+    fn from_array_idx(array_idx: usize) -> Self;
+    /// Flips the given axis of the branch index. (0 becomes 1, 1 becomes 0.)
+    #[must_use]
+    fn negate(self, ax: Axis) -> Self;
+
+    /// Flips all axis of the branch index. (0 becomes 1, 1 becomes 0.)
+    #[must_use]
+    fn opposite(self) -> Self;
+}
+impl<D: Dim> NdTreeBranchIndex<D> for ByteVec<D> {
+    fn branch_offset<N: NdVecNum>(self, layer: usize) -> NdVec<D, N>
+    where
+        N: From<u8> + std::ops::ShlAssign<usize>,
+        D: DimFor<N>,
+    {
+        self.convert() << (layer - 1)
     }
-    ret
+    fn to_array_idx(self) -> usize {
+        let mut ret = 0;
+        for &ax in D::axes() {
+            ret |= (self[ax] as usize & 1) << ax as usize;
+        }
+        ret
+    }
+    fn from_array_idx(array_idx: usize) -> Self {
+        Self::from_fn(|ax| (array_idx >> ax as usize) as u8 & 1)
+    }
+    fn negate(self, ax: Axis) -> Self {
+        let mut ret = self;
+        ret[ax] = 1 - ret[ax];
+        ret
+    }
+    fn opposite(self) -> Self {
+        Self::from_fn(|ax| 1 - self[ax])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tests NdTreeBranchIndex::to_array_idx() and ::from_array_idx().
+    #[test]
+    fn test_branch_idx() {
+        let arr: [ByteVec3D; 8] = [
+            NdVec([0, 0, 0]),
+            NdVec([1, 0, 0]),
+            NdVec([0, 1, 0]),
+            NdVec([1, 1, 0]),
+            NdVec([0, 0, 1]),
+            NdVec([1, 0, 1]),
+            NdVec([0, 1, 1]),
+            NdVec([1, 1, 1]),
+        ];
+        for (idx, vec) in arr.iter().enumerate() {
+            assert_eq!(*vec, ByteVec::from_array_idx(idx));
+            assert_eq!(idx, vec.to_array_idx());
+        }
+    }
 }

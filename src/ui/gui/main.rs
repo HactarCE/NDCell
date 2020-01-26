@@ -1,6 +1,6 @@
 use imgui::*;
 
-use crate::automaton::{Axis, NdSimulate};
+use crate::automaton::{AsFVec, Dim, Dim2D, NdSimulate};
 use crate::ui::gridview::{GridView, GridView2D, Viewport2D};
 use crate::ui::State;
 
@@ -20,26 +20,17 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
         match &state.grid_view {
             GridView::View2D(GridView2D {
                 automaton: _,
-                viewport:
-                    Viewport2D {
-                        pos,
-                        x_offset,
-                        y_offset,
-                        zoom,
-                    },
+                viewport: Viewport2D { pos, offset, zoom },
                 ..
             }) => {
-                let x = pos[Axis::X] as f32 + x_offset;
-                let y = pos[Axis::Y] as f32 + y_offset;
-                if format!("{:.1}", x).ends_with("0") {
-                    ui.text(format!("X = {:.0}", x))
-                } else {
-                    ui.text(format!("X = {:.1}", x));
-                }
-                if format!("{:.1}", y).ends_with("0") {
-                    ui.text(format!("Y = {:.0}", y))
-                } else {
-                    ui.text(format!("Y = {:.1}", y));
+                let total_pos = pos.as_fvec() + offset.clone();
+                for &ax in Dim2D::axes() {
+                    let value = total_pos[ax];
+                    if format!("{:.1}", value).ends_with("0") {
+                        ui.text(format!("{} = {:.0}", ax.name(), value));
+                    } else {
+                        ui.text(format!("{} = {:.1}", ax.name(), value));
+                    }
                 }
                 ui.text(format!("Zoom = {}", zoom));
             }

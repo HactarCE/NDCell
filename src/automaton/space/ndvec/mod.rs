@@ -1,167 +1,263 @@
+//! N-dimensional vectors.
+//!
+//! Until generic associated types work (see rust-lang#44265), this module and
+//! ndrect are kind of a mess. We have to use a hacky DimFor trait to get
+//! generic vectors to work, and generic-dimensioned vectors can't implement
+//! Copy.
+//!
+//! Note that we use noisy_float's R64 type here instead of f64 so that we don't
+//! have to deal with infinities and NaN, which really should NEVER show up in
+//! NdVecs.
+
+use noisy_float::prelude::{r64, R64};
+use num::{BigInt, FromPrimitive, Num, One, ToPrimitive, Zero};
 use std::cmp::Eq;
+use std::convert::TryInto;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::*;
 
+mod aliases;
 mod axis;
 mod dim;
-mod ops_scalar;
-mod ops_vector;
+mod ops;
 
+pub use aliases::*;
+pub use axis::Axis::{U, V, W, X, Y, Z};
 pub use axis::*;
 pub use dim::*;
 
+/// A "trait alias" for types that can be used as coordinates in an NdVec.
+pub trait NdVecNum:
+    Debug + Default + Clone + Eq + Hash + Ord + Num + AddAssign + MulAssign
+{
+    /// The minimum size for an NdRect using this number type as coordinates.
+    /// For integers, this is 1; for floats, this is 0.
+    fn get_min_rect_size() -> Self;
+}
+impl NdVecNum for BigInt {
+    fn get_min_rect_size() -> Self {
+        Self::one()
+    }
+}
+impl NdVecNum for R64 {
+    fn get_min_rect_size() -> Self {
+        Self::zero()
+    }
+}
+impl NdVecNum for isize {
+    fn get_min_rect_size() -> Self {
+        1
+    }
+}
+impl NdVecNum for usize {
+    fn get_min_rect_size() -> Self {
+        1
+    }
+}
+impl NdVecNum for u8 {
+    fn get_min_rect_size() -> Self {
+        1
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 /// A set of coordinates for a given dimensionality.
-///
-/// Unlike ndarray's NdIndex, this uses isize and so supports negative numbers.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct NdVec<D: Dim>(D);
+pub struct NdVec<D: DimFor<N>, N: NdVecNum>(pub D::Array);
 
-/// A 1D NdVec.
-pub type Vec1D = NdVec<[isize; 1]>;
-/// A 2D NdVec.
-pub type Vec2D = NdVec<[isize; 2]>;
-/// A 3D NdVec.
-pub type Vec3D = NdVec<[isize; 3]>;
-/// A 4D NdVec.
-pub type Vec4D = NdVec<[isize; 4]>;
-/// A 5D NdVec.
-pub type Vec5D = NdVec<[isize; 5]>;
-/// A 6D NdVec.
-pub type Vec6D = NdVec<[isize; 6]>;
+// Implement Copy when coordinate type is Copy.
+//
+// Unfortunately, for a number of subtle reasons, this only works when the
+// dimensionality is known, not when it is a type parameter. This is still
+// useful enough that it's worth including.
+impl<D: DimFor<N>, N: NdVecNum + Copy> Copy for NdVec<D, N> where D::Array: Copy {}
 
-impl<D: Dim> NdVec<D> {
-    /// Returns the NdVec pointing to the origin; i.e. an NdVec consisting of
-    /// all zeros.
+// Implement indexing using Axis.
+impl<D: DimFor<N>, N: NdVecNum> Index<Axis> for NdVec<D, N> {
+    type Output = N;
+    fn index(&self, axis: Axis) -> &N {
+        &self.0.as_ref()[axis as usize]
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum> IndexMut<Axis> for NdVec<D, N> {
+    fn index_mut(&mut self, axis: Axis) -> &mut N {
+        &mut self.0.as_mut()[axis as usize]
+    }
+}
+
+impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
+    /// Returns a vector consisting of all zeros.
     pub fn origin() -> Self {
-        Self(D::origin())
+        Self::default()
     }
-    /// Returns true if te NdVec is pointing to the origin; i.e. all components
-    /// of the NdVec are zero.
-    pub fn is_zero(self) -> bool {
-        self == Self::origin()
+    /// Returns true if the vector is all zeros, or false otherwise.
+    pub fn is_zero(&self) -> bool {
+        *self == Self::default()
     }
-}
+    /// Returns the unit vector pointing along the given axis.
+    pub fn unit(axis: Axis) -> Self {
+        let mut ret = Self::default();
+        ret[axis] = N::one();
+        ret
+    }
 
-// Implement conversion from array.
-impl<D: Dim> From<D> for NdVec<D> {
-    fn from(dim: D) -> Self {
-        Self(dim)
+    /// Constructs an NdVec using a function of an axis to generate each
+    /// component.
+    pub fn from_fn<F: FnMut(Axis) -> N>(mut generator: F) -> Self {
+        let mut ret: Self = Self::default();
+        for &ax in D::Dim::axes() {
+            ret[ax] = generator(ax);
+        }
+        ret
     }
-}
-
-// Implement indexing by usize.
-impl<D: Dim> Index<Axis> for NdVec<D> {
-    type Output = isize;
-    fn index(&self, axis: Axis) -> &isize {
-        self.0.get(axis)
-    }
-}
-impl<D: Dim> IndexMut<Axis> for NdVec<D> {
-    fn index_mut(&mut self, axis: Axis) -> &mut isize {
-        self.0.get_mut(axis)
-    }
-}
-
-/// Hard-coded access to X/Y.
-///
-/// TODO replace this with easier indexing (with `use Axis::{X, Y}`)
-pub trait VecXY: Index<Axis, Output = isize> + IndexMut<Axis> {
-    /// Returns the X value of this vector.
-    fn x(&self) -> &isize {
-        // TODO maybe don't return a reference? isize is Copy.
-        &self[Axis::X]
-    }
-    /// Returns a mutable reference to the X value of this vector.
-    fn x_mut(&mut self) -> &mut isize {
-        &mut self[Axis::X]
-    }
-    /// Returns the Y value of this vector.
-    fn y(&self) -> &isize {
-        &self[Axis::Y]
-    }
-    /// Returns a mutable reference to the Y value of this vector.
-    fn y_mut(&mut self) -> &mut isize {
-        &mut self[Axis::Y]
-    }
-}
-impl VecXY for Vec2D {}
-
-#[cfg(test)]
-use proptest::prelude::*;
-
-#[cfg(test)]
-impl proptest::arbitrary::Arbitrary for Vec2D {
-    type Parameters = Option<isize>;
-    type Strategy = BoxedStrategy<Self>;
-    fn arbitrary_with(max: Option<isize>) -> Self::Strategy {
-        let max = max.unwrap_or(100);
-        prop::collection::vec(-max..=max, 2)
-            .prop_flat_map(|v| Just(NdVec([v[0], v[1]])))
-            .boxed()
-    }
-}
-
-#[cfg(test)]
-impl proptest::arbitrary::Arbitrary for Vec3D {
-    type Parameters = Option<isize>;
-    type Strategy = BoxedStrategy<Self>;
-    fn arbitrary_with(max: Option<isize>) -> Self::Strategy {
-        let max = max.unwrap_or(100);
-        prop::collection::vec(-max..=max, 3)
-            .prop_flat_map(|v| Just(NdVec([v[0], v[1], v[2]])))
-            .boxed()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use proptest::proptest;
-
-    proptest! {
-        /// Tests various vector operations.
-        #[test]
-        fn test_ops(
-            pos1: Vec3D,
-            pos2: Vec3D,
-            scalar in -100..=100isize,
-            shift in 0..10isize,
-        ) {
-            for &ax in Dim3D::axes() {
-                assert_eq!(-(pos1[ax]), (-pos1)[ax]);
-                assert_eq!(pos1[ax] + pos2[ax],   (pos1 + pos2  )[ax]);
-                assert_eq!(pos1[ax] - pos2[ax],   (pos1 - pos2  )[ax]);
-                assert_eq!(pos1[ax] * pos2[ax],   (pos1 * pos2  )[ax]);
-                assert_eq!(pos1[ax] + scalar,     (pos1 + scalar)[ax]);
-                assert_eq!(pos1[ax] - scalar,     (pos1 - scalar)[ax]);
-                assert_eq!(pos1[ax] * scalar,     (pos1 * scalar)[ax]);
-                if scalar != 0 {
-                    assert_eq!(pos1[ax].div_euclid(scalar), (pos1.div_euclid(scalar))[ax]);
-                    assert_eq!(pos1[ax] % scalar, (pos1 % scalar)[ax]);
-                }
-                assert_eq!(pos1[ax] & scalar,     (pos1 & scalar)[ax]);
-                assert_eq!(pos1[ax] | scalar,     (pos1 | scalar)[ax]);
-                assert_eq!(pos1[ax] ^ scalar,     (pos1 ^ scalar)[ax]);
-                assert_eq!(pos1[ax] << shift,     (pos1 << shift)[ax]);
-                assert_eq!(pos1[ax] >> shift,     (pos1 >> shift)[ax]);
-            }
-            let mut result;
-            result = pos1; result += pos2;   assert_eq!(result, pos1 + pos2);
-            result = pos1; result -= pos2;   assert_eq!(result, pos1 - pos2);
-            result = pos1; result *= pos2;   assert_eq!(result, pos1 * pos2);
-            result = pos1; result += scalar; assert_eq!(result, pos1 + scalar);
-            result = pos1; result -= scalar; assert_eq!(result, pos1 - scalar);
-            result = pos1; result *= scalar; assert_eq!(result, pos1 * scalar);
-            if scalar != 0 {
-                result = pos1; result /= scalar;  assert_eq!(result, pos1 / scalar);
-                result = pos1; result %= scalar;  assert_eq!(result, pos1 % scalar);
-            }
-            result = pos1; result &= scalar; assert_eq!(result, pos1 & scalar);
-            result = pos1; result |= scalar; assert_eq!(result, pos1 | scalar);
-            result = pos1; result ^= scalar; assert_eq!(result, pos1 ^ scalar);
-            result = pos1; result <<= shift; assert_eq!(result, pos1 << shift);
-            result = pos1; result >>= shift; assert_eq!(result, pos1 >> shift);
+    /// Applies a function to each component of this vector, constructing a new
+    /// NdVec.
+    pub fn map_fn<F: FnMut(Axis, &mut N)>(&mut self, mut f: F) {
+        for &ax in D::Dim::axes() {
+            f(ax, &mut self[ax]);
         }
     }
+    /// Constructs an NdVec using the given value for all components.
+    pub fn repeat<X: Into<N>>(value: X) -> Self {
+        let value = value.into();
+        Self::from_fn(|_| value.clone())
+    }
+
+    /// Converts an NdVec from one number type to another using
+    /// std::convert::Into.
+    pub fn convert<N2: NdVecNum>(&self) -> NdVec<D, N2>
+    where
+        D: DimFor<N2>,
+        N: Into<N2>,
+    {
+        NdVec::from_fn(|ax| N2::from(self[ax].clone().into()))
+    }
+
+    /// Constructs an NdVec where each component is the minimum of the
+    /// corresponding components in the two given vectors.
+    pub fn min(v1: &Self, v2: &Self) -> Self {
+        let mut ret = Self::default();
+        for &ax in D::Dim::axes() {
+            ret[ax] = std::cmp::min(&v1[ax], &v2[ax]).clone();
+        }
+        ret
+    }
+    /// Constructs an NdVec where each component is the maximum of the
+    /// corresponding components in the two given vectors.
+    pub fn max(v1: &Self, v2: &Self) -> Self {
+        let mut ret = Self::default();
+        for &ax in D::Dim::axes() {
+            ret[ax] = std::cmp::max(&v1[ax], &v2[ax]).clone();
+        }
+        ret
+    }
+
+    /// Adds together all the components of this vector.
+    pub fn sum(&self) -> N {
+        let mut ret = N::zero();
+        for &ax in D::Dim::axes() {
+            ret += self[ax].clone();
+        }
+        ret
+    }
+    /// Multiplies together all the components of this vector.
+    pub fn product(&self) -> N {
+        let mut ret = N::one();
+        for &ax in D::Dim::axes() {
+            ret *= self[ax].clone();
+        }
+        ret
+    }
 }
+
+/// NdVecs that can be converted to UVecs but not using From/Into.
+pub trait AsUVec<D: Dim> {
+    /// Converts the NdVec to a UVec, panicking if it does not fit.
+    fn as_uvec(&self) -> UVec<D>;
+}
+/// NdVecs that can be converted to IVecs but not using From/Into.
+pub trait AsIVec<D: Dim> {
+    /// Converts the NdVec to an IVec, panicking if it does not fit.
+    fn as_ivec(&self) -> IVec<D>;
+}
+/// NdVecs that can be converted to FVecs but not using From/Into.
+pub trait AsFVec<D: Dim> {
+    /// Converts the NdVec to an FVec, panicking if it does not fit.
+    fn as_fvec(&self) -> FVec<D>;
+}
+/// NdVecs that can be converted to BigVecs but not using From/Into.
+pub trait AsBigVec<D: Dim> {
+    /// Converts the NdVec to an BigVec, panicking if it does not fit.
+    fn as_bigvec(&self) -> BigVec<D>;
+}
+
+impl<D: Dim> AsUVec<D> for IVec<D> {
+    fn as_uvec(&self) -> UVec<D> {
+        UVec::from_fn(|ax| {
+            self[ax]
+                .try_into()
+                .expect("Cannot convert this IVec into a UVec")
+        })
+    }
+}
+impl<D: Dim> AsIVec<D> for UVec<D> {
+    fn as_ivec(&self) -> IVec<D> {
+        IVec::from_fn(|ax| {
+            self[ax]
+                .try_into()
+                .expect("Cannot convert this UVec into an IVec")
+        })
+    }
+}
+
+impl<D: Dim> AsIVec<D> for BigVec<D> {
+    fn as_ivec(&self) -> IVec<D> {
+        IVec::from_fn(|ax| {
+            self[ax]
+                .to_isize()
+                .expect("Cannot convert such a large BigVec into an IVec")
+        })
+    }
+}
+impl<D: Dim> AsIVec<D> for FVec<D> {
+    fn as_ivec(&self) -> IVec<D> {
+        IVec::from_fn(|ax| self[ax].raw() as isize)
+    }
+}
+
+impl<D: Dim> AsFVec<D> for BigVec<D> {
+    fn as_fvec(&self) -> FVec<D> {
+        FVec::from_fn(|ax| {
+            self[ax]
+                .to_f64()
+                .map(r64)
+                .expect("Cannot convert such a large BigVec into an FVec")
+        })
+    }
+}
+impl<D: Dim> AsFVec<D> for IVec<D> {
+    fn as_fvec(&self) -> FVec<D> {
+        FVec::from_fn(|ax| {
+            self[ax]
+                .to_f64()
+                .map(r64)
+                .expect("Cannot convert such a large BigVec into an FVec")
+        })
+    }
+}
+
+impl<D: Dim> AsBigVec<D> for FVec<D> {
+    fn as_bigvec(&self) -> BigVec<D> {
+        BigVec::from_fn(|ax| BigInt::from_f64(self[ax].raw()).unwrap())
+    }
+}
+
+impl<D: Dim> BigVec<D> {
+    /// Constructs a new BigVec using isize components.
+    pub fn big(isize_array: <D as DimFor<isize>>::Array) -> Self {
+        NdVec::<D, isize>(isize_array).convert()
+    }
+}
+
+#[cfg(test)]
+mod tests;

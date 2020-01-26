@@ -280,13 +280,13 @@ pub fn do_frame(state: &mut super::State) {
                     input_state.zooming = true;
                 }
             }
-            // if !input_state.moving {
-            //     // Snap to nearest position and zoom level.
-            //     view2d.viewport.snap_pos();
-            // }
-            // if !input_state.zooming {
-            //     view2d.viewport.zoom = view2d.viewport.zoom.round();
-            // }
+            if !input_state.moving {
+                // Snap to nearest position and zoom level.
+                view2d.viewport.snap_pos();
+            }
+            if !input_state.zooming {
+                view2d.viewport.zoom = view2d.viewport.zoom.round();
+            }
         }
         gridview::GridView::View3D(_) => (),
     }

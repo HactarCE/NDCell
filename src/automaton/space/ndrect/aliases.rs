@@ -1,4 +1,5 @@
 use super::*;
+use noisy_float::prelude::R64;
 use num::BigInt;
 
 /// A 1D hyperrectangle (a linear range).
@@ -16,8 +17,8 @@ pub type Rect6D<N> = NdRect<Dim6D, N>;
 
 /// An N-dimensional hyperrectangle with BigInt coordinates.
 pub type BigRect<D> = NdRect<D, BigInt>;
-/// An N-dimensional hyperrectangle with f32 coordinates.
-pub type FRect<D> = NdRect<D, f32>;
+/// An N-dimensional hyperrectangle with R64 coordinates.
+pub type FRect<D> = NdRect<D, R64>;
 /// An N-dimensional hyperrectangle with isize coordinates.
 pub type IRect<D> = NdRect<D, isize>;
 /// An N-dimensional hyperrectangle with usize coordinates.
@@ -26,66 +27,66 @@ pub type URect<D> = NdRect<D, usize>;
 pub type ByteRect<D> = NdRect<D, u8>;
 
 /// A 1D hyperrectangle (a linear range) with BigInt coordinates.
-pub type BigRect1D = NdRect<Dim1D, BigInt>;
+pub type BigRect1D = BigRect<Dim1D>;
 /// A 2D hyperrectangle (a rectangle) with BigInt coordinates.
-pub type BigRect2D = NdRect<Dim2D, BigInt>;
+pub type BigRect2D = BigRect<Dim2D>;
 /// A 3D hyperrectangle (a rectangular prism) with BigInt coordinates.
-pub type BigRect3D = NdRect<Dim3D, BigInt>;
+pub type BigRect3D = BigRect<Dim3D>;
 /// A 4D hyperrectangle (a rectangular duoprism) with BigInt coordinates.
-pub type BigRect4D = NdRect<Dim4D, BigInt>;
+pub type BigRect4D = BigRect<Dim4D>;
 /// A 5D hyperrectangle with BigInt coordinates.
-pub type BigRect5D = NdRect<Dim5D, BigInt>;
+pub type BigRect5D = BigRect<Dim5D>;
 /// A 6D hyperrectangle with BigInt coordinates.
-pub type BigRect6D = NdRect<Dim6D, BigInt>;
+pub type BigRect6D = BigRect<Dim6D>;
 
-/// A 1D hyperrectangle (a linear range) with f32 coordinates.
-pub type FRect1D = NdRect<Dim1D, f32>;
-/// A 2D hyperrectangle (a rectangle) with f32 coordinates.
-pub type FRect2D = NdRect<Dim2D, f32>;
-/// A 3D hyperrectangle (a rectangular prism) with f32 coordinates.
-pub type FRect3D = NdRect<Dim3D, f32>;
-/// A 4D hyperrectangle (a rectangular duoprism) with f32 coordinates.
-pub type FRect4D = NdRect<Dim4D, f32>;
-/// A 5D hyperrectangle with f32 coordinates.
-pub type FRect5D = NdRect<Dim5D, f32>;
-/// A 6D hyperrectangle with f32 coordinates.
-pub type FRect6D = NdRect<Dim6D, f32>;
+/// A 1D hyperrectangle (a linear range) with R64 coordinates.
+pub type FRect1D = FRect<Dim1D>;
+/// A 2D hyperrectangle (a rectangle) with R64 coordinates.
+pub type FRect2D = FRect<Dim2D>;
+/// A 3D hyperrectangle (a rectangular prism) with R64 coordinates.
+pub type FRect3D = FRect<Dim3D>;
+/// A 4D hyperrectangle (a rectangular duoprism) with R64 coordinates.
+pub type FRect4D = FRect<Dim4D>;
+/// A 5D hyperrectangle with R64 coordinates.
+pub type FRect5D = FRect<Dim5D>;
+/// A 6D hyperrectangle with R64 coordinates.
+pub type FRect6D = FRect<Dim6D>;
 
 /// A 1D hyperrectangle (a linear range) with isize coordinates.
-pub type IRect1D = NdRect<Dim1D, isize>;
+pub type IRect1D = IRect<Dim1D>;
 /// A 2D hyperrectangle (a rectangle) with isize coordinates.
-pub type IRect2D = NdRect<Dim2D, isize>;
+pub type IRect2D = IRect<Dim2D>;
 /// A 3D hyperrectangle (a rectangular prism) with isize coordinates.
-pub type IRect3D = NdRect<Dim3D, isize>;
+pub type IRect3D = IRect<Dim3D>;
 /// A 4D hyperrectangle (a rectangular duoprism) with isize coordinates.
-pub type IRect4D = NdRect<Dim4D, isize>;
+pub type IRect4D = IRect<Dim4D>;
 /// A 5D hyperrectangle with isize coordinates.
-pub type IRect5D = NdRect<Dim5D, isize>;
+pub type IRect5D = IRect<Dim5D>;
 /// A 6D hyperrectangle with isize coordinates.
-pub type IRect6D = NdRect<Dim6D, isize>;
+pub type IRect6D = IRect<Dim6D>;
 
 /// A 1D hyperrectangle (a linear range) with usize coordinates.
-pub type URect1D = NdRect<Dim1D, usize>;
+pub type URect1D = URect<Dim1D>;
 /// A 2D hyperrectangle (a rectangle) with usize coordinates.
-pub type URect2D = NdRect<Dim2D, usize>;
+pub type URect2D = URect<Dim2D>;
 /// A 3D hyperrectangle (a rectangular prism) with usize coordinates.
-pub type URect3D = NdRect<Dim3D, usize>;
+pub type URect3D = URect<Dim3D>;
 /// A 4D hyperrectangle (a rectangular duoprism) with usize coordinates.
-pub type URect4D = NdRect<Dim4D, usize>;
+pub type URect4D = URect<Dim4D>;
 /// A 5D hyperrectangle with usize coordinates.
-pub type URect5D = NdRect<Dim5D, usize>;
+pub type URect5D = URect<Dim5D>;
 /// A 6D hyperrectangle with usize coordinates.
-pub type URect6D = NdRect<Dim6D, usize>;
+pub type URect6D = URect<Dim6D>;
 
 /// A 1D hyperrectangle (a linear range) with u8 coordinates.
-pub type ByteRect1D = NdRect<Dim1D, u8>;
+pub type ByteRect1D = ByteRect<Dim1D>;
 /// A 2D hyperrectangle (a rectangle) with u8 coordinates.
-pub type ByteRect2D = NdRect<Dim2D, u8>;
+pub type ByteRect2D = ByteRect<Dim2D>;
 /// A 3D hyperrectangle (a rectangular prism) with u8 coordinates.
-pub type ByteRect3D = NdRect<Dim3D, u8>;
+pub type ByteRect3D = ByteRect<Dim3D>;
 /// A 4D hyperrectangle (a rectangular duoprism) with u8 coordinates.
-pub type ByteRect4D = NdRect<Dim4D, u8>;
+pub type ByteRect4D = ByteRect<Dim4D>;
 /// A 5D hyperrectangle with u8 coordinates.
-pub type ByteRect5D = NdRect<Dim5D, u8>;
+pub type ByteRect5D = ByteRect<Dim5D>;
 /// A 6D hyperrectangle with u8 coordinates.
-pub type ByteRect6D = NdRect<Dim6D, u8>;
+pub type ByteRect6D = ByteRect<Dim6D>;

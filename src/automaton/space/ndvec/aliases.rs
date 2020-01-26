@@ -17,7 +17,7 @@ pub type Vec6D<N> = NdVec<Dim6D, N>;
 
 /// An N-dimensional vector with BigInt coordinates.
 pub type BigVec<D> = NdVec<D, BigInt>;
-/// An N-dimensional vector with f32 coordinates.
+/// An N-dimensional vector with R64 coordinates.
 pub type FVec<D> = NdVec<D, R64>;
 /// An N-dimensional vector with isize coordinates.
 pub type IVec<D> = NdVec<D, isize>;
@@ -39,17 +39,17 @@ pub type BigVec5D = BigVec<Dim5D>;
 /// A 6D vector with BigInt coordinates.
 pub type BigVec6D = BigVec<Dim6D>;
 
-/// A 1D vector with f32 coordinates.
+/// A 1D vector with R64 coordinates.
 pub type FVec1D = FVec<Dim1D>;
-/// A 2D vector with f32 coordinates.
+/// A 2D vector with R64 coordinates.
 pub type FVec2D = FVec<Dim2D>;
-/// A 3D vector with f32 coordinates.
+/// A 3D vector with R64 coordinates.
 pub type FVec3D = FVec<Dim3D>;
-/// A 4D vector with f32 coordinates.
+/// A 4D vector with R64 coordinates.
 pub type FVec4D = FVec<Dim4D>;
-/// A 5D vector with f32 coordinates.
+/// A 5D vector with R64 coordinates.
 pub type FVec5D = FVec<Dim5D>;
-/// A 6D vector with f32 coordinates.
+/// A 6D vector with R64 coordinates.
 pub type FVec6D = FVec<Dim6D>;
 
 /// A 1D vector with isize coordinates.

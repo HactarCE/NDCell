@@ -1,10 +1,12 @@
+use num::BigInt;
+
 /// Simulation-related methods whose type signatures are the same for all
 /// automata, regardless of dimensionality.
 pub trait NdSimulate {
     /// Returns the number of dimensions of the underlying automaton.
     fn get_ndim(&self) -> usize;
     /// Returns the number of live cells in the simulation.
-    fn get_population(&self) -> usize;
+    fn get_population(&self) -> &BigInt;
     /// Returns the simulation step size.
     fn get_step_size(&self) -> usize;
     /// Sets the simulation step size.
@@ -38,7 +40,7 @@ where
     fn get_ndim(&self) -> usize {
         self.ndsim().get_ndim()
     }
-    fn get_population(&self) -> usize {
+    fn get_population(&self) -> &BigInt {
         self.ndsim().get_population()
     }
     fn get_step_size(&self) -> usize {

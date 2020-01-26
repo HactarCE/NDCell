@@ -4,6 +4,7 @@
 //! automata.
 
 use enum_dispatch::enum_dispatch;
+use num::BigInt;
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
@@ -178,8 +179,8 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
     fn get_ndim(&self) -> usize {
         D::NDIM
     }
-    fn get_population(&self) -> usize {
-        self.tree.get_root().population
+    fn get_population(&self) -> &BigInt {
+        &self.tree.get_root().population
     }
     fn get_step_size(&self) -> usize {
         self.sim.get_step_size()

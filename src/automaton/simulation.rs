@@ -11,6 +11,7 @@ use crate::math::ceil_log_base_2;
 #[derive(Debug, Clone)]
 pub struct Simulation<C: CellType, D: Dim> {
     rule: Rc<dyn Rule<C, D>>,
+    // TODO: make step_size be a BigInt
     step_size: usize,
     min_layer: usize,
     results: ResultsCache<C, D>,

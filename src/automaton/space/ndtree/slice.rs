@@ -88,7 +88,7 @@ impl<C: CellType, D: Dim> Index<BigVec<D>> for NdTreeSlice<C, D> {
 }
 
 impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
-    /// Constructs a new NdTreeSlice centered on a given node.
+    /// Constructs a new NdTreeSlice of a given node centered on the origin.
     pub fn centered(root: NdCachedNode<C, D>) -> Self {
         Self {
             offset: NdVec::origin() - &(root.len() / 2),

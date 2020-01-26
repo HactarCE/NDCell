@@ -78,11 +78,8 @@ where
 {
     /// "Outward-rounded" integer division; returns the largest rectangle that is
     /// the given fraction of the size of the original.
-    pub fn div_outward(self, other: N) -> Self
-    where
-        N: Copy,
-    {
-        Self::span(self.min().div_floor(&other), self.max().div_ceil(&other))
+    pub fn div_outward(&self, other: &N) -> Self {
+        Self::span(self.min().div_floor(other), self.max().div_ceil(other))
     }
 }
 

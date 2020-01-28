@@ -324,11 +324,19 @@ impl<C: CellType, D: Dim> NdTreeBranch<C, D> {
         }
     }
 
+    /// Returns the inner cell state if this is a leaf, or None if it is a node.
+    pub fn leaf(&self) -> Option<C> {
+        match self {
+            NdTreeBranch::Leaf(state) => Some(*state),
+            _ => None,
+        }
+    }
+
     /// Returns the inner node if this is a node, or None if it is a leaf.
     pub fn node(&self) -> Option<&NdCachedNode<C, D>> {
         match self {
-            NdTreeBranch::Leaf(_) => None,
             NdTreeBranch::Node(node) => Some(node),
+            _ => None,
         }
     }
 

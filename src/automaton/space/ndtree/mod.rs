@@ -235,10 +235,12 @@ mod tests {
         cells_to_check: &Vec<IVec2D>,
     ) {
         assert_eq!(
-            expected_cells
-                .iter()
-                .filter(|(_, &cell_state)| cell_state)
-                .count(),
+            BigInt::from(
+                expected_cells
+                    .iter()
+                    .filter(|(_, &cell_state)| cell_state)
+                    .count()
+            ),
             ndtree.get_root().population
         );
         for pos in cells_to_check {

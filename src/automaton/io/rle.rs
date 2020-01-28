@@ -361,7 +361,7 @@ o$3o!
 ",
         )
         .unwrap();
-        assert_eq!(5, result.tree.get_root().population);
+        assert_eq!(BigInt::from(5), result.tree.get_root().population);
         assert_eq!(1, result.tree.get_cell(&NdVec::big([11, 14])));
         assert_eq!(1, result.tree.get_cell(&NdVec::big([12, 13])));
         assert_eq!(1, result.tree.get_cell(&NdVec::big([10, 12])));

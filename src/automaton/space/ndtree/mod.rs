@@ -224,6 +224,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
 
 #[cfg(test)]
 mod tests {
+    use num::BigInt;
     use proptest::prelude::*;
     use std::collections::HashMap;
 

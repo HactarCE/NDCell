@@ -1,11 +1,11 @@
 #version 140
 
 in vec2 texture_pos;
-in ivec2 cell_pos;
+in vec2 cell_pos;
 
-out ivec2 CellPos;
+out vec2 CellPos;
 
 void main() {
-    gl_Position = texture_pos;
+    gl_Position = vec4(texture_pos, 0.0, 1.0);
     CellPos = cell_pos;
 }

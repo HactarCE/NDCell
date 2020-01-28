@@ -45,16 +45,27 @@ use std::borrow::Cow;
 use std::cell::RefMut;
 use std::collections::HashMap;
 
+mod gl_quadtree;
+
 use super::*;
 use crate::automaton::space::*;
+use gl_quadtree::GlQuadtree;
 
-/// A vertex containing a 2D floating-point position and a 2D texture coordinate.
+/// A vertex containing a 2D floating-point position and a 2D texture position.
 #[derive(Debug, Default, Copy, Clone)]
 struct TexturePosVertex {
     pos: [f32; 2],
     tex_coords: [f32; 2],
 }
 glium::implement_vertex!(TexturePosVertex, pos, tex_coords);
+
+/// A vertex containing a 2D floating-point position and a 2D cell position.
+#[derive(Debug, Default, Copy, Clone)]
+struct QuadtreePosVertex {
+    texture_pos: [f32; 2],
+    cell_pos: [i32; 2],
+}
+glium::implement_vertex!(QuadtreePosVertex, texture_pos, cell_pos);
 
 /// A vertex containing just a 2D floating-point position.
 #[derive(Debug, Default, Copy, Clone)]
@@ -153,23 +164,28 @@ impl CellPixelChunk {
 struct Shaders {
     cells: glium::Program,
     gridlines: glium::Program,
+    quadtree: glium::Program,
 }
 impl Shaders {
     pub fn compile(display: &glium::Display) -> Self {
         Self {
             cells: shaders::compile_cells_program(display),
             gridlines: shaders::compile_lines_program(display),
+            quadtree: shaders::compile_quadtree_program(display),
         }
     }
 }
 
 struct VBOs {
+    quadtree: glium::VertexBuffer<QuadtreePosVertex>,
     cells: glium::VertexBuffer<TexturePosVertex>,
     gridlines: glium::VertexBuffer<PointVertex>,
 }
 impl VBOs {
     pub fn new(display: &glium::Display) -> Self {
         Self {
+            quadtree: glium::VertexBuffer::empty_dynamic(display, 4)
+                .expect("Failed to create vertex buffer"),
             cells: glium::VertexBuffer::empty_dynamic(display, 4)
                 .expect("Failed to create vertex buffer"),
             gridlines: glium::VertexBuffer::empty_dynamic(display, GRIDLINE_BATCH_SIZE)
@@ -338,8 +354,18 @@ impl<'a> RenderInProgress<'a> {
 
     /// Draw the cells that appear in the viewport.
     pub fn draw_cells(&mut self) {
-        // Steps #1 and #2: draw at 1 pixel per render cell.
-        let render_cells_rect = self.chunk_visible_rect * CHUNK_SIZE as isize;
+        // Steps #1 and #2: draw at 1 pixel per render cell, including only the
+        // cells inside self.visible_rect.
+        let render_cells_rect: IRect2D = self
+            .visible_rect
+            .div_outward(&(BigInt::from(1) << self.render_cell_layer))
+            .as_irect();
+        // Encode the quadtree as a texture.
+        let gl_quadtree = GlQuadtree::from_node(
+            &self.quadtree_slice.root,
+            self.render_cell_layer,
+            Self::get_branch_pixel_color,
+        );
         let unscaled_cells_w = render_cells_rect.len(X) as u32;
         let unscaled_cells_h = render_cells_rect.len(Y) as u32;
         let unscaled_cells_texture = glium::texture::srgb_texture2d::SrgbTexture2d::empty(
@@ -348,28 +374,17 @@ impl<'a> RenderInProgress<'a> {
             unscaled_cells_h,
         )
         .expect("Failed to create texture");
-        let unscaled_cells_fbo = glium::framebuffer::SimpleFrameBuffer::new(
+        let mut unscaled_cells_fbo = glium::framebuffer::SimpleFrameBuffer::new(
             &*self.cache.display,
             &unscaled_cells_texture,
         )
         .expect("Failed to create frame buffer");
-        self.draw_cell_chunks(
-            &unscaled_cells_texture,
-            &self.quadtree_slice.root.clone(),
-            Vec2D::origin(),
-            self.quadtree_slice.root.layer - self.render_cell_layer - CHUNK_POW,
-        );
+        self.draw_cell_pixels(&mut unscaled_cells_fbo, gl_quadtree, render_cells_rect);
 
-        // Step #3: resize that texture by an integer factor, only including the
-        // cells that are visible.target_pixels_
-        let render_cell_visible_rect: IRect2D = (self
-            .visible_rect
-            .div_outward(&(BigInt::from(1) << self.render_cell_layer))
-            - self.chunk_visible_rect.min() * CHUNK_SIZE as isize)
-            .as_irect();
+        // Step #3: resize that texture by an integer factor.
         let integer_scale_factor = self.render_cell_pixels.ceil();
-        let visible_cells_w = render_cell_visible_rect.len(X) as u32;
-        let visible_cells_h = render_cell_visible_rect.len(Y) as u32;
+        let visible_cells_w = render_cells_rect.len(X) as u32;
+        let visible_cells_h = render_cells_rect.len(Y) as u32;
         let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
         let scaled_cells_h = visible_cells_h * integer_scale_factor as u32;
         let scaled_cells_texture = glium::texture::SrgbTexture2d::empty(
@@ -382,15 +397,9 @@ impl<'a> RenderInProgress<'a> {
         let scaled_cells_fbo =
             glium::framebuffer::SimpleFrameBuffer::new(&*self.cache.display, &scaled_cells_texture)
                 .expect("Failed to create frame buffer");
-        let source_rect = glium::Rect {
-            left: render_cell_visible_rect.min()[X] as u32,
-            bottom: render_cell_visible_rect.min()[Y] as u32,
-            width: render_cell_visible_rect.len(X) as u32,
-            height: render_cell_visible_rect.len(Y) as u32,
-        };
         scaled_cells_fbo.blit_from_simple_framebuffer(
             &unscaled_cells_fbo,
-            &source_rect,
+            &entire_rect(&unscaled_cells_fbo),
             &entire_blit_target(&scaled_cells_fbo),
             glium::uniforms::MagnifySamplerFilter::Nearest,
         );
@@ -405,13 +414,14 @@ impl<'a> RenderInProgress<'a> {
                 .div_outward(&(BigInt::from(1) << self.render_cell_layer))
                 .min()
                 .as_fvec();
-        let mut render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size / 2.0);
-        render_cells_rect /= render_cell_visible_rect.size().as_fvec();
+        let mut render_cells_frect =
+            FRect2D::centered(render_cells_center, render_cells_size / 2.0);
+        render_cells_frect /= render_cells_rect.size().as_fvec();
 
-        let left = render_cells_rect.min()[X].raw() as f32;
-        let right = render_cells_rect.max()[X].raw() as f32;
-        let bottom = render_cells_rect.min()[Y].raw() as f32;
-        let top = render_cells_rect.max()[Y].raw() as f32;
+        let left = render_cells_frect.min()[X].raw() as f32;
+        let right = render_cells_frect.max()[X].raw() as f32;
+        let bottom = render_cells_frect.min()[Y].raw() as f32;
+        let top = render_cells_frect.max()[Y].raw() as f32;
 
         self.cache.vbos.cells.write(&[
             TexturePosVertex {
@@ -443,6 +453,14 @@ impl<'a> RenderInProgress<'a> {
             )
             .expect("Failed to draw cells");
 
+        // // Draw a 1:1 "minimap" in the corner
+        // self.target.blit_from_simple_framebuffer(
+        //     &unscaled_cells_fbo,
+        //     &entire_rect(&unscaled_cells_fbo),
+        //     &entire_blit_target(&unscaled_cells_fbo),
+        //     glium::uniforms::MagnifySamplerFilter::Linear,
+        // );
+
         // Remove elements from the cache that we did not use this frame, and
         // mark the rest as being unused (to prepare for the next frame).
         self.cache.chunks.retain(|_, (_, ref mut keep)| {
@@ -451,98 +469,77 @@ impl<'a> RenderInProgress<'a> {
             ret
         });
     }
-    fn draw_cell_chunks(
+    fn draw_cell_pixels<'b, S: glium::Surface>(
         &mut self,
-        target: &glium::texture::srgb_texture2d::SrgbTexture2d,
-        root_node: &NdCachedNode<u8, Dim2D>,
-        root_node_offset: IVec2D,
-        layers_remaining: usize,
+        target: &mut S,
+        gl_quadtree: GlQuadtree<'b>,
+        render_cells_rect: IRect2D,
     ) {
-        let lower_chunk_bound = root_node_offset;
-        let upper_chunk_bound = root_node_offset + (1 << layers_remaining) - 1;
-        let root_node_chunk_rect = Rect2D::span(lower_chunk_bound, upper_chunk_bound);
-        // If nothing in this node is visible, just skip it entirely.
-        if !self.chunk_visible_rect.intersects(root_node_chunk_rect) {
-            return;
-        }
-        if layers_remaining == 0 {
-            // Get the pixel data.
-            let pixels = self.get_color_array(root_node);
-
-            // Write those pixels into the cells texture.
-            let offset_in_texture =
-                (root_node_offset - self.chunk_visible_rect.min()) * CHUNK_SIZE as isize;
-            target.write(
-                glium::Rect {
-                    left: offset_in_texture[X] as u32,
-                    bottom: offset_in_texture[Y] as u32,
-                    width: CHUNK_SIZE as u32,
-                    height: CHUNK_SIZE as u32,
+        let quadtree_texture = glium::texture::unsigned_texture1d::UnsignedTexture1d::new(
+            &*self.cache.display,
+            gl_quadtree.raw_image,
+        )
+        .expect("Failed to create texture");
+        let left = render_cells_rect.min()[X] as i32;
+        let right = render_cells_rect.max()[X] as i32;
+        let bottom = render_cells_rect.min()[Y] as i32;
+        let top = render_cells_rect.max()[Y] as i32;
+        self.cache.vbos.quadtree.write(&[
+            QuadtreePosVertex {
+                texture_pos: [-1.0, -1.0],
+                cell_pos: [left, bottom],
+            },
+            QuadtreePosVertex {
+                texture_pos: [1.0, -1.0],
+                cell_pos: [right, bottom],
+            },
+            QuadtreePosVertex {
+                texture_pos: [-1.0, 1.0],
+                cell_pos: [left, top],
+            },
+            QuadtreePosVertex {
+                texture_pos: [1.0, 1.0],
+                cell_pos: [right, top],
+            },
+        ]);
+        target
+            .draw(
+                &self.cache.vbos.quadtree,
+                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
+                &self.cache.shaders.quadtree,
+                &uniform! {
+                    quadtree_texture: &quadtree_texture,
+                    max_layer: gl_quadtree.layers as i32,
+                    root_idx: gl_quadtree.root_idx as u32,
                 },
-                &pixels,
-            );
-        } else {
-            // Recurse into each child node.
-            for (branch_idx, branch) in root_node.branch_iter() {
-                let child_node = branch.node().unwrap();
-                let branch_offset: IVec2D = branch_idx.branch_offset(layers_remaining);
-                let child_node_offset: IVec2D = root_node_offset + branch_offset;
-                self.draw_cell_chunks(target, child_node, child_node_offset, layers_remaining - 1);
-            }
-        }
+                &glium::DrawParameters::default(),
+            )
+            .expect("Failed to draw cells");
     }
-    // Get a Vec of vertices for all the cells in the given chunk, creating a
-    // new one if necessary.
-    fn get_color_array(&mut self, node: &NdCachedNode<u8, Dim2D>) -> CellPixelChunk {
-        self.cache
-            .chunks
-            .entry(node.clone())
-            .and_modify(|(_, ref mut keep)| {
-                *keep = true;
-            })
-            .or_insert_with(|| {
-                let mut vertices = CellPixelChunk::default();
-                vertices.fill_with_quadtree_node(
-                    &NdTreeBranch::Node(node.clone()),
-                    &|branch: &NdTreeBranch<u8, Dim2D>| {
-                        // let live = match branch {
-                        //     NdTreeBranch::Leaf(cell_state) => *cell_state != 0,
-                        //     NdTreeBranch::Node(node) => node.population != 0,
-                        // };
-                        // if live {
-                        //     LIVE_COLOR
-                        // } else {
-                        //     DEAD_COLOR
-                        // }
-                        let ratio = match branch {
-                            NdTreeBranch::Leaf(cell_state) => *cell_state as f64,
-                            NdTreeBranch::Node(node) => {
-                                if node.population.is_zero() {
-                                    0.0
-                                } else if let Some(node_len) = node.len().to_f64() {
-                                    let population = node.population.to_f64().unwrap();
-                                    (population / 2.0) / node_len.powf(2.0) + 0.5
-                                } else {
-                                    1.0
-                                }
-                            }
-                        };
-                        let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
-                            + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
-                            .powf(0.5);
-                        let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
-                            + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
-                            .powf(0.5);
-                        let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
-                            + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
-                            .powf(0.5);
-                        (r as u8, g as u8, b as u8)
-                    },
-                );
-                (vertices, true)
-            })
-            .0
-            .clone()
+    fn get_branch_pixel_color(branch: &NdTreeBranch<u8, Dim2D>) -> [u8; 4] {
+        let ratio = match branch {
+            NdTreeBranch::Leaf(cell_state) => *cell_state as f64,
+            NdTreeBranch::Node(node) => {
+                if node.population.is_zero() {
+                    0.0
+                } else if let Some(node_len) = node.len().to_f64() {
+                    let population = node.population.to_f64().unwrap();
+                    (population / 2.0) / node_len.powf(2.0) + 0.5
+                } else {
+                    1.0
+                }
+            }
+        };
+        let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
+            + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
+            .powf(0.5);
+        let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
+            + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
+            .powf(0.5);
+        let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
+            + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
+            .powf(0.5);
+        [r as u8, g as u8, b as u8, 255]
     }
     /// Draw the gridlines that appear in the viewport.
     pub fn draw_gridlines(&mut self) {

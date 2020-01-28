@@ -1,5 +1,5 @@
-//! Code for producing "flattened" NdTrees, to export as MacroCell or for
-//! passing to GLSL in rendering.
+//! Code for producing "indexed" NdTrees, to export as MacroCell or for passing
+//! to GLSL in rendering.
 
 use std::collections::HashMap;
 
@@ -7,31 +7,31 @@ use super::*;
 
 /// An NdTree represented as an list of nodes.
 #[derive(Debug)]
-pub struct FlatNdTree<C: CellType, D: Dim> {
+pub struct IndexedNdTree<C: CellType, D: Dim> {
     layers: usize,
-    nodes: Vec<Vec<FlatNdTreeBranch<C, D>>>,
+    nodes: Vec<Vec<IndexedNdTreeBranch<C, D>>>,
     root_idx: usize,
 }
 
-/// A branch of a node in a FlatNdTree.
+/// A branch of a node in a IndexedNdTree.
 #[derive(Debug)]
-pub enum FlatNdTreeBranch<C: CellType, D: Dim> {
-    /// The last "flattened" node in a FlatNdTree; can be either an NdTreeNode
+pub enum IndexedNdTreeBranch<C: CellType, D: Dim> {
+    /// The last "indexed" node in a IndexedNdTree; can be either an NdTreeNode
     /// or a single cell.
     Leaf(NdTreeBranch<C, D>),
     /// A pointer to another node in the list of nodes.
     Pointer(usize),
 }
 
-impl<C: CellType, D: Dim> FlatNdTree<C, D> {
-    /// Gets the number of flattened layers; i.e. how many times you have to
+impl<C: CellType, D: Dim> IndexedNdTree<C, D> {
+    /// Gets the number of indexed layers; i.e. how many times you have to
     /// follow a pointer (including getting the initial node) to reach a leaf.
     /// The minimum is 1.
     pub fn get_layer_count(&self) -> usize {
         self.layers
     }
     /// Gets the list of nodes.
-    pub fn get_nodes(&self) -> &[Vec<FlatNdTreeBranch<C, D>>] {
+    pub fn get_nodes(&self) -> &[Vec<IndexedNdTreeBranch<C, D>>] {
         &self.nodes
     }
     /// Gets the list index of the root node.
@@ -39,21 +39,21 @@ impl<C: CellType, D: Dim> FlatNdTree<C, D> {
         self.root_idx
     }
 
-    /// Constructs a FlatNdTree from an NdCachedNode, flattening nodes down to
+    /// Constructs a IndexedNdTree from an NdCachedNode, indexing nodes down to
     /// the given layer. Use `min_layer = 0` to store the entire NdTree.
     pub fn from_node(node: &NdCachedNode<C, D>, min_layer: usize) -> Self {
-        FlatNdTreeInProgress {
+        IndexedNdTreeInProgress {
             min_layer,
             nodes: vec![],
             cache: HashMap::default(),
         }
         .complete(node)
     }
-    /// Converts this FlatNdTree back into an NdCachedNode.
+    /// Converts this IndexedNdTree back into an NdCachedNode.
     pub fn to_node(&self, cache: &mut NdTreeCache<C, D>) -> NdCachedNode<C, D> {
         self.partial_to_node(cache, self.root_idx)
     }
-    /// Converts a single node (and its descendants) of this FlatNdTree into an
+    /// Converts a single node (and its descendants) of this IndexedNdTree into an
     /// NdCachedNode.
     fn partial_to_node(
         &self,
@@ -62,47 +62,49 @@ impl<C: CellType, D: Dim> FlatNdTree<C, D> {
     ) -> NdCachedNode<C, D> {
         let mut branch_iter = self.nodes[start_idx].iter();
         cache.get_node_from_fn(|cache, _| match branch_iter.next().unwrap() {
-            FlatNdTreeBranch::Leaf(branch) => branch.clone(),
-            FlatNdTreeBranch::Pointer(idx) => NdTreeBranch::Node(self.partial_to_node(cache, *idx)),
+            IndexedNdTreeBranch::Leaf(branch) => branch.clone(),
+            IndexedNdTreeBranch::Pointer(idx) => {
+                NdTreeBranch::Node(self.partial_to_node(cache, *idx))
+            }
         })
     }
 }
 
-/// A temporary struct used to create a FlatNdTree.
-struct FlatNdTreeInProgress<'a, C: CellType, D: Dim> {
+/// A temporary struct used to create a IndexedNdTree.
+struct IndexedNdTreeInProgress<'a, C: CellType, D: Dim> {
     min_layer: usize,
-    nodes: Vec<Vec<FlatNdTreeBranch<C, D>>>,
+    nodes: Vec<Vec<IndexedNdTreeBranch<C, D>>>,
     cache: HashMap<&'a NdCachedNode<C, D>, usize, NodeHasher>,
 }
-impl<'a, C: CellType, D: Dim> FlatNdTreeInProgress<'a, C, D> {
-    /// Adds a node recursively to the flattened NdTree if it is not already
+impl<'a, C: CellType, D: Dim> IndexedNdTreeInProgress<'a, C, D> {
+    /// Adds a node recursively to the indexed NdTree if it is not already
     /// present and returns its index.
     fn add_node(&mut self, node: &'a NdCachedNode<C, D>) -> usize {
         if let Some(&node_index) = self.cache.get(node) {
             node_index
         } else {
-            let flat_branches;
-            flat_branches = node
+            let indexed_branches;
+            indexed_branches = node
                 .branches
                 .iter()
                 .map(|branch| {
                     if branch.get_layer() <= self.min_layer {
-                        FlatNdTreeBranch::Leaf(branch.clone())
+                        IndexedNdTreeBranch::Leaf(branch.clone())
                     } else {
-                        FlatNdTreeBranch::Pointer(self.add_node(branch.node().unwrap()))
+                        IndexedNdTreeBranch::Pointer(self.add_node(branch.node().unwrap()))
                     }
                 })
                 .collect();
             let node_index = self.nodes.len();
-            self.nodes.push(flat_branches);
+            self.nodes.push(indexed_branches);
             self.cache.insert(node, node_index);
             node_index
         }
     }
-    /// Returns the final FlatNdTree, using the given node as the root.
-    pub fn complete(mut self, node: &'a NdCachedNode<C, D>) -> FlatNdTree<C, D> {
+    /// Returns the final IndexedNdTree, using the given node as the root.
+    pub fn complete(mut self, node: &'a NdCachedNode<C, D>) -> IndexedNdTree<C, D> {
         let root_idx = self.add_node(node);
-        FlatNdTree {
+        IndexedNdTree {
             layers: node.layer - self.min_layer,
             nodes: self.nodes,
             root_idx,
@@ -115,9 +117,9 @@ mod tests {
     use super::*;
     use crate::automaton::{rle, NdAutomaton};
 
-    /// Thoroughly test flattening a single quadtree.
+    /// Thoroughly test a single "indexed" quadtree.
     #[test]
-    fn test_flat_ndtree() {
+    fn test_indexed_ndtree() {
         // Load this pattern:
         //
         // - - - - x - - -
@@ -144,28 +146,28 @@ x = 8, y = 8, rule = B3/S23
         //  - three unique layer-2 nodes (4x4)
         //  - two unique layer-1 nodes (2x2)
         //  - two unique "layer-0" nodes (individual cells), but these don't
-        //    have their own entries in the flattened tree
+        //    have their own entries in the indexed tree
         //
-        // When we flatten the tree down to layer N, we are flattening all nodes
-        // of layer >= N, and leaving the rest as NdTreeNodes. The number of
-        // flattened nodes is flat_N.nodes.len().
+        // When we make the tree indexed down to layer N, we are indexing all
+        // nodes of layer >= N, and leaving the rest as NdTreeNodes. The number
+        // of indexed nodes is indexed_N.nodes.len().
 
-        let flat_0 = FlatNdTree::from_node(&node, 0);
-        assert_eq!(3, flat_0.layers);
+        let indexed_0 = IndexedNdTree::from_node(&node, 0);
+        assert_eq!(3, indexed_0.layers);
         // 1+3+2 = 6, so there should be a total of eight nodes in this one.
-        assert_eq!(6, flat_0.nodes.len());
-        assert_eq!(node, flat_0.to_node(&mut cache));
+        assert_eq!(6, indexed_0.nodes.len());
+        assert_eq!(node, indexed_0.to_node(&mut cache));
 
-        let flat_1 = FlatNdTree::from_node(&node, 1);
-        assert_eq!(2, flat_1.layers);
+        let indexed_1 = IndexedNdTree::from_node(&node, 1);
+        assert_eq!(2, indexed_1.layers);
         // 1+3 = 4
-        assert_eq!(4, flat_1.nodes.len());
-        assert_eq!(node, flat_1.to_node(&mut cache));
+        assert_eq!(4, indexed_1.nodes.len());
+        assert_eq!(node, indexed_1.to_node(&mut cache));
 
-        let flat_2 = FlatNdTree::from_node(&node, 2);
-        assert_eq!(1, flat_2.layers);
+        let indexed_2 = IndexedNdTree::from_node(&node, 2);
+        assert_eq!(1, indexed_2.layers);
         // 1 = 1
-        assert_eq!(1, flat_2.nodes.len());
-        assert_eq!(node, flat_2.to_node(&mut cache));
+        assert_eq!(1, indexed_2.nodes.len());
+        assert_eq!(node, indexed_2.to_node(&mut cache));
     }
 }

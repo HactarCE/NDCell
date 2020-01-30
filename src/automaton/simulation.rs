@@ -1,30 +1,32 @@
 //! The functions that apply a rule to each cell in a grid.
 
-use num::BigInt;
+use num::{BigInt, One, Signed, Zero};
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use super::*;
-use crate::math::ceil_log_base_2;
 
 /// A HashLife simulation of a given automaton that caches simulation results.
 #[derive(Debug, Clone)]
 pub struct Simulation<C: CellType, D: Dim> {
     rule: Rc<dyn Rule<C, D>>,
-    // TODO: make step_size be a BigInt
-    step_size: usize,
+    last_step_size: BigInt,
     min_layer: usize,
     results: ResultsCache<C, D>,
 }
 impl<C: CellType, D: Dim> Default for Simulation<C, D> {
     fn default() -> Self {
-        Self::new(Rc::new(DummyRule), 1)
+        Self::new(Rc::new(DummyRule))
     }
 }
 
 impl<C: CellType, D: Dim> Simulation<C, D> {
-    /// Constructs a new Simulation with the given rule and step size.
-    pub fn new(rule: Rc<dyn Rule<C, D>>, step_size: usize) -> Self {
+    /// Constructs a new Simulation using the given rule.
+    pub fn from<R: 'static + Rule<C, D>>(rule: R) -> Self {
+        Self::new(Rc::new(rule))
+    }
+    /// Constructs a new Simulation using the given rule.
+    pub fn new(rule: Rc<dyn Rule<C, D>>) -> Self {
         // Determine the minimum layer at which we can simulate one generation
         // of the automaton, using `n / 4 >= r`. (See the documentation for
         // Simulation::advance_inner_node() for an explanation.) Even at r=0 or
@@ -37,19 +39,15 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 
         Self {
             rule,
-            step_size,
+            last_step_size: 0.into(),
             min_layer,
             results: ResultsCache::default(),
         }
     }
 
-    /// Returns the step size of this simulation.
-    pub fn get_step_size(&self) -> usize {
-        self.step_size
-    }
     /// Sets the step size of this simulation to the given value.
-    pub fn set_step_size(&mut self, new_step_size: usize) {
-        if new_step_size != self.step_size {
+    fn set_last_step_size(&mut self, new_step_size: &BigInt) {
+        if *new_step_size != self.last_step_size {
             // If the new step is different, recompute ResultsCache. This is
             // only present to prevent holding onto memory we don't need any
             // more, and could probably be replaced with something smarter that
@@ -57,24 +55,31 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
             // this new step size.
             self.results = ResultsCache::default();
         }
-        self.step_size = new_step_size;
+        self.last_step_size = new_step_size.clone();
     }
 
-    /// Advances the given NdTree by a single generation.
-    pub fn step_single(&mut self, tree: &mut NdTree<C, D>) {
-        let old_step_size = self.step_size;
-        self.step_size = 1;
-        self.step(tree);
-        self.step_size = old_step_size;
+    /// Advances the given NdTree by the given number of generations.
+    pub fn step(&mut self, tree: &mut NdTree<C, D>, step_size: &BigInt) {
+        assert!(
+            step_size.is_positive(),
+            "Step size must be a positive integer"
+        );
+        self.set_last_step_size(step_size);
+        self.step_no_cache_clear(tree, step_size);
     }
 
-    /// Advances the given NdTree by a number of generations equal to this
-    /// simulation's step size.
-    pub fn step(&mut self, tree: &mut NdTree<C, D>) {
+    /// Advances the given NdTree by the given number of generations without
+    /// clearing the results cache.
+    pub fn step_no_cache_clear(&mut self, tree: &mut NdTree<C, D>, step_size: &BigInt) {
+        assert!(
+            step_size.is_positive(),
+            "Step size must be a positive integer"
+        );
         // Expand out to the sphere of influence of the existing pattern,
-        // following `expansion_distance >= r * t`.
-        let min_expansion_distance = BigInt::from(1)
-            << (ceil_log_base_2(self.rule.radius()) + ceil_log_base_2(self.step_size));
+        // following `expansion_distance >= r * t` (rounding `r` and `t` each to
+        // the next-highest power of two).
+        let min_expansion_distance =
+            BigInt::from(1) << (BigInt::from(self.rule.radius()).bits() + step_size.bits());
         let mut expansion_distance = BigInt::from(0);
         while expansion_distance < min_expansion_distance {
             tree.expand();
@@ -88,11 +93,8 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         // minimum layer for a node.)
         tree.expand();
         // Now do the actual simulation.
-        let new_node = self.advance_inner_node(
-            &mut tree.cache.borrow_mut(),
-            &tree.slice.root,
-            self.step_size,
-        );
+        let new_node =
+            self.advance_inner_node(&mut tree.cache.borrow_mut(), &tree.slice.root, step_size);
         tree.set_root_centered(new_node);
         // Shrink the tree as much as possible to avoid wasted space.
         tree.shrink();
@@ -121,11 +123,11 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         &mut self,
         cache: &mut NdTreeCache<C, D>,
         node: &NdCachedNode<C, D>,
-        generations: usize,
+        generations: &BigInt,
     ) -> NdCachedNode<C, D> {
         // Handle the simplest case of just not simulating anything. This is one
         // of the recursive base cases.
-        if generations == 0 {
+        if generations.is_zero() {
             return node.get_inner_node(cache);
         }
 
@@ -145,8 +147,8 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         // If this is the minimum layer, just compute each cell manually. This
         // is the other recursive base case.
         if node.layer == self.min_layer {
-            assert_eq!(
-                1, generations,
+            assert!(
+                generations.is_one(),
                 "Cannot simulate more than 1 generation at minimum layer"
             );
             let old_cell_ndarray = NdArray::from(node);
@@ -163,7 +165,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
             // as long as they differ by no more than `1` and they add up to
             // `t`.
             let t_inner = generations / 2;
-            let t_outer = generations - t_inner;
+            let t_outer = generations - &t_inner;
 
             // Let `L` be the layer of the current node, and let `t` be the
             // number of generations to simulate. Colors refer to Figure 4 in
@@ -182,13 +184,13 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
                     });
                     // 3. Simulate that node to get a new node at layer `L-2`
                     //    and time `t/2` (red squares).
-                    NdTreeBranch::Node(self.advance_inner_node(cache, &node_intial, t_outer))
+                    NdTreeBranch::Node(self.advance_inner_node(cache, &node_intial, &t_outer))
                     // 4. Using branches from step #3, create a node at layer
                     //    `L-1` and time `t/2`.
                 });
                 // 5. Simulate that node to get a new node at layer `L-2` and
                 //    time `t` (green squares).
-                NdTreeBranch::Node(self.advance_inner_node(cache, &node_halfway, t_inner))
+                NdTreeBranch::Node(self.advance_inner_node(cache, &node_halfway, &t_inner))
                 // 6. Using branches from step #5, create a new node at layer
                 //    `L-1` and time `t` (blue square). This is the final
                 //    result.
@@ -205,27 +207,34 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 
 /// A cache of simulation results for a variety of step sizes.
 #[derive(Debug, Default, Clone)]
-struct ResultsCache<C: CellType, D: Dim>(HashMap<usize, SingleStepResultsCache<C, D>, NodeHasher>);
+struct ResultsCache<C: CellType, D: Dim>(HashMap<BigInt, SingleStepResultsCache<C, D>, NodeHasher>);
 impl<C: CellType, D: Dim> ResultsCache<C, D> {
     fn get_result(
         &self,
         node: &NdCachedNode<C, D>,
-        step_size: usize,
+        step_size: &BigInt,
     ) -> Option<&NdCachedNode<C, D>> {
         self.0
-            .get(&step_size)
+            .get(step_size)
             .and_then(|single_step_cache| single_step_cache.get_result(node))
     }
     fn set_result(
         &mut self,
         node: NdCachedNode<C, D>,
-        step_size: usize,
+        step_size: &BigInt,
         result: NdCachedNode<C, D>,
     ) {
-        self.0
-            .entry(step_size)
-            .or_insert_with(SingleStepResultsCache::default)
-            .set_result(node, result);
+        // TODO: once #![feature(entry_insert)] is stabalized, use that instead.
+        let single_step_results_cache;
+        if let Some(existing) = self.0.get_mut(step_size) {
+            single_step_results_cache = existing;
+        } else {
+            single_step_results_cache = self
+                .0
+                .entry(step_size.clone())
+                .or_insert_with(SingleStepResultsCache::default)
+        }
+        single_step_results_cache.set_result(node, result);
     }
 }
 

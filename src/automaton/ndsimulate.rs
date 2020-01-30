@@ -7,18 +7,15 @@ pub trait NdSimulate {
     fn get_ndim(&self) -> usize;
     /// Returns the number of live cells in the simulation.
     fn get_population(&self) -> &BigInt;
-    /// Returns the simulation step size.
-    fn get_step_size(&self) -> usize;
-    /// Sets the simulation step size.
-    fn set_step_size(&mut self, step_size: usize);
     /// Returns the number of generations that have elapsed in the simulation.
-    fn get_generation_count(&self) -> isize;
+    fn get_generation_count(&self) -> &BigInt;
     /// Sets the number of generations that have elapsed in the simulation.
-    fn set_generation_count(&mut self, generations: isize);
-    /// Step forward in the simulation by the step size.
-    fn step(&mut self);
-    /// Step forward one generation in the simulation.
-    fn step_single(&mut self);
+    fn set_generation_count(&mut self, generations: BigInt);
+    /// Steps forward in the simulation by the given number of generations.
+    fn step(&mut self, step_size: &BigInt);
+    /// Steps forward in the simulation by the given number of generations
+    /// without clearing the results cache.
+    fn step_no_cache_clear(&mut self, step_size: &BigInt);
 }
 
 /// A proxy trait for NdSimulate.
@@ -43,22 +40,16 @@ where
     fn get_population(&self) -> &BigInt {
         self.ndsim().get_population()
     }
-    fn get_step_size(&self) -> usize {
-        self.ndsim().get_step_size()
-    }
-    fn set_step_size(&mut self, step_size: usize) {
-        self.ndsim_mut().set_step_size(step_size);
-    }
-    fn get_generation_count(&self) -> isize {
+    fn get_generation_count(&self) -> &BigInt {
         self.ndsim().get_generation_count()
     }
-    fn set_generation_count(&mut self, generations: isize) {
+    fn set_generation_count(&mut self, generations: BigInt) {
         self.ndsim_mut().set_generation_count(generations);
     }
-    fn step(&mut self) {
-        self.ndsim_mut().step();
+    fn step(&mut self, step_size: &BigInt) {
+        self.ndsim_mut().step(step_size);
     }
-    fn step_single(&mut self) {
-        self.ndsim_mut().step_single();
+    fn step_no_cache_clear(&mut self, step_size: &BigInt) {
+        self.ndsim_mut().step_no_cache_clear(step_size);
     }
 }

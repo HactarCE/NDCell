@@ -7,6 +7,7 @@ use imgui::{Context, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use log::warn;
+use num::{BigInt, Signed};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -33,6 +34,7 @@ pub struct State {
     pub grid_view: GridView,
     pub history: HistoryStack,
     pub input_state: input::InputState,
+    pub step_size: BigInt,
     pub gui: gui::GuiWindows,
     pub dpi: f64,
 }
@@ -87,12 +89,13 @@ pub fn show_gui() {
             warn!("Unable to parse default pattern; using empty pattern instead");
             Default::default()
         });
-    automaton.sim = Simulation::new(Rc::new(rule::LIFE), 4);
+    automaton.sim = Simulation::new(Rc::new(rule::LIFE));
     let mut state = State {
         display: display.clone(),
         grid_view: GridView::new_2d(display.clone(), automaton),
         history: Default::default(),
         input_state: Default::default(),
+        step_size: BigInt::from(4),
         gui: Default::default(),
         dpi: hidpi_factor,
     };
@@ -159,30 +162,40 @@ impl State {
     pub fn reset(&mut self) -> usize {
         self.stop_running();
         let mut i = 0;
-        while self.grid_view.get_generation_count() > 0 && self.undo() {
+        while self.grid_view.get_generation_count().is_positive() && self.undo() {
             i += 1;
         }
         i
     }
-    /// Step forward a number of generations in the simulation.
-    pub fn step(&mut self, record_history: bool) {
+    pub fn step_step_size(&mut self, record_history: bool) {
         if record_history {
             if self.stop_running() {
                 return;
             }
             self.record_state();
         }
-        self.grid_view.step();
+        self.grid_view.step(&self.step_size);
     }
-    /// Step forward one generation in the simulation.
-    pub fn step_single(&mut self, record_history: bool) {
+    /// Steps forward in the simulation by the given number of generations.
+    pub fn step(&mut self, step_size: &BigInt, record_history: bool) {
         if record_history {
             if self.stop_running() {
                 return;
             }
             self.record_state();
         }
-        self.grid_view.step_single();
+        self.grid_view.step(step_size);
+    }
+    /// Steps forward in the simulation by the given number of generations
+    /// without clearing the results cache.
+    pub fn step_no_cache_clear(&mut self, step_size: &BigInt, record_history: bool) {
+        if record_history {
+            if self.stop_running() {
+                return;
+            }
+            self.record_state();
+        }
+        self.grid_view.step_no_cache_clear(&step_size);
     }
     pub fn toggle_running(&mut self) -> bool {
         if self.input_state.is_running {
@@ -209,8 +222,7 @@ impl State {
         let mut automaton: NdAutomaton<Dim2D> = rle::RleEncode::from_rle(
             &clipboard_get().map_err(|_| "Unable to access clipboard contents")?,
         )?;
-        automaton.sim =
-            Simulation::new(Rc::new(rule::LIFE), self.grid_view.ndsim().get_step_size());
+        automaton.sim = Simulation::new(Rc::new(rule::LIFE));
         self.grid_view = GridView::new_2d(self.display.clone(), automaton);
         Ok(())
     }

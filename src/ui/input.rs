@@ -1,6 +1,7 @@
 use glium::glutin::*;
 use log::warn;
 use noisy_float::prelude::r64;
+use num::Signed;
 use std::collections::HashSet;
 use std::ops::Index;
 
@@ -164,8 +165,8 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                     alt: false,
                     logo: false,
                 } => match virtual_keycode {
-                    Some(VirtualKeyCode::Space) => state.step_single(true),
-                    Some(VirtualKeyCode::Tab) => state.step(true),
+                    Some(VirtualKeyCode::Space) => state.step_no_cache_clear(&1.into(), true),
+                    Some(VirtualKeyCode::Tab) => state.step_step_size(true),
                     Some(VirtualKeyCode::Return) => {
                         state.toggle_running();
                     }
@@ -192,7 +193,7 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                     // Reset.
                     Some(VirtualKeyCode::R) => {
                         state.stop_running();
-                        while state.grid_view.get_generation_count() > 0
+                        while state.grid_view.get_generation_count().is_positive()
                             && state.history.undo(&mut state.grid_view)
                         {}
                     }
@@ -229,7 +230,7 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
 
 pub fn do_frame(state: &mut super::State) {
     if state.input_state.is_running {
-        state.step(false);
+        state.step_step_size(false);
     }
 
     let input_state = &mut state.input_state;

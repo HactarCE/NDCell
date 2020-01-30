@@ -30,7 +30,7 @@ struct CxrleHeader {
     /// Position of top-left of pattern (i.e. most negative coordinates).
     pub pos: BigVec2D,
     /// Number of generations simulated.
-    pub gen: isize,
+    pub gen: BigInt,
 }
 /// A single "content item" that may be repeated in an RLE pattern.
 enum RleItem<C> {
@@ -157,7 +157,7 @@ fn parse_header(pair: TokenPair) -> Result<RleHeader, String> {
 
 fn parse_cxrle(pair: TokenPair) -> Result<CxrleHeader, String> {
     let mut pos: BigVec2D = BigVec2D::origin();
-    let mut gen: isize = 0;
+    let mut gen: BigInt = 0.into();
     for kv_pair in pair.into_inner() {
         let mut inners = kv_pair.into_inner();
         let k = inners.next().ok_or("Invalid CXRLE key")?.as_str();

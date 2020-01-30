@@ -172,8 +172,7 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<u8, D>,
     pub sim: Simulation<u8, D>,
-    // TODO make generation count be isize
-    pub generations: isize,
+    pub generations: BigInt,
 }
 impl<D: Dim> NdSimulate for NdAutomaton<D> {
     fn get_ndim(&self) -> usize {
@@ -182,25 +181,19 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
     fn get_population(&self) -> &BigInt {
         &self.tree.get_root().population
     }
-    fn get_step_size(&self) -> usize {
-        self.sim.get_step_size()
+    fn get_generation_count(&self) -> &BigInt {
+        &self.generations
     }
-    fn set_step_size(&mut self, step_size: usize) {
-        self.sim.set_step_size(step_size);
-    }
-    fn get_generation_count(&self) -> isize {
-        self.generations
-    }
-    fn set_generation_count(&mut self, generations: isize) {
+    fn set_generation_count(&mut self, generations: BigInt) {
         self.generations = generations;
     }
-    fn step(&mut self) {
-        self.sim.step(&mut self.tree);
-        self.generations += self.sim.get_step_size() as isize;
+    fn step(&mut self, step_size: &BigInt) {
+        self.sim.step(&mut self.tree, step_size);
+        self.generations += step_size;
     }
-    fn step_single(&mut self) {
-        self.sim.step_single(&mut self.tree);
-        self.generations += 1;
+    fn step_no_cache_clear(&mut self, step_size: &BigInt) {
+        self.sim.step_no_cache_clear(&mut self.tree, step_size);
+        self.generations += step_size;
     }
 }
 

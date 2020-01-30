@@ -1,4 +1,5 @@
 use imgui::*;
+use num::ToPrimitive;
 
 use crate::automaton::NdSimulate;
 use crate::ui::State;
@@ -19,15 +20,15 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                 width = 200.0;
             }
             if ui.button(im_str!("Step 1 generation"), [width, 40.0]) {
-                state.step_single(true);
+                state.step_no_cache_clear(&1.into(), true);
             };
             ui.spacing();
             ui.spacing();
             ui.separator();
             ui.spacing();
             ui.spacing();
-            let old_sim_step_size = state.grid_view.get_step_size();
-            let mut sim_step_size = old_sim_step_size as i32;
+            let old_sim_step_size = &state.step_size;
+            let mut sim_step_size = old_sim_step_size.to_i32().unwrap();
             ui.input_int(im_str!("Sim step"), &mut sim_step_size)
                 .step(16)
                 .step_fast(256)
@@ -35,14 +36,14 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
             if sim_step_size <= 0 {
                 sim_step_size = 1;
             }
-            if old_sim_step_size as i32 != sim_step_size {
-                state.grid_view.set_step_size(sim_step_size as usize);
+            if old_sim_step_size.to_i32().unwrap() != sim_step_size {
+                state.step_size = sim_step_size.into();
             }
             if ui.button(
                 &ImString::new(format!("Step {} generations", sim_step_size)),
                 [width, 40.0],
             ) {
-                state.step(true);
+                state.step_step_size(true);
             }
             ui.spacing();
             ui.spacing();
@@ -70,20 +71,17 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                 .step_fast(256)
                 .build();
             *jump_to_gen = jump_to_gen_i32 as isize;
-            if *jump_to_gen <= state.grid_view.get_generation_count() {
-                *jump_to_gen = state.grid_view.get_generation_count();
+            if *jump_to_gen <= state.grid_view.get_generation_count().to_isize().unwrap() {
+                *jump_to_gen = state.grid_view.get_generation_count().to_isize().unwrap();
             }
             if ui.button(
                 &ImString::new(format!("Jump to generation {}", *jump_to_gen)),
                 [width, 40.0],
             ) {
-                if state.grid_view.get_generation_count() < *jump_to_gen {
-                    let old_sim_step_size = state.grid_view.get_step_size();
-                    state.grid_view.set_step_size(
-                        (*jump_to_gen - state.grid_view.get_generation_count()) as usize,
-                    );
-                    state.step(true);
-                    state.grid_view.set_step_size(old_sim_step_size);
+                if state.grid_view.get_generation_count().to_isize().unwrap() < *jump_to_gen {
+                    let tmp_step_size =
+                        *jump_to_gen - state.grid_view.get_generation_count().to_isize().unwrap();
+                    state.step(&tmp_step_size.into(), true);
                 }
             }
             ui.spacing();

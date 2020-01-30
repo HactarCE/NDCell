@@ -31,7 +31,7 @@ fn test_cgol() {
     // TODO: load RLE instead of manually setting individual cells.
     let mut grid = NdTree::new();
     let rule = rule::LIFE;
-    let mut sim = Simulation::new(Rc::new(rule), 1);
+    let mut sim = Simulation::new(Rc::new(rule));
 
     // Make a glider
     grid.set_cell(&NdVec::big([3, 3]), 1);
@@ -53,7 +53,7 @@ fn test_cgol() {
         get_non_default_set(&grid.slice)
     );
     // Simulate it for a few steps.
-    sim.step(&mut grid);
+    sim.step(&mut grid, &1.into());
     println!("{}", grid);
     println!();
     assert_eq!(
@@ -66,7 +66,7 @@ fn test_cgol() {
         ]),
         get_non_default_set(&grid.slice)
     );
-    sim.step(&mut grid);
+    sim.step(&mut grid, &1.into());
     println!("{}", grid);
     println!();
     assert_eq!(
@@ -79,8 +79,8 @@ fn test_cgol() {
         ]),
         get_non_default_set(&grid.slice)
     );
-    sim.set_step_size(64);
-    sim.step(&mut grid);
+    // Simulate it for a much bigger step.
+    sim.step(&mut grid, &64.into());
     assert_eq!(
         make_cell_coords_set(vec![
             NdVec([20, 20]),
@@ -91,8 +91,8 @@ fn test_cgol() {
         ]),
         get_non_default_set(&grid.slice)
     );
-    sim.set_step_size(1024);
-    sim.step(&mut grid);
+    // And an even bigger one.
+    sim.step(&mut grid, &1024.into());
     assert_eq!(
         make_cell_coords_set(vec![
             NdVec([276, 276]),

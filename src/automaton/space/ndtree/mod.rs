@@ -21,6 +21,12 @@ pub struct NdTree<C: CellType, D: Dim> {
     /// The slice describing the root node and offset.
     pub slice: NdTreeSlice<C, D>,
 }
+impl<C: CellType, D: Dim> PartialEq for NdTree<C, D> {
+    fn eq(&self, other: &Self) -> bool {
+        self.slice == other.slice
+    }
+}
+impl<C: CellType, D: Dim> Eq for NdTree<C, D> {}
 
 /// A 1D grid represented as a bintree.
 pub type NdTree1D<C> = NdTree<C, Dim1D>;

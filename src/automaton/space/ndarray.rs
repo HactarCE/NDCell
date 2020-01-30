@@ -72,6 +72,14 @@ impl<T, D: Dim> NdArray<T, D> {
     pub fn rect(&self) -> URect<D> {
         URect::new(UVec::origin(), self.size.clone())
     }
+    /// Returns an iterator over all the elements in this array, enumerated by
+    /// their positions.
+    pub fn iter_enumerated<'a>(&'a self) -> impl Iterator<Item = (IVec<D>, &T)> + 'a {
+        self.data
+            .iter()
+            .enumerate()
+            .map(move |(idx, item)| (unflatten_idx(&self.size, idx), item))
+    }
 }
 
 /// An offset immutable slice of a NdArray.

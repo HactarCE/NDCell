@@ -42,9 +42,7 @@ use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use noisy_float::prelude::r64;
 use num::{BigInt, ToPrimitive, Zero};
-use std::borrow::Cow;
 use std::cell::RefMut;
-use std::collections::HashMap;
 
 mod gl_quadtree;
 
@@ -630,7 +628,7 @@ impl<'a> RenderInProgress<'a> {
         {
             // Generate vertices.
             let highlight_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
-            let mut highlight_vertices: Vec<PointVertex> = vec![
+            let highlight_vertices: Vec<PointVertex> = vec![
                 ([hover_x, hover_y], dark_highlight_color).into(),
                 ([hover_x + 1.0, hover_y], dark_highlight_color).into(),
                 ([hover_x, hover_y + 1.0], dark_highlight_color).into(),
@@ -723,7 +721,6 @@ impl<'a> RenderInProgress<'a> {
         gridlines_texture: &glium::texture::srgb_texture2d::SrgbTexture2d,
         alpha: f32,
     ) {
-        let (target_w, target_h) = self.target.get_dimensions();
         self.cache.vbos.blit.write(&[
             TexturePosVertex {
                 src_coords: [0.0, 0.0],

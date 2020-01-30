@@ -28,7 +28,7 @@ impl GridViewTrait for GridView3D {
     fn draw(
         &mut self,
         _target: &mut glium::Frame,
-        cursor_position: Option<(i32, i32)>,
+        _cursor_position: Option<(i32, i32)>,
     ) -> Option<AnyDimBigVec> {
         unimplemented!()
     }

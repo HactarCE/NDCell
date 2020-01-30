@@ -211,10 +211,14 @@ impl RenderCache {
     }
 }
 
-pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) {
+/// Draw the 2D grid and return the coordinates of the cell that the mouse is
+/// hovering over.
+pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) -> Option<BigVec2D> {
     let mut rip = RenderInProgress::new(grid_view, target);
     rip.draw_cells();
     rip.draw_gridlines();
+    rip.draw_hover_highlight();
+    unimplemented!()
 }
 
 struct RenderInProgress<'a> {
@@ -614,6 +618,12 @@ impl<'a> RenderInProgress<'a> {
                 )
                 .expect("Failed to draw gridlines");
         }
+    }
+    /// Draws highlights around the hovered cell and then returns its global
+    /// coordinates.
+    pub fn draw_hover_highlight(&mut self) -> Option<BigVec2D> {
+        // TODO: implement
+        None
     }
 }
 

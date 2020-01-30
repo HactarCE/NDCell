@@ -12,7 +12,7 @@ pub use view3d::GridView3D;
 /// the GridView2D or GridView3D within.
 #[enum_dispatch]
 pub trait GridViewTrait: Clone + NdSimulate {
-    fn draw(&mut self, target: &mut glium::Frame);
+    fn draw(&mut self, target: &mut glium::Frame) -> Option<AnyDimBigVec>;
     fn do_frame(&mut self);
     fn get_automaton<'a>(&'a self) -> Automaton<'a>;
     fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;

@@ -25,7 +25,7 @@ impl IntoNdSimulate for GridView3D {
 }
 
 impl GridViewTrait for GridView3D {
-    fn draw(&mut self, _target: &mut glium::Frame) {
+    fn draw(&mut self, _target: &mut glium::Frame) -> Option<AnyDimBigVec> {
         unimplemented!()
     }
     fn do_frame(&mut self) {

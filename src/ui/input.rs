@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::ops::Index;
 
 use super::gridview;
-use crate::automaton::{NdSimulate, NdVec};
+use crate::automaton::{AnyDimBigVec, NdSimulate, NdVec};
 
 const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;
@@ -56,6 +56,8 @@ pub struct InputState {
     pub ignore_mouse: bool,
     /// Whether to ignore keyboard inputs.
     pub ignore_keyboard: bool,
+    /// The cell that the mouse is currently hovering over.
+    pub hovered_cell: Option<AnyDimBigVec>,
 }
 impl Index<u32> for InputState {
     type Output = bool;

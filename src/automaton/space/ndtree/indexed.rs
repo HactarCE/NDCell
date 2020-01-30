@@ -115,7 +115,7 @@ impl<'a, C: CellType, D: Dim> IndexedNdTreeInProgress<'a, C, D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::automaton::{rle, NdAutomaton};
+    use crate::automaton::{rle, Automaton2D};
 
     /// Thoroughly test a single "indexed" quadtree.
     #[test]
@@ -130,7 +130,7 @@ mod tests {
         // - x - - - - - x
         // x - x - - - - -
         // - x - x - - - -
-        let automaton: NdAutomaton<Dim2D> = rle::RleEncode::from_rle(
+        let automaton: Automaton2D = rle::RleEncode::from_rle(
             "
 #CXRLE Pos=-4,-4
 x = 8, y = 8, rule = B3/S23

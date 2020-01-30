@@ -346,7 +346,7 @@ mod tests {
     // Load and save a glider.
     #[test]
     fn test_basic_rle() {
-        let result: NdAutomaton<Dim2D> = RleEncode::from_rle(
+        let imported: Automaton2D = RleEncode::from_rle(
             "
 #CXRLE Pos=10,-15
 # Comment

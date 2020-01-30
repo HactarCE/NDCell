@@ -165,8 +165,8 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
     }
 }
 
-/// A fully-fledged cellular automaton, including a grid (NdTree), rule & step
-/// size (Simulation), and generation count.
+/// A fully-fledged cellular automaton, including a grid (NdTree), rule
+/// (Simulation), and generation count.
 #[allow(missing_docs)]
 #[derive(Clone, Default)]
 pub struct NdAutomaton<D: Dim> {
@@ -196,6 +196,19 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
         self.generations += step_size;
     }
 }
+
+/// A 1D cellular automaton.
+pub type Automaton1D = NdAutomaton<Dim1D>;
+/// A 2D cellular automaton.
+pub type Automaton2D = NdAutomaton<Dim2D>;
+/// A 3D cellular automaton.
+pub type Automaton3D = NdAutomaton<Dim3D>;
+/// A 4D cellular automaton.
+pub type Automaton4D = NdAutomaton<Dim4D>;
+/// A 5D cellular automaton.
+pub type Automaton5D = NdAutomaton<Dim5D>;
+/// A 6D cellular automaton.
+pub type Automaton6D = NdAutomaton<Dim6D>;
 
 #[cfg(test)]
 mod tests;

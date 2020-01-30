@@ -84,7 +84,7 @@ pub fn show_gui() {
         Renderer::init(&mut imgui, &*display).expect("Failed to initialize renderer");
 
     // Initialize cellular automaton stuff.
-    let mut automaton: NdAutomaton<Dim2D> = rle::RleEncode::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE)
+    let mut automaton: Automaton2D = rle::RleEncode::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE)
         .unwrap_or_else(|_| {
             warn!("Unable to parse default pattern; using empty pattern instead");
             Default::default()
@@ -219,7 +219,7 @@ impl State {
     }
     pub fn load_rle_from_clipboard(&mut self) -> Result<(), String> {
         self.record_state();
-        let mut automaton: NdAutomaton<Dim2D> = rle::RleEncode::from_rle(
+        let mut automaton: Automaton2D = rle::RleEncode::from_rle(
             &clipboard_get().map_err(|_| "Unable to access clipboard contents")?,
         )?;
         automaton.sim = Simulation::new(Rc::new(rule::LIFE));

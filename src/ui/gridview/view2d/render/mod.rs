@@ -54,12 +54,17 @@ use gl_quadtree::GlQuadtree;
 
 /// Minimum zoom power to draw gridlines. 2.0 = 4 pixels per cell.
 const MIN_GRIDLINE_ZOOM_POWER: f64 = 2.0;
-/// Number of zoom levels over which to fade gridlines in. 4.0 = four zoom levels
-const GRIDLINE_FADE_RANGE: f64 = 2.0;
+/// Number of zoom levels over which to fade gridlines in. 3.0 = three zoom levels
+const GRIDLINE_FADE_RANGE: f64 = 3.0;
 
 /// Draw the 2D grid and return the coordinates of the cell that the mouse is
-/// hovering over. This is the entry point for the entire render process.
-pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) -> Option<BigVec2D> {
+/// hovering over. This is the entry point for the entire 2D grid rendering
+/// process.
+pub fn draw(
+    grid_view: &mut GridView2D,
+    target: &mut glium::Frame,
+    cursor_position: Option<(i32, i32)>,
+) -> Option<BigVec2D> {
     let mut hover_pos = None;
     let mut rip = RenderInProgress::new(grid_view, target);
     rip.draw_cells();
@@ -75,7 +80,7 @@ pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) -> Option<Big
         let gridlines_texture = rip.make_gridlines_texture();
         let mut gridlines_fbo = rip.make_gridlines_fbo(&gridlines_texture);
         rip.draw_gridlines(&mut gridlines_fbo);
-        // let hover_pos = Some(rip.draw_hover_highlight(&mut gridlines_fbo));
+        hover_pos = rip.draw_hover_highlight(&mut gridlines_fbo, cursor_position);
         rip.blit_gridlines(&gridlines_texture, alpha as f32);
     }
     hover_pos
@@ -97,22 +102,31 @@ struct QuadtreePosVertex {
 }
 glium::implement_vertex!(QuadtreePosVertex, texture_pos, cell_pos);
 
-/// A vertex containing just a 2D floating-point position.
+/// A vertex containing a 2D floating-point position and an RGBA color.
 #[derive(Debug, Default, Copy, Clone)]
 struct PointVertex {
     pos: [f32; 2],
+    color: [f32; 4],
 }
-glium::implement_vertex!(PointVertex, pos);
-impl From<[isize; 2]> for PointVertex {
-    fn from(pos: [isize; 2]) -> Self {
-        Self {
-            pos: [pos[0] as f32, pos[1] as f32],
-        }
+glium::implement_vertex!(PointVertex, pos, color);
+impl From<([isize; 2], [f32; 4])> for PointVertex {
+    fn from(pos_and_color: ([isize; 2], [f32; 4])) -> Self {
+        let (pos, color) = pos_and_color;
+        Self::from(([pos[0] as f32, pos[1] as f32], color))
+    }
+}
+impl From<([f32; 2], [f32; 4])> for PointVertex {
+    fn from(pos_and_color: ([f32; 2], [f32; 4])) -> Self {
+        let (pos, color) = pos_and_color;
+        Self { pos, color }
     }
 }
 
 /// The color of the grid. This will be configurable in the future.
 const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
+/// The color given to the highlighted cell. This will be configurable in the
+/// future.
+const GRID_HIGHLIGHT_COLOR: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
 /// The color for dead cells. This will be configurable in the future.
 const DEAD_COLOR: (u8, u8, u8) = (0, 0, 0);
 /// The color for live cells. This will be configurable in the future.
@@ -123,14 +137,14 @@ const GRIDLINE_BATCH_SIZE: usize = 256;
 
 struct Shaders {
     blit: glium::Program,
-    gridlines: glium::Program,
+    lines: glium::Program,
     quadtree: glium::Program,
 }
 impl Shaders {
     pub fn compile(display: &glium::Display) -> Self {
         Self {
             blit: shaders::compile_blit_program(display),
-            gridlines: shaders::compile_lines_program(display),
+            lines: shaders::compile_lines_program(display),
             quadtree: shaders::compile_quadtree_program(display),
         }
     }
@@ -185,7 +199,7 @@ struct RenderInProgress<'a> {
     /// screen.
     pos: FVec2D,
     /// A rectangle of render cells within quadtree_slice that is visible.
-    visible_rect: BigRect2D,
+    visible_rect: IRect2D,
     /// The view matrix converting from quadtree_slice space (1 unit = 1 render
     /// cell; (0, 0) = bottom left) to screen space ((-1, -1) = bottom left; (1,
     /// 1) = top right).
@@ -227,7 +241,7 @@ impl<'a> RenderInProgress<'a> {
         // cell position relative to that node that will be in the center of the
         // screen.
         let quadtree_slice: NdTreeSlice<u8, Dim2D>;
-        let visible_rect: BigRect2D;
+        let visible_rect: IRect2D;
         let pos: FVec2D;
         {
             // Before computing the rectangles relative to the slice, get the
@@ -255,7 +269,11 @@ impl<'a> RenderInProgress<'a> {
 
             // Subtract the slice offset from global_visible_rect and
             // global_chunk_visible_rect so that they are relative to the slice.
-            visible_rect = global_visible_rect.clone() - &quadtree_slice.offset;
+            let mut tmp_visible_rect = global_visible_rect.clone() - &quadtree_slice.offset;
+            // Divide by render_cell_len to get render cells.
+            tmp_visible_rect = tmp_visible_rect.div_outward(&render_cell_len);
+            // Now it is safe to convert from BigInt to isize.
+            visible_rect = tmp_visible_rect.as_irect();
 
             // Subtract the slice offset from the viewport position and divide
             // by the size of a render cell to get the render cell offset from
@@ -309,20 +327,16 @@ impl<'a> RenderInProgress<'a> {
 
     /// Draw the cells that appear in the viewport.
     pub fn draw_cells(&mut self) {
-        // Steps #1 and #2: draw at 1 pixel per render cell, including only the
-        // cells inside self.visible_rect.
-        let render_cells_rect: IRect2D = self
-            .visible_rect
-            .div_outward(&(BigInt::from(1) << self.render_cell_layer))
-            .as_irect();
-        // Encode the quadtree as a texture.
+        // Steps #1: encode the quadtree as a 1D texture.
         let gl_quadtree = GlQuadtree::from_node(
             &self.quadtree_slice.root,
             self.render_cell_layer,
             Self::get_branch_pixel_color,
         );
-        let unscaled_cells_w = render_cells_rect.len(X) as u32;
-        let unscaled_cells_h = render_cells_rect.len(Y) as u32;
+        // Step #2: draw at 1 pixel per render cell, including only the cells
+        // inside self.visible_rect.
+        let unscaled_cells_w = self.visible_rect.len(X) as u32;
+        let unscaled_cells_h = self.visible_rect.len(Y) as u32;
         let unscaled_cells_texture = glium::texture::srgb_texture2d::SrgbTexture2d::empty(
             &*self.cache.display,
             unscaled_cells_w,
@@ -334,12 +348,12 @@ impl<'a> RenderInProgress<'a> {
             &unscaled_cells_texture,
         )
         .expect("Failed to create frame buffer");
-        self.draw_cell_pixels(&mut unscaled_cells_fbo, gl_quadtree, render_cells_rect);
+        self.draw_cell_pixels(&mut unscaled_cells_fbo, gl_quadtree);
 
         // Step #3: resize that texture by an integer factor.
         let integer_scale_factor = self.render_cell_pixels.ceil();
-        let visible_cells_w = render_cells_rect.len(X) as u32;
-        let visible_cells_h = render_cells_rect.len(Y) as u32;
+        let visible_cells_w = self.visible_rect.len(X) as u32;
+        let visible_cells_h = self.visible_rect.len(Y) as u32;
         let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
         let scaled_cells_h = visible_cells_h * integer_scale_factor as u32;
         let scaled_cells_texture = glium::texture::SrgbTexture2d::empty(
@@ -363,15 +377,10 @@ impl<'a> RenderInProgress<'a> {
         let (target_w, target_h) = self.target.get_dimensions();
         let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let render_cells_size = target_size / r64(self.render_cell_pixels);
-        let render_cells_center = self.pos
-            - self
-                .visible_rect
-                .div_outward(&(BigInt::from(1) << self.render_cell_layer))
-                .min()
-                .as_fvec();
+        let render_cells_center = self.pos - self.visible_rect.min().as_fvec();
         let mut render_cells_frect =
             FRect2D::centered(render_cells_center, render_cells_size / 2.0);
-        render_cells_frect /= render_cells_rect.size().as_fvec();
+        render_cells_frect /= self.visible_rect.size().as_fvec();
 
         let left = render_cells_frect.min()[X].raw() as f32;
         let right = render_cells_frect.max()[X].raw() as f32;
@@ -421,17 +430,16 @@ impl<'a> RenderInProgress<'a> {
         &mut self,
         target: &mut S,
         gl_quadtree: GlQuadtree<'b>,
-        render_cells_rect: IRect2D,
     ) {
         let quadtree_texture = glium::texture::unsigned_texture1d::UnsignedTexture1d::new(
             &*self.cache.display,
             gl_quadtree.raw_image,
         )
         .expect("Failed to create texture");
-        let left = render_cells_rect.min()[X] as i32;
-        let right = render_cells_rect.max()[X] as i32;
-        let bottom = render_cells_rect.min()[Y] as i32;
-        let top = render_cells_rect.max()[Y] as i32;
+        let left = self.visible_rect.min()[X] as i32;
+        let right = self.visible_rect.max()[X] as i32;
+        let bottom = self.visible_rect.min()[Y] as i32;
+        let top = self.visible_rect.max()[Y] as i32;
         self.cache.vbos.quadtree.write(&[
             QuadtreePosVertex {
                 texture_pos: [-1.0, -1.0],
@@ -512,38 +520,29 @@ impl<'a> RenderInProgress<'a> {
 
     /// Draw the gridlines that appear in the viewport.
     pub fn draw_gridlines(&mut self, gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer) {
-        // Can't draw gridlines if we're zoomed out too far for the view matrix to work.
-        if self.viewport.zoom.factor() < 2.0 {
-            return;
-        }
-
         // Generate a pair of vertices for each gridline.
-        let gridlines_indices = glium::index::NoIndices(PrimitiveType::LinesList);
+        let gridline_indices = glium::index::NoIndices(PrimitiveType::LinesList);
         let mut gridline_vertices: Vec<PointVertex>;
         {
-            // Convert visible_rect from a BigVec to an UVec, which is only safe
-            // because we're zoomed in enough that far less than isize::MAX cells
-            // are in self.quadtree_slice.
-            let visible_rect: IRect2D = self.visible_rect.as_irect();
-            let w = visible_rect.len(X);
-            let h = visible_rect.len(Y);
+            let w = self.visible_rect.len(X);
+            let h = self.visible_rect.len(Y);
 
             gridline_vertices = Vec::with_capacity((w + h) as usize * 2);
-            let min = visible_rect.min();
-            let max = visible_rect.max() + 1;
+            let min = self.visible_rect.min();
+            let max = self.visible_rect.max() + 1;
             let min_x = min[X];
             let min_y = min[Y];
             let max_x = max[X];
             let max_y = max[Y];
             // Generate vertical gridlines.
-            for x in visible_rect.axis_range(X) {
-                gridline_vertices.push(PointVertex::from([x, min_y]));
-                gridline_vertices.push(PointVertex::from([x, max_y]));
+            for x in self.visible_rect.axis_range(X) {
+                gridline_vertices.push(([x, min_y], GRID_COLOR).into());
+                gridline_vertices.push(([x, max_y], GRID_COLOR).into());
             }
             // Generate horizontal gridlines.
-            for y in visible_rect.axis_range(Y) {
-                gridline_vertices.push(PointVertex::from([min_x, y]));
-                gridline_vertices.push(PointVertex::from([max_x, y]));
+            for y in self.visible_rect.axis_range(Y) {
+                gridline_vertices.push(([min_x, y], GRID_COLOR).into());
+                gridline_vertices.push(([max_x, y], GRID_COLOR).into());
             }
         }
 
@@ -557,11 +556,10 @@ impl<'a> RenderInProgress<'a> {
             gridlines_fbo
                 .draw(
                     vbo_slice,
-                    &gridlines_indices,
-                    &self.cache.shaders.gridlines,
+                    &gridline_indices,
+                    &self.cache.shaders.lines,
                     &uniform! {
                         matrix: self.view_matrix,
-                        lines_color: GRID_COLOR,
                     },
                     &glium::DrawParameters {
                         line_width: Some(1.0),
@@ -573,14 +571,151 @@ impl<'a> RenderInProgress<'a> {
         }
     }
 
-    /// Draws highlights around the hovered cell and then returns its global
+    /// Draws a highlight around the hovered cell and then returns its global
     /// coordinates.
     pub fn draw_hover_highlight(
         &mut self,
         gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer,
+        cursor_position: Option<(i32, i32)>,
     ) -> Option<BigVec2D> {
-        // TODO: implement
-        None
+        if self.viewport.zoom.power() < 0.0 {
+            return None;
+        }
+        let cursor_position = cursor_position?;
+        let (mut x, mut y) = cursor_position;
+        // Center the coordinates.
+        let (target_w, target_h) = self.target.get_dimensions();
+        x -= target_w as i32 / 2;
+        y -= target_h as i32 / 2;
+        // Glutin measures window coordinates from the top-left corner, but we
+        // want the Y coordinate increasing upwards.
+        y = -y;
+        // Convert to float.
+        let mut x = x as f64;
+        let mut y = y as f64;
+        // Convert to local cell space (relative to slice).
+        x /= self.viewport.zoom.pixels_per_cell();
+        y /= self.viewport.zoom.pixels_per_cell();
+        x += self.pos[X].raw();
+        y += self.pos[Y].raw();
+        // Floor to integer.
+        let hover_pos = NdVec([x.floor() as isize, y.floor() as isize]);
+        // Convert to global cell space.
+        let global_hover_pos = hover_pos.convert() + &self.quadtree_slice.offset;
+        // Actually draw the highlight.
+        self.internal_draw_hover_highlight(gridlines_fbo, hover_pos);
+        Some(global_hover_pos)
+    }
+    fn internal_draw_hover_highlight(
+        &mut self,
+        gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer,
+        hover_pos: IVec2D,
+    ) {
+        let min = self.visible_rect.min();
+        let max = self.visible_rect.max() + 1;
+        let min_x = min[X] as f32;
+        let min_y = min[Y] as f32;
+        let max_x = max[X] as f32;
+        let max_y = max[Y] as f32;
+        let mut half_highlight_color = GRID_HIGHLIGHT_COLOR;
+        half_highlight_color[3] *= 0.5;
+        let mut dark_highlight_color = GRID_HIGHLIGHT_COLOR;
+        dark_highlight_color[0] *= 0.5;
+        dark_highlight_color[1] *= 0.5;
+        dark_highlight_color[2] *= 0.5;
+        dark_highlight_color[3] *= 0.75;
+        let hover_x = hover_pos[X] as f32;
+        let hover_y = hover_pos[Y] as f32;
+        // Draw transparent fill.
+        {
+            // Generate vertices.
+            let highlight_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
+            let mut highlight_vertices: Vec<PointVertex> = vec![
+                ([hover_x, hover_y], dark_highlight_color).into(),
+                ([hover_x + 1.0, hover_y], dark_highlight_color).into(),
+                ([hover_x, hover_y + 1.0], dark_highlight_color).into(),
+                ([hover_x + 1.0, hover_y + 1.0], dark_highlight_color).into(),
+            ];
+            // Put the data in a slice of the VBO.
+            let vbo_slice = self
+                .cache
+                .vbos
+                .gridlines
+                .slice(0..highlight_vertices.len())
+                .unwrap();
+            vbo_slice.write(&highlight_vertices);
+            // Draw.
+            gridlines_fbo
+                .draw(
+                    vbo_slice,
+                    &highlight_indices,
+                    &self.cache.shaders.lines,
+                    &uniform! {
+                        matrix: self.view_matrix,
+                    },
+                    &glium::DrawParameters {
+                        blend: glium::Blend::alpha_blending(),
+                        ..Default::default()
+                    },
+                )
+                .expect("Failed to draw cursor crosshairs");
+        }
+
+        // Draw crosshairs.
+        {
+            // Generate vertices.
+            let highlight_indices = glium::index::NoIndices(PrimitiveType::LinesList);
+            let mut highlight_vertices: Vec<PointVertex> = vec![];
+            for &y in [hover_y, hover_y + 1.0].iter() {
+                highlight_vertices.push(([min_x, y], half_highlight_color).into());
+                highlight_vertices.push(([hover_x - 1.0, y], half_highlight_color).into());
+                highlight_vertices.push(([hover_x - 1.0, y], half_highlight_color).into());
+                highlight_vertices.push(([hover_x, y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([hover_x, y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([hover_x + 1.0, y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([hover_x + 1.0, y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([hover_x + 2.0, y], half_highlight_color).into());
+                highlight_vertices.push(([hover_x + 2.0, y], half_highlight_color).into());
+                highlight_vertices.push(([max_x, y], half_highlight_color).into());
+            }
+            for &x in [hover_x, hover_x + 1.0].iter() {
+                highlight_vertices.push(([x, min_y], half_highlight_color).into());
+                highlight_vertices.push(([x, hover_y - 1.0], half_highlight_color).into());
+                highlight_vertices.push(([x, hover_y - 1.0], half_highlight_color).into());
+                highlight_vertices.push(([x, hover_y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([x, hover_y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([x, hover_y + 1.0], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([x, hover_y + 1.0], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([x, hover_y + 2.0], half_highlight_color).into());
+                highlight_vertices.push(([x, hover_y + 2.0], half_highlight_color).into());
+                highlight_vertices.push(([x, max_y], half_highlight_color).into());
+            }
+
+            // Put the data in a slice of the VBO.
+            let vbo_slice = self
+                .cache
+                .vbos
+                .gridlines
+                .slice(0..highlight_vertices.len())
+                .unwrap();
+            vbo_slice.write(&highlight_vertices);
+            // Draw.
+            gridlines_fbo
+                .draw(
+                    vbo_slice,
+                    &highlight_indices,
+                    &self.cache.shaders.lines,
+                    &uniform! {
+                        matrix: self.view_matrix,
+                    },
+                    &glium::DrawParameters {
+                        line_width: Some(1.0),
+                        blend: glium::Blend::alpha_blending(),
+                        ..Default::default()
+                    },
+                )
+                .expect("Failed to draw cursor crosshairs");
+        }
     }
 
     pub fn blit_gridlines(

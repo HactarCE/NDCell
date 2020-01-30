@@ -23,8 +23,12 @@ pub struct GridView2D {
 }
 
 impl GridViewTrait for GridView2D {
-    fn draw(&mut self, target: &mut glium::Frame) -> Option<AnyDimBigVec> {
-        render::draw(self, target).map(AnyDimVec::from)
+    fn draw(
+        &mut self,
+        target: &mut glium::Frame,
+        cursor_position: Option<(i32, i32)>,
+    ) -> Option<AnyDimBigVec> {
+        render::draw(self, target, cursor_position).map(AnyDimVec::from)
     }
     fn do_frame(&mut self) {
         const DECAY_CONSTANT: f64 = 4.0;

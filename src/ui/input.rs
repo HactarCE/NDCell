@@ -56,6 +56,8 @@ pub struct InputState {
     pub ignore_mouse: bool,
     /// Whether to ignore keyboard inputs.
     pub ignore_keyboard: bool,
+    /// The pixel position of the cursor.
+    pub cursor_position: Option<(i32, i32)>,
     /// The cell that the mouse is currently hovering over.
     pub hovered_cell: Option<AnyDimBigVec>,
 }
@@ -117,6 +119,9 @@ pub fn start_frame(state: &mut super::State) {
 }
 
 pub fn handle_event(state: &mut super::State, ev: &Event) {
+    if state.input_state.ignore_mouse {
+        state.input_state.cursor_position = None;
+    }
     match ev {
         // Handle WindowEvents.
         Event::WindowEvent { event, .. } => {
@@ -126,6 +131,16 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                     if !state.input_state.ignore_keyboard {
                         handle_key(state, input);
                     }
+                }
+                WindowEvent::CursorLeft { .. } => {
+                    state.input_state.cursor_position = None;
+                }
+                WindowEvent::CursorMoved {
+                    position: dpi::LogicalPosition { x, y },
+                    ..
+                } if !state.input_state.ignore_mouse => {
+                    state.input_state.cursor_position =
+                        Some(((*x * state.dpi) as i32, (*y * state.dpi) as i32));
                 }
                 WindowEvent::MouseWheel { delta, .. } if !state.input_state.ignore_mouse => {
                     // Pan 100x.

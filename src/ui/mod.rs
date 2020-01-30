@@ -139,7 +139,9 @@ pub fn show_gui() {
         gui::build_windows(&mut state, &ui);
 
         let mut target = display.draw();
-        state.input_state.hovered_cell = state.grid_view.draw(&mut target);
+        state.input_state.hovered_cell = state
+            .grid_view
+            .draw(&mut target, state.input_state.cursor_position);
 
         platform.prepare_render(&ui, &window);
         let draw_data = ui.render();

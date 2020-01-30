@@ -1,12 +1,12 @@
 use glium::program;
 
-pub fn compile_cells_program(display: &glium::Display) -> glium::Program {
+pub fn compile_blit_program(display: &glium::Display) -> glium::Program {
     program!(
         display,
         140 => {
-            vertex: include_str!("cells.vert"),
-            fragment: include_str!("cells.frag"),
-            outputs_srgb: true,
+            vertex: include_str!("blit.vert"),
+            fragment: include_str!("blit.frag"),
+            outputs_srgb: false,
         },
     )
     .expect(&format!(

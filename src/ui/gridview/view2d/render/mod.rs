@@ -6,12 +6,13 @@
 //! Not including preliminary computations, there are four main stages to
 //! rendering:
 //!
-//! 1. Read a chunk of cells from quadtree and produce a 2D array of colors,
-//!    with one array element for each render cell. (A "render cell" is a node
-//!    of the quadtree which is rendered as single unit; this is a single cell
-//!    when zoomed in, but may be larger when zoomed out.)
-//! 2. Copy that pixel data into the corresponding section of an OpenGL texture,
-//!    where each pixel represents one cell.
+//! 1. Create an indexed quadtree of render cells encoded in a 1D OpenGL
+//!    texture. (A "render cell" is a node of the quadtree which is rendered as
+//!    single unit; this is a single cell when zoomed in, but may be larger when
+//!    zoomed out.)
+//! 2. Render the visible portion of that quadtree into an OepnGL texture.
+//!    Render that pixel data into the corresponding section of an OpenGL
+//!    texture, where each pixel represents one cell.
 //! 3. Resize that texture to the next-highest power-of-2 zoom factor using
 //!    nearest-neighbor sampling. For example, if the zoom factor is 2.4 (i.e.
 //!    each cell takes up a square 2.4 pixels wide), resize the texture by a
@@ -51,13 +52,42 @@ use super::*;
 use crate::automaton::space::*;
 use gl_quadtree::GlQuadtree;
 
+/// Minimum zoom power to draw gridlines. 2.0 = 4 pixels per cell.
+const MIN_GRIDLINE_ZOOM_POWER: f64 = 2.0;
+/// Number of zoom levels over which to fade gridlines in. 4.0 = four zoom levels
+const GRIDLINE_FADE_RANGE: f64 = 2.0;
+
+/// Draw the 2D grid and return the coordinates of the cell that the mouse is
+/// hovering over. This is the entry point for the entire render process.
+pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) -> Option<BigVec2D> {
+    let mut hover_pos = None;
+    let mut rip = RenderInProgress::new(grid_view, target);
+    rip.draw_cells();
+    // Only draw gridlines if we're zoomed in far enough.
+    let zoom_power = rip.viewport.zoom.power();
+    if zoom_power > MIN_GRIDLINE_ZOOM_POWER {
+        let mut alpha = 1.0;
+        // Fade in between MIN_GRIDLINE_ZOOM_POWER and MIN_GRIDLINE_ZOOM_POWER + 4.
+        if zoom_power < MIN_GRIDLINE_ZOOM_POWER + GRIDLINE_FADE_RANGE {
+            alpha = (zoom_power - MIN_GRIDLINE_ZOOM_POWER) / GRIDLINE_FADE_RANGE;
+        }
+        assert!(0.0 <= alpha && alpha <= 1.0);
+        let gridlines_texture = rip.make_gridlines_texture();
+        let mut gridlines_fbo = rip.make_gridlines_fbo(&gridlines_texture);
+        rip.draw_gridlines(&mut gridlines_fbo);
+        // let hover_pos = Some(rip.draw_hover_highlight(&mut gridlines_fbo));
+        rip.blit_gridlines(&gridlines_texture, alpha as f32);
+    }
+    hover_pos
+}
+
 /// A vertex containing a 2D floating-point position and a 2D texture position.
 #[derive(Debug, Default, Copy, Clone)]
 struct TexturePosVertex {
-    pos: [f32; 2],
-    tex_coords: [f32; 2],
+    src_coords: [f32; 2],
+    dest_coords: [f32; 2],
 }
-glium::implement_vertex!(TexturePosVertex, pos, tex_coords);
+glium::implement_vertex!(TexturePosVertex, src_coords, dest_coords);
 
 /// A vertex containing a 2D floating-point position and a 2D cell position.
 #[derive(Debug, Default, Copy, Clone)]
@@ -88,88 +118,18 @@ const DEAD_COLOR: (u8, u8, u8) = (0, 0, 0);
 /// The color for live cells. This will be configurable in the future.
 const LIVE_COLOR: (u8, u8, u8) = (255, 255, 255);
 
-const CHUNK_POW: usize = 8;
-/// The length of render cells per chunk; a render cell is a square of cells
-/// that is rendered as one unit.
-///
-/// When zoomed in, each render cell is the same as a normal cell. When zoomed
-/// out beyond 1:1, each render cell is a single pixel, which can contain a
-/// large square of cells. A chunk is a groups of render cells that is passed to
-/// the graphics card at once.
-const CHUNK_SIZE: usize = 1 << CHUNK_POW; // 2^8 = 256
-
+/// The number of gridlines in each render batch.
 const GRIDLINE_BATCH_SIZE: usize = 256;
 
-#[derive(Clone)]
-struct CellPixelChunk([[(u8, u8, u8); CHUNK_SIZE]; CHUNK_SIZE]);
-impl Default for CellPixelChunk {
-    fn default() -> Self {
-        Self([[(0, 0, 0); CHUNK_SIZE]; CHUNK_SIZE])
-    }
-}
-impl<'a> glium::texture::Texture2dDataSource<'a> for &'a CellPixelChunk {
-    type Data = (u8, u8, u8);
-    fn into_raw(self) -> glium::texture::RawImage2d<'a, (u8, u8, u8)> {
-        let flattened_pixels = unsafe {
-            std::mem::transmute::<
-                &[[(u8, u8, u8); CHUNK_SIZE]; CHUNK_SIZE],
-                &[(u8, u8, u8); CHUNK_SIZE * CHUNK_SIZE],
-            >(&self.0)
-        };
-        glium::texture::RawImage2d {
-            data: Cow::Borrowed(flattened_pixels),
-            width: CHUNK_SIZE as u32,
-            height: CHUNK_SIZE as u32,
-            format: glium::texture::ClientFormat::U8U8U8,
-        }
-    }
-}
-impl CellPixelChunk {
-    pub fn fill_with_quadtree_node<C: CellType, F>(
-        &mut self,
-        branch: &NdTreeBranch<C, Dim2D>,
-        branch_to_pixel: &F,
-    ) where
-        F: Fn(&NdTreeBranch<C, Dim2D>) -> (u8, u8, u8),
-    {
-        self.fill_part_with_quadtree_node(branch, branch_to_pixel, CHUNK_POW, Vec2D::origin())
-    }
-    fn fill_part_with_quadtree_node<C: CellType, F>(
-        &mut self,
-        branch: &NdTreeBranch<C, Dim2D>,
-        branch_to_pixel: &F,
-        layers_remaining: usize,
-        offset: UVec2D,
-    ) where
-        F: Fn(&NdTreeBranch<C, Dim2D>) -> (u8, u8, u8),
-    {
-        if layers_remaining == 0 {
-            let x = offset[X];
-            let y = offset[Y];
-            self.0[y][x] = branch_to_pixel(branch);
-        } else {
-            for (sub_branch_idx, sub_branch) in branch.node().unwrap().branch_iter() {
-                let sub_branch_offset: UVec2D = sub_branch_idx.branch_offset(layers_remaining);
-                self.fill_part_with_quadtree_node(
-                    &sub_branch,
-                    branch_to_pixel,
-                    layers_remaining - 1,
-                    offset + sub_branch_offset,
-                );
-            }
-        }
-    }
-}
-
 struct Shaders {
-    cells: glium::Program,
+    blit: glium::Program,
     gridlines: glium::Program,
     quadtree: glium::Program,
 }
 impl Shaders {
     pub fn compile(display: &glium::Display) -> Self {
         Self {
-            cells: shaders::compile_cells_program(display),
+            blit: shaders::compile_blit_program(display),
             gridlines: shaders::compile_lines_program(display),
             quadtree: shaders::compile_quadtree_program(display),
         }
@@ -178,7 +138,7 @@ impl Shaders {
 
 struct VBOs {
     quadtree: glium::VertexBuffer<QuadtreePosVertex>,
-    cells: glium::VertexBuffer<TexturePosVertex>,
+    blit: glium::VertexBuffer<TexturePosVertex>,
     gridlines: glium::VertexBuffer<PointVertex>,
 }
 impl VBOs {
@@ -186,7 +146,7 @@ impl VBOs {
         Self {
             quadtree: glium::VertexBuffer::empty_dynamic(display, 4)
                 .expect("Failed to create vertex buffer"),
-            cells: glium::VertexBuffer::empty_dynamic(display, 4)
+            blit: glium::VertexBuffer::empty_dynamic(display, 4)
                 .expect("Failed to create vertex buffer"),
             gridlines: glium::VertexBuffer::empty_dynamic(display, GRIDLINE_BATCH_SIZE)
                 .expect("Failed to create vertex buffer"),
@@ -195,7 +155,6 @@ impl VBOs {
 }
 
 pub(super) struct RenderCache {
-    chunks: HashMap<NdCachedNode<u8, Dim2D>, (CellPixelChunk, bool)>,
     shaders: Shaders,
     vbos: VBOs,
     display: Rc<glium::Display>,
@@ -203,22 +162,11 @@ pub(super) struct RenderCache {
 impl RenderCache {
     pub fn new(display: Rc<glium::Display>) -> Self {
         Self {
-            chunks: HashMap::default(),
             shaders: Shaders::compile(&*display),
             vbos: VBOs::new(&*display),
             display: display,
         }
     }
-}
-
-/// Draw the 2D grid and return the coordinates of the cell that the mouse is
-/// hovering over.
-pub fn draw(grid_view: &mut GridView2D, target: &mut glium::Frame) -> Option<BigVec2D> {
-    let mut rip = RenderInProgress::new(grid_view, target);
-    rip.draw_cells();
-    rip.draw_gridlines();
-    rip.draw_hover_highlight();
-    unimplemented!()
 }
 
 struct RenderInProgress<'a> {
@@ -233,18 +181,17 @@ struct RenderInProgress<'a> {
     render_cell_pixels: f64,
     /// A slice of the quadtree that encompasses all visible cells.
     quadtree_slice: NdTreeSlice<u8, Dim2D>,
-    /// The render cell position within quadtree_slice that is centered on the screen.
+    /// The render cell position within quadtree_slice that is centered on the
+    /// screen.
     pos: FVec2D,
     /// A rectangle of render cells within quadtree_slice that is visible.
     visible_rect: BigRect2D,
-    /// A rectangle of chunk coordinates (i.e. cell coordinates divided by the
-    /// number of cells in a chunk) within quadtree_slice for the chunks that
-    /// are visible.
-    chunk_visible_rect: IRect2D,
-    // /// The view matrix converting from quadtree_slice space (1 unit = 1 render
-    // /// cell; (0, 0) = bottom left) to screen space ((-1, -1) = bottom left; (1,
-    // /// 1) = top right).
-    // view_matrix: [[f32; 4]; 4],
+    /// The view matrix converting from quadtree_slice space (1 unit = 1 render
+    /// cell; (0, 0) = bottom left) to screen space ((-1, -1) = bottom left; (1,
+    /// 1) = top right).
+    view_matrix: [[f32; 4]; 4],
+    /// The framebuffer to draw gridlines to.
+    gridlines_fbo: Option<glium::framebuffer::SimpleFrameBuffer<'a>>,
 }
 impl<'a> RenderInProgress<'a> {
     /// Performs preliminary computations and returns a RenderInProgress.
@@ -275,24 +222,17 @@ impl<'a> RenderInProgress<'a> {
         // Compute the width of pixels for each render cell.
         let render_cell_pixels: f64 = zoom.pixels_per_cell();
 
-        // Compute the width of cells for each chunk. (Note that CHUNK_SIZE
-        // is the number of render cells per chunk, not individual cells.)
-        let chunk_cell_len: BigInt = CHUNK_SIZE * BigInt::from(1 << render_cell_layer);
-
         // Get an NdCachedNode that covers the entire visible area, a rectangle
-        // of visible chunks relative to that node (using cell coordinates
-        // divided by CHUNK_SIZE), a rectangle of visible cells relative to that
-        // node, and a floating-point position relative to that node that will
-        // be in the center of the screen.
+        // of visible cells relative to that node, and a floating-point render
+        // cell position relative to that node that will be in the center of the
+        // screen.
         let quadtree_slice: NdTreeSlice<u8, Dim2D>;
         let visible_rect: BigRect2D;
-        let chunk_visible_rect: IRect2D;
         let pos: FVec2D;
         {
             // Before computing the rectangles relative to the slice, get the
             // rectangles in global space.
             let global_visible_rect: BigRect2D;
-            let global_chunk_visible_rect: BigRect2D;
             {
                 // Compute the width and height of individual cells that fit on
                 // the screen. Because this number is stored in an f64, which
@@ -305,42 +245,52 @@ impl<'a> RenderInProgress<'a> {
 
                 global_visible_rect =
                     BigRect2D::centered(viewport.pos.clone(), &half_diag.ceil().as_bigvec());
-
-                // Compute the chunk coordinates for the lower and upper bounds
-                // using division that rounds "outward."
-                global_chunk_visible_rect = global_visible_rect.div_outward(&chunk_cell_len);
-                // TODO: see what happenes if you divide "inward" instead.
             }
 
-            // Now fetch the NdTreeSlice containing all of the visible chunks.
+            // Now fetch the NdTreeSlice containing all of the visible cells.
             quadtree_slice = g.automaton.get_projected_tree().get_slice_containing(
                 // Convert chunk coordinates into normal cell coordinates.
-                &(global_chunk_visible_rect.clone() * &chunk_cell_len),
+                &global_visible_rect,
             );
-            // That slice should line up along chunk boundaries.
-            assert!(quadtree_slice.min().mod_floor(&chunk_cell_len).is_zero());
-            assert!(quadtree_slice.size().mod_floor(&chunk_cell_len).is_zero());
 
             // Subtract the slice offset from global_visible_rect and
             // global_chunk_visible_rect so that they are relative to the slice.
-            // This is where we can convert from BigInt to isize, since the
-            // quadtree slice should be relatively close to the visible rect.
             visible_rect = global_visible_rect.clone() - &quadtree_slice.offset;
-            chunk_visible_rect = (global_chunk_visible_rect.clone()
-                - quadtree_slice.offset.clone().div_floor(&chunk_cell_len))
-            .as_irect();
 
             // Subtract the slice offset from the viewport position and divide
-            // by the size of a render cell.
-            let integer_pos =
-                (viewport.pos.clone() - &quadtree_slice.offset).div_floor(&render_cell_len);
-            // viewport.offset is a sub-cell offset, so they only matter when
+            // by the size of a render cell to get the render cell offset from
+            // the lower corner of the slice.
+            let integer_pos = (&viewport.pos - &quadtree_slice.offset).div_floor(&render_cell_len);
+            // viewport.offset is a sub-cell offset, so it only matters when
             // zoomed in more than 1:1.
             if viewport.zoom.pixels_per_cell() > 1.0 {
                 pos = integer_pos.as_fvec() + viewport.offset;
             } else {
                 pos = integer_pos.as_fvec();
             }
+        }
+
+        // Compute the render cell view matrix.
+        let view_matrix: [[f32; 4]; 4];
+        {
+            let (target_w, target_h) = target.get_dimensions();
+            let target_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
+            let pixels_per_cell = r64(viewport.zoom.pixels_per_cell());
+            // Multiply by 2 because the OpenGL screen space ranges from -1 to +1.
+            let scale = FVec2D::repeat(pixels_per_cell) / target_size * r64(2.0);
+            // Convert pos from render-cell-space to screen-space.
+            let offset = pos * scale;
+            let x_offset = offset[X].raw() as f32;
+            let y_offset = offset[Y].raw() as f32;
+            let x_scale = scale[X].raw() as f32;
+            let y_scale = scale[Y].raw() as f32;
+
+            view_matrix = [
+                [x_scale, 0.0, 0.0, 0.0],
+                [0.0, y_scale, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [-x_offset, -y_offset, 0.0, 1.0],
+            ];
         }
 
         Self {
@@ -352,7 +302,8 @@ impl<'a> RenderInProgress<'a> {
             quadtree_slice,
             pos,
             visible_rect,
-            chunk_visible_rect,
+            view_matrix,
+            gridlines_fbo: None,
         }
     }
 
@@ -427,31 +378,32 @@ impl<'a> RenderInProgress<'a> {
         let bottom = render_cells_frect.min()[Y].raw() as f32;
         let top = render_cells_frect.max()[Y].raw() as f32;
 
-        self.cache.vbos.cells.write(&[
+        self.cache.vbos.blit.write(&[
             TexturePosVertex {
-                pos: [-1.0, -1.0],
-                tex_coords: [left, bottom],
+                src_coords: [left, bottom],
+                dest_coords: [-1.0, -1.0],
             },
             TexturePosVertex {
-                pos: [1.0, -1.0],
-                tex_coords: [right, bottom],
+                src_coords: [right, bottom],
+                dest_coords: [1.0, -1.0],
             },
             TexturePosVertex {
-                pos: [-1.0, 1.0],
-                tex_coords: [left, top],
+                src_coords: [left, top],
+                dest_coords: [-1.0, 1.0],
             },
             TexturePosVertex {
-                pos: [1.0, 1.0],
-                tex_coords: [right, top],
+                src_coords: [right, top],
+                dest_coords: [1.0, 1.0],
             },
         ]);
         self.target
             .draw(
-                &self.cache.vbos.cells,
+                &self.cache.vbos.blit,
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &self.cache.shaders.cells,
+                &self.cache.shaders.blit,
                 &uniform! {
-                    cells_texture: scaled_cells_texture.sampled(),
+                    src_texture: scaled_cells_texture.sampled(),
+                    alpha: 1.0f32,
                 },
                 &glium::DrawParameters::default(),
             )
@@ -464,14 +416,6 @@ impl<'a> RenderInProgress<'a> {
         //     &entire_blit_target(&unscaled_cells_fbo),
         //     glium::uniforms::MagnifySamplerFilter::Linear,
         // );
-
-        // Remove elements from the cache that we did not use this frame, and
-        // mark the rest as being unused (to prepare for the next frame).
-        self.cache.chunks.retain(|_, (_, ref mut keep)| {
-            let ret = *keep;
-            *keep = false;
-            ret
-        });
     }
     fn draw_cell_pixels<'b, S: glium::Surface>(
         &mut self,
@@ -545,54 +489,63 @@ impl<'a> RenderInProgress<'a> {
             .powf(0.5);
         [r as u8, g as u8, b as u8, 255]
     }
+
+    fn make_gridlines_texture(&self) -> glium::texture::srgb_texture2d::SrgbTexture2d {
+        let (target_w, target_h) = self.target.get_dimensions();
+        glium::texture::srgb_texture2d::SrgbTexture2d::empty(
+            &*self.cache.display,
+            target_w,
+            target_h,
+        )
+        .expect("Failed to create texture")
+    }
+    fn make_gridlines_fbo<'b>(
+        &self,
+        gridlines_texture: &'b glium::texture::srgb_texture2d::SrgbTexture2d,
+    ) -> glium::framebuffer::SimpleFrameBuffer<'b> {
+        let mut ret =
+            glium::framebuffer::SimpleFrameBuffer::new(&*self.cache.display, gridlines_texture)
+                .expect("Failed to create frame buffer");
+        ret.clear_color_srgb(0.0, 0.0, 0.0, 0.0);
+        ret
+    }
+
     /// Draw the gridlines that appear in the viewport.
-    pub fn draw_gridlines(&mut self) {
-        // Don't bother drawing gridlines if we're zoomed out far enough.
-        if self.viewport.zoom.pixels_per_cell() < 8.0 {
+    pub fn draw_gridlines(&mut self, gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer) {
+        // Can't draw gridlines if we're zoomed out too far for the view matrix to work.
+        if self.viewport.zoom.factor() < 2.0 {
             return;
         }
-        // Convert visible_rect from a BigVec to an UVec, which is only safe
-        // because we're zoomed in enough that far less than isize::MAX cells
-        // are in self.quadtree_slice.
-        let visible_rect: IRect2D = self.visible_rect.as_irect();
+
         // Generate a pair of vertices for each gridline.
         let gridlines_indices = glium::index::NoIndices(PrimitiveType::LinesList);
-        let mut gridline_vertices =
-            Vec::with_capacity((visible_rect.len(X) + visible_rect.len(Y)) as usize * 2);
-        let min = visible_rect.min();
-        let max = visible_rect.max() + 1;
-        let min_x = min[X];
-        let min_y = min[Y];
-        let max_x = max[X];
-        let max_y = max[Y];
-        for x in visible_rect.axis_range(X) {
-            gridline_vertices.push(PointVertex::from([x, min_y]));
-            gridline_vertices.push(PointVertex::from([x, max_y]));
-        }
-        for y in visible_rect.axis_range(Y) {
-            gridline_vertices.push(PointVertex::from([min_x, y]));
-            gridline_vertices.push(PointVertex::from([max_x, y]));
-        }
+        let mut gridline_vertices: Vec<PointVertex>;
+        {
+            // Convert visible_rect from a BigVec to an UVec, which is only safe
+            // because we're zoomed in enough that far less than isize::MAX cells
+            // are in self.quadtree_slice.
+            let visible_rect: IRect2D = self.visible_rect.as_irect();
+            let w = visible_rect.len(X);
+            let h = visible_rect.len(Y);
 
-        let (target_w, target_h) = self.target.get_dimensions();
-        let target_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
-        let pixels_per_cell = r64(self.viewport.zoom.pixels_per_cell());
-        // Multiply by 2 because the OpenGL screen space ranged from -1 to +1.
-        let scale = FVec2D::repeat(pixels_per_cell) / target_size * r64(2.0);
-        let mut offset: FVec2D = self.pos * r64(1.0f64.powf(self.render_cell_layer as f64));
-        // Convert offset from render-cell-space to screen-space.
-        offset *= scale;
-        let x_offset = offset[X].raw() as f32;
-        let y_offset = offset[Y].raw() as f32;
-        let x_scale = scale[X].raw() as f32;
-        let y_scale = scale[Y].raw() as f32;
-        // Compute the view matrix.
-        let view_matrix = [
-            [x_scale, 0.0, 0.0, 0.0],
-            [0.0, y_scale, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [-x_offset, -y_offset, 0.0, 1.0],
-        ];
+            gridline_vertices = Vec::with_capacity((w + h) as usize * 2);
+            let min = visible_rect.min();
+            let max = visible_rect.max() + 1;
+            let min_x = min[X];
+            let min_y = min[Y];
+            let max_x = max[X];
+            let max_y = max[Y];
+            // Generate vertical gridlines.
+            for x in visible_rect.axis_range(X) {
+                gridline_vertices.push(PointVertex::from([x, min_y]));
+                gridline_vertices.push(PointVertex::from([x, max_y]));
+            }
+            // Generate horizontal gridlines.
+            for y in visible_rect.axis_range(Y) {
+                gridline_vertices.push(PointVertex::from([min_x, y]));
+                gridline_vertices.push(PointVertex::from([max_x, y]));
+            }
+        }
 
         // Draw the gridlines in batches, because the VBO might not be able to
         // hold all the points at once.
@@ -601,13 +554,13 @@ impl<'a> RenderInProgress<'a> {
             let vbo_slice = self.cache.vbos.gridlines.slice(0..batch.len()).unwrap();
             vbo_slice.write(batch);
             // Draw gridlines.
-            self.target
+            gridlines_fbo
                 .draw(
                     vbo_slice,
                     &gridlines_indices,
                     &self.cache.shaders.gridlines,
                     &uniform! {
-                        matrix: view_matrix,
+                        matrix: self.view_matrix,
                         lines_color: GRID_COLOR,
                     },
                     &glium::DrawParameters {
@@ -619,11 +572,63 @@ impl<'a> RenderInProgress<'a> {
                 .expect("Failed to draw gridlines");
         }
     }
+
     /// Draws highlights around the hovered cell and then returns its global
     /// coordinates.
-    pub fn draw_hover_highlight(&mut self) -> Option<BigVec2D> {
+    pub fn draw_hover_highlight(
+        &mut self,
+        gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer,
+    ) -> Option<BigVec2D> {
         // TODO: implement
         None
+    }
+
+    pub fn blit_gridlines(
+        &mut self,
+        gridlines_texture: &glium::texture::srgb_texture2d::SrgbTexture2d,
+        alpha: f32,
+    ) {
+        let (target_w, target_h) = self.target.get_dimensions();
+        self.cache.vbos.blit.write(&[
+            TexturePosVertex {
+                src_coords: [0.0, 0.0],
+                dest_coords: [-1.0, -1.0],
+            },
+            TexturePosVertex {
+                src_coords: [1.0, 0.0],
+                dest_coords: [1.0, -1.0],
+            },
+            TexturePosVertex {
+                src_coords: [0.0, 1.0],
+                dest_coords: [-1.0, 1.0],
+            },
+            TexturePosVertex {
+                src_coords: [1.0, 1.0],
+                dest_coords: [1.0, 1.0],
+            },
+        ]);
+        self.target
+            .draw(
+                &self.cache.vbos.blit,
+                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
+                &self.cache.shaders.blit,
+                &uniform! {
+                    src_texture: gridlines_texture.sampled(),
+                    alpha: alpha,
+                },
+                &glium::DrawParameters {
+                    blend: glium::Blend {
+                        color: glium::BlendingFunction::Addition {
+                            source: glium::LinearBlendingFactor::SourceAlpha,
+                            destination: glium::LinearBlendingFactor::OneMinusSourceAlpha,
+                        },
+                        alpha: glium::BlendingFunction::Max,
+                        constant_value: (0.0, 0.0, 0.0, 0.0),
+                    },
+                    ..Default::default()
+                },
+            )
+            .expect("Failed to draw cells");
     }
 }
 

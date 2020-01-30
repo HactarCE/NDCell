@@ -31,4 +31,10 @@ impl GridViewTrait for GridView3D {
     fn do_frame(&mut self) {
         unimplemented!()
     }
+    fn get_automaton<'a>(&'a self) -> Automaton<'a> {
+        unimplemented!()
+    }
+    fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
+        unimplemented!()
+    }
 }

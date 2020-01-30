@@ -36,6 +36,12 @@ impl GridViewTrait for GridView2D {
             );
         }
     }
+    fn get_automaton<'a>(&'a self) -> Automaton<'a> {
+        Automaton::from(&self.automaton)
+    }
+    fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
+        AutomatonMut::from(&mut self.automaton)
+    }
 }
 
 impl IntoNdSimulate for GridView2D {

@@ -197,6 +197,13 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                             && state.history.undo(&mut state.grid_view)
                         {}
                     }
+                    // Copy (Golly-compatible).
+                    Some(VirtualKeyCode::C) => {
+                        state.stop_running();
+                        if state.copy_rle_to_clipboard().is_err() {
+                            warn!("Failed to save RLE to clipboard");
+                        }
+                    }
                     // Paste.
                     Some(VirtualKeyCode::V) => {
                         state.stop_running();
@@ -217,6 +224,13 @@ pub fn handle_key(state: &mut super::State, input: &KeyboardInput) {
                     Some(VirtualKeyCode::Z) => {
                         state.stop_running();
                         state.history.redo(&mut state.grid_view);
+                    }
+                    // Copy with extra info.
+                    Some(VirtualKeyCode::C) => {
+                        state.stop_running();
+                        if state.copy_cxrle_to_clipboard().is_err() {
+                            warn!("Failed to save CXRLE to clipboard");
+                        }
                     }
                     _ => (),
                 },

@@ -7,10 +7,12 @@
 
 #![allow(missing_docs)]
 
-use num::BigInt;
+use num::{BigInt, ToPrimitive, Zero};
 use pest::Parser;
 
 use super::*;
+
+const MAX_LINE_LEN: usize = 70;
 
 #[derive(Parser)]
 #[grammar = "automaton/io/rle.pest"]
@@ -19,11 +21,20 @@ struct Grammar;
 /// Information contained in the header of an RLE pattern.
 struct RleHeader {
     /// Pattern width.
-    pub x: isize,
+    pub x: BigInt,
     /// Pattern height.
-    pub y: isize,
+    pub y: BigInt,
     /// Automaton rule.
     pub rule: Option<String>,
+}
+impl ToString for RleHeader {
+    fn to_string(&self) -> String {
+        let mut ret = format!("x = {}, y = {}", self.x, self.y);
+        if let Some(rule) = &self.rule {
+            ret.push_str(&format!(", rule = {}", rule));
+        }
+        ret
+    }
 }
 /// Information contained in the CXRLE header of a Golly Extended RLE pattern.
 struct CxrleHeader {
@@ -32,26 +43,134 @@ struct CxrleHeader {
     /// Number of generations simulated.
     pub gen: BigInt,
 }
+impl ToString for CxrleHeader {
+    fn to_string(&self) -> String {
+        let mut ret = format!("#CXRLE Pos={},{}", self.pos[X], self.pos[Y]);
+        if !self.gen.is_zero() {
+            ret.push_str(&format!(", Gen={}", self.gen));
+        }
+        ret
+    }
+}
 /// A single "content item" that may be repeated in an RLE pattern.
+#[derive(Debug, PartialEq, Eq)]
 enum RleItem<C> {
     /// A cell state.
     Cell(C),
     /// The end of a row.
     EndRow,
 }
+impl<C: RleCellType> RleItem<C> {
+    fn repeated(&self, count: usize) -> String {
+        let mut ret = String::new();
+        match count {
+            0 => return ret,
+            1 => (),
+            _ => ret.push_str(&count.to_string()),
+        };
+        match self {
+            RleItem::Cell(state) => state.push_to_string(&mut ret),
+            RleItem::EndRow => ret.push('$'),
+        }
+        ret
+    }
+}
 
 type TokenPair<'a> = pest::iterators::Pair<'a, Rule>;
 
 /// Methods for encoding/decoding patterns to/from Golly Extended RLE.
 pub trait RleEncode: std::marker::Sized {
-    /// Encode the pattern in Golly Extended RLE.
+    /// Encodes the pattern in Extended RLE, which can encode extra information
+    /// such as absolute position and generation count and is not necessarily
+    /// Golly-compatible.
+    fn to_cxrle(&self) -> String {
+        self.to_rle()
+    }
+    /// Encodes the pattern in Golly Extended RLE.
     fn to_rle(&self) -> String;
-    /// Decode a Golly Extended RLE pattern.
+    /// Decodes a Golly Extended RLE pattern.
     fn from_rle(s: &str) -> Result<Self, String>;
 }
-impl RleEncode for NdAutomaton<Dim2D> {
+impl RleEncode for Automaton2D {
+    fn to_cxrle(&self) -> String {
+        // Y coordinates increase upwards in NDCell, but downwards in RLE, so
+        // reflect over the Y axis. But since the pattern extends the same
+        // distance each direction from the origin, we don't have negate the X
+        // position.
+        let cxrle = CxrleHeader {
+            pos: self.tree.slice.min(),
+            gen: self.generations.clone(),
+        };
+        format!("{}\n{}", cxrle.to_string(), self.to_rle())
+    }
     fn to_rle(&self) -> String {
-        unimplemented!()
+        let root = &self.tree.slice.root;
+        let header = RleHeader {
+            x: root.len(),
+            y: root.len(),
+            // TODO: Actually use a proper rulestring.
+            rule: Some("Life".to_owned()),
+        };
+        let cell_array = NdArray::from(root);
+        let mut items: Vec<(usize, RleItem<u8>)> = vec![];
+        for mut pos in cell_array.rect().iter() {
+            // Y coordinates increase upwards in NDCell, but downwards in RLE, so
+            // reflect over the Y axis.
+            pos[Y] = root.len().to_usize().unwrap() - pos[Y] - 1;
+            let cell = cell_array[&pos.as_ivec()];
+            if pos[X] == 0 && pos[Y] != 0 {
+                // We're at the beginning of a new row. Remove trailing
+                // zeros.
+                if let Some((_, RleItem::Cell(0))) = items.last() {
+                    items.pop();
+                }
+                if let Some((ref mut n, RleItem::EndRow)) = items.last_mut() {
+                    // Combine with an existing item if possible ...
+                    *n += 1;
+                } else {
+                    // ... or else make a new one.
+                    items.push((1, RleItem::EndRow));
+                }
+            }
+            if let Some((ref mut n, RleItem::Cell(last_cell))) = items.last_mut() {
+                if *last_cell == cell {
+                    // Combine with an existing item if possible ...
+                    *n += 1;
+                } else {
+                    // ... or else make a new one.
+                    items.push((1, RleItem::Cell(cell)));
+                }
+            } else {
+                // ... ditto.
+                items.push((1, RleItem::Cell(cell)));
+            }
+        }
+        // Remove trailing zeros.
+        if let Some((_, RleItem::Cell(0))) = items.last() {
+            items.pop();
+        }
+        // Remve trailing row ends.
+        if let Some((_, RleItem::EndRow)) = items.last() {
+            items.pop();
+        }
+        let mut ret = String::new();
+        ret.push_str(&header.to_string());
+        let mut line_len = MAX_LINE_LEN;
+        for (repeat_count, item) in items {
+            let item_str = item.repeated(repeat_count);
+            line_len += item_str.len();
+            if line_len > MAX_LINE_LEN {
+                ret.push('\n');
+                line_len = item_str.len();
+            }
+            ret.push_str(&item_str);
+        }
+        if line_len > MAX_LINE_LEN {
+            ret.push('\n');
+        }
+        ret.push('!');
+        ret.push('\n');
+        ret
     }
     fn from_rle(s: &str) -> Result<Self, String> {
         let mut header: Option<RleHeader> = None;
@@ -136,13 +255,13 @@ impl RleEncode for NdAutomaton<Dim2D> {
 
 fn parse_header(pair: TokenPair) -> Result<RleHeader, String> {
     let mut inners = pair.into_inner();
-    let x: isize = inners
+    let x: BigInt = inners
         .next()
         .ok_or("No X value in RLE header")?
         .as_str()
         .parse()
         .map_err(|_| "Could not parse RLE X value as integer")?;
-    let y: isize = inners
+    let y: BigInt = inners
         .next()
         .ok_or("No Y value in RLE header")?
         .as_str()
@@ -342,7 +461,7 @@ mod tests {
 
     // Load and save a glider.
     #[test]
-    fn test_basic_rle() {
+    fn test_basic_cxrle() {
         let imported: Automaton2D = RleEncode::from_rle(
             "
 #CXRLE Pos=10,-14
@@ -358,11 +477,26 @@ o$3o!
 ",
         )
         .unwrap();
-        assert_eq!(BigInt::from(5), result.tree.get_root().population);
-        assert_eq!(1, result.tree.get_cell(&NdVec::big([11, 14])));
-        assert_eq!(1, result.tree.get_cell(&NdVec::big([12, 13])));
-        assert_eq!(1, result.tree.get_cell(&NdVec::big([10, 12])));
-        assert_eq!(1, result.tree.get_cell(&NdVec::big([11, 12])));
-        assert_eq!(1, result.tree.get_cell(&NdVec::big([12, 12])));
+        assert_eq!(BigInt::from(5), imported.tree.get_root().population);
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 14])));
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 13])));
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([10, 12])));
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 12])));
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 12])));
+        let exported = RleEncode::to_cxrle(&imported);
+        // Right now, the RLE writer includes a fair bit of padding around all
+        // the edges. In future this might be fixed, and then this hard-coded
+        // string would need to be updated.
+        assert_eq!(
+            "\
+#CXRLE Pos=-16,-16
+x = 32, y = 32, rule = Life
+2$27.A$28.A$26.3A!
+",
+            exported
+        );
+        let reimported: Automaton2D =
+            RleEncode::from_rle(&exported).expect("Could not parse RLE output");
+        assert_eq!(imported.tree, reimported.tree);
     }
 }

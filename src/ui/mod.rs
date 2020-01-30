@@ -217,6 +217,22 @@ impl State {
     fn record_state(&mut self) {
         self.history.record(self.grid_view.clone());
     }
+    pub fn copy_rle_to_clipboard(&self) -> Result<(), String> {
+        match self.grid_view.get_automaton() {
+            Automaton::Automaton2D(automaton) => clipboard_set(rle::RleEncode::to_rle(automaton))
+                .map_err(|_| "Unable to set clipboard contents")?,
+            _ => Err("Unable to convert non-2D patterns to RLE")?,
+        }
+        Ok(())
+    }
+    pub fn copy_cxrle_to_clipboard(&self) -> Result<(), String> {
+        match self.grid_view.get_automaton() {
+            Automaton::Automaton2D(automaton) => clipboard_set(rle::RleEncode::to_cxrle(automaton))
+                .map_err(|_| "Unable to set clipboard contents")?,
+            _ => Err("Unable to convert non-2D patterns to RLE")?,
+        }
+        Ok(())
+    }
     pub fn load_rle_from_clipboard(&mut self) -> Result<(), String> {
         self.record_state();
         let mut automaton: Automaton2D = rle::RleEncode::from_rle(

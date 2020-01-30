@@ -14,6 +14,8 @@ pub use view3d::GridView3D;
 pub trait GridViewTrait: Clone + NdSimulate {
     fn draw(&mut self, target: &mut glium::Frame);
     fn do_frame(&mut self);
+    fn get_automaton<'a>(&'a self) -> Automaton<'a>;
+    fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;
 }
 
 /// An enum between 2D and 3D views that manages the automaton.

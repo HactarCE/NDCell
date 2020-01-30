@@ -210,5 +210,51 @@ pub type Automaton5D = NdAutomaton<Dim5D>;
 /// A 6D cellular automaton.
 pub type Automaton6D = NdAutomaton<Dim6D>;
 
+/// An immutable reference to a cellular automaton of an unknown dimensionality.
+#[allow(missing_docs)]
+pub enum Automaton<'a> {
+    Automaton1D(&'a Automaton1D),
+    Automaton2D(&'a Automaton2D),
+    Automaton3D(&'a Automaton3D),
+    Automaton4D(&'a Automaton4D),
+    Automaton5D(&'a Automaton5D),
+    Automaton6D(&'a Automaton6D),
+}
+impl<'a, P: Dim> From<&'a ProjectedAutomaton<P>> for Automaton<'a> {
+    fn from(projected_automaton: &'a ProjectedAutomaton<P>) -> Self {
+        match projected_automaton {
+            ProjectedAutomaton::From1D(inner) => Self::Automaton1D(&inner.automaton),
+            ProjectedAutomaton::From2D(inner) => Self::Automaton2D(&inner.automaton),
+            ProjectedAutomaton::From3D(inner) => Self::Automaton3D(&inner.automaton),
+            ProjectedAutomaton::From4D(inner) => Self::Automaton4D(&inner.automaton),
+            ProjectedAutomaton::From5D(inner) => Self::Automaton5D(&inner.automaton),
+            ProjectedAutomaton::From6D(inner) => Self::Automaton6D(&inner.automaton),
+        }
+    }
+}
+
+/// A mutable reference to a cellular automaton of an unknown dimensionality.
+#[allow(missing_docs)]
+pub enum AutomatonMut<'a> {
+    Automaton1D(&'a mut Automaton1D),
+    Automaton2D(&'a mut Automaton2D),
+    Automaton3D(&'a mut Automaton3D),
+    Automaton4D(&'a mut Automaton4D),
+    Automaton5D(&'a mut Automaton5D),
+    Automaton6D(&'a mut Automaton6D),
+}
+impl<'a, P: Dim> From<&'a mut ProjectedAutomaton<P>> for AutomatonMut<'a> {
+    fn from(projected_automaton: &'a mut ProjectedAutomaton<P>) -> Self {
+        match projected_automaton {
+            ProjectedAutomaton::From1D(inner) => Self::Automaton1D(&mut inner.automaton),
+            ProjectedAutomaton::From2D(inner) => Self::Automaton2D(&mut inner.automaton),
+            ProjectedAutomaton::From3D(inner) => Self::Automaton3D(&mut inner.automaton),
+            ProjectedAutomaton::From4D(inner) => Self::Automaton4D(&mut inner.automaton),
+            ProjectedAutomaton::From5D(inner) => Self::Automaton5D(&mut inner.automaton),
+            ProjectedAutomaton::From6D(inner) => Self::Automaton6D(&mut inner.automaton),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

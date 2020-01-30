@@ -17,12 +17,14 @@ use std::hash::Hash;
 use std::ops::*;
 
 mod aliases;
+mod any;
 mod axis;
 mod convert;
 mod dim;
 mod ops;
 
 pub use aliases::*;
+pub use any::*;
 pub use axis::Axis::{U, V, W, X, Y, Z};
 pub use axis::*;
 pub use convert::*;

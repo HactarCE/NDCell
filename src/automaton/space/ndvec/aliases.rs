@@ -26,6 +26,17 @@ pub type UVec<D> = NdVec<D, usize>;
 /// An N-dimensional vector with u8 coordinates.
 pub type ByteVec<D> = NdVec<D, u8>;
 
+/// A vector of unknown dimensionality with BigInt coordinates.
+pub type AnyDimBigVec = AnyDimVec<BigInt>;
+/// A vector of unknown dimensionality with R64 coordinates.
+pub type AnyDimFVec = AnyDimVec<R64>;
+/// A vector of unknown dimensionality with isize coordinates.
+pub type AnyDimIVec = AnyDimVec<isize>;
+/// A vector of unknown dimensionality with usize coordinates.
+pub type AnyDimUVec = AnyDimVec<usize>;
+/// A vector of unknown dimensionality with u8 coordinates.
+pub type AnyDimByteVec = AnyDimVec<u8>;
+
 /// A 1D vector with BigInt coordinates.
 pub type BigVec1D = BigVec<Dim1D>;
 /// A 2D vector with BigInt coordinates.

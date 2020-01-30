@@ -109,20 +109,17 @@ impl RleEncode for NdAutomaton<Dim2D> {
         let _header = header.ok_or("Missing RLE header")?;
 
         let mut ret = NdAutomaton::default();
-        let mut pos = BigVec2D::origin();
-        let x_start: BigInt;
-
+        let mut pos;
         if let Some(cxrle) = cxrle {
             ret.generations = cxrle.gen;
             pos = cxrle.pos;
-            x_start = pos[X].clone();
         } else {
-            x_start = 0.into();
+            pos = NdVec::big([0, 1]);
         }
+        let x_start = pos[X].clone();
         // Y coordinates increase upwards in NDCell, but downwards in RLE, so
         // reflect over the Y axis.
         pos[Y] *= -1;
-        pos[Y] -= 1;
 
         for row in cell_array {
             for cell in row {
@@ -156,7 +153,7 @@ fn parse_header(pair: TokenPair) -> Result<RleHeader, String> {
 }
 
 fn parse_cxrle(pair: TokenPair) -> Result<CxrleHeader, String> {
-    let mut pos: BigVec2D = BigVec2D::origin();
+    let mut pos: BigVec2D = NdVec::big([0, 1]);
     let mut gen: BigInt = 0.into();
     for kv_pair in pair.into_inner() {
         let mut inners = kv_pair.into_inner();
@@ -348,7 +345,7 @@ mod tests {
     fn test_basic_rle() {
         let imported: Automaton2D = RleEncode::from_rle(
             "
-#CXRLE Pos=10,-15
+#CXRLE Pos=10,-14
 # Comment
 # Comment 2
 x = 3, y = 3, rule = Life

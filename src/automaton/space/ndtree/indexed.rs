@@ -132,7 +132,7 @@ mod tests {
         // - x - x - - - -
         let automaton: Automaton2D = rle::RleEncode::from_rle(
             "
-#CXRLE Pos=-4,-4
+#CXRLE Pos=-4,-3
 x = 8, y = 8, rule = B3/S23
 4bo$5bo$4bobo$5bobo$o5bo$bo5bo$obo$bobo!
 ",

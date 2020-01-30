@@ -106,7 +106,7 @@ impl RleEncode for NdAutomaton<Dim2D> {
                 _ => Err("Unexpected token pair")?,
             }
         }
-        let _header = header.ok_or("Missing RLE header")?;
+        let header = header.ok_or("Missing RLE header")?;
 
         let mut ret = NdAutomaton::default();
         let mut pos;
@@ -114,7 +114,7 @@ impl RleEncode for NdAutomaton<Dim2D> {
             ret.generations = cxrle.gen;
             pos = cxrle.pos;
         } else {
-            pos = NdVec::big([0, 1]);
+            pos = NdVec([-header.x / 2, -header.y / 2]);
         }
         let x_start = pos[X].clone();
         // Y coordinates increase upwards in NDCell, but downwards in RLE, so

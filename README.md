@@ -15,12 +15,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
     + [x] ... at any power-of-2 zoom level
     + [x] ... at _any_ zoom level
     + [x] ... at 60 FPS
-        * [x] Render grid separately from cells
-        * [x] Skip empty nodes
-        * [x] Render in 256x256 chunks
-        * [x] Skip empty chunks
-        * [x] Cache chunks between frames
-    + [ ] ... by traversing the quadtree on the GPU
+    + [x] ... by traversing the quadtree on the GPU
 - [x] Control simulation from GUI
     + [x] Undo/reset
     + [x] Change sim step
@@ -28,11 +23,20 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 - [x] Read 2D Extended RLE patterns from Golly
     + [x] ... from clipboard
     + [ ] ... from file
-- [ ] Write 2D Extended RLE patterns from Golly
-    + [ ] ... to clipboard
+- [x] Write 2D Extended RLE patterns for Golly
+    + [x] ... to clipboard
     + [ ] ... to file
 - [ ] Edit patterns with the mouse
-- [ ] Begin work on 3D rendering
+- [ ] Begin work on custom rules
+
+## Long-term to-do list
+
+- [x] Render 2D
+- [ ] Basic editing in 2D
+- [ ] Basic custom rules
+- [ ] Render 3D
+- [ ] Basic editing in 3D
+- [ ] GUI refactor
 
 ## Implementation status
 

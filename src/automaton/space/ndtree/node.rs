@@ -344,7 +344,7 @@ impl<C: CellType, D: Dim> NdTreeBranch<C, D> {
     /// true if it contains only default cells.
     pub fn is_empty(&self) -> bool {
         match self {
-            NdTreeBranch::Leaf(cell_state) => *cell_state != C::default(),
+            NdTreeBranch::Leaf(cell_state) => *cell_state == C::default(),
             NdTreeBranch::Node(node) => node.is_empty(),
         }
     }

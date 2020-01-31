@@ -28,6 +28,9 @@ impl<C: CellType, D: Dim, P: Dim> NdProjector<C, D, P> for NdProjection<C, D, P>
     fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P> {
         self.0.project(tree)
     }
+    fn unproject_pos(&self, pos: &BigVec<P>) -> BigVec<D> {
+        self.0.unproject_pos(pos)
+    }
     fn overwrite_projected(&self, destination: &mut NdTree<C, D>, source: &NdTree<C, P>) {
         self.0.overwrite_projected(destination, source);
     }
@@ -41,6 +44,8 @@ impl<C: CellType, D: Dim, P: Dim> NdProjector<C, D, P> for NdProjection<C, D, P>
 pub trait NdProjector<C: CellType, D: Dim, P: Dim> {
     /// Projects a D-dimensional NdTree into a P-dimensional NdTree.
     fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P>;
+    /// Unprojects a P-dimensional point back into D-dimensional space.
+    fn unproject_pos(&self, pos: &BigVec<P>) -> BigVec<D>;
     /// Modifies part of a projected NdTree.
     fn overwrite_projected(&self, destination: &mut NdTree<C, D>, source: &NdTree<C, P>);
     /// Returns the ProjectionParams that describe this projection.

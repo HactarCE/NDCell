@@ -2,7 +2,7 @@ use super::*;
 
 /// An NdVec of unknown dimensionality.
 #[allow(missing_docs)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum AnyDimVec<N: NdVecNum> {
     Vec1D(Vec1D<N>),
     Vec2D(Vec2D<N>),

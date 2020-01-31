@@ -1,6 +1,6 @@
 use imgui::*;
 
-use crate::automaton::{AsFVec, Dim, Dim2D, NdSimulate};
+use crate::automaton::{AnyDimBigVec, AsFVec, Dim, Dim2D, NdSimulate, X, Y};
 use crate::ui::gridview::{GridView, GridView2D, Viewport2D};
 use crate::ui::State;
 
@@ -23,6 +23,7 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                 viewport: Viewport2D { pos, offset, zoom },
                 ..
             }) => {
+                ui.text(format!("Zoom = {}", zoom));
                 let total_pos = pos.as_fvec() + offset.clone();
                 for &ax in Dim2D::axes() {
                     let value = total_pos[ax];
@@ -32,7 +33,14 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                         ui.text(format!("{} = {:.1}", ax.name(), value));
                     }
                 }
-                ui.text(format!("Zoom = {}", zoom));
+                if let Some(AnyDimBigVec::Vec2D(hover_pos)) = &state.input_state.hovered_cell {
+                    ui.text(format!(
+                        "Selected: X = {}, Y = {}",
+                        hover_pos[X], hover_pos[Y]
+                    ));
+                } else {
+                    ui.text("");
+                }
             }
             _ => unimplemented!(),
         };

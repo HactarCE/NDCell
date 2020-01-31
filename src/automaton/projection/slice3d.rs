@@ -18,6 +18,9 @@ impl<C: CellType, D: Dim> NdProjector<C, D, Dim3D> for SliceProjection3D<D> {
     fn project(&self, _tree: &NdTree<C, D>) -> NdTree<C, Dim3D> {
         unimplemented!()
     }
+    fn unproject_pos(&self, _pos: &BigVec<Dim3D>) -> BigVec<D> {
+        unimplemented!()
+    }
     fn overwrite_projected(&self, _destination: &mut NdTree<C, D>, _source: &NdTree<C, Dim3D>) {
         unimplemented!()
     }

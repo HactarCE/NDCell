@@ -58,6 +58,8 @@ pub struct InputState {
     pub ignore_keyboard: bool,
     /// The pixel position of the cursor.
     pub cursor_position: Option<(i32, i32)>,
+    /// The cell state to draw with.
+    pub draw_state: Option<u8>,
     /// The cell that the mouse is currently hovering over.
     pub hovered_cell: Option<AnyDimBigVec>,
 }
@@ -141,6 +143,15 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                 } if !state.input_state.ignore_mouse => {
                     state.input_state.cursor_position =
                         Some(((*x * state.dpi) as i32, (*y * state.dpi) as i32));
+                    if let Some(draw_state) = state.input_state.draw_state {
+                        if let gridview::GridView::View2D(grid_view) = &mut state.grid_view {
+                            if let Some(AnyDimBigVec::Vec2D(hover_pos)) =
+                                &state.input_state.hovered_cell
+                            {
+                                grid_view.set_cell(hover_pos, draw_state);
+                            }
+                        }
+                    }
                 }
                 WindowEvent::MouseWheel { delta, .. } if !state.input_state.ignore_mouse => {
                     // Pan 100x.
@@ -157,6 +168,33 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                         _ => (),
                     }
                 }
+                WindowEvent::MouseInput {
+                    button: MouseButton::Left,
+                    state: element_state,
+                    ..
+                } if !state.input_state.ignore_mouse => match element_state {
+                    ElementState::Pressed => {
+                        if let gridview::GridView::View2D(grid_view) = &mut state.grid_view {
+                            if let Some(AnyDimBigVec::Vec2D(hover_pos)) =
+                                &state.input_state.hovered_cell
+                            {
+                                if grid_view.get_cell(hover_pos) == 1 {
+                                    state.input_state.draw_state = Some(0);
+                                } else {
+                                    state.input_state.draw_state = Some(1);
+                                }
+                                grid_view
+                                    .set_cell(hover_pos, state.input_state.draw_state.unwrap());
+                            }
+                        }
+                    }
+                    ElementState::Released => {
+                        state.input_state.draw_state = None;
+                    }
+                },
+                // WindowEvent::MouseInput {
+
+                // }
                 _ => (),
             }
         }

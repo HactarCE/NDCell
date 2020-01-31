@@ -32,6 +32,8 @@ pub trait NdProjectedAutomatonTrait<P: Dim> {
     fn get_projection_params(&self) -> ProjectionParams;
     /// Sets the projection from the ProjectionParams.
     fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError>;
+    /// Sets a cell using projected coordinates.
+    fn set_cell(&mut self, pos: &BigVec<P>, state: u8);
 }
 
 /// An automaton of an unknown dimensionality combined with a projection to a
@@ -162,6 +164,11 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
     fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError> {
         self.projection = NdProjection(params.try_into()?);
         Ok(())
+    }
+    fn set_cell(&mut self, pos: &BigVec<P>, state: u8) {
+        self.automaton
+            .tree
+            .set_cell(&self.projection.unproject_pos(pos), state);
     }
 }
 

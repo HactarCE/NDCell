@@ -359,7 +359,7 @@ pub trait NdTreeIndex<D: Dim> {
 }
 impl<D: Dim> NdTreeIndex<D> for BigVec<D> {
     fn branch_idx(&self, layer: usize) -> ByteVec<D> {
-        ByteVec::from_fn(|ax| (&self[ax] >> (layer - 1)).to_u8().unwrap() & 1)
+        ByteVec::from_fn(|ax| (&self[ax] >> (layer - 1) & BigInt::one()).to_u8().unwrap())
     }
 }
 impl<D: Dim> NdTreeIndex<D> for IVec<D> {

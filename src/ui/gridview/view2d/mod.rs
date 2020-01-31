@@ -73,7 +73,7 @@ impl GridView2D {
         self.viewport = other.viewport.clone();
         self.interpolating_viewport = other.interpolating_viewport.clone();
     }
-    pub fn get_cell(&mut self, pos: &BigVec2D) -> u8 {
+    pub fn get_cell(&self, pos: &BigVec2D) -> u8 {
         self.automaton.get_projected_tree().get_cell(pos)
     }
     pub fn set_cell(&mut self, pos: &BigVec2D, new_cell_state: u8) {

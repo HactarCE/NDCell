@@ -143,15 +143,6 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                 } if !state.input_state.ignore_mouse => {
                     state.input_state.cursor_position =
                         Some(((*x * state.dpi) as i32, (*y * state.dpi) as i32));
-                    if let Some(draw_state) = state.input_state.draw_state {
-                        if let gridview::GridView::View2D(grid_view) = &mut state.grid_view {
-                            if let Some(AnyDimBigVec::Vec2D(hover_pos)) =
-                                &state.input_state.hovered_cell
-                            {
-                                grid_view.set_cell(hover_pos, draw_state);
-                            }
-                        }
-                    }
                 }
                 WindowEvent::MouseWheel { delta, .. } if !state.input_state.ignore_mouse => {
                     // Pan 100x.
@@ -174,7 +165,7 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                     ..
                 } if !state.input_state.ignore_mouse => match element_state {
                     ElementState::Pressed => {
-                        if let gridview::GridView::View2D(grid_view) = &mut state.grid_view {
+                        if let gridview::GridView::View2D(grid_view) = &state.grid_view {
                             if let Some(AnyDimBigVec::Vec2D(hover_pos)) =
                                 &state.input_state.hovered_cell
                             {
@@ -183,8 +174,7 @@ pub fn handle_event(state: &mut super::State, ev: &Event) {
                                 } else {
                                     state.input_state.draw_state = Some(1);
                                 }
-                                grid_view
-                                    .set_cell(hover_pos, state.input_state.draw_state.unwrap());
+                                state.history.record(grid_view.clone().into());
                             }
                         }
                     }
@@ -310,6 +300,14 @@ pub fn do_frame(state: &mut super::State) {
         || input_state[VirtualKeyCode::RControl]
         || input_state[VirtualKeyCode::RWin]);
     let shift_pressed = input_state[VirtualKeyCode::LShift] || input_state[VirtualKeyCode::RShift];
+
+    if let Some(draw_state) = input_state.draw_state {
+        if let gridview::GridView::View2D(grid_view) = &mut state.grid_view {
+            if let Some(AnyDimBigVec::Vec2D(hover_pos)) = &input_state.hovered_cell {
+                grid_view.set_cell(hover_pos, draw_state);
+            }
+        }
+    }
 
     let speed = if shift_pressed { 2.0 } else { 1.0 };
     let move_speed = 25.0 * speed * state.dpi;

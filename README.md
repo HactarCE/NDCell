@@ -11,38 +11,28 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ## Short-term to-do list
 
-- [x] Render 2D grids
-    + [x] ... at any power-of-2 zoom level
-    + [x] ... at _any_ zoom level
-    + [x] ... at 60 FPS
-    + [x] ... by traversing the quadtree on the GPU
-- [x] Control simulation from GUI
-    + [x] Undo/reset
-    + [x] Change sim step
-    + [x] Jump to generation
-- [x] Read 2D Extended RLE patterns from Golly
-    + [x] ... from clipboard
-    + [ ] ... from file
-- [x] Write 2D Extended RLE patterns for Golly
-    + [x] ... to clipboard
-    + [ ] ... to file
-- [ ] Edit patterns with the mouse
+- [ ] Refactor UI
+- [ ] Generalized associative structures for nodes
+    + Simulation futures, population, etc.
+- [ ] Asynchronous simulation
+    + Use queue of completed frames
 - [ ] Begin work on custom rules
 
 ## Long-term to-do list
 
 - [x] Render 2D
-- [ ] Basic editing in 2D
+- [x] Basic editing in 2D
 - [ ] Basic custom rules
 - [ ] Render 3D
 - [ ] Basic editing in 3D
-- [ ] GUI refactor
 
 ## Implementation status
 
 ### Simulation
 
 #### Rules
+
+- [ ] Custom rules
 
 ##### 1D
 
@@ -68,7 +58,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 - [x] Unbounded (infinite)
     + [x] Up to ~ ±2^63 (or ±2^31 on 32-bit platforms)
-    + [ ] Beyond ±2^63 using `BigInt`s (probably ~~not happening for a while~~ [happening very soon](https://github.com/HactarCE/NDCell/tree/generic_ndvec))
+    + [x] Beyond ±2^63 using `BigInt`s
 - [ ] Bounded (finite)
 - [ ] Partially bounded (e.g. tube)
 - [ ] Edge conditions
@@ -86,7 +76,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
     + [ ] as "barcode"
     + [ ] as squares
     + [ ] as 2D spacetime
-- [ ] A 2D grid
+- [x] A 2D grid
     + [x] as 2D space
     + [ ] as 3D spacetime
     + [ ] as 2D slice of spacetime
@@ -114,15 +104,19 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
     + [ ] in 1D
     + [x] in 2D
     + [ ] in 3D
-- [ ] Toggle/cycle cell state
+- [x] Toggle/cycle cell state
     + [ ] in 1D
-    + [ ] in 2D
+    + [x] in 2D
     + [ ] in 3D
 - [ ] More advanced editing (?)
 
-## Possible future optimizations
+## Possible future improvements/optimizations
 
 - Simulation
     + [ ] Render and simulate asynchronously
-    + [ ] Multithread HashLife (?)
-    + [ ] Compute population asynchronously
+    + Minimize `BigInt` allocations
+        * [ ] Compute population asynchronously
+        * [ ] Precompute HashLife time splits
+    + [ ] Garbage-collection / memory limit
+    + [ ] Use fixed-size arrays instead of `Vec<NdTreeBranch<...>>`
+        * This would be an associated type of `Dim`

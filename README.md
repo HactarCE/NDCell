@@ -124,4 +124,5 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 - Simulation
     + [ ] Render and simulate asynchronously
-    + [ ] Multithread HashLife
+    + [ ] Multithread HashLife (?)
+    + [ ] Compute population asynchronously

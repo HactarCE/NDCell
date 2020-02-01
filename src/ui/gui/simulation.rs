@@ -1,19 +1,23 @@
 use imgui::*;
 use num::ToPrimitive;
+use ref_thread_local::RefThreadLocal;
 
 use crate::automaton::NdSimulate;
 use crate::ui::State;
 
+ref_thread_local! {
+    pub static managed VISIBLE: bool = false;
+}
+
 #[derive(Default)]
 pub struct WindowState {
-    pub visible: bool,
     pub running: bool,
     jump_to_gen: isize,
 }
 
 /// Builds the main window.
 pub fn build(state: &mut State, ui: &imgui::Ui) {
-    if state.gui.simulation.visible {
+    if *VISIBLE.borrow() {
         Window::new(&ImString::new("Simulation")).build(&ui, || {
             let mut width = ui.window_content_region_width();
             if width < 100.0 {

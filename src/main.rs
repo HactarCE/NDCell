@@ -6,6 +6,9 @@
 #[macro_use]
 extern crate pest_derive;
 
+#[macro_use]
+extern crate ref_thread_local;
+
 use log::{debug, info};
 
 pub mod automaton;

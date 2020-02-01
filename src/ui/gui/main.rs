@@ -1,4 +1,5 @@
 use imgui::*;
+use ref_thread_local::RefThreadLocal;
 
 use crate::automaton::{AnyDimBigVec, AsFVec, Dim, Dim2D, NdSimulate, X, Y};
 use crate::ui::gridview::{GridView, GridView2D, Viewport2D};
@@ -44,6 +45,9 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
             }
             _ => unimplemented!(),
         };
-        ui.checkbox(im_str!("Simulation"), &mut state.gui.simulation.visible);
+        ui.checkbox(
+            im_str!("Simulation"),
+            &mut super::simulation::VISIBLE.borrow_mut(),
+        );
     });
 }

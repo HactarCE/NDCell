@@ -69,6 +69,9 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 ### UI
 
 - [x] "Root" window that can toggle other windows
+- [ ] Breakpoints
+    + [ ] ... at generation X
+    + [ ] ... when given cell is nonzero
 
 ### Grid display
 

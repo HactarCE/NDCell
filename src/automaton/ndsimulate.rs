@@ -12,10 +12,10 @@ pub trait NdSimulate {
     /// Sets the number of generations that have elapsed in the simulation.
     fn set_generation_count(&mut self, generations: BigInt);
     /// Steps forward in the simulation by the given number of generations.
-    fn step(&mut self, step_size: &BigInt);
-    /// Steps forward in the simulation by the given number of generations
-    /// without clearing the results cache.
-    fn step_no_cache_clear(&mut self, step_size: &BigInt);
+    ///
+    /// This method is called step_forward() instead of step() so that it does
+    /// not conflict with GridViewTrait::step().
+    fn step_forward(&mut self, step_size: &BigInt);
 }
 
 /// A proxy trait for NdSimulate.
@@ -46,10 +46,7 @@ where
     fn set_generation_count(&mut self, generations: BigInt) {
         self.ndsim_mut().set_generation_count(generations);
     }
-    fn step(&mut self, step_size: &BigInt) {
-        self.ndsim_mut().step(step_size);
-    }
-    fn step_no_cache_clear(&mut self, step_size: &BigInt) {
-        self.ndsim_mut().step_no_cache_clear(step_size);
+    fn step_forward(&mut self, step_size: &BigInt) {
+        self.ndsim_mut().step_forward(step_size);
     }
 }

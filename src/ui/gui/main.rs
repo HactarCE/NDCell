@@ -1,29 +1,20 @@
 use imgui::*;
 use ref_thread_local::RefThreadLocal;
 
-use crate::automaton::{AnyDimBigVec, AsFVec, Dim, Dim2D, NdSimulate, X, Y};
-use crate::ui::gridview::{GridView, GridView2D, Viewport2D};
-use crate::ui::State;
-
-#[derive(Default)]
-pub struct WindowState {}
+use crate::automaton::{AsFVec, Dim, Dim2D, NdSimulate, X, Y};
+use crate::ui::gridview::{GridView, Viewport2D};
 
 /// Builds the main window.
-pub fn build(state: &mut State, ui: &imgui::Ui) {
+pub fn build(ui: &imgui::Ui) {
+    let gridview = &*crate::ui::gridview();
     Window::new(&ImString::new(crate::ui::TITLE)).build(&ui, || {
         ui.text("Hello, world!");
         ui.text(format!("Framerate = {} FPS", ui.io().framerate as usize));
-        ui.text(format!(
-            "Generations = {}",
-            state.grid_view.get_generation_count()
-        ));
-        ui.text(format!("Population = {}", state.grid_view.get_population()));
-        match &state.grid_view {
-            GridView::View2D(GridView2D {
-                automaton: _,
-                viewport: Viewport2D { pos, offset, zoom },
-                ..
-            }) => {
+        ui.text(format!("Generations = {}", gridview.get_generation_count()));
+        ui.text(format!("Population = {}", gridview.get_population()));
+        match &gridview {
+            GridView::View2D(view2d) => {
+                let Viewport2D { pos, offset, zoom } = &view2d.viewport;
                 ui.text(format!("Zoom = {}", zoom));
                 let total_pos = pos.as_fvec() + offset.clone();
                 for &ax in Dim2D::axes() {
@@ -34,7 +25,7 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
                         ui.text(format!("{} = {:.1}", ax.name(), value));
                     }
                 }
-                if let Some(AnyDimBigVec::Vec2D(hover_pos)) = &state.input_state.hovered_cell {
+                if let Some(hover_pos) = view2d.get_hover_pos() {
                     ui.text(format!(
                         "Selected: X = {}, Y = {}",
                         hover_pos[X], hover_pos[Y]
@@ -47,7 +38,7 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
         };
         ui.checkbox(
             im_str!("Simulation"),
-            &mut super::simulation::VISIBLE.borrow_mut(),
+            &mut super::simulation::IS_VISIBLE.borrow_mut(),
         );
     });
 }

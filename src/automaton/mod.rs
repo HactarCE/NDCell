@@ -36,6 +36,19 @@ pub trait NdProjectedAutomatonTrait<P: Dim> {
     fn set_cell(&mut self, pos: &BigVec<P>, state: u8);
 }
 
+/// A cellular automaton projected to 1D.
+pub type ProjectedAutomaton1D = ProjectedAutomaton<Dim1D>;
+/// A cellular automaton projected to 2D.
+pub type ProjectedAutomaton2D = ProjectedAutomaton<Dim2D>;
+/// A cellular automaton projected to 3D.
+pub type ProjectedAutomaton3D = ProjectedAutomaton<Dim3D>;
+/// A cellular automaton projected to 4D.
+pub type ProjectedAutomaton4D = ProjectedAutomaton<Dim4D>;
+/// A cellular automaton projected to 5D.
+pub type ProjectedAutomaton5D = ProjectedAutomaton<Dim5D>;
+/// A cellular automaton projected to 6D.
+pub type ProjectedAutomaton6D = ProjectedAutomaton<Dim6D>;
+
 /// An automaton of an unknown dimensionality combined with a projection to a
 /// given dimensionality.
 #[allow(missing_docs)]
@@ -194,12 +207,8 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
     fn set_generation_count(&mut self, generations: BigInt) {
         self.generations = generations;
     }
-    fn step(&mut self, step_size: &BigInt) {
+    fn step_forward(&mut self, step_size: &BigInt) {
         self.sim.step(&mut self.tree, step_size);
-        self.generations += step_size;
-    }
-    fn step_no_cache_clear(&mut self, step_size: &BigInt) {
-        self.sim.step_no_cache_clear(&mut self.tree, step_size);
         self.generations += step_size;
     }
 }

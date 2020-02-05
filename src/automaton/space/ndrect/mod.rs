@@ -42,7 +42,7 @@ where
     pub fn new(start: NdVec<D, N>, size: NdVec<D, N>) -> Self {
         NdRect { start, size }
     }
-    /// Constructs an NdRect spanning the given positions (inclusive).
+    /// Constructs an NdRect spaning the given positions (inclusive).
     pub fn span(mut a: NdVec<D, N>, mut b: NdVec<D, N>) -> Self {
         for &ax in D::Dim::axes() {
             if a[ax] > b[ax] {

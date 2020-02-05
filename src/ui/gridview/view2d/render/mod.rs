@@ -38,6 +38,7 @@
 //! lines is not at all trivial in OpenGL!). At non-integer zoom factors,
 //! however, this is not guaranteed.
 
+use crate::ui::get_display;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use noisy_float::prelude::r64;
@@ -58,30 +59,29 @@ const GRIDLINE_FADE_RANGE: f64 = 3.0;
 /// Draw the 2D grid and return the coordinates of the cell that the mouse is
 /// hovering over. This is the entry point for the entire 2D grid rendering
 /// process.
-pub fn draw(
-    grid_view: &mut GridView2D,
-    target: &mut glium::Frame,
-    cursor_position: Option<(i32, i32)>,
-) -> Option<BigVec2D> {
-    let mut hover_pos = None;
-    let mut rip = RenderInProgress::new(grid_view, target);
-    rip.draw_cells();
-    // Only draw gridlines if we're zoomed in far enough.
-    let zoom_power = rip.viewport.zoom.power();
-    if zoom_power > MIN_GRIDLINE_ZOOM_POWER {
-        let mut alpha = 1.0;
-        // Fade in between MIN_GRIDLINE_ZOOM_POWER and MIN_GRIDLINE_ZOOM_POWER + 4.
-        if zoom_power < MIN_GRIDLINE_ZOOM_POWER + GRIDLINE_FADE_RANGE {
-            alpha = (zoom_power - MIN_GRIDLINE_ZOOM_POWER) / GRIDLINE_FADE_RANGE;
+pub fn render(gridview: &mut GridView2D, target: &mut glium::Frame) {
+    let mut new_hover_pos = None;
+    {
+        let mut rip = RenderInProgress::new(gridview, target);
+        rip.draw_cells();
+        // Only draw gridlines if we're zoomed in far enough.
+        let zoom_power = rip.viewport.zoom.power();
+        if zoom_power > MIN_GRIDLINE_ZOOM_POWER {
+            let mut alpha = 1.0;
+            // Fade in between MIN_GRIDLINE_ZOOM_POWER and MIN_GRIDLINE_ZOOM_POWER + 4.
+            if zoom_power < MIN_GRIDLINE_ZOOM_POWER + GRIDLINE_FADE_RANGE {
+                alpha = (zoom_power - MIN_GRIDLINE_ZOOM_POWER) / GRIDLINE_FADE_RANGE;
+            }
+            assert!(0.0 <= alpha && alpha <= 1.0);
+            let gridlines_texture = rip.make_gridlines_texture();
+            let mut gridlines_fbo = rip.make_gridlines_fbo(&gridlines_texture);
+            rip.draw_gridlines(&mut gridlines_fbo);
+            new_hover_pos =
+                rip.draw_hover_highlight(&mut gridlines_fbo, crate::ui::input::get_cursor_pos());
+            rip.blit_gridlines(&gridlines_texture, alpha as f32);
         }
-        assert!(0.0 <= alpha && alpha <= 1.0);
-        let gridlines_texture = rip.make_gridlines_texture();
-        let mut gridlines_fbo = rip.make_gridlines_fbo(&gridlines_texture);
-        rip.draw_gridlines(&mut gridlines_fbo);
-        hover_pos = rip.draw_hover_highlight(&mut gridlines_fbo, cursor_position);
-        rip.blit_gridlines(&gridlines_texture, alpha as f32);
     }
-    hover_pos
+    gridview.hover_pos = new_hover_pos;
 }
 
 /// A vertex containing a 2D floating-point position and a 2D texture position.
@@ -138,8 +138,9 @@ struct Shaders {
     lines: glium::Program,
     quadtree: glium::Program,
 }
-impl Shaders {
-    pub fn compile(display: &glium::Display) -> Self {
+impl Default for Shaders {
+    fn default() -> Self {
+        let display = &*get_display();
         Self {
             blit: shaders::compile_blit_program(display),
             lines: shaders::compile_lines_program(display),
@@ -153,8 +154,9 @@ struct VBOs {
     blit: glium::VertexBuffer<TexturePosVertex>,
     gridlines: glium::VertexBuffer<PointVertex>,
 }
-impl VBOs {
-    pub fn new(display: &glium::Display) -> Self {
+impl Default for VBOs {
+    fn default() -> Self {
+        let display = &*get_display();
         Self {
             quadtree: glium::VertexBuffer::empty_dynamic(display, 4)
                 .expect("Failed to create vertex buffer"),
@@ -166,19 +168,10 @@ impl VBOs {
     }
 }
 
+#[derive(Default)]
 pub(super) struct RenderCache {
     shaders: Shaders,
     vbos: VBOs,
-    display: Rc<glium::Display>,
-}
-impl RenderCache {
-    pub fn new(display: Rc<glium::Display>) -> Self {
-        Self {
-            shaders: Shaders::compile(&*display),
-            vbos: VBOs::new(&*display),
-            display: display,
-        }
-    }
 }
 
 struct RenderInProgress<'a> {
@@ -325,6 +318,7 @@ impl<'a> RenderInProgress<'a> {
 
     /// Draw the cells that appear in the viewport.
     pub fn draw_cells(&mut self) {
+        let display = &*get_display();
         // Steps #1: encode the quadtree as a 1D texture.
         let gl_quadtree = GlQuadtree::from_node(
             &self.quadtree_slice.root,
@@ -336,16 +330,14 @@ impl<'a> RenderInProgress<'a> {
         let unscaled_cells_w = self.visible_rect.len(X) as u32;
         let unscaled_cells_h = self.visible_rect.len(Y) as u32;
         let unscaled_cells_texture = glium::texture::srgb_texture2d::SrgbTexture2d::empty(
-            &*self.cache.display,
+            display,
             unscaled_cells_w,
             unscaled_cells_h,
         )
         .expect("Failed to create texture");
-        let mut unscaled_cells_fbo = glium::framebuffer::SimpleFrameBuffer::new(
-            &*self.cache.display,
-            &unscaled_cells_texture,
-        )
-        .expect("Failed to create frame buffer");
+        let mut unscaled_cells_fbo =
+            glium::framebuffer::SimpleFrameBuffer::new(display, &unscaled_cells_texture)
+                .expect("Failed to create frame buffer");
         self.draw_cell_pixels(&mut unscaled_cells_fbo, gl_quadtree);
 
         // Step #3: resize that texture by an integer factor.
@@ -354,15 +346,12 @@ impl<'a> RenderInProgress<'a> {
         let visible_cells_h = self.visible_rect.len(Y) as u32;
         let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
         let scaled_cells_h = visible_cells_h * integer_scale_factor as u32;
-        let scaled_cells_texture = glium::texture::SrgbTexture2d::empty(
-            &*self.cache.display,
-            scaled_cells_w,
-            scaled_cells_h,
-        )
-        .expect("Failed to create render buffer");
+        let scaled_cells_texture =
+            glium::texture::SrgbTexture2d::empty(display, scaled_cells_w, scaled_cells_h)
+                .expect("Failed to create render buffer");
 
         let scaled_cells_fbo =
-            glium::framebuffer::SimpleFrameBuffer::new(&*self.cache.display, &scaled_cells_texture)
+            glium::framebuffer::SimpleFrameBuffer::new(display, &scaled_cells_texture)
                 .expect("Failed to create frame buffer");
         scaled_cells_fbo.blit_from_simple_framebuffer(
             &unscaled_cells_fbo,
@@ -429,8 +418,9 @@ impl<'a> RenderInProgress<'a> {
         target: &mut S,
         gl_quadtree: GlQuadtree<'b>,
     ) {
+        let display = &*get_display();
         let quadtree_texture = glium::texture::unsigned_texture1d::UnsignedTexture1d::new(
-            &*self.cache.display,
+            display,
             gl_quadtree.raw_image,
         )
         .expect("Failed to create texture");
@@ -497,21 +487,18 @@ impl<'a> RenderInProgress<'a> {
     }
 
     fn make_gridlines_texture(&self) -> glium::texture::srgb_texture2d::SrgbTexture2d {
+        let display = &*get_display();
         let (target_w, target_h) = self.target.get_dimensions();
-        glium::texture::srgb_texture2d::SrgbTexture2d::empty(
-            &*self.cache.display,
-            target_w,
-            target_h,
-        )
-        .expect("Failed to create texture")
+        glium::texture::srgb_texture2d::SrgbTexture2d::empty(display, target_w, target_h)
+            .expect("Failed to create texture")
     }
     fn make_gridlines_fbo<'b>(
         &self,
         gridlines_texture: &'b glium::texture::srgb_texture2d::SrgbTexture2d,
     ) -> glium::framebuffer::SimpleFrameBuffer<'b> {
-        let mut ret =
-            glium::framebuffer::SimpleFrameBuffer::new(&*self.cache.display, gridlines_texture)
-                .expect("Failed to create frame buffer");
+        let display = &*get_display();
+        let mut ret = glium::framebuffer::SimpleFrameBuffer::new(display, gridlines_texture)
+            .expect("Failed to create frame buffer");
         ret.clear_color_srgb(0.0, 0.0, 0.0, 0.0);
         ret
     }
@@ -574,17 +561,18 @@ impl<'a> RenderInProgress<'a> {
     pub fn draw_hover_highlight(
         &mut self,
         gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer,
-        cursor_position: Option<(i32, i32)>,
+        cursor_position: Option<IVec2D>,
     ) -> Option<BigVec2D> {
         if self.viewport.zoom.power() < 0.0 {
             return None;
         }
         let cursor_position = cursor_position?;
-        let (mut x, mut y) = cursor_position;
+        let mut x = cursor_position[X];
+        let mut y = cursor_position[Y];
         // Center the coordinates.
         let (target_w, target_h) = self.target.get_dimensions();
-        x -= target_w as i32 / 2;
-        y -= target_h as i32 / 2;
+        x -= target_w as isize / 2;
+        y -= target_h as isize / 2;
         // Glutin measures window coordinates from the top-left corner, but we
         // want the Y coordinate increasing upwards.
         y = -y;

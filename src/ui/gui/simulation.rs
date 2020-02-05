@@ -1,66 +1,66 @@
 use imgui::*;
-use num::ToPrimitive;
+use num::{BigInt, ToPrimitive};
 use ref_thread_local::RefThreadLocal;
 
 use crate::automaton::NdSimulate;
-use crate::ui::State;
+use crate::ui::{gridview_mut, GridViewTrait, History};
 
 ref_thread_local! {
-    pub static managed VISIBLE: bool = false;
-}
-
-#[derive(Default)]
-pub struct WindowState {
-    pub running: bool,
-    jump_to_gen: isize,
+    pub static managed IS_VISIBLE: bool = false;
+    pub static managed STEP_SIZE: BigInt = 4.into();
+    pub static managed USE_BREAKPOINT: bool = false;
+    pub static managed BREAKPOINT_GEN: BigInt = 0.into();
 }
 
 /// Builds the main window.
-pub fn build(state: &mut State, ui: &imgui::Ui) {
-    if *VISIBLE.borrow() {
+pub fn build(ui: &imgui::Ui) {
+    if *IS_VISIBLE.borrow() {
+        let mut gridview = gridview_mut();
         Window::new(&ImString::new("Simulation")).build(&ui, || {
             let mut width = ui.window_content_region_width();
             if width < 100.0 {
                 width = 200.0;
             }
             if ui.button(im_str!("Step 1 generation"), [width, 40.0]) {
-                state.step_no_cache_clear(&1.into(), true);
-            };
+                gridview_mut().step_n(&1.into());
+            }
             ui.spacing();
             ui.spacing();
             ui.separator();
             ui.spacing();
             ui.spacing();
-            let old_sim_step_size = &state.step_size;
-            let mut sim_step_size = old_sim_step_size.to_i32().unwrap();
-            ui.input_int(im_str!("Sim step"), &mut sim_step_size)
+            // TODO: implement custom BigInt-compatible number entry widget
+            let mut step_size_big = STEP_SIZE.borrow_mut();
+            let old_step_size_i32 = step_size_big.to_i32().unwrap_or(std::i32::MAX);
+            let mut step_size_i32 = old_step_size_i32;
+            ui.input_int(im_str!("Sim step"), &mut step_size_i32)
                 .step(16)
                 .step_fast(256)
                 .build();
-            if sim_step_size <= 0 {
-                sim_step_size = 1;
+            if step_size_i32 <= 0 {
+                step_size_i32 = 1;
             }
-            if old_sim_step_size.to_i32().unwrap() != sim_step_size {
-                state.step_size = sim_step_size.into();
+            if old_step_size_i32 != step_size_i32 {
+                *step_size_big = step_size_i32.into();
             }
             if ui.button(
-                &ImString::new(format!("Step {} generations", sim_step_size)),
+                &ImString::new(format!("Step {} generations", *step_size_big)),
                 [width, 40.0],
             ) {
-                state.step_step_size(true);
+                gridview_mut().step();
             }
             ui.spacing();
             ui.spacing();
             {
                 if ui.button(
-                    if state.input_state.is_running {
+                    if gridview.is_running() {
                         im_str!("Stop")
                     } else {
                         im_str!("Start")
                     },
                     [width, 60.0],
                 ) {
-                    state.toggle_running();
+                    gridview.toggle_running();
                 }
             }
             ui.spacing();
@@ -68,24 +68,20 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
             ui.separator();
             ui.spacing();
             ui.spacing();
-            let jump_to_gen = &mut state.gui.simulation.jump_to_gen;
-            let mut jump_to_gen_i32 = *jump_to_gen as i32;
-            ui.input_int(im_str!("Jump to"), &mut jump_to_gen_i32)
-                .step(16)
-                .step_fast(256)
-                .build();
-            *jump_to_gen = jump_to_gen_i32 as isize;
-            if *jump_to_gen <= state.grid_view.get_generation_count().to_isize().unwrap() {
-                *jump_to_gen = state.grid_view.get_generation_count().to_isize().unwrap();
-            }
-            if ui.button(
-                &ImString::new(format!("Jump to generation {}", *jump_to_gen)),
-                [width, 40.0],
-            ) {
-                if state.grid_view.get_generation_count().to_isize().unwrap() < *jump_to_gen {
-                    let tmp_step_size =
-                        *jump_to_gen - state.grid_view.get_generation_count().to_isize().unwrap();
-                    state.step(&tmp_step_size.into(), true);
+            ui.checkbox(im_str!("Breakpoint"), &mut USE_BREAKPOINT.borrow_mut());
+            if *USE_BREAKPOINT.borrow() {
+                let mut breakpoint_gen = BREAKPOINT_GEN.borrow_mut();
+                let old_breakpoint_gen_i32 = breakpoint_gen.to_i32().unwrap_or(std::i32::MAX);
+                let mut breakpoint_gen_i32 = old_breakpoint_gen_i32;
+                ui.input_int(im_str!(""), &mut breakpoint_gen_i32)
+                    .step(16)
+                    .step_fast(256)
+                    .build();
+                if old_breakpoint_gen_i32 != breakpoint_gen_i32 {
+                    *breakpoint_gen = breakpoint_gen_i32.into();
+                }
+                if &*breakpoint_gen < gridview.get_generation_count() {
+                    *breakpoint_gen = gridview.get_generation_count().clone()
                 }
             }
             ui.spacing();
@@ -95,17 +91,17 @@ pub fn build(state: &mut State, ui: &imgui::Ui) {
             ui.spacing();
             let button_width = (width - 20.0) / 2.0;
             if ui.button(im_str!("Undo"), [button_width, 60.0]) {
-                state.undo();
+                gridview.undo();
             }
             ui.same_line(button_width + 20.0);
             if ui.button(im_str!("Redo"), [button_width, 60.0]) {
-                state.redo();
+                gridview.redo();
             }
             ui.spacing();
             ui.spacing();
             if ui.button(im_str!("Reset"), [width, 40.0]) {
-                state.stop_running();
-                state.reset();
+                gridview.stop_running();
+                gridview.undo_to_gen(&0.into());
             }
         })
     }

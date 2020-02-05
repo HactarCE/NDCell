@@ -6,11 +6,12 @@ use std::rc::Rc;
 
 use super::*;
 
+// TODO: garbage collect results cache
+
 /// A HashLife simulation of a given automaton that caches simulation results.
 #[derive(Debug, Clone)]
 pub struct Simulation<C: CellType, D: Dim> {
     rule: Rc<dyn Rule<C, D>>,
-    last_step_size: BigInt,
     min_layer: usize,
     results: ResultsCache<C, D>,
 }
@@ -39,38 +40,13 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 
         Self {
             rule,
-            last_step_size: 0.into(),
             min_layer,
             results: ResultsCache::default(),
         }
     }
 
-    /// Sets the step size of this simulation to the given value.
-    fn set_last_step_size(&mut self, new_step_size: &BigInt) {
-        if *new_step_size != self.last_step_size {
-            // If the new step is different, recompute ResultsCache. This is
-            // only present to prevent holding onto memory we don't need any
-            // more, and could probably be replaced with something smarter that
-            // only prunes the SingleStepResultsCaches that won't be used with
-            // this new step size.
-            self.results = ResultsCache::default();
-        }
-        self.last_step_size = new_step_size.clone();
-    }
-
     /// Advances the given NdTree by the given number of generations.
     pub fn step(&mut self, tree: &mut NdTree<C, D>, step_size: &BigInt) {
-        assert!(
-            step_size.is_positive(),
-            "Step size must be a positive integer"
-        );
-        self.set_last_step_size(step_size);
-        self.step_no_cache_clear(tree, step_size);
-    }
-
-    /// Advances the given NdTree by the given number of generations without
-    /// clearing the results cache.
-    pub fn step_no_cache_clear(&mut self, tree: &mut NdTree<C, D>, step_size: &BigInt) {
         assert!(
             step_size.is_positive(),
             "Step size must be a positive integer"

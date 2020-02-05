@@ -5,6 +5,9 @@ use weak_table::WeakHashSet;
 
 use crate::automaton::*;
 
+// TODO: use one node cache for all nodes with the same cell type.
+// TODO: garbage-collect the hash set?
+
 /// Fast hasher used for NdTreeNodes.
 pub type NodeHasher = BuildHasherDefault<SeaHasher>;
 

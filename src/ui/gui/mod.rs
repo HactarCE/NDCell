@@ -1,16 +1,9 @@
 mod main;
-mod simulation;
-
-use crate::ui::State;
-
-#[derive(Default)]
-pub struct GuiWindows {
-    pub main: main::WindowState,
-    pub simulation: simulation::WindowState,
-}
+// TODO this module probably shouldn't be public?
+pub mod simulation;
 
 /// Builds all the imgui windows.
-pub fn build_windows(state: &mut State, ui: &imgui::Ui) {
-    main::build(state, ui);
-    simulation::build(state, ui);
+pub fn build_windows(ui: &imgui::Ui) {
+    main::build(ui);
+    simulation::build(ui);
 }

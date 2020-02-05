@@ -1,79 +1,79 @@
-use super::*;
-
-#[derive(Default)]
-pub struct HistoryStack {
-    undo: Vec<HistoryEntry>,
-    redo: Vec<HistoryEntry>,
+/// Methods for managing history entries.
+pub trait HistoryManager {
+    /// The type used for history entries.
+    type HistoryEntry;
+    /// Returns a history entry representing the current state.
+    fn history_entry(&self) -> Self::HistoryEntry;
+    /// Replaces this state with the one recorded in the given history entry and
+    /// returns a new history entry representing the state before calling this
+    /// method.
+    ///
+    /// This method is analogous to std::mem::replace().
+    fn restore(&mut self, entry: Self::HistoryEntry) -> Self::HistoryEntry;
+    /// Returns a mutable reference to the undo stack, with the most recent
+    /// entry on top.
+    fn undo_stack(&mut self) -> &mut Vec<Self::HistoryEntry>;
+    /// Returns a mutable reference to the redo stack, with the next entry on
+    /// top.
+    fn redo_stack(&mut self) -> &mut Vec<Self::HistoryEntry>;
 }
-impl HistoryStack {
-    /// Pushes the given state onto the undo stack and clears the redo stack.
-    pub fn record(&mut self, current: GridView) {
-        // Erase redo history.
-        self.redo.clear();
-        // Push new entry.
-        self.undo.push(HistoryEntry::from(current));
-    }
+
+/// Undo/redo methods -- the "public" interface of HistoryManager. This is
+/// automatically implemented for all HistoryManager.
+pub trait History {
+    /// Pushes the current state onto the undo stack and clears the redo stack.
+    fn record(&mut self);
     /// Returns true if there is something to undo, or false otherwise.
-    pub fn has_undo(&self) -> bool {
-        !self.undo.is_empty()
-    }
+    fn has_undo(&mut self) -> bool;
     /// Returns true if there is something to redo, or false otherwise.
-    pub fn has_redo(&self) -> bool {
-        !self.redo.is_empty()
-    }
+    fn has_redo(&mut self) -> bool;
     /// Restores the last state from the undo stack, pushing the current state
     /// onto the redo stack.
     ///
     /// Returns true if the undo was successful, or false if there was nothing
     /// to undo.
-    pub fn undo(&mut self, current: &mut GridView) -> bool {
-        if let Some(new_state) = self.undo.pop() {
-            let redo_state = new_state.restore(current);
-            self.redo.push(HistoryEntry::from(redo_state));
-            true
-        } else {
-            false
-        }
-    }
+    fn undo(&mut self) -> bool;
     /// Restores the next state from the redo stack, pushing the current state
     /// onto the undo stack.
     ///
     /// Returns true if the redo was successful, or false if there was nothing
     /// to redo.
-    pub fn redo(&mut self, current: &mut GridView) -> bool {
-        if let Some(new_state) = self.redo.pop() {
-            let undo_state = new_state.restore(current);
-            self.undo.push(HistoryEntry::from(undo_state));
+    fn redo(&mut self) -> bool;
+}
+
+impl<T: HistoryManager> History for T {
+    fn record(&mut self) {
+        let current = self.history_entry();
+        // Erase redo history.
+        self.redo_stack().clear();
+        // Push new entry.
+        self.undo_stack().push(current);
+    }
+    fn has_undo(&mut self) -> bool {
+        // TODO: note that this could take an immut ref, but then there would
+        // need to be separate undo_stack() and undo_stack_mut() methods, which
+        // just isn't worth the hassle
+        !self.undo_stack().is_empty()
+    }
+    fn has_redo(&mut self) -> bool {
+        !self.redo_stack().is_empty()
+    }
+    fn undo(&mut self) -> bool {
+        if let Some(new_state) = self.undo_stack().pop() {
+            let redo_state = self.restore(new_state);
+            self.redo_stack().push(redo_state.into());
             true
         } else {
             false
         }
     }
-}
-
-pub struct HistoryEntry(GridView);
-impl From<GridView> for HistoryEntry {
-    fn from(grid_view: GridView) -> Self {
-        Self(grid_view)
-    }
-}
-impl HistoryEntry {
-    /// Replaces the given GridView with the one recorded in this HistoryEntry
-    /// and return a new HistoryEntry representing the GridView originally
-    /// passed to this method.
-    ///
-    /// This method is analogous to std::mem::replace().
-    pub fn restore(mut self, current: &mut GridView) -> GridView {
-        // Preserve viewport if possible.
-        match &mut self.0 {
-            GridView::View2D(about_to_restore) => {
-                if let GridView::View2D(current_view) = &current {
-                    about_to_restore.use_viewport_from(current_view);
-                }
-            }
-            GridView::View3D { .. } => unimplemented!(),
+    fn redo(&mut self) -> bool {
+        if let Some(new_state) = self.redo_stack().pop() {
+            let undo_state = self.restore(new_state);
+            self.undo_stack().push(undo_state.into());
+            true
+        } else {
+            false
         }
-        // Perform the replacement.
-        std::mem::replace(current, self.0)
     }
 }

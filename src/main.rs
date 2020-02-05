@@ -1,7 +1,7 @@
 //! N-dimensional cellular automaton simulation program
 
 #![allow(dead_code)]
-#![warn(missing_docs)]
+#![warn(missing_docs)] // TODO: pull this band-aid off.
 
 #[macro_use]
 extern crate pest_derive;

@@ -1,14 +1,11 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 mod render;
-mod shaders;
 mod viewport;
 mod zoom;
 
-use super::GridViewTrait;
+use super::{GridViewTrait, RenderGridView};
 use crate::automaton::*;
 use crate::ui::history::{History, HistoryManager};
+use render::{RenderInProgress, GRIDLINE_FADE_RANGE, MIN_GRIDLINE_ZOOM_POWER};
 pub use viewport::Viewport2D;
 pub use zoom::Zoom2D;
 
@@ -26,18 +23,11 @@ pub struct GridView2D {
     redo_stack: Vec<HistoryEntry>,
     /// Whether the simulation is currently running.
     is_running: bool,
-    // TODO: probably move render cache to ref_thread_local
-    render_cache: Rc<RefCell<render::RenderCache>>,
-    /// The coordinates of the cell that the mouse is currently hovering over,
-    /// if any.
-    hover_pos: Option<BigVec2D>,
+    /// The last render result.
+    last_render_result: View2DRenderResult,
 }
 
 impl GridViewTrait for GridView2D {
-    fn render(&mut self, target: &mut glium::Frame) {
-        render::render(self, target);
-    }
-
     fn do_frame(&mut self) {
         const DECAY_CONSTANT: f64 = 4.0;
         if self.interpolating_viewport != self.viewport {
@@ -91,6 +81,42 @@ impl From<Automaton2D> for GridView2D {
     }
 }
 
+impl RenderGridView for GridView2D {
+    type RenderParams = View2DRenderParams;
+    type RenderResult = View2DRenderResult;
+    fn render(
+        &mut self,
+        target: &mut glium::Frame,
+        params: View2DRenderParams,
+    ) -> &View2DRenderResult {
+        let mut hover_pos = None;
+        {
+            let mut rip = RenderInProgress::new(self, target);
+            rip.draw_cells();
+            // Only draw gridlines if we're zoomed in far enough.
+            let zoom_power = self.viewport.zoom.power(); // TODO interpolating!
+            if zoom_power > MIN_GRIDLINE_ZOOM_POWER {
+                let mut alpha = 1.0;
+                // Fade in between MIN_GRIDLINE_ZOOM_POWER and MIN_GRIDLINE_ZOOM_POWER + 4.
+                if zoom_power < MIN_GRIDLINE_ZOOM_POWER + GRIDLINE_FADE_RANGE {
+                    alpha = (zoom_power - MIN_GRIDLINE_ZOOM_POWER) / GRIDLINE_FADE_RANGE;
+                }
+                assert!(0.0 <= alpha && alpha <= 1.0);
+                let gridlines_texture = rip.make_gridlines_texture();
+                let mut gridlines_fbo = rip.make_gridlines_fbo(&gridlines_texture);
+                rip.draw_gridlines(&mut gridlines_fbo);
+                hover_pos = rip.draw_hover_highlight(&mut gridlines_fbo, params.cursor_pos);
+                rip.blit_gridlines(&gridlines_texture, alpha as f32);
+            }
+        }
+        self.last_render_result = View2DRenderResult { hover_pos };
+        &self.last_render_result
+    }
+    fn last_render_result(&self) -> &View2DRenderResult {
+        &self.last_render_result
+    }
+}
+
 impl GridView2D {
     pub fn use_viewport_from(&mut self, other: &Self) {
         self.viewport = other.viewport.clone();
@@ -102,9 +128,18 @@ impl GridView2D {
     pub fn set_cell(&mut self, pos: &BigVec2D, new_cell_state: u8) {
         self.automaton.set_cell(pos, new_cell_state)
     }
-    pub fn get_hover_pos(&self) -> Option<&BigVec2D> {
-        self.hover_pos.as_ref()
-    }
+}
+
+#[derive(Debug, Default)]
+pub struct View2DRenderParams {
+    /// The pixel position of the mouse cursor from the top left of the area
+    /// where the gridview is being drawn.
+    pub cursor_pos: Option<IVec2D>,
+}
+#[derive(Debug, Default)]
+pub struct View2DRenderResult {
+    /// The cell that the mouse cursor is hovering over.
+    pub hover_pos: Option<BigVec2D>,
 }
 
 pub struct HistoryEntry {

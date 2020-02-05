@@ -1,6 +1,6 @@
 #version 140
 
-in vec2 CellPos;
+in vec2 vCellPos;
 
 // One "pixel" per node; each pixel contains four uints.
 uniform usampler1D quadtree_texture;
@@ -18,8 +18,8 @@ uint getNodeBranch(uint node, bool branch_x, bool branch_y) {
 }
 
 void main() {
-    int cell_x = int(round(CellPos.x));
-    int cell_y = int(round(CellPos.y));
+    int cell_x = int(round(vCellPos.x));
+    int cell_y = int(round(vCellPos.y));
     uint node = root_idx;
     // color = vec4(
     //     float(cell_x / 256) / 255.0,

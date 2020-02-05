@@ -25,12 +25,10 @@ impl IntoNdSimulate for GridView3D {
 }
 
 impl GridViewTrait for GridView3D {
-    fn render(&mut self, _target: &mut glium::Frame) {
-        unimplemented!()
-    }
     fn do_frame(&mut self) {
         unimplemented!()
     }
+
     fn is_running(&self) -> bool {
         unimplemented!()
     }

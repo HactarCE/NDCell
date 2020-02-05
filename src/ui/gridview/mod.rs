@@ -7,15 +7,13 @@ mod view3d;
 
 use crate::automaton::*;
 use crate::ui::history::History;
-pub use view2d::{GridView2D, Viewport2D, Zoom2D};
+pub use view2d::{GridView2D, View2DRenderParams, View2DRenderResult, Viewport2D, Zoom2D};
 pub use view3d::GridView3D;
 
 /// Methods implemented by GridView by dispatching to the implementation of the
 /// GridView2D or GridView3D within.
 #[enum_dispatch]
 pub trait GridViewTrait: NdSimulate + History {
-    fn render(&mut self, target: &mut glium::Frame);
-
     fn do_frame(&mut self);
 
     fn step_n(&mut self, step_size: &BigInt) {
@@ -61,6 +59,25 @@ pub trait GridViewTrait: NdSimulate + History {
 
     fn get_automaton<'a>(&'a self) -> Automaton<'a>;
     fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;
+}
+
+pub trait RenderGridView: GridViewTrait {
+    /// Parameters passed each frame to control the rendering process.
+    type RenderParams: Default;
+    /// Information generated during the render that may be useful to the
+    /// caller.
+    type RenderResult: Default;
+    /// Draws the 2D grid and return a RenderResult which includes the
+    /// coordinates of the cell that the mouse is hovering over. This is the
+    /// entry point for the entire 2D grid rendering process.
+    fn render(
+        &mut self,
+        target: &mut glium::Frame,
+        params: Self::RenderParams,
+    ) -> &Self::RenderResult;
+    /// Returns the RenderResult of the most recent render, or
+    /// RenderResult::default() if there hasn't been one.
+    fn last_render_result(&self) -> &Self::RenderResult;
 }
 
 /// An enum between 2D and 3D views that manages the automaton.

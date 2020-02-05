@@ -43,82 +43,21 @@ use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use noisy_float::prelude::r64;
 use num::{BigInt, ToPrimitive, Zero};
-use std::cell::RefMut;
 
 mod gl_quadtree;
+mod shaders;
+mod vbos;
+mod vertices;
 
 use super::*;
 use crate::automaton::space::*;
 use gl_quadtree::GlQuadtree;
+use vertices::*;
 
 /// Minimum zoom power to draw gridlines. 2.0 = 4 pixels per cell.
-const MIN_GRIDLINE_ZOOM_POWER: f64 = 2.0;
+pub const MIN_GRIDLINE_ZOOM_POWER: f64 = 2.0;
 /// Number of zoom levels over which to fade gridlines in. 3.0 = three zoom levels
-const GRIDLINE_FADE_RANGE: f64 = 3.0;
-
-/// Draw the 2D grid and return the coordinates of the cell that the mouse is
-/// hovering over. This is the entry point for the entire 2D grid rendering
-/// process.
-pub fn render(gridview: &mut GridView2D, target: &mut glium::Frame) {
-    let mut new_hover_pos = None;
-    {
-        let mut rip = RenderInProgress::new(gridview, target);
-        rip.draw_cells();
-        // Only draw gridlines if we're zoomed in far enough.
-        let zoom_power = rip.viewport.zoom.power();
-        if zoom_power > MIN_GRIDLINE_ZOOM_POWER {
-            let mut alpha = 1.0;
-            // Fade in between MIN_GRIDLINE_ZOOM_POWER and MIN_GRIDLINE_ZOOM_POWER + 4.
-            if zoom_power < MIN_GRIDLINE_ZOOM_POWER + GRIDLINE_FADE_RANGE {
-                alpha = (zoom_power - MIN_GRIDLINE_ZOOM_POWER) / GRIDLINE_FADE_RANGE;
-            }
-            assert!(0.0 <= alpha && alpha <= 1.0);
-            let gridlines_texture = rip.make_gridlines_texture();
-            let mut gridlines_fbo = rip.make_gridlines_fbo(&gridlines_texture);
-            rip.draw_gridlines(&mut gridlines_fbo);
-            new_hover_pos =
-                rip.draw_hover_highlight(&mut gridlines_fbo, crate::ui::input::get_cursor_pos());
-            rip.blit_gridlines(&gridlines_texture, alpha as f32);
-        }
-    }
-    gridview.hover_pos = new_hover_pos;
-}
-
-/// A vertex containing a 2D floating-point position and a 2D texture position.
-#[derive(Debug, Default, Copy, Clone)]
-struct TexturePosVertex {
-    src_coords: [f32; 2],
-    dest_coords: [f32; 2],
-}
-glium::implement_vertex!(TexturePosVertex, src_coords, dest_coords);
-
-/// A vertex containing a 2D floating-point position and a 2D cell position.
-#[derive(Debug, Default, Copy, Clone)]
-struct QuadtreePosVertex {
-    texture_pos: [f32; 2],
-    cell_pos: [i32; 2],
-}
-glium::implement_vertex!(QuadtreePosVertex, texture_pos, cell_pos);
-
-/// A vertex containing a 2D floating-point position and an RGBA color.
-#[derive(Debug, Default, Copy, Clone)]
-struct PointVertex {
-    pos: [f32; 2],
-    color: [f32; 4],
-}
-glium::implement_vertex!(PointVertex, pos, color);
-impl From<([isize; 2], [f32; 4])> for PointVertex {
-    fn from(pos_and_color: ([isize; 2], [f32; 4])) -> Self {
-        let (pos, color) = pos_and_color;
-        Self::from(([pos[0] as f32, pos[1] as f32], color))
-    }
-}
-impl From<([f32; 2], [f32; 4])> for PointVertex {
-    fn from(pos_and_color: ([f32; 2], [f32; 4])) -> Self {
-        let (pos, color) = pos_and_color;
-        Self { pos, color }
-    }
-}
+pub const GRIDLINE_FADE_RANGE: f64 = 3.0;
 
 /// The color of the grid. This will be configurable in the future.
 const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
@@ -133,49 +72,7 @@ const LIVE_COLOR: (u8, u8, u8) = (255, 255, 255);
 /// The number of gridlines in each render batch.
 const GRIDLINE_BATCH_SIZE: usize = 256;
 
-struct Shaders {
-    blit: glium::Program,
-    lines: glium::Program,
-    quadtree: glium::Program,
-}
-impl Default for Shaders {
-    fn default() -> Self {
-        let display = &*get_display();
-        Self {
-            blit: shaders::compile_blit_program(display),
-            lines: shaders::compile_lines_program(display),
-            quadtree: shaders::compile_quadtree_program(display),
-        }
-    }
-}
-
-struct VBOs {
-    quadtree: glium::VertexBuffer<QuadtreePosVertex>,
-    blit: glium::VertexBuffer<TexturePosVertex>,
-    gridlines: glium::VertexBuffer<PointVertex>,
-}
-impl Default for VBOs {
-    fn default() -> Self {
-        let display = &*get_display();
-        Self {
-            quadtree: glium::VertexBuffer::empty_dynamic(display, 4)
-                .expect("Failed to create vertex buffer"),
-            blit: glium::VertexBuffer::empty_dynamic(display, 4)
-                .expect("Failed to create vertex buffer"),
-            gridlines: glium::VertexBuffer::empty_dynamic(display, GRIDLINE_BATCH_SIZE)
-                .expect("Failed to create vertex buffer"),
-        }
-    }
-}
-
-#[derive(Default)]
-pub(super) struct RenderCache {
-    shaders: Shaders,
-    vbos: VBOs,
-}
-
-struct RenderInProgress<'a> {
-    cache: RefMut<'a, RenderCache>,
+pub struct RenderInProgress<'a> {
     /// The viewport to use when rendering.
     viewport: Viewport2D,
     /// The target to render to.
@@ -200,11 +97,10 @@ struct RenderInProgress<'a> {
 }
 impl<'a> RenderInProgress<'a> {
     /// Performs preliminary computations and returns a RenderInProgress.
-    pub fn new(g: &'a mut GridView2D, target: &'a mut glium::Frame) -> Self {
+    pub fn new(g: &GridView2D, target: &'a mut glium::Frame) -> Self {
         let (target_w, target_h) = target.get_dimensions();
         let target_pixels_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let viewport = g.interpolating_viewport.clone();
-        let cache = g.render_cache.borrow_mut();
         let mut zoom = viewport.zoom;
 
         // Compute the width of pixels for each individual cell.
@@ -303,7 +199,6 @@ impl<'a> RenderInProgress<'a> {
         }
 
         Self {
-            cache,
             viewport,
             target,
             render_cell_layer,
@@ -369,34 +264,11 @@ impl<'a> RenderInProgress<'a> {
             FRect2D::centered(render_cells_center, render_cells_size / 2.0);
         render_cells_frect /= self.visible_rect.size().as_fvec();
 
-        let left = render_cells_frect.min()[X].raw() as f32;
-        let right = render_cells_frect.max()[X].raw() as f32;
-        let bottom = render_cells_frect.min()[Y].raw() as f32;
-        let top = render_cells_frect.max()[Y].raw() as f32;
-
-        self.cache.vbos.blit.write(&[
-            TexturePosVertex {
-                src_coords: [left, bottom],
-                dest_coords: [-1.0, -1.0],
-            },
-            TexturePosVertex {
-                src_coords: [right, bottom],
-                dest_coords: [1.0, -1.0],
-            },
-            TexturePosVertex {
-                src_coords: [left, top],
-                dest_coords: [-1.0, 1.0],
-            },
-            TexturePosVertex {
-                src_coords: [right, top],
-                dest_coords: [1.0, 1.0],
-            },
-        ]);
         self.target
             .draw(
-                &self.cache.vbos.blit,
+                &*vbos::blit_quad_with_src_coords(render_cells_frect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &self.cache.shaders.blit,
+                &shaders::blit(),
                 &uniform! {
                     src_texture: scaled_cells_texture.sampled(),
                     alpha: 1.0f32,
@@ -413,7 +285,7 @@ impl<'a> RenderInProgress<'a> {
         //     glium::uniforms::MagnifySamplerFilter::Linear,
         // );
     }
-    fn draw_cell_pixels<'b, S: glium::Surface>(
+    pub fn draw_cell_pixels<'b, S: glium::Surface>(
         &mut self,
         target: &mut S,
         gl_quadtree: GlQuadtree<'b>,
@@ -424,33 +296,11 @@ impl<'a> RenderInProgress<'a> {
             gl_quadtree.raw_image,
         )
         .expect("Failed to create texture");
-        let left = self.visible_rect.min()[X] as i32;
-        let right = self.visible_rect.max()[X] as i32;
-        let bottom = self.visible_rect.min()[Y] as i32;
-        let top = self.visible_rect.max()[Y] as i32;
-        self.cache.vbos.quadtree.write(&[
-            QuadtreePosVertex {
-                texture_pos: [-1.0, -1.0],
-                cell_pos: [left, bottom],
-            },
-            QuadtreePosVertex {
-                texture_pos: [1.0, -1.0],
-                cell_pos: [right, bottom],
-            },
-            QuadtreePosVertex {
-                texture_pos: [-1.0, 1.0],
-                cell_pos: [left, top],
-            },
-            QuadtreePosVertex {
-                texture_pos: [1.0, 1.0],
-                cell_pos: [right, top],
-            },
-        ]);
         target
             .draw(
-                &self.cache.vbos.quadtree,
+                &*vbos::quadtree_quad_with_quadtree_coords(self.visible_rect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &self.cache.shaders.quadtree,
+                &shaders::quadtree(),
                 &uniform! {
                     quadtree_texture: &quadtree_texture,
                     max_layer: gl_quadtree.layers as i32,
@@ -486,13 +336,13 @@ impl<'a> RenderInProgress<'a> {
         [r as u8, g as u8, b as u8, 255]
     }
 
-    fn make_gridlines_texture(&self) -> glium::texture::srgb_texture2d::SrgbTexture2d {
+    pub fn make_gridlines_texture(&self) -> glium::texture::srgb_texture2d::SrgbTexture2d {
         let display = &*get_display();
         let (target_w, target_h) = self.target.get_dimensions();
         glium::texture::srgb_texture2d::SrgbTexture2d::empty(display, target_w, target_h)
             .expect("Failed to create texture")
     }
-    fn make_gridlines_fbo<'b>(
+    pub fn make_gridlines_fbo<'b>(
         &self,
         gridlines_texture: &'b glium::texture::srgb_texture2d::SrgbTexture2d,
     ) -> glium::framebuffer::SimpleFrameBuffer<'b> {
@@ -507,7 +357,7 @@ impl<'a> RenderInProgress<'a> {
     pub fn draw_gridlines(&mut self, gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer) {
         // Generate a pair of vertices for each gridline.
         let gridline_indices = glium::index::NoIndices(PrimitiveType::LinesList);
-        let mut gridline_vertices: Vec<PointVertex>;
+        let mut gridline_vertices: Vec<RgbaVertex>;
         {
             let w = self.visible_rect.len(X);
             let h = self.visible_rect.len(Y);
@@ -535,14 +385,15 @@ impl<'a> RenderInProgress<'a> {
         // hold all the points at once.
         for batch in gridline_vertices.chunks(GRIDLINE_BATCH_SIZE) {
             // Put the data in a slice of the VBO.
-            let vbo_slice = self.cache.vbos.gridlines.slice(0..batch.len()).unwrap();
+            let gridlines_vbo = vbos::gridlines();
+            let vbo_slice = gridlines_vbo.slice(0..batch.len()).unwrap();
             vbo_slice.write(batch);
             // Draw gridlines.
             gridlines_fbo
                 .draw(
                     vbo_slice,
                     &gridline_indices,
-                    &self.cache.shaders.lines,
+                    &shaders::lines(),
                     &uniform! {
                         matrix: self.view_matrix,
                     },
@@ -616,26 +467,22 @@ impl<'a> RenderInProgress<'a> {
         {
             // Generate vertices.
             let highlight_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
-            let highlight_vertices: Vec<PointVertex> = vec![
+            let highlight_vertices: Vec<RgbaVertex> = vec![
                 ([hover_x, hover_y], dark_highlight_color).into(),
                 ([hover_x + 1.0, hover_y], dark_highlight_color).into(),
                 ([hover_x, hover_y + 1.0], dark_highlight_color).into(),
                 ([hover_x + 1.0, hover_y + 1.0], dark_highlight_color).into(),
             ];
             // Put the data in a slice of the VBO.
-            let vbo_slice = self
-                .cache
-                .vbos
-                .gridlines
-                .slice(0..highlight_vertices.len())
-                .unwrap();
+            let gridlines_vbo = vbos::gridlines();
+            let vbo_slice = gridlines_vbo.slice(0..highlight_vertices.len()).unwrap();
             vbo_slice.write(&highlight_vertices);
             // Draw.
             gridlines_fbo
                 .draw(
                     vbo_slice,
                     &highlight_indices,
-                    &self.cache.shaders.lines,
+                    &shaders::lines(),
                     &uniform! {
                         matrix: self.view_matrix,
                     },
@@ -651,7 +498,7 @@ impl<'a> RenderInProgress<'a> {
         {
             // Generate vertices.
             let highlight_indices = glium::index::NoIndices(PrimitiveType::LinesList);
-            let mut highlight_vertices: Vec<PointVertex> = vec![];
+            let mut highlight_vertices: Vec<RgbaVertex> = vec![];
             for &y in [hover_y, hover_y + 1.0].iter() {
                 highlight_vertices.push(([min_x, y], half_highlight_color).into());
                 highlight_vertices.push(([hover_x - 1.0, y], half_highlight_color).into());
@@ -678,19 +525,15 @@ impl<'a> RenderInProgress<'a> {
             }
 
             // Put the data in a slice of the VBO.
-            let vbo_slice = self
-                .cache
-                .vbos
-                .gridlines
-                .slice(0..highlight_vertices.len())
-                .unwrap();
+            let gridlines_vbo = vbos::gridlines();
+            let vbo_slice = gridlines_vbo.slice(0..highlight_vertices.len()).unwrap();
             vbo_slice.write(&highlight_vertices);
             // Draw.
             gridlines_fbo
                 .draw(
                     vbo_slice,
                     &highlight_indices,
-                    &self.cache.shaders.lines,
+                    &shaders::lines(),
                     &uniform! {
                         matrix: self.view_matrix,
                     },
@@ -709,29 +552,11 @@ impl<'a> RenderInProgress<'a> {
         gridlines_texture: &glium::texture::srgb_texture2d::SrgbTexture2d,
         alpha: f32,
     ) {
-        self.cache.vbos.blit.write(&[
-            TexturePosVertex {
-                src_coords: [0.0, 0.0],
-                dest_coords: [-1.0, -1.0],
-            },
-            TexturePosVertex {
-                src_coords: [1.0, 0.0],
-                dest_coords: [1.0, -1.0],
-            },
-            TexturePosVertex {
-                src_coords: [0.0, 1.0],
-                dest_coords: [-1.0, 1.0],
-            },
-            TexturePosVertex {
-                src_coords: [1.0, 1.0],
-                dest_coords: [1.0, 1.0],
-            },
-        ]);
         self.target
             .draw(
-                &self.cache.vbos.blit,
+                &*vbos::blit_quad_with_src_coords(FRect2D::single_cell(NdVec::origin())),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &self.cache.shaders.blit,
+                &shaders::blit(),
                 &uniform! {
                     src_texture: gridlines_texture.sampled(),
                     alpha: alpha,

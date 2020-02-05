@@ -4,6 +4,9 @@
 #![warn(missing_docs)] // TODO: pull this band-aid off.
 
 #[macro_use]
+extern crate glium;
+
+#[macro_use]
 extern crate pest_derive;
 
 #[macro_use]

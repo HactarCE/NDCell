@@ -19,7 +19,7 @@ mod input;
 
 use crate::automaton::*;
 use clipboard_compat::*;
-use gridview::{GridView, GridViewTrait};
+use gridview::*;
 use history::History;
 use rle::RleEncode;
 
@@ -103,6 +103,8 @@ pub fn show_gui() {
     // Initialize imgui renderer.
     let mut renderer = Renderer::init(&mut imgui, display).expect("Failed to initialize renderer");
 
+    let mut input_state = input::State::default();
+
     // Main loop
     let mut last_frame_time = Instant::now();
     let mut closed = false;
@@ -122,7 +124,7 @@ pub fn show_gui() {
             // Let imgui handle events.
             platform.handle_event(imgui.io_mut(), &window, &ev);
             // Handle events for the grid view.
-            input::handle_event(&ev, has_keyboard, has_mouse);
+            input_state.handle_event(&ev, has_keyboard, has_mouse);
             // Handle events ourself.
             match ev {
                 glutin::Event::WindowEvent { event, .. } => match event {
@@ -134,13 +136,21 @@ pub fn show_gui() {
             }
         });
 
-        input::do_frame(has_keyboard, has_mouse);
+        input_state.do_frame(has_keyboard, has_mouse);
 
         let ui = imgui.frame();
         gui::build_windows(&ui);
 
         let mut target = display.draw();
-        gridview_mut().render(&mut target);
+        match &mut *gridview_mut() {
+            GridView::View2D(view2d) => {
+                let gridview_render_params = View2DRenderParams {
+                    cursor_pos: input_state.get_cursor_pos(),
+                };
+                view2d.render(&mut target, gridview_render_params);
+            }
+            GridView::View3D(_view3d) => (),
+        };
 
         platform.prepare_render(&ui, &window);
         let draw_data = ui.render();

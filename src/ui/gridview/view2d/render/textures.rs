@@ -26,8 +26,7 @@ impl CachedSrgbTexture2d {
             self.current_size = Some((w, h));
         }
     }
-    // TODO: can these lifetimes be inferred?
-    pub fn at_size<'a>(&'a mut self, w: u32, h: u32) -> (&'a SrgbTexture2d, SimpleFrameBuffer<'a>) {
+    pub fn at_size(&mut self, w: u32, h: u32) -> (&SrgbTexture2d, SimpleFrameBuffer) {
         self.set_size(w, h);
         (self.unwrap(), self.make_fbo())
     }
@@ -37,7 +36,7 @@ impl CachedSrgbTexture2d {
     pub fn unwrap(&self) -> &SrgbTexture2d {
         self.cached.as_ref().unwrap()
     }
-    pub fn make_fbo<'a>(&'a self) -> SimpleFrameBuffer<'a> {
+    pub fn make_fbo(&self) -> SimpleFrameBuffer {
         SimpleFrameBuffer::new(&*get_display(), self.unwrap())
             .expect("Failed to create frame buffer")
     }

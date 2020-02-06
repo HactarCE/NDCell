@@ -28,7 +28,6 @@ fn make_cell_coords_set<D: Dim>(coords_vec: Vec<IVec<D>>) -> HashSet<BigVec<D>> 
 
 #[test]
 fn test_cgol() {
-    // TODO: load RLE instead of manually setting individual cells.
     let mut grid = NdTree::new();
     let rule = rule::LIFE;
     let mut sim = Simulation::new(Rc::new(rule));

@@ -12,22 +12,31 @@ use super::*;
 // These are the only operations not implemented as traits.
 impl<D: DimFor<N>, N: NdVecNum + Integer> NdVec<D, N> {
     /// Floored integer division.
-    pub fn div_floor(self, other: &N) -> Self {
-        let mut ret = self;
-        ret.map_fn(|_ax, ret| *ret = ret.div_floor(other));
-        ret
+    pub fn div_floor(&self, other: &N) -> Self {
+        Self::from_fn(|ax| self[ax].div_floor(other))
     }
     /// Ceiled integer division.
-    pub fn div_ceil(self, other: &N) -> Self {
-        let mut ret = self;
-        ret.map_fn(|_ax, ret| *ret = ret.div_ceil(other));
-        ret
+    pub fn div_ceil(&self, other: &N) -> Self {
+        Self::from_fn(|ax| self[ax].div_ceil(other))
     }
     /// Floored integer modulo.
-    pub fn mod_floor(self, other: &N) -> Self {
-        let mut ret = self;
-        ret.map_fn(|_ax, ret| *ret = ret.mod_floor(other));
-        ret
+    pub fn mod_floor(&self, other: &N) -> Self {
+        Self::from_fn(|ax| self[ax].mod_floor(other))
+    }
+    /// Integer division that rounds toward zero.
+    ///
+    /// This is not implemented using std::ops::Div because most of the time we
+    /// actually want floor division, and I don't want to accidentally use this
+    /// kind of division in the wrong place.
+    pub fn div_to_zero(&self, other: &N) -> Self {
+        Self::from_fn(|ax| self[ax].clone() / other.clone())
+    }
+    /// Integer modulo that rounds toward zero.
+    ///
+    /// This is not implemented using std::ops::Rem for the same reason as
+    /// div_to_zero().
+    pub fn rem_to_zero(&self, other: &N) -> Self {
+        Self::from_fn(|ax| self[ax].clone() % other.clone())
     }
 }
 

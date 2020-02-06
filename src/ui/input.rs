@@ -7,7 +7,7 @@ use std::ops::Index;
 use std::time::{Duration, Instant};
 
 use super::gridview::*;
-use crate::automaton::{AsFVec, IVec2D, NdVec};
+use crate::automaton::{AsFVec, IVec2D, NdVec, X};
 use crate::ui::{gridview_mut, History};
 
 const FALSE_REF: &bool = &false;
@@ -84,7 +84,23 @@ impl State {
                         ..
                     } if has_mouse => {
                         let dpi = crate::ui::get_dpi();
-                        self.cursor_pos = Some(NdVec([(*x * dpi) as isize, (*y * dpi) as isize]));
+                        let new_pos = NdVec([(*x * dpi) as isize, (*y * dpi) as isize]);
+
+                        if let (true, Some(old_pos)) = (self.rmb_held, self.cursor_pos) {
+                            let mut delta = new_pos - old_pos;
+                            delta[X] = -delta[X]; // TODO: why invert X? explain.
+                            match &mut *gridview_mut() {
+                                GridView::View2D(view2d) => {
+                                    // Pan both viewports so that the viewport stays matched with the cursor.
+                                    view2d.viewport.pan_pixels(delta.as_fvec());
+                                    view2d.interpolating_viewport.pan_pixels(delta.as_fvec());
+                                }
+                                _ => (),
+                            }
+                            // TODO: implement velocity when letting go
+                            // TODO: zoom in/out relative to cursor position when holding RMB
+                        }
+                        self.cursor_pos = Some(new_pos);
                     }
                     WindowEvent::MouseWheel { delta, .. } if has_mouse => {
                         let (_dx, dy) = match delta {
@@ -94,6 +110,7 @@ impl State {
                         match &mut *gridview_mut() {
                             GridView::View2D(view2d) => {
                                 view2d.viewport.zoom_by(2.0f64.powf(dy));
+                                // TODO magic numbers ick
                                 self.time_to_snap_zoom =
                                     Some(Instant::now() + Duration::from_millis(200));
                             }
@@ -249,18 +266,6 @@ impl State {
             || self.keys[VirtualKeyCode::RWin]);
         let shift_pressed = self.keys[VirtualKeyCode::LShift] || self.keys[VirtualKeyCode::RShift];
 
-        if let (true, Some(last_pos), Some(current_pos)) =
-            (self.rmb_held, self.last_cursor_pos, self.cursor_pos)
-        {
-            let delta = current_pos - last_pos;
-            match &mut *gridview_mut() {
-                GridView::View2D(view2d) => {
-                    view2d.viewport.pan_pixels(delta.as_fvec());
-                }
-                _ => (),
-            }
-        }
-
         if let Some(draw_state) = self.draw_cell_state {
             let mut gridview = gridview_mut();
             match &mut *gridview {
@@ -316,14 +321,13 @@ impl State {
                         zoomed = true;
                     }
                 }
-                if !moved {
-                    // Snap to nearest position.
+                if !moved && !self.rmb_held {
+                    // Snap to the nearest position.
                     view2d.viewport.snap_pos();
                 }
                 if zoomed {
                     self.time_to_snap_zoom = Some(Instant::now() + Duration::from_millis(10));
                 }
-                // TODO magic numbers ick
                 if self.time_to_snap_zoom.is_none()
                     || (Instant::now() >= self.time_to_snap_zoom.unwrap())
                 {

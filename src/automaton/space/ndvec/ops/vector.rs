@@ -8,6 +8,8 @@ use std::ops::*;
 use super::*;
 
 impl<D: DimFor<N>, N: NdVecNum + Signed> NdVec<D, N> {
+    /// Returns a vector consisting of the sign of each member of this one. See
+    /// num::Signed::signum() for more details.
     pub fn signum(&self) -> Self {
         Self::from_fn(|ax| self[ax].signum())
     }

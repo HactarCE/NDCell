@@ -4,9 +4,10 @@ use noisy_float::prelude::r64;
 use ref_thread_local::RefThreadLocal;
 use std::collections::HashSet;
 use std::ops::Index;
+use std::time::{Duration, Instant};
 
 use super::gridview::*;
-use crate::automaton::{IVec2D, NdVec};
+use crate::automaton::{AsFVec, IVec2D, NdVec};
 use crate::ui::{gridview_mut, History};
 
 const FALSE_REF: &bool = &false;
@@ -37,8 +38,14 @@ mod sc {
 pub struct State {
     /// A record of which keys are pressed.
     keys: KeysPressed,
+    /// Whether the right mouse button is held.
+    rmb_held: bool,
     /// The pixel position of the mouse cursor from the top left of the window.
     cursor_pos: Option<IVec2D>,
+    /// The cursor position on the last frame.
+    last_cursor_pos: Option<IVec2D>,
+    /// The next time that the zoom should snap to the nearest power of 2.
+    time_to_snap_zoom: Option<Instant>,
     /// The cell state being used in the current drawing operation.
     draw_cell_state: Option<u8>,
 }
@@ -80,17 +87,15 @@ impl State {
                         self.cursor_pos = Some(NdVec([(*x * dpi) as isize, (*y * dpi) as isize]));
                     }
                     WindowEvent::MouseWheel { delta, .. } if has_mouse => {
-                        // Pan 100x.
-                        let (dx, dy) = match delta {
+                        let (_dx, dy) = match delta {
                             MouseScrollDelta::LineDelta(x, y) => (*x as f64, *y as f64),
                             MouseScrollDelta::PixelDelta(dpi::LogicalPosition { x, y }) => (*x, *y),
                         };
-                        // TODO: zoom on mousewheel instead of pan
                         match &mut *gridview_mut() {
                             GridView::View2D(view2d) => {
-                                view2d
-                                    .viewport
-                                    .pan_pixels(NdVec([r64(dx * 100.0), r64(dy * 100.0)]));
+                                view2d.viewport.zoom_by(2.0f64.powf(dy));
+                                self.time_to_snap_zoom =
+                                    Some(Instant::now() + Duration::from_millis(200));
                             }
                             _ => (),
                         }
@@ -125,9 +130,13 @@ impl State {
                             self.stop_drawing();
                         }
                     },
-                    // WindowEvent::MouseInput {
-
-                    // }
+                    WindowEvent::MouseInput {
+                        button: MouseButton::Right,
+                        state,
+                        ..
+                    } if has_mouse => {
+                        self.rmb_held = *state == ElementState::Pressed;
+                    }
                     _ => (),
                 }
             }
@@ -230,6 +239,18 @@ impl State {
             || self.keys[VirtualKeyCode::RWin]);
         let shift_pressed = self.keys[VirtualKeyCode::LShift] || self.keys[VirtualKeyCode::RShift];
 
+        if let (true, Some(last_pos), Some(current_pos)) =
+            (self.rmb_held, self.last_cursor_pos, self.cursor_pos)
+        {
+            let delta = current_pos - last_pos;
+            match &mut *gridview_mut() {
+                GridView::View2D(view2d) => {
+                    view2d.viewport.pan_pixels(delta.as_fvec());
+                }
+                _ => (),
+            }
+        }
+
         if let Some(draw_state) = self.draw_cell_state {
             let mut gridview = gridview_mut();
             match &mut *gridview {
@@ -289,13 +310,20 @@ impl State {
                     // Snap to nearest position.
                     view2d.viewport.snap_pos();
                 }
-                if !zoomed {
+                if zoomed {
+                    self.time_to_snap_zoom = Some(Instant::now() + Duration::from_millis(10));
+                }
+                // TODO magic numbers ick
+                if self.time_to_snap_zoom.is_none()
+                    || (Instant::now() >= self.time_to_snap_zoom.unwrap())
+                {
                     // Snap to the nearest zoom level.
                     view2d.viewport.zoom = view2d.viewport.zoom.round();
                 }
             }
             GridView::View3D(_) => (),
         }
+        self.last_cursor_pos = self.cursor_pos;
     }
 }
 

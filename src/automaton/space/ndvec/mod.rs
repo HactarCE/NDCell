@@ -12,7 +12,7 @@
 use noisy_float::prelude::R64;
 use num::{BigInt, Num, One, Zero};
 use std::cmp::Eq;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::*;
 
@@ -70,10 +70,23 @@ pub struct NdVec<D: DimFor<N>, N: NdVecNum>(pub D::Array);
 
 // Implement Copy when coordinate type is Copy.
 //
-// Unfortunately, for a number of subtle reasons, this only works when the
-// dimensionality is known, not when it is a type parameter. This is still
-// useful enough that it's worth including.
+// Unfortunately this only works when the dimensionality is known, not when it
+// is a type parameter. It's useful enough regardless that it's worth including.
 impl<D: DimFor<N>, N: NdVecNum + Copy> Copy for NdVec<D, N> where D::Array: Copy {}
+
+impl<D: DimFor<N>, N: NdVecNum + Display> Display for NdVec<D, N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "[")?;
+        for &ax in D::Dim::axes() {
+            if ax != X {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", self[ax])?;
+        }
+        write!(f, "]")?;
+        Ok(())
+    }
+}
 
 // Implement indexing using Axis.
 impl<D: DimFor<N>, N: NdVecNum> Index<Axis> for NdVec<D, N> {

@@ -142,6 +142,7 @@ pub fn show_gui() {
         gui::build_windows(&ui);
 
         let mut target = display.draw();
+
         match &mut *gridview_mut() {
             GridView::View2D(view2d) => {
                 let gridview_render_params = View2DRenderParams {
@@ -157,6 +158,7 @@ pub fn show_gui() {
         renderer
             .render(&mut target, draw_data)
             .expect("Rendering failed");
+
         target.finish().expect("Failed to swap buffers");
     }
 }

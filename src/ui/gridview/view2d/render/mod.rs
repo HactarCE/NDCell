@@ -38,20 +38,21 @@
 //! lines is not at all trivial in OpenGL!). At non-integer zoom factors,
 //! however, this is not guaranteed.
 
-use crate::ui::get_display;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use noisy_float::prelude::r64;
 use num::{BigInt, ToPrimitive, Zero};
+use ref_thread_local::RefThreadLocal;
 
 mod gl_quadtree;
 mod shaders;
+mod textures;
 mod vbos;
 mod vertices;
 
 use super::*;
 use crate::automaton::space::*;
-use gl_quadtree::GlQuadtree;
+use gl_quadtree::CachedGlQuadtree;
 use vertices::*;
 
 /// Minimum zoom power to draw gridlines. 2.0 = 4 pixels per cell.
@@ -71,6 +72,11 @@ const LIVE_COLOR: (u8, u8, u8) = (255, 255, 255);
 
 /// The number of gridlines in each render batch.
 const GRIDLINE_BATCH_SIZE: usize = 256;
+
+#[derive(Default)]
+pub struct RenderCache {
+    gl_quadtree: CachedGlQuadtree<u8>,
+}
 
 pub struct RenderInProgress<'a> {
     /// The viewport to use when rendering.
@@ -92,12 +98,12 @@ pub struct RenderInProgress<'a> {
     /// cell; (0, 0) = bottom left) to screen space ((-1, -1) = bottom left; (1,
     /// 1) = top right).
     view_matrix: [[f32; 4]; 4],
-    /// The framebuffer to draw gridlines to.
-    gridlines_fbo: Option<glium::framebuffer::SimpleFrameBuffer<'a>>,
+    /// Cached render data unique to the given GridView.
+    cache: &'a mut RenderCache,
 }
 impl<'a> RenderInProgress<'a> {
     /// Performs preliminary computations and returns a RenderInProgress.
-    pub fn new(g: &GridView2D, target: &'a mut glium::Frame) -> Self {
+    pub fn new(g: &GridView2D, cache: &'a mut RenderCache, target: &'a mut glium::Frame) -> Self {
         let (target_w, target_h) = target.get_dimensions();
         let target_pixels_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let viewport = g.interpolating_viewport.clone();
@@ -207,16 +213,16 @@ impl<'a> RenderInProgress<'a> {
             pos,
             visible_rect,
             view_matrix,
-            gridlines_fbo: None,
+            cache,
         }
     }
 
     /// Draw the cells that appear in the viewport.
     pub fn draw_cells(&mut self) {
-        let display = &*get_display();
+        let textures: &mut textures::TextureCache = &mut textures::CACHE.borrow_mut();
         // Steps #1: encode the quadtree as a 1D texture.
-        let gl_quadtree = GlQuadtree::from_node(
-            &self.quadtree_slice.root,
+        let gl_quadtree = self.cache.gl_quadtree.from_node(
+            self.quadtree_slice.root.clone(),
             self.render_cell_layer,
             Self::get_branch_pixel_color,
         );
@@ -224,16 +230,22 @@ impl<'a> RenderInProgress<'a> {
         // inside self.visible_rect.
         let unscaled_cells_w = self.visible_rect.len(X) as u32;
         let unscaled_cells_h = self.visible_rect.len(Y) as u32;
-        let unscaled_cells_texture = glium::texture::srgb_texture2d::SrgbTexture2d::empty(
-            display,
-            unscaled_cells_w,
-            unscaled_cells_h,
-        )
-        .expect("Failed to create texture");
-        let mut unscaled_cells_fbo =
-            glium::framebuffer::SimpleFrameBuffer::new(display, &unscaled_cells_texture)
-                .expect("Failed to create frame buffer");
-        self.draw_cell_pixels(&mut unscaled_cells_fbo, gl_quadtree);
+        let (_, mut unscaled_cells_fbo) = textures
+            .unscaled_cells
+            .at_size(unscaled_cells_w, unscaled_cells_h);
+        unscaled_cells_fbo
+            .draw(
+                &*vbos::quadtree_quad_with_quadtree_coords(self.visible_rect),
+                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
+                &shaders::quadtree(),
+                &uniform! {
+                    quadtree_texture: &gl_quadtree.texture,
+                    max_layer: gl_quadtree.layers as i32,
+                    root_idx: gl_quadtree.root_idx as u32,
+                },
+                &glium::DrawParameters::default(),
+            )
+            .expect("Failed to draw cells");
 
         // Step #3: resize that texture by an integer factor.
         let integer_scale_factor = self.render_cell_pixels.ceil();
@@ -241,13 +253,9 @@ impl<'a> RenderInProgress<'a> {
         let visible_cells_h = self.visible_rect.len(Y) as u32;
         let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
         let scaled_cells_h = visible_cells_h * integer_scale_factor as u32;
-        let scaled_cells_texture =
-            glium::texture::SrgbTexture2d::empty(display, scaled_cells_w, scaled_cells_h)
-                .expect("Failed to create render buffer");
-
-        let scaled_cells_fbo =
-            glium::framebuffer::SimpleFrameBuffer::new(display, &scaled_cells_texture)
-                .expect("Failed to create frame buffer");
+        let (scaled_cells_texture, scaled_cells_fbo) = textures
+            .scaled_cells
+            .at_size(scaled_cells_w, scaled_cells_h);
         scaled_cells_fbo.blit_from_simple_framebuffer(
             &unscaled_cells_fbo,
             &entire_rect(&unscaled_cells_fbo),
@@ -285,31 +293,6 @@ impl<'a> RenderInProgress<'a> {
         //     glium::uniforms::MagnifySamplerFilter::Linear,
         // );
     }
-    pub fn draw_cell_pixels<'b, S: glium::Surface>(
-        &mut self,
-        target: &mut S,
-        gl_quadtree: GlQuadtree<'b>,
-    ) {
-        let display = &*get_display();
-        let quadtree_texture = glium::texture::unsigned_texture1d::UnsignedTexture1d::new(
-            display,
-            gl_quadtree.raw_image,
-        )
-        .expect("Failed to create texture");
-        target
-            .draw(
-                &*vbos::quadtree_quad_with_quadtree_coords(self.visible_rect),
-                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::quadtree(),
-                &uniform! {
-                    quadtree_texture: &quadtree_texture,
-                    max_layer: gl_quadtree.layers as i32,
-                    root_idx: gl_quadtree.root_idx as u32,
-                },
-                &glium::DrawParameters::default(),
-            )
-            .expect("Failed to draw cells");
-    }
     fn get_branch_pixel_color(branch: &NdTreeBranch<u8, Dim2D>) -> [u8; 4] {
         let ratio = match branch {
             NdTreeBranch::Leaf(cell_state) => *cell_state as f64,
@@ -336,21 +319,38 @@ impl<'a> RenderInProgress<'a> {
         [r as u8, g as u8, b as u8, 255]
     }
 
-    pub fn make_gridlines_texture(&self) -> glium::texture::srgb_texture2d::SrgbTexture2d {
-        let display = &*get_display();
+    pub fn with_gridlines_fbo<F: FnOnce(&mut Self, &mut glium::framebuffer::SimpleFrameBuffer)>(
+        &mut self,
+        alpha: f32,
+        f: F,
+    ) {
+        let textures: &mut textures::TextureCache = &mut textures::CACHE.borrow_mut();
         let (target_w, target_h) = self.target.get_dimensions();
-        glium::texture::srgb_texture2d::SrgbTexture2d::empty(display, target_w, target_h)
-            .expect("Failed to create texture")
-    }
-    pub fn make_gridlines_fbo<'b>(
-        &self,
-        gridlines_texture: &'b glium::texture::srgb_texture2d::SrgbTexture2d,
-    ) -> glium::framebuffer::SimpleFrameBuffer<'b> {
-        let display = &*get_display();
-        let mut ret = glium::framebuffer::SimpleFrameBuffer::new(display, gridlines_texture)
-            .expect("Failed to create frame buffer");
-        ret.clear_color_srgb(0.0, 0.0, 0.0, 0.0);
-        ret
+        let (gridlines_texture, mut gridlines_fbo) = textures.gridlines.at_size(target_w, target_h);
+        gridlines_fbo.clear_color_srgb(0.0, 0.0, 0.0, 0.0);
+        f(self, &mut gridlines_fbo);
+        self.target
+            .draw(
+                &*vbos::blit_quad_with_src_coords(FRect2D::single_cell(NdVec::origin())),
+                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
+                &shaders::blit(),
+                &uniform! {
+                    src_texture: gridlines_texture.sampled(),
+                    alpha: alpha,
+                },
+                &glium::DrawParameters {
+                    blend: glium::Blend {
+                        color: glium::BlendingFunction::Addition {
+                            source: glium::LinearBlendingFactor::SourceAlpha,
+                            destination: glium::LinearBlendingFactor::OneMinusSourceAlpha,
+                        },
+                        alpha: glium::BlendingFunction::Max,
+                        constant_value: (0.0, 0.0, 0.0, 0.0),
+                    },
+                    ..Default::default()
+                },
+            )
+            .expect("Failed to draw cells");
     }
 
     /// Draw the gridlines that appear in the viewport.
@@ -545,35 +545,6 @@ impl<'a> RenderInProgress<'a> {
                 )
                 .expect("Failed to draw cursor crosshairs");
         }
-    }
-
-    pub fn blit_gridlines(
-        &mut self,
-        gridlines_texture: &glium::texture::srgb_texture2d::SrgbTexture2d,
-        alpha: f32,
-    ) {
-        self.target
-            .draw(
-                &*vbos::blit_quad_with_src_coords(FRect2D::single_cell(NdVec::origin())),
-                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::blit(),
-                &uniform! {
-                    src_texture: gridlines_texture.sampled(),
-                    alpha: alpha,
-                },
-                &glium::DrawParameters {
-                    blend: glium::Blend {
-                        color: glium::BlendingFunction::Addition {
-                            source: glium::LinearBlendingFactor::SourceAlpha,
-                            destination: glium::LinearBlendingFactor::OneMinusSourceAlpha,
-                        },
-                        alpha: glium::BlendingFunction::Max,
-                        constant_value: (0.0, 0.0, 0.0, 0.0),
-                    },
-                    ..Default::default()
-                },
-            )
-            .expect("Failed to draw cells");
     }
 }
 

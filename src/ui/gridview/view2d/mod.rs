@@ -5,7 +5,7 @@ mod zoom;
 use super::{GridViewTrait, RenderGridView};
 use crate::automaton::*;
 use crate::ui::history::{History, HistoryManager};
-use render::{RenderInProgress, GRIDLINE_FADE_RANGE, MIN_GRIDLINE_ZOOM_POWER};
+use render::{RenderCache, RenderInProgress, GRIDLINE_FADE_RANGE, MIN_GRIDLINE_ZOOM_POWER};
 pub use viewport::Viewport2D;
 pub use zoom::Zoom2D;
 
@@ -25,6 +25,8 @@ pub struct GridView2D {
     is_running: bool,
     /// The last render result.
     last_render_result: View2DRenderResult,
+    /// Cached render data unique to this GridView.
+    render_cache: Option<RenderCache>,
 }
 
 impl GridViewTrait for GridView2D {
@@ -90,25 +92,24 @@ impl RenderGridView for GridView2D {
         params: View2DRenderParams,
     ) -> &View2DRenderResult {
         let mut hover_pos = None;
-        {
-            let mut rip = RenderInProgress::new(self, target);
-            rip.draw_cells();
-            // Only draw gridlines if we're zoomed in far enough.
-            let zoom_power = self.viewport.zoom.power(); // TODO interpolating!
-            if zoom_power > MIN_GRIDLINE_ZOOM_POWER {
-                let mut alpha = 1.0;
-                // Fade in between MIN_GRIDLINE_ZOOM_POWER and MIN_GRIDLINE_ZOOM_POWER + 4.
-                if zoom_power < MIN_GRIDLINE_ZOOM_POWER + GRIDLINE_FADE_RANGE {
-                    alpha = (zoom_power - MIN_GRIDLINE_ZOOM_POWER) / GRIDLINE_FADE_RANGE;
-                }
-                assert!(0.0 <= alpha && alpha <= 1.0);
-                let gridlines_texture = rip.make_gridlines_texture();
-                let mut gridlines_fbo = rip.make_gridlines_fbo(&gridlines_texture);
-                rip.draw_gridlines(&mut gridlines_fbo);
-                hover_pos = rip.draw_hover_highlight(&mut gridlines_fbo, params.cursor_pos);
-                rip.blit_gridlines(&gridlines_texture, alpha as f32);
+        let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
+        let mut rip = RenderInProgress::new(self, &mut render_cache, target);
+        rip.draw_cells();
+        // Only draw gridlines if we're zoomed in far enough.
+        let zoom_power = self.viewport.zoom.power(); // TODO interpolating!
+        if zoom_power > MIN_GRIDLINE_ZOOM_POWER {
+            let mut alpha = 1.0;
+            // Fade in between MIN_GRIDLINE_ZOOM_POWER and MIN_GRIDLINE_ZOOM_POWER + 4.
+            if zoom_power < MIN_GRIDLINE_ZOOM_POWER + GRIDLINE_FADE_RANGE {
+                alpha = (zoom_power - MIN_GRIDLINE_ZOOM_POWER) / GRIDLINE_FADE_RANGE;
             }
+            assert!(0.0 <= alpha && alpha <= 1.0);
+            rip.with_gridlines_fbo(alpha as f32, |rip, gridlines_fbo| {
+                rip.draw_gridlines(gridlines_fbo);
+                hover_pos = rip.draw_hover_highlight(gridlines_fbo, params.cursor_pos);
+            });
         }
+        self.render_cache = Some(render_cache);
         self.last_render_result = View2DRenderResult { hover_pos };
         &self.last_render_result
     }
@@ -155,7 +156,7 @@ impl HistoryManager for GridView2D {
     }
     fn restore(&mut self, entry: HistoryEntry) -> HistoryEntry {
         HistoryEntry {
-            // Replace automaton, but keep viewport.
+            // Replace automaton, but keep viewport, cache, and everything else.
             automaton: std::mem::replace(&mut self.automaton, entry.automaton),
         }
     }

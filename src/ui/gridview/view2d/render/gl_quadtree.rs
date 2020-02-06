@@ -1,23 +1,64 @@
-//! Functions for creating an OpenGL texture that encodes a quadtree.
+//! Utilities for constructing and caching an OpenGL texture that encodes a
+//! quadtree.
 
+use glium::texture::unsigned_texture1d::UnsignedTexture1d;
 use glium::texture::{ClientFormat, RawImage1d};
 use std::borrow::Cow;
 
 use super::*;
 
+#[derive(Default)]
+pub struct CachedGlQuadtree<C: CellType> {
+    cached: Option<GlQuadtree>,
+    current_node: Option<NdCachedNode<C, Dim2D>>,
+    current_min_layer: usize,
+}
+impl<C: CellType> CachedGlQuadtree<C> {
+    pub fn set_node<F: FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4]>(
+        &mut self,
+        node: NdCachedNode<C, Dim2D>,
+        min_layer: usize,
+        pixelator: F,
+    ) {
+        // if let Some(current_node) = &self.current_node {
+        //     if self.current_min_layer == min_layer && current_node == &node {
+        //         return;
+        //     }
+        // }
+        self.cached = Some(GlQuadtree::from_node(&node, min_layer, pixelator));
+        self.current_node = Some(node);
+        self.current_min_layer = min_layer;
+    }
+    pub fn from_node<F: FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4]>(
+        &mut self,
+        node: NdCachedNode<C, Dim2D>,
+        min_layer: usize,
+        pixelator: F,
+    ) -> &GlQuadtree {
+        self.set_node(node, min_layer, pixelator);
+        self.unwrap()
+    }
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+    pub fn unwrap(&self) -> &GlQuadtree {
+        self.cached.as_ref().unwrap()
+    }
+}
+
 /// A container for an OpenGL texture that encodes a square pixel pattern using
 /// a quadtree.
-pub struct GlQuadtree<'a> {
-    pub raw_image: RawImage1d<'a, u32>,
+pub struct GlQuadtree {
+    pub texture: UnsignedTexture1d,
     pub layers: usize,
     pub root_idx: usize,
 }
 
-impl<'a> GlQuadtree<'a> {
+impl GlQuadtree {
     /// Constructs a GlQuadtree from a node and a function to turn a node into a
     /// solid color.
-    pub fn from_node<C: CellType, D: Dim, F: FnMut(&NdTreeBranch<C, D>) -> [u8; 4]>(
-        node: &NdCachedNode<C, D>,
+    pub fn from_node<C: CellType, F: FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4]>(
+        node: &NdCachedNode<C, Dim2D>,
         min_layer: usize,
         mut pixelator: F,
     ) -> Self {
@@ -37,7 +78,8 @@ impl<'a> GlQuadtree<'a> {
             format: ClientFormat::U32U32U32U32,
         };
         Self {
-            raw_image,
+            texture: UnsignedTexture1d::new(&*crate::ui::get_display(), raw_image)
+                .expect("Failed to create texture"),
             layers: indexed_tree.get_layer_count(),
             root_idx: indexed_tree.get_root_idx(),
         }

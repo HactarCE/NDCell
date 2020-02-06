@@ -11,11 +11,12 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ## Short-term to-do list
 
-- [ ] Refactor UI
-- [ ] Generalized associative structures for nodes
+- [x] Refactor UI
+- [ ] Implement line-drawing
+- [ ] Generalized associative cache for nodes
     + Simulation futures, population, etc.
 - [ ] Asynchronous simulation
-    + Use queue of completed frames
+    + [ ] Precompute simulation results (optional)
 - [ ] Begin work on custom rules
 
 ## Long-term to-do list

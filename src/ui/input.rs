@@ -162,8 +162,18 @@ impl State {
                         alt: false,
                         logo: false,
                     } => match virtual_keycode {
-                        Some(VirtualKeyCode::Space) => gridview_mut().step_n(&1.into()),
-                        Some(VirtualKeyCode::Tab) => gridview_mut().step(),
+                        Some(VirtualKeyCode::Space) => {
+                            let mut gridview = gridview_mut();
+                            if !gridview.stop_running() {
+                                gridview.step_n(&1.into())
+                            }
+                        }
+                        Some(VirtualKeyCode::Tab) => {
+                            let mut gridview = gridview_mut();
+                            if !gridview.stop_running() {
+                                gridview_mut().step()
+                            }
+                        }
                         Some(VirtualKeyCode::Return) => {
                             gridview_mut().toggle_running();
                         }

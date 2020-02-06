@@ -49,8 +49,10 @@ impl GridViewTrait for GridView2D {
         self.record();
         self.is_running = true;
     }
-    fn stop_running(&mut self) {
+    fn stop_running(&mut self) -> bool {
+        let was_running = self.is_running;
         self.is_running = false;
+        was_running
     }
     fn get_automaton<'a>(&'a self) -> Automaton<'a> {
         Automaton::from(&self.automaton)

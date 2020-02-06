@@ -182,8 +182,8 @@ pub fn copy_cxrle_to_clipboard() -> Result<(), String> {
     Ok(())
 }
 pub fn load_rle_from_clipboard() -> Result<(), String> {
-    gridview_mut().stop_running();
     let mut gridview = gridview_mut();
+    gridview.stop_running();
     gridview.record();
     let mut automaton: Automaton2D = rle::RleEncode::from_rle(
         &clipboard_get().map_err(|_| "Unable to access clipboard contents")?,

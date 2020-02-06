@@ -35,7 +35,7 @@ impl GridViewTrait for GridView3D {
     fn start_running(&mut self) {
         unimplemented!()
     }
-    fn stop_running(&mut self) {
+    fn stop_running(&mut self) -> bool {
         unimplemented!()
     }
     fn get_automaton<'a>(&'a self) -> Automaton<'a> {

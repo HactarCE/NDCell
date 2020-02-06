@@ -12,6 +12,8 @@ pub use view3d::GridView3D;
 
 /// Methods implemented by GridView by dispatching to the implementation of the
 /// GridView2D or GridView3D within.
+///
+/// TODO: Document these methods!
 #[enum_dispatch]
 pub trait GridViewTrait: NdSimulate + History {
     fn do_frame(&mut self);
@@ -38,7 +40,7 @@ pub trait GridViewTrait: NdSimulate + History {
     }
     fn is_running(&self) -> bool;
     fn start_running(&mut self);
-    fn stop_running(&mut self);
+    fn stop_running(&mut self) -> bool;
     fn toggle_running(&mut self) -> bool {
         if self.is_running() {
             self.stop_running();
@@ -111,6 +113,7 @@ impl IntoNdSimulate for GridView {
 
 impl History for GridView {
     fn record(&mut self) {
+        self.stop_running();
         self.history().record()
     }
     fn has_undo(&mut self) -> bool {
@@ -120,9 +123,11 @@ impl History for GridView {
         self.history().has_redo()
     }
     fn undo(&mut self) -> bool {
+        self.stop_running();
         self.history().undo()
     }
     fn redo(&mut self) -> bool {
+        self.stop_running();
         self.history().redo()
     }
 }

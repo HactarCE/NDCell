@@ -184,6 +184,24 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         }
         ret
     }
+
+    /// Returns the Axis that is the farthest from the origin in this vector (or
+    /// one of them, if there is a tie).
+    pub fn max_axis<F: Fn(Axis, &N) -> X, X: std::cmp::Ord>(&self, key: F) -> Axis {
+        *D::Dim::axes()
+            .into_iter()
+            .max_by_key(|&&ax| key(ax, &self[ax]))
+            .unwrap()
+    }
+
+    /// Returns the Axis that is the closest to the origin in this vector (or
+    /// one of them, if there is a tie).
+    pub fn min_axis<F: Fn(Axis, &N) -> X, X: std::cmp::Ord>(&self, key: F) -> Axis {
+        *D::Dim::axes()
+            .into_iter()
+            .min_by_key(|&&ax| key(ax, &self[ax]))
+            .unwrap()
+    }
 }
 
 impl<D: Dim> BigVec<D> {

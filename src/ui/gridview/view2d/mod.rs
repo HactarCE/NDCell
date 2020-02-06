@@ -96,7 +96,7 @@ impl RenderGridView for GridView2D {
         let mut rip = RenderInProgress::new(self, &mut render_cache, target);
         rip.draw_cells();
         // Only draw gridlines if we're zoomed in far enough.
-        let zoom_power = self.viewport.zoom.power(); // TODO interpolating!
+        let zoom_power = self.interpolating_viewport.zoom.power();
         if zoom_power > MIN_GRIDLINE_ZOOM_POWER {
             let mut alpha = 1.0;
             // Fade in between MIN_GRIDLINE_ZOOM_POWER and MIN_GRIDLINE_ZOOM_POWER + 4.

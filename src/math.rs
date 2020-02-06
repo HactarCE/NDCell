@@ -1,6 +1,5 @@
 //! Miscellaneous math functions
 
-use noisy_float::prelude::r64;
 use num::{BigInt, Signed};
 
 use crate::automaton::{BigVec, Dim};

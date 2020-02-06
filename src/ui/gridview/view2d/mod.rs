@@ -23,8 +23,10 @@ pub struct GridView2D {
     redo_stack: Vec<HistoryEntry>,
     /// Whether the simulation is currently running.
     is_running: bool,
-    /// The last render result.
-    last_render_result: View2DRenderResult,
+    /// The most-recent render result.
+    render_result: View2DRenderResult,
+    /// The render result before the most recent one.
+    prior_render_result: View2DRenderResult,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
 }
@@ -112,11 +114,15 @@ impl RenderGridView for GridView2D {
             });
         }
         self.render_cache = Some(render_cache);
-        self.last_render_result = View2DRenderResult { hover_pos };
-        &self.last_render_result
+        let new_render_result = View2DRenderResult { hover_pos };
+        self.prior_render_result = std::mem::replace(&mut self.render_result, new_render_result);
+        &self.render_result
     }
-    fn last_render_result(&self) -> &View2DRenderResult {
-        &self.last_render_result
+    fn get_render_result(&self) -> &View2DRenderResult {
+        &self.render_result
+    }
+    fn get_prior_render_result(&self) -> &View2DRenderResult {
+        &self.prior_render_result
     }
 }
 

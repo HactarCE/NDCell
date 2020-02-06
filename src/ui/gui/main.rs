@@ -25,7 +25,7 @@ pub fn build(ui: &imgui::Ui) {
                         ui.text(format!("{} = {:.1}", ax.name(), value));
                     }
                 }
-                if let Some(hover_pos) = &view2d.last_render_result().hover_pos {
+                if let Some(hover_pos) = &view2d.get_render_result().hover_pos {
                     ui.text(format!(
                         "Selected: X = {}, Y = {}",
                         hover_pos[X], hover_pos[Y]

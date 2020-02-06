@@ -126,7 +126,7 @@ impl State {
                             let mut gridview = gridview_mut();
                             match &*gridview {
                                 GridView::View2D(view2d) => {
-                                    let pos = &view2d.last_render_result().hover_pos.clone();
+                                    let pos = &view2d.get_render_result().hover_pos.clone();
                                     if let Some(draw_pos) = &pos {
                                         // Start drawing.
                                         self.start_drawing(if view2d.get_cell(draw_pos) == 1 {
@@ -270,9 +270,14 @@ impl State {
             let mut gridview = gridview_mut();
             match &mut *gridview {
                 GridView::View2D(view2d) => {
-                    let pos = view2d.last_render_result().hover_pos.clone();
-                    if let Some(draw_pos) = pos {
-                        view2d.set_cell(&draw_pos, draw_state);
+                    if let Some(pos1) = view2d.get_render_result().hover_pos.clone() {
+                        if let Some(pos2) = view2d.get_prior_render_result().hover_pos.clone() {
+                            for draw_pos in crate::math::bresenham(pos1, pos2) {
+                                view2d.set_cell(&draw_pos, draw_state);
+                            }
+                        } else {
+                            view2d.set_cell(&pos1, draw_state);
+                        }
                     }
                 }
                 _ => (),

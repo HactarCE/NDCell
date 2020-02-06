@@ -79,7 +79,12 @@ pub trait RenderGridView: GridViewTrait {
     ) -> &Self::RenderResult;
     /// Returns the RenderResult of the most recent render, or
     /// RenderResult::default() if there hasn't been one.
-    fn last_render_result(&self) -> &Self::RenderResult;
+    fn get_render_result(&self) -> &Self::RenderResult;
+    /// Returns the RenderResult of the render before the most recent render, or
+    /// RenderResult::default() if there hasn't been one.
+    ///
+    /// TODO: This is kind of ugly, unless GridView handles line-drawing.
+    fn get_prior_render_result(&self) -> &Self::RenderResult;
 }
 
 /// An enum between 2D and 3D views that manages the automaton.

@@ -1,10 +1,17 @@
 //! Operations between two NdVecs (and unary negation operator).
 
 use noisy_float::prelude::R64;
+use num::Signed;
 use std::iter::IntoIterator;
 use std::ops::*;
 
 use super::*;
+
+impl<D: DimFor<N>, N: NdVecNum + Signed> NdVec<D, N> {
+    pub fn signum(&self) -> Self {
+        Self::from_fn(|ax| self[ax].signum())
+    }
+}
 
 // Implement negation of an NdVec (i.e. negate each coordinate).
 impl<D: DimFor<N>, N: NdVecNum + Neg> Neg for NdVec<D, N>

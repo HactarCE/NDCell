@@ -52,6 +52,7 @@ pub trait GridViewTrait: NdSimulate + History {
     }
 
     fn undo_to_gen(&mut self, gen: &BigInt) -> usize {
+        self.stop_running();
         let mut i = 0;
         while self.get_generation_count() > gen && self.undo() {
             i += 1;

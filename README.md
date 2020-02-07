@@ -13,8 +13,6 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 - [x] Refactor UI
 - [x] Implement line-drawing
-- [ ] Generalized associative cache for nodes
-    + Simulation futures, population, etc.
 - [ ] Asynchronous simulation
     + [ ] Precompute simulation results (optional)
 - [ ] Begin work on custom rules
@@ -117,7 +115,8 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 ## Possible future improvements/optimizations
 
 - Simulation
-    + [ ] Render and simulate asynchronously
+    - [ ] Generalized associative cache for nodes
+        + Simulation futures, population, etc.
     + Minimize `BigInt` allocations
         * [ ] Compute population asynchronously
         * [ ] Precompute HashLife time splits

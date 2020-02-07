@@ -12,7 +12,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 ## Short-term to-do list
 
 - [x] Refactor UI
-- [ ] Implement line-drawing
+- [x] Implement line-drawing
 - [ ] Generalized associative cache for nodes
     + Simulation futures, population, etc.
 - [ ] Asynchronous simulation

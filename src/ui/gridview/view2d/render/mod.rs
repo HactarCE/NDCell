@@ -237,7 +237,7 @@ impl<'a> RenderInProgress<'a> {
             .draw(
                 &*vbos::quadtree_quad_with_quadtree_coords(self.visible_rect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::quadtree(),
+                &shaders::QUADTREE,
                 &uniform! {
                     quadtree_texture: &gl_quadtree.texture,
                     max_layer: gl_quadtree.layers as i32,
@@ -276,7 +276,7 @@ impl<'a> RenderInProgress<'a> {
             .draw(
                 &*vbos::blit_quad_with_src_coords(render_cells_frect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::blit(),
+                &shaders::BLIT,
                 &uniform! {
                     src_texture: scaled_cells_texture.sampled(),
                     alpha: 1.0f32,
@@ -333,7 +333,7 @@ impl<'a> RenderInProgress<'a> {
             .draw(
                 &*vbos::blit_quad_with_src_coords(FRect2D::single_cell(NdVec::origin())),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::blit(),
+                &shaders::BLIT,
                 &uniform! {
                     src_texture: gridlines_texture.sampled(),
                     alpha: alpha,
@@ -393,7 +393,7 @@ impl<'a> RenderInProgress<'a> {
                 .draw(
                     vbo_slice,
                     &gridline_indices,
-                    &shaders::lines(),
+                    &shaders::LINES,
                     &uniform! {
                         matrix: self.view_matrix,
                     },
@@ -482,7 +482,7 @@ impl<'a> RenderInProgress<'a> {
                 .draw(
                     vbo_slice,
                     &highlight_indices,
-                    &shaders::lines(),
+                    &shaders::LINES,
                     &uniform! {
                         matrix: self.view_matrix,
                     },
@@ -533,7 +533,7 @@ impl<'a> RenderInProgress<'a> {
                 .draw(
                     vbo_slice,
                     &highlight_indices,
-                    &shaders::lines(),
+                    &shaders::LINES,
                     &uniform! {
                         matrix: self.view_matrix,
                     },

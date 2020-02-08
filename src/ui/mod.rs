@@ -9,6 +9,7 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use log::warn;
 use ref_thread_local::RefThreadLocal;
 use send_wrapper::SendWrapper;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -28,12 +29,13 @@ use rle::RleEncode;
 pub const TITLE: &str = "NDCell";
 
 ref_thread_local! {
-    static managed EVENTS_LOOP: glutin::EventsLoop = glutin::EventsLoop::new();
     static managed DPI: f64 = 1.0;
     static managed CURRENT_GRIDVIEW: GridView = get_default_gridview();
 }
 
 lazy_static! {
+    static ref EVENTS_LOOP: SendWrapper<RefCell<glutin::EventsLoop>> =
+        SendWrapper::new(RefCell::new(glutin::EventsLoop::new()));
     pub static ref DISPLAY: SendWrapper<glium::Display> = SendWrapper::new({
         let wb = glutin::WindowBuilder::new().with_title(TITLE.to_owned());
         let cb = glutin::ContextBuilder::new().with_vsync(true);

@@ -112,6 +112,10 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
     + [ ] in 3D
 - [ ] More advanced editing (?)
 
+### Command line interface
+
+- [ ] CLI argument parsing using [`clap`](https://docs.rs/clap/2.33.0/clap/)
+
 ## Possible future improvements/optimizations
 
 - Simulation

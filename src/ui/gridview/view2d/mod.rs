@@ -1,5 +1,6 @@
 use log::warn;
 use std::collections::VecDeque;
+use std::rc::Rc;
 use std::sync::Mutex;
 
 mod render;
@@ -10,7 +11,8 @@ use super::control::*;
 use super::{GridViewTrait, RenderGridView};
 use crate::automaton::*;
 use crate::ui::config::Config;
-use crate::ui::history::HistoryManager;
+use crate::ui::history::{History, HistoryManager};
+use crate::ui::{clipboard_get, clipboard_set};
 use render::{RenderCache, RenderInProgress, GRIDLINE_FADE_RANGE, MIN_GRIDLINE_ZOOM_POWER};
 pub use viewport::Viewport2D;
 pub use zoom::Zoom2D;
@@ -99,7 +101,50 @@ impl GridViewTrait for GridView2D {
                     );
                     unimplemented!()
                 }
-                Command::Clipboard(c) => unimplemented!(),
+                Command::Clipboard(c) => {
+                    if !self.is_drawing {
+                        self.stop_running();
+                        match c {
+                            ClipboardCommand::CopyRle => {
+                                let result = match self.get_automaton() {
+                                    Automaton::Automaton2D(automaton) => {
+                                        clipboard_set(rle::RleEncode::to_rle(automaton))
+                                            .map_err(|_| "Unable to set clipboard contents")
+                                    }
+                                    _ => Err("Unable to convert non-2D patterns to RLE"),
+                                };
+                                if let Err(msg) = result {
+                                    warn!("Failed to save RLE to clipboard: {}", msg);
+                                }
+                            }
+                            ClipboardCommand::CopyCxrle => {
+                                let result = match self.get_automaton() {
+                                    Automaton::Automaton2D(automaton) => {
+                                        clipboard_set(rle::RleEncode::to_cxrle(automaton))
+                                            .map_err(|_| "Unable to set clipboard contents")
+                                    }
+                                    _ => Err("Unable to convert non-2D patterns to RLE"),
+                                };
+                                if let Err(msg) = result {
+                                    warn!("Failed to save CXRLE to clipboard: {}", msg);
+                                }
+                            }
+                            ClipboardCommand::Paste => {
+                                self.record();
+                                let result: Result<Automaton2D, _> = clipboard_get()
+                                    .map_err(|_| "Unable to access clipboard contents".to_owned())
+                                    .and_then(|s| rle::RleEncode::from_rle(&s));
+                                match result {
+                                    Ok(mut new_automaton) => {
+                                        new_automaton.sim = Simulation::new(Rc::new(rule::LIFE));
+                                        *self = Self::from(new_automaton)
+                                    }
+                                    Err(msg) => warn!("Failed to load RLE from clipboard: {}", msg),
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         const DECAY_CONSTANT: f64 = 4.0;

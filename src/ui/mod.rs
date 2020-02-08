@@ -150,37 +150,3 @@ pub fn show_gui() {
         target.finish().expect("Failed to swap buffers");
     }
 }
-
-// pub fn copy_rle_to_clipboard() -> Result<(), String> {
-//     gridview_mut().stop_running();
-//     match gridview().get_automaton() {
-//         Automaton::Automaton2D(automaton) => clipboard_set(rle::RleEncode::to_rle(automaton))
-//             .map_err(|_| "Unable to set clipboard contents")?,
-//         _ => Err("Unable to convert non-2D patterns to RLE")?,
-//     }
-//     Ok(())
-// }
-// pub fn copy_cxrle_to_clipboard() -> Result<(), String> {
-//     gridview_mut().stop_running();
-//     match gridview().get_automaton() {
-//         Automaton::Automaton2D(automaton) => clipboard_set(rle::RleEncode::to_cxrle(automaton))
-//             .map_err(|_| "Unable to set clipboard contents")?,
-//         _ => Err("Unable to convert non-2D patterns to RLE")?,
-//     }
-//     Ok(())
-// }
-// pub fn load_rle_from_clipboard() -> Result<(), String> {
-//     let mut gridview = gridview_mut();
-//     gridview.stop_running();
-//     gridview.record();
-//     let mut automaton: Automaton2D = rle::RleEncode::from_rle(
-//         &clipboard_get().map_err(|_| "Unable to access clipboard contents")?,
-//     )?;
-//     automaton.sim = Simulation::new(Rc::new(rule::LIFE));
-//     *gridview = GridView::from(automaton);
-//     Ok(())
-// }
-
-// warn!("Failed to save RLE to clipboard");
-// warn!("Failed to load RLE from clipboard");
-// warn!("Failed to save CXRLE to clipboard");

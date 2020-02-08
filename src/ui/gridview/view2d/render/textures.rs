@@ -1,7 +1,7 @@
 use glium::framebuffer::SimpleFrameBuffer;
 use glium::texture::srgb_texture2d::SrgbTexture2d;
 
-use crate::ui::get_display;
+use crate::ui::DISPLAY;
 
 #[derive(Default)]
 pub struct CachedSrgbTexture2d {
@@ -20,9 +20,8 @@ impl CachedSrgbTexture2d {
     }
     pub fn set_size(&mut self, w: u32, h: u32) {
         if self.current_size != Some((w, h)) {
-            self.cached = Some(
-                SrgbTexture2d::empty(&*get_display(), w, h).expect("Failed to create texture"),
-            );
+            self.cached =
+                Some(SrgbTexture2d::empty(&**DISPLAY, w, h).expect("Failed to create texture"));
             self.current_size = Some((w, h));
         }
     }
@@ -37,8 +36,7 @@ impl CachedSrgbTexture2d {
         self.cached.as_ref().unwrap()
     }
     pub fn make_fbo(&self) -> SimpleFrameBuffer {
-        SimpleFrameBuffer::new(&*get_display(), self.unwrap())
-            .expect("Failed to create frame buffer")
+        SimpleFrameBuffer::new(&**DISPLAY, self.unwrap()).expect("Failed to create frame buffer")
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::automaton::{FRect2D, IRect2D, X, Y};
+use crate::ui::DISPLAY;
 use glium::VertexBuffer;
 use ref_thread_local::{RefMut, RefThreadLocal};
 
@@ -6,8 +7,7 @@ use super::vertices::*;
 use super::GRIDLINE_BATCH_SIZE;
 
 fn empty_vbo<T: glium::Vertex>(size: usize) -> VertexBuffer<T> {
-    VertexBuffer::empty_dynamic(&*crate::ui::get_display(), size)
-        .expect("Failed to create vertex buffer")
+    VertexBuffer::empty_dynamic(&**DISPLAY, size).expect("Failed to create vertex buffer")
 }
 
 ref_thread_local! {

@@ -1,6 +1,7 @@
 //! Utilities for constructing and caching an OpenGL texture that encodes a
 //! quadtree.
 
+use crate::ui::DISPLAY;
 use glium::texture::unsigned_texture1d::UnsignedTexture1d;
 use glium::texture::{ClientFormat, RawImage1d};
 use std::borrow::Cow;
@@ -78,7 +79,7 @@ impl GlQuadtree {
             format: ClientFormat::U32U32U32U32,
         };
         Self {
-            texture: UnsignedTexture1d::new(&*crate::ui::get_display(), raw_image)
+            texture: UnsignedTexture1d::new(&**DISPLAY, raw_image)
                 .expect("Failed to create texture"),
             layers: indexed_tree.get_layer_count(),
             root_idx: indexed_tree.get_root_idx(),

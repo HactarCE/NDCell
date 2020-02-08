@@ -8,6 +8,7 @@ use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use log::warn;
 use ref_thread_local::RefThreadLocal;
+use send_wrapper::SendWrapper;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -28,17 +29,16 @@ pub const TITLE: &str = "NDCell";
 
 ref_thread_local! {
     static managed EVENTS_LOOP: glutin::EventsLoop = glutin::EventsLoop::new();
-    static managed DISPLAY: glium::Display = {
-        let wb = glutin::WindowBuilder::new().with_title(TITLE.to_owned());
-        let cb = glutin::ContextBuilder::new().with_vsync(true);
-        glium::Display::new(wb, cb, &EVENTS_LOOP.borrow()).expect("Failed to initialize display")
-    };
     static managed DPI: f64 = 1.0;
     static managed CURRENT_GRIDVIEW: GridView = get_default_gridview();
 }
 
-pub fn get_display<'a>() -> ref_thread_local::Ref<'a, glium::Display> {
-    DISPLAY.borrow()
+lazy_static! {
+    pub static ref DISPLAY: SendWrapper<glium::Display> = SendWrapper::new({
+        let wb = glutin::WindowBuilder::new().with_title(TITLE.to_owned());
+        let cb = glutin::ContextBuilder::new().with_vsync(true);
+        glium::Display::new(wb, cb, &EVENTS_LOOP.borrow()).expect("Failed to initialize display")
+    });
 }
 
 pub fn get_dpi() -> f64 {
@@ -76,7 +76,7 @@ fn get_default_gridview() -> GridView {
 
 /// Display the main application window.
 pub fn show_gui() {
-    let display = &*get_display();
+    let display = &**DISPLAY;
     // Initialize imgui things.
     let mut imgui = Context::create();
     imgui.set_clipboard_backend(Box::new(ClipboardCompat));

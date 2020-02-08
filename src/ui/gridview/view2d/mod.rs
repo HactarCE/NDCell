@@ -36,18 +36,71 @@ pub struct GridView2D {
     redo_stack: Vec<HistoryEntry>,
     /// Whether the simulation is currently running.
     is_running: bool,
+    /// Whether the user is current drawing.
+    is_drawing: bool,
     /// The last several render results, with the most recent at the front.
     render_results: VecDeque<View2DRenderResult>,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
     /// Queue of pending commands to be executed on the next frame.
-    command_queue: Mutex<VecDeque<Command>>,
+    command_queue: Mutex<Vec<Command>>,
 }
 
 impl GridViewTrait for GridView2D {
     fn do_frame(&mut self, config: &Config) {
-        for command in self.command_queue.lock().unwrap().drain(..) {
-            println!("{:?}", command);
+        let old_command_queue = std::mem::replace(&mut *self.command_queue.lock().unwrap(), vec![]);
+        for command in old_command_queue.into_iter() {
+            let was_running = self.is_running;
+            match command {
+                Command::Sim(c) => {
+                    if was_running || self.is_drawing {
+                        self.stop_running();
+                    } else {
+                        self.do_sim_command(c, config);
+                    }
+                }
+                Command::History(c) => {
+                    if !self.is_drawing {
+                        self.stop_running();
+                        self.do_history_command(c, config);
+                    }
+                }
+                Command::Move2D(c, interpolation) => {
+                    let mut new_viewport = match interpolation {
+                        Interpolation::Direct => self.interpolating_viewport.clone(),
+                        Interpolation::Decay => self.viewport.clone(),
+                    };
+                    match c {
+                        MoveCommand2D::PanPixels(delta) => new_viewport.pan_pixels(delta),
+                        MoveCommand2D::ZoomByPower(zoom_power) => {
+                            new_viewport.zoom_by(2.0f64.powf(zoom_power))
+                        }
+                        MoveCommand2D::SnapPos => new_viewport.snap_pos(),
+                        MoveCommand2D::SnapZoom => new_viewport.snap_zoom(),
+                    };
+                    self.viewport = new_viewport;
+                    match interpolation {
+                        Interpolation::Direct => {
+                            self.interpolating_viewport = self.viewport.clone()
+                        }
+                        Interpolation::Decay => (),
+                    };
+                }
+                Command::StartDraw => {
+                    self.stop_running();
+                    self.is_drawing = true;
+                }
+                Command::EndDraw => self.is_drawing = false,
+                Command::Draw2D(c) => {
+                    assert!(
+                        self.is_drawing,
+                        "Attempt to execute draw command before {:?}",
+                        Command::StartDraw
+                    );
+                    unimplemented!()
+                }
+                Command::Clipboard(c) => unimplemented!(),
+            }
         }
         const DECAY_CONSTANT: f64 = 4.0;
         if self.interpolating_viewport != self.viewport {
@@ -61,7 +114,7 @@ impl GridViewTrait for GridView2D {
     }
 
     fn enqueue<C: Into<Command>>(&self, command: C) {
-        self.command_queue.lock().unwrap().push_back(command.into());
+        self.command_queue.lock().unwrap().push(command.into());
     }
 
     fn is_running(&self) -> bool {

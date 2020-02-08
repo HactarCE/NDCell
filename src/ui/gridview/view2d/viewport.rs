@@ -38,6 +38,10 @@ impl Viewport2D {
         }
         self.offset = NdVec::origin();
     }
+    /// Snap to the nearest power-of-2 zoom level.
+    pub fn snap_zoom(&mut self) {
+        self.zoom = self.zoom.round();
+    }
     /// Zoom in or out by the given factor.
     pub fn zoom_by(&mut self, factor: f64) {
         assert!(

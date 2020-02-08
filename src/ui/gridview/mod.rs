@@ -29,11 +29,48 @@ pub trait GridViewTrait: NdSimulate + History {
     //     self.step_n(&crate::ui::gui::simulation::STEP_SIZE.borrow());
     // }
 
-    fn do_history_command(&mut self, command: HistoryCommand) {
-        println!("GridView handling {:?}", command);
+    fn do_history_command(&mut self, command: HistoryCommand, _config: &Config) {
+        match command {
+            HistoryCommand::Undo => {
+                self.undo();
+            }
+            HistoryCommand::Redo => {
+                self.redo();
+            }
+            // TODO make this JumpTo instead of UndoTo
+            HistoryCommand::UndoTo(gen) => {
+                while self.get_generation_count() > &gen && self.has_undo() {
+                    self.undo();
+                }
+            }
+        }
     }
-    fn do_sim_command(&mut self, command: HistoryCommand) {
-        println!("GridView handling {:?}", command);
+    fn do_sim_command(&mut self, command: SimCommand, config: &Config) {
+        match command {
+            SimCommand::Step(step_size) => {
+                self.record();
+                self.step(&step_size);
+            }
+            SimCommand::StepStepSize => {
+                self.record();
+                self.step(&config.sim.step_size);
+            }
+            SimCommand::StartRunning => {
+                self.record();
+                self.start_running();
+            }
+            SimCommand::StopRunning => {
+                self.stop_running();
+            }
+            SimCommand::ToggleRunning => {
+                if self.is_running() {
+                    self.stop_running()
+                } else {
+                    self.record();
+                    self.start_running()
+                }
+            }
+        }
     }
 
     fn is_running(&self) -> bool;
@@ -46,7 +83,7 @@ pub trait GridViewTrait: NdSimulate + History {
             {
                 self.stop_running();
             } else {
-                NdSimulate::step_forward(self, &config.sim.step_size);
+                self.step(&config.sim.step_size);
             }
         }
     }

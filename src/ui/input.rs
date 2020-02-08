@@ -1,7 +1,7 @@
+use glium::glutin::dpi::LogicalPosition;
 use glium::glutin::*;
 use log::warn;
 use noisy_float::prelude::r64;
-use ref_thread_local::RefThreadLocal;
 use std::collections::HashSet;
 use std::ops::Index;
 use std::time::{Duration, Instant};
@@ -80,7 +80,7 @@ impl State {
                         self.cursor_pos = None;
                     }
                     WindowEvent::CursorMoved {
-                        position: dpi::LogicalPosition { x, y },
+                        position: LogicalPosition { x, y },
                         ..
                     } if has_mouse => {
                         let dpi = crate::ui::get_dpi();
@@ -105,7 +105,7 @@ impl State {
                     WindowEvent::MouseWheel { delta, .. } if has_mouse => {
                         let (_dx, dy) = match delta {
                             MouseScrollDelta::LineDelta(x, y) => (*x as f64, *y as f64),
-                            MouseScrollDelta::PixelDelta(dpi::LogicalPosition { x, y }) => (*x, *y),
+                            MouseScrollDelta::PixelDelta(LogicalPosition { x, y }) => (*x, *y),
                         };
                         match &mut *gridview_mut() {
                             GridView::View2D(view2d) => {
@@ -288,7 +288,7 @@ impl State {
         let mut zoomed = false;
 
         let speed = if shift_pressed { 2.0 } else { 1.0 };
-        let move_speed = 25.0 * speed * *crate::ui::DPI.borrow();
+        let move_speed = 25.0 * speed * crate::ui::get_dpi();
         let zoom_speed = 0.1 * speed;
         match &mut *gridview_mut() {
             GridView::View2D(view2d) => {

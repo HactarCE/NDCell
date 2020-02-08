@@ -11,6 +11,7 @@ use ref_thread_local::RefThreadLocal;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::RwLock;
 use std::time::Instant;
 
 mod clipboard_compat;
@@ -29,7 +30,6 @@ use rle::RleEncode;
 pub const TITLE: &str = "NDCell";
 
 ref_thread_local! {
-    static managed DPI: f64 = 1.0;
     static managed CURRENT_GRIDVIEW: GridView = get_default_gridview();
 }
 
@@ -41,13 +41,14 @@ lazy_static! {
         let cb = glutin::ContextBuilder::new().with_vsync(true);
         glium::Display::new(wb, cb, &EVENTS_LOOP.borrow()).expect("Failed to initialize display")
     });
+    static ref DPI: RwLock<f64> = RwLock::new(1.0);
 }
 
 pub fn get_dpi() -> f64 {
-    *DPI.borrow()
+    *DPI.read().unwrap()
 }
 pub fn set_dpi(dpi: f64) {
-    *DPI.borrow_mut() = dpi;
+    *DPI.write().unwrap() = dpi;
 }
 
 /// Returns an immutable reference to the active gridview.

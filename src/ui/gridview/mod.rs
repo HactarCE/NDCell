@@ -21,14 +21,6 @@ pub trait GridViewTrait: NdSimulate + History {
 
     fn enqueue<C: Into<Command>>(&self, command: C);
 
-    // fn step_n(&mut self, step_size: &BigInt) {
-    //     self.record();
-    //     NdSimulate::step_forward(self, step_size);
-    // }
-    // fn step(&mut self) {
-    //     self.step_n(&crate::ui::gui::simulation::STEP_SIZE.borrow());
-    // }
-
     fn do_history_command(&mut self, command: HistoryCommand, _config: &Config) {
         match command {
             HistoryCommand::Undo => {
@@ -87,25 +79,6 @@ pub trait GridViewTrait: NdSimulate + History {
             }
         }
     }
-
-    // fn toggle_running(&mut self) -> bool {
-    //     if self.is_running() {
-    //         self.stop_running();
-    //         false
-    //     } else {
-    //         self.start_running();
-    //         true
-    //     }
-    // }
-
-    // fn undo_to_gen(&mut self, gen: &BigInt) -> usize {
-    //     self.stop_running();
-    //     let mut i = 0;
-    //     while self.get_generation_count() > gen && self.undo() {
-    //         i += 1;
-    //     }
-    //     i
-    // }
 
     fn get_automaton<'a>(&'a self) -> Automaton<'a>;
     fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;

@@ -9,7 +9,6 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use log::warn;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::time::Instant;
 
 mod clipboard_compat;
@@ -51,7 +50,7 @@ fn make_default_gridview() -> GridView {
         warn!("Unable to parse default pattern; using empty pattern instead");
         Default::default()
     });
-    automaton.sim = Simulation::new(Rc::new(rule::LIFE));
+    automaton.set_sim(Simulation::from(rule::LIFE));
     GridView::from(automaton)
 }
 

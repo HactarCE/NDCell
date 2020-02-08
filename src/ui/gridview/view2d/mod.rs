@@ -1,6 +1,5 @@
 use log::warn;
 use std::collections::VecDeque;
-use std::rc::Rc;
 use std::sync::Mutex;
 
 mod render;
@@ -149,7 +148,7 @@ impl GridViewTrait for GridView2D {
                                     .and_then(|s| rle::RleEncode::from_rle(&s));
                                 match result {
                                     Ok(mut new_automaton) => {
-                                        new_automaton.sim = Simulation::new(Rc::new(rule::LIFE));
+                                        new_automaton.set_sim(Simulation::from(rule::LIFE));
                                         *self = Self::from(new_automaton)
                                     }
                                     Err(msg) => warn!("Failed to load RLE from clipboard: {}", msg),

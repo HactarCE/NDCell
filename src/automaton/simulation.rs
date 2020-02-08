@@ -9,7 +9,7 @@ use super::*;
 // TODO: garbage collect results cache
 
 /// A HashLife simulation of a given automaton that caches simulation results.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Simulation<C: CellType, D: Dim> {
     rule: Rc<dyn Rule<C, D>>,
     min_layer: usize,

@@ -7,6 +7,7 @@ use enum_dispatch::enum_dispatch;
 use num::BigInt;
 use std::convert::TryInto;
 use std::marker::PhantomData;
+use std::sync::{Arc, Mutex};
 
 mod io;
 mod ndsimulate;
@@ -191,7 +192,7 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
 #[derive(Clone, Default)]
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<u8, D>,
-    pub sim: Simulation<u8, D>,
+    pub sim: Arc<Mutex<Simulation<u8, D>>>,
     pub generations: BigInt,
 }
 impl<D: Dim> NdSimulate for NdAutomaton<D> {
@@ -208,8 +209,14 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
         self.generations = generations;
     }
     fn step(&mut self, step_size: &BigInt) {
-        self.sim.step(&mut self.tree, step_size);
+        self.sim.lock().unwrap().step(&mut self.tree, step_size);
         self.generations += step_size;
+    }
+}
+impl<D: Dim> NdAutomaton<D> {
+    /// Sets the simulation of this automaton.
+    pub fn set_sim(&mut self, new_sim: Simulation<u8, D>) {
+        self.sim = Arc::new(Mutex::new(new_sim));
     }
 }
 

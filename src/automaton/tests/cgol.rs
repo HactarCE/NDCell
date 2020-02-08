@@ -30,7 +30,7 @@ fn make_cell_coords_set<D: Dim>(coords_vec: Vec<IVec<D>>) -> HashSet<BigVec<D>> 
 fn test_cgol() {
     let mut grid = NdTree::new();
     let rule = rule::LIFE;
-    let mut sim = Simulation::new(Rc::new(rule));
+    let mut sim = Simulation::from(rule);
 
     // Make a glider
     grid.set_cell(&NdVec::big([3, 3]), 1);

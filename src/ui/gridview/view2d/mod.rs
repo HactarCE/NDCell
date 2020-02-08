@@ -99,7 +99,20 @@ impl GridViewTrait for GridView2D {
                         "Attempt to execute draw command before {:?}",
                         Command::StartDraw
                     );
-                    unimplemented!()
+                    assert!(
+                        !self.is_running,
+                        "Attempt to execute draw command while simulation is running"
+                    );
+                    match c {
+                        DrawCommand2D::Cell(pos, cell_state) => {
+                            self.automaton.set_cell(&pos, cell_state)
+                        }
+                        DrawCommand2D::Line(pos1, pos2, cell_state) => {
+                            for pos in crate::math::bresenham(pos1, pos2) {
+                                self.automaton.set_cell(&pos, cell_state);
+                            }
+                        }
+                    }
                 }
                 Command::Clipboard(c) => {
                     if !self.is_drawing {
@@ -250,15 +263,8 @@ impl RenderGridView for GridView2D {
 }
 
 impl GridView2D {
-    pub fn use_viewport_from(&mut self, other: &Self) {
-        self.viewport = other.viewport.clone();
-        self.interpolating_viewport = other.interpolating_viewport.clone();
-    }
     pub fn get_cell(&self, pos: &BigVec2D) -> u8 {
         self.automaton.get_projected_tree().get_cell(pos)
-    }
-    pub fn set_cell(&mut self, pos: &BigVec2D, new_cell_state: u8) {
-        self.automaton.set_cell(pos, new_cell_state)
     }
 }
 

@@ -60,8 +60,6 @@ impl MoveCommand2D {
 pub enum DrawCommand2D {
     Cell(BigVec2D, u8),
     Line(BigVec2D, BigVec2D, u8),
-    SnapPos,
-    SnapZoom,
 }
 impl From<DrawCommand2D> for Command {
     fn from(c: DrawCommand2D) -> Self {

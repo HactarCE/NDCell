@@ -1,64 +1,74 @@
 use enum_dispatch::enum_dispatch;
-use num::BigInt;
-use ref_thread_local::RefThreadLocal;
 
+pub mod control;
 mod view2d;
 mod view3d;
 
 use crate::automaton::*;
+use crate::ui::config::Config;
 use crate::ui::history::History;
+pub use control::*;
 pub use view2d::{GridView2D, View2DRenderParams, View2DRenderResult, Viewport2D, Zoom2D};
 pub use view3d::GridView3D;
 
-/// Methods implemented by GridView by dispatching to the implementation of the
-/// GridView2D or GridView3D within.
+/// Methods implemented by GridView by dispatching to the GridView2D or
+/// GridView3D within.
 ///
 /// TODO: Document these methods!
 #[enum_dispatch]
 pub trait GridViewTrait: NdSimulate + History {
-    fn do_frame(&mut self);
+    fn do_frame(&mut self, config: &Config);
 
-    fn step_n(&mut self, step_size: &BigInt) {
-        self.record();
-        NdSimulate::step_forward(self, step_size);
+    fn enqueue<C: Into<Command>>(&self, command: C);
+
+    // fn step_n(&mut self, step_size: &BigInt) {
+    //     self.record();
+    //     NdSimulate::step_forward(self, step_size);
+    // }
+    // fn step(&mut self) {
+    //     self.step_n(&crate::ui::gui::simulation::STEP_SIZE.borrow());
+    // }
+
+    fn do_history_command(&mut self, command: HistoryCommand) {
+        println!("GridView handling {:?}", command);
     }
-    fn step(&mut self) {
-        self.step_n(&crate::ui::gui::simulation::STEP_SIZE.borrow());
+    fn do_sim_command(&mut self, command: HistoryCommand) {
+        println!("GridView handling {:?}", command);
     }
 
-    fn do_sim_frame(&mut self) {
+    fn is_running(&self) -> bool;
+    fn start_running(&mut self);
+    fn stop_running(&mut self);
+    fn do_sim_frame(&mut self, config: &Config) {
         if self.is_running() {
-            if *crate::ui::gui::simulation::USE_BREAKPOINT.borrow()
-                && self.get_generation_count()
-                    >= &crate::ui::gui::simulation::BREAKPOINT_GEN.borrow()
+            if config.sim.use_breakpoint
+                && self.get_generation_count() >= &config.sim.breakpoint_gen
             {
                 self.stop_running();
             } else {
-                NdSimulate::step_forward(self, &crate::ui::gui::simulation::STEP_SIZE.borrow());
+                NdSimulate::step_forward(self, &config.sim.step_size);
             }
         }
     }
-    fn is_running(&self) -> bool;
-    fn start_running(&mut self);
-    fn stop_running(&mut self) -> bool;
-    fn toggle_running(&mut self) -> bool {
-        if self.is_running() {
-            self.stop_running();
-            false
-        } else {
-            self.start_running();
-            true
-        }
-    }
 
-    fn undo_to_gen(&mut self, gen: &BigInt) -> usize {
-        self.stop_running();
-        let mut i = 0;
-        while self.get_generation_count() > gen && self.undo() {
-            i += 1;
-        }
-        i
-    }
+    // fn toggle_running(&mut self) -> bool {
+    //     if self.is_running() {
+    //         self.stop_running();
+    //         false
+    //     } else {
+    //         self.start_running();
+    //         true
+    //     }
+    // }
+
+    // fn undo_to_gen(&mut self, gen: &BigInt) -> usize {
+    //     self.stop_running();
+    //     let mut i = 0;
+    //     while self.get_generation_count() > gen && self.undo() {
+    //         i += 1;
+    //     }
+    //     i
+    // }
 
     fn get_automaton<'a>(&'a self) -> Automaton<'a>;
     fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;
@@ -75,17 +85,14 @@ pub trait RenderGridView: GridViewTrait {
     /// entry point for the entire 2D grid rendering process.
     fn render(
         &mut self,
+        config: &Config,
         target: &mut glium::Frame,
         params: Self::RenderParams,
     ) -> &Self::RenderResult;
-    /// Returns the RenderResult of the most recent render, or
-    /// RenderResult::default() if there hasn't been one.
-    fn get_render_result(&self) -> &Self::RenderResult;
-    /// Returns the RenderResult of the render before the most recent render, or
-    /// RenderResult::default() if there hasn't been one.
-    ///
-    /// TODO: This is kind of ugly, unless GridView handles line-drawing.
-    fn get_prior_render_result(&self) -> &Self::RenderResult;
+    /// Returns the RenderResult of the Nth most recent render, or
+    /// RenderResult::default() if there hasn't been one or it has been
+    /// forgotten.
+    fn get_render_result(&self, frame: usize) -> &Self::RenderResult;
 }
 
 /// An enum between 2D and 3D views that manages the automaton.
@@ -119,7 +126,6 @@ impl IntoNdSimulate for GridView {
 
 impl History for GridView {
     fn record(&mut self) {
-        self.stop_running();
         self.history().record()
     }
     fn has_undo(&mut self) -> bool {
@@ -129,11 +135,9 @@ impl History for GridView {
         self.history().has_redo()
     }
     fn undo(&mut self) -> bool {
-        self.stop_running();
         self.history().undo()
     }
     fn redo(&mut self) -> bool {
-        self.stop_running();
         self.history().redo()
     }
 }

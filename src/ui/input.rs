@@ -1,14 +1,13 @@
 use glium::glutin::dpi::LogicalPosition;
 use glium::glutin::*;
-use log::warn;
 use noisy_float::prelude::r64;
 use std::collections::HashSet;
-use std::ops::Index;
+use std::ops::{Deref, DerefMut, Index};
 use std::time::{Duration, Instant};
 
-use super::gridview::*;
 use crate::automaton::{AsFVec, IVec2D, NdVec, X};
-use crate::ui::{gridview_mut, History};
+use crate::ui::gridview::control::*;
+use crate::ui::{Config, GridView, GridViewTrait, RenderGridView};
 
 const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;
@@ -49,21 +48,59 @@ pub struct State {
     /// The cell state being used in the current drawing operation.
     draw_cell_state: Option<u8>,
 }
-
 impl State {
     pub fn get_cursor_pos(&self) -> Option<IVec2D> {
         self.cursor_pos
     }
+    pub fn frame<'a>(
+        &'a mut self,
+        config: &'a mut Config,
+        gridview: &'a GridView,
+        imgui_io: &imgui::Io,
+    ) -> FrameInProgress<'a> {
+        FrameInProgress {
+            stable_state: self,
+            config,
+            gridview,
+            has_keyboard: !imgui_io.want_capture_keyboard,
+            has_mouse: !imgui_io.want_capture_mouse,
+        }
+    }
+}
 
+#[must_use = "call finish()"]
+pub struct FrameInProgress<'a> {
+    stable_state: &'a mut State,
+    config: &'a mut Config,
+    gridview: &'a GridView,
+    /// Whether to handle keyboard input (false if it is captured by imgui).
+    has_keyboard: bool,
+    /// Whether to handle mouse input (false if it is captured by imgui).
+    has_mouse: bool,
+}
+impl<'a> Deref for FrameInProgress<'a> {
+    type Target = State;
+    fn deref(&self) -> &State {
+        &self.stable_state
+    }
+}
+impl<'a> DerefMut for FrameInProgress<'a> {
+    fn deref_mut(&mut self) -> &mut State {
+        &mut self.stable_state
+    }
+}
+impl<'a> FrameInProgress<'a> {
     fn start_drawing(&mut self, draw_cell_state: u8) {
+        self.gridview.enqueue(Command::StartDraw);
         self.draw_cell_state = Some(draw_cell_state);
     }
     fn stop_drawing(&mut self) {
+        self.gridview.enqueue(Command::EndDraw);
         self.draw_cell_state = None;
     }
 
-    pub fn handle_event(&mut self, ev: &Event, has_keyboard: bool, has_mouse: bool) {
-        if !has_mouse {
+    pub fn handle_event(&mut self, ev: &Event) {
+        if !self.has_mouse {
             self.cursor_pos = None;
         }
         match ev {
@@ -72,7 +109,7 @@ impl State {
                 match event {
                     WindowEvent::KeyboardInput { input, .. } => {
                         self.keys.update(input);
-                        if has_keyboard {
+                        if self.has_keyboard {
                             self.handle_key(input);
                         }
                     }
@@ -82,18 +119,19 @@ impl State {
                     WindowEvent::CursorMoved {
                         position: LogicalPosition { x, y },
                         ..
-                    } if has_mouse => {
-                        let dpi = crate::ui::get_dpi();
+                    } if self.has_mouse => {
+                        let dpi = self.config.gfx.dpi;
                         let new_pos = NdVec([(*x * dpi) as isize, (*y * dpi) as isize]);
 
                         if let (true, Some(old_pos)) = (self.rmb_held, self.cursor_pos) {
                             let mut delta = new_pos - old_pos;
                             delta[X] = -delta[X]; // TODO: why invert X? explain.
-                            match &mut *gridview_mut() {
+                            match self.gridview {
                                 GridView::View2D(view2d) => {
                                     // Pan both viewports so that the viewport stays matched with the cursor.
-                                    view2d.viewport.pan_pixels(delta.as_fvec());
-                                    view2d.interpolating_viewport.pan_pixels(delta.as_fvec());
+                                    view2d.enqueue(
+                                        MoveCommand2D::PanPixels(delta.as_fvec()).direct(),
+                                    );
                                 }
                                 _ => (),
                             }
@@ -102,14 +140,14 @@ impl State {
                         }
                         self.cursor_pos = Some(new_pos);
                     }
-                    WindowEvent::MouseWheel { delta, .. } if has_mouse => {
+                    WindowEvent::MouseWheel { delta, .. } if self.has_mouse => {
                         let (_dx, dy) = match delta {
                             MouseScrollDelta::LineDelta(x, y) => (*x as f64, *y as f64),
                             MouseScrollDelta::PixelDelta(LogicalPosition { x, y }) => (*x, *y),
                         };
-                        match &mut *gridview_mut() {
+                        match self.gridview {
                             GridView::View2D(view2d) => {
-                                view2d.viewport.zoom_by(2.0f64.powf(dy));
+                                view2d.enqueue(MoveCommand2D::ZoomByPower(dy).decay());
                                 // TODO magic numbers ick
                                 self.time_to_snap_zoom =
                                     Some(Instant::now() + Duration::from_millis(200));
@@ -121,13 +159,13 @@ impl State {
                         button: MouseButton::Left,
                         state,
                         ..
-                    } if has_mouse => match state {
+                    } if self.has_mouse => match state {
                         ElementState::Pressed => {
-                            let mut gridview = gridview_mut();
-                            match &*gridview {
+                            match self.gridview {
                                 GridView::View2D(view2d) => {
-                                    let pos = &view2d.get_render_result().hover_pos.clone();
-                                    if let Some(draw_pos) = &pos {
+                                    if let Some(draw_pos) =
+                                        view2d.get_render_result(0).hover_pos.as_ref()
+                                    {
                                         // Start drawing.
                                         self.start_drawing(if view2d.get_cell(draw_pos) == 1 {
                                             0
@@ -138,10 +176,6 @@ impl State {
                                 }
                                 _ => (),
                             }
-                            if self.draw_cell_state.is_some() {
-                                // Save to undo history before starting to draw.
-                                gridview.record()
-                            }
                         }
                         ElementState::Released => {
                             self.stop_drawing();
@@ -151,7 +185,7 @@ impl State {
                         button: MouseButton::Right,
                         state,
                         ..
-                    } if has_mouse => {
+                    } if self.has_mouse => {
                         self.rmb_held = *state == ElementState::Pressed;
                     }
                     _ => (),
@@ -180,19 +214,13 @@ impl State {
                         logo: false,
                     } => match virtual_keycode {
                         Some(VirtualKeyCode::Space) => {
-                            let mut gridview = gridview_mut();
-                            if !gridview.stop_running() {
-                                gridview.step_n(&1.into())
-                            }
+                            self.gridview.enqueue(SimCommand::Step(1.into()))
                         }
                         Some(VirtualKeyCode::Tab) => {
-                            let mut gridview = gridview_mut();
-                            if !gridview.stop_running() {
-                                gridview_mut().step()
-                            }
+                            self.gridview.enqueue(SimCommand::StepStepSize)
                         }
                         Some(VirtualKeyCode::Return) => {
-                            gridview_mut().toggle_running();
+                            self.gridview.enqueue(SimCommand::ToggleRunning)
                         }
                         _ => (),
                     },
@@ -205,29 +233,17 @@ impl State {
                         logo: false,
                     } => match virtual_keycode {
                         // Undo.
-                        Some(VirtualKeyCode::Z) => {
-                            gridview_mut().undo();
-                        }
+                        Some(VirtualKeyCode::Z) => self.gridview.enqueue(HistoryCommand::Undo),
                         // Redo.
-                        Some(VirtualKeyCode::Y) => {
-                            gridview_mut().redo();
-                        }
+                        Some(VirtualKeyCode::Y) => self.gridview.enqueue(HistoryCommand::Redo),
                         // Reset.
                         Some(VirtualKeyCode::R) => {
-                            gridview_mut().undo_to_gen(&0.into());
+                            self.gridview.enqueue(HistoryCommand::UndoTo(0.into()))
                         }
                         // Copy (Golly-compatible).
-                        Some(VirtualKeyCode::C) => {
-                            if crate::ui::copy_rle_to_clipboard().is_err() {
-                                warn!("Failed to save RLE to clipboard");
-                            }
-                        }
+                        Some(VirtualKeyCode::C) => self.gridview.enqueue(ClipboardCommand::CopyRle),
                         // Paste.
-                        Some(VirtualKeyCode::V) => {
-                            if crate::ui::load_rle_from_clipboard().is_err() {
-                                warn!("Failed to load RLE from clipboard");
-                            };
-                        }
+                        Some(VirtualKeyCode::V) => self.gridview.enqueue(ClipboardCommand::Paste),
                         _ => (),
                     },
                     // SHIFT + CTRL
@@ -238,14 +254,10 @@ impl State {
                         logo: false,
                     } => match virtual_keycode {
                         // Redo.
-                        Some(VirtualKeyCode::Z) => {
-                            gridview_mut().redo();
-                        }
+                        Some(VirtualKeyCode::Z) => self.gridview.enqueue(HistoryCommand::Redo),
                         // Copy with extra info.
                         Some(VirtualKeyCode::C) => {
-                            if crate::ui::copy_cxrle_to_clipboard().is_err() {
-                                warn!("Failed to save CXRLE to clipboard");
-                            }
+                            self.gridview.enqueue(ClipboardCommand::CopyCxrle)
                         }
                         _ => (),
                     },
@@ -257,7 +269,7 @@ impl State {
         }
     }
 
-    pub fn do_frame(&mut self, has_keyboard: bool, _has_mouse: bool) {
+    pub fn finish(mut self) {
         let no_modifiers_pressed = !(self.keys[VirtualKeyCode::LAlt]
             || self.keys[VirtualKeyCode::LControl]
             || self.keys[VirtualKeyCode::LWin]
@@ -267,16 +279,13 @@ impl State {
         let shift_pressed = self.keys[VirtualKeyCode::LShift] || self.keys[VirtualKeyCode::RShift];
 
         if let Some(draw_state) = self.draw_cell_state {
-            let mut gridview = gridview_mut();
-            match &mut *gridview {
+            match self.gridview {
                 GridView::View2D(view2d) => {
-                    if let Some(pos1) = view2d.get_render_result().hover_pos.clone() {
-                        if let Some(pos2) = view2d.get_prior_render_result().hover_pos.clone() {
-                            for draw_pos in crate::math::bresenham(pos1, pos2) {
-                                view2d.set_cell(&draw_pos, draw_state);
-                            }
+                    if let Some(pos1) = view2d.get_render_result(0).hover_pos.clone() {
+                        if let Some(pos2) = view2d.get_render_result(1).hover_pos.clone() {
+                            view2d.enqueue(DrawCommand2D::Line(pos1, pos2, draw_state))
                         } else {
-                            view2d.set_cell(&pos1, draw_state);
+                            view2d.enqueue(DrawCommand2D::Cell(pos1, draw_state));
                         }
                     }
                 }
@@ -288,11 +297,11 @@ impl State {
         let mut zoomed = false;
 
         let speed = if shift_pressed { 2.0 } else { 1.0 };
-        let move_speed = 25.0 * speed * crate::ui::get_dpi();
+        let move_speed = 25.0 * speed * self.config.gfx.dpi;
         let zoom_speed = 0.1 * speed;
-        match &mut *gridview_mut() {
+        match self.gridview {
             GridView::View2D(view2d) => {
-                if has_keyboard && no_modifiers_pressed {
+                if self.has_keyboard && no_modifiers_pressed {
                     let mut pan_x = 0.0;
                     let mut pan_y = 0.0;
                     // 'A' or left arrow => pan west.
@@ -312,23 +321,25 @@ impl State {
                         pan_y -= move_speed;
                     }
                     if pan_x != 0.0 || pan_y != 0.0 {
-                        view2d.viewport.pan_pixels(NdVec([r64(pan_x), r64(pan_y)]));
+                        view2d.enqueue(
+                            MoveCommand2D::PanPixels(NdVec([r64(pan_x), r64(pan_y)])).decay(),
+                        );
                         moved = true;
                     }
                     // 'Q' or page up => zoom in.
                     if self.keys[sc::Q] || self.keys[VirtualKeyCode::PageUp] {
-                        view2d.viewport.zoom_by(2.0f64.powf(zoom_speed));
+                        view2d.enqueue(MoveCommand2D::ZoomByPower(zoom_speed).decay());
                         zoomed = true;
                     }
                     // 'Z' or page down => zoom out.
                     if self.keys[sc::Z] || self.keys[VirtualKeyCode::PageDown] {
-                        view2d.viewport.zoom_by(2.0f64.powf(-zoom_speed));
+                        view2d.enqueue(MoveCommand2D::ZoomByPower(-zoom_speed).decay());
                         zoomed = true;
                     }
                 }
                 if !moved && !self.rmb_held {
                     // Snap to the nearest position.
-                    view2d.viewport.snap_pos();
+                    view2d.enqueue(MoveCommand2D::SnapPos.decay());
                 }
                 if zoomed {
                     self.time_to_snap_zoom = Some(Instant::now() + Duration::from_millis(10));
@@ -337,7 +348,7 @@ impl State {
                     || (Instant::now() >= self.time_to_snap_zoom.unwrap())
                 {
                     // Snap to the nearest zoom level.
-                    view2d.viewport.zoom = view2d.viewport.zoom.round();
+                    view2d.enqueue(MoveCommand2D::SnapZoom.decay());
                 }
             }
             GridView::View3D(_) => (),

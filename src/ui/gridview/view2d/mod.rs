@@ -1,13 +1,26 @@
+use log::warn;
+use std::collections::VecDeque;
+use std::sync::Mutex;
+
 mod render;
 mod viewport;
 mod zoom;
 
+use super::control::*;
 use super::{GridViewTrait, RenderGridView};
 use crate::automaton::*;
-use crate::ui::history::{History, HistoryManager};
+use crate::ui::config::Config;
+use crate::ui::history::HistoryManager;
 use render::{RenderCache, RenderInProgress, GRIDLINE_FADE_RANGE, MIN_GRIDLINE_ZOOM_POWER};
 pub use viewport::Viewport2D;
 pub use zoom::Zoom2D;
+
+/// The number of render results to remember.
+const RENDER_RESULTS_COUNT: usize = 4;
+
+lazy_static! {
+    static ref DEFAULT_RENDER_RESULT: View2DRenderResult = View2DRenderResult::default();
+}
 
 #[derive(Default)]
 pub struct GridView2D {
@@ -23,16 +36,19 @@ pub struct GridView2D {
     redo_stack: Vec<HistoryEntry>,
     /// Whether the simulation is currently running.
     is_running: bool,
-    /// The most-recent render result.
-    render_result: View2DRenderResult,
-    /// The render result before the most recent one.
-    prior_render_result: View2DRenderResult,
+    /// The last several render results, with the most recent at the front.
+    render_results: VecDeque<View2DRenderResult>,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
+    /// Queue of pending commands to be executed on the next frame.
+    command_queue: Mutex<VecDeque<Command>>,
 }
 
 impl GridViewTrait for GridView2D {
-    fn do_frame(&mut self) {
+    fn do_frame(&mut self, config: &Config) {
+        for command in self.command_queue.lock().unwrap().drain(..) {
+            println!("{:?}", command);
+        }
         const DECAY_CONSTANT: f64 = 4.0;
         if self.interpolating_viewport != self.viewport {
             self.interpolating_viewport = Viewport2D::interpolate(
@@ -41,21 +57,23 @@ impl GridViewTrait for GridView2D {
                 1.0 / DECAY_CONSTANT,
             );
         }
-        self.do_sim_frame();
+        self.do_sim_frame(config);
+    }
+
+    fn enqueue<C: Into<Command>>(&self, command: C) {
+        self.command_queue.lock().unwrap().push_back(command.into());
     }
 
     fn is_running(&self) -> bool {
         self.is_running
     }
     fn start_running(&mut self) {
-        self.record();
         self.is_running = true;
     }
-    fn stop_running(&mut self) -> bool {
-        let was_running = self.is_running;
+    fn stop_running(&mut self) {
         self.is_running = false;
-        was_running
     }
+
     fn get_automaton<'a>(&'a self) -> Automaton<'a> {
         Automaton::from(&self.automaton)
     }
@@ -92,6 +110,7 @@ impl RenderGridView for GridView2D {
     type RenderResult = View2DRenderResult;
     fn render(
         &mut self,
+        _config: &Config,
         target: &mut glium::Frame,
         params: View2DRenderParams,
     ) -> &View2DRenderResult {
@@ -114,15 +133,21 @@ impl RenderGridView for GridView2D {
             });
         }
         self.render_cache = Some(render_cache);
-        let new_render_result = View2DRenderResult { hover_pos };
-        self.prior_render_result = std::mem::replace(&mut self.render_result, new_render_result);
-        &self.render_result
+        if self.render_results.len() >= RENDER_RESULTS_COUNT {
+            self.render_results.pop_back();
+        }
+        self.render_results
+            .push_front(View2DRenderResult { hover_pos });
+        self.get_render_result(0)
     }
-    fn get_render_result(&self) -> &View2DRenderResult {
-        &self.render_result
-    }
-    fn get_prior_render_result(&self) -> &View2DRenderResult {
-        &self.prior_render_result
+    fn get_render_result(&self, frame: usize) -> &View2DRenderResult {
+        if frame > RENDER_RESULTS_COUNT {
+            warn!("Attempted to access render result {:?} of GridView2D, but render results are only kept for {:?} frames", frame, RENDER_RESULTS_COUNT);
+        }
+        &self
+            .render_results
+            .get(frame)
+            .unwrap_or(&*DEFAULT_RENDER_RESULT)
     }
 }
 

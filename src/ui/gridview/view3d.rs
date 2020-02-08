@@ -1,7 +1,9 @@
 use std::rc::Rc;
 
+use super::control::*;
 use super::GridViewTrait;
 use crate::automaton::*;
+use crate::ui::config::Config;
 use crate::ui::history::HistoryManager;
 
 pub struct GridView3D {}
@@ -25,7 +27,11 @@ impl IntoNdSimulate for GridView3D {
 }
 
 impl GridViewTrait for GridView3D {
-    fn do_frame(&mut self) {
+    fn do_frame(&mut self, _config: &Config) {
+        unimplemented!()
+    }
+
+    fn enqueue<C: Into<Command>>(&self, _command: C) {
         unimplemented!()
     }
 
@@ -35,9 +41,10 @@ impl GridViewTrait for GridView3D {
     fn start_running(&mut self) {
         unimplemented!()
     }
-    fn stop_running(&mut self) -> bool {
+    fn stop_running(&mut self) {
         unimplemented!()
     }
+
     fn get_automaton<'a>(&'a self) -> Automaton<'a> {
         unimplemented!()
     }

@@ -244,6 +244,10 @@ impl<'a> FrameInProgress<'a> {
                         Some(VirtualKeyCode::C) => self.gridview.enqueue(ClipboardCommand::CopyRle),
                         // Paste.
                         Some(VirtualKeyCode::V) => self.gridview.enqueue(ClipboardCommand::Paste),
+                        // Center pattern.
+                        Some(VirtualKeyCode::M) => self
+                            .gridview
+                            .enqueue(MoveCommand2D::SetPos(NdVec::origin()).decay()),
                         _ => (),
                     },
                     // SHIFT + CTRL

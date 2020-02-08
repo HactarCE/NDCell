@@ -44,6 +44,7 @@ impl From<HistoryCommand> for Command {
 pub enum MoveCommand2D {
     PanPixels(FVec2D),
     ZoomByPower(f64),
+    SetPos(BigVec2D),
     SnapPos,
     SnapZoom,
 }

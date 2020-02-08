@@ -76,6 +76,7 @@ impl GridViewTrait for GridView2D {
                         MoveCommand2D::ZoomByPower(zoom_power) => {
                             new_viewport.zoom_by(2.0f64.powf(zoom_power))
                         }
+                        MoveCommand2D::SetPos(pos) => new_viewport.pos = pos,
                         MoveCommand2D::SnapPos => new_viewport.snap_pos(),
                         MoveCommand2D::SnapZoom => new_viewport.snap_zoom(),
                     };

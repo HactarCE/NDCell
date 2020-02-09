@@ -1,5 +1,6 @@
 use glium::glutin::dpi::PhysicalPosition;
 use glium::glutin::*;
+use log::debug;
 use noisy_float::prelude::r64;
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut, Index};
@@ -107,6 +108,10 @@ impl<'a> FrameInProgress<'a> {
             // Handle WindowEvents.
             Event::WindowEvent { event, .. } => {
                 match event {
+                    WindowEvent::HiDpiFactorChanged(hidpi_factor) => {
+                        self.config.gfx.dpi = *hidpi_factor;
+                        debug!("DPI changed to {:?}", self.config.gfx.dpi);
+                    }
                     WindowEvent::KeyboardInput { input, .. } => {
                         self.keys.update(input);
                         if self.has_keyboard {

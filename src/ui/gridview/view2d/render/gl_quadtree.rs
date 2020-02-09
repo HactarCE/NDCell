@@ -21,11 +21,10 @@ impl<C: CellType> CachedGlQuadtree<C> {
         min_layer: usize,
         pixelator: F,
     ) {
-        // if let Some(current_node) = &self.current_node {
-        //     if self.current_min_layer == min_layer && current_node == &node {
-        //         return;
-        //     }
-        // }
+        // Only recompute quadtree if necessary.
+        if self.current_min_layer == min_layer && Some(&node) == self.current_node.as_ref() {
+            return;
+        }
         self.cached = Some(GlQuadtree::from_node(&node, min_layer, pixelator));
         self.current_node = Some(node);
         self.current_min_layer = min_layer;

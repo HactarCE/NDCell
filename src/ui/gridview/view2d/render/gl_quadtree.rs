@@ -2,11 +2,18 @@
 //! quadtree.
 
 use crate::ui::DISPLAY;
-use glium::texture::unsigned_texture1d::UnsignedTexture1d;
-use glium::texture::{ClientFormat, RawImage1d};
+use glium::texture::unsigned_texture2d::UnsignedTexture2d;
+use glium::texture::{ClientFormat, RawImage2d};
 use std::borrow::Cow;
+use std::sync::Once;
 
 use super::*;
+
+// Nearly all GPUs have a lower GL_MAX_TEXTURE_SIZE than 1024:
+// https://opengl.gpuinfo.org/displaycapability.php?name=GL_MAX_TEXTURE_SIZE
+const WARN_TEXTURE_SIZE_THRESHOLD: usize = 1024;
+
+static WARN_TEXTURE_SIZE: Once = Once::new();
 
 #[derive(Default)]
 pub struct CachedGlQuadtree<C: CellType> {
@@ -21,11 +28,10 @@ impl<C: CellType> CachedGlQuadtree<C> {
         min_layer: usize,
         pixelator: F,
     ) {
-        // if let Some(current_node) = &self.current_node {
-        //     if self.current_min_layer == min_layer && current_node == &node {
-        //         return;
-        //     }
-        // }
+        // Only recompute quadtree if necessary.
+        if self.current_min_layer == min_layer && Some(&node) == self.current_node.as_ref() {
+            return;
+        }
         self.cached = Some(GlQuadtree::from_node(&node, min_layer, pixelator));
         self.current_node = Some(node);
         self.current_min_layer = min_layer;
@@ -50,7 +56,7 @@ impl<C: CellType> CachedGlQuadtree<C> {
 /// A container for an OpenGL texture that encodes a square pixel pattern using
 /// a quadtree.
 pub struct GlQuadtree {
-    pub texture: UnsignedTexture1d,
+    pub texture: UnsignedTexture2d,
     pub layers: usize,
     pub root_idx: usize,
 }
@@ -64,7 +70,7 @@ impl GlQuadtree {
         mut pixelator: F,
     ) -> Self {
         let indexed_tree = IndexedNdTree::from_node(node, min_layer);
-        let pixel_vec: Vec<u32> = indexed_tree
+        let mut pixel_vec: Vec<u32> = indexed_tree
             .get_nodes()
             .iter()
             .flatten()
@@ -73,14 +79,30 @@ impl GlQuadtree {
                 IndexedNdTreeBranch::Pointer(idx) => *idx as u32,
             })
             .collect();
-        let raw_image: RawImage1d<u32> = RawImage1d {
+        // A simple 1D texture may exceed GL_MAX_TEXTURE_SIZE (which,
+        // unfortunately, we can't get because Glium does not expose it), so
+        // instead make a square texture that is as small as possible. Even this
+        // might exceed the maximum texture size, but that's less likely.
+        let width = ((pixel_vec.len() / 4) as f64).sqrt().ceil() as usize;
+        if width > WARN_TEXTURE_SIZE_THRESHOLD {
+            WARN_TEXTURE_SIZE.call_once(|| warn!(
+                "Texture encoding quadtree has exceeded {}x{}; this may cause rendering problems in older GPUs",
+                WARN_TEXTURE_SIZE_THRESHOLD,
+                WARN_TEXTURE_SIZE_THRESHOLD
+            ));
+        }
+        assert!(width * width * 4 >= pixel_vec.len());
+        pixel_vec.resize(width * width * 4, 0);
+        let raw_image: RawImage2d<u32> = RawImage2d {
             data: Cow::Owned(pixel_vec),
-            width: indexed_tree.get_nodes().len() as u32,
+            width: width as u32,
+            height: width as u32,
             format: ClientFormat::U32U32U32U32,
         };
+        let texture =
+            UnsignedTexture2d::new(&**DISPLAY, raw_image).expect("Failed to create texture");
         Self {
-            texture: UnsignedTexture1d::new(&**DISPLAY, raw_image)
-                .expect("Failed to create texture"),
+            texture,
             layers: indexed_tree.get_layer_count(),
             root_idx: indexed_tree.get_root_idx(),
         }

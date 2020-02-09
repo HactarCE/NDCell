@@ -1,5 +1,7 @@
 use glium::framebuffer::SimpleFrameBuffer;
 use glium::texture::srgb_texture2d::SrgbTexture2d;
+use send_wrapper::SendWrapper;
+use std::cell::RefCell;
 
 use crate::ui::DISPLAY;
 
@@ -47,6 +49,7 @@ pub struct TextureCache {
     pub gridlines: CachedSrgbTexture2d,
 }
 
-ref_thread_local! {
-    pub static managed CACHE: TextureCache = TextureCache::default();
+lazy_static! {
+    pub static ref CACHE: SendWrapper<RefCell<TextureCache>> =
+        SendWrapper::new(RefCell::new(TextureCache::default()));
 }

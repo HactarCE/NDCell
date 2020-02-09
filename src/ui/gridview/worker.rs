@@ -62,7 +62,7 @@ impl<T: 'static + NdSimulate + Clone + Send> Worker<T> {
                         return;
                     }
                     if !continuous {
-                        return;
+                        break;
                     }
                     record = false;
                 }

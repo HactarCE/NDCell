@@ -50,18 +50,14 @@ impl<C: CellType, D: Dim> IndexedNdTree<C, D> {
         .complete(node)
     }
     /// Converts this IndexedNdTree back into an NdCachedNode.
-    pub fn to_node(&self, cache: &mut NdTreeCache<C, D>) -> NdCachedNode<C, D> {
+    pub fn to_node(&self, cache: &NdTreeCache<C, D>) -> NdCachedNode<C, D> {
         self.partial_to_node(cache, self.root_idx)
     }
     /// Converts a single node (and its descendants) of this IndexedNdTree into an
     /// NdCachedNode.
-    fn partial_to_node(
-        &self,
-        cache: &mut NdTreeCache<C, D>,
-        start_idx: usize,
-    ) -> NdCachedNode<C, D> {
+    fn partial_to_node(&self, cache: &NdTreeCache<C, D>, start_idx: usize) -> NdCachedNode<C, D> {
         let mut branch_iter = self.nodes[start_idx].iter();
-        cache.get_node_from_fn(|cache, _| match branch_iter.next().unwrap() {
+        cache.get_node_from_fn(|_| match branch_iter.next().unwrap() {
             IndexedNdTreeBranch::Leaf(branch) => branch.clone(),
             IndexedNdTreeBranch::Pointer(idx) => {
                 NdTreeBranch::Node(self.partial_to_node(cache, *idx))
@@ -140,7 +136,7 @@ x = 8, y = 8, rule = B3/S23
         .unwrap();
         let node = automaton.tree.slice.root;
         assert_eq!(3, node.layer);
-        let mut cache = automaton.tree.cache.borrow_mut();
+        let cache = automaton.tree.cache;
 
         // The root node is of layer 3 (8x8), and there should be ...
         //  - three unique layer-2 nodes (4x4)
@@ -156,18 +152,18 @@ x = 8, y = 8, rule = B3/S23
         assert_eq!(3, indexed_0.layers);
         // 1+3+2 = 6, so there should be a total of eight nodes in this one.
         assert_eq!(6, indexed_0.nodes.len());
-        assert_eq!(node, indexed_0.to_node(&mut cache));
+        assert_eq!(node, indexed_0.to_node(&cache));
 
         let indexed_1 = IndexedNdTree::from_node(&node, 1);
         assert_eq!(2, indexed_1.layers);
         // 1+3 = 4
         assert_eq!(4, indexed_1.nodes.len());
-        assert_eq!(node, indexed_1.to_node(&mut cache));
+        assert_eq!(node, indexed_1.to_node(&cache));
 
         let indexed_2 = IndexedNdTree::from_node(&node, 2);
         assert_eq!(1, indexed_2.layers);
         // 1 = 1
         assert_eq!(1, indexed_2.nodes.len());
-        assert_eq!(node, indexed_2.to_node(&mut cache));
+        assert_eq!(node, indexed_2.to_node(&cache));
     }
 }

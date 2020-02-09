@@ -19,6 +19,7 @@ path = "src/main.rs"
 
 [dependencies]
 clipboard = "0.5"
+dashmap = "3.4"
 enum_dispatch = "0.2"
 glium = "0.25"
 imgui = "0.2"
@@ -36,7 +37,6 @@ regex = "1"
 seahash = "3.0"
 send_wrapper = "0.4"
 simple_logger = "1.0"
-weak-table = "0.2"
 
 [dev-dependencies]
 proptest = "0.9.4"

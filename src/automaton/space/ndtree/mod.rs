@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 mod cache;
 mod indexed;
@@ -16,7 +16,7 @@ pub use slice::*;
 #[derive(Debug, Clone)]
 pub struct NdTree<C: CellType, D: Dim> {
     /// The cache for this tree's nodes.
-    pub cache: Arc<Mutex<NdTreeCache<C, D>>>,
+    pub cache: Arc<NdTreeCache<C, D>>,
     /// The slice describing the root node and offset.
     pub slice: NdTreeSlice<C, D>,
 }
@@ -65,11 +65,11 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// Constructs a new empty NdTree with an empty node cache centered on the
     /// origin.
     pub fn new() -> Self {
-        let mut cache = NdTreeCache::default();
+        let cache = NdTreeCache::default();
         let root = cache.get_empty_node(1);
         let offset = NdVec::repeat(-1);
         Self {
-            cache: Arc::new(Mutex::new(cache)),
+            cache: Arc::new(cache),
             slice: NdTreeSlice { root, offset },
         }
     }
@@ -96,10 +96,9 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// corner. The final result is that the entire tree contains the same
     /// contents as before, but with 25% padding on each edge.
     pub fn expand(&mut self) {
-        let mut cache = self.cache.lock().unwrap();
-        let empty_sub_branch = cache.get_empty_branch(self.slice.root.layer - 1);
+        let empty_sub_branch = self.cache.get_empty_branch(self.slice.root.layer - 1);
         let old_root = self.slice.root.clone();
-        self.slice.root = cache.get_node_from_fn(move |cache, branch_idx| {
+        self.slice.root = self.cache.get_node_from_fn(|branch_idx| {
             let old_branch = &old_root[branch_idx.clone()];
             // Compute the index of the opposite branch (diagonally opposite
             // on all axes).
@@ -109,7 +108,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
             // ... except for the opposite branch, which is closest to the center.
             inner_branches[opposite_branch_idx.to_array_idx()] = old_branch.clone();
             // And return a branch with that node.
-            NdTreeBranch::Node(cache.get_node(inner_branches))
+            NdTreeBranch::Node(self.cache.get_node(inner_branches))
         });
         self.slice.offset -= &(self.get_root().len() / 4);
     }
@@ -133,9 +132,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         if self.get_root().layer == 1 {
             return 0;
         }
-        let new_node = self
-            .get_root()
-            .get_inner_node(&mut self.cache.lock().unwrap());
+        let new_node = self.get_root().get_inner_node(&self.cache);
         // Make sure the populations are the same (i.e. we haven't lost any
         // cells); otherwise don't do anything.
         if new_node.population == self.get_root().population {
@@ -157,11 +154,10 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// Sets the state of the cell at the given position.
     pub fn set_cell(&mut self, pos: &BigVec<D>, cell_state: C) {
         self.expand_to(&pos);
-        self.slice.root = self.slice.root.set_cell(
-            &mut self.cache.lock().unwrap(),
-            &(pos - &self.slice.offset),
-            cell_state,
-        );
+        self.slice.root =
+            self.slice
+                .root
+                .set_cell(&self.cache, &(pos - &self.slice.offset), cell_state);
     }
 
     /// Returns an NdTreeSlice of the smallest node in the grid containing the
@@ -178,7 +174,6 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         let mut slice = self.slice.clone();
         let mut smaller_slice = self.slice.clone();
         self.shrink();
-        let mut cache = self.cache.lock().unwrap();
         // "Zoom in" on either a corner, an edge/face, or the center until it
         // can't shrink any more. Each iteration of the loop "zooms in" by a
         // factor of 2. If we've zoomed in too far, break out of the loop and
@@ -216,7 +211,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
             }
             // Now compose a new node from sub-branches selected using
             // sub_branch_idx_1 and sub_branch_idx_2.
-            let smaller_node = cache.get_node_from_fn(|_cache, new_branch_idx| {
+            let smaller_node = self.cache.get_node_from_fn(|new_branch_idx| {
                 slice
                     .root
                     .get_sub_branch(&min_sub_branch_idx + new_branch_idx)

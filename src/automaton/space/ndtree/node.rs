@@ -227,7 +227,7 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
     /// A node's inner node is the node one layer down, centered on the original
     /// node. For example, the inner node of a 16x16 node (layer 4) is the 8x8
     /// node (layer 3) centered on it.
-    pub fn get_inner_node(&self, cache: &mut NdTreeCache<C, D>) -> NdCachedNode<C, D> {
+    pub fn get_inner_node(&self, cache: &NdTreeCache<C, D>) -> NdCachedNode<C, D> {
         assert_ne!(1, self.layer, "Cannot take inner node of node at layer 1");
         let new_branches = self
             .branches
@@ -281,7 +281,7 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
     #[must_use]
     pub fn set_cell<I: NdTreeIndex<D>>(
         &self,
-        cache: &mut NdTreeCache<C, D>,
+        cache: &NdTreeCache<C, D>,
         pos: &I,
         cell_state: C,
     ) -> NdCachedNode<C, D> {

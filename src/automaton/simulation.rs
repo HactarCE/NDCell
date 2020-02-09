@@ -69,8 +69,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         // minimum layer for a node.)
         tree.expand();
         // Now do the actual simulation.
-        let new_node =
-            self.advance_inner_node(&mut tree.cache.lock().unwrap(), &tree.slice.root, step_size);
+        let new_node = self.advance_inner_node(&tree.cache, &tree.slice.root, step_size);
         tree.set_root_centered(new_node);
         // Shrink the tree as much as possible to avoid wasted space.
         tree.shrink();
@@ -97,7 +96,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
     #[must_use]
     fn advance_inner_node(
         &mut self,
-        cache: &mut NdTreeCache<C, D>,
+        cache: &NdTreeCache<C, D>,
         node: &NdCachedNode<C, D>,
         generations: &BigInt,
     ) -> NdCachedNode<C, D> {
@@ -146,9 +145,9 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
             // Let `L` be the layer of the current node, and let `t` be the
             // number of generations to simulate. Colors refer to Figure 4 in
             // this article: https://www.drdobbs.com/jvm/_/184406478.
-            ret = cache.get_node_from_fn(|cache, final_branch_idx| {
-                let node_halfway = cache.get_node_from_fn(|cache, inner_branch_idx| {
-                    let node_intial = cache.get_node_from_fn(|_cache, outer_branch_idx| {
+            ret = cache.get_node_from_fn(|final_branch_idx| {
+                let node_halfway = cache.get_node_from_fn(|inner_branch_idx| {
+                    let node_intial = cache.get_node_from_fn(|outer_branch_idx| {
                         // 1. Grab sub-branches at layer `L-2` of the original
                         //    node at time `0`.
                         node.get_sub_branch(

@@ -1,4 +1,4 @@
-use log::{debug, warn};
+use log::{trace, warn};
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -227,7 +227,7 @@ impl GridViewTrait for GridView2D {
     }
     fn reset_worker(&mut self) {
         self.worker = None;
-        debug!("Reset simulation worker thread");
+        trace!("Reset simulation worker thread");
     }
 
     fn is_running(&self) -> bool {

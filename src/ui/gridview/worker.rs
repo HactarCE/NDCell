@@ -1,4 +1,4 @@
-use log::debug;
+use log::trace;
 use num::BigInt;
 use std::sync::mpsc;
 use std::thread;
@@ -42,7 +42,7 @@ impl<T: 'static + NdSimulate + Clone + Send> Worker<T> {
                         step_size = requested_step_size;
                     }
                     Err(_) => {
-                        debug!("Worker thread ending (requests channel dropped)");
+                        trace!("Worker thread ending (requests channel dropped)");
                         return;
                     }
                 }
@@ -59,7 +59,7 @@ impl<T: 'static + NdSimulate + Clone + Send> Worker<T> {
                         })
                         .is_err()
                     {
-                        debug!("Worker thread ending (results channel dropped)");
+                        trace!("Worker thread ending (results channel dropped)");
                         return;
                     }
                     if !continuous {

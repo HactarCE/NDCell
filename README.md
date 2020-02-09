@@ -13,8 +13,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 - [x] Refactor UI
 - [x] Implement line-drawing
-- [ ] Asynchronous simulation
-    + [ ] Precompute simulation results (optional)
+- [x] Run simulation concurrently with rendering
 - [ ] Begin work on custom rules
 
 ## Long-term to-do list
@@ -125,5 +124,6 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
         * [ ] Compute population asynchronously
         * [ ] Precompute HashLife time splits
     + [ ] Garbage-collection / memory limit
-    + [ ] Use fixed-size arrays instead of `Vec<NdTreeBranch<...>>`
-        * This would be an associated type of `Dim`
+    + [ ] Use fixed-size arrays instead of `Vec<NdTreeBranch<...>>`; there are two ways to implement this:
+        1. As an associated type of `Dim` (needs [GATs](https://github.com/rust-lang/rust/issues/44265))
+        2. Using a const generic for array length (needs [const generics](https://github.com/rust-lang/rust/issues/44580))

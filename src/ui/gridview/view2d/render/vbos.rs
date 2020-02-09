@@ -1,19 +1,24 @@
 use crate::automaton::{FRect2D, IRect2D, X, Y};
 use crate::ui::DISPLAY;
 use glium::VertexBuffer;
-use ref_thread_local::{RefMut, RefThreadLocal};
+use send_wrapper::SendWrapper;
+use std::cell::{RefCell, RefMut};
 
 use super::vertices::*;
 use super::GRIDLINE_BATCH_SIZE;
 
-fn empty_vbo<T: glium::Vertex>(size: usize) -> VertexBuffer<T> {
-    VertexBuffer::empty_dynamic(&**DISPLAY, size).expect("Failed to create vertex buffer")
+type StaticVBO<T> = SendWrapper<RefCell<VertexBuffer<T>>>;
+
+fn empty_static_vbo<T: glium::Vertex>(size: usize) -> StaticVBO<T> {
+    SendWrapper::new(RefCell::new(
+        VertexBuffer::empty_dynamic(&**DISPLAY, size).expect("Failed to create vertex buffer"),
+    ))
 }
 
-ref_thread_local! {
-    static managed QUADTREE_QUAD: VertexBuffer<QuadtreePosVertex> = empty_vbo(4);
-    static managed BLIT_QUAD: VertexBuffer<TexturePosVertex> = empty_vbo(4);
-    static managed GRIDLINES: VertexBuffer<RgbaVertex> = empty_vbo(GRIDLINE_BATCH_SIZE);
+lazy_static! {
+    static ref QUADTREE_QUAD: StaticVBO<QuadtreePosVertex> = empty_static_vbo(4);
+    static ref BLIT_QUAD: StaticVBO<TexturePosVertex> = empty_static_vbo(4);
+    static ref GRIDLINES: StaticVBO<RgbaVertex> = empty_static_vbo(GRIDLINE_BATCH_SIZE);
 }
 
 pub fn quadtree_quad<'a>() -> RefMut<'a, VertexBuffer<QuadtreePosVertex>> {

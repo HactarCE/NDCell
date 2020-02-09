@@ -42,7 +42,6 @@ use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use noisy_float::prelude::r64;
 use num::{BigInt, ToPrimitive, Zero};
-use ref_thread_local::RefThreadLocal;
 
 mod gl_quadtree;
 mod shaders;

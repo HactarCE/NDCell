@@ -4,27 +4,26 @@ use clipboard;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use imgui;
 use log::warn;
-use std::cell::RefCell;
+use std::sync::Mutex;
 
-thread_local!(
-    static CTX: RefCell<Option<ClipboardContext>> = RefCell::new(ClipboardProvider::new().ok()) ) ;
+lazy_static! {
+    static ref CTX: Mutex<Option<ClipboardContext>> = Mutex::new(ClipboardProvider::new().ok());
+}
 
 pub fn clipboard_get() -> Result<String, ()> {
-    CTX.with(|ctx| {
-        ctx.borrow_mut()
-            .as_mut()
-            .ok_or(())
-            .and_then(|ctx| ctx.get_contents().map_err(|_| ()))
-    })
+    CTX.lock()
+        .unwrap()
+        .as_mut()
+        .ok_or(())
+        .and_then(|ctx| ctx.get_contents().map_err(|_| ()))
 }
 
 pub fn clipboard_set(new_contents: String) -> Result<(), ()> {
-    CTX.with(|ctx| {
-        ctx.borrow_mut()
-            .as_mut()
-            .ok_or(())
-            .and_then(|ctx| ctx.set_contents(new_contents).map_err(|_| ()))
-    })
+    CTX.lock()
+        .unwrap()
+        .as_mut()
+        .ok_or(())
+        .and_then(|ctx| ctx.set_contents(new_contents).map_err(|_| ()))
 }
 
 pub struct ClipboardCompat;

@@ -7,6 +7,11 @@ use crate::ui::config::*;
 use crate::ui::gridview::*;
 use simulation::SimulationWindow;
 
+const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+const YELLOW: [f32; 4] = [1.0, 1.0, 0.0, 1.0];
+const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+const BLUE: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
+
 #[derive(Debug, Default)]
 pub struct MainWindow {
     simulation: SimulationWindow,
@@ -17,12 +22,39 @@ impl MainWindow {
         Window::new(&ImString::new(crate::ui::TITLE)).build(&ui, || {
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
             ui.text("");
-            ui.text(format!("Framerate = {} FPS", ui.io().framerate as usize));
+            let fps = ui.io().framerate as usize;
+            ui.text_colored(get_fps_color(fps), format!("Framerate = {} FPS", fps));
             if let GridView::View2D(view2d) = gridview {
-                ui.text(format!(
-                    "Max sim speed = {} UPS",
-                    (1.0 / view2d.last_sim_time.as_secs_f64()) as usize
-                ));
+                let total_update_ms: f64 = view2d
+                    .last_sim_times
+                    .iter()
+                    .map(|duration| duration.as_secs_f64())
+                    .sum();
+                if total_update_ms == 0.0 {
+                    ui.text("");
+                } else {
+                    let avg_update_ms = total_update_ms / view2d.last_sim_times.len() as f64;
+                    let ups = (1.0 / avg_update_ms) as usize;
+                    ui.text_colored(get_fps_color(ups), format!("Max sim speed = {} UPS", ups));
+                }
+                if view2d.is_drawing {
+                    ui.text_colored(BLUE, "DRAWING");
+                } else if view2d.is_waiting || view2d.is_running {
+                    ui.text_colored(
+                        if view2d.is_running {
+                            if view2d.is_waiting {
+                                RED
+                            } else {
+                                GREEN
+                            }
+                        } else {
+                            YELLOW
+                        },
+                        "SIMULATING",
+                    );
+                } else {
+                    ui.text("");
+                }
             }
             ui.text("");
             ui.text(format!("Generations = {}", gridview.get_generation_count()));
@@ -55,5 +87,18 @@ impl MainWindow {
             ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
         });
         self.simulation.build(ui, config, gridview)
+    }
+}
+
+fn get_fps_color(fps: usize) -> [f32; 4] {
+    if fps >= 58 {
+        // Green
+        [0.0, 1.0, 0.0, 1.0]
+    } else if fps >= 29 {
+        // Yellow
+        [1.0, 1.0, 0.0, 1.0]
+    } else {
+        // Red
+        [1.0, 0.0, 0.0, 1.0]
     }
 }

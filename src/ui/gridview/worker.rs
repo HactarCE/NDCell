@@ -21,6 +21,7 @@ pub struct WorkerResult<T> {
 pub struct Worker<T: NdSimulate + Clone + Send> {
     requests_tx: mpsc::Sender<WorkerRequest>,
     results_rx: mpsc::Receiver<WorkerResult<T>>,
+    request_count: usize,
 }
 
 impl<T: 'static + NdSimulate + Clone + Send> Worker<T> {
@@ -71,20 +72,30 @@ impl<T: 'static + NdSimulate + Clone + Send> Worker<T> {
         Self {
             requests_tx,
             results_rx,
+            request_count: 0,
         }
     }
     pub fn request(&mut self, request: WorkerRequest) {
+        self.request_count += 1;
         self.requests_tx
             .send(request)
             .expect("Automaton simulation worker thread died unexpectedly")
     }
     pub fn take(&mut self) -> Option<WorkerResult<T>> {
         match self.results_rx.try_recv() {
-            Ok(ret) => Some(ret),
+            Ok(ret) => {
+                if self.request_count > 0 {
+                    self.request_count -= 1;
+                }
+                Some(ret)
+            }
             Err(mpsc::TryRecvError::Empty) => None,
             Err(mpsc::TryRecvError::Disconnected) => {
                 panic!("Automaton simulation worker thread died unexpectedly")
             }
         }
+    }
+    pub fn get_request_count(&self) -> usize {
+        self.request_count
     }
 }

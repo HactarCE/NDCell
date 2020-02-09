@@ -20,6 +20,8 @@ pub use zoom::Zoom2D;
 
 /// The number of render results to remember.
 const RENDER_RESULTS_COUNT: usize = 4;
+/// The number of previous simulation steps to track for counting UPS.
+const MAX_LAST_SIM_TIMES: usize = 4;
 
 lazy_static! {
     static ref DEFAULT_RENDER_RESULT: View2DRenderResult = View2DRenderResult::default();
@@ -49,7 +51,7 @@ pub struct GridView2D {
     /// The last several render results, with the most recent at the front.
     render_results: VecDeque<View2DRenderResult>,
     /// The last simulation time.
-    pub last_sim_time: Duration,
+    pub last_sim_times: VecDeque<Duration>,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
     /// Queue of pending commands to be executed on the next frame.
@@ -100,6 +102,7 @@ impl GridViewTrait for GridView2D {
                 }
                 Command::StartDraw => {
                     self.stop_running();
+                    self.record();
                     self.is_drawing = true;
                 }
                 Command::EndDraw => self.is_drawing = false,
@@ -188,17 +191,25 @@ impl GridViewTrait for GridView2D {
         {
             self.stop_running();
         } else {
-            if let Some(WorkerResult {
-                result,
-                record,
-                time,
-            }) = self.worker.as_mut().and_then(|w| w.take())
-            {
-                if record {
-                    self.record();
+            if let Some(worker) = self.worker.as_mut() {
+                if let Some(WorkerResult {
+                    result,
+                    record,
+                    time,
+                }) = worker.take()
+                {
+                    if !self.is_running {
+                        self.is_waiting = worker.get_request_count() > 0;
+                    }
+                    if record {
+                        self.record();
+                    }
+                    self.automaton = result;
+                    self.last_sim_times.push_back(time);
+                    if self.last_sim_times.len() > MAX_LAST_SIM_TIMES {
+                        self.last_sim_times.pop_front();
+                    }
                 }
-                self.automaton = result;
-                self.last_sim_time = time;
             }
         }
     }

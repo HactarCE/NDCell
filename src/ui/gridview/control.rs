@@ -21,6 +21,7 @@ pub enum SimCommand {
     StartRunning,
     StopRunning,
     ToggleRunning,
+    Cancel,
 }
 impl From<SimCommand> for Command {
     fn from(c: SimCommand) -> Self {

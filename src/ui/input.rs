@@ -222,6 +222,7 @@ impl<'a> FrameInProgress<'a> {
                         Some(VirtualKeyCode::Return) => {
                             self.gridview.enqueue(SimCommand::ToggleRunning)
                         }
+                        Some(VirtualKeyCode::Escape) => self.gridview.enqueue(SimCommand::Cancel),
                         _ => (),
                     },
 

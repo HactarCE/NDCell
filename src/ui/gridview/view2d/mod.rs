@@ -1,4 +1,4 @@
-use log::warn;
+use log::{debug, warn};
 use std::collections::VecDeque;
 use std::sync::Mutex;
 
@@ -7,6 +7,7 @@ mod viewport;
 mod zoom;
 
 use super::control::*;
+use super::worker::*;
 use super::{GridViewTrait, RenderGridView};
 use crate::automaton::*;
 use crate::ui::config::Config;
@@ -39,6 +40,11 @@ pub struct GridView2D {
     is_running: bool,
     /// Whether the user is current drawing.
     is_drawing: bool,
+    /// Whether a one-off simulation request is currently happening
+    /// concurrently.
+    is_waiting: bool,
+    /// Communication channel with the simulation worker thread.
+    worker: Option<Worker<ProjectedAutomaton2D>>,
     /// The last several render results, with the most recent at the front.
     render_results: VecDeque<View2DRenderResult>,
     /// Cached render data unique to this GridView.
@@ -175,14 +181,46 @@ impl GridViewTrait for GridView2D {
         self.command_queue.lock().unwrap().push(command.into());
     }
 
+    fn queue_worker_request(&mut self, request: WorkerRequest) {
+        match &request {
+            WorkerRequest::Step(_) => self.is_waiting = true,
+            WorkerRequest::SimContinuous(_) => (),
+        }
+        self.get_worker().request(request);
+    }
+    fn reset_worker(&mut self) {
+        self.worker = None;
+        debug!("Reset simulation worker thread");
+    }
+
     fn is_running(&self) -> bool {
         self.is_running
     }
-    fn start_running(&mut self) {
+    fn start_running(&mut self, config: &Config) {
         self.is_running = true;
+        self.queue_worker_request(WorkerRequest::SimContinuous(config.sim.step_size.clone()));
     }
     fn stop_running(&mut self) {
         self.is_running = false;
+        self.is_waiting = false;
+        self.reset_worker();
+    }
+    fn do_sim_frame(&mut self, config: &Config) {
+        if self.is_running
+            && config.sim.use_breakpoint
+            && self.get_generation_count() >= &config.sim.breakpoint_gen
+        {
+            self.stop_running();
+        } else {
+            if let Some(WorkerResult { result, record }) =
+                self.worker.as_mut().and_then(|w| w.take())
+            {
+                if record {
+                    self.record();
+                }
+                self.automaton = result;
+            }
+        }
     }
 
     fn get_automaton<'a>(&'a self) -> Automaton<'a> {
@@ -265,6 +303,12 @@ impl RenderGridView for GridView2D {
 impl GridView2D {
     pub fn get_cell(&self, pos: &BigVec2D) -> u8 {
         self.automaton.get_projected_tree().get_cell(pos)
+    }
+    fn get_worker(&mut self) -> &mut Worker<ProjectedAutomaton2D> {
+        if let None = self.worker {
+            self.worker = Some(Worker::new(self.automaton.clone()));
+        }
+        self.worker.as_mut().unwrap()
     }
 }
 

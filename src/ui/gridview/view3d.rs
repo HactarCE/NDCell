@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use super::control::*;
+use super::worker::*;
 use super::GridViewTrait;
 use crate::automaton::*;
 use crate::ui::config::Config;
@@ -35,13 +36,23 @@ impl GridViewTrait for GridView3D {
         unimplemented!()
     }
 
+    fn queue_worker_request(&mut self, _request: WorkerRequest) {
+        unimplemented!()
+    }
+    fn reset_worker(&mut self) {
+        unimplemented!()
+    }
+
     fn is_running(&self) -> bool {
         unimplemented!()
     }
-    fn start_running(&mut self) {
+    fn start_running(&mut self, _config: &Config) {
         unimplemented!()
     }
     fn stop_running(&mut self) {
+        unimplemented!()
+    }
+    fn do_sim_frame(&mut self, _config: &Config) {
         unimplemented!()
     }
 

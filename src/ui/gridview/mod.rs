@@ -3,6 +3,7 @@ use enum_dispatch::enum_dispatch;
 pub mod control;
 mod view2d;
 mod view3d;
+mod worker;
 
 use crate::automaton::*;
 use crate::ui::config::Config;
@@ -10,13 +11,14 @@ use crate::ui::history::History;
 pub use control::*;
 pub use view2d::{GridView2D, View2DRenderParams, View2DRenderResult, Viewport2D, Zoom2D};
 pub use view3d::GridView3D;
+use worker::*;
 
 /// Methods implemented by GridView by dispatching to the GridView2D or
 /// GridView3D within.
 ///
 /// TODO: Document these methods!
 #[enum_dispatch]
-pub trait GridViewTrait: NdSimulate + History {
+pub trait GridViewTrait: Sized + NdSimulate + History {
     fn do_frame(&mut self, config: &Config);
 
     fn enqueue<C: Into<Command>>(&self, command: C);
@@ -40,16 +42,19 @@ pub trait GridViewTrait: NdSimulate + History {
     fn do_sim_command(&mut self, command: SimCommand, config: &Config) {
         match command {
             SimCommand::Step(step_size) => {
-                self.record();
-                self.step(&step_size);
+                if self.is_running() {
+                    self.stop_running()
+                }
+                self.queue_worker_request(WorkerRequest::Step(step_size));
             }
             SimCommand::StepStepSize => {
-                self.record();
-                self.step(&config.sim.step_size);
+                if self.is_running() {
+                    self.stop_running()
+                }
+                self.queue_worker_request(WorkerRequest::Step(config.sim.step_size.clone()));
             }
             SimCommand::StartRunning => {
-                self.record();
-                self.start_running();
+                self.start_running(config);
             }
             SimCommand::StopRunning => {
                 self.stop_running();
@@ -58,27 +63,22 @@ pub trait GridViewTrait: NdSimulate + History {
                 if self.is_running() {
                     self.stop_running()
                 } else {
-                    self.record();
-                    self.start_running()
+                    self.start_running(config)
                 }
+            }
+            SimCommand::Cancel => {
+                self.stop_running();
             }
         }
     }
 
+    fn queue_worker_request(&mut self, request: WorkerRequest);
+    fn reset_worker(&mut self);
+
     fn is_running(&self) -> bool;
-    fn start_running(&mut self);
+    fn start_running(&mut self, config: &Config);
     fn stop_running(&mut self);
-    fn do_sim_frame(&mut self, config: &Config) {
-        if self.is_running() {
-            if config.sim.use_breakpoint
-                && self.get_generation_count() >= &config.sim.breakpoint_gen
-            {
-                self.stop_running();
-            } else {
-                self.step(&config.sim.step_size);
-            }
-        }
-    }
+    fn do_sim_frame(&mut self, config: &Config);
 
     fn get_automaton<'a>(&'a self) -> Automaton<'a>;
     fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;
@@ -145,10 +145,14 @@ impl History for GridView {
         self.history().has_redo()
     }
     fn undo(&mut self) -> bool {
-        self.history().undo()
+        let ret = self.history().undo();
+        self.reset_worker();
+        ret
     }
     fn redo(&mut self) -> bool {
-        self.history().redo()
+        let ret = self.history().redo();
+        self.reset_worker();
+        ret
     }
 }
 

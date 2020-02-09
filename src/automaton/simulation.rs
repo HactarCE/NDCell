@@ -2,7 +2,7 @@
 
 use num::{BigInt, One, Signed, Zero};
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::*;
 
@@ -11,23 +11,23 @@ use super::*;
 /// A HashLife simulation of a given automaton that caches simulation results.
 #[derive(Debug)]
 pub struct Simulation<C: CellType, D: Dim> {
-    rule: Rc<dyn Rule<C, D>>,
+    rule: Arc<dyn Rule<C, D>>,
     min_layer: usize,
     results: ResultsCache<C, D>,
 }
 impl<C: CellType, D: Dim> Default for Simulation<C, D> {
     fn default() -> Self {
-        Self::new(Rc::new(DummyRule))
+        Self::new(Arc::new(DummyRule))
     }
 }
 
 impl<C: CellType, D: Dim> Simulation<C, D> {
     /// Constructs a new Simulation using the given rule.
     pub fn from<R: 'static + Rule<C, D>>(rule: R) -> Self {
-        Self::new(Rc::new(rule))
+        Self::new(Arc::new(rule))
     }
     /// Constructs a new Simulation using the given rule.
-    pub fn new(rule: Rc<dyn Rule<C, D>>) -> Self {
+    pub fn new(rule: Arc<dyn Rule<C, D>>) -> Self {
         // Determine the minimum layer at which we can simulate one generation
         // of the automaton, using `n / 4 >= r`. (See the documentation for
         // Simulation::advance_inner_node() for an explanation.) Even at r=0 or
@@ -70,7 +70,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         tree.expand();
         // Now do the actual simulation.
         let new_node =
-            self.advance_inner_node(&mut tree.cache.borrow_mut(), &tree.slice.root, step_size);
+            self.advance_inner_node(&mut tree.cache.lock().unwrap(), &tree.slice.root, step_size);
         tree.set_root_centered(new_node);
         // Shrink the tree as much as possible to avoid wasted space.
         tree.shrink();

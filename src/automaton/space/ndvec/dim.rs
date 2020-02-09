@@ -77,30 +77,30 @@ pub trait DimFor<T: Default + Clone + Eq>:
     /// The pure Dim type associated with this DimFor (i.e. Self)
     type Dim: Dim;
     /// The array type used for vectors.
-    type Array: Debug + Default + Clone + Eq + Hash + AsRef<[T]> + AsMut<[T]>;
+    type Array: Debug + Default + Clone + Eq + Hash + Send + AsRef<[T]> + AsMut<[T]>;
 }
 
-impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim1D {
+impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim1D {
     type Dim = Dim1D;
     type Array = [T; 1];
 }
-impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim2D {
+impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim2D {
     type Dim = Dim2D;
     type Array = [T; 2];
 }
-impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim3D {
+impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim3D {
     type Dim = Dim3D;
     type Array = [T; 3];
 }
-impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim4D {
+impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim4D {
     type Dim = Dim4D;
     type Array = [T; 4];
 }
-impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim5D {
+impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim5D {
     type Dim = Dim5D;
     type Array = [T; 5];
 }
-impl<T: Debug + Default + Clone + Eq + Hash> DimFor<T> for Dim6D {
+impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim6D {
     type Dim = Dim6D;
     type Array = [T; 6];
 }

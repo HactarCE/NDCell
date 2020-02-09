@@ -1,6 +1,6 @@
 use seahash::SeaHasher;
 use std::hash::BuildHasherDefault;
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Weak};
 use weak_table::WeakHashSet;
 
 use crate::automaton::*;
@@ -12,7 +12,7 @@ use crate::automaton::*;
 pub type NodeHasher = BuildHasherDefault<SeaHasher>;
 
 /// A cached NdTreeNode.
-pub type NdCachedNode<C, D> = Rc<NdTreeNode<C, D>>;
+pub type NdCachedNode<C, D> = Arc<NdTreeNode<C, D>>;
 
 /// A cache of NdTreeNodes.
 #[derive(Debug, Clone, Default)]
@@ -42,7 +42,7 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
             return existing_node;
         }
         // Otherwise, make it a full node, add it to the cache, and return it.
-        let ret = Rc::new(NdTreeNode::from(base_node));
+        let ret = Arc::new(NdTreeNode::from(base_node));
         self.nodes.insert(ret.clone());
         ret
     }

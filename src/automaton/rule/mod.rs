@@ -9,7 +9,7 @@ mod totalistic;
 pub use totalistic::*;
 
 /// A cellular automaton rule.
-pub trait Rule<C: CellType, D: Dim>: fmt::Debug {
+pub trait Rule<C: CellType, D: Dim>: fmt::Debug + Send + Sync {
     /// Returns the maximum distance away that a cell may need to see in order
     /// to compute its next state.
     fn radius(&self) -> usize;

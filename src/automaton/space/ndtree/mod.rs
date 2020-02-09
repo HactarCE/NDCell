@@ -1,6 +1,5 @@
-use std::cell::RefCell;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 mod cache;
 mod indexed;
@@ -17,7 +16,7 @@ pub use slice::*;
 #[derive(Debug, Clone)]
 pub struct NdTree<C: CellType, D: Dim> {
     /// The cache for this tree's nodes.
-    pub cache: Rc<RefCell<NdTreeCache<C, D>>>,
+    pub cache: Arc<Mutex<NdTreeCache<C, D>>>,
     /// The slice describing the root node and offset.
     pub slice: NdTreeSlice<C, D>,
 }
@@ -70,7 +69,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         let root = cache.get_empty_node(1);
         let offset = NdVec::repeat(-1);
         Self {
-            cache: Rc::new(RefCell::new(cache)),
+            cache: Arc::new(Mutex::new(cache)),
             slice: NdTreeSlice { root, offset },
         }
     }
@@ -97,7 +96,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// corner. The final result is that the entire tree contains the same
     /// contents as before, but with 25% padding on each edge.
     pub fn expand(&mut self) {
-        let mut cache = self.cache.borrow_mut();
+        let mut cache = self.cache.lock().unwrap();
         let empty_sub_branch = cache.get_empty_branch(self.slice.root.layer - 1);
         let old_root = self.slice.root.clone();
         self.slice.root = cache.get_node_from_fn(move |cache, branch_idx| {
@@ -134,7 +133,9 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         if self.get_root().layer == 1 {
             return 0;
         }
-        let new_node = self.get_root().get_inner_node(&mut self.cache.borrow_mut());
+        let new_node = self
+            .get_root()
+            .get_inner_node(&mut self.cache.lock().unwrap());
         // Make sure the populations are the same (i.e. we haven't lost any
         // cells); otherwise don't do anything.
         if new_node.population == self.get_root().population {
@@ -157,7 +158,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     pub fn set_cell(&mut self, pos: &BigVec<D>, cell_state: C) {
         self.expand_to(&pos);
         self.slice.root = self.slice.root.set_cell(
-            &mut self.cache.borrow_mut(),
+            &mut self.cache.lock().unwrap(),
             &(pos - &self.slice.offset),
             cell_state,
         );
@@ -177,7 +178,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
         let mut slice = self.slice.clone();
         let mut smaller_slice = self.slice.clone();
         self.shrink();
-        let mut cache = self.cache.borrow_mut();
+        let mut cache = self.cache.lock().unwrap();
         // "Zoom in" on either a corner, an edge/face, or the center until it
         // can't shrink any more. Each iteration of the loop "zooms in" by a
         // factor of 2. If we've zoomed in too far, break out of the loop and

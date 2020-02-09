@@ -41,7 +41,7 @@ impl<C: CellType, D: Dim, P: Dim> NdProjector<C, D, P> for NdProjection<C, D, P>
 
 /// A method for extracting or constructing a P-dimensional slice from a
 /// D-dimensional automaton.
-pub trait NdProjector<C: CellType, D: Dim, P: Dim> {
+pub trait NdProjector<C: CellType, D: Dim, P: Dim>: Send {
     /// Projects a D-dimensional NdTree into a P-dimensional NdTree.
     fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P>;
     /// Unprojects a P-dimensional point back into D-dimensional space.

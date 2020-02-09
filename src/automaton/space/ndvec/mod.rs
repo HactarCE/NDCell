@@ -32,7 +32,7 @@ pub use dim::*;
 
 /// A "trait alias" for types that can be used as coordinates in an NdVec.
 pub trait NdVecNum:
-    Debug + Default + Clone + Eq + Hash + Ord + Num + AddAssign + MulAssign
+    Debug + Default + Clone + Eq + Hash + Ord + Send + Num + AddAssign + MulAssign
 {
     /// The minimum size for an NdRect using this number type as coordinates.
     /// For integers, this is 1; for floats, this is 0.

@@ -1,4 +1,4 @@
-use glium::glutin::dpi::LogicalPosition;
+use glium::glutin::dpi::PhysicalPosition;
 use glium::glutin::*;
 use noisy_float::prelude::r64;
 use std::collections::HashSet;
@@ -116,12 +116,9 @@ impl<'a> FrameInProgress<'a> {
                     WindowEvent::CursorLeft { .. } => {
                         self.cursor_pos = None;
                     }
-                    WindowEvent::CursorMoved {
-                        position: LogicalPosition { x, y },
-                        ..
-                    } if self.has_mouse => {
-                        let dpi = self.config.gfx.dpi;
-                        let new_pos = NdVec([(*x * dpi) as isize, (*y * dpi) as isize]);
+                    WindowEvent::CursorMoved { position, .. } if self.has_mouse => {
+                        let PhysicalPosition { x, y } = position.to_physical(self.config.gfx.dpi);
+                        let new_pos = NdVec([x.round() as isize, y.round() as isize]);
 
                         if let (true, Some(old_pos)) = (self.rmb_held, self.cursor_pos) {
                             let mut delta = new_pos - old_pos;
@@ -143,7 +140,11 @@ impl<'a> FrameInProgress<'a> {
                     WindowEvent::MouseWheel { delta, .. } if self.has_mouse => {
                         let (_dx, dy) = match delta {
                             MouseScrollDelta::LineDelta(x, y) => (*x as f64, *y as f64),
-                            MouseScrollDelta::PixelDelta(LogicalPosition { x, y }) => (*x, *y),
+                            MouseScrollDelta::PixelDelta(logical_position) => {
+                                let PhysicalPosition { x, y } =
+                                    logical_position.to_physical(self.config.gfx.dpi);
+                                (x, y)
+                            }
                         };
                         match self.gridview {
                             GridView::View2D(view2d) => {

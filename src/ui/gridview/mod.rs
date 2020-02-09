@@ -78,7 +78,6 @@ pub trait GridViewTrait: Sized + NdSimulate + History {
     fn is_running(&self) -> bool;
     fn start_running(&mut self, config: &Config);
     fn stop_running(&mut self);
-    fn do_sim_frame(&mut self, config: &Config);
 
     fn get_automaton<'a>(&'a self) -> Automaton<'a>;
     fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;

@@ -2,6 +2,7 @@ use log::debug;
 use num::BigInt;
 use std::sync::mpsc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::automaton::NdSimulate;
 
@@ -13,6 +14,7 @@ pub enum WorkerRequest {
 pub struct WorkerResult<T> {
     pub result: T,
     pub record: bool,
+    pub time: Duration,
 }
 
 /// A manager for worker threads that compute simulation results concurrently.
@@ -45,11 +47,14 @@ impl<T: 'static + NdSimulate + Clone + Send> Worker<T> {
                 }
                 let mut record = true;
                 loop {
+                    let t1 = Instant::now();
                     simulation.step(&step_size);
+                    let t2 = Instant::now();
                     if results_tx
                         .send(WorkerResult {
                             result: simulation.clone(),
                             record,
+                            time: t2 - t1,
                         })
                         .is_err()
                     {

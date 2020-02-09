@@ -52,9 +52,6 @@ impl GridViewTrait for GridView3D {
     fn stop_running(&mut self) {
         unimplemented!()
     }
-    fn do_sim_frame(&mut self, _config: &Config) {
-        unimplemented!()
-    }
 
     fn get_automaton<'a>(&'a self) -> Automaton<'a> {
         unimplemented!()

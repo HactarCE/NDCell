@@ -1,6 +1,7 @@
 use log::{debug, warn};
 use std::collections::VecDeque;
 use std::sync::Mutex;
+use std::time::Duration;
 
 mod render;
 mod viewport;
@@ -37,16 +38,18 @@ pub struct GridView2D {
     /// List of redo states.
     redo_stack: Vec<HistoryEntry>,
     /// Whether the simulation is currently running.
-    is_running: bool,
+    pub is_running: bool,
     /// Whether the user is current drawing.
-    is_drawing: bool,
+    pub is_drawing: bool,
     /// Whether a one-off simulation request is currently happening
     /// concurrently.
-    is_waiting: bool,
+    pub is_waiting: bool,
     /// Communication channel with the simulation worker thread.
     worker: Option<Worker<ProjectedAutomaton2D>>,
     /// The last several render results, with the most recent at the front.
     render_results: VecDeque<View2DRenderResult>,
+    /// The last simulation time.
+    pub last_sim_time: Duration,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
     /// Queue of pending commands to be executed on the next frame.
@@ -55,6 +58,7 @@ pub struct GridView2D {
 
 impl GridViewTrait for GridView2D {
     fn do_frame(&mut self, config: &Config) {
+        // Handle commands.
         let old_command_queue = std::mem::replace(&mut *self.command_queue.lock().unwrap(), vec![]);
         for command in old_command_queue.into_iter() {
             let was_running = self.is_running;
@@ -166,6 +170,8 @@ impl GridViewTrait for GridView2D {
                 }
             }
         }
+
+        // Update viewport.
         const DECAY_CONSTANT: f64 = 4.0;
         if self.interpolating_viewport != self.viewport {
             self.interpolating_viewport = Viewport2D::interpolate(
@@ -174,7 +180,27 @@ impl GridViewTrait for GridView2D {
                 1.0 / DECAY_CONSTANT,
             );
         }
-        self.do_sim_frame(config);
+
+        // Update automaton.
+        if self.is_running
+            && config.sim.use_breakpoint
+            && self.get_generation_count() >= &config.sim.breakpoint_gen
+        {
+            self.stop_running();
+        } else {
+            if let Some(WorkerResult {
+                result,
+                record,
+                time,
+            }) = self.worker.as_mut().and_then(|w| w.take())
+            {
+                if record {
+                    self.record();
+                }
+                self.automaton = result;
+                self.last_sim_time = time;
+            }
+        }
     }
 
     fn enqueue<C: Into<Command>>(&self, command: C) {
@@ -204,23 +230,6 @@ impl GridViewTrait for GridView2D {
         self.is_running = false;
         self.is_waiting = false;
         self.reset_worker();
-    }
-    fn do_sim_frame(&mut self, config: &Config) {
-        if self.is_running
-            && config.sim.use_breakpoint
-            && self.get_generation_count() >= &config.sim.breakpoint_gen
-        {
-            self.stop_running();
-        } else {
-            if let Some(WorkerResult { result, record }) =
-                self.worker.as_mut().and_then(|w| w.take())
-            {
-                if record {
-                    self.record();
-                }
-                self.automaton = result;
-            }
-        }
     }
 
     fn get_automaton<'a>(&'a self) -> Automaton<'a> {

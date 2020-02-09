@@ -15,10 +15,19 @@ impl MainWindow {
     /// Builds the main window.
     pub fn build(&mut self, ui: &imgui::Ui, config: &mut Config, gridview: &GridView) {
         Window::new(&ImString::new(crate::ui::TITLE)).build(&ui, || {
-            ui.text("Hello, world!");
+            ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
+            ui.text("");
             ui.text(format!("Framerate = {} FPS", ui.io().framerate as usize));
+            if let GridView::View2D(view2d) = gridview {
+                ui.text(format!(
+                    "Max sim speed = {} UPS",
+                    (1.0 / view2d.last_sim_time.as_secs_f64()) as usize
+                ));
+            }
+            ui.text("");
             ui.text(format!("Generations = {}", gridview.get_generation_count()));
             ui.text(format!("Population = {}", gridview.get_population()));
+            ui.text("");
             match &gridview {
                 GridView::View2D(view2d) => {
                     let Viewport2D { pos, offset, zoom } = &view2d.viewport;

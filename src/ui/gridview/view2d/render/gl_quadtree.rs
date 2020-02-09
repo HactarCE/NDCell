@@ -5,6 +5,7 @@ use crate::ui::DISPLAY;
 use glium::texture::unsigned_texture2d::UnsignedTexture2d;
 use glium::texture::{ClientFormat, RawImage2d};
 use std::borrow::Cow;
+use std::sync::Once;
 
 use super::*;
 
@@ -12,17 +13,7 @@ use super::*;
 // https://opengl.gpuinfo.org/displaycapability.php?name=GL_MAX_TEXTURE_SIZE
 const WARN_TEXTURE_SIZE_THRESHOLD: usize = 1024;
 
-lazy_static! {
-    // lazy_static ensures that this is only evaluated once. This is a bit of a
-    // hack; a better solution would be to use once_cell, but I don't want to
-    // pull in another dependency that effectively does the same thing but more
-    // verbosely.
-    static ref WARN_TEXTURE_SIZE: () = warn!(
-        "Texture encoding quadtree has exceeded {}x{}; this may cause rendering problems in older GPUs",
-        WARN_TEXTURE_SIZE_THRESHOLD,
-        WARN_TEXTURE_SIZE_THRESHOLD
-    );
-}
+static WARN_TEXTURE_SIZE: Once = Once::new();
 
 #[derive(Default)]
 pub struct CachedGlQuadtree<C: CellType> {
@@ -94,7 +85,11 @@ impl GlQuadtree {
         // might exceed the maximum texture size, but that's less likely.
         let width = ((pixel_vec.len() / 4) as f64).sqrt().ceil() as usize;
         if width > WARN_TEXTURE_SIZE_THRESHOLD {
-            *WARN_TEXTURE_SIZE;
+            WARN_TEXTURE_SIZE.call_once(|| warn!(
+                "Texture encoding quadtree has exceeded {}x{}; this may cause rendering problems in older GPUs",
+                WARN_TEXTURE_SIZE_THRESHOLD,
+                WARN_TEXTURE_SIZE_THRESHOLD
+            ));
         }
         assert!(width * width * 4 >= pixel_vec.len());
         pixel_vec.resize(width * width * 4, 0);

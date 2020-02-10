@@ -318,42 +318,10 @@ impl<'a> RenderInProgress<'a> {
         [r as u8, g as u8, b as u8, 255]
     }
 
-    pub fn with_gridlines_fbo<F: FnOnce(&mut Self, &mut glium::framebuffer::SimpleFrameBuffer)>(
-        &mut self,
-        alpha: f32,
-        f: F,
-    ) {
-        let textures: &mut textures::TextureCache = &mut textures::CACHE.borrow_mut();
-        let (target_w, target_h) = self.target.get_dimensions();
-        let (gridlines_texture, mut gridlines_fbo) = textures.gridlines.at_size(target_w, target_h);
-        gridlines_fbo.clear_color_srgb(0.0, 0.0, 0.0, 0.0);
-        f(self, &mut gridlines_fbo);
-        self.target
-            .draw(
-                &*vbos::blit_quad_with_src_coords(FRect2D::single_cell(NdVec::origin())),
-                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::BLIT,
-                &uniform! {
-                    src_texture: gridlines_texture.sampled(),
-                    alpha: alpha,
-                },
-                &glium::DrawParameters {
-                    blend: glium::Blend {
-                        color: glium::BlendingFunction::Addition {
-                            source: glium::LinearBlendingFactor::SourceAlpha,
-                            destination: glium::LinearBlendingFactor::OneMinusSourceAlpha,
-                        },
-                        alpha: glium::BlendingFunction::Max,
-                        constant_value: (0.0, 0.0, 0.0, 0.0),
-                    },
-                    ..Default::default()
-                },
-            )
-            .expect("Failed to draw cells");
-    }
-
     /// Draw the gridlines that appear in the viewport.
-    pub fn draw_gridlines(&mut self, gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer) {
+    pub fn draw_gridlines(&mut self, alpha: f32) {
+        let mut grid_color = GRID_COLOR;
+        grid_color[3] *= alpha;
         // Generate a pair of vertices for each gridline.
         let gridline_indices = glium::index::NoIndices(PrimitiveType::LinesList);
         let mut gridline_vertices: Vec<RgbaVertex>;
@@ -370,13 +338,13 @@ impl<'a> RenderInProgress<'a> {
             let max_y = max[Y];
             // Generate vertical gridlines.
             for x in self.visible_rect.axis_range(X) {
-                gridline_vertices.push(([x, min_y], GRID_COLOR).into());
-                gridline_vertices.push(([x, max_y], GRID_COLOR).into());
+                gridline_vertices.push(([x, min_y], grid_color).into());
+                gridline_vertices.push(([x, max_y], grid_color).into());
             }
             // Generate horizontal gridlines.
             for y in self.visible_rect.axis_range(Y) {
-                gridline_vertices.push(([min_x, y], GRID_COLOR).into());
-                gridline_vertices.push(([max_x, y], GRID_COLOR).into());
+                gridline_vertices.push(([min_x, y], grid_color).into());
+                gridline_vertices.push(([max_x, y], grid_color).into());
             }
         }
 
@@ -388,7 +356,7 @@ impl<'a> RenderInProgress<'a> {
             let vbo_slice = gridlines_vbo.slice(0..batch.len()).unwrap();
             vbo_slice.write(batch);
             // Draw gridlines.
-            gridlines_fbo
+            self.target
                 .draw(
                     vbo_slice,
                     &gridline_indices,
@@ -406,17 +374,12 @@ impl<'a> RenderInProgress<'a> {
         }
     }
 
-    /// Draws a highlight around the hovered cell and then returns its global
-    /// coordinates.
-    pub fn draw_hover_highlight(
-        &mut self,
-        gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer,
-        cursor_position: Option<IVec2D>,
-    ) -> Option<BigVec2D> {
+    /// Returns the coordinates of the cell at the given pixel, or None if the
+    /// viewport is zoomed out beyond 1:1.
+    pub fn pixel_pos_to_cell_pos(&self, cursor_position: IVec2D) -> Option<BigVec2D> {
         if self.viewport.zoom.power() < 0.0 {
             return None;
         }
-        let cursor_position = cursor_position?;
         let mut x = cursor_position[X];
         let mut y = cursor_position[Y];
         // Center the coordinates.
@@ -435,18 +398,14 @@ impl<'a> RenderInProgress<'a> {
         x += self.pos[X].raw();
         y += self.pos[Y].raw();
         // Floor to integer.
-        let hover_pos = NdVec([x.floor() as isize, y.floor() as isize]);
+        let local_pos = NdVec([x.floor() as isize, y.floor() as isize]);
         // Convert to global cell space.
-        let global_hover_pos = hover_pos.convert() + &self.quadtree_slice.offset;
-        // Actually draw the highlight.
-        self.internal_draw_hover_highlight(gridlines_fbo, hover_pos);
-        Some(global_hover_pos)
+        let global_pos = local_pos.convert() + &self.quadtree_slice.offset;
+        Some(global_pos)
     }
-    fn internal_draw_hover_highlight(
-        &mut self,
-        gridlines_fbo: &mut glium::framebuffer::SimpleFrameBuffer,
-        hover_pos: IVec2D,
-    ) {
+
+    /// Draws a highlight around the given cell.
+    pub fn draw_blue_crosshairs_highlight(&mut self, cell_position: &BigVec2D) {
         let min = self.visible_rect.min();
         let max = self.visible_rect.max() + 1;
         let min_x = min[X] as f32;
@@ -460,24 +419,29 @@ impl<'a> RenderInProgress<'a> {
         dark_highlight_color[1] *= 0.5;
         dark_highlight_color[2] *= 0.5;
         dark_highlight_color[3] *= 0.75;
-        let hover_x = hover_pos[X] as f32;
-        let hover_y = hover_pos[Y] as f32;
+        let local_pos: IVec2D = (cell_position - &self.quadtree_slice.offset).as_ivec();
+        let mut cell_x = local_pos[X] as f32;
+        let mut cell_y = local_pos[Y] as f32;
+        if self.viewport.zoom.power() < 1.0 {
+            cell_x += 0.5;
+            cell_y += 0.5;
+        }
         // Draw transparent fill.
         {
             // Generate vertices.
             let highlight_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
             let highlight_vertices: Vec<RgbaVertex> = vec![
-                ([hover_x, hover_y], dark_highlight_color).into(),
-                ([hover_x + 1.0, hover_y], dark_highlight_color).into(),
-                ([hover_x, hover_y + 1.0], dark_highlight_color).into(),
-                ([hover_x + 1.0, hover_y + 1.0], dark_highlight_color).into(),
+                ([cell_x, cell_y], dark_highlight_color).into(),
+                ([cell_x + 1.0, cell_y], dark_highlight_color).into(),
+                ([cell_x, cell_y + 1.0], dark_highlight_color).into(),
+                ([cell_x + 1.0, cell_y + 1.0], dark_highlight_color).into(),
             ];
             // Put the data in a slice of the VBO.
             let gridlines_vbo = vbos::gridlines();
             let vbo_slice = gridlines_vbo.slice(0..highlight_vertices.len()).unwrap();
             vbo_slice.write(&highlight_vertices);
             // Draw.
-            gridlines_fbo
+            self.target
                 .draw(
                     vbo_slice,
                     &highlight_indices,
@@ -498,28 +462,40 @@ impl<'a> RenderInProgress<'a> {
             // Generate vertices.
             let highlight_indices = glium::index::NoIndices(PrimitiveType::LinesList);
             let mut highlight_vertices: Vec<RgbaVertex> = vec![];
-            for &y in [hover_y, hover_y + 1.0].iter() {
+            for &y in if self.viewport.zoom.power() >= 1.0 {
+                vec![cell_y, cell_y + 1.0]
+            } else {
+                vec![cell_y]
+            }
+            .iter()
+            {
                 highlight_vertices.push(([min_x, y], half_highlight_color).into());
-                highlight_vertices.push(([hover_x - 1.0, y], half_highlight_color).into());
-                highlight_vertices.push(([hover_x - 1.0, y], half_highlight_color).into());
-                highlight_vertices.push(([hover_x, y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([hover_x, y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([hover_x + 1.0, y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([hover_x + 1.0, y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([hover_x + 2.0, y], half_highlight_color).into());
-                highlight_vertices.push(([hover_x + 2.0, y], half_highlight_color).into());
+                highlight_vertices.push(([cell_x - 1.0, y], half_highlight_color).into());
+                highlight_vertices.push(([cell_x - 1.0, y], half_highlight_color).into());
+                highlight_vertices.push(([cell_x, y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([cell_x, y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([cell_x + 1.0, y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([cell_x + 1.0, y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([cell_x + 2.0, y], half_highlight_color).into());
+                highlight_vertices.push(([cell_x + 2.0, y], half_highlight_color).into());
                 highlight_vertices.push(([max_x, y], half_highlight_color).into());
             }
-            for &x in [hover_x, hover_x + 1.0].iter() {
+            for &x in if self.viewport.zoom.power() >= 1.0 {
+                vec![cell_x, cell_x + 1.0]
+            } else {
+                vec![cell_x]
+            }
+            .iter()
+            {
                 highlight_vertices.push(([x, min_y], half_highlight_color).into());
-                highlight_vertices.push(([x, hover_y - 1.0], half_highlight_color).into());
-                highlight_vertices.push(([x, hover_y - 1.0], half_highlight_color).into());
-                highlight_vertices.push(([x, hover_y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([x, hover_y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([x, hover_y + 1.0], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([x, hover_y + 1.0], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([x, hover_y + 2.0], half_highlight_color).into());
-                highlight_vertices.push(([x, hover_y + 2.0], half_highlight_color).into());
+                highlight_vertices.push(([x, cell_y - 1.0], half_highlight_color).into());
+                highlight_vertices.push(([x, cell_y - 1.0], half_highlight_color).into());
+                highlight_vertices.push(([x, cell_y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([x, cell_y], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([x, cell_y + 1.0], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([x, cell_y + 1.0], GRID_HIGHLIGHT_COLOR).into());
+                highlight_vertices.push(([x, cell_y + 2.0], half_highlight_color).into());
+                highlight_vertices.push(([x, cell_y + 2.0], half_highlight_color).into());
                 highlight_vertices.push(([x, max_y], half_highlight_color).into());
             }
 
@@ -528,7 +504,7 @@ impl<'a> RenderInProgress<'a> {
             let vbo_slice = gridlines_vbo.slice(0..highlight_vertices.len()).unwrap();
             vbo_slice.write(&highlight_vertices);
             // Draw.
-            gridlines_fbo
+            self.target
                 .draw(
                     vbo_slice,
                     &highlight_indices,

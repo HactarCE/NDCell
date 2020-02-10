@@ -296,10 +296,13 @@ impl RenderGridView for GridView2D {
                 alpha = (zoom_power - MIN_GRIDLINE_ZOOM_POWER) / GRIDLINE_FADE_RANGE;
             }
             assert!(0.0 <= alpha && alpha <= 1.0);
-            rip.with_gridlines_fbo(alpha as f32, |rip, gridlines_fbo| {
-                rip.draw_gridlines(gridlines_fbo);
-                hover_pos = rip.draw_hover_highlight(gridlines_fbo, params.cursor_pos);
-            });
+            rip.draw_gridlines(alpha as f32);
+        }
+        if let Some(cursor_pos) = params.cursor_pos {
+            hover_pos = rip.pixel_pos_to_cell_pos(cursor_pos);
+            if let Some(pos) = &hover_pos {
+                rip.draw_blue_crosshairs_highlight(pos);
+            }
         }
         self.render_cache = Some(render_cache);
         if self.render_results.len() >= RENDER_RESULTS_COUNT {

@@ -10,7 +10,9 @@ use super::*;
 /// uses any number type instead of usize (which is crucial for this
 /// application). Similar to ndarray's Dimension trait, this trait should not
 /// and cannot be implemented outside of this crate.
-pub trait Dim: DimFor<BigInt> + DimFor<R64> + DimFor<isize> + DimFor<usize> + DimFor<u8> {
+pub trait Dim:
+    DimFor<BigInt> + DimFor<R64> + DimFor<isize> + DimFor<usize> + DimFor<u8> + Send
+{
     /// The number of dimensions (number of axes).
     const NDIM: usize;
 
@@ -72,7 +74,7 @@ impl Dim for Dim6D {
 /// Once generic associated types come along, this can be merged into Dim to
 /// simplify things.
 pub trait DimFor<T: Default + Clone + Eq>:
-    Debug + Default + Copy + Eq + Hash + private::Sealed
+    Debug + Default + Copy + Eq + Hash + Sync + private::Sealed
 {
     /// The pure Dim type associated with this DimFor (i.e. Self)
     type Dim: Dim;

@@ -146,6 +146,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
             // number of generations to simulate. Colors refer to Figure 4 in
             // this article: https://www.drdobbs.com/jvm/_/184406478.
             ret = cache.get_node_from_fn(|final_branch_idx| {
+                // TODO: parallelize using rayon or something similar
                 let node_halfway = cache.get_node_from_fn(|inner_branch_idx| {
                     let node_intial = cache.get_node_from_fn(|outer_branch_idx| {
                         // 1. Grab sub-branches at layer `L-2` of the original

@@ -4,6 +4,7 @@
 use crate::automaton::space::*;
 use core::fmt;
 
+mod lang;
 mod totalistic;
 
 pub use totalistic::*;

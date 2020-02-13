@@ -1,5 +1,10 @@
+mod compiler;
+mod runtime;
+mod textpoint;
+
 use super::Rule;
 use crate::automaton::space::*;
+use textpoint::*;
 
 #[derive(Debug)]
 pub struct NdcaRule<D: Dim> {

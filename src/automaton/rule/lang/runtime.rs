@@ -1,7 +1,5 @@
-mod instructions;
-
 use super::*;
-pub use instructions::{Instruction, Type};
+use instructions::Instruction;
 
 #[derive(Debug, Default, Clone)]
 pub struct TypeData<T: Copy> {
@@ -40,10 +38,10 @@ impl Runtime {
     fn step(&mut self) -> Result<(), ()> {
         match self.instructions.get(self.instruction_pointer).ok_or(())? {
             Instruction::VarAssign(ty, id) => match ty {
-                Type::Int => self.ints.assign_var(*id)?,
+                vars::Type::Int => self.ints.assign_var(*id)?,
             },
             Instruction::VarFetch(ty, id) => match ty {
-                Type::Int => self.ints.fetch_var(*id)?,
+                vars::Type::Int => self.ints.fetch_var(*id)?,
             },
             Instruction::PushInt(value) => self.ints.push(*value)?,
             Instruction::AddInt => {

@@ -1,10 +1,14 @@
 mod compiler;
+mod instructions;
 mod runtime;
-mod textpoint;
+mod span;
+mod vars;
 
 use super::Rule;
 use crate::automaton::space::*;
-use textpoint::*;
+use instructions::Instruction;
+use span::*;
+use vars::VarMapping;
 
 #[derive(Debug)]
 pub struct NdcaRule<D: Dim> {

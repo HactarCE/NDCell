@@ -1,4 +1,5 @@
 mod compiler;
+mod errors;
 mod instructions;
 mod runtime;
 mod span;
@@ -6,9 +7,10 @@ mod vars;
 
 use super::Rule;
 use crate::automaton::space::*;
-use instructions::Instruction;
+use errors::*;
+use instructions::{Instruction, Instructions};
 use span::*;
-use vars::VarMapping;
+use vars::*;
 
 #[derive(Debug)]
 pub struct NdcaRule<D: Dim> {

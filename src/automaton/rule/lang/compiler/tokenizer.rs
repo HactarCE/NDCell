@@ -3,7 +3,7 @@ use regex::Regex;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
-use super::{CompileResult, Span};
+use super::{lang_err, LangResult, Span};
 
 /// A list of token patterns, arranged roughly from least to most general.
 const TOKEN_PATTERNS: &'static [&'static str] = &[
@@ -59,7 +59,7 @@ lazy_static! {
 
 /// Splits a string into tokens and returns them as a Vec, with all comments
 /// removed.
-pub fn tokenize<'a>(s: &'a str) -> CompileResult<Vec<Token<'a>>> {
+pub fn tokenize<'a>(s: &'a str) -> LangResult<Vec<Token<'a>>> {
     let flat_tokens = TOKEN_PATTERN.find_iter(s).map(|m| {
         let span = Span {
             start: m.start(),
@@ -72,7 +72,7 @@ pub fn tokenize<'a>(s: &'a str) -> CompileResult<Vec<Token<'a>>> {
                 string,
                 class,
             }),
-            Err(msg) => Err((span, msg)),
+            Err(msg) => lang_err(span, msg),
         }
     });
     flat_tokens

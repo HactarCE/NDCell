@@ -124,17 +124,14 @@ impl<'a> TokenFeeder<'a> {
         }
     }
     /// Returns a tuple with the span of the most recently returned token that
-    /// can be used to make a CompileResult::Err.
-    fn error(&self, msg: &'static str) -> (Span, &'static str) {
-        (self.get_span(), msg)
+    /// can be used to make a LangResult::Err.
+    fn error(&self, msg: &'static str) -> LangError {
+        lang_error(self.get_span(), msg)
     }
-    fn err<T>(&self, msg: &'static str) -> CompileResult<T> {
-        Err(self.error(msg))
+    fn err<T>(&self, msg: &'static str) -> LangResult<T> {
+        lang_err(self.get_span(), msg)
     }
-    fn expect<T, F: Fn(&mut Self) -> CompileResult<T>>(
-        &mut self,
-        f: F,
-    ) -> CompileResult<Spanned<T>> {
+    fn expect<T, F: Fn(&mut Self) -> LangResult<T>>(&mut self, f: F) -> LangResult<Spanned<T>> {
         let start = self.get_span().start;
         let ret = f(self);
         let end = self.get_span().end;
@@ -143,7 +140,7 @@ impl<'a> TokenFeeder<'a> {
             inner: t,
         })
     }
-    fn accept<T, F: Fn(&mut Self) -> CompileResult<T>>(&mut self, f: F) -> Option<Spanned<T>> {
+    fn accept<T, F: Fn(&mut Self) -> LangResult<T>>(&mut self, f: F) -> Option<Spanned<T>> {
         let prior_state = *self;
         match self.expect(f) {
             Ok(ret) => Some(ret),
@@ -155,9 +152,9 @@ impl<'a> TokenFeeder<'a> {
     }
     fn accept_any<T>(
         &mut self,
-        fs: &[fn(&mut Self) -> CompileResult<T>],
+        fs: &[fn(&mut Self) -> LangResult<T>],
         error_msg: &'static str,
-    ) -> CompileResult<Spanned<T>> {
+    ) -> LangResult<Spanned<T>> {
         for f in fs {
             if let Some(ret) = self.accept(f) {
                 return Ok(ret);
@@ -166,7 +163,7 @@ impl<'a> TokenFeeder<'a> {
         self.next();
         self.err(error_msg)
     }
-    fn unimplemented<T>(self) -> CompileResult<T> {
+    fn unimplemented<T>(self) -> LangResult<T> {
         self.err("Unimplemented")
     }
     fn token_is_one_of(token: Option<Token<'a>>, token_classes: &[TokenClass]) -> bool {
@@ -176,14 +173,14 @@ impl<'a> TokenFeeder<'a> {
             false
         }
     }
-    fn program(&mut self) -> CompileResult<Vec<Spanned<Directive>>> {
+    pub fn program(&mut self) -> LangResult<Vec<Spanned<Directive>>> {
         let mut directives = vec![];
         while self.peek_next().is_some() {
             directives.push(self.expect(Self::directive)?);
         }
         Ok(directives)
     }
-    fn directive(&mut self) -> CompileResult<Directive> {
+    fn directive(&mut self) -> LangResult<Directive> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Directive(directive_name)) => {
                 match directive_name.to_ascii_lowercase().as_ref() {
@@ -198,7 +195,7 @@ impl<'a> TokenFeeder<'a> {
             None => self.err("Expected directive"),
         }
     }
-    fn block(&mut self) -> CompileResult<Vec<Spanned<Statement>>> {
+    fn block(&mut self) -> LangResult<Vec<Spanned<Statement>>> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LBrace)) => (),
             _ => self.err("Expected code block beginning with '{'")?,
@@ -215,12 +212,12 @@ impl<'a> TokenFeeder<'a> {
                     break;
                 }
                 Some(_) => self.err("Expected statement or '}'")?,
-                None => Err((open_span, "This '{' has no matching '}'"))?,
+                None => lang_err(open_span, "This '{' has no matching '}'")?,
             }
         }
         Ok(statements)
     }
-    fn statement(&mut self) -> CompileResult<Statement> {
+    fn statement(&mut self) -> LangResult<Statement> {
         use StatementKeywordToken::*;
         match self.next().map(|t| t.class) {
             Some(TokenClass::StatementKeyword(kw)) => match kw {
@@ -240,14 +237,11 @@ impl<'a> TokenFeeder<'a> {
             _ => self.err("Expected statement"),
         }
     }
-    fn expression(&mut self) -> CompileResult<Expr> {
+    fn expression(&mut self) -> LangResult<Expr> {
         self.expression_at_precedence(OpPrecedence::lowest())
             .map(|spanned| spanned.inner)
     }
-    fn expression_at_precedence(
-        &mut self,
-        precedence: OpPrecedence,
-    ) -> CompileResult<Spanned<Expr>> {
+    fn expression_at_precedence(&mut self, precedence: OpPrecedence) -> LangResult<Spanned<Expr>> {
         match precedence {
             OpPrecedence::UnaryPrefix => self.unary_op(
                 &[
@@ -282,7 +276,7 @@ impl<'a> TokenFeeder<'a> {
         &mut self,
         token_classes: &[TokenClass],
         precedence: OpPrecedence,
-    ) -> CompileResult<Spanned<Expr>> {
+    ) -> LangResult<Spanned<Expr>> {
         let mut op_tokens = vec![];
         while Self::token_is_one_of(self.peek_next(), token_classes) {
             op_tokens.push(self.next().unwrap());
@@ -311,7 +305,7 @@ impl<'a> TokenFeeder<'a> {
         &mut self,
         token_classes: &[TokenClass],
         precedence: OpPrecedence,
-    ) -> CompileResult<Spanned<Expr>> {
+    ) -> LangResult<Spanned<Expr>> {
         let initial = self.expression_at_precedence(precedence.next())?;
         let mut op_tokens_and_exprs = vec![];
         while Self::token_is_one_of(self.peek_next(), token_classes) {
@@ -341,19 +335,19 @@ impl<'a> TokenFeeder<'a> {
         }
         Ok(ret)
     }
-    fn int(&mut self) -> CompileResult<Expr> {
+    fn int(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Integer(i)) => Ok(Expr::Int(i)),
             _ => self.err("Expected integer"),
         }
     }
-    fn var(&mut self) -> CompileResult<Expr> {
+    fn var(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Ident(s)) => Ok(Expr::Var(s.to_owned())),
             _ => self.err("Expected string"),
         }
     }
-    fn paren(&mut self) -> CompileResult<Expr> {
+    fn paren(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LParen)) => (),
             _ => self.err("Expected parenthetical expression beginning with '('")?,
@@ -362,14 +356,10 @@ impl<'a> TokenFeeder<'a> {
         let expr = self.expect(Self::expression)?.inner;
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::RParen)) => Ok(expr),
-            Some(_) => self.err("Expected ')'")?,
-            None => Err((open_span, "This '(' has no matching ')'"))?,
+            Some(_) => self.err("Expected ')'"),
+            None => lang_err(open_span, "This '(' has no matching ')'"),
         }
     }
-}
-
-pub struct Program {
-    transition_function: Block,
 }
 
 pub type Block = Vec<Spanned<Statement>>;
@@ -393,7 +383,6 @@ pub enum Statement {
     // Continue,
     // Remain,
     Become(Spanned<Expr>),
-    Directive(Directive),
     // Return(Spanned<Expr>),
 }
 
@@ -428,7 +417,7 @@ mod tests {
         let tokens = tokenizer::tokenize(source_code).expect("Tokenization failed");
         let ast = TokenFeeder::from(&tokens[..])
             .program()
-            .expect("Compilation failed");
+            .expect("AST generation failed");
         let mut correct = false;
         if let Directive::Transition(ast) = &ast[0].inner {
             if let Statement::Become(ast) = &ast[0].inner {

@@ -58,6 +58,24 @@ impl Span {
             TextPoint::from_idx(string, self.end),
         )
     }
+    pub fn merge<T: Into<Span>, U: Into<Span>>(span1: T, span2: U) -> Self {
+        let span1: Span = span1.into();
+        let span2: Span = span2.into();
+        Self {
+            start: std::cmp::min(span1.start, span2.start),
+            end: std::cmp::max(span1.end, span2.end),
+        }
+    }
+}
+impl<T> From<Spanned<T>> for Span {
+    fn from(spanned: Spanned<T>) -> Span {
+        spanned.span
+    }
+}
+impl<T> From<&Spanned<T>> for Span {
+    fn from(spanned: &Spanned<T>) -> Span {
+        spanned.span
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,6 +98,12 @@ impl<T> Spanned<T> {
         Self {
             span: Span { start, end },
             inner,
+        }
+    }
+    pub fn replace<U>(&self, new_inner: U) -> Spanned<U> {
+        Spanned {
+            span: self.span,
+            inner: new_inner,
         }
     }
 }

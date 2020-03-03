@@ -4,6 +4,5 @@ mod optimizer;
 mod tokenizer;
 
 use super::*;
+use ast::*;
 use tokenizer::*;
-
-type CompileResult<T> = Result<T, (Span, &'static str)>;

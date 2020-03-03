@@ -285,16 +285,12 @@ impl<'a> TokenFeeder<'a> {
         // Read operators from right to left so that the leftmost is the
         // outermost.
         for op_token in op_tokens.iter().rev() {
-            let outer_span = Span {
-                start: op_token.span.start,
-                end: ret.span.end,
-            };
-            let inside = Box::new(ret);
+            let operand = Box::new(ret);
             ret = Spanned {
-                span: outer_span,
+                span: Span::merge(op_token, &*operand),
                 inner: match op_token.class {
-                    TokenClass::Operator(OperatorToken::Minus) => Expr::Neg(inside),
-                    TokenClass::Operator(OperatorToken::Tag) => Expr::Tag(inside),
+                    TokenClass::Operator(OperatorToken::Minus) => Expr::Neg(operand),
+                    TokenClass::Operator(OperatorToken::Tag) => Expr::Tag(operand),
                     other => panic!("Invalid unary operator: {:?}", other),
                 },
             };
@@ -317,15 +313,11 @@ impl<'a> TokenFeeder<'a> {
         let mut ret = initial;
         // Read operations from left to right so that the rightmost is the
         // outermost.
-        for (op_token, operand) in op_tokens_and_exprs {
-            let outer_span = Span {
-                start: ret.span.start,
-                end: operand.span.end,
-            };
+        for (op_token, rhs) in op_tokens_and_exprs {
             let lhs = Box::new(ret);
-            let rhs = Box::new(operand);
+            let rhs = Box::new(rhs);
             ret = Spanned {
-                span: outer_span,
+                span: Span::merge(&*lhs, &*rhs),
                 inner: match op_token.class {
                     TokenClass::Operator(OperatorToken::Plus) => Expr::Add(lhs, rhs),
                     TokenClass::Operator(OperatorToken::Minus) => Expr::Sub(lhs, rhs),

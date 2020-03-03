@@ -92,6 +92,16 @@ impl<'a> Token<'a> {
         self.class == TokenClass::Comment
     }
 }
+impl<'a> Into<Span> for Token<'a> {
+    fn into(self) -> Span {
+        self.span
+    }
+}
+impl<'a> Into<Span> for &Token<'a> {
+    fn into(self) -> Span {
+        self.span
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TokenClass<'a> {

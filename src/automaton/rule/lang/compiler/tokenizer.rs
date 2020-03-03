@@ -489,8 +489,10 @@ if this is {
     become ( #live )
 }
 ";
+
         let tokens = tokenize(source_code).expect("Tokenization failed");
-        // println!("{:?}", tokens);
+        println!("{:?}", tokens);
+
         // Check number of tokens.
         assert_eq!(20, tokens.len());
         // Check content of "@states" token on line 2.
@@ -500,7 +502,7 @@ if this is {
         // Check span of "this" token on line 3.
         assert_eq!(
             (TextPoint(3, 4), TextPoint(3, 8)),
-            tokens[3].span.textpoints(source_code)
+            tokens[7].span.textpoints(source_code)
         );
     }
 }

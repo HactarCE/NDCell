@@ -406,10 +406,12 @@ mod tests {
     become #(1 - (2 + -3) + 12)
 }
 ";
+
         let tokens = tokenizer::tokenize(source_code).expect("Tokenization failed");
         let ast = TokenFeeder::from(&tokens[..])
             .program()
             .expect("AST generation failed");
+
         let mut correct = false;
         if let Directive::Transition(ast) = &ast[0].inner {
             if let Statement::Become(ast) = &ast[0].inner {

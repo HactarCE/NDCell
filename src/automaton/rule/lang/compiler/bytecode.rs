@@ -218,6 +218,7 @@ mod tests {
             .program()
             .expect("AST generation failed");
         let program = Program::try_from(&ast[..]).expect("Instruction generation failed");
+
         assert_eq!(
             "Program [
   Transition Function [

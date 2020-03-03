@@ -4,39 +4,32 @@ use std::fmt;
 use super::*;
 
 #[derive(Debug)]
-pub struct ProgramFunction {
-    pub instructions: Instructions,
-    pub vars: VarMapping,
-}
-impl fmt::Display for ProgramFunction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "    Variables [")?;
-        for id in 0..self.vars.len() {
-            writeln!(
-                f,
-                "  {:<7} {:<15?} {}",
-                id,
-                self.vars.get_type(id),
-                self.vars.get_name(id)
-            )?;
-        }
-        writeln!(f, "    ]")?;
-        writeln!(f, "    Instructions [")?;
-        for instruction in &self.instructions {
-            writeln!(
-                f,
-                "      {:<6}  {:?}",
-                instruction.span.end, instruction.inner
-            )?;
-        }
-        write!(f, "    ]")?;
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
 pub struct Program {
-    pub transition_function: ProgramFunction,
+    pub transition_function: Function,
+}
+impl TryFrom<&[Spanned<Directive>]> for Program {
+    type Error = LangError;
+    fn try_from(directives: &[Spanned<Directive>]) -> LangResult<Self> {
+        let mut transition_function = None;
+        for directive in directives {
+            match &directive.inner {
+                Directive::Transition(block) => {
+                    if transition_function.is_some() {
+                        lang_err(directive, "Multiple transition functions")?
+                    } else {
+                        let mut ctx = BytecodeContext::new(FunctionType::TransitionFunction);
+                        block.make_bytecode(&mut ctx)?;
+                        transition_function = Some(ctx.into());
+                    }
+                }
+            }
+        }
+        let transition_function =
+            transition_function.ok_or(lang_error(Span::default(), "No transition function"))?;
+        Ok(Self {
+            transition_function,
+        })
+    }
 }
 impl fmt::Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -50,84 +43,89 @@ impl fmt::Display for Program {
         Ok(())
     }
 }
-impl TryFrom<&[Spanned<Directive>]> for Program {
-    type Error = LangError;
-    fn try_from(directives: &[Spanned<Directive>]) -> LangResult<Self> {
-        let mut transition_function = None;
-        for directive in directives {
-            match &directive.inner {
-                Directive::Transition(block) => {
-                    if transition_function.is_some() {
-                        lang_err(directive, "Multiple transition functions")?
-                    } else {
-                        let mut instructions = vec![];
-                        let mut vars = VarMapping::new();
-                        block.make_bytecode(&mut instructions, &mut vars)?;
-                        transition_function = Some(ProgramFunction { instructions, vars });
-                    }
-                }
-            }
+
+#[derive(Debug)]
+enum FunctionType {
+    HelperFunction,
+    TransitionFunction,
+    StatesFunction,
+}
+
+impl Into<Function> for BytecodeContext {
+    fn into(self) -> Function {
+        Function {
+            instructions: self.instructions,
+            vars: self.vars,
         }
-        let transition_function =
-            transition_function.ok_or(lang_error(Span::default(), "No transition function"))?;
-        Ok(Self {
-            transition_function,
-        })
+    }
+}
+
+struct BytecodeContext {
+    fn_type: FunctionType,
+    instructions: Instructions,
+    vars: VarMapping,
+}
+impl BytecodeContext {
+    fn new(fn_type: FunctionType) -> Self {
+        Self {
+            fn_type,
+            instructions: vec![],
+            vars: VarMapping::new(),
+        }
     }
 }
 
 trait MakeBytecode {
-    fn make_bytecode(
-        &self,
-        instructions: &mut Instructions,
-        vars: &mut VarMapping,
-    ) -> LangResult<Type>;
+    #[must_use]
+    fn make_bytecode(&self, ctx: &mut BytecodeContext) -> LangResult<Type>;
 }
 
 impl MakeBytecode for Block {
-    fn make_bytecode(
-        &self,
-        instructions: &mut Instructions,
-        vars: &mut VarMapping,
-    ) -> LangResult<Type> {
+    fn make_bytecode(&self, ctx: &mut BytecodeContext) -> LangResult<Type> {
         for statement in self {
-            statement.make_bytecode(instructions, vars)?;
+            statement.make_bytecode(ctx)?;
         }
         Ok(Type::Void)
     }
 }
 
 impl MakeBytecode for Spanned<Statement> {
-    fn make_bytecode(
-        &self,
-        instructions: &mut Instructions,
-        vars: &mut VarMapping,
-    ) -> LangResult<Type> {
+    fn make_bytecode(&self, ctx: &mut BytecodeContext) -> LangResult<Type> {
         match &self.inner {
-            Statement::Become(expr) => {
-                expr.make_bytecode(instructions, vars)?;
-                instructions.push(self.replace(Instruction::Become));
-            }
+            Statement::Become(expr) => match expr.make_bytecode(ctx)? {
+                Type::CellState => {
+                    ctx.instructions.push(self.replace(Instruction::Become));
+                    Ok(Type::Void)
+                }
+                Type::Int => lang_err(
+                    expr,
+                    "Type error: use '#' to convert an integer to a cell state",
+                ),
+                other_type => lang_err(
+                    expr,
+                    format!(
+                        "Type error: 'become' requires a cell state, not {}",
+                        other_type
+                    ),
+                ),
+            },
         }
-        Ok(Type::Void)
     }
 }
 
 impl MakeBytecode for Spanned<Expr> {
-    fn make_bytecode(
-        &self,
-        instructions: &mut Instructions,
-        vars: &mut VarMapping,
-    ) -> LangResult<Type> {
+    fn make_bytecode(&self, ctx: &mut BytecodeContext) -> LangResult<Type> {
         match &self.inner {
             Expr::Int(i) => {
-                instructions.push(self.replace(Instruction::PushInt(*i)));
+                ctx.instructions
+                    .push(self.replace(Instruction::PushInt(*i)));
                 Ok(Type::Int)
             }
 
-            Expr::Tag(expr) => match expr.make_bytecode(instructions, vars)? {
+            Expr::Tag(expr) => match expr.make_bytecode(ctx)? {
                 Type::Int => {
-                    instructions.push(self.replace(Instruction::GetStateFromInt));
+                    ctx.instructions
+                        .push(self.replace(Instruction::GetStateFromInt));
                     Ok(Type::CellState)
                 }
                 other_type => lang_err(
@@ -139,9 +137,9 @@ impl MakeBytecode for Spanned<Expr> {
                 ),
             },
 
-            Expr::Neg(expr) => match expr.make_bytecode(instructions, vars)? {
+            Expr::Neg(expr) => match expr.make_bytecode(ctx)? {
                 Type::Int => {
-                    instructions.push(self.replace(Instruction::NegInt));
+                    ctx.instructions.push(self.replace(Instruction::NegInt));
                     Ok(Type::Int)
                 }
                 other_type => lang_err(
@@ -154,8 +152,8 @@ impl MakeBytecode for Spanned<Expr> {
             },
 
             Expr::Add(expr1, expr2) | Expr::Sub(expr1, expr2) => {
-                let ty1 = expr1.make_bytecode(instructions, vars)?;
-                let ty2 = expr2.make_bytecode(instructions, vars)?;
+                let ty1 = expr1.make_bytecode(ctx)?;
+                let ty2 = expr2.make_bytecode(ctx)?;
                 let op_str = match &self.inner {
                     Expr::Add(_, _) => "+",
                     Expr::Sub(_, _) => "-",
@@ -163,11 +161,11 @@ impl MakeBytecode for Spanned<Expr> {
                 };
                 match (op_str, ty1, ty2) {
                     ("+", Type::Int, Type::Int) => {
-                        instructions.push(self.replace(Instruction::AddInt));
+                        ctx.instructions.push(self.replace(Instruction::AddInt));
                         Ok(Type::Int)
                     }
                     ("-", Type::Int, Type::Int) => {
-                        instructions.push(self.replace(Instruction::SubInt));
+                        ctx.instructions.push(self.replace(Instruction::SubInt));
                         Ok(Type::Int)
                     }
                     (op_str, other_ty1, other_ty2) => lang_err(
@@ -181,10 +179,11 @@ impl MakeBytecode for Spanned<Expr> {
             }
 
             Expr::Var(name) => {
-                if vars.is_registered(name) {
-                    let id = vars[name.as_ref()];
-                    instructions.push(self.replace(Instruction::VarFetch(id)));
-                    Ok(vars.get_type(id))
+                if ctx.vars.is_registered(name) {
+                    let id = ctx.vars[name.as_ref()];
+                    ctx.instructions
+                        .push(self.replace(Instruction::VarFetch(id)));
+                    Ok(ctx.vars.get_type(id))
                 } else {
                     lang_err(
                         self,

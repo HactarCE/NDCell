@@ -7,8 +7,9 @@ mod vars;
 
 use super::Rule;
 use crate::automaton::space::*;
+use compiler::compile;
 use errors::*;
-use instructions::{Instruction, Instructions};
+use instructions::*;
 use span::*;
 use vars::*;
 

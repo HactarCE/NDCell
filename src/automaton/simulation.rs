@@ -118,6 +118,16 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
             return node.get_inner_node(cache);
         }
 
+        // If the entire node is empty, then in the future it will remain empty.
+        // This is not strictly necessary, but it is an obvious optimization for
+        // rules without "B0" behavior.
+        if node.is_empty() {
+            // Rather than constructing a new node or fetching one from the
+            // cache, just clone one of the branches of this one (since we know
+            // it's empty).
+            return node.branches[0].node().unwrap().clone();
+        }
+
         // If the result is already in the cache, just return that.
         if let Some(result) = self.results.get_result(node, generations) {
             return result.clone();

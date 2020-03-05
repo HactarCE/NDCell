@@ -7,6 +7,7 @@ use core::fmt;
 mod lang;
 mod totalistic;
 
+pub use lang::{NdcaRule, NdcaRuleGenerator};
 pub use totalistic::*;
 
 pub type TransitionFunction<'a, C, D> = Box<dyn 'a + FnMut(&NdArraySlice<C, D>) -> C>;

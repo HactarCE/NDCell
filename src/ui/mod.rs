@@ -51,6 +51,17 @@ fn make_default_gridview() -> GridView {
         Default::default()
     });
     automaton.set_sim(Simulation::from(rule::LIFE));
+    automaton.set_sim(Simulation::from(
+        rule::NdcaRuleGenerator::from_source(
+            "
+        @transition {
+          become #0
+        }
+        ",
+        )
+        .and_then(|rule_gen| rule::NdcaRuleGenerator::make_rule(&rule_gen))
+        .expect("Failed to compile the most basic rule possible"),
+    ));
     GridView::from(automaton)
 }
 

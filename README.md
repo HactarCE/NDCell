@@ -11,10 +11,8 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ## Short-term to-do list
 
-- [x] Refactor UI
-- [x] Implement line-drawing
-- [x] Run simulation concurrently with rendering
 - [ ] Begin work on custom rules
+- [ ] Refactor all imports to use preludes
 
 ## Long-term to-do list
 

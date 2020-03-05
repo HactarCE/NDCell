@@ -7,11 +7,7 @@ pub enum Type {
     Void,
     Int,
     CellState,
-}
-impl Default for Type {
-    fn default() -> Self {
-        Self::Void
-    }
+    Pattern,
 }
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -22,17 +18,40 @@ impl fmt::Display for Type {
                 Self::Void => "void",
                 Self::Int => "integer",
                 Self::CellState => "cell state",
+                Self::Pattern => "pattern",
             }
         )
     }
 }
+impl Type {
+    pub fn default<'a>(self) -> Value {
+        match self {
+            Self::Void => Value::Void,
+            Self::Int => Value::Int(0),
+            Self::CellState => Value::CellState(0),
+            Self::Pattern => Value::Null,
+        }
+    }
+}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     Null,
     Void,
     Int(i64),
     CellState(i64),
+    Pattern(crate::automaton::ArrayView2D<u8>),
+}
+impl Value {
+    pub fn get_type(&self) -> Option<Type> {
+        match self {
+            Self::Null => None,
+            Self::Void => Some(Type::Void),
+            Self::Int(_) => Some(Type::Int),
+            Self::CellState(_) => Some(Type::CellState),
+            Self::Pattern(_) => Some(Type::Pattern),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]

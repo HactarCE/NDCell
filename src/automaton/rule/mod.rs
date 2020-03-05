@@ -10,7 +10,7 @@ mod totalistic;
 pub use lang::{NdcaRule, NdcaRuleGenerator};
 pub use totalistic::*;
 
-pub type TransitionFunction<'a, C, D> = Box<dyn 'a + FnMut(&NdArraySlice<C, D>) -> C>;
+pub type TransitionFunction<'a, C, D> = Box<dyn 'a + FnMut(NdArrayView<C, D>) -> C>;
 
 /// A cellular automaton rule.
 pub trait Rule<C: CellType, D: Dim>: fmt::Debug + Send + Sync {

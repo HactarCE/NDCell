@@ -19,11 +19,15 @@ struct Context {
     return_type: Option<Type>,
 }
 impl Context {
-    fn new(fn_type: FunctionType) -> Self {
+    fn new(fn_type: FunctionType, parameters: &[(&str, Type)]) -> Self {
+        let mut vars = VarMapping::new();
+        for (param_name, param_type) in parameters {
+            vars.register(param_name, *param_type);
+        }
         Self {
             fn_type,
             instructions: vec![],
-            vars: VarMapping::new(),
+            vars,
             return_type: match fn_type {
                 FunctionType::TransitionFunction => Some(Type::CellState),
                 FunctionType::StatesFunction => Some(Type::Void),
@@ -216,6 +220,8 @@ mod tests {
         assert_eq!(
             "Function [
   Variables [
+    0       napkin: Pattern
+    1       this: CellState
   ]
   Instructions [
     57      PushInt(1)

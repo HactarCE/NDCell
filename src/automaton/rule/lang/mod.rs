@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 mod ast;
 mod bytecode;
 mod errors;
@@ -59,7 +61,7 @@ impl NdcaRuleGenerator {
     }
     pub fn eval_dim(&self) -> LangResult<usize> {
         if let Some(dim_expr) = &self.dim_expr {
-            let function = &bytecode::compile_expr(dim_expr, Some(Type::Int))?;
+            let function = &bytecode::compile_expr(dim_expr, &[], Some(Type::Int))?;
             let result = Runtime::new(function).run(MAX_STEPS)?;
             if let Value::Int(i) = result {
                 Ok(i as usize)
@@ -70,10 +72,6 @@ impl NdcaRuleGenerator {
             Ok(DEFAULT_DIM)
         }
     }
-    // TODO
-    // pub fn get_cell_type() -> CellTypeSpecifier {
-    //     unimplemented!()
-    // }
     pub fn make_rule<D: Dim>(&self) -> LangResult<NdcaRule<D>> {
         let dim = self.eval_dim()?;
         if D::NDIM != dim {
@@ -95,14 +93,16 @@ pub struct NdcaRule<D: Dim> {
     pub attr: RuleAttributes,
     pub transition_function: Function,
 }
-impl<D: Dim> Rule<u8, D> for NdcaRule<D> {
+impl Rule<u8, Dim2D> for NdcaRule<Dim2D> {
     fn radius(&self) -> usize {
         self.attr.radius
     }
-    fn get_transition_function(&self) -> TransitionFunction<u8, D> {
+    fn get_transition_function(&self) -> TransitionFunction<u8, Dim2D> {
         let mut runtime = Runtime::new(&self.transition_function);
         Box::new(move |napkin| {
+            let this = napkin[&NdVec::origin()];
             runtime.reset();
+            runtime.set_args(&[Value::Pattern(napkin), Value::CellState(this as i64)]);
             let result = loop {
                 if let Some(result) = runtime
                     .step()
@@ -111,13 +111,13 @@ impl<D: Dim> Rule<u8, D> for NdcaRule<D> {
                     break result;
                 }
             };
-            if let Value::CellState(i) = result {
-                return (i & 255) as u8;
-            } else {
-                panic!(
+            match result {
+                Value::CellState(i) => (i & 255) as u8,
+                Value::Void => this,
+                _ => panic!(
                     "Transition function returned '{:?}' instead of a cell state",
                     result
-                );
+                ),
             }
         })
     }

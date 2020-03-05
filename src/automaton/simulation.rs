@@ -2,6 +2,7 @@
 
 use num::{BigInt, One, Signed, Zero};
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use super::*;
@@ -137,11 +138,11 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
                 generations.is_one(),
                 "Cannot simulate more than 1 generation at minimum layer"
             );
-            let old_cell_ndarray = NdArray::from(node);
+            let old_cell_ndarray = Rc::new(NdArray::from(node));
             let base_offset = 1 << (node.layer - 2);
             ret = cache.get_small_node_from_cell_fn(node.layer - 1, NdVec::origin(), &mut |pos| {
-                let slice = old_cell_ndarray.offset_slice(-&pos - base_offset);
-                transition_function(&slice)
+                let slice = old_cell_ndarray.clone().offset_slice(-&pos - base_offset);
+                transition_function(slice)
             })
         } else {
             // In the algorithm described below, there are two `t/2`s that must

@@ -28,6 +28,18 @@ impl<'a> Runtime<'a> {
         self.stack.clear();
         self.stack.resize(self.function.vars.len(), Value::Null);
     }
+    pub fn set_args(&mut self, arguments: &[Value]) {
+        for (i, arg) in arguments.iter().enumerate() {
+            if let Some(arg_type) = arg.get_type() {
+                assert_eq!(
+                    self.function.vars.get_type(i),
+                    arg_type,
+                    "Argument passed to function does not match the type it expects"
+                );
+            }
+            self.stack[i] = arg.clone();
+        }
+    }
     pub fn run(&mut self, max_steps: usize) -> LangResult<Value> {
         for _ in 0..max_steps {
             if let Some(ret) = self.step()? {
@@ -89,7 +101,7 @@ impl<'a> Runtime<'a> {
         }
         match instruction {
             Instruction::VarAssign(var_id) => self.stack[var_id] = self.pop_value(),
-            Instruction::VarFetch(var_id) => self.push_value(self.stack[var_id]),
+            Instruction::VarFetch(var_id) => self.push_value(self.stack[var_id].clone()),
             Instruction::PushInt(i) => self.push_value(Value::Int(i)),
             Instruction::GetStateFromInt => {
                 // TODO check if this cell state is in bounds.

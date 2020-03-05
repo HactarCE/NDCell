@@ -3,10 +3,12 @@
 use num::traits::Pow;
 use num::ToPrimitive;
 use std::ops::{Index, IndexMut};
+use std::rc::Rc;
 
 use super::*;
 
 /// A basic N-dimensional array, implemented using a flat Vec<T>.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NdArray<T, D: Dim> {
     size: UVec<D>,
     data: Vec<T>,
@@ -55,14 +57,14 @@ impl<T, D: Dim> NdArray<T, D> {
     fn flatten_idx(&self, pos: &IVec<D>) -> usize {
         flatten_idx(&self.size, pos)
     }
-    /// Returns an NdArraySlice of this NdArray with no offset.
-    pub fn slice(&self) -> NdArraySlice<T, D> {
+    /// Returns an NdArrayView of this NdArray with no offset.
+    pub fn slice(self: Rc<Self>) -> NdArrayView<T, D> {
         self.into()
     }
-    /// Returns an NdArraySlice of this NdArray with the given offset.
-    pub fn offset_slice(&self, offset: IVec<D>) -> NdArraySlice<T, D> {
+    /// Returns an NdArrayView of this NdArray with the given offset.
+    pub fn offset_slice(self: Rc<Self>, offset: IVec<D>) -> NdArrayView<T, D> {
         let array = self;
-        NdArraySlice { array, offset }
+        NdArrayView { array, offset }
     }
     /// Returns the size vector of this NdArray.
     pub fn size(&self) -> &UVec<D> {
@@ -83,31 +85,32 @@ impl<T, D: Dim> NdArray<T, D> {
 }
 
 /// An offset immutable slice of a NdArray.
-pub struct NdArraySlice<'a, T, D: Dim> {
-    array: &'a NdArray<T, D>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NdArrayView<T, D: Dim> {
+    array: Rc<NdArray<T, D>>,
     offset: IVec<D>,
 }
-impl<'a, T, D: Dim> AsRef<NdArray<T, D>> for NdArraySlice<'a, T, D> {
+impl<T, D: Dim> AsRef<NdArray<T, D>> for NdArrayView<T, D> {
     fn as_ref(&self) -> &NdArray<T, D> {
-        self.array
+        &self.array
     }
 }
-impl<'a, T, D: Dim> From<&'a NdArray<T, D>> for NdArraySlice<'a, T, D> {
-    fn from(array: &'a NdArray<T, D>) -> Self {
+impl<T, D: Dim> From<Rc<NdArray<T, D>>> for NdArrayView<T, D> {
+    fn from(array: Rc<NdArray<T, D>>) -> Self {
         let offset = IVec::origin();
         Self { array, offset }
     }
 }
 
-impl<'a, T, D: Dim> Index<&IVec<D>> for NdArraySlice<'a, T, D> {
+impl<T, D: Dim> Index<&IVec<D>> for NdArrayView<T, D> {
     type Output = T;
     fn index(&self, pos: &IVec<D>) -> &T {
         &self.array[&(pos - self.offset.clone()).convert()]
     }
 }
 
-impl<'a, T, D: Dim> NdArraySlice<'a, T, D> {
-    /// Returns the rectangle of this NdArraySlice.
+impl<T, D: Dim> NdArrayView<T, D> {
+    /// Returns the rectangle of this NdArrayView.
     pub fn rect(&self) -> IRect<D> {
         IRect::new(
             -self.offset.clone(),
@@ -153,17 +156,17 @@ pub type Array5D<T> = NdArray<T, Dim5D>;
 pub type Array6D<T> = NdArray<T, Dim6D>;
 
 /// An offset slice of a 1D array.
-pub type ArraySlice1D<'a, T> = NdArraySlice<'a, T, Dim1D>;
+pub type ArrayView1D<T> = NdArrayView<T, Dim1D>;
 /// An offset slice of a 2D array.
-pub type ArraySlice2D<'a, T> = NdArraySlice<'a, T, Dim2D>;
+pub type ArrayView2D<T> = NdArrayView<T, Dim2D>;
 /// An offset slice of a 3D array.
-pub type ArraySlice3D<'a, T> = NdArraySlice<'a, T, Dim3D>;
+pub type ArrayView3D<T> = NdArrayView<T, Dim3D>;
 /// An offset slice of a 4D array.
-pub type ArraySlice4D<'a, T> = NdArraySlice<'a, T, Dim4D>;
+pub type ArrayView4D<T> = NdArrayView<T, Dim4D>;
 /// An offset slice of a 5D array.
-pub type ArraySlice5D<'a, T> = NdArraySlice<'a, T, Dim5D>;
+pub type ArrayView5D<T> = NdArrayView<T, Dim5D>;
 /// An offset slice of a 6D array.
-pub type ArraySlice6D<'a, T> = NdArraySlice<'a, T, Dim6D>;
+pub type ArrayView6D<T> = NdArrayView<T, Dim6D>;
 
 #[cfg(test)]
 mod tests {

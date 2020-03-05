@@ -16,10 +16,10 @@ impl fmt::Display for Function {
         for id in 0..self.vars.len() {
             writeln!(
                 f,
-                "{:<7} {:<15?} {}",
+                "    {:<7} {}: {:?}",
                 id,
+                self.vars.get_name(id),
                 self.vars.get_type(id),
-                self.vars.get_name(id)
             )?;
         }
         writeln!(f, "  ]")?;
@@ -58,23 +58,26 @@ pub fn compile_transition_function(block: &ast::Block) -> LangResult<Function> {
     compile_function(
         block,
         FunctionType::TransitionFunction,
+        &[("napkin", Type::Pattern), ("this", Type::CellState)],
         Some(Type::CellState),
     )
 }
 
 pub fn compile_helper_function(
     block: &ast::Block,
+    params: &[(&str, Type)],
     return_type: Option<Type>,
 ) -> LangResult<Function> {
-    compile_function(block, FunctionType::HelperFunction, return_type)
+    compile_function(block, FunctionType::HelperFunction, params, return_type)
 }
 
 fn compile_function(
     block: &ast::Block,
     fn_type: FunctionType,
+    params: &[(&str, Type)],
     expected_return_type: Option<Type>,
 ) -> LangResult<Function> {
-    let mut ctx = Context::new(fn_type);
+    let mut ctx = Context::new(fn_type, params);
     ctx.return_type = expected_return_type;
     block.make_bytecode(&mut ctx)?;
     Ok(ctx.into())
@@ -82,9 +85,10 @@ fn compile_function(
 
 pub fn compile_expr(
     expr: &Spanned<ast::Expr>,
+    params: &[(&str, Type)],
     expected_return_type: Option<Type>,
 ) -> LangResult<Function> {
-    let mut ctx = Context::new(FunctionType::HelperFunction);
+    let mut ctx = Context::new(FunctionType::HelperFunction, params);
     ctx.return_type = expected_return_type;
     ctx.return_expr(expr)?;
     Ok(ctx.into())

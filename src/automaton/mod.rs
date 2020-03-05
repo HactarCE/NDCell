@@ -19,7 +19,7 @@ pub mod space;
 pub use io::*;
 pub use ndsimulate::*;
 pub use projection::*;
-pub use rule::{DummyRule, Rule};
+pub use rule::{DummyRule, Rule, TransitionFunction};
 pub use simulation::*;
 pub use space::*;
 

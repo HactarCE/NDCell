@@ -51,6 +51,11 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
             step_size.is_positive(),
             "Step size must be a positive integer"
         );
+        // Prepare the transition function. (Clone self.rule to avoid a &self
+        // reference which would prevent self.advance_inner_node() from taking a
+        // &mut self.)
+        let rule = self.rule.clone();
+        let mut transition_function = rule.get_transition_function();
         // Expand out to the sphere of influence of the existing pattern,
         // following `expansion_distance >= r * t` (rounding `r` and `t` each to
         // the next-highest power of two).
@@ -69,7 +74,12 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         // minimum layer for a node.)
         tree.expand();
         // Now do the actual simulation.
-        let new_node = self.advance_inner_node(&tree.cache, &tree.slice.root, step_size);
+        let new_node = self.advance_inner_node(
+            &tree.cache,
+            &tree.slice.root,
+            step_size,
+            &mut transition_function,
+        );
         tree.set_root_centered(new_node);
         // Shrink the tree as much as possible to avoid wasted space.
         tree.shrink();
@@ -99,6 +109,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
         cache: &NdTreeCache<C, D>,
         node: &NdCachedNode<C, D>,
         generations: &BigInt,
+        transition_function: &mut TransitionFunction<C, D>,
     ) -> NdCachedNode<C, D> {
         // Handle the simplest case of just not simulating anything. This is one
         // of the recursive base cases.
@@ -128,9 +139,9 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
             );
             let old_cell_ndarray = NdArray::from(node);
             let base_offset = 1 << (node.layer - 2);
-            ret = cache.get_small_node_from_cell_fn(node.layer - 1, NdVec::origin(), &|pos| {
+            ret = cache.get_small_node_from_cell_fn(node.layer - 1, NdVec::origin(), &mut |pos| {
                 let slice = old_cell_ndarray.offset_slice(-&pos - base_offset);
-                self.rule.transition(&slice)
+                transition_function(&slice)
             })
         } else {
             // In the algorithm described below, there are two `t/2`s that must
@@ -160,13 +171,23 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
                     });
                     // 3. Simulate that node to get a new node at layer `L-2`
                     //    and time `t/2` (red squares).
-                    NdTreeBranch::Node(self.advance_inner_node(cache, &node_intial, &t_outer))
+                    NdTreeBranch::Node(self.advance_inner_node(
+                        cache,
+                        &node_intial,
+                        &t_outer,
+                        transition_function,
+                    ))
                     // 4. Using branches from step #3, create a node at layer
                     //    `L-1` and time `t/2`.
                 });
                 // 5. Simulate that node to get a new node at layer `L-2` and
                 //    time `t` (green squares).
-                NdTreeBranch::Node(self.advance_inner_node(cache, &node_halfway, &t_inner))
+                NdTreeBranch::Node(self.advance_inner_node(
+                    cache,
+                    &node_halfway,
+                    &t_inner,
+                    transition_function,
+                ))
                 // 6. Using branches from step #5, create a new node at layer
                 //    `L-1` and time `t` (blue square). This is the final
                 //    result.

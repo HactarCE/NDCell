@@ -9,14 +9,15 @@ mod totalistic;
 
 pub use totalistic::*;
 
+pub type TransitionFunction<'a, C, D> = Box<dyn 'a + FnMut(&NdArraySlice<C, D>) -> C>;
+
 /// A cellular automaton rule.
 pub trait Rule<C: CellType, D: Dim>: fmt::Debug + Send + Sync {
     /// Returns the maximum distance away that a cell may need to see in order
     /// to compute its next state.
     fn radius(&self) -> usize;
-
-    /// Computes the next state for the cell at the center of the napkin.
-    fn transition(&self, napkin: &NdArraySlice<C, D>) -> C;
+    /// Returns a function that can be used to compute cell transitions.
+    fn get_transition_function(&self) -> TransitionFunction<C, D>;
 }
 
 /// A basic rule that never changes any cell states.
@@ -26,7 +27,7 @@ impl<C: CellType, D: Dim> Rule<C, D> for DummyRule {
     fn radius(&self) -> usize {
         0
     }
-    fn transition(&self, napkin: &NdArraySlice<C, D>) -> C {
-        napkin[&NdVec::origin()]
+    fn get_transition_function(&self) -> TransitionFunction<C, D> {
+        Box::new(|napkin| napkin[&NdVec::origin()])
     }
 }

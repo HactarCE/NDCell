@@ -18,6 +18,8 @@ pub use ndvec::*;
 
 /// A "trait alias" for a cell type that has a "default" value and can be copied
 /// for free or near-free.
+///
+/// TODO: rename to Cell and use CellType as the name for an enum over Cell types
 pub trait CellType: Debug + Copy + Default + Eq + Hash {}
 impl<T: Debug + Copy + Default + Eq + Hash> CellType for T {}
 

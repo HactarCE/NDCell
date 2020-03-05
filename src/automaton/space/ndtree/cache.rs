@@ -91,11 +91,11 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
     /// Returns a cached node, using a function of the cell position to generate
     /// each cell state. This can only be used for relatively small nodes, since
     /// an IVec is used for the position vector.
-    pub fn get_small_node_from_cell_fn<F: Fn(IVec<D>) -> C>(
+    pub fn get_small_node_from_cell_fn<F: FnMut(IVec<D>) -> C>(
         &self,
         layer: usize,
         offset: IVec<D>,
-        generator: &F,
+        generator: &mut F,
     ) -> NdCachedNode<C, D> {
         self.get_node_from_fn(|branch_idx| {
             let branch_offset: IVec<D> = branch_idx.branch_offset(layer);

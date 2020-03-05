@@ -1,4 +1,15 @@
-use super::*;
+mod components;
+mod tokens;
+
+use super::{lang_err, lang_error, LangError, LangResult, Span, Spanned};
+pub use components::*;
+use tokens::*;
+
+pub fn make_ast<'a>(source_code: &str) -> LangResult<Vec<Spanned<Directive>>> {
+    let tokens = tokenize(source_code)?;
+    let ast = TokenFeeder::from(&tokens[..]).program()?;
+    Ok(ast)
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum OpPrecedence {
@@ -104,6 +115,7 @@ impl<'a> TokenFeeder<'a> {
         // Subtract 1 if possible.
         self.cursor = self.cursor.and_then(|idx| idx.checked_sub(1));
     }
+
     /// Returns the span of the current token. If there is no current token,
     /// returns an empty span at the begining or end of the input appropriately.
     fn get_span(&self) -> Span {
@@ -123,49 +135,40 @@ impl<'a> TokenFeeder<'a> {
             }
         }
     }
-    /// Returns a tuple with the span of the most recently returned token that
-    /// can be used to make a LangResult::Err.
+
+    /// Returns a tuple with the span of the current token that can be used to
+    /// make a LangResult::Err.
     fn error(&self, msg: &'static str) -> LangError {
         lang_error(self.get_span(), msg)
     }
+    /// Returns a LangResult::Err with the span of the current token.
     fn err<T>(&self, msg: &'static str) -> LangResult<T> {
         lang_err(self.get_span(), msg)
     }
+    /// Consumes the next symbol and return return a Spanned { ... } of the
+    /// result of the given closure if the closure returns LangResult::Ok;
+    /// otherwise rewind the state of the TokenFeeder to before the closure was
+    /// run and then return the LangResult::Err.
     fn expect<T, F: Fn(&mut Self) -> LangResult<T>>(&mut self, f: F) -> LangResult<Spanned<T>> {
+        let prior_state = *self;
         let start = self.get_span().start;
         let ret = f(self);
         let end = self.get_span().end;
+        if ret.is_err() {
+            *self = prior_state;
+        }
         ret.map(|t| Spanned {
             span: Span { start, end },
             inner: t,
         })
     }
-    fn accept<T, F: Fn(&mut Self) -> LangResult<T>>(&mut self, f: F) -> Option<Spanned<T>> {
-        let prior_state = *self;
-        match self.expect(f) {
-            Ok(ret) => Some(ret),
-            Err(_) => {
-                *self = prior_state;
-                None
-            }
-        }
-    }
-    fn accept_any<T>(
-        &mut self,
-        fs: &[fn(&mut Self) -> LangResult<T>],
-        error_msg: &'static str,
-    ) -> LangResult<Spanned<T>> {
-        for f in fs {
-            if let Some(ret) = self.accept(f) {
-                return Ok(ret);
-            }
-        }
-        self.next();
-        self.err(error_msg)
-    }
+    /// Returns a LangResult::Err on the current token stating that this feature
+    /// is not yet implemented.
     fn unimplemented<T>(self) -> LangResult<T> {
         self.err("Unimplemented")
     }
+    /// Returns true if the given Option<Token> is Some and has a class that is
+    /// in the given list of TokenClasses.
     fn token_is_one_of(token: Option<Token<'a>>, token_classes: &[TokenClass]) -> bool {
         if let Some(t) = token {
             token_classes.contains(&t.class)
@@ -173,13 +176,17 @@ impl<'a> TokenFeeder<'a> {
             false
         }
     }
-    pub fn program(&mut self) -> LangResult<Vec<Spanned<Directive>>> {
+    /// Consumes a program, consisting of directives.
+    fn program(&mut self) -> LangResult<Vec<Spanned<Directive>>> {
         let mut directives = vec![];
         while self.peek_next().is_some() {
             directives.push(self.expect(Self::directive)?);
         }
         Ok(directives)
     }
+    /// Consumes a directive, which includes one or more arguments given to the
+    /// directive. The number of arguments consumed depends on the name of the
+    /// directive and the type of arguments passed.
     fn directive(&mut self) -> LangResult<Directive> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Directive(directive_name)) => {
@@ -195,7 +202,8 @@ impl<'a> TokenFeeder<'a> {
             None => self.err("Expected directive"),
         }
     }
-    fn block(&mut self) -> LangResult<Vec<Spanned<Statement>>> {
+    /// Consumes a block, which consists of statements
+    fn block(&mut self) -> LangResult<Block> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LBrace)) => (),
             _ => self.err("Expected code block beginning with '{'")?,
@@ -217,6 +225,7 @@ impl<'a> TokenFeeder<'a> {
         }
         Ok(statements)
     }
+    /// Consumes a statement.
     fn statement(&mut self) -> LangResult<Statement> {
         use StatementKeywordToken::*;
         match self.next().map(|t| t.class) {
@@ -237,11 +246,17 @@ impl<'a> TokenFeeder<'a> {
             _ => self.err("Expected statement"),
         }
     }
+    /// Consumes a nested expression.
     fn expression(&mut self) -> LangResult<Expr> {
-        self.expression_at_precedence(OpPrecedence::lowest())
+        self.expression_with_precedence(OpPrecedence::lowest())
             .map(|spanned| spanned.inner)
     }
-    fn expression_at_precedence(&mut self, precedence: OpPrecedence) -> LangResult<Spanned<Expr>> {
+    /// Consumes a nested expression of the given precedence level and higher
+    /// recursively using precedence climbing.
+    fn expression_with_precedence(
+        &mut self,
+        precedence: OpPrecedence,
+    ) -> LangResult<Spanned<Expr>> {
         match precedence {
             OpPrecedence::UnaryPrefix => self.unary_op(
                 &[
@@ -259,7 +274,9 @@ impl<'a> TokenFeeder<'a> {
             ),
             // TODO add remaining precedence levels
             OpPrecedence::Atom => match self.peek_next().map(|t| t.class) {
-                Some(TokenClass::Punctuation(PunctuationToken::LParen)) => self.expect(Self::paren),
+                Some(TokenClass::Punctuation(PunctuationToken::LParen)) => {
+                    self.expect(|tf| tf.paren(Self::expression))
+                }
                 Some(TokenClass::Integer(_)) => self.expect(Self::int),
                 Some(TokenClass::String { .. }) => self.unimplemented(),
                 Some(TokenClass::Tag(_)) => self.unimplemented(),
@@ -269,9 +286,12 @@ impl<'a> TokenFeeder<'a> {
                     self.err("Expected expression")
                 }
             },
-            _ => self.expression_at_precedence(precedence.next()),
+            _ => self.expression_with_precedence(precedence.next()),
         }
     }
+    /// Consumes an expression consisting of any number of the given unary
+    /// operators applied to an expression of the given precedence level or
+    /// higher.
     fn unary_op(
         &mut self,
         token_classes: &[TokenClass],
@@ -281,7 +301,7 @@ impl<'a> TokenFeeder<'a> {
         while Self::token_is_one_of(self.peek_next(), token_classes) {
             op_tokens.push(self.next().unwrap());
         }
-        let mut ret = self.expression_at_precedence(precedence.next())?;
+        let mut ret = self.expression_with_precedence(precedence.next())?;
         // Read operators from right to left so that the leftmost is the
         // outermost.
         for op_token in op_tokens.iter().rev() {
@@ -297,17 +317,20 @@ impl<'a> TokenFeeder<'a> {
         }
         Ok(ret)
     }
+    /// Consumes an expression consisting of any number of the given
+    /// left-associative binary operators applied to expressions of the given
+    /// precedence level or higher.
     fn left_binary_op(
         &mut self,
         token_classes: &[TokenClass],
         precedence: OpPrecedence,
     ) -> LangResult<Spanned<Expr>> {
-        let initial = self.expression_at_precedence(precedence.next())?;
+        let initial = self.expression_with_precedence(precedence.next())?;
         let mut op_tokens_and_exprs = vec![];
         while Self::token_is_one_of(self.peek_next(), token_classes) {
             op_tokens_and_exprs.push((
                 self.next().unwrap(),
-                self.expression_at_precedence(precedence.next())?,
+                self.expression_with_precedence(precedence.next())?,
             ));
         }
         let mut ret = initial;
@@ -327,25 +350,28 @@ impl<'a> TokenFeeder<'a> {
         }
         Ok(ret)
     }
+    /// Consumes an integer literal.
     fn int(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Integer(i)) => Ok(Expr::Int(i)),
             _ => self.err("Expected integer"),
         }
     }
+    /// Consumes a variable name.
     fn var(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Ident(s)) => Ok(Expr::Var(s.to_owned())),
             _ => self.err("Expected string"),
         }
     }
-    fn paren(&mut self) -> LangResult<Expr> {
+    /// Consumes a pair of parentheses with the given matcher run inside.
+    fn paren<T, F: Fn(&mut Self) -> LangResult<T>>(&mut self, inner_matcher: F) -> LangResult<T> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LParen)) => (),
             _ => self.err("Expected parenthetical expression beginning with '('")?,
         }
         let open_span = self.current().unwrap().span;
-        let expr = self.expect(Self::expression)?.inner;
+        let expr = self.expect(inner_matcher)?.inner;
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::RParen)) => Ok(expr),
             Some(_) => self.err("Expected ')'"),
@@ -354,90 +380,5 @@ impl<'a> TokenFeeder<'a> {
     }
 }
 
-pub type Block = Vec<Spanned<Statement>>;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Statement {
-    // SetVar(Spanned<Var>, Spanned<Expr>),
-    // If(
-    //     // If
-    //     Spanned<Expr>,
-    //     Statements,
-    //     // Elseif
-    //     Vec<(Spanned<Expr>, Statements)>,
-    //     // Else
-    //     Option<Statements>,
-    // ),
-    // ForLoop(Spanned<Var>, Spanned<Expr>, Statements),
-    // WhileLoop(Spanned<Expr>, Statements),
-    // DoWhileLoop(Statements, Spanned<Expr>),
-    // Break,
-    // Continue,
-    // Remain,
-    Become(Spanned<Expr>),
-    // Return(Spanned<Expr>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Directive {
-    Transition(Vec<Spanned<Statement>>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Expr {
-    Int(i64),
-    Tag(Box<Spanned<Expr>>),
-    Neg(Box<Spanned<Expr>>),
-    Add(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
-    Sub(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
-    Var(String),
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[allow(irrefutable_let_patterns)]
-    fn test_ast() {
-        let source_code = "
-// @states [ #dead, #live ]
-@transition {
-    become #(1 - (2 + -3) + 12)
-}
-";
-
-        let tokens = tokenizer::tokenize(source_code).expect("Tokenization failed");
-        let ast = TokenFeeder::from(&tokens[..])
-            .program()
-            .expect("AST generation failed");
-
-        let mut correct = false;
-        if let Directive::Transition(ast) = &ast[0].inner {
-            if let Statement::Become(ast) = &ast[0].inner {
-                if let Expr::Tag(ast) = &ast.inner {
-                    if let Expr::Add(lhs, rhs) = &ast.inner {
-                        if let (Expr::Sub(lhs, rhs), Expr::Int(12)) = (&lhs.inner, &rhs.inner) {
-                            if let (Expr::Int(1), Expr::Add(lhs, rhs)) = (&lhs.inner, &rhs.inner) {
-                                if let (Expr::Int(2), Expr::Neg(ast)) = (&lhs.inner, &rhs.inner) {
-                                    if let Expr::Int(3) = &ast.inner {
-                                        correct = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if !correct {
-            println!("Tokens:");
-            println!("{:?}", tokens);
-            println!();
-            println!("AST:");
-            println!("{:?}", ast);
-            println!();
-            panic!("AST is incorrect");
-        }
-    }
-}
+mod tests;

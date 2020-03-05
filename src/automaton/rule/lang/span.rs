@@ -106,6 +106,13 @@ impl<T> Spanned<T> {
             inner: new_inner,
         }
     }
+    pub fn default(inner: T) -> Self {
+        let span = Span::default();
+        Self { span, inner }
+    }
+    pub fn into_tuple(self) -> (Span, T) {
+        (self.span, self.inner)
+    }
 }
 
 #[cfg(test)]

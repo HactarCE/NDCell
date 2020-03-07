@@ -318,10 +318,10 @@ impl<'a> RenderInProgress<'a> {
         [r as u8, g as u8, b as u8, 255]
     }
 
-    pub fn with_gridlines_fbo<F: FnOnce(&mut Self, &mut glium::framebuffer::SimpleFrameBuffer)>(
+    pub fn with_gridlines_fbo(
         &mut self,
         alpha: f32,
-        f: F,
+        f: impl FnOnce(&mut Self, &mut glium::framebuffer::SimpleFrameBuffer),
     ) {
         let textures: &mut textures::TextureCache = &mut textures::CACHE.borrow_mut();
         let (target_w, target_h) = self.target.get_dimensions();

@@ -149,7 +149,7 @@ impl<'a> TokenFeeder<'a> {
     /// result of the given closure if the closure returns LangResult::Ok;
     /// otherwise rewind the state of the TokenFeeder to before the closure was
     /// run and then return the LangResult::Err.
-    fn expect<T, F: Fn(&mut Self) -> LangResult<T>>(&mut self, f: F) -> LangResult<Spanned<T>> {
+    fn expect<T>(&mut self, f: impl Fn(&mut Self) -> LangResult<T>) -> LangResult<Spanned<T>> {
         let prior_state = *self;
         let start = self.get_span().start;
         let ret = f(self);
@@ -365,7 +365,7 @@ impl<'a> TokenFeeder<'a> {
         }
     }
     /// Consumes a pair of parentheses with the given matcher run inside.
-    fn paren<T, F: Fn(&mut Self) -> LangResult<T>>(&mut self, inner_matcher: F) -> LangResult<T> {
+    fn paren<T>(&mut self, inner_matcher: impl Fn(&mut Self) -> LangResult<T>) -> LangResult<T> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LParen)) => (),
             _ => self.err("Expected parenthetical expression beginning with '('")?,

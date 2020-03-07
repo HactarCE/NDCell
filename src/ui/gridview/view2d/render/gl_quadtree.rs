@@ -22,11 +22,11 @@ pub struct CachedGlQuadtree<C: CellType> {
     current_min_layer: usize,
 }
 impl<C: CellType> CachedGlQuadtree<C> {
-    pub fn set_node<F: FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4]>(
+    pub fn set_node(
         &mut self,
         node: NdCachedNode<C, Dim2D>,
         min_layer: usize,
-        pixelator: F,
+        pixelator: impl FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4],
     ) {
         // Only recompute quadtree if necessary.
         if self.current_min_layer == min_layer && Some(&node) == self.current_node.as_ref() {
@@ -36,11 +36,11 @@ impl<C: CellType> CachedGlQuadtree<C> {
         self.current_node = Some(node);
         self.current_min_layer = min_layer;
     }
-    pub fn from_node<F: FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4]>(
+    pub fn from_node(
         &mut self,
         node: NdCachedNode<C, Dim2D>,
         min_layer: usize,
-        pixelator: F,
+        pixelator: impl FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4],
     ) -> &GlQuadtree {
         self.set_node(node, min_layer, pixelator);
         self.unwrap()
@@ -64,10 +64,10 @@ pub struct GlQuadtree {
 impl GlQuadtree {
     /// Constructs a GlQuadtree from a node and a function to turn a node into a
     /// solid color.
-    pub fn from_node<C: CellType, F: FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4]>(
+    pub fn from_node<C: CellType>(
         node: &NdCachedNode<C, Dim2D>,
         min_layer: usize,
-        mut pixelator: F,
+        mut pixelator: impl FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4],
     ) -> Self {
         let indexed_tree = IndexedNdTree::from_node(node, min_layer);
         let mut pixel_vec: Vec<u32> = indexed_tree

@@ -119,7 +119,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
 
     /// Constructs an NdVec using a function of an axis to generate each
     /// component.
-    pub fn from_fn<F: FnMut(Axis) -> N>(mut generator: F) -> Self {
+    pub fn from_fn(mut generator: impl FnMut(Axis) -> N) -> Self {
         let mut ret: Self = Self::default();
         for &ax in D::Dim::axes() {
             ret[ax] = generator(ax);
@@ -128,7 +128,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     }
     /// Applies a function to each component of this vector, constructing a new
     /// NdVec.
-    pub fn map_fn<F: FnMut(Axis, &mut N)>(&mut self, mut f: F) {
+    pub fn map_fn(&mut self, mut f: impl FnMut(Axis, &mut N)) {
         for &ax in D::Dim::axes() {
             f(ax, &mut self[ax]);
         }
@@ -187,7 +187,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
 
     /// Returns the Axis that is the farthest from the origin in this vector (or
     /// one of them, if there is a tie).
-    pub fn max_axis<F: Fn(Axis, &N) -> X, X: std::cmp::Ord>(&self, key: F) -> Axis {
+    pub fn max_axis<X: std::cmp::Ord>(&self, key: impl Fn(Axis, &N) -> X) -> Axis {
         *D::Dim::axes()
             .into_iter()
             .max_by_key(|&&ax| key(ax, &self[ax]))
@@ -196,7 +196,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
 
     /// Returns the Axis that is the closest to the origin in this vector (or
     /// one of them, if there is a tie).
-    pub fn min_axis<F: Fn(Axis, &N) -> X, X: std::cmp::Ord>(&self, key: F) -> Axis {
+    pub fn min_axis<X: std::cmp::Ord>(&self, key: impl Fn(Axis, &N) -> X) -> Axis {
         *D::Dim::axes()
             .into_iter()
             .min_by_key(|&&ax| key(ax, &self[ax]))

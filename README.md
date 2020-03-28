@@ -36,7 +36,7 @@ What you'll need:
 
 Fair warning: I don't do C or C++ development so it's entirely possible that I've completely butchered the proper build process, but this is what finally worked for me.
 
-If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://1drv.ms/u/s!AnInQYQ5foGShYcTfF2lfwyWka-Xyw?e=GddkoS). (SHA256 = `ffbd0f07a113a26021b006bc7ab0741f3e43159c95738d4a81eaab1a7dbb181f`) Extract that somewhere and skip to step #10, using the path where you extracted it place of `C:\LLVM_solution\MinSizeRel`. I don't promise that this will work, but it's waaaay easier than compiling LLVM yourself.
+If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://1drv.ms/u/s!AnInQYQ5foGShYcTfF2lfwyWka-Xyw?e=GddkoS). (SHA256 = `ffbd0f07a113a26021b006bc7ab0741f3e43159c95738d4a81eaab1a7dbb181f`) Extract that somewhere and skip to step #11, using the path where you extracted it place of `C:\LLVM_solution\MinSizeRel`. I don't promise that this will work, but it's waaaay easier than compiling LLVM yourself.
 
 1. Download/install [CMake](https://cmake.org/download/). WSL or Cygwin `cmake` might work, but I wouldn't count on it.
 2. Download [LLVM](https://releases.llvm.org/download.html) 6.0.1 source code. The precompiled binaries probably won't work, but you can try.

@@ -5,7 +5,7 @@ This is a testing ground for a cellular automaton description language for [NDCe
 ## Building on Linux or macOS
 
 1. Download/install Cargo.
-2. Download [LLVM](https://releases.llvm.org/download.html) 6.0.1 precompiled binaries and extract them somewhere.
+2. Download [LLVM](https://releases.llvm.org/download.html) 8.0.0 precompiled binaries and extract them somewhere.
 3. Either put those LLVM binaries somewhere in your path so that they are accessible on the command line, or set an environment variable `LLVM_SYS_60_PREFIX` containing the path pointing to wherever you extracted LLVM.
 4. Clone this project and build/run:
 
@@ -36,17 +36,17 @@ What you'll need:
 
 Fair warning: I don't do C or C++ development so it's entirely possible that I've completely butchered the proper build process, but this is what finally worked for me.
 
-If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://1drv.ms/u/s!AnInQYQ5foGShYcTfF2lfwyWka-Xyw?e=GddkoS). (SHA256 = `ffbd0f07a113a26021b006bc7ab0741f3e43159c95738d4a81eaab1a7dbb181f`) Extract that somewhere and skip to step #11, using the path where you extracted it place of `C:\LLVM_solution\MinSizeRel`. I don't promise that this will work, but it's waaaay easier than compiling LLVM yourself.
+If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://1drv.ms/u/s!AnInQYQ5foGShYoeG6MVAUedmPYTzw?e=JPwA8f). (SHA256 = `a8cf68f8f313170ad174030e4689239f6d5b8854aca75a4aedf1670ed4fdb5aa`) Extract that somewhere and skip to step #11, using the path where you extracted it place of `C:\LLVM_solution\MinSizeRel`. I don't promise that this will work, but it's waaaay easier than compiling LLVM yourself.
 
 1. Download/install [CMake](https://cmake.org/download/). WSL or Cygwin `cmake` might work, but I wouldn't count on it.
-2. Download [LLVM](https://releases.llvm.org/download.html) 6.0.1 source code. The precompiled binaries probably won't work, but you can try.
+2. Download [LLVM](https://releases.llvm.org/download.html) 8.0.0 source code. The precompiled binaries probably won't work, but you can try.
 3. Extract the LLVM source code somewhere, like `C:\LLVM_source_code`. Now you should have a bunch of folders and files directly intside `C:\LLVM_source_code` including `CMakeLists.txt`.
 4. Make a new empty folder, like `C:\LLVM_solution`.
 5. Run this, replacing the path names accordingly if you used different paths for things:
 
 ```
 cd C:\LLVM_solution
-cmake.exe 'C:\LLVM_source_code' -Thost=x64 -DCMAKE_BUILD_TYPES=MinSizeRel -DLLVM_TARGETS_TO_BUILD="X86" -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_ENABLE_IDE=1
+cmake.exe 'C:\LLVM_source_code' -Thost=x64 -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_ENABLE_IDE=1
 ```
 
 If that doesn't work for some reason, you can try adding `-G "Visual Studio 16 2019" -A x64` on the end of the `cmake` command.

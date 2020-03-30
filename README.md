@@ -58,7 +58,7 @@ By the way, **do not use cmake-gui**. I don't think there's any way to make it u
 7. Now there should be a folder at `C:\LLVM_solution\MinSizeRel` that contains folders named `bin` and `lib`. If that's there, good.
 8. Copy `C:\LLVM_solution\include` into `C:\LLVM_solution\MinSizeRel` so that the new `include` folder is next to `bin` and `lib`.
 9. Also copy the contents of `C:\LLVM_source_code\include` into `C:\LLVM_solution\MinSizeRel\include`, merging the contents. There might be a file or two that are overwritten and that's fine.
-10. Finally, make a new environment variable (system variable or user variable, doesn't matter) called `LLVM_SYS_60_PREFIX` with the value `C:\LLVM_solution\MinSizeRel`. Reboot to make sure this takes effect.
+10. Finally, make a new environment variable (system variable or user variable, doesn't matter) called `LLVM_SYS_80_PREFIX` with the value `C:\LLVM_solution\MinSizeRel`. Reboot to make sure this takes effect.
 
 ### Part 3 - Building Jitty
 

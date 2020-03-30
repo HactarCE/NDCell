@@ -1,7 +1,10 @@
 use inkwell::context::Context;
 use std::error::Error;
 
+mod ast;
 mod codegen;
+mod errors;
+mod span;
 
 use codegen::CodeGen;
 

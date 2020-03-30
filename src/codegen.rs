@@ -25,11 +25,11 @@ impl<'ctx> CodeGen<'ctx> {
         let builder = ctx.create_builder();
         let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
         Ok(CodeGen {
-                    ctx,
-                    module,
-                    builder ,
-                    execution_engine ,
-                })
+            ctx,
+            module,
+            builder,
+            execution_engine,
+        })
     }
 
     pub fn jit_compile_sum(&self) -> Option<JitFunction<SumFunc>> {

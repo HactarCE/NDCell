@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "llvm8-0" }
+lazy_static = "1.4"
+regex = "1"

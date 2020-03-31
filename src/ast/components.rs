@@ -1,6 +1,6 @@
 use super::Spanned;
 
-pub type Block = Vec<Spanned<Statement>>;
+pub type StatementBlock = Vec<Spanned<Statement>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
@@ -8,25 +8,34 @@ pub enum Statement {
     // If(
     //     // If
     //     Spanned<Expr>,
-    //     Statements,
+    //     StatementBlock,
     //     // Elseif
-    //     Vec<(Spanned<Expr>, Statements)>,
+    //     Vec<(Spanned<Expr>, StatementBlock)>,
     //     // Else
-    //     Option<Statements>,
+    //     Option<StatementBlock>,
     // ),
-    // ForLoop(Spanned<Var>, Spanned<Expr>, Statements),
-    // WhileLoop(Spanned<Expr>, Statements),
-    // DoWhileLoop(Statements, Spanned<Expr>),
+    // ForLoop(Spanned<Var>, Spanned<Expr>, StatementBlock),
+    // WhileLoop(Spanned<Expr>, StatementBlock),
+    // DoWhileLoop(StatementBlock, Spanned<Expr>),
     // Break,
     // Continue,
+
+    // /// Returns the center cell state from the transition function.
     // Remain,
+    /// Returns a value from a transition function.
     Become(Spanned<Expr>),
+    /// Returns a value from a helper function.
     Return(Spanned<Expr>),
+
+    /// Jump directly to a given instruction index (used by the interpreter).
+    Goto(usize),
+    /// End of program (used by the interpreter).
+    End,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Directive {
-    Transition(Vec<Spanned<Statement>>),
+    Transition(StatementBlock),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

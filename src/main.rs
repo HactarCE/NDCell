@@ -2,9 +2,11 @@ use inkwell::context::Context;
 use std::error::Error;
 
 mod ast;
-mod codegen;
+mod compiler;
 mod errors;
+mod interpreter;
 mod span;
+pub use span::{Span, Spanned};
 
 use codegen::CodeGen;
 

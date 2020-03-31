@@ -204,7 +204,7 @@ impl<'a> TokenFeeder<'a> {
         }
     }
     /// Consumes a block, which consists of statements
-    fn block(&mut self) -> LangResult<Block> {
+    fn block(&mut self) -> LangResult<StatementBlock> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LBrace)) => (),
             _ => self.err("Expected code block beginning with '{'")?,
@@ -377,6 +377,26 @@ impl<'a> TokenFeeder<'a> {
             Some(TokenClass::Punctuation(PunctuationToken::RParen)) => Ok(expr),
             Some(_) => self.err("Expected ')'"),
             None => lang_err(open_span, "This '(' has no matching ')'"),
+        }
+    }
+}
+
+/// "Flatten" a block of instructions by replacing the body of all branching
+/// instructions (If, ForLoop, WhileLoop, etc.) with a single Goto and moving
+/// their contents to the end of the instruction list. This is mainly useful for
+/// the interpreter, which cannot handle nested structure.
+pub fn flatten_block(block: &mut StatementBlock) {
+    if block.is_empty() {
+        return;
+    }
+    let end = block.last().unwrap().span.end;
+    block.push(Spanned::new(end, end, Statement::End));
+    for i in 0..block.len() {
+        use Statement::*;
+        let statement = &mut block[i];
+        match statement {
+            // TODO
+            _ => (),
         }
     }
 }

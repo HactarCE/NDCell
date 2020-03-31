@@ -1,45 +1,24 @@
-use std::fmt;
+use super::super::{errors::*, Span, Spanned, Type};
 
-use super::super::{errors::*, Span, Spanned};
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Type {
-    Void,
-    Int,
-    CellState,
-    // Pattern,
-}
-impl fmt::Display for Type {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Void => "void",
-                Self::Int => "integer",
-                Self::CellState => "cell state",
-                // Self::Pattern => "pattern",
-            }
-        )
-    }
-}
-impl Type {
-    pub fn default<'a>(self) -> Value {
-        match self {
-            Self::Void => Value::Null,
-            Self::Int => Value::Int(0),
-            Self::CellState => Value::CellState(0),
-            // Self::Pattern => Value::Null,
-        }
-    }
-}
+type IntValue = i64;
+type CellStateValue = i64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     Null,
-    Int(i64),
-    CellState(i64),
+    Int(IntValue),
+    CellState(CellStateValue),
     // Pattern(crate::automaton::ArrayView2D<u8>),
+}
+impl From<Type> for Value {
+    fn from(ty: Type) -> Self {
+        match ty {
+            Type::Void => Value::Null,
+            Type::Int => Value::Int(0),
+            Type::CellState => Value::CellState(0),
+            // Type::Pattern => Value::Null,
+        }
+    }
 }
 impl Value {
     pub fn get_type(&self) -> Type {
@@ -52,13 +31,13 @@ impl Value {
     }
 }
 impl Spanned<Value> {
-    pub fn as_int(&self) -> LangResult<i64> {
+    pub fn as_int(&self) -> LangResult<IntValue> {
         match self.inner {
             Value::Int(i) => Ok(i),
             _ => type_error(self, self.inner.get_type(), Type::Int),
         }
     }
-    pub fn as_cell_state(&self) -> LangResult<i64> {
+    pub fn as_cell_state(&self) -> LangResult<CellStateValue> {
         match self.inner {
             Value::CellState(i) => Ok(i),
             _ => type_error(self, self.inner.get_type(), Type::CellState),

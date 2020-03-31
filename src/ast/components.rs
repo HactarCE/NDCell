@@ -1,6 +1,33 @@
-use super::Spanned;
+use std::convert::TryFrom;
+
+use super::super::errors::*;
+use super::{Span, Spanned};
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
+
+pub struct Program {
+    pub transition_fn: StatementBlock,
+}
+impl TryFrom<Vec<Spanned<Directive>>> for Program {
+    type Error = LangError;
+    fn try_from(directives: Vec<Spanned<Directive>>) -> LangResult<Self> {
+        let mut transition_fn = None;
+        for directive in directives {
+            match directive.inner {
+                Directive::Transition(block) => {
+                    if transition_fn.is_none() {
+                        transition_fn = Some(block);
+                    } else {
+                        return lang_err(directive.span, "Multiple transition functions");
+                    }
+                }
+            }
+        }
+        let transition_fn =
+            transition_fn.ok_or(lang_error(Span::default(), "Missing transition function"))?;
+        Ok(Self { transition_fn })
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {

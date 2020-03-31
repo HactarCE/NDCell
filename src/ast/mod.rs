@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 mod components;
 mod tokens;
 
@@ -6,10 +8,11 @@ use super::span::{Span, Spanned};
 pub use components::*;
 use tokens::*;
 
-pub fn make_ast<'a>(source_code: &str) -> LangResult<Vec<Spanned<Directive>>> {
+/// Produce an AST from source code.
+pub fn make_program(source_code: &str) -> LangResult<Program> {
     let tokens = tokenize(source_code)?;
-    let ast = TokenFeeder::from(&tokens[..]).program()?;
-    Ok(ast)
+    let directives = TokenFeeder::from(&tokens[..]).directives()?;
+    Program::try_from(directives)
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -177,8 +180,8 @@ impl<'a> TokenFeeder<'a> {
             false
         }
     }
-    /// Consumes a program, consisting of directives.
-    fn program(&mut self) -> LangResult<Vec<Spanned<Directive>>> {
+    /// Consumes a sequence of directives.
+    fn directives(&mut self) -> LangResult<Vec<Spanned<Directive>>> {
         let mut directives = vec![];
         while self.peek_next().is_some() {
             directives.push(self.expect(Self::directive)?);
@@ -273,6 +276,13 @@ impl<'a> TokenFeeder<'a> {
                 ],
                 precedence,
             ),
+            OpPrecedence::MulDiv => self.left_binary_op(
+                &[
+                    TokenClass::Operator(OperatorToken::Asterisk),
+                    TokenClass::Operator(OperatorToken::Slash),
+                ],
+                precedence,
+            ),
             // TODO add remaining precedence levels
             OpPrecedence::Atom => match self.peek_next().map(|t| t.class) {
                 Some(TokenClass::Punctuation(PunctuationToken::LParen)) => {
@@ -345,6 +355,8 @@ impl<'a> TokenFeeder<'a> {
                 inner: match op_token.class {
                     TokenClass::Operator(OperatorToken::Plus) => Expr::Add(lhs, rhs),
                     TokenClass::Operator(OperatorToken::Minus) => Expr::Sub(lhs, rhs),
+                    // TokenClass::Operator(OperatorToken::Asterisk) => Expr::Mul(lhs, rhs),
+                    // TokenClass::Operator(OperatorToken::Slash) => Expr::Div(lhs, rhs),
                     other => panic!("Invalid binary operator: {:?}", other),
                 },
             };

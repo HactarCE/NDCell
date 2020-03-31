@@ -1,13 +1,21 @@
 use std::collections::HashMap;
 
 mod value;
-pub use value::{Type, Value};
+pub use value::Value;
 
 use super::{ast, errors::*, Spanned};
 
 pub enum ExecuteResult {
     Continue,
     Return(Value),
+}
+impl ExecuteResult {
+    pub fn return_value(self) -> Option<Value> {
+        match self {
+            Self::Continue => None,
+            Self::Return(value) => Some(value),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -30,7 +38,7 @@ impl State {
             vars: HashMap::default(),
         }
     }
-    fn step(&mut self) -> LangResult<ExecuteResult> {
+    pub fn step(&mut self) -> LangResult<ExecuteResult> {
         use ast::Statement::*;
         match &self.instructions[self.instruction_pointer].inner {
             Become(expr) | Return(expr) => {
@@ -42,7 +50,7 @@ impl State {
         self.instruction_pointer += 1;
         return Ok(ExecuteResult::Continue);
     }
-    fn eval(&self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value>> {
+    pub fn eval(&self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value>> {
         use ast::Expr::*;
         let span = expression.span;
         Ok(Spanned {

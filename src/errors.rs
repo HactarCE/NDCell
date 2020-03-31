@@ -10,48 +10,53 @@ pub type LangErrorMsg = Cow<'static, str>;
 
 #[derive(Debug)]
 pub struct LangError {
-    pub span: Span,
+    pub span: Option<Span>,
     pub msg: LangErrorMsg,
 }
 impl LangError {
     pub fn with_source(&self, src: &str) -> LangErrorWithSource {
-        let (start_tp, end_tp) = self.span.textpoints(src);
-        let start = start_tp.column();
-        let mut end = start;
-        if start_tp.line() == end_tp.line() && end_tp.column() > start_tp.column() {
-            end = end_tp.column();
-        }
-        LangErrorWithSource {
-            start,
-            end,
-            msg: self.msg.clone(),
-            source_line: src
-                .lines()
-                .skip(start_tp.line() - 1)
-                .next()
-                .unwrap_or_default()
-                .to_owned(),
+        if let Some(span) = self.span {
+            let (start_tp, end_tp) = span.textpoints(src);
+            let start = start_tp.column();
+            let mut end = start;
+            if start_tp.line() == end_tp.line() && end_tp.column() > start_tp.column() {
+                end = end_tp.column();
+            }
+            LangErrorWithSource {
+                source_line: src
+                    .lines()
+                    .skip(start_tp.line() - 1)
+                    .next()
+                    .map(str::to_owned),
+                span: Some((start, end)),
+                msg: self.msg.clone(),
+            }
+        } else {
+            LangErrorWithSource {
+                source_line: None,
+                span: None,
+                msg: self.msg.clone(),
+            }
         }
     }
 }
 
 #[derive(Debug)]
 pub struct LangErrorWithSource {
-    pub start: usize,
-    pub end: usize,
+    pub source_line: Option<String>,
+    pub span: Option<(usize, usize)>,
     pub msg: LangErrorMsg,
-    pub source_line: String,
 }
 impl fmt::Display for LangErrorWithSource {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.start > 0 {
+        if let (Some(line), Some((start, end))) = (&self.source_line, self.span) {
             // Write line of source code.
-            writeln!(f, "{}", self.source_line)?;
-            for _ in 0..(self.start - 1) {
+            writeln!(f, "{}", line)?;
+            for _ in 0..(start - 1) {
                 write!(f, " ")?;
             }
             // Write arrows pointing to the part with the error.
-            for _ in self.start..self.end {
+            for _ in start..end {
                 write!(f, "^")?;
             }
             write!(f, "   ")?;
@@ -63,15 +68,26 @@ impl fmt::Display for LangErrorWithSource {
 }
 impl Error for LangErrorWithSource {}
 
-pub fn lang_error<S: Into<Span>, M: Into<LangErrorMsg>>(span: S, msg: M) -> LangError {
+pub fn spanned_lang_error(span: impl Into<Span>, msg: impl Into<LangErrorMsg>) -> LangError {
     LangError {
-        span: span.into(),
+        span: Some(span.into()),
         msg: msg.into(),
     }
 }
 
-pub fn lang_err<T, S: Into<Span>, M: Into<LangErrorMsg>>(span: S, msg: M) -> LangResult<T> {
-    Err(lang_error(span, msg))
+pub fn spanned_lang_err<T>(span: impl Into<Span>, msg: impl Into<LangErrorMsg>) -> LangResult<T> {
+    Err(spanned_lang_error(span, msg))
+}
+
+pub fn lang_error(msg: impl Into<LangErrorMsg>) -> LangError {
+    LangError {
+        span: None,
+        msg: msg.into(),
+    }
+}
+
+pub fn lang_err<T>(msg: impl Into<LangErrorMsg>) -> LangResult<T> {
+    Err(lang_error(msg))
 }
 
 pub fn type_error<T>(
@@ -79,7 +95,7 @@ pub fn type_error<T>(
     got_type: Type,
     expected_type: Type,
 ) -> LangResult<T> {
-    lang_err(
+    spanned_lang_err(
         spanned,
         format!(
             "Type error: expected {} but got {}",

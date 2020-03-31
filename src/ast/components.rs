@@ -18,13 +18,12 @@ impl TryFrom<Vec<Spanned<Directive>>> for Program {
                     if transition_fn.is_none() {
                         transition_fn = Some(block);
                     } else {
-                        return lang_err(directive.span, "Multiple transition functions");
+                        return spanned_lang_err(directive.span, "Multiple transition functions");
                     }
                 }
             }
         }
-        let transition_fn =
-            transition_fn.ok_or(lang_error(Span::default(), "Missing transition function"))?;
+        let transition_fn = transition_fn.ok_or(lang_error("Missing transition function"))?;
         Ok(Self { transition_fn })
     }
 }

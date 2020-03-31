@@ -69,7 +69,7 @@ impl State {
                     .vars
                     .get(name)
                     .ok_or_else(|| {
-                        lang_error(
+                        spanned_lang_error(
                             span,
                             format!("Tried to access uninitialized variable '{}'", name),
                         )

@@ -46,7 +46,7 @@ impl Spanned<Value> {
 }
 
 fn type_error<T>(spanned: impl Into<Span>, got_type: Type, expected_type: Type) -> LangResult<T> {
-    lang_err(
+    spanned_lang_err(
         spanned,
         format!(
             "Type error: expected {} but got {}",

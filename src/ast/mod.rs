@@ -143,11 +143,11 @@ impl<'a> TokenFeeder<'a> {
     /// Returns a tuple with the span of the current token that can be used to
     /// make a LangResult::Err.
     fn error(&self, msg: &'static str) -> LangError {
-        lang_error(self.get_span(), msg)
+        spanned_lang_error(self.get_span(), msg)
     }
     /// Returns a LangResult::Err with the span of the current token.
     fn err<T>(&self, msg: &'static str) -> LangResult<T> {
-        lang_err(self.get_span(), msg)
+        spanned_lang_err(self.get_span(), msg)
     }
     /// Consumes the next symbol and return return a Spanned { ... } of the
     /// result of the given closure if the closure returns LangResult::Ok;
@@ -224,7 +224,7 @@ impl<'a> TokenFeeder<'a> {
                     break;
                 }
                 Some(_) => self.err("Expected statement or '}'")?,
-                None => lang_err(open_span, "This '{' has no matching '}'")?,
+                None => spanned_lang_err(open_span, "This '{' has no matching '}'")?,
             }
         }
         Ok(statements)
@@ -388,7 +388,7 @@ impl<'a> TokenFeeder<'a> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::RParen)) => Ok(expr),
             Some(_) => self.err("Expected ')'"),
-            None => lang_err(open_span, "This '(' has no matching ')'"),
+            None => spanned_lang_err(open_span, "This '(' has no matching ')'"),
         }
     }
 }

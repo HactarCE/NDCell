@@ -81,10 +81,7 @@ impl<'ctx> Compiler<'ctx> {
             })
         } else {
             unsafe { function.delete() };
-            lang_err(
-                Span::default(),
-                "Internal error while compiling: function.verify() returned false",
-            )
+            lang_err("Internal error while compiling: function.verify() returned false")
         }
     }
 

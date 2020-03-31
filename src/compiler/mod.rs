@@ -2,8 +2,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
-use inkwell::types::BasicTypeEnum;
-use inkwell::values::BasicValueEnum;
+use inkwell::types::IntType;
 use inkwell::OptimizationLevel;
 use std::error::Error;
 
@@ -11,7 +10,7 @@ mod value;
 
 use super::ast;
 use super::errors::*;
-use super::Spanned;
+use super::{Span, Spanned};
 use value::*;
 
 /// Convenience type alias for a transition function.
@@ -20,23 +19,30 @@ use value::*;
 /// `unsafe` operations internally.
 type TransitionFunction = unsafe extern "C" fn() -> i64;
 
-pub struct CodeGen<'ctx> {
+const FN_NAME: &'static str = "transition";
+
+pub struct Compiler<'ctx> {
     ctx: &'ctx Context,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
     execution_engine: ExecutionEngine<'ctx>,
+
+    int_type: IntType<'ctx>,
+    cell_state_type: IntType<'ctx>,
 }
 
-impl<'ctx> CodeGen<'ctx> {
+impl<'ctx> Compiler<'ctx> {
     pub fn new(ctx: &'ctx Context) -> Result<Self, Box<dyn Error>> {
         let module = ctx.create_module("sum");
         let builder = ctx.create_builder();
         let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
-        Ok(CodeGen {
+        Ok(Self {
             ctx,
             module,
             builder,
             execution_engine,
+            int_type: ctx.custom_width_int_type(INT_BITS),
+            cell_state_type: ctx.custom_width_int_type(CELL_STATE_BITS),
         })
     }
 
@@ -44,48 +50,75 @@ impl<'ctx> CodeGen<'ctx> {
         &self,
         statements: &ast::StatementBlock,
     ) -> LangResult<JitFunction<TransitionFunction>> {
-        unimplemented!()
+        // Create the function type with no arguments and no varargs.
+        let fn_type = self.cell_state_type.fn_type(&[], false);
+        let function = self.module.add_function(FN_NAME, fn_type, None);
+
+        let basic_block = self.ctx.append_basic_block(function, "entry");
+        self.builder.position_at_end(basic_block);
+
+        for statement in statements {
+            use ast::Statement::*;
+            match &statement.inner {
+                Become(expr) | Return(expr) => self
+                    .builder
+                    .build_return(Some(&self.jit_compile_expr(expr)?.as_cell_state()?)),
+                Goto(usize) => panic!("Got GOTO statement while compiling"),
+                End => panic!("Got END statement while compiling"),
+            };
+        }
+
+        // // Implicit `return #0` at the end of the transition function. TODO
+        // // change this to `remain`, once that's implemented.
+        // self.builder
+        //     .build_return(Some(&self.cell_state_type.const_zero()));
+
+        if function.verify(true) {
+            Ok(unsafe {
+                self.execution_engine
+                    .get_function(FN_NAME)
+                    .expect("Failed to find JIT-compiled transition function")
+            })
+        } else {
+            unsafe { function.delete() };
+            lang_err(
+                Span::default(),
+                "Internal error while compiling: function.verify() returned false",
+            )
+        }
     }
 
-    fn jit_compile_expr(&self, expression: Spanned<ast::Expr>) -> LangResult<BasicValueEnum> {
-        unimplemented!()
-    }
-
-    // pub fn jit_compile_sum(&self) -> Option<JitFunction<SumFunc>> {
-    //     let i64_type = self.ctx.i64_type();
-    //     let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into(), i64_type.into()], false);
-    //     let function = self.module.add_function("sum", fn_type, None);
-    //     let basic_block = self.ctx.append_basic_block(function, "entry");
-
-    //     let bigi_type = self.ctx.custom_width_int_type(64 * 3);
-
-    //     self.builder.position_at_end(basic_block);
-
-    //     let x = function
-    //         .get_nth_param(0)?
-    //         .into_int_value()
-    //         .const_s_extend(bigi_type);
-    //     let y = function
-    //         .get_nth_param(1)?
-    //         .into_int_value()
-    //         .const_s_extend(bigi_type);
-    //     let z = function
-    //         .get_nth_param(2)?
-    //         .into_int_value()
-    //         .const_s_extend(bigi_type);
-
-    //     let sum = self.builder.build_int_add(x, y, "sum");
-    //     let sum = self.builder.build_int_add(sum, z, "sum");
-
-    //     self.builder.build_return(Some(&sum));
-
-    //     unsafe { self.execution_engine.get_function("sum").ok() }
-    // }
-
-    fn int_type(&self) -> BasicTypeEnum {
-        self.ctx.custom_width_int_type(INT_BITS).into()
-    }
-    fn cell_state_type(&self) -> BasicTypeEnum {
-        self.ctx.custom_width_int_type(CELL_STATE_BITS).into()
+    fn jit_compile_expr(&self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value>> {
+        let span = expression.span;
+        use ast::Expr::*;
+        Ok(Spanned {
+            span,
+            inner: match &expression.inner {
+                Int(i) => Value::Int(self.int_type.const_int(*i as u64, true)),
+                Tag(expr) => Value::CellState(self.builder.build_int_truncate(
+                    self.jit_compile_expr(expr)?.as_int()?,
+                    self.cell_state_type,
+                    FN_NAME,
+                )),
+                Neg(expr) => Value::Int({
+                    // TODO check for overflow
+                    let x = self.jit_compile_expr(expr)?.as_int()?;
+                    self.builder.build_int_neg(x, FN_NAME)
+                }),
+                Add(expr1, expr2) => Value::Int({
+                    let lhs = self.jit_compile_expr(expr1)?.as_int()?;
+                    let rhs = self.jit_compile_expr(expr2)?.as_int()?;
+                    // TODO check for overflow
+                    self.builder.build_int_add(lhs, rhs, FN_NAME)
+                }),
+                Sub(expr1, expr2) => Value::Int({
+                    let lhs = self.jit_compile_expr(expr1)?.as_int()?;
+                    let rhs = self.jit_compile_expr(expr2)?.as_int()?;
+                    // TODO check for overflow
+                    self.builder.build_int_sub(lhs, rhs, FN_NAME)
+                }),
+                Var(name) => unimplemented!(),
+            },
+        })
     }
 }

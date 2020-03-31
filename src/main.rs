@@ -60,8 +60,8 @@ fn interpret(source_code: &str) -> Result<interpreter::Value, Box<dyn Error>> {
 fn compile_and_run(source_code: &str) -> Result<i64, Box<dyn Error>> {
     let ast = make_ast(source_code)?;
     let context = Context::create();
-    let codegen = compiler::CodeGen::new(&context)?;
-    let transition_fn = codegen
+    let compiler = compiler::Compiler::new(&context)?;
+    let transition_fn = compiler
         .jit_compile_transition_fn(&ast.transition_fn)
         .map_err(|e| Box::new(e.with_source(source_code)))?;
     Ok(unsafe { transition_fn.call() })

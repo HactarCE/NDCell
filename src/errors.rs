@@ -44,17 +44,20 @@ pub struct LangErrorWithSource {
 }
 impl fmt::Display for LangErrorWithSource {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Write line of source code.
-        writeln!(f, "{}", self.source_line)?;
-        for _ in 0..(self.start - 1) {
-            write!(f, " ")?;
-        }
-        // Write arrows pointing to the part with the error.
-        for _ in self.start..self.end {
-            write!(f, "^")?;
+        if self.start > 0 {
+            // Write line of source code.
+            writeln!(f, "{}", self.source_line)?;
+            for _ in 0..(self.start - 1) {
+                write!(f, " ")?;
+            }
+            // Write arrows pointing to the part with the error.
+            for _ in self.start..self.end {
+                write!(f, "^")?;
+            }
+            write!(f, "   ")?;
         }
         // Write the error message.
-        write!(f, "   {}", self.msg)?;
+        write!(f, "{}", self.msg)?;
         Ok(())
     }
 }

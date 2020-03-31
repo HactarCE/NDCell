@@ -31,7 +31,8 @@ pub struct State {
     pub vars: HashMap<String, Value>,
 }
 impl State {
-    pub fn new(instructions: ast::StatementBlock) -> Self {
+    pub fn new(mut instructions: ast::StatementBlock) -> Self {
+        ast::flatten_block(&mut instructions);
         Self {
             instructions,
             instruction_pointer: 0,

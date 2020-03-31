@@ -10,7 +10,7 @@ mod value;
 
 use super::ast;
 use super::errors::*;
-use super::{Span, Spanned};
+use super::Spanned;
 use value::*;
 
 /// Convenience type alias for a transition function.
@@ -63,7 +63,7 @@ impl<'ctx> Compiler<'ctx> {
                 Become(expr) | Return(expr) => self
                     .builder
                     .build_return(Some(&self.jit_compile_expr(expr)?.as_cell_state()?)),
-                Goto(usize) => panic!("Got GOTO statement while compiling"),
+                Goto(_) => panic!("Got GOTO statement while compiling"),
                 End => panic!("Got END statement while compiling"),
             };
         }

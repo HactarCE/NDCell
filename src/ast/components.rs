@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 
 use super::super::errors::*;
-use super::{Span, Spanned};
+use super::Spanned;
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
 

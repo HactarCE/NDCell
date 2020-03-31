@@ -19,8 +19,6 @@ use value::*;
 /// `unsafe` operations internally.
 type TransitionFunction = unsafe extern "C" fn() -> i64;
 
-const FN_NAME: &'static str = "transition";
-
 pub struct Compiler<'ctx> {
     ctx: &'ctx Context,
     module: Module<'ctx>,
@@ -52,7 +50,9 @@ impl<'ctx> Compiler<'ctx> {
     ) -> LangResult<JitFunction<TransitionFunction>> {
         // Create the function type with no arguments and no varargs.
         let fn_type = self.cell_state_type.fn_type(&[], false);
-        let function = self.module.add_function(FN_NAME, fn_type, None);
+        let function = self
+            .module
+            .add_function("transition_function", fn_type, None);
 
         let basic_block = self.ctx.append_basic_block(function, "entry");
         self.builder.position_at_end(basic_block);
@@ -76,7 +76,7 @@ impl<'ctx> Compiler<'ctx> {
         if function.verify(true) {
             Ok(unsafe {
                 self.execution_engine
-                    .get_function(FN_NAME)
+                    .get_function("transition_function")
                     .expect("Failed to find JIT-compiled transition function")
             })
         } else {
@@ -95,24 +95,24 @@ impl<'ctx> Compiler<'ctx> {
                 Tag(expr) => Value::CellState(self.builder.build_int_truncate(
                     self.jit_compile_expr(expr)?.as_int()?,
                     self.cell_state_type,
-                    FN_NAME,
+                    "tmp_intToCellstate",
                 )),
                 Neg(expr) => Value::Int({
                     // TODO check for overflow
                     let x = self.jit_compile_expr(expr)?.as_int()?;
-                    self.builder.build_int_neg(x, FN_NAME)
+                    self.builder.build_int_neg(x, "tmp_neg")
                 }),
                 Add(expr1, expr2) => Value::Int({
                     let lhs = self.jit_compile_expr(expr1)?.as_int()?;
                     let rhs = self.jit_compile_expr(expr2)?.as_int()?;
                     // TODO check for overflow
-                    self.builder.build_int_add(lhs, rhs, FN_NAME)
+                    self.builder.build_int_add(lhs, rhs, "tmp_add")
                 }),
                 Sub(expr1, expr2) => Value::Int({
                     let lhs = self.jit_compile_expr(expr1)?.as_int()?;
                     let rhs = self.jit_compile_expr(expr2)?.as_int()?;
                     // TODO check for overflow
-                    self.builder.build_int_sub(lhs, rhs, FN_NAME)
+                    self.builder.build_int_sub(lhs, rhs, "tmp_sub")
                 }),
                 Var(name) => unimplemented!(),
             },

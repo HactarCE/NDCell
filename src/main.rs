@@ -47,11 +47,11 @@ fn interpret(program: ast::Program) -> LangResult<interpreter::Value> {
     }
 }
 
-fn compile_and_run(program: ast::Program) -> LangResult<i64> {
+fn compile_and_run(program: ast::Program) -> LangResult<types::LangCellState> {
     let context = Context::create();
-    let compiler = compiler::Compiler::new(&context)?;
+    let mut compiler = compiler::Compiler::new(&context)?;
     let transition_fn = compiler.jit_compile_transition_fn(&program.transition_fn)?;
-    Ok(unsafe { transition_fn.call() })
+    unsafe { transition_fn.call() }
 }
 
 fn make_ast(source_code: &str) -> LangResult<ast::Program> {

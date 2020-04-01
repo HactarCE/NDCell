@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
@@ -7,7 +8,7 @@ use super::types::Type;
 pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
 pub type LangResult<T> = Result<T, LangError>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LangErrorWithSource {
     pub source_line: Option<String>,
     pub span: Option<(usize, usize)>,
@@ -34,7 +35,7 @@ impl fmt::Display for LangErrorWithSource {
 }
 impl Error for LangErrorWithSource {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LangError {
     pub span: Option<Span>,
     pub msg: LangErrorMsg,
@@ -67,12 +68,11 @@ impl LangError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LangErrorMsg {
     // Miscellaneous errors
     Unimplemented,
-    InternalError(&'static str),
-    BoxedInternalError(Box<dyn std::error::Error>),
+    InternalError(Cow<'static, str>),
 
     // Compile errors
     UnknownSymbol,
@@ -87,6 +87,7 @@ pub enum LangErrorMsg {
     // Compile errors for JIT; runtime errors for interpreter
     TypeError { expected: Type, got: Type },
     UseOfUninitializedVariable,
+    ReturnInTransitionFunction,
 
     // Runtime errors
     IntegerOverflowDuringNegation,
@@ -97,7 +98,7 @@ pub enum LangErrorMsg {
 }
 impl<T: 'static + std::error::Error> From<T> for LangErrorMsg {
     fn from(error: T) -> Self {
-        Self::BoxedInternalError(Box::new(error))
+        Self::InternalError(error.to_string().into())
     }
 }
 impl fmt::Display for LangErrorMsg {
@@ -108,9 +109,6 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::InternalError(s) => {
                 write!(f, "Internal error: {}\nThis is a bug in NDCell, not your code. Please report this to the developer!", s)?;
-            }
-            Self::BoxedInternalError(e) => {
-                write!(f, "Internal error: {}\nThis is a bug in NDCell, not your code. Please report this to the developer!", e)?;
             }
 
             Self::UnknownSymbol => {
@@ -143,6 +141,12 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::UseOfUninitializedVariable => {
                 write!(f, "This variable might not be initialized before use")?;
+            }
+            Self::ReturnInTransitionFunction => {
+                write!(
+                    f,
+                    "Use 'become' instead of 'return' in transition functions"
+                )?;
             }
 
             Self::IntegerOverflowDuringNegation => {

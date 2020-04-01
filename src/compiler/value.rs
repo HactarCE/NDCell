@@ -1,11 +1,10 @@
 use inkwell::values::IntValue;
 
-use super::super::{errors::*, Spanned, Type};
+use super::super::types::Type;
+use super::super::{errors::*, Spanned};
+use LangErrorMsg::TypeError;
 
-pub const INT_BITS: u32 = 64;
-pub const CELL_STATE_BITS: u32 = 64;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Value<'ctx> {
     Null,
     Int(IntValue<'ctx>),
@@ -13,7 +12,7 @@ pub enum Value<'ctx> {
     // Pattern(crate::automaton::ArrayView2D<u8>),
 }
 impl<'ctx> Value<'ctx> {
-    pub fn get_type(&self) -> Type {
+    pub fn get_type(self) -> Type {
         match self {
             Self::Null => Type::Void,
             Self::Int(_) => Type::Int,
@@ -22,16 +21,23 @@ impl<'ctx> Value<'ctx> {
     }
 }
 impl<'ctx> Spanned<Value<'ctx>> {
-    pub fn as_int(&self) -> LangResult<IntValue<'ctx>> {
+    pub fn as_int(self) -> LangResult<IntValue<'ctx>> {
         match self.inner {
             Value::Int(i) => Ok(i),
-            _ => type_error(self, self.inner.get_type(), Type::Int),
+            _ => self.type_err(Type::Int),
         }
     }
-    pub fn as_cell_state(&self) -> LangResult<IntValue<'ctx>> {
+    pub fn as_cell_state(self) -> LangResult<IntValue<'ctx>> {
         match self.inner {
             Value::CellState(i) => Ok(i),
-            _ => type_error(self, self.inner.get_type(), Type::CellState),
+            _ => self.type_err(Type::CellState),
         }
+    }
+    fn type_err<T>(self, expected: Type) -> LangResult<T> {
+        Err(TypeError {
+            expected,
+            got: self.inner.get_type(),
+        }
+        .with_span(self))
     }
 }

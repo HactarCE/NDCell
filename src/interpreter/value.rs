@@ -1,13 +1,12 @@
-use super::super::{errors::*, Span, Spanned, Type};
-
-type IntValue = i64;
-type CellStateValue = i64;
+use super::super::types::{LangCellState, LangInt, Type};
+use super::super::{errors::*, Spanned};
+use LangErrorMsg::TypeError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     Null,
-    Int(IntValue),
-    CellState(CellStateValue),
+    Int(LangInt),
+    CellState(LangCellState),
     // Pattern(crate::automaton::ArrayView2D<u8>),
 }
 impl From<Type> for Value {
@@ -31,26 +30,23 @@ impl Value {
     }
 }
 impl Spanned<Value> {
-    pub fn as_int(&self) -> LangResult<IntValue> {
+    pub fn as_int(&self) -> LangResult<LangInt> {
         match self.inner {
             Value::Int(i) => Ok(i),
-            _ => type_error(self, self.inner.get_type(), Type::Int),
+            _ => self.type_err(Type::Int),
         }
     }
-    pub fn as_cell_state(&self) -> LangResult<CellStateValue> {
+    pub fn as_cell_state(&self) -> LangResult<LangCellState> {
         match self.inner {
             Value::CellState(i) => Ok(i),
-            _ => type_error(self, self.inner.get_type(), Type::CellState),
+            _ => self.type_err(Type::CellState),
         }
     }
-}
-
-fn type_error<T>(spanned: impl Into<Span>, got_type: Type, expected_type: Type) -> LangResult<T> {
-    spanned_lang_err(
-        spanned,
-        format!(
-            "Type error: expected {} but got {}",
-            expected_type, got_type
-        ),
-    )
+    fn type_err<T>(&self, expected: Type) -> LangResult<T> {
+        Err(TypeError {
+            expected,
+            got: self.inner.get_type(),
+        }
+        .with_span(self))
+    }
 }

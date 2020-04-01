@@ -1,45 +1,11 @@
-use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
 use super::span::Span;
-use super::Type;
+use super::types::Type;
 
+pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
 pub type LangResult<T> = Result<T, LangError>;
-pub type LangErrorMsg = Cow<'static, str>;
-
-#[derive(Debug)]
-pub struct LangError {
-    pub span: Option<Span>,
-    pub msg: LangErrorMsg,
-}
-impl LangError {
-    pub fn with_source(&self, src: &str) -> LangErrorWithSource {
-        if let Some(span) = self.span {
-            let (start_tp, end_tp) = span.textpoints(src);
-            let start = start_tp.column();
-            let mut end = start;
-            if start_tp.line() == end_tp.line() && end_tp.column() > start_tp.column() {
-                end = end_tp.column();
-            }
-            LangErrorWithSource {
-                source_line: src
-                    .lines()
-                    .skip(start_tp.line() - 1)
-                    .next()
-                    .map(str::to_owned),
-                span: Some((start, end)),
-                msg: self.msg.clone(),
-            }
-        } else {
-            LangErrorWithSource {
-                source_line: None,
-                span: None,
-                msg: self.msg.clone(),
-            }
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct LangErrorWithSource {
@@ -68,38 +34,153 @@ impl fmt::Display for LangErrorWithSource {
 }
 impl Error for LangErrorWithSource {}
 
-pub fn spanned_lang_error(span: impl Into<Span>, msg: impl Into<LangErrorMsg>) -> LangError {
-    LangError {
-        span: Some(span.into()),
-        msg: msg.into(),
+#[derive(Debug)]
+pub struct LangError {
+    pub span: Option<Span>,
+    pub msg: LangErrorMsg,
+}
+impl LangError {
+    pub fn with_source(self, src: &str) -> LangErrorWithSource {
+        if let Some(span) = self.span {
+            let (start_tp, end_tp) = span.textpoints(src);
+            let start = start_tp.column();
+            let mut end = start;
+            if start_tp.line() == end_tp.line() && end_tp.column() > start_tp.column() {
+                end = end_tp.column();
+            }
+            LangErrorWithSource {
+                source_line: src
+                    .lines()
+                    .skip(start_tp.line() - 1)
+                    .next()
+                    .map(str::to_owned),
+                span: Some((start, end)),
+                msg: self.msg,
+            }
+        } else {
+            LangErrorWithSource {
+                source_line: None,
+                span: None,
+                msg: self.msg,
+            }
+        }
     }
 }
 
-pub fn spanned_lang_err<T>(span: impl Into<Span>, msg: impl Into<LangErrorMsg>) -> LangResult<T> {
-    Err(spanned_lang_error(span, msg))
-}
+#[derive(Debug)]
+pub enum LangErrorMsg {
+    // Miscellaneous errors
+    Unimplemented,
+    InternalError(&'static str),
+    BoxedInternalError(Box<dyn std::error::Error>),
 
-pub fn lang_error(msg: impl Into<LangErrorMsg>) -> LangError {
-    LangError {
-        span: None,
-        msg: msg.into(),
+    // Compile errors
+    UnknownSymbol,
+    Unterminated(&'static str),
+    Unmatched(char, char),
+    Expected(&'static str),
+    TopLevelNonDirective,
+    InvalidDirectiveName,
+    MissingTransitionFunction,
+    MultipleTransitionFunctions,
+
+    // Compile errors for JIT; runtime errors for interpreter
+    TypeError { expected: Type, got: Type },
+    UseOfUninitializedVariable,
+
+    // Runtime errors
+    IntegerOverflowDuringNegation,
+    IntegerOverflowDuringAddition,
+    IntegerOverflowDuringSubtraction,
+    IntegerOverflowDuringMultiplication,
+    CellStateOutOfRange,
+}
+impl<T: 'static + std::error::Error> From<T> for LangErrorMsg {
+    fn from(error: T) -> Self {
+        Self::BoxedInternalError(Box::new(error))
+    }
+}
+impl fmt::Display for LangErrorMsg {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Unimplemented => {
+                write!(f, "This feature is unimplemented")?;
+            }
+            Self::InternalError(s) => {
+                write!(f, "Internal error: {}\nThis is a bug in NDCell, not your code. Please report this to the developer!", s)?;
+            }
+            Self::BoxedInternalError(e) => {
+                write!(f, "Internal error: {}\nThis is a bug in NDCell, not your code. Please report this to the developer!", e)?;
+            }
+
+            Self::UnknownSymbol => {
+                write!(f, "Unknown symbol")?;
+            }
+            Self::Unterminated(s) => {
+                write!(f, "This {} never ends", s)?;
+            }
+            Self::Unmatched(char1, char2) => {
+                write!(f, "This '{}' has no matching '{}'", char1, char2)?;
+            }
+            Self::Expected(s) => {
+                write!(f, "Expected {}", s)?;
+            }
+            Self::TopLevelNonDirective => {
+                write!(f, "Only directives may appear at the top level of a file")?;
+            }
+            Self::InvalidDirectiveName => {
+                write!(f, "Invalid directive name")?;
+            }
+            Self::MissingTransitionFunction => {
+                write!(f, "Missing transition function")?;
+            }
+            Self::MultipleTransitionFunctions => {
+                write!(f, "Multiple transition functions")?;
+            }
+
+            Self::TypeError { expected, got } => {
+                write!(f, "Type error: expected {} but got {}", expected, got)?;
+            }
+            Self::UseOfUninitializedVariable => {
+                write!(f, "This variable might not be initialized before use")?;
+            }
+
+            Self::IntegerOverflowDuringNegation => {
+                write!(f, "Integer overflow during negation")?;
+            }
+            Self::IntegerOverflowDuringAddition => {
+                write!(f, "Integer overflow during addition")?;
+            }
+            Self::IntegerOverflowDuringSubtraction => {
+                write!(f, "Integer overflow during subtraction")?;
+            }
+            Self::IntegerOverflowDuringMultiplication => {
+                write!(f, "Integer overflow during multiplication")?;
+            }
+            Self::CellStateOutOfRange => {
+                write!(f, "Cell state out of range")?;
+            }
+        }
+        Ok(())
+    }
+}
+impl LangErrorMsg {
+    pub fn with_span(self, span: impl Into<Span>) -> LangError {
+        LangError {
+            span: Some(span.into()),
+            msg: self,
+        }
+    }
+    pub fn without_span(self) -> LangError {
+        LangError {
+            span: None,
+            msg: self,
+        }
     }
 }
 
-pub fn lang_err<T>(msg: impl Into<LangErrorMsg>) -> LangResult<T> {
-    Err(lang_error(msg))
-}
-
-pub fn type_error<T>(
-    spanned: impl Into<Span>,
-    got_type: Type,
-    expected_type: Type,
-) -> LangResult<T> {
-    spanned_lang_err(
-        spanned,
-        format!(
-            "Type error: expected {} but got {}",
-            expected_type, got_type
-        ),
-    )
+impl<T: Into<LangErrorMsg>> From<T> for LangError {
+    fn from(msg: T) -> Self {
+        msg.into().without_span()
+    }
 }

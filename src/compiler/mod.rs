@@ -3,15 +3,15 @@ use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
 use inkwell::types::IntType;
+use inkwell::values::IntValue;
 use inkwell::OptimizationLevel;
-use std::error::Error;
 
 mod value;
 
-use super::ast;
-use super::errors::*;
-use super::Spanned;
+use super::types::{CELL_STATE_BITS, INT_BITS};
+use super::{ast, errors::*, Span, Spanned};
 use value::*;
+use LangErrorMsg::InternalError;
 
 /// Convenience type alias for a transition function.
 ///
@@ -27,10 +27,12 @@ pub struct Compiler<'ctx> {
 
     int_type: IntType<'ctx>,
     cell_state_type: IntType<'ctx>,
+
+    error_points: Vec<LangError>,
 }
 
 impl<'ctx> Compiler<'ctx> {
-    pub fn new(ctx: &'ctx Context) -> Result<Self, Box<dyn Error>> {
+    pub fn new(ctx: &'ctx Context) -> LangResult<Self> {
         let module = ctx.create_module("sum");
         let builder = ctx.create_builder();
         let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
@@ -39,8 +41,11 @@ impl<'ctx> Compiler<'ctx> {
             module,
             builder,
             execution_engine,
+
             int_type: ctx.custom_width_int_type(INT_BITS),
             cell_state_type: ctx.custom_width_int_type(CELL_STATE_BITS),
+
+            error_points: vec![],
         })
     }
 
@@ -83,7 +88,7 @@ impl<'ctx> Compiler<'ctx> {
             })
         } else {
             unsafe { function.delete() };
-            lang_err("Internal error while compiling: function.verify() returned false")
+            Err(InternalError("LLVM function verification failed").without_span())
         }
     }
 
@@ -121,6 +126,10 @@ impl<'ctx> Compiler<'ctx> {
         })
     }
 
+    fn jit_compile_cell_state_value_check(&self, cell_state_value: IntValue, span: Span) {}
+
+    /// Returns true if the current basic block needs a terminator, or false
+    /// otherwise.
     fn needs_terminator(&self) -> bool {
         if let Some(block) = self.builder.get_insert_block() {
             block.get_terminator().is_none()

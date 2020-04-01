@@ -78,7 +78,7 @@ impl<T> From<&Spanned<T>> for Span {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Spanned<T> {
     pub span: Span,
     pub inner: T,

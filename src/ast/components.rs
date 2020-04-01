@@ -2,9 +2,11 @@ use std::convert::TryFrom;
 
 use super::super::errors::*;
 use super::Spanned;
+use LangErrorMsg::{MissingTransitionFunction, MultipleTransitionFunctions};
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
 
+#[derive(Debug, Clone)]
 pub struct Program {
     pub transition_fn: StatementBlock,
 }
@@ -18,12 +20,12 @@ impl TryFrom<Vec<Spanned<Directive>>> for Program {
                     if transition_fn.is_none() {
                         transition_fn = Some(block);
                     } else {
-                        return spanned_lang_err(directive.span, "Multiple transition functions");
+                        return Err(MultipleTransitionFunctions.with_span(directive.span));
                     }
                 }
             }
         }
-        let transition_fn = transition_fn.ok_or(lang_error("Missing transition function"))?;
+        let transition_fn = transition_fn.ok_or(MissingTransitionFunction)?;
         Ok(Self { transition_fn })
     }
 }

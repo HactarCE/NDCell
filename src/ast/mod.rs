@@ -7,6 +7,9 @@ use super::errors::*;
 use super::span::{Span, Spanned};
 pub use components::*;
 use tokens::*;
+use LangErrorMsg::{
+    Expected, InvalidDirectiveName, TopLevelNonDirective, Unimplemented, Unmatched,
+};
 
 /// Produce an AST from source code.
 pub fn make_program(source_code: &str) -> LangResult<Program> {
@@ -140,14 +143,9 @@ impl<'a> TokenFeeder<'a> {
         }
     }
 
-    /// Returns a tuple with the span of the current token that can be used to
-    /// make a LangResult::Err.
-    fn error(&self, msg: &'static str) -> LangError {
-        spanned_lang_error(self.get_span(), msg)
-    }
     /// Returns a LangResult::Err with the span of the current token.
-    fn err<T>(&self, msg: &'static str) -> LangResult<T> {
-        spanned_lang_err(self.get_span(), msg)
+    fn err<T>(&self, msg: LangErrorMsg) -> LangResult<T> {
+        Err(msg.with_span(self.get_span()))
     }
     /// Consumes the next symbol and return return a Spanned { ... } of the
     /// result of the given closure if the closure returns LangResult::Ok;
@@ -165,11 +163,6 @@ impl<'a> TokenFeeder<'a> {
             span: Span { start, end },
             inner: t,
         })
-    }
-    /// Returns a LangResult::Err on the current token stating that this feature
-    /// is not yet implemented.
-    fn unimplemented<T>(self) -> LangResult<T> {
-        self.err("Unimplemented")
     }
     /// Returns true if the given Option<Token> is Some and has a class that is
     /// in the given list of TokenClasses.
@@ -196,21 +189,18 @@ impl<'a> TokenFeeder<'a> {
             Some(TokenClass::Directive(directive_name)) => {
                 match directive_name.to_ascii_lowercase().as_ref() {
                     "transition" => Ok(Directive::Transition(self.expect(Self::block)?.inner)),
-                    _ => self.err(
-                        "Invalid directive name; valid directives are @ndca, @states, @transition",
-                    ),
+                    _ => self.err(InvalidDirectiveName),
                 }
             }
-            Some(_) => self
-                .err("Only directives, which begin with @, may appear at the top level of a file"),
-            None => self.err("Expected directive"),
+            Some(_) => self.err(TopLevelNonDirective),
+            None => self.err(Expected("directive")),
         }
     }
     /// Consumes a block, which consists of statements
     fn block(&mut self) -> LangResult<StatementBlock> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LBrace)) => (),
-            _ => self.err("Expected code block beginning with '{'")?,
+            _ => self.err(Expected("code block beginning with '{'"))?,
         }
         let open_span = self.current().unwrap().span;
         let mut statements = vec![];
@@ -223,8 +213,8 @@ impl<'a> TokenFeeder<'a> {
                     self.next();
                     break;
                 }
-                Some(_) => self.err("Expected statement or '}'")?,
-                None => spanned_lang_err(open_span, "This '{' has no matching '}'")?,
+                Some(_) => self.err(Expected("statement or '}'"))?,
+                None => Err(Unmatched('{', '}').with_span(open_span))?,
             }
         }
         Ok(statements)
@@ -235,19 +225,19 @@ impl<'a> TokenFeeder<'a> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::StatementKeyword(kw)) => match kw {
                 Become => Ok(Statement::Become(self.expect(Self::expression)?)),
-                Break => unimplemented!(),
-                Case => unimplemented!(),
-                Continue => unimplemented!(),
-                Else => unimplemented!(),
-                For => unimplemented!(),
-                If => unimplemented!(),
-                Remain => unimplemented!(),
-                Return => unimplemented!(),
-                Set => unimplemented!(),
-                Unless => unimplemented!(),
-                While => unimplemented!(),
+                Break => self.err(Unimplemented),
+                Case => self.err(Unimplemented),
+                Continue => self.err(Unimplemented),
+                Else => self.err(Unimplemented),
+                For => self.err(Unimplemented),
+                If => self.err(Unimplemented),
+                Remain => self.err(Unimplemented),
+                Return => self.err(Unimplemented),
+                Set => self.err(Unimplemented),
+                Unless => self.err(Unimplemented),
+                While => self.err(Unimplemented),
             },
-            _ => self.err("Expected statement"),
+            _ => self.err(Expected("statement")),
         }
     }
     /// Consumes a nested expression.
@@ -289,12 +279,12 @@ impl<'a> TokenFeeder<'a> {
                     self.expect(|tf| tf.paren(Self::expression))
                 }
                 Some(TokenClass::Integer(_)) => self.expect(Self::int),
-                Some(TokenClass::String { .. }) => self.unimplemented(),
-                Some(TokenClass::Tag(_)) => self.unimplemented(),
+                Some(TokenClass::String { .. }) => self.err(Unimplemented),
+                Some(TokenClass::Tag(_)) => self.err(Unimplemented),
                 Some(TokenClass::Ident(_)) => self.expect(Self::var),
                 _ => {
                     self.next();
-                    self.err("Expected expression")
+                    self.err(Expected("expression"))
                 }
             },
             _ => self.expression_with_precedence(precedence.next()),
@@ -367,28 +357,28 @@ impl<'a> TokenFeeder<'a> {
     fn int(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Integer(i)) => Ok(Expr::Int(i)),
-            _ => self.err("Expected integer"),
+            _ => self.err(Expected("integer")),
         }
     }
     /// Consumes a variable name.
     fn var(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Ident(s)) => Ok(Expr::Var(s.to_owned())),
-            _ => self.err("Expected string"),
+            _ => self.err(Expected("string")),
         }
     }
     /// Consumes a pair of parentheses with the given matcher run inside.
     fn paren<T>(&mut self, inner_matcher: impl Fn(&mut Self) -> LangResult<T>) -> LangResult<T> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LParen)) => (),
-            _ => self.err("Expected parenthetical expression beginning with '('")?,
+            _ => self.err(Expected("parenthetical expression beginning with '('"))?,
         }
         let open_span = self.current().unwrap().span;
         let expr = self.expect(inner_matcher)?.inner;
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::RParen)) => Ok(expr),
-            Some(_) => self.err("Expected ')'"),
-            None => spanned_lang_err(open_span, "This '(' has no matching ')'"),
+            Some(_) => self.err(Expected("')'")),
+            None => Err(Unmatched('(', ')').with_span(open_span)),
         }
     }
 }

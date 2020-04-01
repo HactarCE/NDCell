@@ -4,7 +4,9 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
 use super::super::errors::*;
+use super::super::types::LangInt;
 use super::{LangResult, Span};
+use LangErrorMsg::{UnknownSymbol, Unterminated};
 
 /// A list of token patterns, arranged roughly from least to most general.
 const TOKEN_PATTERNS: &'static [&'static str] = &[
@@ -73,7 +75,7 @@ pub fn tokenize<'a>(s: &'a str) -> LangResult<Vec<Token<'a>>> {
                 string,
                 class,
             }),
-            Err(msg) => spanned_lang_err(span, msg),
+            Err(msg) => Err(msg.with_span(span)),
         }
     });
     flat_tokens
@@ -112,7 +114,7 @@ pub enum TokenClass<'a> {
     Assignment(AssignmentToken),
     Comparison(ComparisonToken),
     Punctuation(PunctuationToken),
-    Integer(i64),
+    Integer(LangInt),
     String {
         prefix: Option<char>,
         quote: char,
@@ -146,8 +148,8 @@ impl<'a> fmt::Display for TokenClass<'a> {
     }
 }
 impl<'a> TryFrom<&'a str> for TokenClass<'a> {
-    type Error = &'static str;
-    fn try_from(s: &'a str) -> Result<Self, &'static str> {
+    type Error = LangErrorMsg;
+    fn try_from(s: &'a str) -> Result<Self, LangErrorMsg> {
         if let Ok(statement_keyword) = s.try_into() {
             Ok(Self::StatementKeyword(statement_keyword))
         } else if let Ok(keyword) = s.try_into() {
@@ -173,7 +175,7 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
                     contents,
                 })
             } else {
-                Err("This string never ends")
+                Err(Unterminated("string"))
             }
         } else if DIRECTIVE_PATTERN.is_match(s) {
             Ok(Self::Directive(&s[1..]))
@@ -185,12 +187,12 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
             Ok(Self::Comment)
         } else if BLOCK_COMMENT_PATTERN.is_match(s) {
             if s == "/*" {
-                Err("This block comment never ends")
+                Err(Unterminated("block comment"))
             } else {
                 Ok(Self::Comment)
             }
         } else {
-            Err("Unknown symbol")
+            Err(UnknownSymbol)
         }
     }
 }

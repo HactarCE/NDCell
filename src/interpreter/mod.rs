@@ -3,7 +3,12 @@ use std::collections::HashMap;
 mod value;
 pub use value::Value;
 
-use super::{ast, errors::*, Spanned};
+use super::types::LangCellState;
+use super::{ast, errors::*, Spanned, CELL_STATE_COUNT};
+use LangErrorMsg::{
+    CellStateOutOfRange, IntegerOverflowDuringNegation, IntegerOverflowDuringSubtraction,
+    UseOfUninitializedVariable,
+};
 
 pub enum ExecuteResult {
     Continue,
@@ -39,6 +44,7 @@ impl State {
             vars: HashMap::default(),
         }
     }
+
     pub fn step(&mut self) -> LangResult<ExecuteResult> {
         use ast::Statement::*;
         if let Some(instruction) = self.instructions.get(self.instruction_pointer) {
@@ -55,6 +61,7 @@ impl State {
             Ok(ExecuteResult::Return(Value::Null))
         }
     }
+
     pub fn eval(&self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value>> {
         use ast::Expr::*;
         let span = expression.span;
@@ -62,23 +69,39 @@ impl State {
             span,
             inner: match &expression.inner {
                 Int(i) => Value::Int(*i),
-                Tag(expr) => Value::CellState(self.eval(expr)?.as_int()?),
+                Tag(expr) => Value::CellState({
+                    // Convert integer to cell state, checking whether it is
+                    // within range.
+                    let x = self.eval(expr)?.as_int()?;
+                    if x > 0 && (x as usize) < CELL_STATE_COUNT {
+                        x as LangCellState
+                    } else {
+                        Err(CellStateOutOfRange.with_span(span))?
+                    }
+                }),
                 Neg(expr) => Value::Int(-self.eval(expr)?.as_int()?),
                 Add(expr1, expr2) => {
-                    Value::Int(self.eval(expr1)?.as_int()? + self.eval(expr2)?.as_int()?)
+                    // Add two integers, checking for overflow.
+                    let lhs = self.eval(expr1)?.as_int()?;
+                    let rhs = self.eval(expr2)?.as_int()?;
+                    Value::Int(
+                        lhs.checked_add(rhs)
+                            .ok_or_else(|| IntegerOverflowDuringNegation.with_span(span))?,
+                    )
                 }
                 Sub(expr1, expr2) => {
-                    Value::Int(self.eval(expr1)?.as_int()? - self.eval(expr2)?.as_int()?)
+                    // Subtract two integers, checking for overflow.
+                    let lhs = self.eval(expr1)?.as_int()?;
+                    let rhs = self.eval(expr2)?.as_int()?;
+                    Value::Int(
+                        lhs.checked_sub(rhs)
+                            .ok_or_else(|| IntegerOverflowDuringSubtraction.with_span(span))?,
+                    )
                 }
                 Var(name) => self
                     .vars
                     .get(name)
-                    .ok_or_else(|| {
-                        spanned_lang_error(
-                            span,
-                            format!("Tried to access uninitialized variable '{}'", name),
-                        )
-                    })?
+                    .ok_or_else(|| UseOfUninitializedVariable.with_span(span))?
                     .clone(),
             },
         })

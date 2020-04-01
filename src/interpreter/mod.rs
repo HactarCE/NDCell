@@ -41,15 +41,19 @@ impl State {
     }
     pub fn step(&mut self) -> LangResult<ExecuteResult> {
         use ast::Statement::*;
-        match &self.instructions[self.instruction_pointer].inner {
-            Become(expr) | Return(expr) => {
-                return Ok(ExecuteResult::Return(self.eval(expr)?.inner))
+        if let Some(instruction) = self.instructions.get(self.instruction_pointer) {
+            match &instruction.inner {
+                Become(expr) | Return(expr) => {
+                    return Ok(ExecuteResult::Return(self.eval(expr)?.inner))
+                }
+                End => return Ok(ExecuteResult::Return(Value::Null)),
+                Goto(idx) => self.instruction_pointer = *idx,
             }
-            End => return Ok(ExecuteResult::Return(Value::Null)),
-            Goto(idx) => self.instruction_pointer = *idx,
+            self.instruction_pointer += 1;
+            Ok(ExecuteResult::Continue)
+        } else {
+            Ok(ExecuteResult::Return(Value::Null))
         }
-        self.instruction_pointer += 1;
-        return Ok(ExecuteResult::Continue);
     }
     pub fn eval(&self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value>> {
         use ast::Expr::*;

@@ -68,10 +68,12 @@ impl<'ctx> Compiler<'ctx> {
             };
         }
 
-        // // Implicit `return #0` at the end of the transition function. TODO
-        // // change this to `remain`, once that's implemented.
-        // self.builder
-        //     .build_return(Some(&self.cell_state_type.const_zero()));
+        if self.needs_terminator() {
+            // Implicit `return #0` at the end of the transition function. TODO
+            // change this to `remain`, once that's implemented.
+            self.builder
+                .build_return(Some(&self.cell_state_type.const_zero()));
+        }
 
         if function.verify(true) {
             Ok(unsafe {
@@ -117,5 +119,13 @@ impl<'ctx> Compiler<'ctx> {
                 Var(name) => unimplemented!(),
             },
         })
+    }
+
+    fn needs_terminator(&self) -> bool {
+        if let Some(block) = self.builder.get_insert_block() {
+            block.get_terminator().is_none()
+        } else {
+            false
+        }
     }
 }

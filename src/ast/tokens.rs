@@ -474,7 +474,7 @@ impl TryFrom<&str> for PunctuationToken {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::TextPoint;
+    use super::super::super::span::TextPoint;
     use super::*;
 
     #[test]

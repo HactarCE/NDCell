@@ -12,7 +12,7 @@ fn test_ast() {
 
     let tokens = tokens::tokenize(source_code).expect("Tokenization failed");
     let ast = TokenFeeder::from(&tokens[..])
-        .program()
+        .directives()
         .expect("AST generation failed");
 
     let mut correct = false;

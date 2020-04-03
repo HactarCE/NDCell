@@ -4,10 +4,10 @@ mod value;
 pub use value::Value;
 
 use super::types::LangCellState;
-use super::{ast, errors::*, Spanned, CELL_STATE_COUNT};
+use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use LangErrorMsg::{
-    CellStateOutOfRange, IntegerOverflowDuringNegation, IntegerOverflowDuringSubtraction,
-    UseOfUninitializedVariable,
+    CellStateOutOfRange, ComparisonError, IntegerOverflowDuringNegation,
+    IntegerOverflowDuringSubtraction, UseOfUninitializedVariable,
 };
 
 pub enum ExecuteResult {
@@ -98,13 +98,51 @@ impl State {
                             .ok_or_else(|| IntegerOverflowDuringSubtraction.with_span(span))?,
                     )
                 }
-                Comparison(expr1, comparisons) => unimplemented!(),
+                Comparison(expr1, comparisons) => {
+                    let mut result = true;
+                    let mut lhs = self.eval(expr1)?;
+                    for (comparison, expr2) in comparisons {
+                        let rhs = self.eval(expr2)?;
+                        if !Self::compare(*comparison, &lhs, &rhs)? {
+                            result = false;
+                        }
+                        lhs = rhs;
+                    }
+                    Value::Int(if result { 1 } else { 0 })
+                }
                 Var(name) => self
                     .vars
                     .get(name)
                     .ok_or_else(|| UseOfUninitializedVariable.with_span(span))?
                     .clone(),
             },
+        })
+    }
+    fn compare(
+        comparison: ast::Comparison,
+        lhs: &Spanned<Value>,
+        rhs: &Spanned<Value>,
+    ) -> LangResult<bool> {
+        use ast::Comparison::*;
+        use Value::*;
+        Ok(match (&lhs.inner, &rhs.inner, comparison) {
+            // Integer comparison
+            (Int(a), Int(b), Equal) => a == b,
+            (Int(a), Int(b), NotEqual) => a != b,
+            (Int(a), Int(b), LessThan) => a < b,
+            (Int(a), Int(b), GreaterThan) => a > b,
+            (Int(a), Int(b), LessThanOrEqual) => a <= b,
+            (Int(a), Int(b), GreaterThanOrEqual) => a >= b,
+            // Cell state comparison
+            (CellState(a), CellState(b), Equal) => a == b,
+            (CellState(a), CellState(b), NotEqual) => a != b,
+            // Error
+            _ => Err(ComparisonError {
+                cmp_sym: comparison.get_symbol(),
+                lhs: lhs.inner.get_type(),
+                rhs: rhs.inner.get_type(),
+            }
+            .with_span(Span::merge(lhs, rhs)))?,
         })
     }
 }

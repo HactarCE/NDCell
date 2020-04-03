@@ -84,7 +84,7 @@ pub enum Expr {
     Var(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Comparison {
     Equal,
     NotEqual,
@@ -92,6 +92,18 @@ pub enum Comparison {
     GreaterThan,
     LessThanOrEqual,
     GreaterThanOrEqual,
+}
+impl Comparison {
+    pub fn get_symbol(self) -> &'static str {
+        match self {
+            Self::Equal => "==",
+            Self::NotEqual => "!=",
+            Self::LessThan => "<",
+            Self::GreaterThan => ">",
+            Self::LessThanOrEqual => "<=",
+            Self::GreaterThanOrEqual => ">=",
+        }
+    }
 }
 impl From<ComparisonToken> for Comparison {
     fn from(token_class: ComparisonToken) -> Self {

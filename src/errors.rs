@@ -85,7 +85,15 @@ pub enum LangErrorMsg {
     MultipleTransitionFunctions,
 
     // Compile errors for JIT; runtime errors for interpreter
-    TypeError { expected: Type, got: Type },
+    TypeError {
+        expected: Type,
+        got: Type,
+    },
+    ComparisonError {
+        cmp_sym: &'static str,
+        lhs: Type,
+        rhs: Type,
+    },
     UseOfUninitializedVariable,
     ReturnInTransitionFunction,
 
@@ -138,6 +146,16 @@ impl fmt::Display for LangErrorMsg {
 
             Self::TypeError { expected, got } => {
                 write!(f, "Type error: expected {} but got {}", expected, got)?;
+            }
+            Self::ComparisonError { cmp_sym, lhs, rhs } => {
+                write!(
+                    f,
+                    "Type error: cannot compare {} to {} using {}",
+                    lhs, rhs, cmp_sym
+                )?;
+                if *lhs == Type::CellState && *rhs == Type::CellState {
+                    write!(f, "; convert them to integers first using the '#id' tag")?;
+                }
             }
             Self::UseOfUninitializedVariable => {
                 write!(f, "This variable might not be initialized before use")?;

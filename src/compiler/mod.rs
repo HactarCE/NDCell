@@ -32,6 +32,8 @@ pub struct TransitionFunction {
 }
 impl TransitionFunction {
     pub fn call(&self) -> LangResult<LangCellState> {
+        // This module takes responsibility for JIT-related unsafety because the
+        // JITting happened in this module.
         let result = unsafe { self.jit_fn.call() };
         if result & (1 << 63) == 0 {
             Ok(result as LangCellState)
@@ -177,6 +179,7 @@ impl<'ctx> Compiler<'ctx> {
                     // TODO check for overflow
                     self.builder.build_int_sub(lhs, rhs, "tmp_sub")
                 }),
+                Comparison(expr1, comparisons) => unimplemented!(),
                 Var(_name) => unimplemented!(),
             },
         })

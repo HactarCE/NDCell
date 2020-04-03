@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 
 use super::super::errors::*;
+use super::tokens::ComparisonToken;
 use super::Spanned;
 use LangErrorMsg::{MissingTransitionFunction, MultipleTransitionFunctions};
 
@@ -73,5 +74,32 @@ pub enum Expr {
     Neg(Box<Spanned<Expr>>),
     Add(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Sub(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
+    /// A series of chained comparisons (a la Python). For example, `x < y == z`
+    /// would be represented (roughly) as: `Expr::Comparison(x, [(LessThan, y),
+    /// (Equal, z)])`.
+    Comparison(Box<Spanned<Expr>>, Vec<(Comparison, Spanned<Expr>)>),
     Var(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Comparison {
+    Equal,
+    NotEqual,
+    LessThan,
+    GreaterThan,
+    LessThanOrEqual,
+    GreaterThanOrEqual,
+}
+impl From<ComparisonToken> for Comparison {
+    fn from(token_class: ComparisonToken) -> Self {
+        use ComparisonToken::*;
+        match token_class {
+            Equal => Self::Equal,
+            NotEqual => Self::NotEqual,
+            LessThan => Self::LessThan,
+            GreaterThan => Self::GreaterThan,
+            LessThanOrEqual => Self::LessThanOrEqual,
+            GreaterThanOrEqual => Self::GreaterThanOrEqual,
+        }
+    }
 }

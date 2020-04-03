@@ -98,6 +98,7 @@ impl State {
                             .ok_or_else(|| IntegerOverflowDuringSubtraction.with_span(span))?,
                     )
                 }
+                Comparison(expr1, comparisons) => unimplemented!(),
                 Var(name) => self
                     .vars
                     .get(name)

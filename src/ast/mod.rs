@@ -90,12 +90,14 @@ impl<'a> From<&'a [Token<'a>]> for TokenFeeder<'a> {
 impl<'a> TokenFeeder<'a> {
     /// Moves the cursor forward and then returns the element at the cursor.
     pub fn next(&mut self) -> Option<Token<'a>> {
-        self.skip();
+        // Add 1 or set to zero.
+        self.cursor = Some(self.cursor.map(|idx| idx + 1).unwrap_or(0));
         self.current()
     }
     /// Moves the cursor back and then returns the element at the cursor.
     pub fn prev(&mut self) -> Option<Token<'a>> {
-        self.skip_back();
+        // Subtract 1 if possible.
+        self.cursor = self.cursor.and_then(|idx| idx.checked_sub(1));
         self.current()
     }
     /// Returns the element at the cursor.
@@ -111,16 +113,6 @@ impl<'a> TokenFeeder<'a> {
     /// the cursor.
     pub fn peek_prev(mut self) -> Option<Token<'a>> {
         self.prev()
-    }
-    /// Moves the cursor forward without reading a token.
-    pub fn skip(&mut self) {
-        // Add 1 or set to zero.
-        self.cursor = Some(self.cursor.map(|idx| idx + 1).unwrap_or(0));
-    }
-    /// Moves the cursor backward without reading a token.
-    pub fn skip_back(&mut self) {
-        // Subtract 1 if possible.
-        self.cursor = self.cursor.and_then(|idx| idx.checked_sub(1));
     }
 
     /// Returns the span of the current token. If there is no current token,
@@ -164,10 +156,10 @@ impl<'a> TokenFeeder<'a> {
             inner: t,
         })
     }
-    /// Returns true if the given Option<Token> is Some and has a class that is
-    /// in the given list of TokenClasses.
-    fn token_is_one_of(token: Option<Token<'a>>, token_classes: &[TokenClass]) -> bool {
-        if let Some(t) = token {
+    /// Returns true if the next token exists and has a class that is in the
+    /// given list of TokenClasses.
+    fn next_token_is_one_of(&self, token_classes: &[TokenClass]) -> bool {
+        if let Some(t) = self.peek_next() {
             token_classes.contains(&t.class)
         } else {
             false
@@ -202,7 +194,7 @@ impl<'a> TokenFeeder<'a> {
             Some(TokenClass::Punctuation(PunctuationToken::LBrace)) => (),
             _ => self.err(Expected("code block beginning with '{'"))?,
         }
-        let open_span = self.current().unwrap().span;
+        let open_span = self.get_span();
         let mut statements = vec![];
         loop {
             match self.peek_next().map(|t| t.class) {
@@ -273,6 +265,7 @@ impl<'a> TokenFeeder<'a> {
                 ],
                 precedence,
             ),
+            OpPrecedence::Comparison => self.comparison_op(precedence),
             // TODO add remaining precedence levels
             OpPrecedence::Atom => match self.peek_next().map(|t| t.class) {
                 Some(TokenClass::Punctuation(PunctuationToken::LParen)) => {
@@ -299,7 +292,7 @@ impl<'a> TokenFeeder<'a> {
         precedence: OpPrecedence,
     ) -> LangResult<Spanned<Expr>> {
         let mut op_tokens = vec![];
-        while Self::token_is_one_of(self.peek_next(), token_classes) {
+        while self.next_token_is_one_of(token_classes) {
             op_tokens.push(self.next().unwrap());
         }
         let mut ret = self.expression_with_precedence(precedence.next())?;
@@ -328,7 +321,7 @@ impl<'a> TokenFeeder<'a> {
     ) -> LangResult<Spanned<Expr>> {
         let initial = self.expression_with_precedence(precedence.next())?;
         let mut op_tokens_and_exprs = vec![];
-        while Self::token_is_one_of(self.peek_next(), token_classes) {
+        while self.next_token_is_one_of(token_classes) {
             op_tokens_and_exprs.push((
                 self.next().unwrap(),
                 self.expression_with_precedence(precedence.next())?,
@@ -353,6 +346,32 @@ impl<'a> TokenFeeder<'a> {
         }
         Ok(ret)
     }
+    /// Consumes an expression consisting of any number of chained comparison
+    /// operators.
+    fn comparison_op(&mut self, precedence: OpPrecedence) -> LangResult<Spanned<Expr>> {
+        let initial = self.expression_with_precedence(precedence.next())?;
+        let mut comparisons = vec![];
+        while let Some(Token {
+            class: TokenClass::Comparison(cmp_type),
+            ..
+        }) = self.peek_next()
+        {
+            self.next();
+            comparisons.push((
+                Comparison::from(cmp_type),
+                self.expression_with_precedence(precedence.next())?,
+            ));
+        }
+
+        if comparisons.is_empty() {
+            // No comparison to do -- just return the value.
+            return Ok(initial);
+        }
+        Ok(Spanned {
+            span: Span::merge(&initial, &comparisons.last().unwrap().1),
+            inner: Expr::Comparison(Box::new(initial), comparisons),
+        })
+    }
     /// Consumes an integer literal.
     fn int(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
@@ -373,7 +392,7 @@ impl<'a> TokenFeeder<'a> {
             Some(TokenClass::Punctuation(PunctuationToken::LParen)) => (),
             _ => self.err(Expected("parenthetical expression beginning with '('"))?,
         }
-        let open_span = self.current().unwrap().span;
+        let open_span = self.get_span();
         let expr = self.expect(inner_matcher)?.inner;
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::RParen)) => Ok(expr),

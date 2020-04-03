@@ -15,7 +15,7 @@ const CELL_STATE_COUNT: usize = 4;
 fn main() -> CompleteLangResult<()> {
     let source_code = "
         @transition {
-            become #(2 - 1 + 3)
+            become #(2 == 2 > 0)
         }
         ";
     let program = make_ast(source_code).map_err(|e| e.with_source(source_code))?;
@@ -51,7 +51,7 @@ fn compile_and_run(program: ast::Program) -> LangResult<types::LangCellState> {
     let context = Context::create();
     let mut compiler = compiler::Compiler::new(&context)?;
     let transition_fn = compiler.jit_compile_transition_fn(&program.transition_fn)?;
-    unsafe { transition_fn.call() }
+    transition_fn.call()
 }
 
 fn make_ast(source_code: &str) -> LangResult<ast::Program> {

@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::fmt;
 
 use super::super::errors::*;
 use super::tokens::ComparisonToken;
@@ -6,6 +7,8 @@ use super::Spanned;
 use LangErrorMsg::{MissingTransitionFunction, MultipleTransitionFunctions};
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
+
+const DISPLAY_INDENT: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct Program {
@@ -101,5 +104,112 @@ impl From<ComparisonToken> for Comparison {
             LessThanOrEqual => Self::LessThanOrEqual,
             GreaterThanOrEqual => Self::GreaterThanOrEqual,
         }
+    }
+}
+
+fn write_indent(f: &mut fmt::Formatter, spaces: usize) -> fmt::Result {
+    write!(f, "{:spaces$}", "", spaces = spaces)
+}
+
+impl Statement {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Become(_) => "Become",
+            Self::Return(_) => "Return",
+            Self::Goto(_) => "Goto",
+            Self::End => "End",
+        }
+    }
+    fn fmt_indented(&self, f: &mut fmt::Formatter, indent: usize) -> fmt::Result {
+        write_indent(f, indent)?;
+        write!(f, "{}", self.name())?;
+        let next_indent = indent + DISPLAY_INDENT;
+        match self {
+            Self::Become(expr) | Self::Return(expr) => {
+                writeln!(f, " (")?;
+                expr.inner.fmt_indented(f, next_indent)?;
+                writeln!(f)?;
+                write_indent(f, indent)?;
+                write!(f, ")")?;
+            }
+            Self::Goto(index) => write!(f, " {}", index)?,
+            Self::End => (),
+        }
+        Ok(())
+    }
+}
+
+impl Expr {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Int(_) => "Int",
+            Self::Tag(_) => "Tag",
+            Self::Neg(_) => "Neg",
+            Self::Add(_, _) => "Add",
+            Self::Sub(_, _) => "Sub",
+            Self::Comparison(_, _) => "Comparison",
+            Self::Var(_) => "Var",
+        }
+    }
+    fn fmt_indented(&self, f: &mut fmt::Formatter, indent: usize) -> fmt::Result {
+        write_indent(f, indent)?;
+        write!(f, "{}", self.name())?;
+        let next_indent = indent + DISPLAY_INDENT;
+        match self {
+            Self::Int(n) => write!(f, " {}", n)?,
+            Self::Tag(expr) | Self::Neg(expr) => {
+                writeln!(f)?;
+                expr.inner.fmt_indented(f, next_indent)?;
+            }
+            Self::Add(expr1, expr2) | Self::Sub(expr1, expr2) => {
+                writeln!(f)?;
+                expr1.inner.fmt_indented(f, next_indent)?;
+                writeln!(f)?;
+                expr2.inner.fmt_indented(f, next_indent)?;
+            }
+            Self::Comparison(expr1, comparisons) => {
+                writeln!(f)?;
+                let next_next_indent = next_indent + DISPLAY_INDENT;
+                expr1.inner.fmt_indented(f, next_next_indent)?;
+                for (comparison_type, expr2) in comparisons {
+                    writeln!(f)?;
+                    write_indent(f, next_indent)?;
+                    writeln!(f, "{:?}", comparison_type)?;
+                    expr2.inner.fmt_indented(f, next_next_indent)?;
+                }
+            }
+            Self::Var(name) => write!(f, " '{}'", name)?,
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Program {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Program {{")?;
+        {
+            write_indent(f, DISPLAY_INDENT)?;
+            writeln!(f, "@TRANSITION {{")?;
+            for statement in &self.transition_fn {
+                statement.inner.fmt_indented(f, DISPLAY_INDENT * 2)?;
+            }
+            writeln!(f)?;
+            write_indent(f, DISPLAY_INDENT)?;
+            writeln!(f, "}}")?;
+        }
+        write!(f, "}}")?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.fmt_indented(f, 0)
+    }
+}
+
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.fmt_indented(f, 0)
     }
 }

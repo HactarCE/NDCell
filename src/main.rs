@@ -19,6 +19,7 @@ fn main() -> CompleteLangResult<()> {
         }
         ";
     let program = make_ast(source_code).map_err(|e| e.with_source(source_code))?;
+    println!("{}", program);
 
     // Interpret transition function.
     let result = interpret(program.clone()).map_err(|e| e.with_source(source_code));

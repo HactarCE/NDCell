@@ -73,7 +73,7 @@ impl State {
                     // Convert integer to cell state, checking whether it is
                     // within range.
                     let x = self.eval(expr)?.as_int()?;
-                    if x > 0 && (x as usize) < CELL_STATE_COUNT {
+                    if x >= 0 && (x as usize) < CELL_STATE_COUNT {
                         x as LangCellState
                     } else {
                         Err(CellStateOutOfRange.with_span(span))?

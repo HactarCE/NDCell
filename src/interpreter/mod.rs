@@ -106,6 +106,7 @@ impl State {
                         if !Self::compare(*comparison, &lhs, &rhs)? {
                             result = false;
                         }
+                        // The current RHS will be the next condition's LHS.
                         lhs = rhs;
                     }
                     Value::Int(if result { 1 } else { 0 })

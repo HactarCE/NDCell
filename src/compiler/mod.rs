@@ -1,3 +1,4 @@
+use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
@@ -13,7 +14,7 @@ mod value;
 use super::types::{LangCellState, CELL_STATE_BITS, INT_BITS};
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use value::*;
-use LangErrorMsg::{CellStateOutOfRange, InternalError};
+use LangErrorMsg::{CellStateOutOfRange, ComparisonError, InternalError};
 
 /// Convenience type alias for a transition function.
 ///
@@ -102,17 +103,19 @@ impl<'ctx> Compiler<'ctx> {
                 .add_function("transition_function", fn_type, None),
         );
 
-        let basic_block = self.ctx.append_basic_block(self.fn_value(), "entry");
+        let basic_block = self.append_basic_block("entry");
         self.builder.position_at_end(basic_block);
 
         for statement in statements {
             use ast::Statement::*;
             match &statement.inner {
                 Become(expr) | Return(expr) => {
-                    let return_value = self
-                        .jit_compile_expr(expr)?
-                        .as_cell_state()?
-                        .const_z_ext(self.return_type);
+                    let return_cell_state = self.build_expr(expr)?.as_cell_state()?;
+                    let return_value = self.builder.build_int_cast(
+                        return_cell_state,
+                        self.return_type,
+                        "tmp_retValFromCellState",
+                    );
                     self.builder.build_return(Some(&return_value));
                 }
                 Goto(_) => panic!("Got GOTO statement while compiling"),
@@ -137,15 +140,16 @@ impl<'ctx> Compiler<'ctx> {
                 error_points: std::mem::replace(&mut self.error_points, vec![]),
             })
         } else {
+            eprintln!(
+                "Error encountered during function compilation; dumping LLVM function to stderr"
+            );
+            self.fn_value().print_to_stderr();
             unsafe { self.fn_value().delete() };
             Err(InternalError("LLVM function verification failed".into()).without_span())
         }
     }
 
-    fn jit_compile_expr(
-        &mut self,
-        expression: &Spanned<ast::Expr>,
-    ) -> LangResult<Spanned<Value<'ctx>>> {
+    fn build_expr(&mut self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value<'ctx>>> {
         let span = expression.span;
         use ast::Expr::*;
         Ok(Spanned {
@@ -153,40 +157,41 @@ impl<'ctx> Compiler<'ctx> {
             inner: match &expression.inner {
                 Int(i) => Value::Int(self.int_type.const_int(*i as u64, true)),
                 Tag(expr) => Value::CellState({
-                    let x = self.jit_compile_expr(expr)?.as_int()?;
-                    let ret = self.builder.build_int_truncate(
+                    let x = self.build_expr(expr)?.as_int()?;
+                    let ret = self.builder.build_int_cast(
                         x,
                         self.cell_state_type,
-                        "tmp_intToCellstate",
+                        "tmp_cellStateFromInt",
                     );
                     self.build_cell_state_value_check(ret, span);
                     ret
                 }),
                 Neg(expr) => Value::Int({
                     // TODO check for overflow
-                    let x = self.jit_compile_expr(expr)?.as_int()?;
+                    let x = self.build_expr(expr)?.as_int()?;
                     self.builder.build_int_neg(x, "tmp_neg")
                 }),
                 Add(expr1, expr2) => Value::Int({
-                    let lhs = self.jit_compile_expr(expr1)?.as_int()?;
-                    let rhs = self.jit_compile_expr(expr2)?.as_int()?;
+                    let lhs = self.build_expr(expr1)?.as_int()?;
+                    let rhs = self.build_expr(expr2)?.as_int()?;
                     // TODO check for overflow
                     self.builder.build_int_add(lhs, rhs, "tmp_add")
                 }),
                 Sub(expr1, expr2) => Value::Int({
-                    let lhs = self.jit_compile_expr(expr1)?.as_int()?;
-                    let rhs = self.jit_compile_expr(expr2)?.as_int()?;
+                    let lhs = self.build_expr(expr1)?.as_int()?;
+                    let rhs = self.build_expr(expr2)?.as_int()?;
                     // TODO check for overflow
                     self.builder.build_int_sub(lhs, rhs, "tmp_sub")
                 }),
-                Comparison(expr1, comparisons) => unimplemented!(),
+                Comparison(expr1, comparisons) => {
+                    Value::Int(self.build_multi_comparison(expr1, comparisons)?)
+                }
                 Var(_name) => unimplemented!(),
             },
         })
     }
 
     fn build_cell_state_value_check(&mut self, cell_state_value: IntValue, span: Span) {
-        let parent = self.fn_value();
         // Treat the signed integer as an unsigned integer, and create a
         // condition testing whether cell_state_value is less than the number of
         // cell states. (A Negative number will be interpreted as a very large
@@ -202,8 +207,8 @@ impl<'ctx> Compiler<'ctx> {
         );
 
         // Build the branches
-        let out_of_range_bb = self.ctx.append_basic_block(parent, "cellStateOutOfRange");
-        let in_range_bb = self.ctx.append_basic_block(parent, "cellStateInRange");
+        let out_of_range_bb = self.append_basic_block("cellStateOutOfRange");
+        let in_range_bb = self.append_basic_block("cellStateInRange");
 
         self.builder
             .build_conditional_branch(condition, in_range_bb, out_of_range_bb);
@@ -212,6 +217,93 @@ impl<'ctx> Compiler<'ctx> {
         self.build_error_point(CellStateOutOfRange.with_span(span));
 
         self.builder.position_at_end(in_range_bb);
+    }
+
+    fn build_multi_comparison(
+        &mut self,
+        expr1: &Spanned<ast::Expr>,
+        comparisons: &[(ast::Comparison, Spanned<ast::Expr>)],
+    ) -> LangResult<IntValue<'ctx>> {
+        let old_bb = self.builder.get_insert_block().unwrap();
+
+        // Build a basic block to skip to if the condition is false. The last
+        // condition will have an unconditional jump.
+        let merge_bb = self.append_basic_block("multiCompareShortCircuit");
+        self.builder.position_at_end(merge_bb);
+        // Create a phi node for the final result.
+        let phi = self.builder.build_phi(self.int_type, "multiCompareMerge");
+
+        self.builder.position_at_end(old_bb);
+        let mut lhs = self.build_expr(&expr1)?;
+        for (comparison, expr2) in comparisons {
+            let rhs = self.build_expr(expr2)?;
+            let compare_result = self.build_comparison(*comparison, &lhs, &rhs)?;
+            // If the condition is false, skip ahead to the merge and give the
+            // phi node a value of 0. If it is true, continue on to check the
+            // next condition.
+            let next_bb = self.append_basic_block("compare");
+            self.builder
+                .build_conditional_branch(compare_result, next_bb, merge_bb);
+            phi.add_incoming(&[(
+                &self.int_type.const_zero(),
+                self.builder.get_insert_block().unwrap(),
+            )]);
+            self.builder.position_at_end(next_bb);
+            // The current RHS will be the next condition's LHS.
+            lhs = rhs;
+        }
+
+        // After the last comparison, unconditionally jump directly to the merge
+        // block and give the phi node a value of 1 because all conditions were
+        // true.
+        self.builder.build_unconditional_branch(merge_bb);
+        phi.add_incoming(&[(
+            &self.int_type.const_int(1, false),
+            self.builder.get_insert_block().unwrap(),
+        )]);
+
+        // Position the builder at the end of the merge block for later
+        // instructions.
+        self.builder.position_at_end(merge_bb);
+
+        // This phi node now contains 1 if all conditions were true and 0 if all
+        // conditions were false.
+        Ok(phi.as_basic_value().into_int_value())
+    }
+
+    fn build_comparison(
+        &mut self,
+        comparison: ast::Comparison,
+        lhs: &Spanned<Value<'ctx>>,
+        rhs: &Spanned<Value<'ctx>>,
+    ) -> LangResult<IntValue<'ctx>> {
+        use ast::Comparison::*;
+        use Value::*;
+        let int_predicate = match comparison {
+            Equal => IntPredicate::EQ,
+            NotEqual => IntPredicate::NE,
+            LessThan => IntPredicate::ULT,
+            GreaterThan => IntPredicate::UGT,
+            LessThanOrEqual => IntPredicate::ULE,
+            GreaterThanOrEqual => IntPredicate::UGE,
+        };
+        Ok(match (&lhs.inner, &rhs.inner, comparison) {
+            // Integer comparison
+            (Int(a), Int(b), _) => self
+                .builder
+                .build_int_compare(int_predicate, *a, *b, "intCmp"),
+            // Cell state comparison
+            (CellState(a), CellState(b), Equal) | (CellState(a), CellState(b), NotEqual) => self
+                .builder
+                .build_int_compare(int_predicate, *a, *b, "cellStateCmp"),
+            // Error
+            _ => Err(ComparisonError {
+                cmp_sym: comparison.get_symbol(),
+                lhs: lhs.inner.get_type(),
+                rhs: rhs.inner.get_type(),
+            }
+            .with_span(Span::merge(lhs, rhs)))?,
+        })
     }
 
     fn build_error_point(&mut self, error: LangError) {
@@ -223,6 +315,10 @@ impl<'ctx> Compiler<'ctx> {
     fn add_error_point(&mut self, error: LangError) -> usize {
         self.error_points.push(error);
         self.error_points.len() - 1
+    }
+
+    fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
+        self.ctx.append_basic_block(self.fn_value(), name)
     }
 
     /// Returns true if the current basic block needs a terminator, or false

@@ -7,7 +7,8 @@ use super::types::LangCellState;
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use LangErrorMsg::{
     CellStateOutOfRange, ComparisonError, IntegerOverflowDuringAddition,
-    IntegerOverflowDuringNegation, IntegerOverflowDuringSubtraction, UseOfUninitializedVariable,
+    IntegerOverflowDuringNegation, IntegerOverflowDuringSubtraction, InternalError,
+    UseOfUninitializedVariable,
 };
 
 pub enum ExecuteResult {
@@ -48,7 +49,20 @@ impl State {
     pub fn step(&mut self) -> LangResult<ExecuteResult> {
         use ast::Statement::*;
         if let Some(instruction) = self.instructions.get(self.instruction_pointer) {
+            println!("exec {}", instruction.inner);
             match &instruction.inner {
+                If(expr, if_true) => {
+                    if self.eval(expr)?.as_int()? != 0 {
+                        if let Some(Goto(idx)) = if_true.get(0).map(|s| &s.inner) {
+                            self.instruction_pointer = *idx;
+                        } else {
+                            Err(InternalError(
+                                "Conditional block in interpreter did not contain GOTO statement"
+                                    .into(),
+                            ))?
+                        }
+                    }
+                }
                 Become(expr) | Return(expr) => {
                     return Ok(ExecuteResult::Return(self.eval(expr)?.inner))
                 }

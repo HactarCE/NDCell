@@ -10,12 +10,15 @@ mod types;
 pub use errors::{CompleteLangResult, LangResult};
 pub use span::{Span, Spanned};
 
-const CELL_STATE_COUNT: usize = 4;
+const CELL_STATE_COUNT: usize = 100;
 
 fn main() -> CompleteLangResult<()> {
     let source_code = "
         @transition {
-            become #(9223372036854775807 + 9223372036854775807)
+            if 1 + 2 > 3 {
+                become #10
+            }
+            become #98
         }
         ";
     let program = make_ast(source_code).map_err(|e| e.with_source(source_code))?;

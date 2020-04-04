@@ -222,7 +222,10 @@ impl<'a> TokenFeeder<'a> {
                 Continue => self.err(Unimplemented),
                 Else => self.err(Unimplemented),
                 For => self.err(Unimplemented),
-                If => self.err(Unimplemented),
+                If => Ok(Statement::If(
+                    self.expect(Self::expression)?,
+                    self.expect(Self::block)?.inner,
+                )),
                 Remain => self.err(Unimplemented),
                 Return => self.err(Unimplemented),
                 Set => self.err(Unimplemented),
@@ -412,12 +415,36 @@ pub fn flatten_block(block: &mut StatementBlock) {
     }
     let end = block.last().unwrap().span.end;
     block.push(Spanned::new(end, end, Statement::End));
-    for i in 0..block.len() {
-        use Statement::*;
-        let statement = &mut block[i];
-        match statement {
-            // TODO
-            _ => (),
+    // This is basically a for-each loop that allows adding new elements
+    // to the end during iteration.
+    for i in 0.. {
+        use Statement::{Goto, If};
+        let idx_at_end = block.len();
+        if let Some(statement) = block.get_mut(i) {
+            let span = statement.span;
+            // Make a GOTO instruction that jumps to the (current) end of the
+            // block.
+            let goto_end = || Spanned {
+                span,
+                inner: Goto(idx_at_end - 1),
+            };
+            // Make a GOTO instruction that jumps back to this instruction.
+            // Execution will resume with the instruction immediately after it.
+            let goto_here = || Spanned {
+                span,
+                inner: Goto(i),
+            };
+            match &mut statement.inner {
+                If(_expr, ref mut if_true) => {
+                    let new_statements = std::mem::replace(if_true, vec![goto_end()]);
+                    block.extend(new_statements);
+                    block.push(goto_here());
+                }
+                _ => (),
+            }
+        } else {
+            // End of block
+            return;
         }
     }
 }

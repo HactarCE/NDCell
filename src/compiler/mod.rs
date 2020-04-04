@@ -113,25 +113,9 @@ impl<'ctx> Compiler<'ctx> {
 
         let basic_block = self.append_basic_block("entry");
         self.builder.position_at_end(basic_block);
+        let has_terminator = self.build_statements(statements)?;
 
-        for statement in statements {
-            use ast::Statement::*;
-            match &statement.inner {
-                Become(expr) | Return(expr) => {
-                    let return_cell_state = self.build_expr(expr)?.as_cell_state()?;
-                    let return_value = self.builder.build_int_cast(
-                        return_cell_state,
-                        self.return_type,
-                        "tmp_retValFromCellState",
-                    );
-                    self.builder.build_return(Some(&return_value));
-                }
-                Goto(_) => panic!("Got GOTO statement while compiling"),
-                End => panic!("Got END statement while compiling"),
-            };
-        }
-
-        if self.needs_terminator() {
+        if !has_terminator {
             // Implicit `return #0` at the end of the transition function. TODO
             // change this to `remain`, once that's implemented.
             self.builder
@@ -155,6 +139,58 @@ impl<'ctx> Compiler<'ctx> {
             unsafe { self.fn_value().delete() };
             Err(InternalError("LLVM function verification failed".into()).without_span())
         }
+    }
+
+    /// Builds the given statements. Returns Ok(true) if the last block already
+    /// ends with a terminator instruction, or Ok(false) if it does not.
+    pub fn build_statements(&mut self, statements: &ast::StatementBlock) -> LangResult<bool> {
+        for statement in statements {
+            use ast::Statement::*;
+            match &statement.inner {
+                If(expr, if_true) => {
+                    // Build the destination blocks.
+                    let merge_bb = self.append_basic_block("endIf");
+                    let if_true_bb = self.append_basic_block("ifTrue");
+                    // let if_false_bb = self.append_basic_block("ifFalse");
+                    let if_false_bb = merge_bb;
+                    // Evaluate the condition and get a boolean value.
+                    let test_value = self.build_expr(&expr)?.as_int()?;
+                    let condition_value = self.builder.build_int_compare(
+                        IntPredicate::EQ,
+                        test_value,
+                        self.int_type.const_zero(),
+                        "tmp_ifCond",
+                    );
+                    // Build the branch instruction.
+                    self.builder
+                        .build_conditional_branch(condition_value, if_false_bb, if_true_bb);
+                    // Build the instructions to execute if true.
+                    self.builder.position_at_end(if_true_bb);
+                    if !self.build_statements(if_true)? {
+                        self.builder.build_unconditional_branch(merge_bb);
+                    }
+                    // Build the instructions to execute if false.
+                    // self.builder.position_at_end(if_false_bb);
+                    // if !self.build_statements(if_false)? {
+                    //     self.builder.build_unconditional_branch(merge_bb);
+                    // }
+                    self.builder.position_at_end(merge_bb);
+                }
+                Become(expr) | Return(expr) => {
+                    let return_cell_state = self.build_expr(&expr)?.as_cell_state()?;
+                    let return_value = self.builder.build_int_cast(
+                        return_cell_state,
+                        self.return_type,
+                        "tmp_retValFromCellState",
+                    );
+                    self.builder.build_return(Some(&return_value));
+                    return Ok(true);
+                }
+                Goto(_) => panic!("Got GOTO statement while compiling"),
+                End => panic!("Got END statement while compiling"),
+            };
+        }
+        Ok(false)
     }
 
     fn build_expr(&mut self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value<'ctx>>> {

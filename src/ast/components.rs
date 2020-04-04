@@ -37,15 +37,15 @@ impl TryFrom<Vec<Spanned<Directive>>> for Program {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     // SetVar(Spanned<Var>, Spanned<Expr>),
-    // If(
-    //     // If
-    //     Spanned<Expr>,
-    //     StatementBlock,
-    //     // Elseif
-    //     Vec<(Spanned<Expr>, StatementBlock)>,
-    //     // Else
-    //     Option<StatementBlock>,
-    // ),
+    If(
+        // If
+        Spanned<Expr>,
+        StatementBlock,
+        // // Elseif
+        // Vec<(Spanned<Expr>, StatementBlock)>,
+        // // Else
+        // Option<StatementBlock>,
+    ),
     // ForLoop(Spanned<Var>, Spanned<Expr>, StatementBlock),
     // WhileLoop(Spanned<Expr>, StatementBlock),
     // DoWhileLoop(StatementBlock, Spanned<Expr>),
@@ -123,9 +123,25 @@ fn write_indent(f: &mut fmt::Formatter, spaces: usize) -> fmt::Result {
     write!(f, "{:spaces$}", "", spaces = spaces)
 }
 
+fn write_statement_block_indented(
+    f: &mut fmt::Formatter,
+    statements: &StatementBlock,
+    indent: usize,
+) -> fmt::Result {
+    writeln!(f, "{{")?;
+    for statement in statements {
+        statement.inner.fmt_indented(f, indent + DISPLAY_INDENT)?;
+        writeln!(f)?;
+    }
+    write_indent(f, indent)?;
+    write!(f, "}}")?;
+    Ok(())
+}
+
 impl Statement {
     fn name(&self) -> &'static str {
         match self {
+            Self::If(_, _) => "If",
             Self::Become(_) => "Become",
             Self::Return(_) => "Return",
             Self::Goto(_) => "Goto",
@@ -137,6 +153,14 @@ impl Statement {
         write!(f, "{}", self.name())?;
         let next_indent = indent + DISPLAY_INDENT;
         match self {
+            Self::If(expr, if_true) => {
+                writeln!(f, " (")?;
+                expr.inner.fmt_indented(f, next_indent)?;
+                writeln!(f)?;
+                write_indent(f, indent)?;
+                write!(f, ") Then ")?;
+                write_statement_block_indented(f, &if_true, indent)?;
+            }
             Self::Become(expr) | Self::Return(expr) => {
                 writeln!(f, " (")?;
                 expr.inner.fmt_indented(f, next_indent)?;
@@ -201,13 +225,9 @@ impl fmt::Display for Program {
         writeln!(f, "Program {{")?;
         {
             write_indent(f, DISPLAY_INDENT)?;
-            writeln!(f, "@TRANSITION {{")?;
-            for statement in &self.transition_fn {
-                statement.inner.fmt_indented(f, DISPLAY_INDENT * 2)?;
-            }
+            write!(f, "@TRANSITION ")?;
+            write_statement_block_indented(f, &self.transition_fn, DISPLAY_INDENT)?;
             writeln!(f)?;
-            write_indent(f, DISPLAY_INDENT)?;
-            writeln!(f, "}}")?;
         }
         write!(f, "}}")?;
         Ok(())

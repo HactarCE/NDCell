@@ -19,8 +19,10 @@ fn main() -> CompleteLangResult<()> {
         @transition {
             if 1 + 2 > 3 {
                 become #10
+            } else {
+                become #98
             }
-            become #98
+            become #2 // unreachable
         }
         ";
     let program = make_ast(source_code).map_err(|e| e.with_source(source_code))?;

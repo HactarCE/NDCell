@@ -222,10 +222,27 @@ impl<'a> TokenFeeder<'a> {
                 Continue => self.err(Unimplemented),
                 Else => self.err(Unimplemented),
                 For => self.err(Unimplemented),
-                If => Ok(Statement::If(
-                    self.expect(Self::expression)?,
-                    self.expect(Self::block)?.inner,
-                )),
+                If => Ok({
+                    Statement::If(
+                        // Condition
+                        self.expect(Self::expression)?,
+                        // If true
+                        self.expect(Self::block)?.inner,
+                        // If false
+                        if self.next_token_is_one_of(&[TokenClass::StatementKeyword(Else)]) {
+                            self.next();
+                            Some(
+                                if self.next_token_is_one_of(&[TokenClass::StatementKeyword(If)]) {
+                                    vec![self.expect(Self::statement)?]
+                                } else {
+                                    self.expect(Self::block)?.inner
+                                },
+                            )
+                        } else {
+                            None
+                        },
+                    )
+                }),
                 Remain => self.err(Unimplemented),
                 Return => self.err(Unimplemented),
                 Set => self.err(Unimplemented),
@@ -422,23 +439,23 @@ pub fn flatten_block(block: &mut StatementBlock) {
         let idx_at_end = block.len();
         if let Some(statement) = block.get_mut(i) {
             let span = statement.span;
-            // Make a GOTO instruction that jumps to the (current) end of the
-            // block.
-            let goto_end = || Spanned {
+            let goto_idx = |idx| Spanned {
                 span,
-                inner: Goto(idx_at_end - 1),
-            };
-            // Make a GOTO instruction that jumps back to this instruction.
-            // Execution will resume with the instruction immediately after it.
-            let goto_here = || Spanned {
-                span,
-                inner: Goto(i),
+                inner: Goto(idx),
             };
             match &mut statement.inner {
-                If(_expr, ref mut if_true) => {
-                    let new_statements = std::mem::replace(if_true, vec![goto_end()]);
+                If(_, ref mut if_true, ref mut maybe_if_false) => {
+                    let mut new_statements =
+                        std::mem::replace(if_true, vec![goto_idx(idx_at_end - 1)]);
+                    new_statements.push(goto_idx(i));
+                    if let Some(if_false) = maybe_if_false {
+                        new_statements.extend(std::mem::replace(
+                            if_false,
+                            vec![goto_idx(idx_at_end - 1 + new_statements.len())],
+                        ));
+                        new_statements.push(goto_idx(i));
+                    }
                     block.extend(new_statements);
-                    block.push(goto_here());
                 }
                 _ => (),
             }

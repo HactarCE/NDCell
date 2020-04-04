@@ -51,16 +51,11 @@ impl State {
         if let Some(instruction) = self.instructions.get(self.instruction_pointer) {
             println!("exec {}", instruction.inner);
             match &instruction.inner {
-                If(expr, if_true) => {
+                If(expr, if_true, maybe_if_false) => {
                     if self.eval(expr)?.as_int()? != 0 {
-                        if let Some(Goto(idx)) = if_true.get(0).map(|s| &s.inner) {
-                            self.instruction_pointer = *idx;
-                        } else {
-                            Err(InternalError(
-                                "Conditional block in interpreter did not contain GOTO statement"
-                                    .into(),
-                            ))?
-                        }
+                        self.instruction_pointer = Self::get_goto_idx_of_block(if_true)?;
+                    } else if let Some(if_false) = maybe_if_false {
+                        self.instruction_pointer = Self::get_goto_idx_of_block(if_false)?;
                     }
                 }
                 Become(expr) | Return(expr) => {
@@ -73,6 +68,17 @@ impl State {
             Ok(ExecuteResult::Continue)
         } else {
             Ok(ExecuteResult::Return(Value::Null))
+        }
+    }
+
+    fn get_goto_idx_of_block(block: &ast::StatementBlock) -> LangResult<usize> {
+        if let Some(ast::Statement::Goto(idx)) = block.get(0).map(|s| &s.inner) {
+            Ok(*idx)
+        } else {
+            Err(
+                InternalError("Block in interpreter did not contain GOTO statement".into())
+                    .without_span(),
+            )
         }
     }
 

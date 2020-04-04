@@ -113,9 +113,15 @@ impl<'ctx> Compiler<'ctx> {
 
         let basic_block = self.append_basic_block("entry");
         self.builder.position_at_end(basic_block);
-        let has_terminator = self.build_statements(statements)?;
+        self.build_statements(statements)?;
 
-        if !has_terminator {
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
             // Implicit `return #0` at the end of the transition function. TODO
             // change this to `remain`, once that's implemented.
             self.builder
@@ -141,18 +147,20 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
-    /// Builds the given statements. Returns Ok(true) if the last block already
-    /// ends with a terminator instruction, or Ok(false) if it does not.
-    pub fn build_statements(&mut self, statements: &ast::StatementBlock) -> LangResult<bool> {
+    pub fn build_statements(&mut self, statements: &ast::StatementBlock) -> LangResult<()> {
         for statement in statements {
             use ast::Statement::*;
             match &statement.inner {
-                If(expr, if_true) => {
+                If(expr, if_true, if_false_maybe) => {
                     // Build the destination blocks.
                     let merge_bb = self.append_basic_block("endIf");
                     let if_true_bb = self.append_basic_block("ifTrue");
-                    // let if_false_bb = self.append_basic_block("ifFalse");
-                    let if_false_bb = merge_bb;
+                    let if_false_bb;
+                    if if_false_maybe.is_some() {
+                        if_false_bb = self.append_basic_block("ifFalse")
+                    } else {
+                        if_false_bb = merge_bb
+                    };
                     // Evaluate the condition and get a boolean value.
                     let test_value = self.build_expr(&expr)?.as_int()?;
                     let condition_value = self.builder.build_int_compare(
@@ -166,14 +174,18 @@ impl<'ctx> Compiler<'ctx> {
                         .build_conditional_branch(condition_value, if_false_bb, if_true_bb);
                     // Build the instructions to execute if true.
                     self.builder.position_at_end(if_true_bb);
-                    if !self.build_statements(if_true)? {
+                    self.build_statements(if_true)?;
+                    if if_true_bb.get_terminator().is_none() {
                         self.builder.build_unconditional_branch(merge_bb);
                     }
                     // Build the instructions to execute if false.
-                    // self.builder.position_at_end(if_false_bb);
-                    // if !self.build_statements(if_false)? {
-                    //     self.builder.build_unconditional_branch(merge_bb);
-                    // }
+                    if let Some(if_false) = if_false_maybe {
+                        self.builder.position_at_end(if_false_bb);
+                        self.build_statements(if_false)?;
+                        if if_false_bb.get_terminator().is_none() {
+                            self.builder.build_unconditional_branch(merge_bb);
+                        }
+                    }
                     self.builder.position_at_end(merge_bb);
                 }
                 Become(expr) | Return(expr) => {
@@ -184,13 +196,13 @@ impl<'ctx> Compiler<'ctx> {
                         "tmp_retValFromCellState",
                     );
                     self.builder.build_return(Some(&return_value));
-                    return Ok(true);
+                    return Ok(());
                 }
                 Goto(_) => panic!("Got GOTO statement while compiling"),
                 End => panic!("Got END statement while compiling"),
             };
         }
-        Ok(false)
+        Ok(())
     }
 
     fn build_expr(&mut self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value<'ctx>>> {
@@ -419,15 +431,5 @@ impl<'ctx> Compiler<'ctx> {
 
     fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
         self.ctx.append_basic_block(self.fn_value(), name)
-    }
-
-    /// Returns true if the current basic block needs a terminator, or false
-    /// otherwise.
-    fn needs_terminator(&self) -> bool {
-        if let Some(block) = self.builder.get_insert_block() {
-            block.get_terminator().is_none()
-        } else {
-            false
-        }
     }
 }

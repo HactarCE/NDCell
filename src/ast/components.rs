@@ -38,13 +38,12 @@ impl TryFrom<Vec<Spanned<Directive>>> for Program {
 pub enum Statement {
     // SetVar(Spanned<Var>, Spanned<Expr>),
     If(
-        // If
+        // Condition
         Spanned<Expr>,
+        // If true
         StatementBlock,
-        // // Elseif
-        // Vec<(Spanned<Expr>, StatementBlock)>,
-        // // Else
-        // Option<StatementBlock>,
+        // If false
+        Option<StatementBlock>,
     ),
     // ForLoop(Spanned<Var>, Spanned<Expr>, StatementBlock),
     // WhileLoop(Spanned<Expr>, StatementBlock),
@@ -141,7 +140,7 @@ fn write_statement_block_indented(
 impl Statement {
     fn name(&self) -> &'static str {
         match self {
-            Self::If(_, _) => "If",
+            Self::If(_, _, _) => "If",
             Self::Become(_) => "Become",
             Self::Return(_) => "Return",
             Self::Goto(_) => "Goto",
@@ -153,13 +152,17 @@ impl Statement {
         write!(f, "{}", self.name())?;
         let next_indent = indent + DISPLAY_INDENT;
         match self {
-            Self::If(expr, if_true) => {
+            Self::If(expr, if_true, maybe_if_false) => {
                 writeln!(f, " (")?;
                 expr.inner.fmt_indented(f, next_indent)?;
                 writeln!(f)?;
                 write_indent(f, indent)?;
                 write!(f, ") Then ")?;
                 write_statement_block_indented(f, &if_true, indent)?;
+                if let Some(if_false) = maybe_if_false {
+                    write!(f, " Else ")?;
+                    write_statement_block_indented(f, &if_false, indent)?;
+                }
             }
             Self::Become(expr) | Self::Return(expr) => {
                 writeln!(f, " (")?;

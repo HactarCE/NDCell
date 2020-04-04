@@ -97,7 +97,7 @@ impl State {
                     self.eval(expr)?
                         .as_int()?
                         .checked_neg()
-                        .ok_or_else(|| IntegerOverflowDuringAddition.with_span(span))?,
+                        .ok_or_else(|| IntegerOverflowDuringNegation.with_span(span))?,
                 ),
                 Add(expr1, expr2) => {
                     // Add two integers, checking for overflow.

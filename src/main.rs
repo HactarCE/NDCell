@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use inkwell::context::Context;
 
 mod ast;

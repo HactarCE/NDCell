@@ -11,10 +11,12 @@ use std::collections::HashMap;
 
 mod value;
 
-use super::types::{LangCellState, CELL_STATE_BITS, INT_BITS};
+use super::types::{LangCellState, CELL_STATE_BITS, INT_BITS, INT_LLVM_TYPE_STR};
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use value::*;
-use LangErrorMsg::{CellStateOutOfRange, ComparisonError, InternalError};
+use LangErrorMsg::{
+    CellStateOutOfRange, ComparisonError, IntegerOverflowDuringAddition, InternalError,
+};
 
 /// Convenience type alias for a transition function.
 ///
@@ -84,6 +86,12 @@ impl<'ctx> Compiler<'ctx> {
             fn_value_opt: None,
 
             error_points: vec![],
+        })
+    }
+
+    fn get_function(&self, name: &str) -> LangResult<FunctionValue<'ctx>> {
+        self.module.get_function(name).ok_or_else(|| {
+            InternalError(format!("Could not find LLVM function '{}'", name).into()).without_span()
         })
     }
 
@@ -174,7 +182,7 @@ impl<'ctx> Compiler<'ctx> {
                 Add(expr1, expr2) => Value::Int({
                     let lhs = self.build_expr(expr1)?.as_int()?;
                     let rhs = self.build_expr(expr2)?.as_int()?;
-                    // TODO check for overflow
+                    // self.build_int_arithmetic_with_overflow_check(lhs, rhs, span, "sadd")?
                     self.builder.build_int_add(lhs, rhs, "tmp_add")
                 }),
                 Sub(expr1, expr2) => Value::Int({
@@ -189,6 +197,62 @@ impl<'ctx> Compiler<'ctx> {
                 Var(_name) => unimplemented!(),
             },
         })
+    }
+
+    fn build_int_arithmetic_with_overflow_check(
+        &mut self,
+        lhs: IntValue<'ctx>,
+        rhs: IntValue<'ctx>,
+        span: Span,
+        intrinsic_name: &str,
+    ) -> LangResult<IntValue<'ctx>> {
+        // Build a call to an LLVM intrinsic to do the operation.
+        let call_site_value = self.builder.build_call(
+            // TODO properly get overflow-checking intrinsic:
+            //  - llvm.sadd.with.overflow.i64
+            //  - llvm.ssub.with.overflow.i64
+            //  - llvm.smul.with.overflow.i64
+            self.get_function(&format!(
+                "llvm.{}.with.overflow.{}",
+                intrinsic_name, INT_LLVM_TYPE_STR
+            ))?,
+            &[lhs.into(), rhs.into()],
+            &format!("tmp_{}", intrinsic_name),
+        );
+
+        // Get the actual return value of the function.
+        let return_value = call_site_value
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_struct_value();
+
+        // This return value is a struct with two elements: the integer result
+        // of the addition, and a boolean value which is true if overflow
+        // occurred. Extract each of those.
+        let result_value = self
+            .builder
+            .build_extract_value(return_value, 0, &format!("tmp_{}Result", intrinsic_name))
+            .unwrap()
+            .into_int_value();
+        let overflow_value = self
+            .builder
+            .build_extract_value(return_value, 1, &format!("tmp_{}Overflow", intrinsic_name))
+            .unwrap()
+            .into_int_value();
+
+        // Build two new blocks: one for if there was overflow, and one for if there was not overflow.
+        let overflow_bb = self.append_basic_block("overflow");
+        let no_overflow_bb = self.append_basic_block("noOverflow");
+        // Branch to the appropriate block.
+        self.builder
+            .build_conditional_branch(overflow_value, overflow_bb, no_overflow_bb);
+        // Return an error if there was overflow.
+        self.builder.position_at_end(overflow_bb);
+        self.build_error_point(IntegerOverflowDuringAddition.with_span(span));
+        // Otherwise proceed.
+        self.builder.position_at_end(no_overflow_bb);
+        return Ok(result_value);
     }
 
     fn build_cell_state_value_check(&mut self, cell_state_value: IntValue, span: Span) {

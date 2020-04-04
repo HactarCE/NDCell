@@ -6,8 +6,8 @@ pub use value::Value;
 use super::types::LangCellState;
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use LangErrorMsg::{
-    CellStateOutOfRange, ComparisonError, IntegerOverflowDuringNegation,
-    IntegerOverflowDuringSubtraction, UseOfUninitializedVariable,
+    CellStateOutOfRange, ComparisonError, IntegerOverflowDuringAddition,
+    IntegerOverflowDuringNegation, IntegerOverflowDuringSubtraction, UseOfUninitializedVariable,
 };
 
 pub enum ExecuteResult {
@@ -79,14 +79,19 @@ impl State {
                         Err(CellStateOutOfRange.with_span(span))?
                     }
                 }),
-                Neg(expr) => Value::Int(-self.eval(expr)?.as_int()?),
+                Neg(expr) => Value::Int(
+                    self.eval(expr)?
+                        .as_int()?
+                        .checked_neg()
+                        .ok_or_else(|| IntegerOverflowDuringAddition.with_span(span))?,
+                ),
                 Add(expr1, expr2) => {
                     // Add two integers, checking for overflow.
                     let lhs = self.eval(expr1)?.as_int()?;
                     let rhs = self.eval(expr2)?.as_int()?;
                     Value::Int(
                         lhs.checked_add(rhs)
-                            .ok_or_else(|| IntegerOverflowDuringNegation.with_span(span))?,
+                            .ok_or_else(|| IntegerOverflowDuringAddition.with_span(span))?,
                     )
                 }
                 Sub(expr1, expr2) => {

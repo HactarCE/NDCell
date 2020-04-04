@@ -15,7 +15,7 @@ const CELL_STATE_COUNT: usize = 4;
 fn main() -> CompleteLangResult<()> {
     let source_code = "
         @transition {
-            become #(2 == 2 > 0)
+            become #(9223372036854775807 + 9223372036854775807)
         }
         ";
     let program = make_ast(source_code).map_err(|e| e.with_source(source_code))?;

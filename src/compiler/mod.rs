@@ -153,14 +153,9 @@ impl<'ctx> Compiler<'ctx> {
             match &statement.inner {
                 If(expr, if_true, if_false_maybe) => {
                     // Build the destination blocks.
-                    let merge_bb = self.append_basic_block("endIf");
                     let if_true_bb = self.append_basic_block("ifTrue");
-                    let if_false_bb;
-                    if if_false_maybe.is_some() {
-                        if_false_bb = self.append_basic_block("ifFalse")
-                    } else {
-                        if_false_bb = merge_bb
-                    };
+                    let if_false_bb = self.append_basic_block("ifFalse");
+                    let merge_bb = self.append_basic_block("endIf");
                     // Evaluate the condition and get a boolean value.
                     let test_value = self.build_expr(&expr)?.as_int()?;
                     let condition_value = self.builder.build_int_compare(
@@ -182,9 +177,9 @@ impl<'ctx> Compiler<'ctx> {
                     if let Some(if_false) = if_false_maybe {
                         self.builder.position_at_end(if_false_bb);
                         self.build_statements(if_false)?;
-                        if if_false_bb.get_terminator().is_none() {
-                            self.builder.build_unconditional_branch(merge_bb);
-                        }
+                    }
+                    if if_false_bb.get_terminator().is_none() {
+                        self.builder.build_unconditional_branch(merge_bb);
                     }
                     self.builder.position_at_end(merge_bb);
                 }

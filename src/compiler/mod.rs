@@ -115,13 +115,7 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.position_at_end(basic_block);
         self.build_statements(statements)?;
 
-        if self
-            .builder
-            .get_insert_block()
-            .unwrap()
-            .get_terminator()
-            .is_none()
-        {
+        if self.needs_terminator() {
             // Implicit `return #0` at the end of the transition function. TODO
             // change this to `remain`, once that's implemented.
             self.builder
@@ -170,7 +164,7 @@ impl<'ctx> Compiler<'ctx> {
                     // Build the instructions to execute if true.
                     self.builder.position_at_end(if_true_bb);
                     self.build_statements(if_true)?;
-                    if if_true_bb.get_terminator().is_none() {
+                    if self.needs_terminator() {
                         self.builder.build_unconditional_branch(merge_bb);
                     }
                     // Build the instructions to execute if false.
@@ -178,7 +172,7 @@ impl<'ctx> Compiler<'ctx> {
                         self.builder.position_at_end(if_false_bb);
                         self.build_statements(if_false)?;
                     }
-                    if if_false_bb.get_terminator().is_none() {
+                    if self.needs_terminator() {
                         self.builder.build_unconditional_branch(merge_bb);
                     }
                     self.builder.position_at_end(merge_bb);
@@ -411,6 +405,14 @@ impl<'ctx> Compiler<'ctx> {
             }
             .with_span(Span::merge(lhs, rhs)))?,
         })
+    }
+
+    fn needs_terminator(&self) -> bool {
+        self.builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
     }
 
     fn build_error_point(&mut self, error: LangError) {

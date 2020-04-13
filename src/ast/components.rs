@@ -86,9 +86,9 @@ pub enum Expr {
 pub enum Op {
     Add,
     Sub,
-    // Mul,
-    // Div,
-    // Mod,
+    Mul,
+    Div,
+    Rem,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -194,6 +194,9 @@ impl Expr {
             Self::Neg(_) => "Neg",
             Self::Op(_, Op::Add, _) => "Add",
             Self::Op(_, Op::Sub, _) => "Sub",
+            Self::Op(_, Op::Mul, _) => "Mul",
+            Self::Op(_, Op::Div, _) => "Div",
+            Self::Op(_, Op::Rem, _) => "Rem",
             Self::Comparison(_, _) => "Comparison",
             Self::Var(_) => "Var",
         }

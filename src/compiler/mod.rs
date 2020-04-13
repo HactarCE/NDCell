@@ -15,7 +15,7 @@ use super::types::{LangCellState, CELL_STATE_BITS, INT_BITS};
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use value::*;
 use LangErrorMsg::{
-    CellStateOutOfRange, ComparisonError, IntegerOverflowDuringAddition, InternalError,
+    CellStateOutOfRange, ComparisonError, DivideByZero, IntegerOverflow, InternalError,
 };
 
 /// Convenience type alias for a transition function.
@@ -174,7 +174,7 @@ impl<'ctx> Compiler<'ctx> {
                     // Evaluate the condition and get a boolean value.
                     let test_value = self.build_expr(&expr)?.as_int()?;
                     let condition_value = self.builder.build_int_compare(
-                        IntPredicate::EQ,
+                        IntPredicate::NE,
                         test_value,
                         self.int_type.const_zero(),
                         "tmp_ifCond",
@@ -234,6 +234,15 @@ impl<'ctx> Compiler<'ctx> {
                     match op {
                         Add => self.build_checked_int_arithmetic(lhs, rhs, span, "sadd")?,
                         Sub => self.build_checked_int_arithmetic(lhs, rhs, span, "ssub")?,
+                        Mul => self.build_checked_int_arithmetic(lhs, rhs, span, "smul")?,
+                        Div => {
+                            self.build_div_check(lhs, rhs, span)?;
+                            self.builder.build_int_signed_div(lhs, rhs, "tmp_div")
+                        }
+                        Rem => {
+                            self.build_div_check(lhs, rhs, span)?;
+                            self.builder.build_int_signed_rem(lhs, rhs, "tmp_rem")
+                        }
                     }
                 }),
                 Comparison(expr1, comparisons) => {
@@ -266,23 +275,23 @@ impl<'ctx> Compiler<'ctx> {
             .into_struct_value();
 
         // This return value is a struct with two elements: the integer result
-        // of the addition, and a boolean value which is true if overflow
+        // of the operation, and a boolean value which is true if overflow
         // occurred. Extract each of those.
         let result_value = self
             .builder
             .build_extract_value(return_value, 0, &format!("tmp_{}Result", intrinsic_name))
             .unwrap()
             .into_int_value();
-        let overflow_value = self
+        let is_overflow = self
             .builder
             .build_extract_value(return_value, 1, &format!("tmp_{}Overflow", intrinsic_name))
             .unwrap()
             .into_int_value();
 
         self.build_conditional(
-            overflow_value,
+            is_overflow,
             // Return an error if there was overflow.
-            |c| Ok(c.build_error_point(IntegerOverflowDuringAddition.with_span(span))),
+            |c| Ok(c.build_error_point(IntegerOverflow.with_span(span))),
             // Otherwise proceed.
             |_| Ok(()),
         )?;
@@ -296,7 +305,43 @@ impl<'ctx> Compiler<'ctx> {
         rhs: IntValue<'ctx>,
         span: Span,
     ) -> LangResult<()> {
-        unimplemented!()
+        // If the denominator (rhs) is zero, that's a DivideByZero error.
+        let is_div_by_zero = self.builder.build_int_compare(
+            IntPredicate::EQ,
+            rhs,
+            self.int_type.const_zero(),
+            "isDivByZero",
+        );
+        self.build_conditional(
+            is_div_by_zero,
+            // The denominator is zero.
+            |c| Ok(c.build_error_point(DivideByZero.with_span(span))),
+            // The denominator is not zero.
+            |c| {
+                // If the numerator is the minimum possible value and the denominator is
+                // -1, that's an IntegerOverflow error.
+                let min_value = c.get_min_int_value();
+                let num_is_min_value =
+                    c.builder
+                        .build_int_compare(IntPredicate::EQ, lhs, min_value, "isMinValue");
+                let denom_is_neg_one = c.builder.build_int_compare(
+                    IntPredicate::EQ,
+                    rhs,
+                    c.int_type.const_int(-1i64 as u64, true),
+                    "isNegOne",
+                );
+                let is_overflow =
+                    c.builder
+                        .build_and(num_is_min_value, denom_is_neg_one, "isOverflow");
+                c.build_conditional(
+                    is_overflow,
+                    // Overflow would occur.
+                    |c| Ok(c.build_error_point(IntegerOverflow.with_span(span))),
+                    // Overflow would not occur; it is safe to perform the division.
+                    |_| Ok(()),
+                )
+            },
+        )
     }
 
     fn build_cell_state_value_check(&mut self, cell_state_value: IntValue, span: Span) {
@@ -426,7 +471,7 @@ impl<'ctx> Compiler<'ctx> {
         let merge_bb = self.append_basic_block("endIf");
         // Build the branch instruction.
         self.builder
-            .build_conditional_branch(condition_value, if_false_bb, if_true_bb);
+            .build_conditional_branch(condition_value, if_true_bb, if_false_bb);
         // Build the instructions to execute if true.
         self.builder.position_at_end(if_true_bb);
         build_if_true(self)?;
@@ -464,5 +509,12 @@ impl<'ctx> Compiler<'ctx> {
 
     fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
         self.ctx.append_basic_block(self.fn_value(), name)
+    }
+
+    fn get_min_int_value(&self) -> IntValue<'ctx> {
+        self.int_type.const_int(1, false).const_shl(
+            self.int_type
+                .const_int(self.int_type.get_bit_width() as u64 - 1, false),
+        )
     }
 }

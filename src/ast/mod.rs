@@ -282,6 +282,7 @@ impl<'a> TokenFeeder<'a> {
                 &[
                     TokenClass::Operator(OperatorToken::Asterisk),
                     TokenClass::Operator(OperatorToken::Slash),
+                    TokenClass::Operator(OperatorToken::Percent),
                 ],
                 precedence,
             ),
@@ -356,8 +357,9 @@ impl<'a> TokenFeeder<'a> {
             let op = match op_token.class {
                 TokenClass::Operator(OperatorToken::Plus) => Op::Add,
                 TokenClass::Operator(OperatorToken::Minus) => Op::Sub,
-                // TokenClass::Operator(OperatorToken::Asterisk) => Op::Mul,
-                // TokenClass::Operator(OperatorToken::Slash) => Op::Div,
+                TokenClass::Operator(OperatorToken::Asterisk) => Op::Mul,
+                TokenClass::Operator(OperatorToken::Slash) => Op::Div,
+                TokenClass::Operator(OperatorToken::Percent) => Op::Rem,
                 other => panic!("Invalid binary operator: {:?}", other),
             };
             ret = Spanned {

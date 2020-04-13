@@ -17,8 +17,11 @@ const CELL_STATE_COUNT: usize = 100;
 fn main() -> CompleteLangResult<()> {
     let source_code = "
         @transition {
-            if 1 + 2 + 9223372036854775805 > 2 {
-                become #10
+            // become #(9223372036854775805 + 3)   // overflow
+            // become #(-9223372036854775808 / -1) // overflow
+            // become #(--9223372036854775808)     // overflow
+            if 3 * 99 % 2 == 1 {
+                become #(10 / 3 * 3)
             } else if 1 + 2 < 2 {
                 become #12
             } else {

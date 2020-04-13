@@ -98,10 +98,8 @@ pub enum LangErrorMsg {
     ReturnInTransitionFunction,
 
     // Runtime errors
-    IntegerOverflowDuringNegation,
-    IntegerOverflowDuringAddition,
-    IntegerOverflowDuringSubtraction,
-    IntegerOverflowDuringMultiplication,
+    IntegerOverflow,
+    DivideByZero,
     CellStateOutOfRange,
 }
 impl<T: 'static + std::error::Error> From<T> for LangErrorMsg {
@@ -167,17 +165,11 @@ impl fmt::Display for LangErrorMsg {
                 )?;
             }
 
-            Self::IntegerOverflowDuringNegation => {
-                write!(f, "Integer overflow during negation")?;
+            Self::IntegerOverflow => {
+                write!(f, "Integer overflow")?;
             }
-            Self::IntegerOverflowDuringAddition => {
-                write!(f, "Integer overflow during addition")?;
-            }
-            Self::IntegerOverflowDuringSubtraction => {
-                write!(f, "Integer overflow during subtraction")?;
-            }
-            Self::IntegerOverflowDuringMultiplication => {
-                write!(f, "Integer overflow during multiplication")?;
+            Self::DivideByZero => {
+                write!(f, "Divide by zero")?;
             }
             Self::CellStateOutOfRange => {
                 write!(f, "Cell state out of range")?;

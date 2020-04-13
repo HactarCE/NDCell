@@ -6,8 +6,7 @@ pub use value::Value;
 use super::types::LangCellState;
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use LangErrorMsg::{
-    CellStateOutOfRange, ComparisonError, IntegerOverflowDuringAddition,
-    IntegerOverflowDuringNegation, IntegerOverflowDuringSubtraction, InternalError,
+    CellStateOutOfRange, ComparisonError, DivideByZero, IntegerOverflow, InternalError,
     UseOfUninitializedVariable,
 };
 
@@ -103,21 +102,26 @@ impl State {
                     self.eval(expr)?
                         .as_int()?
                         .checked_neg()
-                        .ok_or_else(|| IntegerOverflowDuringNegation.with_span(span))?,
+                        .ok_or_else(|| IntegerOverflow.with_span(span))?,
                 ),
                 Op(expr1, op, expr2) => {
                     let lhs = self.eval(expr1)?.as_int()?;
                     let rhs = self.eval(expr2)?.as_int()?;
                     use ast::Op::*;
-                    Value::Int(match op {
-                        // Add two integers, checking for overflow.
-                        Add => lhs
-                            .checked_add(rhs)
-                            .ok_or_else(|| IntegerOverflowDuringAddition.with_span(span))?,
-                        // Subtract two integers, checking for overflow.
-                        Sub => lhs
-                            .checked_sub(rhs)
-                            .ok_or_else(|| IntegerOverflowDuringSubtraction.with_span(span))?,
+                    Value::Int({
+                        // Check for division by zero.
+                        if (*op == Div || *op == Rem) && rhs == 0 {
+                            Err(DivideByZero.with_span(span))?;
+                        }
+                        // Do the operation, checking for overflow.
+                        match op {
+                            Add => lhs.checked_add(rhs),
+                            Sub => lhs.checked_sub(rhs),
+                            Mul => lhs.checked_mul(rhs),
+                            Div => lhs.checked_div(rhs),
+                            Rem => lhs.checked_rem(rhs),
+                        }
+                        .ok_or_else(|| IntegerOverflow.with_span(span))?
                     })
                 }
                 Comparison(expr1, comparisons) => {

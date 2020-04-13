@@ -224,8 +224,8 @@ impl<'ctx> Compiler<'ctx> {
                 }),
                 Neg(expr) => Value::Int({
                     let x = self.build_expr(expr)?.as_int()?;
-                    self.build_neg_check(x, span)?;
-                    self.builder.build_int_neg(x, "tmp_neg")
+                    // Subtract from zero.
+                    self.build_checked_int_arithmetic(self.int_type.const_zero(), x, span, "ssub")?
                 }),
                 Add(expr1, expr2) => Value::Int({
                     let lhs = self.build_expr(expr1)?.as_int()?;
@@ -289,11 +289,6 @@ impl<'ctx> Compiler<'ctx> {
         )?;
 
         Ok(result_value)
-    }
-
-    fn build_neg_check(&mut self, val: IntValue<'ctx>, span: Span) -> LangResult<()> {
-        // self.build_statements(&[ast::Statement::If()])
-        unimplemented!()
     }
 
     fn build_div_check(

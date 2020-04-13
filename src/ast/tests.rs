@@ -19,9 +19,11 @@ fn test_ast() {
     if let Directive::Transition(ast) = &ast[0].inner {
         if let Statement::Become(ast) = &ast[0].inner {
             if let Expr::Tag(ast) = &ast.inner {
-                if let Expr::Add(lhs, rhs) = &ast.inner {
-                    if let (Expr::Sub(lhs, rhs), Expr::Int(12)) = (&lhs.inner, &rhs.inner) {
-                        if let (Expr::Int(1), Expr::Add(lhs, rhs)) = (&lhs.inner, &rhs.inner) {
+                if let Expr::Op(lhs, Op::Add, rhs) = &ast.inner {
+                    if let (Expr::Op(lhs, Op::Sub, rhs), Expr::Int(12)) = (&lhs.inner, &rhs.inner) {
+                        if let (Expr::Int(1), Expr::Op(lhs, Op::Add, rhs)) =
+                            (&lhs.inner, &rhs.inner)
+                        {
                             if let (Expr::Int(2), Expr::Neg(ast)) = (&lhs.inner, &rhs.inner) {
                                 if let Expr::Int(3) = &ast.inner {
                                     correct = true;

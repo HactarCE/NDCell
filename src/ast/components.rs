@@ -74,13 +74,21 @@ pub enum Expr {
     Int(i64),
     Tag(Box<Spanned<Expr>>),
     Neg(Box<Spanned<Expr>>),
-    Add(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
-    Sub(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
+    Op(Box<Spanned<Expr>>, Op, Box<Spanned<Expr>>),
     /// A series of chained comparisons (a la Python). For example, `x < y == z`
     /// would be represented (roughly) as: `Expr::Comparison(x, [(LessThan, y),
     /// (Equal, z)])`.
     Comparison(Box<Spanned<Expr>>, Vec<(Comparison, Spanned<Expr>)>),
     Var(String),
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Op {
+    Add,
+    Sub,
+    // Mul,
+    // Div,
+    // Mod,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -184,8 +192,8 @@ impl Expr {
             Self::Int(_) => "Int",
             Self::Tag(_) => "Tag",
             Self::Neg(_) => "Neg",
-            Self::Add(_, _) => "Add",
-            Self::Sub(_, _) => "Sub",
+            Self::Op(_, Op::Add, _) => "Add",
+            Self::Op(_, Op::Sub, _) => "Sub",
             Self::Comparison(_, _) => "Comparison",
             Self::Var(_) => "Var",
         }
@@ -200,7 +208,7 @@ impl Expr {
                 writeln!(f)?;
                 expr.inner.fmt_indented(f, next_indent)?;
             }
-            Self::Add(expr1, expr2) | Self::Sub(expr1, expr2) => {
+            Self::Op(expr1, _, expr2) => {
                 writeln!(f)?;
                 expr1.inner.fmt_indented(f, next_indent)?;
                 writeln!(f)?;

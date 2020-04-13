@@ -105,23 +105,20 @@ impl State {
                         .checked_neg()
                         .ok_or_else(|| IntegerOverflowDuringNegation.with_span(span))?,
                 ),
-                Add(expr1, expr2) => {
-                    // Add two integers, checking for overflow.
+                Op(expr1, op, expr2) => {
                     let lhs = self.eval(expr1)?.as_int()?;
                     let rhs = self.eval(expr2)?.as_int()?;
-                    Value::Int(
-                        lhs.checked_add(rhs)
+                    use ast::Op::*;
+                    Value::Int(match op {
+                        // Add two integers, checking for overflow.
+                        Add => lhs
+                            .checked_add(rhs)
                             .ok_or_else(|| IntegerOverflowDuringAddition.with_span(span))?,
-                    )
-                }
-                Sub(expr1, expr2) => {
-                    // Subtract two integers, checking for overflow.
-                    let lhs = self.eval(expr1)?.as_int()?;
-                    let rhs = self.eval(expr2)?.as_int()?;
-                    Value::Int(
-                        lhs.checked_sub(rhs)
+                        // Subtract two integers, checking for overflow.
+                        Sub => lhs
+                            .checked_sub(rhs)
                             .ok_or_else(|| IntegerOverflowDuringSubtraction.with_span(span))?,
-                    )
+                    })
                 }
                 Comparison(expr1, comparisons) => {
                     let mut result = true;

@@ -353,15 +353,16 @@ impl<'a> TokenFeeder<'a> {
         for (op_token, rhs) in op_tokens_and_exprs {
             let lhs = Box::new(ret);
             let rhs = Box::new(rhs);
+            let op = match op_token.class {
+                TokenClass::Operator(OperatorToken::Plus) => Op::Add,
+                TokenClass::Operator(OperatorToken::Minus) => Op::Sub,
+                // TokenClass::Operator(OperatorToken::Asterisk) => Op::Mul,
+                // TokenClass::Operator(OperatorToken::Slash) => Op::Div,
+                other => panic!("Invalid binary operator: {:?}", other),
+            };
             ret = Spanned {
                 span: Span::merge(&*lhs, &*rhs),
-                inner: match op_token.class {
-                    TokenClass::Operator(OperatorToken::Plus) => Expr::Add(lhs, rhs),
-                    TokenClass::Operator(OperatorToken::Minus) => Expr::Sub(lhs, rhs),
-                    // TokenClass::Operator(OperatorToken::Asterisk) => Expr::Mul(lhs, rhs),
-                    // TokenClass::Operator(OperatorToken::Slash) => Expr::Div(lhs, rhs),
-                    other => panic!("Invalid binary operator: {:?}", other),
-                },
+                inner: Expr::Op(lhs, op, rhs),
             };
         }
         Ok(ret)

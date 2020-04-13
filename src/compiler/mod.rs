@@ -227,15 +227,14 @@ impl<'ctx> Compiler<'ctx> {
                     // Subtract from zero.
                     self.build_checked_int_arithmetic(self.int_type.const_zero(), x, span, "ssub")?
                 }),
-                Add(expr1, expr2) => Value::Int({
+                Op(expr1, op, expr2) => Value::Int({
                     let lhs = self.build_expr(expr1)?.as_int()?;
                     let rhs = self.build_expr(expr2)?.as_int()?;
-                    self.build_checked_int_arithmetic(lhs, rhs, span, "sadd")?
-                }),
-                Sub(expr1, expr2) => Value::Int({
-                    let lhs = self.build_expr(expr1)?.as_int()?;
-                    let rhs = self.build_expr(expr2)?.as_int()?;
-                    self.build_checked_int_arithmetic(lhs, rhs, span, "ssub")?
+                    use ast::Op::*;
+                    match op {
+                        Add => self.build_checked_int_arithmetic(lhs, rhs, span, "sadd")?,
+                        Sub => self.build_checked_int_arithmetic(lhs, rhs, span, "ssub")?,
+                    }
                 }),
                 Comparison(expr1, comparisons) => {
                     Value::Int(self.build_multi_comparison(expr1, comparisons)?)

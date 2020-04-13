@@ -26,9 +26,9 @@ const TOKEN_PATTERNS: &'static [&'static str] = &[
     // Unterminated string -- this should raise an error.
     r#"\w?["']"#,
     // Number with decimal point.
-    r#"\d?\.\d+"#,
+    r#"-?\d?\.\d+"#,
     // Number without decimal point.
-    r#"\d+"#,
+    r#"-?\d+"#,
     // Identifier consisting of a letter or underscore followed by any letters,
     // digits, and/or underscores, with an optional `#` (for tags) or `@` (for
     // directives) in front.

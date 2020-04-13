@@ -4,8 +4,6 @@ use std::fmt;
 pub type LangInt = i64;
 /// Number of bits in an NDCA integer.
 pub const INT_BITS: u32 = 64;
-/// Name of LLVM type used for an NDCA integer.
-pub const INT_LLVM_TYPE_STR: &'static str = "i64";
 
 /// Rust type used for an NDCA cell state.
 pub type LangCellState = u32;

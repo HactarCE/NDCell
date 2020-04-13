@@ -2,7 +2,7 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
-use inkwell::module::Module;
+use inkwell::module::{Linkage, Module};
 use inkwell::types::IntType;
 use inkwell::values::{FunctionValue, IntValue, PointerValue};
 use inkwell::IntPredicate;
@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 mod value;
 
-use super::types::{LangCellState, CELL_STATE_BITS, INT_BITS, INT_LLVM_TYPE_STR};
+use super::types::{LangCellState, CELL_STATE_BITS, INT_BITS};
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use value::*;
 use LangErrorMsg::{
@@ -72,6 +72,7 @@ impl<'ctx> Compiler<'ctx> {
         let module = ctx.create_module("automaton");
         let builder = ctx.create_builder();
         let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
+
         Ok(Self {
             ctx,
             module,
@@ -86,7 +87,31 @@ impl<'ctx> Compiler<'ctx> {
             fn_value_opt: None,
 
             error_points: vec![],
-        })
+        }
+        .with_extern_prototypes())
+    }
+
+    fn get_checked_int_arithmetic_function_name(&self, name: &str) -> String {
+        format!(
+            "llvm.{}.with.overflow.i{}",
+            name,
+            self.int_type.get_bit_width()
+        )
+    }
+
+    fn with_extern_prototypes(self) -> Self {
+        let int_param_types = &[self.int_type.into(), self.int_type.into()];
+        let int_with_error_type = self
+            .ctx
+            .struct_type(&[self.int_type.into(), self.ctx.bool_type().into()], false);
+        for name in &["sadd", "ssub", "smul"] {
+            self.module.add_function(
+                &self.get_checked_int_arithmetic_function_name(name),
+                int_with_error_type.fn_type(int_param_types, false),
+                Some(Linkage::External),
+            );
+        }
+        self
     }
 
     fn get_function(&self, name: &str) -> LangResult<FunctionValue<'ctx>> {
@@ -146,10 +171,6 @@ impl<'ctx> Compiler<'ctx> {
             use ast::Statement::*;
             match &statement.inner {
                 If(expr, if_true, if_false_maybe) => {
-                    // Build the destination blocks.
-                    let if_true_bb = self.append_basic_block("ifTrue");
-                    let if_false_bb = self.append_basic_block("ifFalse");
-                    let merge_bb = self.append_basic_block("endIf");
                     // Evaluate the condition and get a boolean value.
                     let test_value = self.build_expr(&expr)?.as_int()?;
                     let condition_value = self.builder.build_int_compare(
@@ -158,24 +179,14 @@ impl<'ctx> Compiler<'ctx> {
                         self.int_type.const_zero(),
                         "tmp_ifCond",
                     );
-                    // Build the branch instruction.
-                    self.builder
-                        .build_conditional_branch(condition_value, if_false_bb, if_true_bb);
-                    // Build the instructions to execute if true.
-                    self.builder.position_at_end(if_true_bb);
-                    self.build_statements(if_true)?;
-                    if self.needs_terminator() {
-                        self.builder.build_unconditional_branch(merge_bb);
-                    }
-                    // Build the instructions to execute if false.
-                    if let Some(if_false) = if_false_maybe {
-                        self.builder.position_at_end(if_false_bb);
-                        self.build_statements(if_false)?;
-                    }
-                    if self.needs_terminator() {
-                        self.builder.build_unconditional_branch(merge_bb);
-                    }
-                    self.builder.position_at_end(merge_bb);
+                    self.build_conditional(
+                        condition_value,
+                        |c| c.build_statements(if_true),
+                        |c| match if_false_maybe {
+                            Some(if_false) => c.build_statements(if_false),
+                            None => Ok(()),
+                        },
+                    )?;
                 }
                 Become(expr) | Return(expr) => {
                     let return_cell_state = self.build_expr(&expr)?.as_cell_state()?;
@@ -212,21 +223,19 @@ impl<'ctx> Compiler<'ctx> {
                     ret
                 }),
                 Neg(expr) => Value::Int({
-                    // TODO check for overflow
                     let x = self.build_expr(expr)?.as_int()?;
+                    self.build_neg_check(x, span)?;
                     self.builder.build_int_neg(x, "tmp_neg")
                 }),
                 Add(expr1, expr2) => Value::Int({
                     let lhs = self.build_expr(expr1)?.as_int()?;
                     let rhs = self.build_expr(expr2)?.as_int()?;
-                    // self.build_int_arithmetic_with_overflow_check(lhs, rhs, span, "sadd")?
-                    self.builder.build_int_add(lhs, rhs, "tmp_add")
+                    self.build_checked_int_arithmetic(lhs, rhs, span, "sadd")?
                 }),
                 Sub(expr1, expr2) => Value::Int({
                     let lhs = self.build_expr(expr1)?.as_int()?;
                     let rhs = self.build_expr(expr2)?.as_int()?;
-                    // TODO check for overflow
-                    self.builder.build_int_sub(lhs, rhs, "tmp_sub")
+                    self.build_checked_int_arithmetic(lhs, rhs, span, "ssub")?
                 }),
                 Comparison(expr1, comparisons) => {
                     Value::Int(self.build_multi_comparison(expr1, comparisons)?)
@@ -236,7 +245,7 @@ impl<'ctx> Compiler<'ctx> {
         })
     }
 
-    fn build_int_arithmetic_with_overflow_check(
+    fn build_checked_int_arithmetic(
         &mut self,
         lhs: IntValue<'ctx>,
         rhs: IntValue<'ctx>,
@@ -245,14 +254,7 @@ impl<'ctx> Compiler<'ctx> {
     ) -> LangResult<IntValue<'ctx>> {
         // Build a call to an LLVM intrinsic to do the operation.
         let call_site_value = self.builder.build_call(
-            // TODO properly get overflow-checking intrinsic:
-            //  - llvm.sadd.with.overflow.i64
-            //  - llvm.ssub.with.overflow.i64
-            //  - llvm.smul.with.overflow.i64
-            self.get_function(&format!(
-                "llvm.{}.with.overflow.{}",
-                intrinsic_name, INT_LLVM_TYPE_STR
-            ))?,
+            self.get_function(&self.get_checked_int_arithmetic_function_name(intrinsic_name))?,
             &[lhs.into(), rhs.into()],
             &format!("tmp_{}", intrinsic_name),
         );
@@ -278,18 +280,29 @@ impl<'ctx> Compiler<'ctx> {
             .unwrap()
             .into_int_value();
 
-        // Build two new blocks: one for if there was overflow, and one for if there was not overflow.
-        let overflow_bb = self.append_basic_block("overflow");
-        let no_overflow_bb = self.append_basic_block("noOverflow");
-        // Branch to the appropriate block.
-        self.builder
-            .build_conditional_branch(overflow_value, overflow_bb, no_overflow_bb);
-        // Return an error if there was overflow.
-        self.builder.position_at_end(overflow_bb);
-        self.build_error_point(IntegerOverflowDuringAddition.with_span(span));
-        // Otherwise proceed.
-        self.builder.position_at_end(no_overflow_bb);
-        return Ok(result_value);
+        self.build_conditional(
+            overflow_value,
+            // Return an error if there was overflow.
+            |c| Ok(c.build_error_point(IntegerOverflowDuringAddition.with_span(span))),
+            // Otherwise proceed.
+            |_| Ok(()),
+        )?;
+
+        Ok(result_value)
+    }
+
+    fn build_neg_check(&mut self, val: IntValue<'ctx>, span: Span) -> LangResult<()> {
+        // self.build_statements(&[ast::Statement::If()])
+        unimplemented!()
+    }
+
+    fn build_div_check(
+        &mut self,
+        lhs: IntValue<'ctx>,
+        rhs: IntValue<'ctx>,
+        span: Span,
+    ) -> LangResult<()> {
+        unimplemented!()
     }
 
     fn build_cell_state_value_check(&mut self, cell_state_value: IntValue, span: Span) {
@@ -405,6 +418,35 @@ impl<'ctx> Compiler<'ctx> {
             }
             .with_span(Span::merge(lhs, rhs)))?,
         })
+    }
+
+    fn build_conditional(
+        &mut self,
+        condition_value: IntValue<'ctx>,
+        build_if_true: impl FnOnce(&mut Self) -> LangResult<()>,
+        build_if_false: impl FnOnce(&mut Self) -> LangResult<()>,
+    ) -> LangResult<()> {
+        // Build the destination blocks.
+        let if_true_bb = self.append_basic_block("ifTrue");
+        let if_false_bb = self.append_basic_block("ifFalse");
+        let merge_bb = self.append_basic_block("endIf");
+        // Build the branch instruction.
+        self.builder
+            .build_conditional_branch(condition_value, if_false_bb, if_true_bb);
+        // Build the instructions to execute if true.
+        self.builder.position_at_end(if_true_bb);
+        build_if_true(self)?;
+        if self.needs_terminator() {
+            self.builder.build_unconditional_branch(merge_bb);
+        }
+        // Build the instructions to execute if false.
+        self.builder.position_at_end(if_false_bb);
+        build_if_false(self)?;
+        if self.needs_terminator() {
+            self.builder.build_unconditional_branch(merge_bb);
+        }
+        self.builder.position_at_end(merge_bb);
+        Ok(())
     }
 
     fn needs_terminator(&self) -> bool {

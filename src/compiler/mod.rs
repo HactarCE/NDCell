@@ -170,6 +170,7 @@ impl<'ctx> Compiler<'ctx> {
         for statement in statements {
             use ast::Statement::*;
             match &statement.inner {
+                SetVar(var_expr, expr) => unimplemented!(),
                 If(expr, if_true, if_false_maybe) => {
                     // Evaluate the condition and get a boolean value.
                     let test_value = self.build_expr(&expr)?.as_int()?;

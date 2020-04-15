@@ -8,7 +8,8 @@ use super::span::{Span, Spanned};
 pub use components::*;
 use tokens::*;
 use LangErrorMsg::{
-    Expected, InvalidDirectiveName, TopLevelNonDirective, Unimplemented, Unmatched,
+    Expected, InvalidDirectiveName, MissingSetKeyword, ReservedWord, TopLevelNonDirective,
+    Unimplemented, Unmatched,
 };
 
 /// Produce an AST from source code.
@@ -222,34 +223,55 @@ impl<'a> TokenFeeder<'a> {
                 Continue => self.err(Unimplemented),
                 Else => self.err(Unimplemented),
                 For => self.err(Unimplemented),
-                If => Ok({
-                    Statement::If(
-                        // Condition
-                        self.expect(Self::expression)?,
-                        // If true
-                        self.expect(Self::block)?.inner,
-                        // If false
-                        if self.next_token_is_one_of(&[TokenClass::StatementKeyword(Else)]) {
-                            self.next();
-                            Some(
-                                if self.next_token_is_one_of(&[TokenClass::StatementKeyword(If)]) {
-                                    vec![self.expect(Self::statement)?]
-                                } else {
-                                    self.expect(Self::block)?.inner
-                                },
-                            )
+                If => Ok(Statement::If(
+                    // Condition
+                    self.expect(Self::expression)?,
+                    // If true
+                    self.expect(Self::block)?.inner,
+                    // If false
+                    if self.next_token_is_one_of(&[TokenClass::StatementKeyword(Else)]) {
+                        self.next();
+                        Some(
+                            if self.next_token_is_one_of(&[TokenClass::StatementKeyword(If)]) {
+                                // Else if
+                                vec![self.expect(Self::statement)?]
+                            } else {
+                                // Else
+                                self.expect(Self::block)?.inner
+                            },
+                        )
+                    } else {
+                        None
+                    },
+                )),
+                Remain => self.err(Unimplemented),
+                Return => self.err(Unimplemented),
+                Set => Ok({
+                    let var = self.expect(Self::var)?;
+                    let assign_op = self.expect(Self::assign_op)?;
+                    let expr = self.expect(Self::expression)?;
+                    Statement::SetVar(
+                        var.clone(),
+                        if let Some(op) = assign_op.inner {
+                            Spanned {
+                                span: assign_op.span,
+                                inner: Expr::Op(Box::new(var), op, Box::new(expr)),
+                            }
                         } else {
-                            None
+                            expr
                         },
                     )
                 }),
-                Remain => self.err(Unimplemented),
-                Return => self.err(Unimplemented),
-                Set => self.err(Unimplemented),
                 Unless => self.err(Unimplemented),
                 While => self.err(Unimplemented),
             },
-            _ => self.err(Expected("statement")),
+            _ => {
+                if let Some(TokenClass::Assignment(_)) = self.peek_next().map(|t| t.class) {
+                    self.err(MissingSetKeyword)
+                } else {
+                    self.err(Expected("statement"))
+                }
+            }
         }
     }
     /// Consumes a nested expression.
@@ -406,7 +428,29 @@ impl<'a> TokenFeeder<'a> {
     fn var(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Ident(s)) => Ok(Expr::Var(s.to_owned())),
-            _ => self.err(Expected("string")),
+            Some(TokenClass::Keyword(kw)) => self.err(ReservedWord(kw.to_string().into())),
+            Some(TokenClass::StatementKeyword(kw)) => self.err(ReservedWord(kw.to_string().into())),
+            _ => self.err(Expected("variable name")),
+        }
+    }
+    // Consumes an assignment token.
+    fn assign_op(&mut self) -> LangResult<Option<Op>> {
+        use AssignmentToken::*;
+        match self.next().map(|t| t.class) {
+            Some(TokenClass::Assignment(assign_type)) => Ok(match assign_type {
+                // TODO implement the remaining operators.
+                Assign => None,
+                AddAssign => Some(Op::Add),
+                DivAssign => Some(Op::Div),
+                // ExpAssign => Some(Op::Exp),
+                MulAssign => Some(Op::Mul),
+                RemAssign => Some(Op::Rem),
+                // ShlAssign => Some(Op::Shl),
+                // ShrAssign => Some(Op::Shr),
+                SubAssign => Some(Op::Sub),
+                _ => self.err(Unimplemented)?,
+            }),
+            _ => self.err(Expected("assignment symbol, e.g. '='")),
         }
     }
     /// Consumes a pair of parentheses with the given matcher run inside.

@@ -33,16 +33,14 @@ const TOKEN_PATTERNS: &'static [&'static str] = &[
     // digits, and/or underscores, with an optional `#` (for tags) or `@` (for
     // directives) in front.
     r#"[#@]?[A-Za-z_][A-Za-z_\d]*"#,
-    // Literal `..`.
-    r#"\.\."#,
-    // Literal `**`.
-    r#"\*\*"#,
+    // In-place arithmetic operators `**=`, `<<=`, and `>>=`.
+    r#"(\*\*|<<|>>)="#,
+    // In-place arithmetic operators `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, and `^=`.
+    r#"[+\-*/%&|^]="#,
+    // Operators `..`, `**`, `<<`, and `>>`.
+    r#"(\.\.|\*\*|<<|>>)"#,
     // Equality checks `==`, `!=`, `<=`, and `>=`.
     r#"[=!<>]="#,
-    // In-place arithmetic operator `**=`.
-    r#"\*\*="#,
-    // In-place arithmetic operators `+=`, `-=`, `*=`, and `/=`.
-    r#"[+\-*/]="#,
     // Any other single character.
     r#"[^\s]"#,
 ];
@@ -357,7 +355,11 @@ pub enum AssignmentToken {
     Assign,
     AddAssign,
     DivAssign,
+    ExpAssign,
     MulAssign,
+    RemAssign,
+    ShlAssign,
+    ShrAssign,
     SubAssign,
 }
 impl fmt::Display for AssignmentToken {
@@ -369,7 +371,11 @@ impl fmt::Display for AssignmentToken {
                 Self::Assign => "=",
                 Self::AddAssign => "+=",
                 Self::DivAssign => "/=",
+                Self::ExpAssign => "**=",
                 Self::MulAssign => "*=",
+                Self::RemAssign => "%=",
+                Self::ShlAssign => "<<=",
+                Self::ShrAssign => ">>=",
                 Self::SubAssign => "-=",
             }
         )
@@ -382,7 +388,11 @@ impl TryFrom<&str> for AssignmentToken {
             "=" => Ok(Self::Assign),
             "+=" => Ok(Self::AddAssign),
             "/=" => Ok(Self::DivAssign),
+            "**=" => Ok(Self::ExpAssign),
             "*=" => Ok(Self::MulAssign),
+            "%=" => Ok(Self::RemAssign),
+            "<<=" => Ok(Self::ShlAssign),
+            ">>=" => Ok(Self::ShrAssign),
             "-=" => Ok(Self::SubAssign),
             _ => Err(()),
         }

@@ -17,6 +17,9 @@ const CELL_STATE_COUNT: usize = 100;
 fn main() -> CompleteLangResult<()> {
     let source_code = "
         @transition {
+            set x = 3
+            set y = 2 - 10
+            become #(-y / x)
             // become #(9223372036854775805 + 3)   // overflow
             // become #(-9223372036854775808 / -1) // overflow
             // become #(--9223372036854775808)     // overflow

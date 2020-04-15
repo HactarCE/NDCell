@@ -79,6 +79,8 @@ pub enum LangErrorMsg {
     Unterminated(&'static str),
     Unmatched(char, char),
     Expected(&'static str),
+    ReservedWord(Cow<'static, str>),
+    MissingSetKeyword,
     TopLevelNonDirective,
     InvalidDirectiveName,
     MissingTransitionFunction,
@@ -128,6 +130,12 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::Expected(s) => {
                 write!(f, "Expected {}", s)?;
+            }
+            Self::ReservedWord(s) => {
+                write!(f, "'{}' is a reserved word", s)?;
+            }
+            Self::MissingSetKeyword => {
+                write!(f, "Variable assignment requires the 'set' keyword")?;
             }
             Self::TopLevelNonDirective => {
                 write!(f, "Only directives may appear at the top level of a file")?;

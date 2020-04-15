@@ -50,6 +50,7 @@ impl State {
         if let Some(instruction) = self.instructions.get(self.instruction_pointer) {
             println!("exec {}", instruction.inner);
             match &instruction.inner {
+                SetVar(var_expr, expr) => unimplemented!(),
                 If(expr, if_true, maybe_if_false) => {
                     if self.eval(expr)?.as_int()? != 0 {
                         self.instruction_pointer = Self::get_goto_idx_of_block(if_true)?;

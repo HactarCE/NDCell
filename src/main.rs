@@ -18,8 +18,10 @@ fn main() -> CompleteLangResult<()> {
     let source_code = "
         @transition {
             set x = 3
+            // if 0 { set some_var = 0 } set some_var += 0 // no-op on compiler; error on interpreter
             set y = 2 - 10
             set y -= 3
+            set y = z // use of uninitialized variable
             set z = #(-y / x)
             // set z = 0 // type error
             become z

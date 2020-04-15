@@ -9,16 +9,6 @@ pub enum Value {
     CellState(LangCellState),
     // Pattern(crate::automaton::ArrayView2D<u8>),
 }
-impl From<Type> for Value {
-    fn from(ty: Type) -> Self {
-        match ty {
-            Type::Void => Value::Null,
-            Type::Int => Value::Int(0),
-            Type::CellState => Value::CellState(0),
-            // Type::Pattern => Value::Null,
-        }
-    }
-}
 impl Value {
     pub fn get_type(&self) -> Type {
         match self {
@@ -26,6 +16,14 @@ impl Value {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
             // Self::Pattern(_) => Type::Pattern,
+        }
+    }
+    pub fn from_type(ty: Type) -> Option<Self> {
+        match ty {
+            Type::Void => None,
+            Type::Int => Some(Value::Int(0)),
+            Type::CellState => Some(Value::CellState(0)),
+            // Type::Pattern => Value::Null,
         }
     }
 }

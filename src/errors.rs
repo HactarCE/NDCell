@@ -96,6 +96,7 @@ pub enum LangErrorMsg {
         lhs: Type,
         rhs: Type,
     },
+    CannotAssignTypeToVariable(Type),
     UseOfUninitializedVariable,
     ReturnInTransitionFunction,
 
@@ -163,8 +164,11 @@ impl fmt::Display for LangErrorMsg {
                     write!(f, "; convert them to integers first using the '#id' tag")?;
                 }
             }
+            Self::CannotAssignTypeToVariable(ty) => {
+                write!(f, "Cannot assign {} to variable", ty)?;
+            }
             Self::UseOfUninitializedVariable => {
-                write!(f, "This variable might not be initialized before use")?;
+                write!(f, "This variable must be initialized before it is used")?;
             }
             Self::ReturnInTransitionFunction => {
                 write!(

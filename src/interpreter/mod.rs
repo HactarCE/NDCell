@@ -3,11 +3,11 @@ use std::collections::HashMap;
 mod value;
 pub use value::Value;
 
-use super::types::LangCellState;
+use super::types::{LangCellState, Type};
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use LangErrorMsg::{
-    CellStateOutOfRange, ComparisonError, DivideByZero, Expected, IntegerOverflow, InternalError,
-    TypeError, UseOfUninitializedVariable,
+    CannotAssignTypeToVariable, CellStateOutOfRange, ComparisonError, DivideByZero, Expected,
+    IntegerOverflow, InternalError, TypeError, UseOfUninitializedVariable,
 };
 
 pub enum ExecuteResult {
@@ -53,20 +53,13 @@ impl State {
                 SetVar(var_expr, expr) => {
                     if let ast::Expr::Var(var_name) = &var_expr.inner {
                         let new_value = self.eval(expr)?.inner;
-                        if let Some(old_value) = self.vars.get_mut(var_name) {
-                            let old_type = old_value.get_type();
-                            let new_type = new_value.get_type();
-                            if old_type == new_type {
-                                *old_value = new_value;
-                            } else {
-                                Err(TypeError {
-                                    expected: old_type,
-                                    got: new_type,
-                                })?;
-                            }
-                        } else {
-                            self.vars.insert(var_name.clone(), new_value);
-                        }
+                        let mut_var_value = Self::get_var(
+                            &mut self.vars,
+                            var_name,
+                            Some(new_value.get_type()),
+                            expr.span,
+                        )?;
+                        *mut_var_value = new_value;
                     } else {
                         Err(Expected("variable").with_span(var_expr))?;
                     }
@@ -166,6 +159,7 @@ impl State {
             },
         })
     }
+
     fn compare(
         comparison: ast::Comparison,
         lhs: &Spanned<Value>,
@@ -192,5 +186,36 @@ impl State {
             }
             .with_span(Span::merge(lhs, rhs)))?,
         })
+    }
+
+    fn get_var<'a>(
+        vars: &'a mut HashMap<String, Value>,
+        var_name: &str,
+        expected_type: Option<Type>,
+        span: Span,
+    ) -> LangResult<&'a mut Value> {
+        if let Some(new_type) = expected_type {
+            if let Some(var) = vars.get(var_name) {
+                // Make sure the types match.
+                let old_type = var.get_type();
+                if old_type == new_type {
+                    Ok(vars.get_mut(var_name).unwrap())
+                } else {
+                    Err(TypeError {
+                        expected: old_type,
+                        got: new_type,
+                    }
+                    .with_span(span))?
+                }
+            } else {
+                // Initialize the new variable.
+                let default_value = Value::from_type(new_type)
+                    .ok_or_else(|| CannotAssignTypeToVariable(new_type).with_span(span))?;
+                Ok(vars.entry(var_name.to_owned()).or_insert(default_value))
+            }
+        } else {
+            vars.get_mut(var_name)
+                .ok_or_else(|| UseOfUninitializedVariable.with_span(span))
+        }
     }
 }

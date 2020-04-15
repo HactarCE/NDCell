@@ -3,19 +3,20 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::{Linkage, Module};
-use inkwell::types::IntType;
-use inkwell::values::{FunctionValue, IntValue, PointerValue};
+use inkwell::types::{BasicTypeEnum, IntType};
+use inkwell::values::{BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::IntPredicate;
 use inkwell::OptimizationLevel;
 use std::collections::HashMap;
 
 mod value;
 
-use super::types::{LangCellState, CELL_STATE_BITS, INT_BITS};
+use super::types::{LangCellState, Type, CELL_STATE_BITS, INT_BITS};
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use value::*;
 use LangErrorMsg::{
-    CellStateOutOfRange, ComparisonError, DivideByZero, IntegerOverflow, InternalError,
+    CannotAssignTypeToVariable, CellStateOutOfRange, ComparisonError, DivideByZero, Expected,
+    IntegerOverflow, InternalError, TypeError, UseOfUninitializedVariable,
 };
 
 /// Convenience type alias for a transition function.
@@ -51,6 +52,12 @@ impl TransitionFunction {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+struct Variable<'ctx> {
+    ty: Type,
+    ptr: PointerValue<'ctx>,
+}
+
 pub struct Compiler<'ctx> {
     ctx: &'ctx Context,
     module: Module<'ctx>,
@@ -61,7 +68,8 @@ pub struct Compiler<'ctx> {
     int_type: IntType<'ctx>,
     cell_state_type: IntType<'ctx>,
 
-    variables: HashMap<String, PointerValue<'ctx>>,
+    vars: HashMap<String, Variable<'ctx>>,
+    var_assign_bb: Option<BasicBlock<'ctx>>,
     fn_value_opt: Option<FunctionValue<'ctx>>,
 
     error_points: Vec<LangError>,
@@ -83,7 +91,8 @@ impl<'ctx> Compiler<'ctx> {
             int_type: ctx.custom_width_int_type(INT_BITS),
             cell_state_type: ctx.custom_width_int_type(CELL_STATE_BITS),
 
-            variables: HashMap::new(),
+            vars: HashMap::new(),
+            var_assign_bb: None,
             fn_value_opt: None,
 
             error_points: vec![],
@@ -136,8 +145,9 @@ impl<'ctx> Compiler<'ctx> {
                 .add_function("transition_function", fn_type, None),
         );
 
-        let basic_block = self.append_basic_block("entry");
-        self.builder.position_at_end(basic_block);
+        self.var_assign_bb = Some(self.append_basic_block("var_init"));
+        let entry_bb = self.append_basic_block("entry");
+        self.builder.position_at_end(entry_bb);
         self.build_statements(statements)?;
 
         if self.needs_terminator() {
@@ -146,6 +156,10 @@ impl<'ctx> Compiler<'ctx> {
             self.builder
                 .build_return(Some(&self.cell_state_type.const_zero()));
         }
+
+        // Jump to entry block after variable initialization.
+        self.builder.position_at_end(self.var_assign_bb.unwrap());
+        self.builder.build_unconditional_branch(entry_bb);
 
         if self.fn_value().verify(true) {
             Ok(TransitionFunction {
@@ -170,7 +184,17 @@ impl<'ctx> Compiler<'ctx> {
         for statement in statements {
             use ast::Statement::*;
             match &statement.inner {
-                SetVar(var_expr, expr) => unimplemented!(),
+                SetVar(var_expr, expr) => {
+                    if let ast::Expr::Var(var_name) = &var_expr.inner {
+                        let new_value = self.build_expr(expr)?;
+                        let new_type = Some(new_value.inner.get_type());
+                        let var = self.get_var(var_name, new_type, expr.span)?;
+                        self.builder
+                            .build_store(var.ptr, new_value.as_basic_value()?);
+                    } else {
+                        Err(Expected("variable").with_span(var_expr))?;
+                    }
+                }
                 If(expr, if_true, if_false_maybe) => {
                     // Evaluate the condition and get a boolean value.
                     let test_value = self.build_expr(&expr)?.as_int()?;
@@ -249,7 +273,7 @@ impl<'ctx> Compiler<'ctx> {
                 Comparison(expr1, comparisons) => {
                     Value::Int(self.build_multi_comparison(expr1, comparisons)?)
                 }
-                Var(_name) => unimplemented!(),
+                Var(var_name) => self.get_var_value(var_name, span)?,
             },
         })
     }
@@ -503,6 +527,59 @@ impl<'ctx> Compiler<'ctx> {
             .build_return(Some(&self.return_type.const_int(error_value as u64, true)));
     }
 
+    fn get_var_value(&mut self, var_name: &str, span: Span) -> LangResult<Value<'ctx>> {
+        let var = self.get_var(var_name, None, span)?;
+        let var_basic_value = self.builder.build_load(var.ptr, var_name);
+        Ok(Value::from_basic_value(var.ty, var_basic_value))
+    }
+
+    fn get_var(
+        &mut self,
+        var_name: &str,
+        expected_type: Option<Type>,
+        span: Span,
+    ) -> LangResult<Variable<'ctx>> {
+        if let Some(new_type) = expected_type {
+            if self.vars.contains_key(var_name) {
+                // Make sure the types match.
+                let var = self.vars[var_name];
+                if var.ty == new_type {
+                    Ok(var)
+                } else {
+                    Err(TypeError {
+                        expected: var.ty,
+                        got: new_type,
+                    }
+                    .with_span(span))?
+                }
+            } else {
+                // Allocate and initialize the new variable.
+                let llvm_type = self
+                    .get_llvm_type(new_type)
+                    .ok_or_else(|| CannotAssignTypeToVariable(new_type).with_span(span))?;
+                let initial_value = self
+                    .get_default_var_value(new_type)
+                    .ok_or_else(|| CannotAssignTypeToVariable(new_type).with_span(span))?;
+                let var_builder = self.ctx.create_builder();
+                var_builder.position_at_end(self.var_assign_bb.unwrap());
+                let var_ptr =
+                    var_builder.build_alloca(llvm_type, &format!("uservar__{}", var_name));
+                var_builder.build_store(var_ptr, initial_value);
+                let var = Variable {
+                    ty: new_type,
+                    ptr: var_ptr,
+                };
+                self.vars.insert(var_name.to_owned(), var);
+                Ok(var)
+            }
+        } else {
+            self.vars
+                .get(var_name)
+                .cloned()
+                .ok_or_else(|| UseOfUninitializedVariable.with_span(span))
+        }
+    }
+
     fn add_error_point(&mut self, error: LangError) -> usize {
         self.error_points.push(error);
         self.error_points.len() - 1
@@ -510,6 +587,22 @@ impl<'ctx> Compiler<'ctx> {
 
     fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
         self.ctx.append_basic_block(self.fn_value(), name)
+    }
+
+    fn get_llvm_type(&self, ty: Type) -> Option<BasicTypeEnum<'ctx>> {
+        match ty {
+            Type::Void => None,
+            Type::Int => Some(self.int_type.into()),
+            Type::CellState => Some(self.cell_state_type.into()),
+        }
+    }
+
+    fn get_default_var_value(&self, ty: Type) -> Option<BasicValueEnum<'ctx>> {
+        match ty {
+            Type::Void => None,
+            Type::Int => Some(self.int_type.const_zero().into()),
+            Type::CellState => Some(self.cell_state_type.const_zero().into()),
+        }
     }
 
     fn get_min_int_value(&self) -> IntValue<'ctx> {

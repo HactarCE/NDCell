@@ -19,7 +19,10 @@ fn main() -> CompleteLangResult<()> {
         @transition {
             set x = 3
             set y = 2 - 10
-            become #(-y / x)
+            set y -= 3
+            set z = #(-y / x)
+            // set z = 0 // type error
+            become z
             // become #(9223372036854775805 + 3)   // overflow
             // become #(-9223372036854775808 / -1) // overflow
             // become #(--9223372036854775808)     // overflow

@@ -6,8 +6,8 @@ pub use value::Value;
 use super::types::LangCellState;
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use LangErrorMsg::{
-    CellStateOutOfRange, ComparisonError, DivideByZero, IntegerOverflow, InternalError,
-    UseOfUninitializedVariable,
+    CellStateOutOfRange, ComparisonError, DivideByZero, Expected, IntegerOverflow, InternalError,
+    TypeError, UseOfUninitializedVariable,
 };
 
 pub enum ExecuteResult {
@@ -50,7 +50,27 @@ impl State {
         if let Some(instruction) = self.instructions.get(self.instruction_pointer) {
             println!("exec {}", instruction.inner);
             match &instruction.inner {
-                SetVar(var_expr, expr) => unimplemented!(),
+                SetVar(var_expr, expr) => {
+                    if let ast::Expr::Var(var_name) = &var_expr.inner {
+                        let new_value = self.eval(expr)?.inner;
+                        if let Some(old_value) = self.vars.get_mut(var_name) {
+                            let old_type = old_value.get_type();
+                            let new_type = new_value.get_type();
+                            if old_type == new_type {
+                                *old_value = new_value;
+                            } else {
+                                Err(TypeError {
+                                    expected: old_type,
+                                    got: new_type,
+                                })?;
+                            }
+                        } else {
+                            self.vars.insert(var_name.clone(), new_value);
+                        }
+                    } else {
+                        Err(Expected("variable").with_span(var_expr))?;
+                    }
+                }
                 If(expr, if_true, maybe_if_false) => {
                     if self.eval(expr)?.as_int()? != 0 {
                         self.instruction_pointer = Self::get_goto_idx_of_block(if_true)?;

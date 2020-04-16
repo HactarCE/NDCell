@@ -146,8 +146,9 @@ impl<'a> TokenFeeder<'a> {
     /// run and then return the LangResult::Err.
     fn expect<T>(&mut self, f: impl Fn(&mut Self) -> LangResult<T>) -> LangResult<Spanned<T>> {
         let prior_state = *self;
-        let start = self.get_span().start;
+        let first_token = self.peek_next();
         let ret = f(self);
+        let start = first_token.unwrap().span.start;
         let end = self.get_span().end;
         if ret.is_err() {
             *self = prior_state;
@@ -198,12 +199,12 @@ impl<'a> TokenFeeder<'a> {
         let open_span = self.get_span();
         let mut statements = vec![];
         loop {
-            match self.peek_next().map(|t| t.class) {
+            match self.next().map(|t| t.class) {
                 Some(TokenClass::StatementKeyword(_)) => {
+                    self.prev();
                     statements.push(self.expect(Self::statement)?)
                 }
                 Some(TokenClass::Punctuation(PunctuationToken::RBrace)) => {
-                    self.next();
                     break;
                 }
                 Some(_) => self.err(Expected("statement or '}'"))?,

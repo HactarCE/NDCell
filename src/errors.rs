@@ -11,15 +11,23 @@ pub type LangResult<T> = Result<T, LangError>;
 #[derive(Debug, Clone)]
 pub struct LangErrorWithSource {
     pub source_line: Option<String>,
+    pub line_num: Option<usize>,
     pub span: Option<(usize, usize)>,
     pub msg: LangErrorMsg,
 }
 impl fmt::Display for LangErrorWithSource {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let (Some(line), Some((start, end))) = (&self.source_line, self.span) {
+        if let (Some(line), Some(line_num), Some((start, end))) =
+            (&self.source_line, self.line_num, self.span)
+        {
+            // Write line and column numbers.
+            writeln!(f, "Error at line {}; column {}", line_num, start)?;
+            // Remove initial whitespace.
+            let trimmed_len = line.len() - line.trim_start().len();
+            let trimmed_start = start - trimmed_len;
             // Write line of source code.
-            writeln!(f, "{}", line)?;
-            for _ in 0..(start - 1) {
+            writeln!(f, "{}", line.trim())?;
+            for _ in 0..(trimmed_start - 1) {
                 write!(f, " ")?;
             }
             // Write arrows pointing to the part with the error.
@@ -55,12 +63,14 @@ impl LangError {
                     .skip(start_tp.line() - 1)
                     .next()
                     .map(str::to_owned),
+                line_num: Some(start_tp.line()),
                 span: Some((start, end)),
                 msg: self.msg,
             }
         } else {
             LangErrorWithSource {
                 source_line: None,
+                line_num: None,
                 span: None,
                 msg: self.msg,
             }

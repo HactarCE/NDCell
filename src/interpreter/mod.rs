@@ -48,7 +48,6 @@ impl State {
     pub fn step(&mut self) -> LangResult<ExecuteResult> {
         use ast::Statement::*;
         if let Some(instruction) = self.instructions.get(self.instruction_pointer) {
-            println!("exec {}", instruction.inner);
             match &instruction.inner {
                 SetVar(var_expr, expr) => {
                     if let ast::Expr::Var(var_name) = &var_expr.inner {

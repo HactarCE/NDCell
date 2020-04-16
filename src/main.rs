@@ -40,8 +40,8 @@ fn main() -> CompleteLangResult<()> {
         ";
     let program = make_ast(source_code).map_err(|e| e.with_source(source_code))?;
     println!("{}", program);
-    println!();
 
+    println!();
     // Interpret transition function.
     let result = interpret(program.clone()).map_err(|e| e.with_source(source_code));
     match result {
@@ -49,6 +49,7 @@ fn main() -> CompleteLangResult<()> {
         Err(err) => println!("Error while interpreting transition function\n{}", err),
     }
 
+    println!();
     // Compile and execute transition function.
     let result = compile_and_run(program).map_err(|e| e.with_source(source_code));
     match result {

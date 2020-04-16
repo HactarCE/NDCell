@@ -8,8 +8,8 @@ use super::span::{Span, Spanned};
 pub use components::*;
 use tokens::*;
 use LangErrorMsg::{
-    Expected, InvalidDirectiveName, MissingSetKeyword, ReservedWord, TopLevelNonDirective,
-    Unimplemented, Unmatched,
+    ElseWithoutIf, Expected, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
+    TopLevelNonDirective, Unimplemented, Unmatched,
 };
 
 /// Produce an AST from source code.
@@ -222,7 +222,7 @@ impl<'a> TokenFeeder<'a> {
                 Break => self.err(Unimplemented),
                 Case => self.err(Unimplemented),
                 Continue => self.err(Unimplemented),
-                Else => self.err(Unimplemented),
+                Else => self.err(ElseWithoutIf),
                 For => self.err(Unimplemented),
                 If => Ok(Statement::If(
                     // Condition

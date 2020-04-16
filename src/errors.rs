@@ -90,6 +90,7 @@ pub enum LangErrorMsg {
     Unmatched(char, char),
     Expected(&'static str),
     ReservedWord(Cow<'static, str>),
+    ElseWithoutIf,
     MissingSetKeyword,
     TopLevelNonDirective,
     InvalidDirectiveName,
@@ -144,6 +145,9 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::ReservedWord(s) => {
                 write!(f, "'{}' is a reserved word", s)?;
+            }
+            Self::ElseWithoutIf => {
+                write!(f, "This 'else' has no matching 'if'")?;
             }
             Self::MissingSetKeyword => {
                 write!(f, "Variable assignment requires the 'set' keyword")?;

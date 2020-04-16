@@ -96,8 +96,6 @@ pub enum LangErrorMsg {
     InvalidDirectiveName,
     MissingTransitionFunction,
     MultipleTransitionFunctions,
-
-    // Compile errors for JIT; runtime errors for interpreter
     TypeError {
         expected: Type,
         got: Type,

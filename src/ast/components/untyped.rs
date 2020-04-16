@@ -1,14 +1,12 @@
 use std::convert::TryFrom;
 use std::fmt;
 
-use super::super::errors::*;
-use super::tokens::ComparisonToken;
-use super::Spanned;
+use super::super::super::errors::*;
+use super::super::Spanned;
+use super::common::*;
 use LangErrorMsg::{MissingTransitionFunction, MultipleTransitionFunctions};
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
-
-const DISPLAY_INDENT: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct Program {
@@ -36,15 +34,20 @@ impl TryFrom<Vec<Spanned<Directive>>> for Program {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
-    SetVar(Spanned<Expr>, Spanned<Expr>),
-    If(
-        // Condition
-        Spanned<Expr>,
-        // If true
-        StatementBlock,
-        // If false
-        Option<StatementBlock>,
-    ),
+    SetVar {
+        /// Variable to set.
+        var_expr: Spanned<Expr>,
+        /// Value to store in the variable.
+        value_expr: Spanned<Expr>,
+    },
+    If {
+        /// Condition.
+        cond_expr: Spanned<Expr>,
+        /// Statements to execute if condition is truthy.
+        if_true: StatementBlock,
+        /// Statements to execute if condition is falsey.
+        if_false: StatementBlock,
+    },
     // ForLoop(Spanned<Expr>, Spanned<Expr>, StatementBlock),
     // WhileLoop(Spanned<Expr>, StatementBlock),
     // DoWhileLoop(StatementBlock, Spanned<Expr>),
@@ -76,54 +79,10 @@ pub enum Expr {
     Neg(Box<Spanned<Expr>>),
     Op(Box<Spanned<Expr>>, Op, Box<Spanned<Expr>>),
     /// A series of chained comparisons (a la Python). For example, `x < y == z`
-    /// would be represented (roughly) as: `Expr::Comparison(x, [(LessThan, y),
-    /// (Equal, z)])`.
-    Comparison(Box<Spanned<Expr>>, Vec<(Comparison, Spanned<Expr>)>),
+    /// would be represented (roughly) as: `Expr::Cmp(x, [(LessThan, y), (Equal,
+    /// z)])`.
+    Cmp(Box<Spanned<Expr>>, Vec<(Cmp, Spanned<Expr>)>),
     Var(String),
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Op {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Comparison {
-    Equal,
-    NotEqual,
-    LessThan,
-    GreaterThan,
-    LessThanOrEqual,
-    GreaterThanOrEqual,
-}
-impl Comparison {
-    pub fn get_symbol(self) -> &'static str {
-        match self {
-            Self::Equal => "==",
-            Self::NotEqual => "!=",
-            Self::LessThan => "<",
-            Self::GreaterThan => ">",
-            Self::LessThanOrEqual => "<=",
-            Self::GreaterThanOrEqual => ">=",
-        }
-    }
-}
-impl From<ComparisonToken> for Comparison {
-    fn from(token_class: ComparisonToken) -> Self {
-        use ComparisonToken::*;
-        match token_class {
-            Equal => Self::Equal,
-            NotEqual => Self::NotEqual,
-            LessThan => Self::LessThan,
-            GreaterThan => Self::GreaterThan,
-            LessThanOrEqual => Self::LessThanOrEqual,
-            GreaterThanOrEqual => Self::GreaterThanOrEqual,
-        }
-    }
 }
 
 fn write_indent(f: &mut fmt::Formatter, spaces: usize) -> fmt::Result {
@@ -148,8 +107,8 @@ fn write_statement_block_indented(
 impl Statement {
     fn name(&self) -> &'static str {
         match self {
-            Self::SetVar(_, _) => "SetVar",
-            Self::If(_, _, _) => "If",
+            Self::SetVar { .. } => "SetVar",
+            Self::If { .. } => "If",
             Self::Become(_) => "Become",
             Self::Return(_) => "Return",
             Self::Goto(_) => "Goto",
@@ -161,28 +120,33 @@ impl Statement {
         write!(f, "{}", self.name())?;
         let next_indent = indent + DISPLAY_INDENT;
         match self {
-            Self::SetVar(var, expr) => {
+            Self::SetVar {
+                var_expr,
+                value_expr,
+            } => {
                 writeln!(f, " (")?;
-                var.inner.fmt_indented(f, next_indent)?;
+                var_expr.inner.fmt_indented(f, next_indent)?;
                 writeln!(f)?;
                 write_indent(f, indent)?;
                 writeln!(f, ") = (")?;
-                expr.inner.fmt_indented(f, next_indent)?;
+                value_expr.inner.fmt_indented(f, next_indent)?;
                 writeln!(f)?;
                 write_indent(f, indent)?;
                 write!(f, ")")?;
             }
-            Self::If(expr, if_true, maybe_if_false) => {
+            Self::If {
+                cond_expr,
+                if_true,
+                if_false,
+            } => {
                 writeln!(f, " (")?;
-                expr.inner.fmt_indented(f, next_indent)?;
+                cond_expr.inner.fmt_indented(f, next_indent)?;
                 writeln!(f)?;
                 write_indent(f, indent)?;
                 write!(f, ") Then ")?;
                 write_statement_block_indented(f, &if_true, indent)?;
-                if let Some(if_false) = maybe_if_false {
-                    write!(f, " Else ")?;
-                    write_statement_block_indented(f, &if_false, indent)?;
-                }
+                write!(f, " Else ")?;
+                write_statement_block_indented(f, &if_false, indent)?;
             }
             Self::Become(expr) | Self::Return(expr) => {
                 writeln!(f, " (")?;
@@ -209,7 +173,7 @@ impl Expr {
             Self::Op(_, Op::Mul, _) => "Mul",
             Self::Op(_, Op::Div, _) => "Div",
             Self::Op(_, Op::Rem, _) => "Rem",
-            Self::Comparison(_, _) => "Comparison",
+            Self::Cmp(_, _) => "Cmp",
             Self::Var(_) => "Var",
         }
     }
@@ -229,7 +193,7 @@ impl Expr {
                 writeln!(f)?;
                 expr2.inner.fmt_indented(f, next_indent)?;
             }
-            Self::Comparison(expr1, comparisons) => {
+            Self::Cmp(expr1, comparisons) => {
                 writeln!(f)?;
                 let next_next_indent = next_indent + DISPLAY_INDENT;
                 expr1.inner.fmt_indented(f, next_next_indent)?;

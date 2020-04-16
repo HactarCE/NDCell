@@ -184,20 +184,27 @@ impl<'ctx> Compiler<'ctx> {
         for statement in statements {
             use ast::Statement::*;
             match &statement.inner {
-                SetVar(var_expr, expr) => {
+                SetVar {
+                    var_expr,
+                    value_expr,
+                } => {
                     if let ast::Expr::Var(var_name) = &var_expr.inner {
-                        let new_value = self.build_expr(expr)?;
+                        let new_value = self.build_expr(value_expr)?;
                         let new_type = Some(new_value.inner.get_type());
-                        let var = self.get_var(var_name, new_type, expr.span)?;
+                        let var = self.get_var(var_name, new_type, value_expr.span)?;
                         self.builder
                             .build_store(var.ptr, new_value.as_basic_value()?);
                     } else {
                         Err(Expected("variable").with_span(var_expr))?;
                     }
                 }
-                If(expr, if_true, if_false_maybe) => {
+                If {
+                    cond_expr,
+                    if_true,
+                    if_false,
+                } => {
                     // Evaluate the condition and get a boolean value.
-                    let test_value = self.build_expr(&expr)?.as_int()?;
+                    let test_value = self.build_expr(&cond_expr)?.as_int()?;
                     let condition_value = self.builder.build_int_compare(
                         IntPredicate::NE,
                         test_value,
@@ -207,10 +214,7 @@ impl<'ctx> Compiler<'ctx> {
                     self.build_conditional(
                         condition_value,
                         |c| c.build_statements(if_true),
-                        |c| match if_false_maybe {
-                            Some(if_false) => c.build_statements(if_false),
-                            None => Ok(()),
-                        },
+                        |c| c.build_statements(if_false),
                     )?;
                 }
                 Become(expr) | Return(expr) => {
@@ -270,7 +274,7 @@ impl<'ctx> Compiler<'ctx> {
                         }
                     }
                 }),
-                Comparison(expr1, comparisons) => {
+                Cmp(expr1, comparisons) => {
                     Value::Int(self.build_multi_comparison(expr1, comparisons)?)
                 }
                 Var(var_name) => self.get_var_value(var_name, span)?,
@@ -400,7 +404,7 @@ impl<'ctx> Compiler<'ctx> {
     fn build_multi_comparison(
         &mut self,
         expr1: &Spanned<ast::Expr>,
-        comparisons: &[(ast::Comparison, Spanned<ast::Expr>)],
+        comparisons: &[(ast::Cmp, Spanned<ast::Expr>)],
     ) -> LangResult<IntValue<'ctx>> {
         let old_bb = self.builder.get_insert_block().unwrap();
 
@@ -451,19 +455,19 @@ impl<'ctx> Compiler<'ctx> {
 
     fn build_comparison(
         &mut self,
-        comparison: ast::Comparison,
+        comparison: ast::Cmp,
         lhs: &Spanned<Value<'ctx>>,
         rhs: &Spanned<Value<'ctx>>,
     ) -> LangResult<IntValue<'ctx>> {
-        use ast::Comparison::*;
+        use ast::Cmp::*;
         use Value::*;
         let int_predicate = match comparison {
-            Equal => IntPredicate::EQ,
-            NotEqual => IntPredicate::NE,
-            LessThan => IntPredicate::ULT,
-            GreaterThan => IntPredicate::UGT,
-            LessThanOrEqual => IntPredicate::ULE,
-            GreaterThanOrEqual => IntPredicate::UGE,
+            Eql => IntPredicate::EQ,
+            Neq => IntPredicate::NE,
+            Lt => IntPredicate::ULT,
+            Gt => IntPredicate::UGT,
+            Lte => IntPredicate::ULE,
+            Gte => IntPredicate::UGE,
         };
         Ok(match (&lhs.inner, &rhs.inner, comparison) {
             // Integer comparison
@@ -471,7 +475,7 @@ impl<'ctx> Compiler<'ctx> {
                 .builder
                 .build_int_compare(int_predicate, *a, *b, "intCmp"),
             // Cell state comparison
-            (CellState(a), CellState(b), Equal) | (CellState(a), CellState(b), NotEqual) => self
+            (CellState(a), CellState(b), Eql) | (CellState(a), CellState(b), Neq) => self
                 .builder
                 .build_int_compare(int_predicate, *a, *b, "cellStateCmp"),
             // Error
@@ -591,7 +595,6 @@ impl<'ctx> Compiler<'ctx> {
 
     fn get_llvm_type(&self, ty: Type) -> Option<BasicTypeEnum<'ctx>> {
         match ty {
-            Type::Void => None,
             Type::Int => Some(self.int_type.into()),
             Type::CellState => Some(self.cell_state_type.into()),
         }
@@ -599,7 +602,6 @@ impl<'ctx> Compiler<'ctx> {
 
     fn get_default_var_value(&self, ty: Type) -> Option<BasicValueEnum<'ctx>> {
         match ty {
-            Type::Void => None,
             Type::Int => Some(self.int_type.const_zero().into()),
             Type::CellState => Some(self.cell_state_type.const_zero().into()),
         }

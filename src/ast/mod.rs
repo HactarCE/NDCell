@@ -5,7 +5,7 @@ mod tokens;
 
 use super::errors::*;
 use super::span::{Span, Spanned};
-pub use components::*;
+pub use components::{untyped::*, Cmp, Op};
 use tokens::*;
 use LangErrorMsg::{
     ElseWithoutIf, Expected, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
@@ -224,36 +224,31 @@ impl<'a> TokenFeeder<'a> {
                 Continue => self.err(Unimplemented),
                 Else => self.err(ElseWithoutIf),
                 For => self.err(Unimplemented),
-                If => Ok(Statement::If(
-                    // Condition
-                    self.expect(Self::expression)?,
-                    // If true
-                    self.expect(Self::block)?.inner,
-                    // If false
-                    if self.next_token_is_one_of(&[TokenClass::StatementKeyword(Else)]) {
+                If => Ok(Statement::If {
+                    cond_expr: self.expect(Self::expression)?,
+                    if_true: self.expect(Self::block)?.inner,
+                    if_false: if self.next_token_is_one_of(&[TokenClass::StatementKeyword(Else)]) {
                         self.next();
-                        Some(
-                            if self.next_token_is_one_of(&[TokenClass::StatementKeyword(If)]) {
-                                // Else if
-                                vec![self.expect(Self::statement)?]
-                            } else {
-                                // Else
-                                self.expect(Self::block)?.inner
-                            },
-                        )
+                        if self.next_token_is_one_of(&[TokenClass::StatementKeyword(If)]) {
+                            // Else if
+                            vec![self.expect(Self::statement)?]
+                        } else {
+                            // Else
+                            self.expect(Self::block)?.inner
+                        }
                     } else {
-                        None
+                        vec![]
                     },
-                )),
+                }),
                 Remain => self.err(Unimplemented),
                 Return => self.err(Unimplemented),
                 Set => Ok({
                     let var = self.expect(Self::var)?;
                     let assign_op = self.expect(Self::assign_op)?;
                     let expr = self.expect(Self::expression)?;
-                    Statement::SetVar(
-                        var.clone(),
-                        if let Some(op) = assign_op.inner {
+                    Statement::SetVar {
+                        var_expr: var.clone(),
+                        value_expr: if let Some(op) = assign_op.inner {
                             Spanned {
                                 span: assign_op.span,
                                 inner: Expr::Op(Box::new(var), op, Box::new(expr)),
@@ -261,7 +256,7 @@ impl<'a> TokenFeeder<'a> {
                         } else {
                             expr
                         },
-                    )
+                    }
                 }),
                 Unless => self.err(Unimplemented),
                 While => self.err(Unimplemented),
@@ -404,7 +399,7 @@ impl<'a> TokenFeeder<'a> {
         {
             self.next();
             comparisons.push((
-                Comparison::from(cmp_type),
+                Cmp::from(cmp_type),
                 self.expression_with_precedence(precedence.next())?,
             ));
         }
@@ -415,7 +410,7 @@ impl<'a> TokenFeeder<'a> {
         }
         Ok(Spanned {
             span: Span::merge(&initial, &comparisons.last().unwrap().1),
-            inner: Expr::Comparison(Box::new(initial), comparisons),
+            inner: Expr::Cmp(Box::new(initial), comparisons),
         })
     }
     /// Consumes an integer literal.
@@ -492,11 +487,15 @@ pub fn flatten_block(block: &mut StatementBlock) {
                 inner: Goto(idx),
             };
             match &mut statement.inner {
-                If(_, ref mut if_true, ref mut maybe_if_false) => {
+                If {
+                    ref mut if_true,
+                    ref mut if_false,
+                    ..
+                } => {
                     let mut new_statements =
                         std::mem::replace(if_true, vec![goto_idx(idx_at_end - 1)]);
                     new_statements.push(goto_idx(i));
-                    if let Some(if_false) = maybe_if_false {
+                    if !if_false.is_empty() {
                         new_statements.extend(std::mem::replace(
                             if_false,
                             vec![goto_idx(idx_at_end - 1 + new_statements.len())],

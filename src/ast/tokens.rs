@@ -401,12 +401,12 @@ impl TryFrom<&str> for AssignmentToken {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ComparisonToken {
-    Equal,
-    NotEqual,
-    LessThan,
-    GreaterThan,
-    LessThanOrEqual,
-    GreaterThanOrEqual,
+    Eql,
+    Neq,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
 }
 impl fmt::Display for ComparisonToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -414,12 +414,12 @@ impl fmt::Display for ComparisonToken {
             f,
             "{}",
             match self {
-                Self::Equal => "==",
-                Self::NotEqual => "!=",
-                Self::LessThan => "<",
-                Self::GreaterThan => ">",
-                Self::LessThanOrEqual => "<=",
-                Self::GreaterThanOrEqual => ">=",
+                Self::Eql => "==",
+                Self::Neq => "!=",
+                Self::Lt => "<",
+                Self::Gt => ">",
+                Self::Lte => "<=",
+                Self::Gte => ">=",
             }
         )
     }
@@ -428,12 +428,12 @@ impl TryFrom<&str> for ComparisonToken {
     type Error = ();
     fn try_from(s: &str) -> Result<Self, ()> {
         match s {
-            "==" => Ok(Self::Equal),
-            "!=" => Ok(Self::NotEqual),
-            "<" => Ok(Self::LessThan),
-            ">" => Ok(Self::GreaterThan),
-            "<=" => Ok(Self::LessThanOrEqual),
-            ">=" => Ok(Self::GreaterThanOrEqual),
+            "==" => Ok(Self::Eql),
+            "!=" => Ok(Self::Neq),
+            "<" => Ok(Self::Lt),
+            ">" => Ok(Self::Gt),
+            "<=" => Ok(Self::Lte),
+            ">=" => Ok(Self::Gte),
             _ => Err(()),
         }
     }

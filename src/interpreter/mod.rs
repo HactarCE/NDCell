@@ -12,13 +12,13 @@ use LangErrorMsg::{
 
 pub enum ExecuteResult {
     Continue,
-    Return(Value),
+    Return(Option<Value>),
 }
 impl ExecuteResult {
     pub fn return_value(self) -> Option<Value> {
         match self {
             Self::Continue => None,
-            Self::Return(value) => Some(value),
+            Self::Return(value) => value,
         }
     }
 }
@@ -49,49 +49,58 @@ impl State {
         use ast::Statement::*;
         if let Some(instruction) = self.instructions.get(self.instruction_pointer) {
             match &instruction.inner {
-                SetVar(var_expr, expr) => {
+                SetVar {
+                    var_expr,
+                    value_expr,
+                } => {
                     if let ast::Expr::Var(var_name) = &var_expr.inner {
-                        let new_value = self.eval(expr)?.inner;
+                        let new_value = self.eval(value_expr)?.inner;
                         let mut_var_value = Self::get_var(
                             &mut self.vars,
                             var_name,
                             Some(new_value.get_type()),
-                            expr.span,
+                            value_expr.span,
                         )?;
                         *mut_var_value = new_value;
                     } else {
                         Err(Expected("variable").with_span(var_expr))?;
                     }
                 }
-                If(expr, if_true, maybe_if_false) => {
-                    if self.eval(expr)?.as_int()? != 0 {
-                        self.instruction_pointer = Self::get_goto_idx_of_block(if_true)?;
-                    } else if let Some(if_false) = maybe_if_false {
-                        self.instruction_pointer = Self::get_goto_idx_of_block(if_false)?;
-                    }
+                If {
+                    cond_expr,
+                    if_true,
+                    if_false,
+                } => {
+                    // Evaluate the condition.
+                    let condition: bool = self.eval(cond_expr)?.as_int()? != 0;
+                    // Decide which block to execute.
+                    let block = if condition { if_true } else { if_false };
+                    // Jump there.
+                    Self::goto_block(&mut self.instruction_pointer, block)?;
                 }
                 Become(expr) | Return(expr) => {
-                    return Ok(ExecuteResult::Return(self.eval(expr)?.inner))
+                    return Ok(ExecuteResult::Return(Some(self.eval(expr)?.inner)))
                 }
-                End => return Ok(ExecuteResult::Return(Value::Null)),
+                End => return Ok(ExecuteResult::Return(None)),
                 Goto(idx) => self.instruction_pointer = *idx,
             }
             self.instruction_pointer += 1;
             Ok(ExecuteResult::Continue)
         } else {
-            Ok(ExecuteResult::Return(Value::Null))
+            Ok(ExecuteResult::Return(None))
         }
     }
 
-    fn get_goto_idx_of_block(block: &ast::StatementBlock) -> LangResult<usize> {
-        if let Some(ast::Statement::Goto(idx)) = block.get(0).map(|s| &s.inner) {
-            Ok(*idx)
-        } else {
-            Err(
+    fn goto_block(instruction_pointer: &mut usize, block: &ast::StatementBlock) -> LangResult<()> {
+        match block.get(0).map(|s| &s.inner) {
+            Some(ast::Statement::Goto(idx)) => *instruction_pointer = *idx,
+            None => (),
+            _ => Err(
                 InternalError("Block in interpreter did not contain GOTO statement".into())
                     .without_span(),
-            )
+            )?,
         }
+        Ok(())
     }
 
     pub fn eval(&self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value>> {
@@ -137,7 +146,7 @@ impl State {
                         .ok_or_else(|| IntegerOverflow.with_span(span))?
                     })
                 }
-                Comparison(expr1, comparisons) => {
+                Cmp(expr1, comparisons) => {
                     let mut result = true;
                     let mut lhs = self.eval(expr1)?;
                     for (comparison, expr2) in comparisons {
@@ -160,23 +169,23 @@ impl State {
     }
 
     fn compare(
-        comparison: ast::Comparison,
+        comparison: ast::Cmp,
         lhs: &Spanned<Value>,
         rhs: &Spanned<Value>,
     ) -> LangResult<bool> {
-        use ast::Comparison::*;
+        use ast::Cmp::*;
         use Value::*;
         Ok(match (&lhs.inner, &rhs.inner, comparison) {
             // Integer comparison
-            (Int(a), Int(b), Equal) => a == b,
-            (Int(a), Int(b), NotEqual) => a != b,
-            (Int(a), Int(b), LessThan) => a < b,
-            (Int(a), Int(b), GreaterThan) => a > b,
-            (Int(a), Int(b), LessThanOrEqual) => a <= b,
-            (Int(a), Int(b), GreaterThanOrEqual) => a >= b,
+            (Int(a), Int(b), Eql) => a == b,
+            (Int(a), Int(b), Neq) => a != b,
+            (Int(a), Int(b), Lt) => a < b,
+            (Int(a), Int(b), Gt) => a > b,
+            (Int(a), Int(b), Lte) => a <= b,
+            (Int(a), Int(b), Gte) => a >= b,
             // Cell state comparison
-            (CellState(a), CellState(b), Equal) => a == b,
-            (CellState(a), CellState(b), NotEqual) => a != b,
+            (CellState(a), CellState(b), Eql) => a == b,
+            (CellState(a), CellState(b), Neq) => a != b,
             // Error
             _ => Err(ComparisonError {
                 cmp_sym: comparison.get_symbol(),

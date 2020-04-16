@@ -6,7 +6,6 @@ use LangErrorMsg::{CannotAssignTypeToVariable, TypeError};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Value<'ctx> {
-    Null,
     Int(IntValue<'ctx>),
     CellState(IntValue<'ctx>),
     // Pattern(crate::automaton::ArrayView2D<u8>),
@@ -14,7 +13,6 @@ pub enum Value<'ctx> {
 impl<'ctx> Value<'ctx> {
     pub fn get_type(self) -> Type {
         match self {
-            Self::Null => Type::Void,
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
         }
@@ -23,7 +21,7 @@ impl<'ctx> Value<'ctx> {
         match ty {
             Type::Int => Self::Int(basic_value.into_int_value()),
             Type::CellState => Self::CellState(basic_value.into_int_value()),
-            Type::Void => panic!("Cannot construct type {} from basic value", ty),
+            // Type::Pattern => panic!("Cannot construct type {} from basic value", ty),
         }
     }
 }
@@ -44,7 +42,7 @@ impl<'ctx> Spanned<Value<'ctx>> {
         match self.inner {
             Value::Int(i) => Ok(i.into()),
             Value::CellState(i) => Ok(i.into()),
-            Value::Null => Err(CannotAssignTypeToVariable(self.inner.get_type()).with_span(self)),
+            // Value::Pattern => Err(CannotAssignTypeToVariable(self.inner.get_type()).with_span(self)),
         }
     }
     fn type_err<T>(self, expected: Type) -> LangResult<T> {

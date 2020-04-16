@@ -4,7 +4,6 @@ use LangErrorMsg::TypeError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
-    Null,
     Int(LangInt),
     CellState(LangCellState),
     // Pattern(crate::automaton::ArrayView2D<u8>),
@@ -12,7 +11,6 @@ pub enum Value {
 impl Value {
     pub fn get_type(&self) -> Type {
         match self {
-            Self::Null => Type::Void,
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
             // Self::Pattern(_) => Type::Pattern,
@@ -20,10 +18,9 @@ impl Value {
     }
     pub fn from_type(ty: Type) -> Option<Self> {
         match ty {
-            Type::Void => None,
             Type::Int => Some(Value::Int(0)),
             Type::CellState => Some(Value::CellState(0)),
-            // Type::Pattern => Value::Null,
+            // Type::Pattern => unimplemented!(),
         }
     }
 }

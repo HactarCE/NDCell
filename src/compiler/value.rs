@@ -2,7 +2,7 @@ use inkwell::values::{BasicValueEnum, IntValue};
 
 use super::super::types::Type;
 use super::super::{errors::*, Spanned};
-use LangErrorMsg::{CannotAssignTypeToVariable, TypeError};
+use LangErrorMsg::TypeError;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Value<'ctx> {

@@ -11,11 +11,12 @@ fn test_ast() {
 ";
 
     let tokens = tokens::tokenize(source_code).expect("Tokenization failed");
-    let ast = TokenFeeder::from(&tokens[..])
+    let ast = AstBuilder::from(&tokens[..])
         .directives()
         .expect("AST generation failed");
 
     let mut correct = false;
+    use untyped::*;
     if let Directive::Transition(ast) = &ast[0].inner {
         if let Statement::Become(ast) = &ast[0].inner {
             if let Expr::Tag(ast) = &ast.inner {

@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use super::super::tokens::ComparisonToken;
 
 pub const DISPLAY_INDENT: usize = 2;
@@ -15,6 +17,17 @@ pub enum Op {
     /// Remainder
     Rem,
 }
+impl Op {
+    pub fn get_symbol(self) -> &'static str {
+        match self {
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Rem => "%",
+        }
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum EqCmp {
@@ -28,6 +41,16 @@ impl EqCmp {
         match self {
             Self::Eql => "==",
             Self::Neq => "!=",
+        }
+    }
+}
+impl TryFrom<Cmp> for EqCmp {
+    type Error = ();
+    fn try_from(cmp: Cmp) -> Result<Self, ()> {
+        match cmp {
+            Cmp::Eql => Ok(Self::Eql),
+            Cmp::Neq => Ok(Self::Neq),
+            _ => Err(()),
         }
     }
 }
@@ -56,6 +79,14 @@ impl Cmp {
             Self::Gt => ">",
             Self::Lte => "<=",
             Self::Gte => ">=",
+        }
+    }
+}
+impl From<EqCmp> for Cmp {
+    fn from(eq_cmp: EqCmp) -> Self {
+        match eq_cmp {
+            EqCmp::Eql => Self::Eql,
+            EqCmp::Neq => Self::Neq,
         }
     }
 }

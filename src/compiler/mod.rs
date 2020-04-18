@@ -13,10 +13,8 @@ mod value;
 
 use super::types::{LangCellState, Type, CELL_STATE_BITS, INT_BITS};
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
-use value::*;
 use LangErrorMsg::{
-    CannotAssignTypeToVariable, CellStateOutOfRange, ComparisonError, DivideByZero, Expected,
-    IntegerOverflow, InternalError, TypeError, UseOfUninitializedVariable,
+    CellStateOutOfRange, DivideByZero, IntegerOverflow, InternalError, Unimplemented,
 };
 
 /// Convenience type alias for a transition function.
@@ -47,7 +45,7 @@ impl TransitionFunction {
                 .error_points
                 .get(error_index as usize)
                 .cloned()
-                .unwrap_or(InternalError("Error index out of range".into()).into()))
+                .unwrap_or(InternalError("Error index out of range".into()).without_span()))
         }
     }
 }
@@ -64,12 +62,12 @@ pub struct Compiler<'ctx> {
     builder: Builder<'ctx>,
     execution_engine: ExecutionEngine<'ctx>,
 
-    return_type: IntType<'ctx>,
-    int_type: IntType<'ctx>,
-    cell_state_type: IntType<'ctx>,
+    llvm_return_type: IntType<'ctx>,
+    llvm_int_type: IntType<'ctx>,
+    llvm_cell_state_type: IntType<'ctx>,
 
+    function_type: Option<ast::FunctionType>,
     vars: HashMap<String, Variable<'ctx>>,
-    var_assign_bb: Option<BasicBlock<'ctx>>,
     fn_value_opt: Option<FunctionValue<'ctx>>,
 
     error_points: Vec<LangError>,
@@ -87,12 +85,12 @@ impl<'ctx> Compiler<'ctx> {
             builder,
             execution_engine,
 
-            return_type: ctx.i64_type(),
-            int_type: ctx.custom_width_int_type(INT_BITS),
-            cell_state_type: ctx.custom_width_int_type(CELL_STATE_BITS),
+            llvm_return_type: ctx.i64_type(),
+            llvm_int_type: ctx.custom_width_int_type(INT_BITS),
+            llvm_cell_state_type: ctx.custom_width_int_type(CELL_STATE_BITS),
 
+            function_type: None,
             vars: HashMap::new(),
-            var_assign_bb: None,
             fn_value_opt: None,
 
             error_points: vec![],
@@ -104,15 +102,16 @@ impl<'ctx> Compiler<'ctx> {
         format!(
             "llvm.{}.with.overflow.i{}",
             name,
-            self.int_type.get_bit_width()
+            self.llvm_int_type.get_bit_width()
         )
     }
 
     fn with_extern_prototypes(self) -> Self {
-        let int_param_types = &[self.int_type.into(), self.int_type.into()];
-        let int_with_error_type = self
-            .ctx
-            .struct_type(&[self.int_type.into(), self.ctx.bool_type().into()], false);
+        let int_param_types = &[self.llvm_int_type.into(), self.llvm_int_type.into()];
+        let int_with_error_type = self.ctx.struct_type(
+            &[self.llvm_int_type.into(), self.ctx.bool_type().into()],
+            false,
+        );
         for name in &["sadd", "ssub", "smul"] {
             self.module.add_function(
                 &self.get_checked_int_arithmetic_function_name(name),
@@ -134,32 +133,34 @@ impl<'ctx> Compiler<'ctx> {
             .expect("No function value in JIT compiler")
     }
 
-    pub fn jit_compile_transition_fn(
-        &mut self,
-        statements: &ast::StatementBlock,
-    ) -> LangResult<TransitionFunction> {
+    pub fn jit_compile_fn(&mut self, function: &ast::Function) -> LangResult<TransitionFunction> {
+        self.function_type = Some(function.fn_type);
+
         // Create the function type with no arguments and no varargs.
-        let fn_type = self.return_type.fn_type(&[], false);
+        let fn_type = self.llvm_return_type.fn_type(&[], false);
         self.fn_value_opt = Some(
             self.module
                 .add_function("transition_function", fn_type, None),
         );
 
-        self.var_assign_bb = Some(self.append_basic_block("var_init"));
         let entry_bb = self.append_basic_block("entry");
         self.builder.position_at_end(entry_bb);
-        self.build_statements(statements)?;
+
+        // Declare and initialize variables.
+        for (var_name, ty) in function.vars.iter() {
+            self.declare_var(var_name.to_owned(), *ty)?;
+            self.initialize_var(var_name)?;
+        }
+
+        // Build statements.
+        self.build_statements(&function.statements)?;
 
         if self.needs_terminator() {
             // Implicit `return #0` at the end of the transition function. TODO
             // change this to `remain`, once that's implemented.
             self.builder
-                .build_return(Some(&self.cell_state_type.const_zero()));
+                .build_return(Some(&self.llvm_cell_state_type.const_zero()));
         }
-
-        // Jump to entry block after variable initialization.
-        self.builder.position_at_end(self.var_assign_bb.unwrap());
-        self.builder.build_unconditional_branch(entry_bb);
 
         if self.fn_value().verify(true) {
             Ok(TransitionFunction {
@@ -185,18 +186,26 @@ impl<'ctx> Compiler<'ctx> {
             use ast::Statement::*;
             match &statement.inner {
                 SetVar {
-                    var_expr,
+                    var_name,
                     value_expr,
                 } => {
-                    if let ast::Expr::Var(var_name) = &var_expr.inner {
-                        let new_value = self.build_expr(value_expr)?;
-                        let new_type = Some(new_value.inner.get_type());
-                        let var = self.get_var(var_name, new_type, value_expr.span)?;
-                        self.builder
-                            .build_store(var.ptr, new_value.as_basic_value()?);
-                    } else {
-                        Err(Expected("variable").with_span(var_expr))?;
+                    let var = self.vars[&var_name.inner];
+                    if var.ty != value_expr.get_type() {
+                        Err(InternalError(
+                            "Invalid variable assignment not caught by type checker".into(),
+                        )
+                        .without_span())?;
                     }
+                    match value_expr {
+                        ast::Expr::Int(e) => {
+                            let value = self.build_int_expr(e)?.inner;
+                            self.builder.build_store(var.ptr, value)
+                        }
+                        ast::Expr::CellState(e) => {
+                            let value = self.build_cell_state_expr(e)?.inner;
+                            self.builder.build_store(var.ptr, value)
+                        }
+                    };
                 }
                 If {
                     cond_expr,
@@ -204,11 +213,11 @@ impl<'ctx> Compiler<'ctx> {
                     if_false,
                 } => {
                     // Evaluate the condition and get a boolean value.
-                    let test_value = self.build_expr(&cond_expr)?.as_int()?;
+                    let test_value = self.build_int_expr(&cond_expr)?;
                     let condition_value = self.builder.build_int_compare(
                         IntPredicate::NE,
-                        test_value,
-                        self.int_type.const_zero(),
+                        test_value.inner,
+                        self.llvm_int_type.const_zero(),
                         "tmp_ifCond",
                     );
                     self.build_conditional(
@@ -217,67 +226,123 @@ impl<'ctx> Compiler<'ctx> {
                         |c| c.build_statements(if_false),
                     )?;
                 }
-                Become(expr) | Return(expr) => {
-                    let return_cell_state = self.build_expr(&expr)?.as_cell_state()?;
-                    let return_value = self.builder.build_int_cast(
-                        return_cell_state,
-                        self.return_type,
-                        "tmp_retValFromCellState",
-                    );
-                    self.builder.build_return(Some(&return_value));
+                Return(return_expr) => {
+                    match self.function_type.unwrap() {
+                        ast::FunctionType::Transition => {
+                            if Type::CellState != return_expr.get_type() {
+                                Err(InternalError(
+                                    "Invalid return statement not caught by type checker".into(),
+                                )
+                                .without_span())?;
+                            }
+                            let return_cell_state =
+                                self.build_cell_state_expr(return_expr.cell_state_ref()?)?;
+                            let return_value = self.builder.build_int_cast(
+                                return_cell_state.inner,
+                                self.llvm_return_type,
+                                "tmp_retValFromCellState",
+                            );
+                            self.builder.build_return(Some(&return_value));
+                        }
+                        ast::FunctionType::Helper(_) => Err(Unimplemented.with_span(return_expr))?,
+                    };
+                    // Don't build any more statements after this!
                     return Ok(());
                 }
-                Goto(_) => panic!("Got GOTO statement while compiling"),
-                End => panic!("Got END statement while compiling"),
+                Goto(_) => panic!("GOTO statement found in AST given to compiler"),
+                End => panic!("END statement found in AST given to compiler"),
             };
         }
         Ok(())
     }
 
-    fn build_expr(&mut self, expression: &Spanned<ast::Expr>) -> LangResult<Spanned<Value<'ctx>>> {
+    fn build_int_expr(
+        &mut self,
+        expression: &Spanned<ast::IntExpr>,
+    ) -> LangResult<Spanned<IntValue<'ctx>>> {
         let span = expression.span;
-        use ast::Expr::*;
+        use ast::IntExpr::*;
         Ok(Spanned {
             span,
             inner: match &expression.inner {
-                Int(i) => Value::Int(self.int_type.const_int(*i as u64, true)),
-                Tag(expr) => Value::CellState({
-                    let x = self.build_expr(expr)?.as_int()?;
-                    let ret = self.builder.build_int_cast(
-                        x,
-                        self.cell_state_type,
-                        "tmp_cellStateFromInt",
-                    );
-                    self.build_cell_state_value_check(ret, span);
-                    ret
-                }),
-                Neg(expr) => Value::Int({
-                    let x = self.build_expr(expr)?.as_int()?;
-                    // Subtract from zero.
-                    self.build_checked_int_arithmetic(self.int_type.const_zero(), x, span, "ssub")?
-                }),
-                Op(expr1, op, expr2) => Value::Int({
-                    let lhs = self.build_expr(expr1)?.as_int()?;
-                    let rhs = self.build_expr(expr2)?.as_int()?;
-                    use ast::Op::*;
+                FnCall(_) => Err(Unimplemented.with_span(span))?,
+                Var(var_name) => self
+                    .builder
+                    .build_load(self.vars[var_name].ptr, var_name)
+                    .into_int_value(),
+                Literal(i) => self.llvm_int_type.const_int(*i as u64, true),
+                Op { lhs, op, rhs } => {
+                    let lhs = self.build_int_expr(lhs)?.inner;
+                    let rhs = self.build_int_expr(rhs)?.inner;
                     match op {
-                        Add => self.build_checked_int_arithmetic(lhs, rhs, span, "sadd")?,
-                        Sub => self.build_checked_int_arithmetic(lhs, rhs, span, "ssub")?,
-                        Mul => self.build_checked_int_arithmetic(lhs, rhs, span, "smul")?,
-                        Div => {
+                        ast::Op::Add => {
+                            self.build_checked_int_arithmetic(lhs, rhs, span, "sadd")?
+                        }
+                        ast::Op::Sub => {
+                            self.build_checked_int_arithmetic(lhs, rhs, span, "ssub")?
+                        }
+                        ast::Op::Mul => {
+                            self.build_checked_int_arithmetic(lhs, rhs, span, "smul")?
+                        }
+                        ast::Op::Div => {
                             self.build_div_check(lhs, rhs, span)?;
                             self.builder.build_int_signed_div(lhs, rhs, "tmp_div")
                         }
-                        Rem => {
+                        ast::Op::Rem => {
                             self.build_div_check(lhs, rhs, span)?;
                             self.builder.build_int_signed_rem(lhs, rhs, "tmp_rem")
                         }
                     }
-                }),
-                Cmp(expr1, comparisons) => {
-                    Value::Int(self.build_multi_comparison(expr1, comparisons)?)
                 }
-                Var(var_name) => self.get_var_value(var_name, span)?,
+                Neg(x) => {
+                    let x = self.build_int_expr(x)?.inner;
+                    // Subtract from zero.
+                    self.build_checked_int_arithmetic(
+                        self.llvm_int_type.const_zero(),
+                        x,
+                        span,
+                        "ssub",
+                    )?
+                }
+                CmpInt(cmp_expr) => self.build_multi_comparison(
+                    cmp_expr,
+                    Self::build_int_expr,
+                    Self::build_int_comparison,
+                )?,
+                CmpCellState(cmp_expr) => self.build_multi_comparison(
+                    cmp_expr,
+                    Self::build_cell_state_expr,
+                    // Compare cell states by integer ID.
+                    Self::build_int_comparison,
+                )?,
+            },
+        })
+    }
+
+    fn build_cell_state_expr(
+        &mut self,
+        expression: &Spanned<ast::CellStateExpr>,
+    ) -> LangResult<Spanned<IntValue<'ctx>>> {
+        let span = expression.span;
+        use ast::CellStateExpr::*;
+        Ok(Spanned {
+            span,
+            inner: match &expression.inner {
+                FnCall(_) => Err(Unimplemented.with_span(span))?,
+                Var(var_name) => self
+                    .builder
+                    .build_load(self.vars[var_name].ptr, var_name)
+                    .into_int_value(),
+                FromId(id_expr) => {
+                    let id_value = self.build_int_expr(id_expr)?;
+                    self.build_cell_state_value_check(id_value);
+                    let ret = self.builder.build_int_cast(
+                        id_value.inner,
+                        self.llvm_cell_state_type,
+                        "tmp_cellStateFromInt",
+                    );
+                    ret
+                }
             },
         })
     }
@@ -338,7 +403,7 @@ impl<'ctx> Compiler<'ctx> {
         let is_div_by_zero = self.builder.build_int_compare(
             IntPredicate::EQ,
             rhs,
-            self.int_type.const_zero(),
+            self.llvm_int_type.const_zero(),
             "isDivByZero",
         );
         self.build_conditional(
@@ -356,7 +421,7 @@ impl<'ctx> Compiler<'ctx> {
                 let denom_is_neg_one = c.builder.build_int_compare(
                     IntPredicate::EQ,
                     rhs,
-                    c.int_type.const_int(-1i64 as u64, true),
+                    c.llvm_int_type.const_int(-1i64 as u64, true),
                     "isNegOne",
                 );
                 let is_overflow =
@@ -373,17 +438,18 @@ impl<'ctx> Compiler<'ctx> {
         )
     }
 
-    fn build_cell_state_value_check(&mut self, cell_state_value: IntValue, span: Span) {
-        // Treat the signed integer as an unsigned integer, and create a
-        // condition testing whether cell_state_value is less than the number of
-        // cell states. (A Negative number will be interpreted as a very large
+    fn build_cell_state_value_check(&mut self, cell_state_value: Spanned<IntValue<'ctx>>) {
+        // Treat the signed integer as an unsigned integer, and build a
+        // condition testing whether that value is less than the number of cell
+        // states. (A negative number will be interpreted as a very large
         // positive number, which will be too large.)
         let cell_state_count_value = cell_state_value
+            .inner
             .get_type()
             .const_int(CELL_STATE_COUNT as u64, false);
         let condition = self.builder.build_int_compare(
             IntPredicate::ULT, // Unsigned Less-Than
-            cell_state_value,
+            cell_state_value.inner,
             cell_state_count_value,
             "cellStateRangeCheck",
         );
@@ -396,15 +462,16 @@ impl<'ctx> Compiler<'ctx> {
             .build_conditional_branch(condition, in_range_bb, out_of_range_bb);
 
         self.builder.position_at_end(out_of_range_bb);
-        self.build_error_point(CellStateOutOfRange.with_span(span));
+        self.build_error_point(CellStateOutOfRange.with_span(cell_state_value));
 
         self.builder.position_at_end(in_range_bb);
     }
 
-    fn build_multi_comparison(
+    fn build_multi_comparison<ExprType, ValueType: Copy, CmpType: Copy>(
         &mut self,
-        expr1: &Spanned<ast::Expr>,
-        comparisons: &[(ast::Cmp, Spanned<ast::Expr>)],
+        cmp_expr: &ast::CmpExpr<ExprType, CmpType>,
+        mut build_expr_fn: impl FnMut(&mut Self, &Spanned<ExprType>) -> LangResult<Spanned<ValueType>>,
+        mut build_compare_fn: impl FnMut(&mut Self, CmpType, ValueType, ValueType) -> IntValue<'ctx>,
     ) -> LangResult<IntValue<'ctx>> {
         let old_bb = self.builder.get_insert_block().unwrap();
 
@@ -413,13 +480,16 @@ impl<'ctx> Compiler<'ctx> {
         let merge_bb = self.append_basic_block("multiCompareShortCircuit");
         self.builder.position_at_end(merge_bb);
         // Create a phi node for the final result.
-        let phi = self.builder.build_phi(self.int_type, "multiCompareMerge");
+        let phi = self
+            .builder
+            .build_phi(self.llvm_int_type, "multiCompareMerge");
 
         self.builder.position_at_end(old_bb);
-        let mut lhs = self.build_expr(&expr1)?;
-        for (comparison, expr2) in comparisons {
-            let rhs = self.build_expr(expr2)?;
-            let compare_result = self.build_comparison(*comparison, &lhs, &rhs)?;
+        let expr1 = &cmp_expr.initial;
+        let mut lhs = build_expr_fn(self, expr1)?.inner;
+        for (comparison, expr2) in &cmp_expr.comparisons {
+            let rhs = build_expr_fn(self, expr2)?.inner;
+            let compare_result = build_compare_fn(self, *comparison, lhs, rhs);
             // If the condition is false, skip ahead to the merge and give the
             // phi node a value of 0. If it is true, continue on to check the
             // next condition.
@@ -427,7 +497,7 @@ impl<'ctx> Compiler<'ctx> {
             self.builder
                 .build_conditional_branch(compare_result, next_bb, merge_bb);
             phi.add_incoming(&[(
-                &self.int_type.const_zero(),
+                &self.llvm_int_type.const_zero(),
                 self.builder.get_insert_block().unwrap(),
             )]);
             self.builder.position_at_end(next_bb);
@@ -440,7 +510,7 @@ impl<'ctx> Compiler<'ctx> {
         // true.
         self.builder.build_unconditional_branch(merge_bb);
         phi.add_incoming(&[(
-            &self.int_type.const_int(1, false),
+            &self.llvm_int_type.const_int(1, false),
             self.builder.get_insert_block().unwrap(),
         )]);
 
@@ -453,39 +523,23 @@ impl<'ctx> Compiler<'ctx> {
         Ok(phi.as_basic_value().into_int_value())
     }
 
-    fn build_comparison(
+    fn build_int_comparison(
         &mut self,
-        comparison: ast::Cmp,
-        lhs: &Spanned<Value<'ctx>>,
-        rhs: &Spanned<Value<'ctx>>,
-    ) -> LangResult<IntValue<'ctx>> {
-        use ast::Cmp::*;
-        use Value::*;
-        let int_predicate = match comparison {
-            Eql => IntPredicate::EQ,
-            Neq => IntPredicate::NE,
-            Lt => IntPredicate::ULT,
-            Gt => IntPredicate::UGT,
-            Lte => IntPredicate::ULE,
-            Gte => IntPredicate::UGE,
+        comparison: impl Into<ast::Cmp>,
+        lhs: IntValue<'ctx>,
+        rhs: IntValue<'ctx>,
+    ) -> IntValue<'ctx> {
+        // Convert from ast::Cmp to inkwell::IntPredicate.
+        let int_predicate = match comparison.into() {
+            ast::Cmp::Eql => IntPredicate::EQ,
+            ast::Cmp::Neq => IntPredicate::NE,
+            ast::Cmp::Lt => IntPredicate::ULT,
+            ast::Cmp::Gt => IntPredicate::UGT,
+            ast::Cmp::Lte => IntPredicate::ULE,
+            ast::Cmp::Gte => IntPredicate::UGE,
         };
-        Ok(match (&lhs.inner, &rhs.inner, comparison) {
-            // Integer comparison
-            (Int(a), Int(b), _) => self
-                .builder
-                .build_int_compare(int_predicate, *a, *b, "intCmp"),
-            // Cell state comparison
-            (CellState(a), CellState(b), Eql) | (CellState(a), CellState(b), Neq) => self
-                .builder
-                .build_int_compare(int_predicate, *a, *b, "cellStateCmp"),
-            // Error
-            _ => Err(ComparisonError {
-                cmp_sym: comparison.get_symbol(),
-                lhs: lhs.inner.get_type(),
-                rhs: rhs.inner.get_type(),
-            }
-            .with_span(Span::merge(lhs, rhs)))?,
-        })
+        self.builder
+            .build_int_compare(int_predicate, lhs, rhs, "intCmp")
     }
 
     fn build_conditional(
@@ -527,61 +581,33 @@ impl<'ctx> Compiler<'ctx> {
 
     fn build_error_point(&mut self, error: LangError) {
         let error_value = self.add_error_point(error) | (1 << 63);
-        self.builder
-            .build_return(Some(&self.return_type.const_int(error_value as u64, true)));
+        self.builder.build_return(Some(
+            &self.llvm_return_type.const_int(error_value as u64, true),
+        ));
     }
 
-    fn get_var_value(&mut self, var_name: &str, span: Span) -> LangResult<Value<'ctx>> {
-        let var = self.get_var(var_name, None, span)?;
-        let var_basic_value = self.builder.build_load(var.ptr, var_name);
-        Ok(Value::from_basic_value(var.ty, var_basic_value))
+    /// Allocates space for a variable.
+    fn declare_var(&mut self, var_name: String, ty: Type) -> LangResult<()> {
+        let llvm_type = self.get_llvm_type(ty).ok_or_else(|| {
+            InternalError("Invalid variable type not caught by type checker".into()).without_span()
+        })?;
+        let ptr = self
+            .builder
+            .build_alloca(llvm_type, &format!("uservar__{}", var_name));
+        self.vars.insert(var_name, Variable { ty, ptr });
+        Ok(())
     }
 
-    fn get_var(
-        &mut self,
-        var_name: &str,
-        expected_type: Option<Type>,
-        span: Span,
-    ) -> LangResult<Variable<'ctx>> {
-        if let Some(new_type) = expected_type {
-            if self.vars.contains_key(var_name) {
-                // Make sure the types match.
-                let var = self.vars[var_name];
-                if var.ty == new_type {
-                    Ok(var)
-                } else {
-                    Err(TypeError {
-                        expected: var.ty,
-                        got: new_type,
-                    }
-                    .with_span(span))?
-                }
-            } else {
-                // Allocate and initialize the new variable.
-                let llvm_type = self
-                    .get_llvm_type(new_type)
-                    .ok_or_else(|| CannotAssignTypeToVariable(new_type).with_span(span))?;
-                let initial_value = self
-                    .get_default_var_value(new_type)
-                    .ok_or_else(|| CannotAssignTypeToVariable(new_type).with_span(span))?;
-                let var_builder = self.ctx.create_builder();
-                var_builder.position_at_end(self.var_assign_bb.unwrap());
-                let var_ptr =
-                    var_builder.build_alloca(llvm_type, &format!("uservar__{}", var_name));
-                var_builder.build_store(var_ptr, initial_value);
-                let var = Variable {
-                    ty: new_type,
-                    ptr: var_ptr,
-                };
-                self.vars.insert(var_name.to_owned(), var);
-                Ok(var)
-            }
-        } else {
-            self.vars
-                .get(var_name)
-                .cloned()
-                .ok_or_else(|| UseOfUninitializedVariable.with_span(span))
-        }
+    /// Initializes a variable to a reasonable default value (generally zero).
+    /// Panics if the variable has not been declared.
+    fn initialize_var(&mut self, var_name: &str) -> LangResult<()> {
+        let Variable { ty, ptr } = self.vars[var_name];
+        let initial_value = self.get_default_var_value(ty).ok_or_else(|| {
+            InternalError("Invalid variable type not caught by type checker".into()).without_span()
+        })?;
+        self.builder.build_store(ptr, initial_value);
+        self.vars.insert(var_name.to_owned(), Variable { ty, ptr });
+        Ok(())
     }
 
     fn add_error_point(&mut self, error: LangError) -> usize {
@@ -595,22 +621,22 @@ impl<'ctx> Compiler<'ctx> {
 
     fn get_llvm_type(&self, ty: Type) -> Option<BasicTypeEnum<'ctx>> {
         match ty {
-            Type::Int => Some(self.int_type.into()),
-            Type::CellState => Some(self.cell_state_type.into()),
+            Type::Int => Some(self.llvm_int_type.into()),
+            Type::CellState => Some(self.llvm_cell_state_type.into()),
         }
     }
 
     fn get_default_var_value(&self, ty: Type) -> Option<BasicValueEnum<'ctx>> {
         match ty {
-            Type::Int => Some(self.int_type.const_zero().into()),
-            Type::CellState => Some(self.cell_state_type.const_zero().into()),
+            Type::Int => Some(self.llvm_int_type.const_zero().into()),
+            Type::CellState => Some(self.llvm_cell_state_type.const_zero().into()),
         }
     }
 
     fn get_min_int_value(&self) -> IntValue<'ctx> {
-        self.int_type.const_int(1, false).const_shl(
-            self.int_type
-                .const_int(self.int_type.get_bit_width() as u64 - 1, false),
+        self.llvm_int_type.const_int(1, false).const_shl(
+            self.llvm_int_type
+                .const_int(self.llvm_int_type.get_bit_width() as u64 - 1, false),
         )
     }
 }

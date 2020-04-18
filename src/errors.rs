@@ -49,6 +49,12 @@ pub struct LangError {
     pub msg: LangErrorMsg,
 }
 impl LangError {
+    pub fn with_span(mut self, span: impl Into<Span>) -> Self {
+        if self.span.is_none() {
+            self.span = Some(span.into());
+        }
+        self
+    }
     pub fn with_source(self, src: &str) -> LangErrorWithSource {
         if let Some(span) = self.span {
             let (start_tp, end_tp) = span.textpoints(src);
@@ -100,13 +106,19 @@ pub enum LangErrorMsg {
         expected: Type,
         got: Type,
     },
-    ComparisonError {
+    OpError {
+        op_sym: &'static str,
+        lhs: Type,
+        rhs: Type,
+    },
+    CmpError {
         cmp_sym: &'static str,
         lhs: Type,
         rhs: Type,
     },
     CannotAssignTypeToVariable(Type),
     UseOfUninitializedVariable,
+    BecomeInHelperFunction,
     ReturnInTransitionFunction,
 
     // Runtime errors
@@ -166,10 +178,17 @@ impl fmt::Display for LangErrorMsg {
             Self::TypeError { expected, got } => {
                 write!(f, "Type error: expected {} but got {}", expected, got)?;
             }
-            Self::ComparisonError { cmp_sym, lhs, rhs } => {
+            Self::OpError { op_sym, lhs, rhs } => {
                 write!(
                     f,
-                    "Type error: cannot compare {} to {} using {}",
+                    "Cannot apply operation '{}' to {} and {}",
+                    op_sym, lhs, rhs
+                )?;
+            }
+            Self::CmpError { cmp_sym, lhs, rhs } => {
+                write!(
+                    f,
+                    "Type error: cannot compare {} to {} using '{}'",
                     lhs, rhs, cmp_sym
                 )?;
                 if *lhs == Type::CellState && *rhs == Type::CellState {
@@ -181,6 +200,12 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::UseOfUninitializedVariable => {
                 write!(f, "This variable must be initialized before it is used")?;
+            }
+            Self::BecomeInHelperFunction => {
+                write!(
+                    f,
+                    "Use 'return' instead of 'become' outside of transition functions"
+                )?;
             }
             Self::ReturnInTransitionFunction => {
                 write!(
@@ -209,7 +234,7 @@ impl LangErrorMsg {
             msg: self,
         }
     }
-    pub fn without_span(self) -> LangError {
+    pub const fn without_span(self) -> LangError {
         LangError {
             span: None,
             msg: self,

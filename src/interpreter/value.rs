@@ -1,6 +1,11 @@
+use super::super::errors::*;
 use super::super::types::{LangCellState, LangInt, Type};
-use super::super::{errors::*, Spanned};
-use LangErrorMsg::TypeError;
+use LangErrorMsg::InternalError;
+
+const INTERNAL_VAR_USE_ERROR: LangError = InternalError(std::borrow::Cow::Borrowed(
+    "Invalid variable use not caught by type checker",
+))
+.without_span();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
@@ -24,24 +29,17 @@ impl Value {
         }
     }
 }
-impl Spanned<Value> {
-    pub fn as_int(&self) -> LangResult<LangInt> {
-        match self.inner {
-            Value::Int(i) => Ok(i),
-            _ => self.type_err(Type::Int),
+impl Value {
+    pub fn int(&self) -> LangResult<LangInt> {
+        match self {
+            Value::Int(i) => Ok(*i),
+            _ => Err(INTERNAL_VAR_USE_ERROR),
         }
     }
-    pub fn as_cell_state(&self) -> LangResult<LangCellState> {
-        match self.inner {
-            Value::CellState(i) => Ok(i),
-            _ => self.type_err(Type::CellState),
+    pub fn cell_state(&self) -> LangResult<LangCellState> {
+        match self {
+            Value::CellState(i) => Ok(*i),
+            _ => Err(INTERNAL_VAR_USE_ERROR),
         }
-    }
-    fn type_err<T>(&self, expected: Type) -> LangResult<T> {
-        Err(TypeError {
-            expected,
-            got: self.inner.get_type(),
-        }
-        .with_span(self))
     }
 }

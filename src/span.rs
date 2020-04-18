@@ -100,7 +100,7 @@ impl<T> Spanned<T> {
             inner,
         }
     }
-    pub fn replace<U>(&self, new_inner: U) -> Spanned<U> {
+    pub fn copy_span<U>(&self, new_inner: U) -> Spanned<U> {
         Spanned {
             span: self.span,
             inner: new_inner,

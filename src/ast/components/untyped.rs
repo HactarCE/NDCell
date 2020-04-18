@@ -1,9 +1,9 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
 use super::super::super::errors::*;
 use super::super::Spanned;
-use super::common::*;
+use super::{common::*, typed};
 use LangErrorMsg::{MissingTransitionFunction, MultipleTransitionFunctions};
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
@@ -11,6 +11,11 @@ pub type StatementBlock = Vec<Spanned<Statement>>;
 #[derive(Debug, Clone)]
 pub struct Program {
     pub transition_fn: StatementBlock,
+}
+impl Program {
+    pub fn check_types(self) -> LangResult<typed::Program> {
+        self.try_into()
+    }
 }
 impl TryFrom<Vec<Spanned<Directive>>> for Program {
     type Error = LangError;
@@ -34,12 +39,14 @@ impl TryFrom<Vec<Spanned<Directive>>> for Program {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
+    /// Sets a variable value.
     SetVar {
         /// Variable to set.
         var_expr: Spanned<Expr>,
         /// Value to store in the variable.
         value_expr: Spanned<Expr>,
     },
+    /// Branches conditionally.
     If {
         /// Condition.
         cond_expr: Spanned<Expr>,
@@ -60,11 +67,6 @@ pub enum Statement {
     Become(Spanned<Expr>),
     /// Returns a value from a helper function.
     Return(Spanned<Expr>),
-
-    /// Jump directly to a given instruction index (used by the interpreter).
-    Goto(usize),
-    /// End of program (used by the interpreter).
-    End,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,8 +113,6 @@ impl Statement {
             Self::If { .. } => "If",
             Self::Become(_) => "Become",
             Self::Return(_) => "Return",
-            Self::Goto(_) => "Goto",
-            Self::End => "End",
         }
     }
     fn fmt_indented(&self, f: &mut fmt::Formatter, indent: usize) -> fmt::Result {
@@ -155,8 +155,6 @@ impl Statement {
                 write_indent(f, indent)?;
                 write!(f, ")")?;
             }
-            Self::Goto(index) => write!(f, " {}", index)?,
-            Self::End => (),
         }
         Ok(())
     }

@@ -4,8 +4,8 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
 use super::super::errors::*;
+use super::super::span::Span;
 use super::super::types::LangInt;
-use super::{LangResult, Span};
 use LangErrorMsg::{UnknownSymbol, Unterminated};
 
 /// A list of token patterns, arranged roughly from least to most general.

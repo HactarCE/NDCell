@@ -10,6 +10,7 @@ use LangErrorMsg::{CmpError, TypeError};
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
 
+/// A complete program containing a transition function.
 #[derive(Debug, Clone)]
 pub struct Program {
     pub transition_fn: Function,
@@ -27,14 +28,21 @@ impl TryFrom<untyped::Program> for Program {
     }
 }
 
+/// A pure function.
 #[derive(Debug, Clone)]
 pub struct Function {
+    /// The function name.
     pub name: String,
+    /// The function type (e.g. transition vs. helper function and return type).
     pub fn_type: FunctionType,
+    /// Variable names and types.
     pub vars: HashMap<String, Type>,
+    /// Statements in the function.
     pub statements: StatementBlock,
 }
 impl Function {
+    /// Constructs a new function and resolve types. Returns an error if type
+    /// checking fails.
     pub fn new(
         name: String,
         untyped_statements: untyped::StatementBlock,
@@ -54,15 +62,21 @@ impl Function {
     }
 }
 
+/// The type of function (i.e. transition vs. helper function and return type).
 #[derive(Debug, Copy, Clone)]
 pub enum FunctionType {
+    /// The transition function (always return Type::CellState).
     Transition,
+    /// A helper function (return type varies; None means not yet determined).
     Helper(Option<Type>),
 }
 
+/// Metadata about a function's type and variable.
 #[derive(Debug)]
 pub struct FunctionMeta<'a> {
+    /// The type of function.
     pub fn_type: &'a mut FunctionType,
+    /// Variable names and types.
     pub vars: &'a mut HashMap<String, Type>,
 }
 
@@ -89,7 +103,7 @@ pub enum Statement {
     /// Returns a value from a function.
     Return(Expr),
 
-    /// Jump directly to a given instruction index (used by the interpreter).
+    /// Jumps directly to a given instruction index (used by the interpreter).
     Goto(usize),
     /// End of program (used by the interpreter).
     End,
@@ -98,46 +112,58 @@ pub enum Statement {
 /// An expression of any type.
 #[derive(Debug, Clone)]
 pub enum Expr {
+    /// Integer expression.
     Int(Spanned<IntExpr>),
+    /// Cell state expression.
     CellState(Spanned<CellStateExpr>),
 }
 impl Expr {
+    /// Returns the IntExpr inside if this is Expr::Int; otherwise a TypeError.
     pub fn int(self) -> LangResult<Spanned<IntExpr>> {
         match self {
             Self::Int(e) => Ok(e),
             _ => self.type_err(Type::Int),
         }
     }
+    /// Returns a reference to the IntExpr inside if this is Expr::Int;
+    /// otherwise a TypeError.
     pub fn int_ref(&self) -> LangResult<&Spanned<IntExpr>> {
         match self {
             Self::Int(e) => Ok(e),
             _ => self.type_err(Type::Int),
         }
     }
+    /// Returns the CellStateExpr inside if this is Expr::CellState; otherwise a
+    /// TypeError.
     pub fn cell_state(self) -> LangResult<Spanned<CellStateExpr>> {
         match self {
             Self::CellState(e) => Ok(e),
             _ => self.type_err(Type::CellState),
         }
     }
+    /// Returns a reference to the CellStateExpr inside if this is
+    /// Expr::CellState; otherwise a TypeError.
     pub fn cell_state_ref(&self) -> LangResult<&Spanned<CellStateExpr>> {
         match self {
             Self::CellState(e) => Ok(e),
             _ => self.type_err(Type::CellState),
         }
     }
+    /// Returns the type that this expression evaluates to.
     pub fn get_type(&self) -> Type {
         match self {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
         }
     }
+    /// Returns the Span of this expression.
     pub fn get_span(&self) -> Span {
         *match self {
             Self::Int(Spanned { span, .. }) => span,
             Self::CellState(Spanned { span, .. }) => span,
         }
     }
+    /// Constructs a TypeError at this expression.
     fn type_err<T>(&self, expected: Type) -> LangResult<T> {
         Err(TypeError {
             expected,
@@ -155,20 +181,30 @@ impl Into<Span> for &Expr {
 /// An expression that resolves to an integer.
 #[derive(Debug, Clone)]
 pub enum IntExpr {
+    /// Function call.
     FnCall(FnCall),
+    /// Variable access.
     Var(String),
+    /// Constant integer.
     Literal(i64),
-    /// Two operands joined by a single operator.
+    /// Operation on two other integers.
     Op {
+        /// Left-hand-side operand.
         lhs: Box<Spanned<IntExpr>>,
+        /// Operator.
         op: Op,
+        /// Right-hand-side operand.
         rhs: Box<Spanned<IntExpr>>,
     },
+    /// Negation of an integer.
     Neg(Box<Spanned<IntExpr>>),
+    /// Comparison between two integers.
     CmpInt(CmpExpr<IntExpr, Cmp>),
+    /// Comparison between two cell states (equality only).
     CmpCellState(CmpExpr<CellStateExpr, EqCmp>),
 }
 impl IntExpr {
+    /// Wraps this IntExpr in an Expr::Int with the given Span.
     pub fn as_generic(self, span: Span) -> Expr {
         Expr::Int(Spanned { span, inner: self })
     }
@@ -183,11 +219,15 @@ impl TryFrom<Expr> for Spanned<IntExpr> {
 /// An expression that resolves to a cell state.
 #[derive(Debug, Clone)]
 pub enum CellStateExpr {
+    /// Function call.
     FnCall(FnCall),
+    /// Variable access.
     Var(String),
+    /// Cell state constructed from an integer ID.
     FromId(Box<Spanned<IntExpr>>),
 }
 impl CellStateExpr {
+    /// Wraps this CellStateExpr in an Expr::CellState with the given Span.
     pub fn as_generic(self, span: Span) -> Expr {
         Expr::CellState(Spanned { span, inner: self })
     }
@@ -199,13 +239,14 @@ impl TryFrom<Expr> for Spanned<CellStateExpr> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum Builtin {}
-
+/// A function call.
 #[derive(Debug, Clone)]
 pub struct FnCall {
+    /// The name of the function to call.
     name: String,
+    /// The arguments to pass to it.
     args: Vec<Expr>,
+    /// Whether the function is a method of the first argument.
     is_method: bool,
 }
 
@@ -222,10 +263,14 @@ pub struct FnCall {
 /// ```
 #[derive(Debug, Clone)]
 pub struct CmpExpr<ExprType, CmpType: Copy> {
+    /// The leftmost expression to compare.
     pub initial: Box<Spanned<ExprType>>,
+    /// Subsequent comparison operators followed by expressions to compare.
     pub comparisons: Vec<(CmpType, Spanned<ExprType>)>,
 }
 impl<E, C: Copy> CmpExpr<E, C> {
+    /// Returns the Span of this entire comparison expression, from the leftmost
+    /// sub-expression to the rightmost sub-expression.
     pub fn get_span(&self) -> Span {
         let lhs = self.initial.span;
         let rhs = match self.comparisons.last() {
@@ -236,6 +281,7 @@ impl<E, C: Copy> CmpExpr<E, C> {
     }
 }
 impl<E> CmpExpr<E, Cmp> {
+    /// Constructs a new CmpExpr.
     pub fn new(
         initial: impl TryInto<Spanned<E>, Error = LangError>,
         comparisons: impl Iterator<
@@ -249,6 +295,8 @@ impl<E> CmpExpr<E, Cmp> {
                 .collect::<LangResult<Vec<_>>>()?,
         })
     }
+    /// Converts this CmpExpr<E, Cmp> into a CmpExp<E, EqCmp>, returning a
+    /// CmpError if an invalid Cmp variant is found.
     pub fn eq_only(self, ty: Type) -> LangResult<CmpExpr<E, EqCmp>> {
         let mut new_comparisons = Vec::with_capacity(self.comparisons.len());
         let mut lhs_span = self.initial.span;

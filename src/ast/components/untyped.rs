@@ -8,11 +8,13 @@ use LangErrorMsg::{MissingTransitionFunction, MultipleTransitionFunctions};
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
 
+/// A complete program containing a transition function, pre-typecheck.
 #[derive(Debug, Clone)]
 pub struct Program {
     pub transition_fn: StatementBlock,
 }
 impl Program {
+    /// Check types in this program, returning a typed::Program.
     pub fn check_types(self) -> LangResult<typed::Program> {
         self.try_into()
     }
@@ -37,11 +39,14 @@ impl TryFrom<Vec<Spanned<Directive>>> for Program {
     }
 }
 
+/// A single '@' directive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Directive {
+    /// The transition function.
     Transition(StatementBlock),
 }
 
+/// A single statement, pre-typecheck.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     /// Sets a variable value.
@@ -74,18 +79,28 @@ pub enum Statement {
     Return(Spanned<Expr>),
 }
 
+/// An expression, pre-typecheck.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
+    /// Variable access.
+    Var(String),
+    /// Constant integer.
     Int(i64),
+    /// Cell state constructed from another value.
     Tag(Box<Spanned<Expr>>),
+    /// Negation of an integer.
     Neg(Box<Spanned<Expr>>),
+    /// Operation on two values.
     Op {
+        /// Left-hand-side operand.
         lhs: Box<Spanned<Expr>>,
+        /// Operator.
         op: Op,
+        /// Right-hand-side operand.
         rhs: Box<Spanned<Expr>>,
     },
+    /// Comparison between two values.
     Cmp(Box<Spanned<Expr>>, Vec<(Cmp, Spanned<Expr>)>),
-    Var(String),
 }
 
 impl fmt::Display for Program {

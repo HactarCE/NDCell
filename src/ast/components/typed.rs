@@ -104,6 +104,10 @@ pub enum Statement {
     Return(Expr),
 
     /// Jumps directly to a given instruction index (used by the interpreter).
+    ///
+    /// Note that the index given here is actually the index _before_ the
+    /// instruction that will be executed next, since the interpreter still
+    /// increments the instruction pointer.
     Goto(usize),
     /// End of program (used by the interpreter).
     End,

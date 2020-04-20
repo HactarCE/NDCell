@@ -182,7 +182,7 @@ impl Into<Span> for &Expr {
     }
 }
 
-/// An expression that resolves to an integer.
+/// An expression that evaluates to an integer.
 #[derive(Debug, Clone)]
 pub enum IntExpr {
     /// Function call.
@@ -220,7 +220,7 @@ impl TryFrom<Expr> for Spanned<IntExpr> {
     }
 }
 
-/// An expression that resolves to a cell state.
+/// An expression that evaluates to a cell state.
 #[derive(Debug, Clone)]
 pub enum CellStateExpr {
     /// Function call.

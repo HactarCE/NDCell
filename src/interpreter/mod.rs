@@ -9,11 +9,16 @@ use LangErrorMsg::{
     CellStateOutOfRange, DivideByZero, IntegerOverflow, InternalError, Unimplemented,
 };
 
+/// Result of executing a single statement.
 pub enum ExecuteResult {
+    /// The interpreter is not done executing instructions.
     Continue,
+    /// The interpreter is done executing instructions and has returned a value.
     Return(Option<Value>),
 }
 impl ExecuteResult {
+    /// Returns the return value if the interpreter has reached the end of the
+    /// function and has returned a value.
     pub fn return_value(self) -> Option<Value> {
         match self {
             Self::Continue => None,
@@ -33,11 +38,17 @@ pub struct State {
     pub instruction_pointer: usize,
     /// Variables.
     pub vars: HashMap<String, Value>,
+    /// The function type of the function that is being interpreted (e.g.
+    /// transition vs. helper function and return type).
     pub function_type: ast::FunctionType,
 }
 impl State {
+    /// Constructs a new interpreter that will execute the given function.
     pub fn new(mut function: ast::Function) -> LangResult<Self> {
+        // "Flatten" blocks into Goto statements.
         ast::flatten_block(&mut function.statements);
+
+        // Initialize variables.
         let mut vars = HashMap::new();
         for (var_name, var_type) in function.vars {
             vars.insert(
@@ -48,6 +59,8 @@ impl State {
                 })?,
             );
         }
+
+        // Construct the State struct.
         Ok(Self {
             instructions: function.statements,
             instruction_pointer: 0,
@@ -56,6 +69,7 @@ impl State {
         })
     }
 
+    /// Executes the next instruction.
     pub fn step(&mut self) -> LangResult<ExecuteResult> {
         use ast::Statement::*;
         if let Some(instruction) = self.instructions.get(self.instruction_pointer) {
@@ -69,14 +83,17 @@ impl State {
                             "Invalid variable assignment not caught by type checker".into(),
                         ))?
                     }
+                    // Evaluate the expression, depending on the type.
                     let var_value = match value_expr {
                         ast::Expr::Int(e) => Value::Int(self.eval_int_expr(e)?.inner),
                         ast::Expr::CellState(e) => {
                             Value::CellState(self.eval_cell_state_expr(e)?.inner)
                         }
                     };
+                    // Store the result in the variable.
                     *self.vars.get_mut(&var_name.inner).unwrap() = var_value;
                 }
+
                 If {
                     cond_expr,
                     if_true,
@@ -89,6 +106,7 @@ impl State {
                     // Jump there.
                     Self::goto_block(&mut self.instruction_pointer, block)?;
                 }
+
                 Return(return_expr) => match self.function_type {
                     ast::FunctionType::Transition => {
                         if Type::CellState != return_expr.get_type() {
@@ -106,7 +124,10 @@ impl State {
                     }
                     ast::FunctionType::Helper(_) => Err(Unimplemented.with_span(return_expr))?,
                 },
+
+                // TODO: replace with `remain` or `return (default value)` once those are implemented.
                 End => return Ok(ExecuteResult::Return(None)),
+
                 Goto(idx) => self.instruction_pointer = *idx,
             }
             self.instruction_pointer += 1;
@@ -116,6 +137,8 @@ impl State {
         }
     }
 
+    /// Jumps to the block encoded by the Goto instruction that is presumably
+    /// inside the given block.
     fn goto_block(instruction_pointer: &mut usize, block: &ast::StatementBlock) -> LangResult<()> {
         match block.get(0).map(|s| &s.inner) {
             Some(ast::Statement::Goto(idx)) => *instruction_pointer = *idx,
@@ -128,6 +151,7 @@ impl State {
         Ok(())
     }
 
+    /// Evaluates an expression to an integer value.
     pub fn eval_int_expr(
         &self,
         expression: &Spanned<ast::IntExpr>,
@@ -138,8 +162,11 @@ impl State {
             span,
             inner: match &expression.inner {
                 FnCall(_) => Err(Unimplemented.with_span(span))?,
+
                 Var(var_name) => self.vars[var_name].int()?,
+
                 Literal(i) => *i,
+
                 Op { lhs, op, rhs } => {
                     let lhs = self.eval_int_expr(&lhs)?.inner;
                     let rhs = self.eval_int_expr(&rhs)?.inner;
@@ -164,14 +191,17 @@ impl State {
                         _ => Err(Unimplemented.with_span(span))?,
                     }
                 }
+
                 Neg(x) => self
                     .eval_int_expr(x)?
                     .inner
                     .checked_neg()
                     .ok_or_else(|| IntegerOverflow.with_span(span))?,
+
                 CmpInt(cmp_expr) => {
                     self.eval_multi_comparison_any(cmp_expr, Self::eval_int_expr)?
                 }
+
                 CmpCellState(cmp_expr) => {
                     self.eval_multi_comparison_eq(cmp_expr, Self::eval_cell_state_expr)?
                 }
@@ -179,6 +209,7 @@ impl State {
         })
     }
 
+    /// Evaluates an expression to a cell state value.
     pub fn eval_cell_state_expr(
         &self,
         expression: &Spanned<ast::CellStateExpr>,
@@ -189,10 +220,11 @@ impl State {
             span,
             inner: match &expression.inner {
                 FnCall(_) => Err(Unimplemented.with_span(span))?,
+
                 Var(var_name) => self.vars[var_name].cell_state()?,
+
                 FromId(id_expr) => {
-                    // Convert integer to cell state, checking whether it is
-                    // within range.
+                    // Convert integer to cell state, if it is within range.
                     let id_value = self.eval_int_expr(id_expr)?.inner;
                     if id_value >= 0 && (id_value as usize) < CELL_STATE_COUNT {
                         id_value as LangCellState
@@ -204,6 +236,8 @@ impl State {
         })
     }
 
+    /// Evaluates a chained comparison check using only equality comparison
+    /// operators, short-circuiting when possible.
     fn eval_multi_comparison_eq<ExprType, ValueType: PartialEq<ValueType>>(
         &self,
         cmp_expr: &ast::CmpExpr<ExprType, ast::EqCmp>,
@@ -214,6 +248,8 @@ impl State {
             ast::EqCmp::Neq => x != y,
         })
     }
+    /// Evaluates a chained comparison check using any comparison operators,
+    /// short-circuiting when possible.
     fn eval_multi_comparison_any<ExprType, ValueType: PartialOrd<ValueType>>(
         &self,
         cmp_expr: &ast::CmpExpr<ExprType, ast::Cmp>,
@@ -228,6 +264,8 @@ impl State {
             ast::Cmp::Gte => x >= y,
         })
     }
+    /// Evaluates a chained comparison check using an arbitrary comparator
+    /// function, short-circuiting when possible.
     fn eval_multi_comparison_generic<ExprType, ValueType, CmpType: Copy>(
         &self,
         cmp_expr: &ast::CmpExpr<ExprType, CmpType>,

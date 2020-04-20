@@ -1,3 +1,5 @@
+//! Functions for producing an AST.
+
 use std::convert::TryFrom;
 
 use super::super::errors::*;

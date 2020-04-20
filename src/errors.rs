@@ -1,3 +1,5 @@
+//! Error reporting functionality for compilation and runtime.
+
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;

@@ -1,3 +1,5 @@
+//! The JIT compiler for NDCA.
+
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -720,7 +722,7 @@ impl<'ctx> Compiler<'ctx> {
         self.ctx.append_basic_block(self.fn_value(), name)
     }
 
-    /// Returns the LLVM type corresponding to the given type in the language.
+    /// Returns the LLVM type corresponding to the given type in NDCA.
     fn get_llvm_type(&self, ty: Type) -> Option<BasicTypeEnum<'ctx>> {
         match ty {
             Type::Int => Some(self.llvm_int_type.into()),
@@ -736,8 +738,8 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
-    /// Returns the minimum value representable by signed integers of the
-    /// language's signed integer type.
+    /// Returns the minimum value representable by signed integers of NDCA's
+    /// signed integer type.
     fn get_min_int_value(&self) -> IntValue<'ctx> {
         self.llvm_int_type.const_int(1, false).const_shl(
             self.llvm_int_type

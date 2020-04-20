@@ -1,3 +1,5 @@
+//! AST components.
+
 pub mod common;
 pub mod typed;
 pub mod untyped;

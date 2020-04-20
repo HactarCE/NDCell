@@ -1,3 +1,5 @@
+//! Methods and structures for creating and verifying an abstract syntax tree.
+
 mod builder;
 mod components;
 mod tokens;

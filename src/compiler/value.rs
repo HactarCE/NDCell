@@ -1,3 +1,5 @@
+//! Values used by the JIT compiler for NDCA.
+
 use inkwell::values::{BasicValueEnum, IntValue};
 
 use super::super::types::Type;

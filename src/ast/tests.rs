@@ -1,3 +1,5 @@
+//! AST test suite.
+
 use super::*;
 
 #[test]

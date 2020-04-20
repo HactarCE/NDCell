@@ -1,3 +1,5 @@
+//! Values used by the interpreter for NDCA.
+
 use super::super::errors::*;
 use super::super::types::{LangCellState, LangInt, Type};
 use LangErrorMsg::InternalError;

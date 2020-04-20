@@ -1,3 +1,5 @@
+//! Structs for tracking locations and substrings within strings.
+
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::borrow::{Borrow, BorrowMut};

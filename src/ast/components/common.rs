@@ -1,3 +1,5 @@
+//! Components used in typed and untyped ASTs.
+
 use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;

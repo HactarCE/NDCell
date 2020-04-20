@@ -1,3 +1,5 @@
+//! Types used by NDCA.
+
 use std::fmt;
 
 /// Rust type used for NDCA integers.

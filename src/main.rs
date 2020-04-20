@@ -1,3 +1,4 @@
+//! A testing ground for a cellular automaton description language for NDCell.
 #![allow(dead_code)]
 #![warn(missing_docs)]
 

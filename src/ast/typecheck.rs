@@ -1,3 +1,5 @@
+//! Type checking functionality for NDCA.
+
 use super::super::errors::*;
 use super::super::types::Type;
 use super::super::Spanned;

@@ -1,3 +1,5 @@
+//! The interpreter for NDCA.
+
 use std::collections::HashMap;
 
 mod value;

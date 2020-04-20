@@ -1,3 +1,5 @@
+//! Macros for this crate.
+
 /// Automatically implements std::fmt::Display and std::str::FromStr on an enum
 /// using custom-specified string representations.
 #[macro_export]

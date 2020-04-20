@@ -16,6 +16,7 @@ pub fn make_program(source_code: &str) -> LangResult<Program> {
     Program::try_from(directives)
 }
 
+/// Operator precedence table.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum OpPrecedence {
     LogicalOr,
@@ -70,6 +71,7 @@ impl OpPrecedence {
     }
 }
 
+/// Iterator over tokens that produces an untyped AST.
 #[derive(Debug, Copy, Clone)]
 pub struct AstBuilder<'a> {
     /// Tokens to feed.
@@ -117,10 +119,15 @@ impl<'a> AstBuilder<'a> {
     /// returns an empty span at the begining or end of the input appropriately.
     fn get_span(&self) -> Span {
         if self.cursor.is_none() {
+            // This is the beginning of the token stream; return an empty span
+            // at the beginning of the file.
             Span::default()
         } else {
             match self.current() {
+                // This is the middle of the token stream.
                 Some(t) => t.span,
+                // This is the end of the token stream; return an empty span at
+                // the end of the file.
                 None => self
                     .tokens
                     .last()
@@ -189,22 +196,29 @@ impl<'a> AstBuilder<'a> {
     }
     /// Consumes a block, which consists of statements
     fn block(&mut self) -> LangResult<StatementBlock> {
+        // Get a left brace.
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LBrace)) => (),
             _ => self.err(Expected("code block beginning with '{'"))?,
         }
+        // Record the span of the left brace.
         let open_span = self.get_span();
+        // Get statements.
         let mut statements = vec![];
         loop {
             match self.next().map(|t| t.class) {
+                // There's the beginning of a statement.
                 Some(TokenClass::StatementKeyword(_)) => {
                     self.prev();
                     statements.push(self.expect(Self::statement)?)
                 }
+                // There's a closing brace.
                 Some(TokenClass::Punctuation(PunctuationToken::RBrace)) => {
                     break;
                 }
+                // There's something else.
                 Some(_) => self.err(Expected("statement or '}'"))?,
+                // We've reached the end of the file without closing the block.
                 None => Err(Unmatched('{', '}').with_span(open_span))?,
             }
         }
@@ -225,27 +239,38 @@ impl<'a> AstBuilder<'a> {
                     cond_expr: self.expect(Self::expression)?,
                     if_true: self.expect(Self::block)?.inner,
                     if_false: if self.next_token_is_one_of(&[TokenClass::StatementKeyword(Else)]) {
+                        // There's an "else" clause.
                         self.next();
                         if self.next_token_is_one_of(&[TokenClass::StatementKeyword(If)]) {
-                            // Else if
+                            // This is actually an "else if" clause. Treat this
+                            // as an "if" nested inside an "else."
                             vec![self.expect(Self::statement)?]
                         } else {
-                            // Else
+                            // This is just a normal "else" clause, not "else
+                            // if."
                             self.expect(Self::block)?.inner
                         }
                     } else {
+                        // There's no "else" clause, so just pretend that there
+                        // is one and it's empty.
                         vec![]
                     },
                 }),
                 Remain => self.err(Unimplemented),
                 Return => self.err(Unimplemented),
                 Set => Ok({
+                    // Get the variable name.
                     let var = self.expect(Self::var)?;
+                    // Get the operator to use when assigning (if any). E.g.
+                    // `+=` uses the `+` operator.
                     let assign_op = self.expect(Self::assign_op)?;
+                    // Get the expression to assign into the variable.
                     let expr = self.expect(Self::expression)?;
+                    // Construct the statement.
                     Statement::SetVar {
                         var_expr: var.clone(),
                         value_expr: if let Some(op) = assign_op.inner {
+                            // Expand OpAssigns like `x += y` into `x = x + y`.
                             Spanned {
                                 span: assign_op.span,
                                 inner: Expr::Op {
@@ -255,6 +280,7 @@ impl<'a> AstBuilder<'a> {
                                 },
                             }
                         } else {
+                            // Just a normal `=` assignment.
                             expr
                         },
                     }
@@ -264,6 +290,8 @@ impl<'a> AstBuilder<'a> {
             },
             _ => {
                 if let Some(TokenClass::Assignment(_)) = self.peek_next().map(|t| t.class) {
+                    // Give the user a nicer error message if they forgot the
+                    // `set` keyword.
                     self.err(MissingSetKeyword)
                 } else {
                     self.err(Expected("statement"))
@@ -273,6 +301,7 @@ impl<'a> AstBuilder<'a> {
     }
     /// Consumes a nested expression.
     fn expression(&mut self) -> LangResult<Expr> {
+        // Start at the lowest precedence level.
         self.expression_with_precedence(OpPrecedence::lowest())
             .map(|spanned| spanned.inner)
     }
@@ -282,6 +311,8 @@ impl<'a> AstBuilder<'a> {
         &mut self,
         precedence: OpPrecedence,
     ) -> LangResult<Spanned<Expr>> {
+        // Get an expression at the given precedence level, which may
+        // consist of expressions with higher precedence.
         match precedence {
             OpPrecedence::UnaryPrefix => self.unary_op(
                 &[
@@ -309,6 +340,8 @@ impl<'a> AstBuilder<'a> {
             // TODO add remaining precedence levels
             OpPrecedence::Atom => match self.peek_next().map(|t| t.class) {
                 Some(TokenClass::Punctuation(PunctuationToken::LParen)) => {
+                    // Expressions inside parentheses always start again at the
+                    // lowest precedence level.
                     self.expect(|tf| tf.paren(Self::expression))
                 }
                 Some(TokenClass::Integer(_)) => self.expect(Self::int),
@@ -332,12 +365,14 @@ impl<'a> AstBuilder<'a> {
         precedence: OpPrecedence,
     ) -> LangResult<Spanned<Expr>> {
         let mut op_tokens = vec![];
+        // Get as many unary operators as possible.
         while self.next_token_is_one_of(token_classes) {
             op_tokens.push(self.next().unwrap());
         }
+        // Get the actual expression that they are applied to.
         let mut ret = self.expression_with_precedence(precedence.next())?;
-        // Read operators from right to left so that the leftmost is the
-        // outermost.
+        // Process unary operators from right to left so that the leftmost is
+        // the outermost.
         for op_token in op_tokens.iter().rev() {
             let operand = Box::new(ret);
             ret = Spanned {
@@ -359,7 +394,9 @@ impl<'a> AstBuilder<'a> {
         token_classes: &[TokenClass],
         precedence: OpPrecedence,
     ) -> LangResult<Spanned<Expr>> {
+        // Get the leftmost expression.
         let initial = self.expression_with_precedence(precedence.next())?;
+        // Alternate between getting an operator and an expression.
         let mut op_tokens_and_exprs = vec![];
         while self.next_token_is_one_of(token_classes) {
             op_tokens_and_exprs.push((
@@ -367,9 +404,9 @@ impl<'a> AstBuilder<'a> {
                 self.expression_with_precedence(precedence.next())?,
             ));
         }
-        let mut ret = initial;
-        // Read operations from left to right so that the rightmost is the
+        // Process operations from left to right so that the rightmost is the
         // outermost.
+        let mut ret = initial;
         for (op_token, rhs) in op_tokens_and_exprs {
             let lhs = Box::new(ret);
             let rhs = Box::new(rhs);
@@ -389,10 +426,12 @@ impl<'a> AstBuilder<'a> {
         Ok(ret)
     }
     /// Consumes an expression consisting of any number of chained comparison
-    /// operators.
+    /// operators. This function is similar to left_binary_op().
     fn comparison_op(&mut self, precedence: OpPrecedence) -> LangResult<Spanned<Expr>> {
+        // Get the leftmost expression.
         let initial = self.expression_with_precedence(precedence.next())?;
         let mut comparisons = vec![];
+        // Alternate between getting a comparison operator and an expression.
         while let Some(Token {
             class: TokenClass::Comparison(cmp_type),
             ..
@@ -404,12 +443,13 @@ impl<'a> AstBuilder<'a> {
                 self.expression_with_precedence(precedence.next())?,
             ));
         }
-
+        // If there are no comparisons happening, just return the expression.
         if comparisons.is_empty() {
-            // No comparison to do -- just return the value.
             return Ok(initial);
         }
         Ok(Spanned {
+            // This comparison spans from the leftmost expression to the
+            // rightmost expression.
             span: Span::merge(&initial, &comparisons.last().unwrap().1),
             inner: Expr::Cmp(Box::new(initial), comparisons),
         })
@@ -430,7 +470,9 @@ impl<'a> AstBuilder<'a> {
             _ => self.err(Expected("variable name")),
         }
     }
-    // Consumes an assignment token.
+    // Consumes an assignment token and returns the operator used in the
+    // assignment, if any. (E.g. `+=` uses the `+` operator, while `=` does not
+    // use any operator.)
     fn assign_op(&mut self) -> LangResult<Option<Op>> {
         use AssignmentToken::*;
         match self.next().map(|t| t.class) {
@@ -445,6 +487,7 @@ impl<'a> AstBuilder<'a> {
             Some(TokenClass::Punctuation(PunctuationToken::LParen)) => (),
             _ => self.err(Expected("parenthetical expression beginning with '('"))?,
         }
+        // Record the span of the left paren.
         let open_span = self.get_span();
         let expr = self.expect(inner_matcher)?.inner;
         match self.next().map(|t| t.class) {

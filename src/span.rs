@@ -36,11 +36,11 @@ impl TextPoint {
         let column_number = idx - line_start_idx + 1;
         Self(line_number, column_number)
     }
-    // Returns the 1-indexed line number of this text point.
+    /// Returns the 1-indexed line number of this text point.
     pub fn line(self) -> usize {
         self.0
     }
-    // Returns the 1-indexed column number of this text point.
+    /// Returns the 1-indexed column number of this text point.
     pub fn column(self) -> usize {
         self.1
     }

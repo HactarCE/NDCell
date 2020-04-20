@@ -233,7 +233,7 @@ impl<'ctx> Compiler<'ctx> {
                     value_expr,
                 } => {
                     let var = self.vars[&var_name.inner];
-                    if var.ty != value_expr.get_type() {
+                    if var.ty != value_expr.ty() {
                         Err(InternalError(
                             "Invalid variable assignment not caught by type checker".into(),
                         )
@@ -280,7 +280,7 @@ impl<'ctx> Compiler<'ctx> {
                         ast::FunctionType::Transition => {
                             // This is a transition function, so the return type
                             // should be a cell state.
-                            if Type::CellState != return_expr.get_type() {
+                            if Type::CellState != return_expr.ty() {
                                 Err(InternalError(
                                     "Invalid return statement not caught by type checker".into(),
                                 )

@@ -22,7 +22,7 @@ pub enum Value {
 }
 impl Value {
     /// Returns the type of this value.
-    pub fn get_type(&self) -> Type {
+    pub fn ty(&self) -> Type {
         match self {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,

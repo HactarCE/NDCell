@@ -156,14 +156,14 @@ impl Expr {
         }
     }
     /// Returns the type that this expression evaluates to.
-    pub fn get_type(&self) -> Type {
+    pub fn ty(&self) -> Type {
         match self {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
         }
     }
     /// Returns the Span of this expression.
-    pub fn get_span(&self) -> Span {
+    pub fn span(&self) -> Span {
         *match self {
             Self::Int(Spanned { span, .. }) => span,
             Self::CellState(Spanned { span, .. }) => span,
@@ -173,14 +173,14 @@ impl Expr {
     fn type_err<T>(&self, expected: Type) -> LangResult<T> {
         Err(TypeError {
             expected,
-            got: self.get_type(),
+            got: self.ty(),
         }
-        .with_span(self.get_span()))
+        .with_span(self.span()))
     }
 }
 impl Into<Span> for &Expr {
     fn into(self) -> Span {
-        self.get_span()
+        self.span()
     }
 }
 
@@ -277,7 +277,7 @@ pub struct CmpExpr<ExprType, CmpType: Copy> {
 impl<E, C: Copy> CmpExpr<E, C> {
     /// Returns the Span of this entire comparison expression, from the leftmost
     /// sub-expression to the rightmost sub-expression.
-    pub fn get_span(&self) -> Span {
+    pub fn span(&self) -> Span {
         let lhs = self.initial.span;
         let rhs = match self.comparisons.last() {
             Some((_, expr)) => expr.span,

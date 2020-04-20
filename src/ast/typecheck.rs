@@ -33,7 +33,7 @@ impl ResolveTypes for Spanned<untyped::Statement> {
                     let var_expr_span = var_expr.span;
                     let value_expr_span = value_expr.span;
                     let typed_value_expr = value_expr.resolve_types(meta)?;
-                    let new_type = typed_value_expr.get_type();
+                    let new_type = typed_value_expr.ty();
                     if let untyped::Expr::Var(var_name) = var_expr.inner {
                         if let Some(var_type) = meta.vars.get(&var_name) {
                             // The variable already exists.
@@ -89,7 +89,7 @@ impl ResolveTypes for Spanned<untyped::Statement> {
                             Err(ReturnInTransitionFunction.with_span(span))?
                         }
                         FunctionType::Helper(ref mut return_type) => {
-                            let this_return_type = typed_return_expr.get_type();
+                            let this_return_type = typed_return_expr.ty();
                             if let Some(expected_return_type) = *return_type {
                                 // Make sure that this is the same return type.
                                 if this_return_type != expected_return_type {
@@ -132,7 +132,7 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                 let lhs = lhs.resolve_types(meta)?;
                 let rhs = rhs.resolve_types(meta)?;
                 use Type::*;
-                match (lhs.get_type(), op, rhs.get_type()) {
+                match (lhs.ty(), op, rhs.ty()) {
                     // Perform any operation between two integers.
                     (Int, op, Int) => Ok(typed::IntExpr::Op {
                         lhs: Box::new(lhs.into_int_expr()?),
@@ -143,8 +143,8 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                     // Anything else is invalid.
                     _ => Err(OpError {
                         op,
-                        lhs: lhs.get_type(),
-                        rhs: rhs.get_type(),
+                        lhs: lhs.ty(),
+                        rhs: rhs.ty(),
                     }
                     .with_span(span)),
                 }
@@ -154,7 +154,7 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                 let comparisons = comparisons
                     .into_iter()
                     .map(|(cmp, expr)| Ok((cmp, expr.resolve_types(meta)?)));
-                match initial.get_type() {
+                match initial.ty() {
                     // Compare integers using any comparison operation.
                     Type::Int => Ok(typed::IntExpr::CmpInt(typed::CmpExpr::new(
                         initial,

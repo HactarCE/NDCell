@@ -119,7 +119,7 @@ impl<'a> AstBuilder<'a> {
 
     /// Returns the span of the current token. If there is no current token,
     /// returns an empty span at the begining or end of the input appropriately.
-    fn get_span(&self) -> Span {
+    fn span(&self) -> Span {
         if self.cursor.is_none() {
             // This is the beginning of the token stream; return an empty span
             // at the beginning of the file.
@@ -141,7 +141,7 @@ impl<'a> AstBuilder<'a> {
 
     /// Returns a LangResult::Err with the span of the current token.
     fn err<T>(&self, msg: LangErrorMsg) -> LangResult<T> {
-        Err(msg.with_span(self.get_span()))
+        Err(msg.with_span(self.span()))
     }
     /// Consumes the next symbol and return return a Spanned { ... } of the
     /// result of the given closure if the closure returns LangResult::Ok;
@@ -152,7 +152,7 @@ impl<'a> AstBuilder<'a> {
         let first_token = self.peek_next();
         let ret = f(self);
         let start = first_token.unwrap().span.start;
-        let end = self.get_span().end;
+        let end = self.span().end;
         if ret.is_err() {
             *self = prior_state;
         }
@@ -201,7 +201,7 @@ impl<'a> AstBuilder<'a> {
             _ => self.err(Expected("code block beginning with '{'"))?,
         }
         // Record the span of the left brace.
-        let open_span = self.get_span();
+        let open_span = self.span();
         // Get statements.
         let mut statements = vec![];
         loop {
@@ -487,7 +487,7 @@ impl<'a> AstBuilder<'a> {
             _ => self.err(Expected("parenthetical expression beginning with '('"))?,
         }
         // Record the span of the left paren.
-        let open_span = self.get_span();
+        let open_span = self.span();
         let expr = self.expect(inner_matcher)?.inner;
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::RParen)) => Ok(expr),

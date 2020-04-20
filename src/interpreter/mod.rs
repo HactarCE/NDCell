@@ -80,7 +80,7 @@ impl State {
                     var_name,
                     value_expr,
                 } => {
-                    if self.vars[&var_name.inner].get_type() != value_expr.get_type() {
+                    if self.vars[&var_name.inner].ty() != value_expr.ty() {
                         Err(InternalError(
                             "Invalid variable assignment not caught by type checker".into(),
                         ))?
@@ -111,7 +111,7 @@ impl State {
 
                 Return(return_expr) => match self.function_type {
                     ast::FunctionType::Transition => {
-                        if Type::CellState != return_expr.get_type() {
+                        if Type::CellState != return_expr.ty() {
                             Err(InternalError(
                                 "Invalid return statement not caught by type checker".into(),
                             )

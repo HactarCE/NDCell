@@ -17,7 +17,7 @@ pub enum Value<'ctx> {
 }
 impl<'ctx> Value<'ctx> {
     /// Returns the type of this value.
-    pub fn get_type(self) -> Type {
+    pub fn ty(self) -> Type {
         match self {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
@@ -55,14 +55,14 @@ impl<'ctx> Spanned<Value<'ctx>> {
         match self.inner {
             Value::Int(i) => Ok(i.into()),
             Value::CellState(i) => Ok(i.into()),
-            // Value::Pattern => Err(CannotAssignTypeToVariable(self.inner.get_type()).with_span(self)),
+            // Value::Pattern => Err(CannotAssignTypeToVariable(self.inner.ty()).with_span(self)),
         }
     }
     /// Returns a TypeError relating to this value.
     fn type_err<T>(self, expected: Type) -> LangResult<T> {
         Err(TypeError {
             expected,
-            got: self.inner.get_type(),
+            got: self.inner.ty(),
         }
         .with_span(self))
     }

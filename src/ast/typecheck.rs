@@ -8,8 +8,12 @@ use LangErrorMsg::{
     UseOfUninitializedVariable,
 };
 
+/// Perform type checking and produce a statically-typed version of this type.
 pub trait ResolveTypes {
+    /// The statically-typed equivalent of this type.
     type TypedSelf;
+    /// Performs type checking and returns a statically-typed version of this
+    /// type, given metadata about the function it is inside.
     fn resolve_types(self, meta: &mut FunctionMeta) -> LangResult<Self::TypedSelf>;
 }
 
@@ -60,6 +64,7 @@ impl ResolveTypes for Spanned<untyped::Statement> {
                     if_true,
                     if_false,
                 } => typed::Statement::If {
+                    // Conditions must be booleans, but booleans are integers.
                     cond_expr: cond_expr.resolve_types(meta)?.int()?,
                     if_true: if_true.resolve_types(meta)?,
                     if_false: if_false.resolve_types(meta)?,
@@ -84,6 +89,7 @@ impl ResolveTypes for Spanned<untyped::Statement> {
                         FunctionType::Helper(ref mut return_type) => {
                             let this_return_type = typed_return_expr.get_type();
                             if let Some(expected_return_type) = *return_type {
+                                // Make sure that this is the same return type.
                                 if this_return_type != expected_return_type {
                                     Err(TypeError {
                                         expected: expected_return_type,
@@ -91,6 +97,8 @@ impl ResolveTypes for Spanned<untyped::Statement> {
                                     })?;
                                 }
                             } else {
+                                // We didn't already have a return type for this
+                                // function, so assign it now.
                                 *return_type = Some(this_return_type);
                             }
                             typed::Statement::Return(typed_return_expr)
@@ -109,10 +117,12 @@ impl ResolveTypes for Spanned<untyped::Expr> {
         match self.inner {
             untyped::Expr::Int(i) => Ok(typed::IntExpr::Literal(i).as_generic(span)),
             untyped::Expr::Tag(expr) => {
+                // This expression always converts an integer into a cell state.
                 let x = expr.resolve_types(meta)?.int()?;
                 Ok(typed::CellStateExpr::FromId(Box::new(x)).as_generic(span))
             }
             untyped::Expr::Neg(expr) => {
+                // We always negate one integer to get another integer.
                 let x = expr.resolve_types(meta)?.int()?;
                 Ok(typed::IntExpr::Neg(Box::new(x)).as_generic(span))
             }
@@ -121,12 +131,14 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                 let rhs = rhs.resolve_types(meta)?;
                 use Type::*;
                 match (lhs.get_type(), op, rhs.get_type()) {
+                    // Perform any operation between two integers.
                     (Int, op, Int) => Ok(typed::IntExpr::Op {
                         lhs: Box::new(lhs.int()?),
                         op,
                         rhs: Box::new(rhs.int()?),
                     }
                     .as_generic(span)),
+                    // Anything else is invalid.
                     _ => Err(OpError {
                         op,
                         lhs: lhs.get_type(),
@@ -141,11 +153,13 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                     .into_iter()
                     .map(|(cmp, expr)| Ok((cmp, expr.resolve_types(meta)?)));
                 match initial.get_type() {
+                    // Compare integers using any comparison operation.
                     Type::Int => Ok(typed::IntExpr::CmpInt(typed::CmpExpr::new(
                         initial,
                         comparisons,
                     )?)
                     .as_generic(span)),
+                    // Compare cell states using only equality comparison.
                     Type::CellState => Ok(typed::IntExpr::CmpCellState(
                         typed::CmpExpr::new(initial, comparisons)?.eq_only(Type::CellState)?,
                     )
@@ -154,11 +168,15 @@ impl ResolveTypes for Spanned<untyped::Expr> {
             }
             untyped::Expr::Var(var_name) => {
                 if let Some(var_type) = meta.vars.get(&var_name) {
+                    // The variable has been used before, so we know what type
+                    // it is.
                     match var_type {
                         Type::Int => Ok(typed::IntExpr::Var(var_name).as_generic(span)),
                         Type::CellState => Ok(typed::CellStateExpr::Var(var_name).as_generic(span)),
                     }
                 } else {
+                    // The variable has not been used before, so we don't know
+                    // what type it is.
                     Err(UseOfUninitializedVariable.with_span(span))
                 }
             }
@@ -169,6 +187,7 @@ impl ResolveTypes for Spanned<untyped::Expr> {
 impl<T: ResolveTypes> ResolveTypes for Vec<T> {
     type TypedSelf = Vec<T::TypedSelf>;
     fn resolve_types(self, meta: &mut FunctionMeta) -> LangResult<Vec<T::TypedSelf>> {
+        // Resolve the types of each member independently.
         self.into_iter().map(|x| x.resolve_types(meta)).collect()
     }
 }

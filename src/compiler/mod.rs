@@ -28,18 +28,26 @@ use LangErrorMsg::{
 /// function was unsuccessful, then the remaining bits encode the error index.
 type RawTransitionFunction = JitFunction<unsafe extern "C" fn() -> u64>;
 
+/// Transition function.
 pub struct TransitionFunction {
+    /// JIT function.
     jit_fn: RawTransitionFunction,
+    /// List of possible errors that can be returned by the transition function.
     error_points: Vec<LangError>,
 }
 impl TransitionFunction {
+    /// Call the JIT-compiled transition function and get a cell state result.
     pub fn call(&self) -> LangResult<LangCellState> {
         // This module takes responsibility for JIT-related unsafety because the
         // JITting happened in this module.
         let result = unsafe { self.jit_fn.call() };
+        // Test the highest bit to see if there was an error.
         if result & (1 << 63) == 0 {
+            // There was no error.
             Ok(result as LangCellState)
         } else {
+            // There was an error. Get the index of the error and return the
+            // corresponding LangError.
             let error_index = result & !(1 << 63);
             Err(self
                 .error_points
@@ -50,30 +58,48 @@ impl TransitionFunction {
     }
 }
 
+/// A variable with associated allocated memory.
 #[derive(Debug, Copy, Clone)]
 struct Variable<'ctx> {
+    /// Type of this variable.
     ty: Type,
+    /// LLVM pointer to the memory allocated for this variable.
     ptr: PointerValue<'ctx>,
 }
 
+/// JIT-compiler.
 pub struct Compiler<'ctx> {
+    /// LLVM context.
     ctx: &'ctx Context,
+    /// LLVM module.
     module: Module<'ctx>,
+    /// LLVM instruction builder, always positioned on a basic block in the
+    /// module.
     builder: Builder<'ctx>,
+    /// The JIT execution engine.
     execution_engine: ExecutionEngine<'ctx>,
 
+    /// The LLVM type of the return type of this function.
     llvm_return_type: IntType<'ctx>,
+    /// The LLVM type used to represent an integer.
     llvm_int_type: IntType<'ctx>,
+    /// The LLVM type used to represent a cell state.
     llvm_cell_state_type: IntType<'ctx>,
 
+    /// The function type of the function that is being compiled (e.g.
+    /// transition vs. helper function and return type).
     function_type: Option<ast::FunctionType>,
+    /// Variables by name.
     vars: HashMap<String, Variable<'ctx>>,
+    /// LLVM function.
     fn_value_opt: Option<FunctionValue<'ctx>>,
 
+    /// Possible errors that could be returned from this function.
     error_points: Vec<LangError>,
 }
 
 impl<'ctx> Compiler<'ctx> {
+    /// Constructs a new Compiler from an LLVM context.
     pub fn new(ctx: &'ctx Context) -> LangResult<Self> {
         let module = ctx.create_module("automaton");
         let builder = ctx.create_builder();
@@ -98,7 +124,12 @@ impl<'ctx> Compiler<'ctx> {
         .with_extern_prototypes())
     }
 
+    /// Returns the name of the LLVM intrinsic that performs the given operation
+    /// with overflow checking.
     fn get_checked_int_arithmetic_function_name(&self, name: &str) -> String {
+        // LLVM has a bunch of overflow-checking intrinsics with names like
+        // `llvm.sadd.with.overflow.i64` ("sadd" = "signed add"), and they are
+        // predictable enough that we can generate them like this.
         format!(
             "llvm.{}.with.overflow.i{}",
             name,
@@ -106,12 +137,17 @@ impl<'ctx> Compiler<'ctx> {
         )
     }
 
+    /// Adds extern function prototypes for some handy LLVM intrinsics.
     fn with_extern_prototypes(self) -> Self {
+        // Define extern function prototypes for various LLVM intrinsics so that
+        // we can call them like normal functions.
         let int_param_types = &[self.llvm_int_type.into(), self.llvm_int_type.into()];
         let int_with_error_type = self.ctx.struct_type(
             &[self.llvm_int_type.into(), self.ctx.bool_type().into()],
             false,
         );
+        // "sadd" = signed addition, "ssub" = signed subtraction, "smul" =
+        // signed multiplication
         for name in &["sadd", "ssub", "smul"] {
             self.module.add_function(
                 &self.get_checked_int_arithmetic_function_name(name),
@@ -122,17 +158,20 @@ impl<'ctx> Compiler<'ctx> {
         self
     }
 
+    /// Returns an LLVM function by name.
     fn get_function(&self, name: &str) -> LangResult<FunctionValue<'ctx>> {
         self.module.get_function(name).ok_or_else(|| {
             InternalError(format!("Could not find LLVM function '{}'", name).into()).without_span()
         })
     }
 
+    /// Returns the LLVM function that is currently being built.
     fn fn_value(&self) -> FunctionValue<'ctx> {
         self.fn_value_opt
             .expect("No function value in JIT compiler")
     }
 
+    /// JIT-compiles a transition function.
     pub fn jit_compile_fn(&mut self, function: &ast::Function) -> LangResult<TransitionFunction> {
         self.function_type = Some(function.fn_type);
 
@@ -162,6 +201,7 @@ impl<'ctx> Compiler<'ctx> {
                 .build_return(Some(&self.llvm_cell_state_type.const_zero()));
         }
 
+        // Make sure that the LLVM code we generated is valid.
         if self.fn_value().verify(true) {
             Ok(TransitionFunction {
                 jit_fn: unsafe {
@@ -181,6 +221,7 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
+    /// Builds LLVM instructions to execute the given statements.
     pub fn build_statements(&mut self, statements: &ast::StatementBlock) -> LangResult<()> {
         for statement in statements {
             use ast::Statement::*;
@@ -196,6 +237,8 @@ impl<'ctx> Compiler<'ctx> {
                         )
                         .without_span())?;
                     }
+                    // Compile the expression and store the result in the
+                    // variable, depending on the type.
                     match value_expr {
                         ast::Expr::Int(e) => {
                             let value = self.build_int_expr(e)?.inner;
@@ -207,6 +250,7 @@ impl<'ctx> Compiler<'ctx> {
                         }
                     };
                 }
+
                 If {
                     cond_expr,
                     if_true,
@@ -214,21 +258,26 @@ impl<'ctx> Compiler<'ctx> {
                 } => {
                     // Evaluate the condition and get a boolean value.
                     let test_value = self.build_int_expr(&cond_expr)?;
+                    // Check whether condition_value != 0.
                     let condition_value = self.builder.build_int_compare(
                         IntPredicate::NE,
                         test_value.inner,
                         self.llvm_int_type.const_zero(),
                         "tmp_ifCond",
                     );
+                    // Now branch based on that boolean value.
                     self.build_conditional(
                         condition_value,
-                        |c| c.build_statements(if_true),
-                        |c| c.build_statements(if_false),
+                        |c| c.build_statements(if_true),  // != 0
+                        |c| c.build_statements(if_false), // == 0
                     )?;
                 }
+
                 Return(return_expr) => {
                     match self.function_type.unwrap() {
                         ast::FunctionType::Transition => {
+                            // This is a transition function, so the return type
+                            // should be a cell state.
                             if Type::CellState != return_expr.get_type() {
                                 Err(InternalError(
                                     "Invalid return statement not caught by type checker".into(),
@@ -249,6 +298,8 @@ impl<'ctx> Compiler<'ctx> {
                     // Don't build any more statements after this!
                     return Ok(());
                 }
+
+                // Goto and End statements are only meant for the interpreter.
                 Goto(_) => panic!("GOTO statement found in AST given to compiler"),
                 End => panic!("END statement found in AST given to compiler"),
             };
@@ -256,6 +307,8 @@ impl<'ctx> Compiler<'ctx> {
         Ok(())
     }
 
+    /// Builds LLVM instructions to evaluate the given expression that evaluates
+    /// to an integer.
     fn build_int_expr(
         &mut self,
         expression: &Spanned<ast::IntExpr>,
@@ -266,11 +319,14 @@ impl<'ctx> Compiler<'ctx> {
             span,
             inner: match &expression.inner {
                 FnCall(_) => Err(Unimplemented.with_span(span))?,
+
                 Var(var_name) => self
                     .builder
                     .build_load(self.vars[var_name].ptr, var_name)
                     .into_int_value(),
+
                 Literal(i) => self.llvm_int_type.const_int(*i as u64, true),
+
                 Op { lhs, op, rhs } => {
                     let lhs = self.build_int_expr(lhs)?.inner;
                     let rhs = self.build_int_expr(rhs)?.inner;
@@ -278,9 +334,13 @@ impl<'ctx> Compiler<'ctx> {
                         ast::Op::Math(math_op) => {
                             use ast::MathOp::*;
                             match math_op {
+                                // Use LLVM intrinsics to check for overflow.
                                 Add => self.build_checked_int_arithmetic(lhs, rhs, span, "sadd")?,
                                 Sub => self.build_checked_int_arithmetic(lhs, rhs, span, "ssub")?,
                                 Mul => self.build_checked_int_arithmetic(lhs, rhs, span, "smul")?,
+                                // LLVM does not provide intrinsics to check for
+                                // overflow and division by zero, so we have to
+                                // check ourselves with build_div_check().
                                 Div => {
                                     self.build_div_check(lhs, rhs, span)?;
                                     self.builder.build_int_signed_div(lhs, rhs, "tmp_div")
@@ -289,15 +349,17 @@ impl<'ctx> Compiler<'ctx> {
                                     self.build_div_check(lhs, rhs, span)?;
                                     self.builder.build_int_signed_rem(lhs, rhs, "tmp_rem")
                                 }
+                                // TODO: how to implement exponentiation?
                                 Exp => Err(Unimplemented.with_span(span))?,
                             }
                         }
                         _ => Err(Unimplemented.with_span(span))?,
                     }
                 }
+
                 Neg(x) => {
                     let x = self.build_int_expr(x)?.inner;
-                    // Subtract from zero.
+                    // To negate an integer, subtract it from zero.
                     self.build_checked_int_arithmetic(
                         self.llvm_int_type.const_zero(),
                         x,
@@ -305,11 +367,13 @@ impl<'ctx> Compiler<'ctx> {
                         "ssub",
                     )?
                 }
+
                 CmpInt(cmp_expr) => self.build_multi_comparison(
                     cmp_expr,
                     Self::build_int_expr,
                     Self::build_int_comparison,
                 )?,
+
                 CmpCellState(cmp_expr) => self.build_multi_comparison(
                     cmp_expr,
                     Self::build_cell_state_expr,
@@ -320,6 +384,8 @@ impl<'ctx> Compiler<'ctx> {
         })
     }
 
+    /// Builds LLVM instructions to evaluate the given expression that evaluates
+    /// to a cell state.
     fn build_cell_state_expr(
         &mut self,
         expression: &Spanned<ast::CellStateExpr>,
@@ -330,13 +396,15 @@ impl<'ctx> Compiler<'ctx> {
             span,
             inner: match &expression.inner {
                 FnCall(_) => Err(Unimplemented.with_span(span))?,
+
                 Var(var_name) => self
                     .builder
                     .build_load(self.vars[var_name].ptr, var_name)
                     .into_int_value(),
+
                 FromId(id_expr) => {
                     let id_value = self.build_int_expr(id_expr)?;
-                    self.build_cell_state_value_check(id_value);
+                    self.build_cell_state_value_check(id_value)?;
                     let ret = self.builder.build_int_cast(
                         id_value.inner,
                         self.llvm_cell_state_type,
@@ -348,6 +416,8 @@ impl<'ctx> Compiler<'ctx> {
         })
     }
 
+    /// Builds LLVM instructions to perform integer arithmetic that checks for
+    /// overflow and division-by-zero errors.
     fn build_checked_int_arithmetic(
         &mut self,
         lhs: IntValue<'ctx>,
@@ -383,9 +453,10 @@ impl<'ctx> Compiler<'ctx> {
             .unwrap()
             .into_int_value();
 
+        // Branch based on whether there is overflow.
         self.build_conditional(
             is_overflow,
-            // Return an error if there was overflow.
+            // Return an error if there is overflow.
             |c| Ok(c.build_error_point(IntegerOverflow.with_span(span))),
             // Otherwise proceed.
             |_| Ok(()),
@@ -394,6 +465,9 @@ impl<'ctx> Compiler<'ctx> {
         Ok(result_value)
     }
 
+    /// Builds LLVM instructions to check integer division arguments for
+    /// overflow and division-by-zero errors (but does not actually perform said
+    /// division).
     fn build_div_check(
         &mut self,
         lhs: IntValue<'ctx>,
@@ -407,6 +481,8 @@ impl<'ctx> Compiler<'ctx> {
             self.llvm_int_type.const_zero(),
             "isDivByZero",
         );
+
+        // Branch based on whether the denominator is zero.
         self.build_conditional(
             is_div_by_zero,
             // The denominator is zero.
@@ -428,6 +504,8 @@ impl<'ctx> Compiler<'ctx> {
                 let is_overflow =
                     c.builder
                         .build_and(num_is_min_value, denom_is_neg_one, "isOverflow");
+
+                // Branch based on whether there is overflow.
                 c.build_conditional(
                     is_overflow,
                     // Overflow would occur.
@@ -439,7 +517,12 @@ impl<'ctx> Compiler<'ctx> {
         )
     }
 
-    fn build_cell_state_value_check(&mut self, cell_state_value: Spanned<IntValue<'ctx>>) {
+    /// Builds LLVM instructions to check the value of a cell state and return
+    /// an error if it is not valid.
+    fn build_cell_state_value_check(
+        &mut self,
+        cell_state_value: Spanned<IntValue<'ctx>>,
+    ) -> LangResult<()> {
         // Treat the signed integer as an unsigned integer, and build a
         // condition testing whether that value is less than the number of cell
         // states. (A negative number will be interpreted as a very large
@@ -455,19 +538,21 @@ impl<'ctx> Compiler<'ctx> {
             "cellStateRangeCheck",
         );
 
-        // Build the branches
-        let out_of_range_bb = self.append_basic_block("cellStateOutOfRange");
-        let in_range_bb = self.append_basic_block("cellStateInRange");
-
-        self.builder
-            .build_conditional_branch(condition, in_range_bb, out_of_range_bb);
-
-        self.builder.position_at_end(out_of_range_bb);
-        self.build_error_point(CellStateOutOfRange.with_span(cell_state_value));
-
-        self.builder.position_at_end(in_range_bb);
+        // Branch based on the whether the cell state is in range.
+        self.build_conditional(
+            condition,
+            // The cell state is in range.
+            |_| Ok(()),
+            // The cell state is out of range.
+            |c| {
+                c.build_error_point(CellStateOutOfRange.with_span(cell_state_value));
+                Ok(())
+            },
+        )
     }
 
+    /// Builds LLVM instructions to perform a chained comparison check,
+    /// short-circuiting when possible.
     fn build_multi_comparison<ExprType, ValueType: Copy, CmpType: Copy>(
         &mut self,
         cmp_expr: &ast::CmpExpr<ExprType, CmpType>,
@@ -480,6 +565,7 @@ impl<'ctx> Compiler<'ctx> {
         // condition will have an unconditional jump.
         let merge_bb = self.append_basic_block("multiCompareShortCircuit");
         self.builder.position_at_end(merge_bb);
+
         // Create a phi node for the final result.
         let phi = self
             .builder
@@ -524,6 +610,7 @@ impl<'ctx> Compiler<'ctx> {
         Ok(phi.as_basic_value().into_int_value())
     }
 
+    /// Build an LLVM instruction to compare two integers.
     fn build_int_comparison(
         &mut self,
         comparison: impl Into<ast::Cmp>,
@@ -543,6 +630,8 @@ impl<'ctx> Compiler<'ctx> {
             .build_int_compare(int_predicate, lhs, rhs, "intCmp")
     }
 
+    /// Builds an LLVM conditional branch, using the given lambdas to generate
+    /// instructions for each branch. Both branches converge afterwards.
     fn build_conditional(
         &mut self,
         condition_value: IntValue<'ctx>,
@@ -553,15 +642,18 @@ impl<'ctx> Compiler<'ctx> {
         let if_true_bb = self.append_basic_block("ifTrue");
         let if_false_bb = self.append_basic_block("ifFalse");
         let merge_bb = self.append_basic_block("endIf");
+
         // Build the branch instruction.
         self.builder
             .build_conditional_branch(condition_value, if_true_bb, if_false_bb);
+
         // Build the instructions to execute if true.
         self.builder.position_at_end(if_true_bb);
         build_if_true(self)?;
         if self.needs_terminator() {
             self.builder.build_unconditional_branch(merge_bb);
         }
+
         // Build the instructions to execute if false.
         self.builder.position_at_end(if_false_bb);
         build_if_false(self)?;
@@ -572,19 +664,30 @@ impl<'ctx> Compiler<'ctx> {
         Ok(())
     }
 
+    /// Adds a possible error that can be returned by the function and builds an
+    /// LLVM instruction to return that error.
+    fn build_error_point(&mut self, error: LangError) {
+        let error_value = self.add_error_point(error) | (1 << 63);
+        self.builder.build_return(Some(
+            &self.llvm_return_type.const_int(error_value as u64, true),
+        ));
+    }
+
+    /// Adds a possible error that can be returned by the function and returns
+    /// the index of the new error point in self.error_points.
+    fn add_error_point(&mut self, error: LangError) -> usize {
+        self.error_points.push(error);
+        self.error_points.len() - 1
+    }
+
+    /// Returns whether the current LLVM BasicBlock still needs a terminator
+    /// instruction (i.e. whether it does NOT yet have one).
     fn needs_terminator(&self) -> bool {
         self.builder
             .get_insert_block()
             .unwrap()
             .get_terminator()
             .is_none()
-    }
-
-    fn build_error_point(&mut self, error: LangError) {
-        let error_value = self.add_error_point(error) | (1 << 63);
-        self.builder.build_return(Some(
-            &self.llvm_return_type.const_int(error_value as u64, true),
-        ));
     }
 
     /// Allocates space for a variable.
@@ -611,15 +714,13 @@ impl<'ctx> Compiler<'ctx> {
         Ok(())
     }
 
-    fn add_error_point(&mut self, error: LangError) -> usize {
-        self.error_points.push(error);
-        self.error_points.len() - 1
-    }
-
+    /// Appends an LLVM BasicBlock to the end of the current LLVM function and
+    /// returns the new BasicBlock.
     fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
         self.ctx.append_basic_block(self.fn_value(), name)
     }
 
+    /// Returns the LLVM type corresponding to the given type in the language.
     fn get_llvm_type(&self, ty: Type) -> Option<BasicTypeEnum<'ctx>> {
         match ty {
             Type::Int => Some(self.llvm_int_type.into()),
@@ -627,6 +728,7 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
+    /// Returns the default value for variables of the given type.
     fn get_default_var_value(&self, ty: Type) -> Option<BasicValueEnum<'ctx>> {
         match ty {
             Type::Int => Some(self.llvm_int_type.const_zero().into()),
@@ -634,6 +736,8 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
+    /// Returns the minimum value representable by signed integers of the
+    /// language's signed integer type.
     fn get_min_int_value(&self) -> IntValue<'ctx> {
         self.llvm_int_type.const_int(1, false).const_shl(
             self.llvm_int_type

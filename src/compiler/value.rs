@@ -51,7 +51,7 @@ impl<'ctx> Spanned<Value<'ctx>> {
     }
     /// Returns this value as an LLVM basic value if it is representable;
     /// otherwise a TypeError.
-    pub fn as_basic_value(self) -> LangResult<BasicValueEnum<'ctx>> {
+    pub fn into_basic_value(self) -> LangResult<BasicValueEnum<'ctx>> {
         match self.inner {
             Value::Int(i) => Ok(i.into()),
             Value::CellState(i) => Ok(i.into()),

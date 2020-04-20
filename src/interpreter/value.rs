@@ -41,7 +41,7 @@ impl Value {
 impl Value {
     /// Returns the integer value inside if this is a Value::Int; otherwise a
     /// TypeError.
-    pub fn int(&self) -> LangResult<LangInt> {
+    pub fn as_int(&self) -> LangResult<LangInt> {
         match self {
             Value::Int(i) => Ok(*i),
             _ => Err(INTERNAL_VAR_USE_ERROR),
@@ -49,7 +49,7 @@ impl Value {
     }
     /// Returns the integer value inside if this is a Value::CellState;
     /// otherwise a TypeError.
-    pub fn cell_state(&self) -> LangResult<LangCellState> {
+    pub fn as_cell_state(&self) -> LangResult<LangCellState> {
         match self {
             Value::CellState(i) => Ok(*i),
             _ => Err(INTERNAL_VAR_USE_ERROR),

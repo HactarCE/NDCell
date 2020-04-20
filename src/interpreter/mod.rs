@@ -118,7 +118,7 @@ impl State {
                             .without_span())?;
                         }
                         let return_value = Value::CellState(
-                            self.eval_cell_state_expr(return_expr.cell_state_ref()?)?
+                            self.eval_cell_state_expr(return_expr.as_cell_state_expr()?)?
                                 .inner
                                 .into(),
                         );
@@ -165,7 +165,7 @@ impl State {
             inner: match &expression.inner {
                 FnCall(_) => Err(Unimplemented.with_span(span))?,
 
-                Var(var_name) => self.vars[var_name].int()?,
+                Var(var_name) => self.vars[var_name].as_int()?,
 
                 Literal(i) => *i,
 
@@ -223,7 +223,7 @@ impl State {
             inner: match &expression.inner {
                 FnCall(_) => Err(Unimplemented.with_span(span))?,
 
-                Var(var_name) => self.vars[var_name].cell_state()?,
+                Var(var_name) => self.vars[var_name].as_cell_state()?,
 
                 FromId(id_expr) => {
                     // Convert integer to cell state, if it is within range.

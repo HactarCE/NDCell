@@ -125,7 +125,7 @@ pub enum Expr {
 }
 impl Expr {
     /// Returns the IntExpr inside if this is Expr::Int; otherwise a TypeError.
-    pub fn int(self) -> LangResult<Spanned<IntExpr>> {
+    pub fn into_int_expr(self) -> LangResult<Spanned<IntExpr>> {
         match self {
             Self::Int(e) => Ok(e),
             _ => self.type_err(Type::Int),
@@ -133,7 +133,7 @@ impl Expr {
     }
     /// Returns a reference to the IntExpr inside if this is Expr::Int;
     /// otherwise a TypeError.
-    pub fn int_ref(&self) -> LangResult<&Spanned<IntExpr>> {
+    pub fn as_int_expr(&self) -> LangResult<&Spanned<IntExpr>> {
         match self {
             Self::Int(e) => Ok(e),
             _ => self.type_err(Type::Int),
@@ -141,7 +141,7 @@ impl Expr {
     }
     /// Returns the CellStateExpr inside if this is Expr::CellState; otherwise a
     /// TypeError.
-    pub fn cell_state(self) -> LangResult<Spanned<CellStateExpr>> {
+    pub fn into_cell_state_expr(self) -> LangResult<Spanned<CellStateExpr>> {
         match self {
             Self::CellState(e) => Ok(e),
             _ => self.type_err(Type::CellState),
@@ -149,7 +149,7 @@ impl Expr {
     }
     /// Returns a reference to the CellStateExpr inside if this is
     /// Expr::CellState; otherwise a TypeError.
-    pub fn cell_state_ref(&self) -> LangResult<&Spanned<CellStateExpr>> {
+    pub fn as_cell_state_expr(&self) -> LangResult<&Spanned<CellStateExpr>> {
         match self {
             Self::CellState(e) => Ok(e),
             _ => self.type_err(Type::CellState),
@@ -218,7 +218,7 @@ impl IntExpr {
 impl TryFrom<Expr> for Spanned<IntExpr> {
     type Error = LangError;
     fn try_from(expr: Expr) -> LangResult<Self> {
-        expr.int()
+        expr.into_int_expr()
     }
 }
 
@@ -241,7 +241,7 @@ impl CellStateExpr {
 impl TryFrom<Expr> for Spanned<CellStateExpr> {
     type Error = LangError;
     fn try_from(expr: Expr) -> LangResult<Self> {
-        expr.cell_state()
+        expr.into_cell_state_expr()
     }
 }
 

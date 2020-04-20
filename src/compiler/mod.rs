@@ -287,7 +287,7 @@ impl<'ctx> Compiler<'ctx> {
                                 .without_span())?;
                             }
                             let return_cell_state =
-                                self.build_cell_state_expr(return_expr.cell_state_ref()?)?;
+                                self.build_cell_state_expr(return_expr.as_cell_state_expr()?)?;
                             let return_value = self.builder.build_int_cast(
                                 return_cell_state.inner,
                                 self.llvm_return_type,

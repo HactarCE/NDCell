@@ -67,7 +67,7 @@ impl ResolveTypes for Spanned<untyped::Statement> {
                     if_false,
                 } => typed::Statement::If {
                     // Conditions must be booleans, but booleans are integers.
-                    cond_expr: cond_expr.resolve_types(meta)?.int()?,
+                    cond_expr: cond_expr.resolve_types(meta)?.into_int_expr()?,
                     if_true: if_true.resolve_types(meta)?,
                     if_false: if_false.resolve_types(meta)?,
                 },
@@ -120,12 +120,12 @@ impl ResolveTypes for Spanned<untyped::Expr> {
             untyped::Expr::Int(i) => Ok(typed::IntExpr::Literal(i).as_generic(span)),
             untyped::Expr::Tag(expr) => {
                 // This expression always converts an integer into a cell state.
-                let x = expr.resolve_types(meta)?.int()?;
+                let x = expr.resolve_types(meta)?.into_int_expr()?;
                 Ok(typed::CellStateExpr::FromId(Box::new(x)).as_generic(span))
             }
             untyped::Expr::Neg(expr) => {
                 // We always negate one integer to get another integer.
-                let x = expr.resolve_types(meta)?.int()?;
+                let x = expr.resolve_types(meta)?.into_int_expr()?;
                 Ok(typed::IntExpr::Neg(Box::new(x)).as_generic(span))
             }
             untyped::Expr::Op { lhs, op, rhs } => {
@@ -135,9 +135,9 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                 match (lhs.get_type(), op, rhs.get_type()) {
                     // Perform any operation between two integers.
                     (Int, op, Int) => Ok(typed::IntExpr::Op {
-                        lhs: Box::new(lhs.int()?),
+                        lhs: Box::new(lhs.into_int_expr()?),
                         op,
-                        rhs: Box::new(rhs.int()?),
+                        rhs: Box::new(rhs.into_int_expr()?),
                     }
                     .as_generic(span)),
                     // Anything else is invalid.

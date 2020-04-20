@@ -76,6 +76,8 @@ fn main() -> Result<(), ()> {
     Ok(())
 }
 
+/// Runs the given program's transition function using the interpreter and
+/// returns the result.
 fn interpret(program: ast::Program) -> LangResult<interpreter::Value> {
     let mut interpreter = interpreter::State::new(program.transition_fn)?;
     loop {
@@ -85,6 +87,8 @@ fn interpret(program: ast::Program) -> LangResult<interpreter::Value> {
     }
 }
 
+/// Runs the given program's transition function using the compiler and returns
+/// the result.
 fn compile_and_run(program: ast::Program) -> LangResult<types::LangCellState> {
     let context = Context::create();
     let mut compiler = compiler::Compiler::new(&context)?;
@@ -92,6 +96,7 @@ fn compile_and_run(program: ast::Program) -> LangResult<types::LangCellState> {
     transition_fn.call()
 }
 
+/// Produces an ast::Program from the given source code.
 fn make_program(source_code: &str) -> LangResult<ast::Program> {
     let untyped_program = ast::make_program(source_code)?;
     // println!("{}", untyped_program);

@@ -53,23 +53,32 @@ lazy_static! {
     /// by joining each member of TOKEN_PATTERNS with '|'.
     static ref TOKEN_PATTERN: Regex = Regex::new(&TOKEN_PATTERNS.join("|")).unwrap();
 
+    /// A regex that matches any valid identifier (or keyword, but that's fine).
     static ref IDENT_PATTERN: Regex = Regex::new(r#"^[A-Za-z_][A-Za-z_\d]*$"#).unwrap();
+    /// A regex that matches any named tag.
     static ref TAG_PATTERN: Regex = Regex::new(r#"^#[A-Za-z_][A-Za-z_\d]*$"#).unwrap();
+    /// A regex that matches any directive.
     static ref DIRECTIVE_PATTERN: Regex = Regex::new(r#"^@[A-Za-z_][A-Za-z_\d]*$"#).unwrap();
+    /// A regex that matches any string literal.
     static ref STRING_PATTERN: Regex = Regex::new(r#"^(\w?)(["'])(?:([\s\S]*)["'])?$"#).unwrap();
+    /// A regex that matches the beginning of a block comment.
     static ref BLOCK_COMMENT_PATTERN: Regex = Regex::new(r#"^/\*"#).unwrap();
+    /// A regex that matches the beginning of a line comment.
     static ref LINE_COMMENT_PATTERN: Regex = Regex::new(r#"^//"#).unwrap();
-    static ref ASSIGN_PATTERN: Regex = Regex::new(r#"(.?.?)="#).unwrap();
+    /// A regex that matches an assignment operator.
+    static ref ASSIGN_PATTERN: Regex = Regex::new(r#"^(.?.?)=$"#).unwrap();
 }
 
 /// Splits a string into tokens and returns them as a Vec, with all comments
 /// removed.
 pub fn tokenize<'a>(s: &'a str) -> LangResult<Vec<Token<'a>>> {
     let flat_tokens = TOKEN_PATTERN.find_iter(s).map(|m| {
+        // Get the span of this token.
         let span = Span {
             start: m.start(),
             end: m.end(),
         };
+        // Classify this token.
         let string = m.as_str();
         match TokenClass::try_from(string) {
             Ok(class) => Ok(Token {
@@ -83,17 +92,22 @@ pub fn tokenize<'a>(s: &'a str) -> LangResult<Vec<Token<'a>>> {
     flat_tokens
         // Remove comments.
         .filter(|t| !t.as_ref().map_or(false, Token::is_comment))
+        // Make a Vec<_>.
         .collect()
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Token<'a> {
+    /// The span of text in the source code where this token occurs.
     pub span: Span,
+    /// A reference to the substring of the source code where this token occurs.
     pub string: &'a str,
+    /// A classification of this token.
     pub class: TokenClass<'a>,
 }
 impl<'a> Token<'a> {
-    fn is_comment(&self) -> bool {
+    /// Returns whether this token is a comment.
+    pub fn is_comment(&self) -> bool {
         self.class == TokenClass::Comment
     }
 }
@@ -108,23 +122,40 @@ impl<'a> Into<Span> for &Token<'a> {
     }
 }
 
+/// Classification of a token.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TokenClass<'a> {
+    /// Keyword that starts a statement.
     StatementKeyword(StatementKeywordToken),
+    /// Keyword that does not start a statement.
     Keyword(KeywordToken),
+    /// Assignment operator.
     Assignment(AssignmentToken),
+    /// Comparison operator.
     Comparison(ComparisonToken),
+    /// Other operator.
     Operator(OperatorToken),
+    /// Miscellaneous punctuation.
     Punctuation(PunctuationToken),
+    /// Integer literal.
     Integer(LangInt),
+    /// String literal.
     String {
+        /// Optional single-character prefix (like Python's `r"..."` and
+        /// `f"..."` strings).
         prefix: Option<char>,
+        /// The quote character used (either single quote or double quote).
         quote: char,
+        /// The contents of the string.
         contents: &'a str,
     },
+    /// Directive (not including initial '@').
     Directive(&'a str),
+    /// Named tag.
     Tag(&'a str),
+    /// Identifier.
     Ident(&'a str),
+    /// Comment.
     Comment,
 }
 impl<'a> fmt::Display for TokenClass<'a> {
@@ -149,6 +180,9 @@ impl<'a> fmt::Display for TokenClass<'a> {
         }
     }
 }
+// Implement TryFrom instead of FromStr because we need the lifetime of the &str
+// to determine the lifetime of the TokenClass (since some TokenClasses keep a
+// &str).
 impl<'a> TryFrom<&'a str> for TokenClass<'a> {
     type Error = LangErrorMsg;
     fn try_from(s: &'a str) -> Result<Self, LangErrorMsg> {
@@ -200,6 +234,7 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
 }
 
 enum_with_str_repr! {
+    /// Keyword that starts a statement.
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub enum StatementKeywordToken {
         // Loops
@@ -225,6 +260,7 @@ enum_with_str_repr! {
         Set = "set",
     }
 
+    /// Keyword that does not start a statement.
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub enum KeywordToken {
         // Boolean operators
@@ -238,6 +274,7 @@ enum_with_str_repr! {
         Where = "where",
     }
 
+    /// Operator.
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub enum OperatorToken {
         // Arithmetic operators
@@ -279,9 +316,12 @@ enum_with_str_repr! {
     }
 }
 
+/// Assignment operator.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AssignmentToken {
+    /// Simple `=` assignment.
     Assign,
+    /// Assignment with an additional operator; e.g. `+=`.
     OpAssign(Op),
 }
 impl fmt::Display for AssignmentToken {
@@ -295,6 +335,8 @@ impl fmt::Display for AssignmentToken {
 impl FromStr for AssignmentToken {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, ()> {
+        // Match the regex `^(.?.?)=$` and extract the first group, `(.?.?)`,
+        // which gives the additional operator if any.
         if let Some(op_str) = ASSIGN_PATTERN
             .captures(s)
             .and_then(|captures| captures.get(1))
@@ -315,6 +357,10 @@ impl FromStr for AssignmentToken {
     }
 }
 
+/// Comparison.
+///
+/// There's no reason to redefine this, since it would be identical to
+/// components::common::Cmp.
 pub type ComparisonToken = Cmp;
 
 #[cfg(test)]

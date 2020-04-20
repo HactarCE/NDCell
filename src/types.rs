@@ -10,9 +10,12 @@ pub type LangCellState = u32;
 /// Number of bits in an NDCA cell state.
 pub const CELL_STATE_BITS: u32 = 32;
 
+/// Any data type.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Type {
+    /// Integer.
     Int,
+    /// Cell state.
     CellState,
     // Pattern,
 }

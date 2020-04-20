@@ -46,18 +46,24 @@ impl TextPoint {
     }
 }
 
+/// A contiguous span of text from one byte index to another in a &str.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct Span {
+    /// The byte index of the first character.
     pub start: usize,
+    /// The byte index after the last character.
     pub end: usize,
 }
 impl Span {
+    /// Returns a pair of TextPoints representing the start and end of this
+    /// span applied to a given &str.
     pub fn textpoints(self, string: &str) -> (TextPoint, TextPoint) {
         (
             TextPoint::from_idx(string, self.start),
             TextPoint::from_idx(string, self.end),
         )
     }
+    /// Returns the smallest contiguous span encompassing the two given spans.
     pub fn merge<T: Into<Span>, U: Into<Span>>(span1: T, span2: U) -> Self {
         let span1: Span = span1.into();
         let span2: Span = span2.into();
@@ -78,9 +84,12 @@ impl<T> From<&Spanned<T>> for Span {
     }
 }
 
+/// Any data with an associated span.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Spanned<T> {
+    /// The span.
     pub span: Span,
+    /// The data.
     pub inner: T,
 }
 impl<T> Borrow<T> for Spanned<T> {
@@ -94,24 +103,12 @@ impl<T> BorrowMut<T> for Spanned<T> {
     }
 }
 impl<T> Spanned<T> {
+    /// Returns a new Spanned<T> spanning the given byte indices.
     pub fn new(start: usize, end: usize, inner: T) -> Self {
         Self {
             span: Span { start, end },
             inner,
         }
-    }
-    pub fn copy_span<U>(&self, new_inner: U) -> Spanned<U> {
-        Spanned {
-            span: self.span,
-            inner: new_inner,
-        }
-    }
-    pub fn default(inner: T) -> Self {
-        let span = Span::default();
-        Self { span, inner }
-    }
-    pub fn into_tuple(self) -> (Span, T) {
-        (self.span, self.inner)
     }
 }
 

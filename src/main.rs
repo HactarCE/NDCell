@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![warn(missing_docs)]
 
 use inkwell::context::Context;
 

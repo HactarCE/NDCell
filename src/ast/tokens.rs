@@ -1,11 +1,14 @@
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fmt;
+use std::str::FromStr;
 
 use super::super::errors::*;
 use super::super::span::Span;
 use super::super::types::LangInt;
+use super::common::{Cmp, Op};
+
 use LangErrorMsg::{UnknownSymbol, Unterminated};
 
 /// A list of token patterns, arranged roughly from least to most general.
@@ -33,12 +36,12 @@ const TOKEN_PATTERNS: &'static [&'static str] = &[
     // digits, and/or underscores, with an optional `#` (for tags) or `@` (for
     // directives) in front.
     r#"[#@]?[A-Za-z_][A-Za-z_\d]*"#,
-    // In-place arithmetic operators `**=`, `<<=`, and `>>=`.
-    r#"(\*\*|<<|>>)="#,
+    // In-place arithmetic operators `**=`, `<<=`, `>>=`, and `>>>=`.
+    r#"(\*\*|<<|>>>?)="#,
     // In-place arithmetic operators `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, and `^=`.
     r#"[+\-*/%&|^]="#,
-    // Operators `..`, `**`, `<<`, and `>>`.
-    r#"(\.\.|\*\*|<<|>>)"#,
+    // Operators `..`, `**`, `<<`, `>>`, and `>>>`.
+    r#"(\.\.|\*\*|<<|>>>?)"#,
     // Equality checks `==`, `!=`, `<=`, and `>=`.
     r#"[=!<>]="#,
     // Any other single character.
@@ -56,6 +59,7 @@ lazy_static! {
     static ref STRING_PATTERN: Regex = Regex::new(r#"^(\w?)(["'])(?:([\s\S]*)["'])?$"#).unwrap();
     static ref BLOCK_COMMENT_PATTERN: Regex = Regex::new(r#"^/\*"#).unwrap();
     static ref LINE_COMMENT_PATTERN: Regex = Regex::new(r#"^//"#).unwrap();
+    static ref ASSIGN_PATTERN: Regex = Regex::new(r#"(.?.?)="#).unwrap();
 }
 
 /// Splits a string into tokens and returns them as a Vec, with all comments
@@ -108,9 +112,9 @@ impl<'a> Into<Span> for &Token<'a> {
 pub enum TokenClass<'a> {
     StatementKeyword(StatementKeywordToken),
     Keyword(KeywordToken),
-    Operator(OperatorToken),
     Assignment(AssignmentToken),
     Comparison(ComparisonToken),
+    Operator(OperatorToken),
     Punctuation(PunctuationToken),
     Integer(LangInt),
     String {
@@ -128,9 +132,9 @@ impl<'a> fmt::Display for TokenClass<'a> {
         match self {
             Self::StatementKeyword(t) => write!(f, "keyword '{}'", t),
             Self::Keyword(t) => write!(f, "keyword '{}'", t),
-            Self::Operator(t) => write!(f, "operator '{}'", t),
             Self::Assignment(t) => write!(f, "assignment operator '{}'", t),
             Self::Comparison(t) => write!(f, "comparison operator '{}'", t),
+            Self::Operator(t) => write!(f, "operator '{}'", t),
             Self::Punctuation(t) => write!(f, "punctuation '{}'", t),
             Self::Integer(i) => write!(f, "integer '{}'", i),
             Self::String { prefix: None, .. } => write!(f, "string"),
@@ -148,17 +152,17 @@ impl<'a> fmt::Display for TokenClass<'a> {
 impl<'a> TryFrom<&'a str> for TokenClass<'a> {
     type Error = LangErrorMsg;
     fn try_from(s: &'a str) -> Result<Self, LangErrorMsg> {
-        if let Ok(statement_keyword) = s.try_into() {
+        if let Ok(statement_keyword) = s.parse() {
             Ok(Self::StatementKeyword(statement_keyword))
-        } else if let Ok(keyword) = s.try_into() {
+        } else if let Ok(keyword) = s.parse() {
             Ok(Self::Keyword(keyword))
-        } else if let Ok(operator) = s.try_into() {
-            Ok(Self::Operator(operator))
-        } else if let Ok(assignment) = s.try_into() {
+        } else if let Ok(assignment) = s.parse() {
             Ok(Self::Assignment(assignment))
-        } else if let Ok(comparison) = s.try_into() {
+        } else if let Ok(comparison) = s.parse() {
             Ok(Self::Comparison(comparison))
-        } else if let Ok(punctuation) = s.try_into() {
+        } else if let Ok(operator) = s.parse() {
+            Ok(Self::Operator(operator))
+        } else if let Ok(punctuation) = s.parse() {
             Ok(Self::Punctuation(punctuation))
         } else if let Ok(i) = s.parse() {
             Ok(Self::Integer(i))
@@ -195,295 +199,123 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum StatementKeywordToken {
-    Become,
-    Break,
-    Case,
-    Continue,
-    Else,
-    For,
-    If,
-    Remain,
-    Return,
-    Set,
-    Unless,
-    While,
-}
-impl fmt::Display for StatementKeywordToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Become => "become",
-                Self::Break => "break",
-                Self::Case => "case",
-                Self::Continue => "continue",
-                Self::Else => "else",
-                Self::For => "for",
-                Self::If => "if",
-                Self::Remain => "remain",
-                Self::Return => "return",
-                Self::Set => "set",
-                Self::Unless => "unless",
-                Self::While => "while",
-            }
-        )
-    }
-}
-impl TryFrom<&str> for StatementKeywordToken {
-    type Error = ();
-    fn try_from(s: &str) -> Result<Self, ()> {
-        match s {
-            "become" => Ok(Self::Become),
-            "break" => Ok(Self::Break),
-            "case" => Ok(Self::Case),
-            "continue" => Ok(Self::Continue),
-            "else" => Ok(Self::Else),
-            "for" => Ok(Self::For),
-            "if" => Ok(Self::If),
-            "remain" => Ok(Self::Remain),
-            "return" => Ok(Self::Return),
-            "set" => Ok(Self::Set),
-            "unless" => Ok(Self::Unless),
-            "while" => Ok(Self::While),
-            _ => Err(()),
-        }
-    }
-}
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum KeywordToken {
-    In,
-    Is,
-    Where,
-}
-impl fmt::Display for KeywordToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::In => "in",
-                Self::Is => "is",
-                Self::Where => "where",
-            }
-        )
-    }
-}
-impl TryFrom<&str> for KeywordToken {
-    type Error = ();
-    fn try_from(s: &str) -> Result<Self, ()> {
-        match s {
-            "in" => Ok(Self::In),
-            "is" => Ok(Self::Is),
-            "where" => Ok(Self::Where),
-            _ => Err(()),
-        }
-    }
-}
+enum_with_str_repr! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum StatementKeywordToken {
+        // Loops
+        For = "for",
+        While = "while",
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum OperatorToken {
-    Ampersand,
-    And,
-    Asterisk,
-    Caret,
-    Dot,
-    DotDot,
-    DoubleAsterisk,
-    Minus,
-    Or,
-    Percent,
-    Pipe,
-    Plus,
-    Slash,
-    Tag,
-    Xor,
-}
-impl fmt::Display for OperatorToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Ampersand => "&",
-                Self::And => "and",
-                Self::Asterisk => "*",
-                Self::Caret => "^",
-                Self::Dot => ".",
-                Self::DotDot => "..",
-                Self::DoubleAsterisk => "**",
-                Self::Minus => "-",
-                Self::Or => "or",
-                Self::Percent => "%",
-                Self::Pipe => "|",
-                Self::Plus => "+",
-                Self::Slash => "/",
-                Self::Tag => "#",
-                Self::Xor => "xor",
-            }
-        )
+        // Loop control
+        Break = "break",
+        Continue = "continue",
+
+        // Returning values
+        Become = "become",
+        Remain = "remain",
+        Return = "return",
+
+        // Branching
+        Case = "case",
+        Else = "else",
+        If = "if",
+        Unless = "unless",
+
+        // Variables
+        Set = "set",
     }
-}
-impl TryFrom<&str> for OperatorToken {
-    type Error = ();
-    fn try_from(s: &str) -> Result<Self, ()> {
-        match s {
-            "&" => Ok(Self::Ampersand),
-            "and" => Ok(Self::And),
-            "*" => Ok(Self::Asterisk),
-            "^" => Ok(Self::Caret),
-            "." => Ok(Self::Dot),
-            ".." => Ok(Self::DotDot),
-            "**" => Ok(Self::DoubleAsterisk),
-            "-" => Ok(Self::Minus),
-            "or" => Ok(Self::Or),
-            "%" => Ok(Self::Percent),
-            "|" => Ok(Self::Pipe),
-            "+" => Ok(Self::Plus),
-            "/" => Ok(Self::Slash),
-            "#" => Ok(Self::Tag),
-            "xor" => Ok(Self::Xor),
-            _ => Err(()),
-        }
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum KeywordToken {
+        // Boolean operators
+        Or = "or",
+        Xor = "xor",
+        And = "and",
+
+        // Miscellaneous keywords
+        In = "in",
+        Is = "is",
+        Where = "where",
+    }
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum OperatorToken {
+        // Arithmetic operators
+        Plus = "+",
+        Minus = "-",
+        Asterisk = "*",
+        Slash = "/",
+        Percent = "%",
+        DoubleAsterisk = "**",
+
+        // Bitshift operators
+        DoubleLessThan = "<<",
+        DoubleGreaterThan = ">>",
+        TripleGreaterThan = ">>>",
+
+        // Bitwise operators
+        Ampersand = "&",
+        Pipe = "|",
+        Caret = "^",
+
+        // Boolean operators are in KeywordToken
+
+        // Miscellaneous operators
+        Dot = ".",
+        DotDot = "..",
+        Tag = "#",
+    }
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum PunctuationToken {
+        LParen = "(",
+        RParen = ")",
+        LBracket = "[",
+        RBracket = "]",
+        LBrace = "{",
+        RBrace = "}",
+        Comma = ",",
+        Semicolon = ";",
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AssignmentToken {
     Assign,
-    AddAssign,
-    DivAssign,
-    ExpAssign,
-    MulAssign,
-    RemAssign,
-    ShlAssign,
-    ShrAssign,
-    SubAssign,
+    OpAssign(Op),
 }
 impl fmt::Display for AssignmentToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Assign => "=",
-                Self::AddAssign => "+=",
-                Self::DivAssign => "/=",
-                Self::ExpAssign => "**=",
-                Self::MulAssign => "*=",
-                Self::RemAssign => "%=",
-                Self::ShlAssign => "<<=",
-                Self::ShrAssign => ">>=",
-                Self::SubAssign => "-=",
-            }
-        )
+        match self {
+            Self::Assign => write!(f, "="),
+            Self::OpAssign(op) => write!(f, "{}=", op),
+        }
     }
 }
-impl TryFrom<&str> for AssignmentToken {
-    type Error = ();
-    fn try_from(s: &str) -> Result<Self, ()> {
-        match s {
-            "=" => Ok(Self::Assign),
-            "+=" => Ok(Self::AddAssign),
-            "/=" => Ok(Self::DivAssign),
-            "**=" => Ok(Self::ExpAssign),
-            "*=" => Ok(Self::MulAssign),
-            "%=" => Ok(Self::RemAssign),
-            "<<=" => Ok(Self::ShlAssign),
-            ">>=" => Ok(Self::ShrAssign),
-            "-=" => Ok(Self::SubAssign),
-            _ => Err(()),
+impl FromStr for AssignmentToken {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        if let Some(op_str) = ASSIGN_PATTERN
+            .captures(s)
+            .and_then(|captures| captures.get(1))
+            .as_ref()
+            .map(regex::Match::as_str)
+        {
+            if op_str.is_empty() {
+                return Ok(Self::Assign);
+            } else if let Ok(math_op) = op_str.parse() {
+                return Ok(Self::OpAssign(Op::Math(math_op)));
+            } else if let Ok(shift_op) = op_str.parse() {
+                return Ok(Self::OpAssign(Op::Shift(shift_op)));
+            } else if let Ok(bit_op) = op_str.parse() {
+                return Ok(Self::OpAssign(Op::Bitwise(bit_op)));
+            }
         }
+        Err(())
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ComparisonToken {
-    Eql,
-    Neq,
-    Lt,
-    Gt,
-    Lte,
-    Gte,
-}
-impl fmt::Display for ComparisonToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Eql => "==",
-                Self::Neq => "!=",
-                Self::Lt => "<",
-                Self::Gt => ">",
-                Self::Lte => "<=",
-                Self::Gte => ">=",
-            }
-        )
-    }
-}
-impl TryFrom<&str> for ComparisonToken {
-    type Error = ();
-    fn try_from(s: &str) -> Result<Self, ()> {
-        match s {
-            "==" => Ok(Self::Eql),
-            "!=" => Ok(Self::Neq),
-            "<" => Ok(Self::Lt),
-            ">" => Ok(Self::Gt),
-            "<=" => Ok(Self::Lte),
-            ">=" => Ok(Self::Gte),
-            _ => Err(()),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum PunctuationToken {
-    LParen,
-    RParen,
-    LBracket,
-    RBracket,
-    LBrace,
-    RBrace,
-    Comma,
-    Semicolon,
-}
-impl fmt::Display for PunctuationToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::LParen => "(",
-                Self::RParen => ")",
-                Self::LBracket => "[",
-                Self::RBracket => "]",
-                Self::LBrace => "{",
-                Self::RBrace => "}",
-                Self::Comma => ",",
-                Self::Semicolon => ";",
-            }
-        )
-    }
-}
-impl TryFrom<&str> for PunctuationToken {
-    type Error = ();
-    fn try_from(s: &str) -> Result<Self, ()> {
-        match s {
-            "(" => Ok(Self::LParen),
-            ")" => Ok(Self::RParen),
-            "[" => Ok(Self::LBracket),
-            "]" => Ok(Self::RBracket),
-            "{" => Ok(Self::LBrace),
-            "}" => Ok(Self::RBrace),
-            "," => Ok(Self::Comma),
-            ";" => Ok(Self::Semicolon),
-            _ => Err(()),
-        }
-    }
-}
+pub type ComparisonToken = Cmp;
 
 #[cfg(test)]
 mod tests {

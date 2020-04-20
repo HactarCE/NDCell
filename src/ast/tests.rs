@@ -10,26 +10,40 @@ fn test_ast() {
 }
 ";
 
-    let tokens = tokens::tokenize(source_code).expect("Tokenization failed");
-    let ast = AstBuilder::from(&tokens[..])
-        .directives()
-        .expect("AST generation failed");
+    let ast = make_program(source_code)
+        .expect("AST generation failed")
+        .transition_fn;
 
     let mut correct = false;
     use untyped::*;
-    if let Directive::Transition(ast) = &ast[0].inner {
-        if let Statement::Become(ast) = &ast[0].inner {
-            if let Expr::Tag(ast) = &ast.inner {
-                if let Expr::Op(lhs, Op::Add, rhs) = &ast.inner {
-                    if let (Expr::Op(lhs, Op::Sub, rhs), Expr::Int(12)) = (&lhs.inner, &rhs.inner) {
-                        if let (Expr::Int(1), Expr::Op(lhs, Op::Add, rhs)) =
-                            (&lhs.inner, &rhs.inner)
-                        {
-                            if let (Expr::Int(2), Expr::Neg(ast)) = (&lhs.inner, &rhs.inner) {
-                                if let Expr::Int(3) = &ast.inner {
-                                    correct = true;
-                                }
-                            }
+    if let Statement::Become(ast) = &ast[0].inner {
+        if let Expr::Tag(ast) = &ast.inner {
+            if let Expr::Op {
+                lhs,
+                op: Op::Math(MathOp::Add),
+                rhs,
+            } = &ast.inner
+            {
+                if let (
+                    Expr::Op {
+                        lhs,
+                        op: Op::Math(MathOp::Sub),
+                        rhs,
+                    },
+                    Expr::Int(12),
+                ) = (&lhs.inner, &rhs.inner)
+                {
+                    if let (
+                        Expr::Int(1),
+                        Expr::Op {
+                            lhs,
+                            op: Op::Math(MathOp::Add),
+                            rhs,
+                        },
+                    ) = (&lhs.inner, &rhs.inner)
+                    {
+                        if let (Expr::Int(2), Expr::Int(-3)) = (&lhs.inner, &rhs.inner) {
+                            correct = true;
                         }
                     }
                 }
@@ -37,11 +51,8 @@ fn test_ast() {
         }
     }
     if !correct {
-        println!("Tokens:");
-        println!("{:?}", tokens);
-        println!();
         println!("AST:");
-        println!("{:?}", ast);
+        println!("{:#?}", ast);
         println!();
         panic!("AST is incorrect");
     }

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
+use super::ast::common::{Cmp, Op};
 use super::span::Span;
 use super::types::Type;
 
@@ -102,20 +103,9 @@ pub enum LangErrorMsg {
     InvalidDirectiveName,
     MissingTransitionFunction,
     MultipleTransitionFunctions,
-    TypeError {
-        expected: Type,
-        got: Type,
-    },
-    OpError {
-        op_sym: &'static str,
-        lhs: Type,
-        rhs: Type,
-    },
-    CmpError {
-        cmp_sym: &'static str,
-        lhs: Type,
-        rhs: Type,
-    },
+    TypeError { expected: Type, got: Type },
+    OpError { op: Op, lhs: Type, rhs: Type },
+    CmpError { cmp: Cmp, lhs: Type, rhs: Type },
     CannotAssignTypeToVariable(Type),
     UseOfUninitializedVariable,
     BecomeInHelperFunction,
@@ -178,18 +168,14 @@ impl fmt::Display for LangErrorMsg {
             Self::TypeError { expected, got } => {
                 write!(f, "Type error: expected {} but got {}", expected, got)?;
             }
-            Self::OpError { op_sym, lhs, rhs } => {
-                write!(
-                    f,
-                    "Cannot apply operation '{}' to {} and {}",
-                    op_sym, lhs, rhs
-                )?;
+            Self::OpError { op, lhs, rhs } => {
+                write!(f, "Cannot apply operation '{}' to {} and {}", op, lhs, rhs)?;
             }
-            Self::CmpError { cmp_sym, lhs, rhs } => {
+            Self::CmpError { cmp, lhs, rhs } => {
                 write!(
                     f,
                     "Type error: cannot compare {} to {} using '{}'",
-                    lhs, rhs, cmp_sym
+                    lhs, rhs, cmp
                 )?;
                 if *lhs == Type::CellState && *rhs == Type::CellState {
                     write!(f, "; convert them to integers first using the '#id' tag")?;

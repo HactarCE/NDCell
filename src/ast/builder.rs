@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use super::super::errors::*;
 use super::super::span::{Span, Spanned};
-use super::components::{untyped::*, Cmp, Op};
+use super::components::{untyped::*, Cmp, MathOp, Op};
 use super::tokens::*;
 use LangErrorMsg::{
     ElseWithoutIf, Expected, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
@@ -248,7 +248,11 @@ impl<'a> AstBuilder<'a> {
                         value_expr: if let Some(op) = assign_op.inner {
                             Spanned {
                                 span: assign_op.span,
-                                inner: Expr::Op(Box::new(var), op, Box::new(expr)),
+                                inner: Expr::Op {
+                                    lhs: Box::new(var),
+                                    op,
+                                    rhs: Box::new(expr),
+                                },
                             }
                         } else {
                             expr
@@ -370,16 +374,16 @@ impl<'a> AstBuilder<'a> {
             let lhs = Box::new(ret);
             let rhs = Box::new(rhs);
             let op = match op_token.class {
-                TokenClass::Operator(OperatorToken::Plus) => Op::Add,
-                TokenClass::Operator(OperatorToken::Minus) => Op::Sub,
-                TokenClass::Operator(OperatorToken::Asterisk) => Op::Mul,
-                TokenClass::Operator(OperatorToken::Slash) => Op::Div,
-                TokenClass::Operator(OperatorToken::Percent) => Op::Rem,
+                TokenClass::Operator(OperatorToken::Plus) => Op::Math(MathOp::Add),
+                TokenClass::Operator(OperatorToken::Minus) => Op::Math(MathOp::Sub),
+                TokenClass::Operator(OperatorToken::Asterisk) => Op::Math(MathOp::Mul),
+                TokenClass::Operator(OperatorToken::Slash) => Op::Math(MathOp::Div),
+                TokenClass::Operator(OperatorToken::Percent) => Op::Math(MathOp::Rem),
                 other => panic!("Invalid binary operator: {:?}", other),
             };
             ret = Spanned {
                 span: Span::merge(&*lhs, &*rhs),
-                inner: Expr::Op(lhs, op, rhs),
+                inner: Expr::Op { lhs, op, rhs },
             };
         }
         Ok(ret)
@@ -430,19 +434,8 @@ impl<'a> AstBuilder<'a> {
     fn assign_op(&mut self) -> LangResult<Option<Op>> {
         use AssignmentToken::*;
         match self.next().map(|t| t.class) {
-            Some(TokenClass::Assignment(assign_type)) => Ok(match assign_type {
-                // TODO implement the remaining operators.
-                Assign => None,
-                AddAssign => Some(Op::Add),
-                DivAssign => Some(Op::Div),
-                // ExpAssign => Some(Op::Exp),
-                MulAssign => Some(Op::Mul),
-                RemAssign => Some(Op::Rem),
-                // ShlAssign => Some(Op::Shl),
-                // ShrAssign => Some(Op::Shr),
-                SubAssign => Some(Op::Sub),
-                _ => self.err(Unimplemented)?,
-            }),
+            Some(TokenClass::Assignment(Assign)) => Ok(None),
+            Some(TokenClass::Assignment(OpAssign(op))) => Ok(Some(op)),
             _ => self.err(Expected("assignment symbol, e.g. '='")),
         }
     }

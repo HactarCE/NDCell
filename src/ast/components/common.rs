@@ -1,46 +1,124 @@
 use std::convert::TryFrom;
+use std::fmt;
+use std::str::FromStr;
 
-use super::super::tokens::ComparisonToken;
-
-pub const DISPLAY_INDENT: usize = 2;
-
+/// A binary (two-input) operator.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Op {
-    /// Addition
-    Add,
-    /// Subtraction
-    Sub,
-    /// Multiplication
-    Mul,
-    /// Division
-    Div,
-    /// Remainder
-    Rem,
+    /// Mathematical operator.
+    Math(MathOp),
+    /// Bitshift operator.
+    Shift(ShiftOp),
+    /// Bitwise operator.
+    Bitwise(BitOp),
+    /// Logical operator.
+    Logic(LogicOp),
 }
-impl Op {
-    pub fn get_symbol(self) -> &'static str {
+impl fmt::Display for Op {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Add => "+",
-            Self::Sub => "-",
-            Self::Mul => "*",
-            Self::Div => "/",
-            Self::Rem => "%",
+            Self::Math(op) => write!(f, "{}", op),
+            Self::Shift(op) => write!(f, "{}", op),
+            Self::Bitwise(op) => write!(f, "{}", op),
+            Self::Logic(op) => write!(f, "{}", op),
+        }
+    }
+}
+impl FromStr for Op {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        if let Ok(math_op) = s.parse() {
+            Ok(Self::Math(math_op))
+        } else if let Ok(shift_op) = s.parse() {
+            Ok(Self::Shift(shift_op))
+        } else if let Ok(bitwise_op) = s.parse() {
+            Ok(Self::Bitwise(bitwise_op))
+        } else if let Ok(logic_op) = s.parse() {
+            Ok(Self::Logic(logic_op))
+        } else {
+            Err(())
         }
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum EqCmp {
-    /// == Equal
-    Eql,
-    /// != Not equal
-    Neq,
+enum_with_str_repr! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum MathOp {
+        /// Addition.
+        Add = "+",
+        /// Subtraction.
+        Sub = "-",
+        /// Multiplication.
+        Mul = "*",
+        /// Division.
+        Div = "/",
+        /// Remainder.
+        Rem = "%",
+        /// Exponentiation.
+        Exp = "**",
+    }
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum ShiftOp {
+        /// Shift left.
+        Shl = "<<",
+        /// Shift right (arithmetic/signed).
+        Shr = ">>",
+        /// Shift right (logical/unsigned).
+        Srl = ">>>",
+    }
+
+   #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum BitOp {
+        /// Bitwise AND.
+        And = "&",
+        /// Bitwise OR.
+        Or = "|",
+        /// Bitwise XOR.
+        Xor = "^",
+    }
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum LogicOp {
+        /// Logical AND.
+        And = "and",
+        /// Logical OR.
+        Or = "or",
+        /// Logical XOR.
+        Xor = "xor",
+    }
+
+    /// A comparison operator.
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum Cmp {
+        /// Equal.
+        Eql = "==",
+        /// Not equal.
+        Neq = "!=",
+        /// Less than.
+        Lt = "<",
+        /// Greater than.
+        Gt = ">",
+        /// Less than or equal.
+        Lte = "<=",
+        /// Greater than or equal.
+        Gte = ">=",
+    }
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum EqCmp {
+        /// Equal.
+        Eql = "==",
+        /// Not equal.
+        Neq = "!=",
+    }
 }
-impl EqCmp {
-    pub fn get_symbol(self) -> &'static str {
-        match self {
-            Self::Eql => "==",
-            Self::Neq => "!=",
+
+impl From<EqCmp> for Cmp {
+    fn from(eq_cmp: EqCmp) -> Self {
+        match eq_cmp {
+            EqCmp::Eql => Self::Eql,
+            EqCmp::Neq => Self::Neq,
         }
     }
 }
@@ -51,55 +129,6 @@ impl TryFrom<Cmp> for EqCmp {
             Cmp::Eql => Ok(Self::Eql),
             Cmp::Neq => Ok(Self::Neq),
             _ => Err(()),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Cmp {
-    /// == Equal
-    Eql,
-    /// != Not equal
-    Neq,
-    /// <  Less than
-    Lt,
-    /// >  Greater than
-    Gt,
-    /// <= Less than or equal
-    Lte,
-    /// >= Greater than or equal
-    Gte,
-}
-impl Cmp {
-    pub fn get_symbol(self) -> &'static str {
-        match self {
-            Self::Eql => "==",
-            Self::Neq => "!=",
-            Self::Lt => "<",
-            Self::Gt => ">",
-            Self::Lte => "<=",
-            Self::Gte => ">=",
-        }
-    }
-}
-impl From<EqCmp> for Cmp {
-    fn from(eq_cmp: EqCmp) -> Self {
-        match eq_cmp {
-            EqCmp::Eql => Self::Eql,
-            EqCmp::Neq => Self::Neq,
-        }
-    }
-}
-impl From<ComparisonToken> for Cmp {
-    fn from(token_class: ComparisonToken) -> Self {
-        use ComparisonToken::*;
-        match token_class {
-            Eql => Self::Eql,
-            Neq => Self::Neq,
-            Lt => Self::Lt,
-            Gt => Self::Gt,
-            Lte => Self::Lte,
-            Gte => Self::Gte,
         }
     }
 }

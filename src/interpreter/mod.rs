@@ -4,10 +4,9 @@ mod value;
 pub use value::Value;
 
 use super::types::{LangCellState, LangInt, Type};
-use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
+use super::{ast, errors::*, Spanned, CELL_STATE_COUNT};
 use LangErrorMsg::{
-    CannotAssignTypeToVariable, CellStateOutOfRange, CmpError, DivideByZero, IntegerOverflow,
-    InternalError, TypeError, Unimplemented, UseOfUninitializedVariable,
+    CellStateOutOfRange, DivideByZero, IntegerOverflow, InternalError, Unimplemented,
 };
 
 pub enum ExecuteResult {
@@ -144,19 +143,26 @@ impl State {
                 Op { lhs, op, rhs } => {
                     let lhs = self.eval_int_expr(&lhs)?.inner;
                     let rhs = self.eval_int_expr(&rhs)?.inner;
-                    // Check for division by zero.
-                    if (*op == ast::Op::Div || *op == ast::Op::Rem) && rhs == 0 {
-                        Err(DivideByZero.with_span(span))?;
-                    }
-                    // Do the operation, checking for overflow.
                     match op {
-                        ast::Op::Add => lhs.checked_add(rhs),
-                        ast::Op::Sub => lhs.checked_sub(rhs),
-                        ast::Op::Mul => lhs.checked_mul(rhs),
-                        ast::Op::Div => lhs.checked_div(rhs),
-                        ast::Op::Rem => lhs.checked_rem(rhs),
+                        ast::Op::Math(math_op) => {
+                            use ast::MathOp::*;
+                            // Check for division by zero.
+                            if (*math_op == Div || *math_op == Rem) && rhs == 0 {
+                                Err(DivideByZero.with_span(span))?;
+                            }
+                            // Do the operation, checking for overflow.
+                            match math_op {
+                                Add => lhs.checked_add(rhs),
+                                Sub => lhs.checked_sub(rhs),
+                                Mul => lhs.checked_mul(rhs),
+                                Div => lhs.checked_div(rhs),
+                                Rem => lhs.checked_rem(rhs),
+                                Exp => Err(Unimplemented.with_span(span))?,
+                            }
+                            .ok_or_else(|| IntegerOverflow.with_span(span))?
+                        }
+                        _ => Err(Unimplemented.with_span(span))?,
                     }
-                    .ok_or_else(|| IntegerOverflow.with_span(span))?
                 }
                 Neg(x) => self
                     .eval_int_expr(x)?

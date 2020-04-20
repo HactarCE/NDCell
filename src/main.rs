@@ -2,6 +2,9 @@
 
 use inkwell::context::Context;
 
+#[macro_use]
+mod macros;
+
 mod ast;
 mod compiler;
 mod errors;
@@ -16,29 +19,29 @@ const CELL_STATE_COUNT: usize = 100;
 
 fn main() -> Result<(), ()> {
     let source_code = "
-        @transition {
-            set x = 3
-            // if 0 { set some_var = 0 } set some_var += 0 // no-op because variable has been defined
-            set y = 2 - 10
-            set y -= 3
-            // set y = z // use of uninitialized variable
-            set z = #(-y / x)
-            // set z = 0 // type error
-            become z
-            // become #(9223372036854775805 + 3)   // overflow
-            // become #(-9223372036854775808 / -1) // overflow
-            // become #(--9223372036854775808)     // overflow
-            // become #(10 % 0)                    // div by zero
-            if 3 * 99 % 2 == 1 {
-                become #(10 / 3 * 3)
-            } else if 1 + 2 < 2 {
-                become #12
-            } else {
-                become #98
+            @transition {
+                set x = 3
+                // if 0 { set some_var = 0 } set some_var += 0 // no-op because variable has been defined
+                set y = 2 - 10
+                set y -= 3
+                // set y = z // use of uninitialized variable
+                set z = #(-y / x)
+                // set z = 0 // type error
+                become z
+                // become #(9223372036854775805 + 3)   // overflow
+                // become #(-9223372036854775808 / -1) // overflow
+                // become #(--9223372036854775808)     // overflow
+                // become #(10 % 0)                    // div by zero
+                if 3 * 99 % 2 == 1 {
+                    become #(10 / 3 * 3)
+                } else if 1 + 2 < 2 {
+                    become #12
+                } else {
+                    become #98
+                }
+                become #2 // unreachable
             }
-            become #2 // unreachable
-        }
-        ";
+            ";
     let program = make_program(source_code).map_err(|err| {
         println!(
             "Error while parsing program and generating AST\n{}",

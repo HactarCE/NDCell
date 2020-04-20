@@ -275,23 +275,24 @@ impl<'ctx> Compiler<'ctx> {
                     let lhs = self.build_int_expr(lhs)?.inner;
                     let rhs = self.build_int_expr(rhs)?.inner;
                     match op {
-                        ast::Op::Add => {
-                            self.build_checked_int_arithmetic(lhs, rhs, span, "sadd")?
+                        ast::Op::Math(math_op) => {
+                            use ast::MathOp::*;
+                            match math_op {
+                                Add => self.build_checked_int_arithmetic(lhs, rhs, span, "sadd")?,
+                                Sub => self.build_checked_int_arithmetic(lhs, rhs, span, "ssub")?,
+                                Mul => self.build_checked_int_arithmetic(lhs, rhs, span, "smul")?,
+                                Div => {
+                                    self.build_div_check(lhs, rhs, span)?;
+                                    self.builder.build_int_signed_div(lhs, rhs, "tmp_div")
+                                }
+                                Rem => {
+                                    self.build_div_check(lhs, rhs, span)?;
+                                    self.builder.build_int_signed_rem(lhs, rhs, "tmp_rem")
+                                }
+                                Exp => Err(Unimplemented.with_span(span))?,
+                            }
                         }
-                        ast::Op::Sub => {
-                            self.build_checked_int_arithmetic(lhs, rhs, span, "ssub")?
-                        }
-                        ast::Op::Mul => {
-                            self.build_checked_int_arithmetic(lhs, rhs, span, "smul")?
-                        }
-                        ast::Op::Div => {
-                            self.build_div_check(lhs, rhs, span)?;
-                            self.builder.build_int_signed_div(lhs, rhs, "tmp_div")
-                        }
-                        ast::Op::Rem => {
-                            self.build_div_check(lhs, rhs, span)?;
-                            self.builder.build_int_signed_rem(lhs, rhs, "tmp_rem")
-                        }
+                        _ => Err(Unimplemented.with_span(span))?,
                     }
                 }
                 Neg(x) => {

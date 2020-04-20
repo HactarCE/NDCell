@@ -209,8 +209,17 @@ pub struct FnCall {
     is_method: bool,
 }
 
-/// N operands joined by N-1 comparison operators, used for chained comparisons
-/// (e.g. `0 < x <= 3`).
+/// A series of chained comparisons, a la Python. For example, `x < y == z`
+/// would be represented (roughly) as:
+/// ```
+/// CmpExpr {
+///     initial: x,
+///     comparisons: vec![
+///         (Cmp::LessThan, y),
+///         (Cmp::Equal, z),
+///     ],
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct CmpExpr<ExprType, CmpType: Copy> {
     pub initial: Box<Spanned<ExprType>>,
@@ -248,7 +257,7 @@ impl<E> CmpExpr<E, Cmp> {
             new_comparisons.push((
                 cmp.try_into().map_err(|_| {
                     CmpError {
-                        cmp_sym: cmp.get_symbol(),
+                        cmp,
                         lhs: ty,
                         rhs: ty,
                     }
@@ -264,17 +273,3 @@ impl<E> CmpExpr<E, Cmp> {
         })
     }
 }
-// impl<E, C> CmpExpr<E, C> {
-//     pub fn new(
-//         initial: Spanned<E>,
-//         comparisons: Vec<(C, Spanned<E>)>,
-//     ) -> LangResult<Self> {
-//         Ok(Self {
-//             initial: Box::new(initial),
-//             comparisons: comparisons
-//                 .into_iter()
-//                 .map(|(cmp, expr)| (cmp, expr.try_into()?))
-//                 .collect::<LangResult<_>>()?,
-//         })
-//     }
-// }

@@ -116,9 +116,9 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                 let x = expr.resolve_types(meta)?.int()?;
                 Ok(typed::IntExpr::Neg(Box::new(x)).as_generic(span))
             }
-            untyped::Expr::Op(expr1, op, expr2) => {
-                let lhs = expr1.resolve_types(meta)?;
-                let rhs = expr2.resolve_types(meta)?;
+            untyped::Expr::Op { lhs, op, rhs } => {
+                let lhs = lhs.resolve_types(meta)?;
+                let rhs = rhs.resolve_types(meta)?;
                 use Type::*;
                 match (lhs.get_type(), op, rhs.get_type()) {
                     (Int, op, Int) => Ok(typed::IntExpr::Op {
@@ -128,7 +128,7 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                     }
                     .as_generic(span)),
                     _ => Err(OpError {
-                        op_sym: op.get_symbol(),
+                        op,
                         lhs: lhs.get_type(),
                         rhs: rhs.get_type(),
                     }

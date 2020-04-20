@@ -47,7 +47,7 @@ impl TextPoint {
 }
 
 /// A contiguous span of text from one byte index to another in a &str.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Span {
     /// The byte index of the first character.
     pub start: usize,
@@ -55,6 +55,13 @@ pub struct Span {
     pub end: usize,
 }
 impl Span {
+    /// Returns a 0-length span at the given index.
+    pub fn empty(idx: usize) -> Self {
+        Self {
+            start: idx,
+            end: idx,
+        }
+    }
     /// Returns a pair of TextPoints representing the start and end of this
     /// span applied to a given &str.
     pub fn textpoints(self, string: &str) -> (TextPoint, TextPoint) {

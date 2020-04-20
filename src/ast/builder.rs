@@ -121,7 +121,7 @@ impl<'a> AstBuilder<'a> {
         if self.cursor.is_none() {
             // This is the beginning of the token stream; return an empty span
             // at the beginning of the file.
-            Span::default()
+            Span::empty(0)
         } else {
             match self.current() {
                 // This is the middle of the token stream.
@@ -131,11 +131,8 @@ impl<'a> AstBuilder<'a> {
                 None => self
                     .tokens
                     .last()
-                    .map(|t| Span {
-                        start: t.span.end,
-                        end: t.span.end,
-                    })
-                    .unwrap_or_default(),
+                    .map(|t| Span::empty(t.span.end))
+                    .unwrap_or(Span::empty(0)),
             }
         }
     }

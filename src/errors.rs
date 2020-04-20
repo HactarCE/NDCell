@@ -6,14 +6,21 @@ use super::ast::common::{Cmp, Op};
 use super::span::Span;
 use super::types::Type;
 
+/// A Result of a LangError and an accompanying line of source code.
 pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
+/// A Result of a LangError.
 pub type LangResult<T> = Result<T, LangError>;
 
+/// An error type and an accompanying line and span of source code.
 #[derive(Debug, Clone)]
 pub struct LangErrorWithSource {
+    /// The string of source code of the error location (if any).
     pub source_line: Option<String>,
+    /// The 1-indexed line number of the error location (if any).
     pub line_num: Option<usize>,
+    /// The span of the error location (if any).
     pub span: Option<(usize, usize)>,
+    /// The type of error.
     pub msg: LangErrorMsg,
 }
 impl fmt::Display for LangErrorWithSource {
@@ -44,22 +51,30 @@ impl fmt::Display for LangErrorWithSource {
 }
 impl Error for LangErrorWithSource {}
 
+/// An error type and an accompanying span.
 #[derive(Debug, Clone)]
 pub struct LangError {
+    /// The span of the error location (if any).
     pub span: Option<Span>,
+    /// The type of error.
     pub msg: LangErrorMsg,
 }
 impl LangError {
+    /// Attaches a span to this LangError, if it does not already have one.
     pub fn with_span(mut self, span: impl Into<Span>) -> Self {
         if self.span.is_none() {
             self.span = Some(span.into());
         }
         self
     }
+    /// Provides a line of source code as context to this error, returning a
+    /// LangErrorWithSource.
     pub fn with_source(self, src: &str) -> LangErrorWithSource {
         if let Some(span) = self.span {
             let (start_tp, end_tp) = span.textpoints(src);
             let start = start_tp.column();
+            // If the error spans multiple lines, use a zero-length span on the
+            // first line.
             let mut end = start;
             if start_tp.line() == end_tp.line() && end_tp.column() > start_tp.column() {
                 end = end_tp.column();
@@ -85,6 +100,7 @@ impl LangError {
     }
 }
 
+/// Information about the type of error that occurred.
 #[derive(Debug, Clone)]
 pub enum LangErrorMsg {
     // Miscellaneous errors
@@ -214,12 +230,14 @@ impl fmt::Display for LangErrorMsg {
     }
 }
 impl LangErrorMsg {
+    /// Attaches a span to this error message, returning a LangError.
     pub fn with_span(self, span: impl Into<Span>) -> LangError {
         LangError {
             span: Some(span.into()),
             msg: self,
         }
     }
+    /// Returns a LangError from this error message, without a span.
     pub const fn without_span(self) -> LangError {
         LangError {
             span: None,

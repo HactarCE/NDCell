@@ -44,9 +44,9 @@ fn main() -> Result<(), ()> {
                 become #2 // unreachable
             }
             ";
-    let program = make_program(source_code).map_err(|err| {
+    let rule = ast::make_ndca_rule(source_code).map_err(|err| {
         println!(
-            "Error while parsing program and generating AST\n{}",
+            "Error while parsing rule and generating AST\n{}",
             err.with_source(source_code)
         );
         ()
@@ -54,7 +54,7 @@ fn main() -> Result<(), ()> {
 
     println!();
     // Interpret transition function.
-    let result = interpret(program.clone());
+    let result = interpret(rule.clone());
     match result {
         Ok(ret) => println!("Interpreted transition function output: {:?}", ret),
         Err(err) => println!(
@@ -65,7 +65,7 @@ fn main() -> Result<(), ()> {
 
     println!();
     // Compile and execute transition function.
-    let result = compile_and_run(program);
+    let result = compile_and_run(rule);
     match result {
         Ok(ret) => println!("JIT-compiled transition function output: {:?}", ret),
         Err(err) => println!(
@@ -77,10 +77,10 @@ fn main() -> Result<(), ()> {
     Ok(())
 }
 
-/// Runs the given program's transition function using the interpreter and
-/// returns the result.
-fn interpret(program: ast::Program) -> LangResult<interpreter::Value> {
-    let mut interpreter = interpreter::State::new(program.transition_fn)?;
+/// Runs the given rule's transition function using the interpreter and returns
+/// the result.
+fn interpret(rule: ast::Rule) -> LangResult<interpreter::Value> {
+    let mut interpreter = interpreter::State::new(rule.transition_fn)?;
     loop {
         if let Some(ret) = interpreter.step()?.return_value() {
             return Ok(ret);
@@ -88,18 +88,14 @@ fn interpret(program: ast::Program) -> LangResult<interpreter::Value> {
     }
 }
 
-/// Runs the given program's transition function using the compiler and returns
-/// the result.
-fn compile_and_run(program: ast::Program) -> LangResult<types::LangCellState> {
+/// Runs the given rule's transition function using the compiler and returns the
+/// result.
+fn compile_and_run(rule: ast::Rule) -> LangResult<types::LangCellState> {
     let context = Context::create();
     let mut compiler = compiler::Compiler::new(&context)?;
-    let transition_fn = compiler.jit_compile_fn(&program.transition_fn)?;
+    let transition_fn = compiler.jit_compile_fn(&rule.transition_fn)?;
     transition_fn.call()
 }
 
-/// Produces an ast::Program from the given source code.
-fn make_program(source_code: &str) -> LangResult<ast::Program> {
-    let untyped_program = ast::make_program(source_code)?;
-    // println!("{}", untyped_program);
-    untyped_program.check_types()
-}
+#[cfg(test)]
+mod tests;

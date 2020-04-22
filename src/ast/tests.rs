@@ -3,7 +3,6 @@
 use super::*;
 
 #[test]
-#[allow(irrefutable_let_patterns)]
 fn test_ast() {
     let source_code = "
 // @states [ #dead, #live ]
@@ -12,7 +11,7 @@ fn test_ast() {
 }
 ";
 
-    let ast = make_program(source_code)
+    let ast = make_rule(source_code)
         .expect("AST generation failed")
         .transition_fn;
 

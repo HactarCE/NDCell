@@ -1,18 +1,37 @@
 //! Methods and structures for creating and verifying an abstract syntax tree.
+//!
+//! This happens in several steps:
+//!
+//! 1. Split source code into list of tokens (ast::tokens)
+//! 2. Create AST from tokens (ast::builder)
+//!     - result is made from ast::components::{common, untyped}
+//! 3. Typecheck AST (ast::typecheck)
+//!     - result is made from ast::components::{common, typed}
+
+use std::convert::{TryFrom, TryInto};
 
 mod builder;
 mod components;
 mod tokens;
 mod typecheck;
 
+use super::errors::LangResult;
 use super::span::Spanned;
-pub use builder::{make_program, AstBuilder};
 pub use components::common::{self, *};
 pub use components::typed::{self, *};
 pub use components::untyped;
 pub use typecheck::ResolveTypes;
 
-/// "Flatten" a block of instructions by replacing the body of all branching
+/// Produces an ast::typed::Rule from the given source code.
+pub fn make_ndca_rule(source_code: &str) -> LangResult<typed::Rule> {
+    let tokens = tokens::tokenize(source_code)?;
+    let untyped_ast = builder::build_ast(&tokens)?;
+    let untyped_rule = untyped::Rule::try_from(untyped_ast)?;
+    let typed_rule = untyped_rule.try_into()?;
+    Ok(typed_rule)
+}
+
+/// "Flattens" a block of instructions by replacing the body of all branching
 /// instructions (If, ForLoop, WhileLoop, etc.) with a single Goto and moving
 /// their contents to the end of the instruction list. This is mainly useful for
 /// the interpreter, which cannot handle nested structure.

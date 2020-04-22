@@ -12,18 +12,18 @@ use LangErrorMsg::{CmpError, TypeError};
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
 
-/// A complete program containing a transition function.
+/// A complete rule containing a transition function.
 #[derive(Debug, Clone)]
-pub struct Program {
+pub struct Rule {
     pub transition_fn: Function,
 }
-impl TryFrom<untyped::Program> for Program {
+impl TryFrom<untyped::Rule> for Rule {
     type Error = LangError;
-    fn try_from(untyped_program: untyped::Program) -> LangResult<Self> {
+    fn try_from(untyped_rule: untyped::Rule) -> LangResult<Self> {
         Ok(Self {
             transition_fn: Function::new(
                 "transition".to_owned(),
-                untyped_program.transition_fn,
+                untyped_rule.transition_fn,
                 FunctionType::Transition,
             )?,
         })
@@ -111,7 +111,7 @@ pub enum Statement {
     /// instruction that will be executed next, since the interpreter still
     /// increments the instruction pointer.
     Goto(usize),
-    /// End of program (used by the interpreter).
+    /// End of rule (used by the interpreter).
     End,
 }
 

@@ -1,7 +1,5 @@
 //! Functions for producing an AST.
 
-use std::convert::TryFrom;
-
 use super::super::errors::*;
 use super::super::span::{Span, Spanned};
 use super::components::{untyped::*, Cmp, MathOp, Op};
@@ -11,11 +9,8 @@ use LangErrorMsg::{
     TopLevelNonDirective, Unimplemented, Unmatched,
 };
 
-/// Produce an AST from source code.
-pub fn make_program(source_code: &str) -> LangResult<Program> {
-    let tokens = tokenize(source_code)?;
-    let directives = AstBuilder::from(&tokens[..]).directives()?;
-    Program::try_from(directives)
+pub fn build_ast(tokens: &[Token]) -> LangResult<Vec<Spanned<Directive>>> {
+    AstBuilder::from(tokens).directives()
 }
 
 /// Operator precedence table.
@@ -75,7 +70,7 @@ impl OpPrecedence {
 
 /// Iterator over tokens that produces an untyped AST.
 #[derive(Debug, Copy, Clone)]
-pub struct AstBuilder<'a> {
+struct AstBuilder<'a> {
     /// Tokens to feed.
     tokens: &'a [Token<'a>],
     /// Index of the "current" token (None = before start).
@@ -91,29 +86,29 @@ impl<'a> From<&'a [Token<'a>]> for AstBuilder<'a> {
 }
 impl<'a> AstBuilder<'a> {
     /// Moves the cursor forward and then returns the element at the cursor.
-    pub fn next(&mut self) -> Option<Token<'a>> {
+    fn next(&mut self) -> Option<Token<'a>> {
         // Add 1 or set to zero.
         self.cursor = Some(self.cursor.map(|idx| idx + 1).unwrap_or(0));
         self.current()
     }
     /// Moves the cursor back and then returns the element at the cursor.
-    pub fn prev(&mut self) -> Option<Token<'a>> {
+    fn prev(&mut self) -> Option<Token<'a>> {
         // Subtract 1 if possible.
         self.cursor = self.cursor.and_then(|idx| idx.checked_sub(1));
         self.current()
     }
     /// Returns the element at the cursor.
-    pub fn current(&self) -> Option<Token<'a>> {
+    fn current(&self) -> Option<Token<'a>> {
         self.cursor.and_then(|idx| self.tokens.get(idx).copied())
     }
     /// Returns the element after the one at the cursor, without mutably moving
     /// the cursor.
-    pub fn peek_next(mut self) -> Option<Token<'a>> {
+    fn peek_next(mut self) -> Option<Token<'a>> {
         self.next()
     }
     /// Returns the element before the one at the cursor, without mutably moving
     /// the cursor.
-    pub fn peek_prev(mut self) -> Option<Token<'a>> {
+    fn peek_prev(mut self) -> Option<Token<'a>> {
         self.prev()
     }
 

@@ -10,18 +10,18 @@ use LangErrorMsg::{MissingTransitionFunction, MultipleTransitionFunctions};
 
 pub type StatementBlock = Vec<Spanned<Statement>>;
 
-/// A complete program containing a transition function, pre-typecheck.
+/// A complete rule containing a transition function, pre-typecheck.
 #[derive(Debug, Clone)]
-pub struct Program {
+pub struct Rule {
     pub transition_fn: StatementBlock,
 }
-impl Program {
-    /// Check types in this program, returning a typed::Program.
-    pub fn check_types(self) -> LangResult<typed::Program> {
+impl Rule {
+    /// Check types in this rule, returning a typed::Rule.
+    pub fn check_types(self) -> LangResult<typed::Rule> {
         self.try_into()
     }
 }
-impl TryFrom<Vec<Spanned<Directive>>> for Program {
+impl TryFrom<Vec<Spanned<Directive>>> for Rule {
     type Error = LangError;
     fn try_from(directives: Vec<Spanned<Directive>>) -> LangResult<Self> {
         let mut transition_fn = None;
@@ -105,9 +105,9 @@ pub enum Expr {
     Cmp(Box<Spanned<Expr>>, Vec<(Cmp, Spanned<Expr>)>),
 }
 
-impl fmt::Display for Program {
+impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Program {{")?;
+        writeln!(f, "Rule {{")?;
         writeln!(f, "    @TRANSITION {:#?}", self.transition_fn)?;
         write!(f, "}}")?;
         Ok(())

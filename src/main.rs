@@ -3,6 +3,8 @@
 #![warn(missing_docs)]
 
 use inkwell::context::Context;
+use std::fs::File;
+use std::io::Read;
 
 #[macro_use]
 mod macros;
@@ -20,34 +22,29 @@ pub use span::{Span, Spanned};
 const CELL_STATE_COUNT: usize = 100;
 
 fn main() -> Result<(), ()> {
-    let source_code = "
-            @transition {
-                set x = 3
-                // if 0 { set some_var = 0 } set some_var += 0 // no-op because variable has been defined
-                set y = 2 - 10
-                set y -= 3
-                // set y = z // use of uninitialized variable
-                set z = #(-y / x)
-                // set z = 0 // type error
-                become z
-                // become #(9223372036854775805 + 3)   // overflow
-                // become #(-9223372036854775808 / -1) // overflow
-                // become #(--9223372036854775808)     // overflow
-                // become #(10 % 0)                    // div by zero
-                if 3 * 99 % 2 == 1 {
-                    become #(10 / 3 * 3)
-                } else if 1 + 2 < 2 {
-                    become #12
-                } else {
-                    become #98
-                }
-                become #2 // unreachable
-            }
-            ";
-    let rule = ast::make_ndca_rule(source_code).map_err(|err| {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        eprintln!(
+            "\
+Please specify a file to run. E.g.
+
+{} examples{}life.ndca",
+            args[0],
+            std::path::MAIN_SEPARATOR,
+        );
+        return Err(());
+    }
+
+    let filename = &args[1];
+    let mut file = File::open(filename).expect("Error opening file");
+    let mut source_code = String::new();
+    file.read_to_string(&mut source_code)
+        .expect("Error reading file");
+
+    let rule = ast::make_ndca_rule(&source_code).map_err(|err| {
         println!(
             "Error while parsing rule and generating AST\n{}",
-            err.with_source(source_code)
+            err.with_source(&source_code)
         );
         ()
     })?;
@@ -59,7 +56,7 @@ fn main() -> Result<(), ()> {
         Ok(ret) => println!("Interpreted transition function output: {:?}", ret),
         Err(err) => println!(
             "Error while interpreting transition function\n{}",
-            err.with_source(source_code)
+            err.with_source(&source_code)
         ),
     }
 
@@ -70,7 +67,7 @@ fn main() -> Result<(), ()> {
         Ok(ret) => println!("JIT-compiled transition function output: {:?}", ret),
         Err(err) => println!(
             "Error in compiled transition function\n{}",
-            err.with_source(source_code)
+            err.with_source(&source_code)
         ),
     }
 

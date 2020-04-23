@@ -2,6 +2,9 @@
 
 use std::borrow::Cow;
 
+mod math;
+mod vars;
+
 use super::ast;
 use super::errors::*;
 use super::types::LangCellState;
@@ -37,9 +40,8 @@ fn assert_output<'a>(expected: Result<LangCellState, &'a str>, source_code: &str
                 compiled_output,
             } = run_rule(rule);
             // Make sure that the output is the same.
-            assert_eq!(
-                interpreted_output,
-                compiled_output,
+            assert!(
+                interpreted_output == compiled_output,
                 "\n\nInterpreted output:\n{}\n\nCompiled output:\n{}\n\nInterpreted and compiled output differ when running this rule:\n{}\n\n",
                 display_result(&interpreted_output),
                 display_result(&compiled_output),
@@ -50,9 +52,8 @@ fn assert_output<'a>(expected: Result<LangCellState, &'a str>, source_code: &str
         Err(e) => Err(e.with_source(source_code).to_string().into()),
     };
 
-    assert_eq!(
-        expected_result,
-        actual_result,
+    assert!(
+        expected_result == actual_result,
         "\n\nExpected:\n{}\n\nGot:\n{}\n\nRule source code:\n{}\n\n",
         display_result(&expected_result),
         display_result(&actual_result),
@@ -62,8 +63,8 @@ fn assert_output<'a>(expected: Result<LangCellState, &'a str>, source_code: &str
 
 fn display_result<T: std::fmt::Display, E: std::fmt::Display>(result: &Result<T, E>) -> String {
     match result {
-        Ok(t) => format!("Ok({})", t),
-        Err(e) => format!("Err({})", e),
+        Ok(t) => format!("{}", t),
+        Err(e) => format!("{}", e),
     }
 }
 

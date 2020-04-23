@@ -249,7 +249,7 @@ impl<'ctx> Compiler<'ctx> {
             // Implicit `return #0` at the end of the transition function. TODO
             // change this to `remain`, once that's implemented.
             self.builder
-                .build_return(Some(&self.llvm_cell_state_type.const_zero()));
+                .build_return(Some(&self.llvm_return_type.const_zero()));
         }
 
         // Make sure that the LLVM code we generated is valid.

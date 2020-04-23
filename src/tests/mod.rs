@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+mod cmp;
 mod math;
 mod vars;
 

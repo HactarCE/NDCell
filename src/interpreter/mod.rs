@@ -11,6 +11,27 @@ use LangErrorMsg::{
     CellStateOutOfRange, DivideByZero, IntegerOverflow, InternalError, Unimplemented,
 };
 
+pub fn run_rule(rule: ast::Rule) -> CompleteLangResult<LangCellState> {
+    let source_code = rule.source_code.clone();
+    run_fn(rule.transition_fn).map_err(|e| e.with_source(&source_code))
+}
+
+fn run_fn(function: ast::Function) -> LangResult<LangCellState> {
+    let ret_val = State::new(function)?.run()?;
+    if let Some(Value::CellState(cell_state)) = ret_val {
+        Ok(cell_state)
+    } else {
+        Err(InternalError(
+            format!(
+                "Transition function produced value other than cell state: {:?}",
+                ret_val
+            )
+            .into(),
+        )
+        .without_span())
+    }
+}
+
 /// Result of executing a single statement.
 pub enum ExecuteResult {
     /// The interpreter is not done executing instructions.
@@ -69,6 +90,15 @@ impl State {
             vars,
             function_type: function.fn_type,
         })
+    }
+
+    /// Executes instructions until the function returns a value.
+    pub fn run(&mut self) -> LangResult<Option<Value>> {
+        loop {
+            if let ExecuteResult::Return(ret) = self.step()? {
+                return Ok(ret);
+            }
+        }
     }
 
     /// Executes the next instruction.

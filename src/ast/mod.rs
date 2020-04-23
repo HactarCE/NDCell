@@ -8,8 +8,6 @@
 //! 3. Typecheck AST (ast::typecheck)
 //!     - result is made from ast::components::{common, typed}
 
-use std::convert::{TryFrom, TryInto};
-
 mod builder;
 mod components;
 mod tokens;
@@ -26,8 +24,8 @@ pub use typecheck::ResolveTypes;
 pub fn make_ndca_rule(source_code: &str) -> LangResult<typed::Rule> {
     let tokens = tokens::tokenize(source_code)?;
     let untyped_ast = builder::build_ast(&tokens)?;
-    let untyped_rule = untyped::Rule::try_from(untyped_ast)?;
-    let typed_rule = untyped_rule.try_into()?;
+    let untyped_rule = untyped::Rule::from_ast(source_code.to_owned(), untyped_ast)?;
+    let typed_rule = untyped_rule.check_types()?;
     Ok(typed_rule)
 }
 
@@ -94,6 +92,3 @@ pub fn flatten_block(block: &mut typed::StatementBlock) {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

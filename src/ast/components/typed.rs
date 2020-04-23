@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::rc::Rc;
 
 use super::super::super::errors::*;
 use super::super::super::span::{Span, Spanned};
@@ -15,12 +16,14 @@ pub type StatementBlock = Vec<Spanned<Statement>>;
 /// A complete rule containing a transition function.
 #[derive(Debug, Clone)]
 pub struct Rule {
+    pub source_code: Rc<String>,
     pub transition_fn: Function,
 }
 impl TryFrom<untyped::Rule> for Rule {
     type Error = LangError;
     fn try_from(untyped_rule: untyped::Rule) -> LangResult<Self> {
         Ok(Self {
+            source_code: Rc::new(untyped_rule.source_code),
             transition_fn: Function::new(
                 "transition".to_owned(),
                 untyped_rule.transition_fn,

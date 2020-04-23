@@ -14,7 +14,7 @@ pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
 pub type LangResult<T> = Result<T, LangError>;
 
 /// An error type and an accompanying line and span of source code.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LangErrorWithSource {
     /// The string of source code of the error location (if any).
     pub source_line: Option<String>,
@@ -103,7 +103,7 @@ impl LangError {
 }
 
 /// Information about the type of error that occurred.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LangErrorMsg {
     // Miscellaneous errors
     Unimplemented,

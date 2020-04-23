@@ -1,6 +1,6 @@
 //! Untyped AST components.
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::fmt;
 
 use super::super::super::errors::*;
@@ -13,6 +13,7 @@ pub type StatementBlock = Vec<Spanned<Statement>>;
 /// A complete rule containing a transition function, pre-typecheck.
 #[derive(Debug, Clone)]
 pub struct Rule {
+    pub source_code: String,
     pub transition_fn: StatementBlock,
 }
 impl Rule {
@@ -21,9 +22,8 @@ impl Rule {
         self.try_into()
     }
 }
-impl TryFrom<Vec<Spanned<Directive>>> for Rule {
-    type Error = LangError;
-    fn try_from(directives: Vec<Spanned<Directive>>) -> LangResult<Self> {
+impl Rule {
+    pub fn from_ast(source_code: String, directives: Vec<Spanned<Directive>>) -> LangResult<Self> {
         let mut transition_fn = None;
         for directive in directives {
             match directive.inner {
@@ -37,7 +37,10 @@ impl TryFrom<Vec<Spanned<Directive>>> for Rule {
             }
         }
         let transition_fn = transition_fn.ok_or(MissingTransitionFunction)?;
-        Ok(Self { transition_fn })
+        Ok(Self {
+            source_code,
+            transition_fn,
+        })
     }
 }
 

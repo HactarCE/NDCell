@@ -10,6 +10,7 @@ use inkwell::values::{BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::IntPredicate;
 use inkwell::OptimizationLevel;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 mod value;
 
@@ -18,6 +19,36 @@ use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use LangErrorMsg::{
     CellStateOutOfRange, DivideByZero, IntegerOverflow, InternalError, Unimplemented,
 };
+
+/// Jit-compiles a rule.
+pub fn jit_compile_rule(rule: ast::Rule) -> CompleteLangResult<CompiledRule> {
+    let source_code = rule.source_code.clone();
+    _jit_compile_rule(rule).map_err(|e| e.with_source(&source_code))
+}
+
+fn _jit_compile_rule(rule: ast::Rule) -> LangResult<CompiledRule> {
+    let source_code = rule.source_code;
+    let ctx = Context::create();
+    let jit_transition_fn: RawTransitionFunction;
+    let error_points;
+    {
+        let mut compiler = Compiler::new(&ctx)?;
+        compiler.jit_compile_fn(&rule.transition_fn)?;
+        jit_transition_fn = unsafe {
+            compiler
+                .execution_engine
+                .get_function("transition_function")
+                .expect("Failed to find JIT-compiled transition function")
+        };
+        error_points = compiler.error_points;
+    }
+    Ok(CompiledRule {
+        source_code,
+        ctx,
+        jit_transition_fn: Some(jit_transition_fn),
+        error_points,
+    })
+}
 
 /// Convenience type alias for a transition function.
 ///
@@ -30,19 +61,34 @@ use LangErrorMsg::{
 /// function was unsuccessful, then the remaining bits encode the error index.
 type RawTransitionFunction = JitFunction<unsafe extern "C" fn() -> u64>;
 
-/// Transition function.
-pub struct TransitionFunction {
-    /// JIT function.
-    jit_fn: RawTransitionFunction,
-    /// List of possible errors that can be returned by the transition function.
+/// Compiled rule.
+#[derive(Debug)]
+pub struct CompiledRule {
+    /// LLVM context (must be dropped AFTER JitFunction; see
+    /// https://github.com/TheDan64/inkwell/issues/177). This
+    #[used]
+    ctx: Context,
+
+    /// Original source code for the rule.
+    source_code: Rc<String>,
+    /// JIT transition function.
+    jit_transition_fn: Option<RawTransitionFunction>,
+    /// List of possible errors that can be returned.
     error_points: Vec<LangError>,
 }
-impl TransitionFunction {
+impl Drop for CompiledRule {
+    fn drop(&mut self) {
+        // Drop JitFunction before its context.
+        self.jit_transition_fn = None;
+    }
+}
+impl CompiledRule {
     /// Call the JIT-compiled transition function and get a cell state result.
-    pub fn call(&self) -> LangResult<LangCellState> {
+    pub fn call_transition_fn(&self) -> CompleteLangResult<LangCellState> {
         // This module takes responsibility for JIT-related unsafety because the
         // JITting happened in this module.
-        let result = unsafe { self.jit_fn.call() };
+        let jit_fn = self.jit_transition_fn.as_ref().unwrap();
+        let result = unsafe { jit_fn.call() };
         // Test the highest bit to see if there was an error.
         if result & (1 << 63) == 0 {
             // There was no error.
@@ -55,7 +101,8 @@ impl TransitionFunction {
                 .error_points
                 .get(error_index as usize)
                 .cloned()
-                .unwrap_or(InternalError("Error index out of range".into()).without_span()))
+                .unwrap_or(InternalError("Error index out of range".into()).without_span())
+                .with_source(&self.source_code))
         }
     }
 }
@@ -69,8 +116,9 @@ struct Variable<'ctx> {
     ptr: PointerValue<'ctx>,
 }
 
+#[derive(Debug)]
 /// JIT-compiler.
-pub struct Compiler<'ctx> {
+struct Compiler<'ctx> {
     /// LLVM context.
     ctx: &'ctx Context,
     /// LLVM module.
@@ -173,13 +221,14 @@ impl<'ctx> Compiler<'ctx> {
             .expect("No function value in JIT compiler")
     }
 
-    /// JIT-compiles a transition function.
-    pub fn jit_compile_fn(&mut self, function: &ast::Function) -> LangResult<TransitionFunction> {
+    /// JIT-compiles a function.
+    fn jit_compile_fn(&mut self, function: &ast::Function) -> LangResult<()> {
         self.function_type = Some(function.fn_type);
 
         // Create the function type with no arguments and no varargs.
         let fn_type = self.llvm_return_type.fn_type(&[], false);
         self.fn_value_opt = Some(
+            // TODO helper functions need a different name.
             self.module
                 .add_function("transition_function", fn_type, None),
         );
@@ -205,14 +254,7 @@ impl<'ctx> Compiler<'ctx> {
 
         // Make sure that the LLVM code we generated is valid.
         if self.fn_value().verify(true) {
-            Ok(TransitionFunction {
-                jit_fn: unsafe {
-                    self.execution_engine
-                        .get_function("transition_function")
-                        .expect("Failed to find JIT-compiled transition function")
-                },
-                error_points: std::mem::replace(&mut self.error_points, vec![]),
-            })
+            Ok(())
         } else {
             eprintln!(
                 "Error encountered during function compilation; dumping LLVM function to stderr"

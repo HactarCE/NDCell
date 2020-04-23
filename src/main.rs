@@ -2,7 +2,6 @@
 #![allow(dead_code)]
 #![warn(missing_docs)]
 
-use inkwell::context::Context;
 use std::fs::File;
 use std::io::Read;
 
@@ -16,7 +15,7 @@ mod interpreter;
 mod span;
 mod types;
 
-pub use errors::{CompleteLangResult, LangResult};
+pub use errors::CompleteLangResult;
 pub use span::{Span, Spanned};
 
 const CELL_STATE_COUNT: usize = 100;
@@ -54,10 +53,7 @@ Please specify a file to run. E.g.
     let result = interpret(rule.clone());
     match result {
         Ok(ret) => println!("Interpreted transition function output: {:?}", ret),
-        Err(err) => println!(
-            "Error while interpreting transition function\n{}",
-            err.with_source(&source_code)
-        ),
+        Err(err) => println!("Error while interpreting transition function\n{}", err),
     }
 
     println!();
@@ -65,10 +61,7 @@ Please specify a file to run. E.g.
     let result = compile_and_run(rule);
     match result {
         Ok(ret) => println!("JIT-compiled transition function output: {:?}", ret),
-        Err(err) => println!(
-            "Error in compiled transition function\n{}",
-            err.with_source(&source_code)
-        ),
+        Err(err) => println!("Error in compiled transition function\n{}", err),
     }
 
     Ok(())
@@ -76,22 +69,15 @@ Please specify a file to run. E.g.
 
 /// Runs the given rule's transition function using the interpreter and returns
 /// the result.
-fn interpret(rule: ast::Rule) -> LangResult<interpreter::Value> {
-    let mut interpreter = interpreter::State::new(rule.transition_fn)?;
-    loop {
-        if let Some(ret) = interpreter.step()?.return_value() {
-            return Ok(ret);
-        }
-    }
+fn interpret(rule: ast::Rule) -> CompleteLangResult<types::LangCellState> {
+    interpreter::run_rule(rule)
 }
 
 /// Runs the given rule's transition function using the compiler and returns the
 /// result.
-fn compile_and_run(rule: ast::Rule) -> LangResult<types::LangCellState> {
-    let context = Context::create();
-    let mut compiler = compiler::Compiler::new(&context)?;
-    let transition_fn = compiler.jit_compile_fn(&rule.transition_fn)?;
-    transition_fn.call()
+fn compile_and_run(rule: ast::Rule) -> CompleteLangResult<types::LangCellState> {
+    let rule: compiler::CompiledRule = compiler::jit_compile_rule(rule)?;
+    rule.call_transition_fn()
 }
 
 #[cfg(test)]

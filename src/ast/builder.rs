@@ -143,18 +143,28 @@ impl<'a> AstBuilder<'a> {
     /// otherwise rewind the state of the AstBuilder to before the closure was
     /// run and then return the LangResult::Err.
     fn expect<T>(&mut self, f: impl Fn(&mut Self) -> LangResult<T>) -> LangResult<Spanned<T>> {
+        self.expect_spanned(|b| {
+            b.next();
+            let start = b.span();
+            b.prev();
+            let ret = f(b);
+            let end = b.span();
+            ret.map(|t| Spanned {
+                span: Span::merge(start, end),
+                inner: t,
+            })
+        })
+    }
+    fn expect_spanned<T>(
+        &mut self,
+        f: impl Fn(&mut Self) -> LangResult<Spanned<T>>,
+    ) -> LangResult<Spanned<T>> {
         let prior_state = *self;
-        let first_token = self.peek_next();
         let ret = f(self);
-        let start = first_token.unwrap().span.start;
-        let end = self.span().end;
         if ret.is_err() {
             *self = prior_state;
         }
-        ret.map(|t| Spanned {
-            span: Span { start, end },
-            inner: t,
-        })
+        ret
     }
     /// Returns true if the next token exists and has a class that is in the
     /// given list of TokenClasses.
@@ -336,7 +346,7 @@ impl<'a> AstBuilder<'a> {
                 Some(TokenClass::Punctuation(PunctuationToken::LParen)) => {
                     // Expressions inside parentheses always start again at the
                     // lowest precedence level.
-                    self.expect(|tf| tf.paren(Self::expression))
+                    self.expect_spanned(|tf| tf.paren(Self::expression))
                 }
                 Some(TokenClass::Integer(_)) => self.expect(Self::int),
                 Some(TokenClass::String { .. }) => self.err(Unimplemented),
@@ -476,14 +486,17 @@ impl<'a> AstBuilder<'a> {
         }
     }
     /// Consumes a pair of parentheses with the given matcher run inside.
-    fn paren<T>(&mut self, inner_matcher: impl Fn(&mut Self) -> LangResult<T>) -> LangResult<T> {
+    fn paren<T>(
+        &mut self,
+        inner_matcher: impl Fn(&mut Self) -> LangResult<T>,
+    ) -> LangResult<Spanned<T>> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LParen)) => (),
             _ => self.err(Expected("parenthetical expression beginning with '('"))?,
         }
         // Record the span of the left paren.
         let open_span = self.span();
-        let expr = self.expect(inner_matcher)?.inner;
+        let expr = self.expect(inner_matcher)?;
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::RParen)) => Ok(expr),
             Some(_) => self.err(Expected("')'")),

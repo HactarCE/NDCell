@@ -12,20 +12,20 @@ fn test_variable_init() {
             }
             become #(x)
         }",
-    )
+    );
 }
 
 #[test]
 fn test_variable_undeclared() {
     assert_output(
-        Err("Error at line 3; column 21
+        Err("Error at line 3; column 22
 become #(x)
-        ^^^   This variable must be initialized before it is used"),
+         ^   This variable must be initialized before it is used"),
         "
         @transition {
             become #(x)
         }",
-    )
+    );
 }
 
 #[test]
@@ -41,5 +41,32 @@ fn test_variables() {
                 become #(x + 3)
             }
         }",
-    )
+    );
+}
+
+#[test]
+fn test_variable_types() {
+    // Cell state -> integer
+    assert_output(
+        Err("Error at line 4; column 21
+set s = 3
+        ^   Type error: expected cell state but got integer"),
+        "
+        @transition {
+            set s = #2
+            set s = 3
+        }",
+    );
+
+    // Integer -> cell state
+    assert_output(
+        Err("Error at line 4; column 21
+set s = #2
+        ^^   Type error: expected integer but got cell state"),
+        "
+        @transition {
+            set s = 3
+            set s = #2
+        }",
+    );
 }

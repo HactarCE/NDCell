@@ -61,9 +61,9 @@ fn test_arithmetic() {
 fn test_overflow() {
     // Addition
     assert_output(
-        Err("Error at line 3; column 21
+        Err("Error at line 3; column 22
 become #(9223372036854775805 + 3)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
+         ^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
         "
         @transition {
             become #(9223372036854775805 + 3)
@@ -72,9 +72,9 @@ become #(9223372036854775805 + 3)
 
     // Subtraction (negative end)
     assert_output(
-        Err("Error at line 3; column 21
+        Err("Error at line 3; column 22
 become #(-9223372036854775805 - 4)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
+         ^^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
         "
         @transition {
             become #(-9223372036854775805 - 4)
@@ -83,9 +83,9 @@ become #(-9223372036854775805 - 4)
 
     // Subtraction (positive end)
     assert_output(
-        Err("Error at line 3; column 21
+        Err("Error at line 3; column 22
 become #(9223372036854775805 - -3)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
+         ^^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
         "
         @transition {
             become #(9223372036854775805 - -3)
@@ -94,9 +94,9 @@ become #(9223372036854775805 - -3)
 
     // Multiplication
     assert_output(
-        Err("Error at line 3; column 21
+        Err("Error at line 3; column 22
 become #(8589934592 * 8589934592)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
+         ^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
         "
         @transition {
             become #(8589934592 * 8589934592)
@@ -105,9 +105,9 @@ become #(8589934592 * 8589934592)
 
     // Division
     assert_output(
-        Err("Error at line 3; column 21
+        Err("Error at line 3; column 22
 become #(-9223372036854775808 / -1)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
+         ^^^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
         "
         @transition {
             become #(-9223372036854775808 / -1)
@@ -116,9 +116,9 @@ become #(-9223372036854775808 / -1)
 
     // Negation
     assert_output(
-        Err("Error at line 3; column 21
+        Err("Error at line 3; column 22
 become #(--9223372036854775808)
-        ^^^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
+         ^^^^^^^^^^^^^^^^^^^^^   Integer overflow"),
         "
         @transition {
             become #(--9223372036854775808)
@@ -127,9 +127,9 @@ become #(--9223372036854775808)
 
     // Divide by zero
     assert_output(
-        Err("Error at line 3; column 21
+        Err("Error at line 3; column 22
 become #(12 / 0)
-        ^^^^^^^^   Divide by zero"),
+         ^^^^^^   Divide by zero"),
         "
         @transition {
             become #(12 / 0)
@@ -138,9 +138,9 @@ become #(12 / 0)
 
     // Divide by zero with remainder
     assert_output(
-        Err("Error at line 3; column 21
+        Err("Error at line 3; column 22
 become #(12 % 0)
-        ^^^^^^^^   Divide by zero"),
+         ^^^^^^   Divide by zero"),
         "
         @transition {
             become #(12 % 0)

@@ -10,8 +10,8 @@ This is a testing ground for a cellular automaton description language for [NDCe
 4. Clone this project and build/run:
 
 ```sh
-git clone https://github.com/HactarCE/Jitty
-cd Jitty
+git clone https://github.com/HactarCE/NDCA
+cd NDCA
 cargo build # or cargo run
 ```
 
@@ -60,7 +60,7 @@ By the way, **do not use cmake-gui**. I don't think there's any way to make it u
 9. Also copy the contents of `C:\LLVM_source_code\include` into `C:\LLVM_solution\MinSizeRel\include`, merging the contents. There might be a file or two that are overwritten and that's fine.
 10. Finally, make a new environment variable (system variable or user variable, doesn't matter) called `LLVM_SYS_80_PREFIX` with the value `C:\LLVM_solution\MinSizeRel`. Reboot to make sure this takes effect.
 
-### Part 3 - Building Jitty
+### Part 3 - Building NDCA
 
 1. Download this project and extract it somewhere.
-2. Open a terminal in the folder where you extracted Jitty (it should have `Cargo.toml` in it) and build it using `cargo build` or run it using `cargo run`.
+2. Open a terminal in the folder where you extracted NDCA (it should have `Cargo.toml` in it) and build it using `cargo build` or run it using `cargo run`.

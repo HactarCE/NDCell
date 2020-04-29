@@ -18,6 +18,8 @@ pub enum Value {
     Int(LangInt),
     /// Cell state
     CellState(LangCellState),
+    /// Vector of a specific length from 1 to 6 (extra components are zero).
+    Vector { len: u8, values: [LangInt; 6] },
     // Pattern(crate::automaton::ArrayView2D<u8>),
 }
 impl Value {
@@ -26,6 +28,7 @@ impl Value {
         match self {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
+            Self::Vector { len, .. } => Type::Vector(*len),
             // Self::Pattern(_) => Type::Pattern,
         }
     }
@@ -34,7 +37,10 @@ impl Value {
         match ty {
             Type::Int => Some(Value::Int(0)),
             Type::CellState => Some(Value::CellState(0)),
-            // Type::Pattern => unimplemented!(),
+            Type::Vector(len) => Some(Value::Vector {
+                len,
+                values: [0; 6],
+            }),
         }
     }
 }

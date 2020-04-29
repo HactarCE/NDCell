@@ -19,18 +19,15 @@ pub enum Type {
     Int,
     /// Cell state.
     CellState,
-    // Pattern,
+    /// Vector of a specific length (from 1 to 6).
+    Vector(u8),
 }
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Int => "integer",
-                Self::CellState => "cell state",
-                // Self::Pattern => "pattern",
-            }
-        )
+        match self {
+            Self::Int => write!(f, "integer"),
+            Self::CellState => write!(f, "cell state"),
+            Self::Vector(len) => write!(f, "vector of length {}", len),
+        }
     }
 }

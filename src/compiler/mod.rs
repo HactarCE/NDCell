@@ -769,6 +769,7 @@ impl<'ctx> Compiler<'ctx> {
         match ty {
             Type::Int => Some(self.llvm_int_type.into()),
             Type::CellState => Some(self.llvm_cell_state_type.into()),
+            Type::Vector(len) => Some(self.llvm_int_type.vec_type(len.into()).into()),
         }
     }
 
@@ -777,6 +778,7 @@ impl<'ctx> Compiler<'ctx> {
         match ty {
             Type::Int => Some(self.llvm_int_type.const_zero().into()),
             Type::CellState => Some(self.llvm_cell_state_type.const_zero().into()),
+            Type::Vector(len) => Some(self.llvm_int_type.vec_type(len.into()).const_zero().into()),
         }
     }
 

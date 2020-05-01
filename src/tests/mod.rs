@@ -5,6 +5,7 @@ use std::borrow::Cow;
 mod cmp;
 mod math;
 mod vars;
+mod vecs;
 
 use super::ast;
 use super::errors::*;

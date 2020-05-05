@@ -12,6 +12,7 @@ mod ast;
 mod compiler;
 mod errors;
 mod interpreter;
+mod meta;
 mod span;
 mod types;
 

@@ -4,6 +4,7 @@ use std::convert::TryInto;
 use std::fmt;
 
 use super::super::super::errors::*;
+use super::super::super::meta::RuleMeta;
 use super::super::Spanned;
 use super::{common::*, typed};
 use LangErrorMsg::{MissingTransitionFunction, MultipleTransitionFunctions};
@@ -14,6 +15,7 @@ pub type StatementBlock = Vec<Spanned<Statement>>;
 #[derive(Debug, Clone)]
 pub struct Rule {
     pub source_code: String,
+    pub meta: RuleMeta,
     pub transition_fn: StatementBlock,
 }
 impl Rule {
@@ -36,9 +38,11 @@ impl Rule {
                 }
             }
         }
+        let meta = RuleMeta::new();
         let transition_fn = transition_fn.ok_or(MissingTransitionFunction)?;
         Ok(Self {
             source_code,
+            meta,
             transition_fn,
         })
     }

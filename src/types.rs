@@ -8,9 +8,9 @@ pub type LangInt = i64;
 pub const INT_BITS: u32 = 64;
 
 /// Rust type used for an NDCA cell state.
-pub type LangCellState = u32;
+pub type LangCellState = u8;
 /// Number of bits in an NDCA cell state.
-pub const CELL_STATE_BITS: u32 = 32;
+pub const CELL_STATE_BITS: u32 = 8;
 
 /// Any data type.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

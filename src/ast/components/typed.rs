@@ -5,6 +5,7 @@ use std::convert::{TryFrom, TryInto};
 use std::rc::Rc;
 
 use super::super::super::errors::*;
+use super::super::super::meta::RuleMeta;
 use super::super::super::span::{Span, Spanned};
 use super::super::super::types::Type;
 use super::super::ResolveTypes;
@@ -17,6 +18,7 @@ pub type StatementBlock = Vec<Spanned<Statement>>;
 #[derive(Debug, Clone)]
 pub struct Rule {
     pub source_code: Rc<String>,
+    pub meta: RuleMeta,
     pub transition_fn: Function,
 }
 impl TryFrom<untyped::Rule> for Rule {
@@ -24,6 +26,7 @@ impl TryFrom<untyped::Rule> for Rule {
     fn try_from(untyped_rule: untyped::Rule) -> LangResult<Self> {
         Ok(Self {
             source_code: Rc::new(untyped_rule.source_code),
+            meta: untyped_rule.meta,
             transition_fn: Function::new(
                 "transition".to_owned(),
                 untyped_rule.transition_fn,

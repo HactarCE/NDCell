@@ -62,7 +62,7 @@ fn test_vector_access() {
 fn test_vector_ops() {
     // Test addition, product, and sum.
     assert_output(
-        Ok(7778),
+        Ok(78),
         "
         @transition {
             set v = [1, 10, 100]
@@ -71,7 +71,7 @@ fn test_vector_ops() {
             // v.product = 2 * 20 * 200 = 8000
             // v.sum = 2 + 20 + 200 = 222
             // v.product - v.sum = 8000 - 222 = 7778
-            become #(v.product - v.sum)
+            become #(v.product - v.sum - 7700)
         }",
     );
     // Test ops on vectors of different lengths.

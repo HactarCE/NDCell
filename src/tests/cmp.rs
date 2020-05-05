@@ -1,6 +1,27 @@
 use super::assert_output;
 
 #[test]
+fn test_branch_nonzero() {
+    assert_output(
+        Ok(10),
+        "
+        @transition {
+            if 0 {
+            } else {
+                if 1 {
+                    if 2 {
+                        if -1 {
+                            become #10
+                        }
+                    }
+                }
+            }
+            become #0
+        }",
+    );
+}
+
+#[test]
 fn test_cmp() {
     assert_output(
         Ok(1),

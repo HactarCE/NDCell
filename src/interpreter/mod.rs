@@ -132,9 +132,9 @@ impl State {
                     if_false,
                 } => {
                     // Evaluate the condition.
-                    let condition: bool = self.eval_int_expr(cond_expr)?.inner != 0;
+                    let condition_value: bool = self.eval_int_expr(cond_expr)?.inner != 0;
                     // Decide which block to execute.
-                    let block = if condition { if_true } else { if_false };
+                    let block = if condition_value { if_true } else { if_false };
                     // Jump there.
                     Self::goto_block(&mut self.instruction_pointer, block)?;
                 }

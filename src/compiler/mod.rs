@@ -301,14 +301,8 @@ impl<'ctx> Compiler<'ctx> {
                     if_false,
                 } => {
                     // Evaluate the condition and get a boolean value.
-                    let test_value = self.build_int_expr(&cond_expr)?;
+                    let condition_value = self.build_int_expr(&cond_expr)?.inner;
                     // Check whether condition_value != 0.
-                    let condition_value = self.builder.build_int_compare(
-                        IntPredicate::NE,
-                        test_value.inner,
-                        self.llvm_int_type.const_zero(),
-                        "tmp_ifCond",
-                    );
                     // Now branch based on that boolean value.
                     self.build_conditional(
                         condition_value,
@@ -687,9 +681,13 @@ impl<'ctx> Compiler<'ctx> {
         let if_false_bb = self.append_basic_block("ifFalse");
         let merge_bb = self.append_basic_block("endIf");
 
-        // Build the branch instruction.
-        self.builder
-            .build_conditional_branch(condition_value, if_true_bb, if_false_bb);
+        // Build the switch instruction (because condition_value might not be
+        // 1-bit).
+        self.builder.build_switch(
+            condition_value,
+            if_true_bb,
+            &[(condition_value.get_type().const_zero(), if_false_bb)],
+        );
 
         // Build the instructions to execute if true.
         self.builder.position_at_end(if_true_bb);

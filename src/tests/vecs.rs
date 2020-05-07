@@ -3,7 +3,7 @@ use super::assert_output;
 #[test]
 fn test_vector_types() {
     assert_output(
-        Err(unimplemented!()),
+        Err(todo!()),
         "
         @transition {
             set x = [1, 2, 3]
@@ -12,7 +12,7 @@ fn test_vector_types() {
         }",
     );
     assert_output(
-        Err(unimplemented!()),
+        Err(todo!()),
         "
         @transition {
             set x = [1, 2, 3]
@@ -21,7 +21,7 @@ fn test_vector_types() {
         }",
     );
     assert_output(
-        Err(unimplemented!()),
+        Err(todo!()),
         "
         @transition {
             set x = [1, 2, 3]

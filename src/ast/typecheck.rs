@@ -167,7 +167,7 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                     )
                     .as_generic(span)),
                     // Compare vectors using any comparison operation.
-                    Type::Vector(_len) => unimplemented!("TODO vector comparison"),
+                    Type::Vector(_len) => todo!("vector comparison"),
                 }
             }
             untyped::Expr::Var(var_name) => {
@@ -177,7 +177,7 @@ impl ResolveTypes for Spanned<untyped::Expr> {
                     match var_type {
                         Type::Int => Ok(typed::IntExpr::Var(var_name).as_generic(span)),
                         Type::CellState => Ok(typed::CellStateExpr::Var(var_name).as_generic(span)),
-                        Type::Vector(_len) => unimplemented!("TODO vector expression"),
+                        Type::Vector(_len) => todo!("vector expression"),
                     }
                 } else {
                     // The variable has not been used before, so we don't know

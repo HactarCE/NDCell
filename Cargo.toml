@@ -10,3 +10,4 @@ edition = "2018"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "llvm8-0" }
 lazy_static = "1.4"
 regex = "1"
+thread_local = "1.0"

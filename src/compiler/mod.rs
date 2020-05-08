@@ -9,16 +9,26 @@ use inkwell::types::{BasicTypeEnum, IntType};
 use inkwell::values::{BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::IntPredicate;
 use inkwell::OptimizationLevel;
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::rc::Rc;
+use thread_local::ThreadLocal;
 
 mod value;
+pub use value::Value;
 
 use super::types::{LangCellState, Type, CELL_STATE_BITS, INT_BITS};
 use super::{ast, errors::*, Span, Spanned, CELL_STATE_COUNT};
 use LangErrorMsg::{
     CellStateOutOfRange, DivideByZero, IntegerOverflow, InternalError, Unimplemented,
 };
+
+lazy_static! {
+    static ref CTX: ThreadLocal<Context> = ThreadLocal::new();
+}
+fn get_ctx() -> &'static Context {
+    &CTX.get_or(Context::create)
+}
 
 /// Jit-compiles a rule.
 pub fn jit_compile_rule(rule: ast::Rule) -> CompleteLangResult<CompiledRule> {
@@ -28,11 +38,10 @@ pub fn jit_compile_rule(rule: ast::Rule) -> CompleteLangResult<CompiledRule> {
 
 fn _jit_compile_rule(rule: ast::Rule) -> LangResult<CompiledRule> {
     let source_code = rule.source_code;
-    let ctx = Context::create();
     let jit_transition_fn: RawTransitionFunction;
     let error_points;
     {
-        let mut compiler = Compiler::new(&ctx)?;
+        let mut compiler = Compiler::new(get_ctx())?;
         compiler.jit_compile_fn(&rule.transition_fn)?;
         jit_transition_fn = unsafe {
             compiler
@@ -44,7 +53,6 @@ fn _jit_compile_rule(rule: ast::Rule) -> LangResult<CompiledRule> {
     }
     Ok(CompiledRule {
         source_code,
-        ctx,
         jit_transition_fn: Some(jit_transition_fn),
         error_points,
     })
@@ -59,28 +67,17 @@ fn _jit_compile_rule(rule: ast::Rule) -> LangResult<CompiledRule> {
 /// the result was successful; 0 = success, 1 = failure. If the function was
 /// successful, then the remaining bits encode the resultant cell state; if the
 /// function was unsuccessful, then the remaining bits encode the error index.
-type RawTransitionFunction = JitFunction<unsafe extern "C" fn() -> u64>;
+type RawTransitionFunction = JitFunction<'static, unsafe extern "C" fn() -> u64>;
 
 /// Compiled rule.
 #[derive(Debug)]
 pub struct CompiledRule {
-    /// LLVM context (must be dropped AFTER JitFunction; see
-    /// https://github.com/TheDan64/inkwell/issues/177). This
-    #[used]
-    ctx: Context,
-
     /// Original source code for the rule.
     source_code: Rc<String>,
     /// JIT transition function.
     jit_transition_fn: Option<RawTransitionFunction>,
     /// List of possible errors that can be returned.
     error_points: Vec<LangError>,
-}
-impl Drop for CompiledRule {
-    fn drop(&mut self) {
-        // Drop JitFunction before its context.
-        self.jit_transition_fn = None;
-    }
 }
 impl CompiledRule {
     /// Call the JIT-compiled transition function and get a cell state result.

@@ -115,7 +115,7 @@ struct Variable<'ctx> {
 
 #[derive(Debug)]
 /// JIT-compiler.
-struct Compiler<'ctx> {
+pub struct Compiler<'ctx> {
     /// LLVM context.
     ctx: &'ctx Context,
     /// LLVM module.

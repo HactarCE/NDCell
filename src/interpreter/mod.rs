@@ -51,7 +51,7 @@ impl ExecuteResult {
 }
 
 #[derive(Debug)]
-pub struct State {
+pub struct Interpreter {
     /// List of instructions to execute. Branching instructions (If, ForLoop,
     /// WhileLoop, etc.) are flattened before execution by replacing their body
     /// with a single Goto statement and moving the instructions that were there
@@ -65,7 +65,7 @@ pub struct State {
     /// transition vs. helper function and return type).
     pub function_type: ast::FunctionType,
 }
-impl State {
+impl Interpreter {
     /// Constructs a new interpreter that will execute the given function.
     pub fn new(mut function: ast::Function) -> LangResult<Self> {
         // "Flatten" blocks into Goto statements.
@@ -83,7 +83,7 @@ impl State {
             );
         }
 
-        // Construct the State struct.
+        // Construct the Interpreter struct.
         Ok(Self {
             instructions: function.statements,
             instruction_pointer: 0,

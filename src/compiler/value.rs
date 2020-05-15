@@ -1,4 +1,4 @@
-//! Values used by the JIT compiler for NDCA.
+//! Values used by the JIT compiler.
 
 use inkwell::values::{BasicValueEnum, IntValue, VectorValue};
 
@@ -38,39 +38,39 @@ impl Value {
     }
     /// Returns the LLVM integer value inside if this is Value::Int; otherwise a
     /// TypeError.
-    pub fn as_int(&self) -> LangResult<IntValue<'static>> {
+    pub fn as_int(self) -> LangResult<IntValue<'static>> {
         match self {
-            Value::Int(i) => Ok(*i),
+            Value::Int(i) => Ok(i),
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
     /// Returns the LLVM integer value inside if this is Value::CellState;
     /// otherwise a TypeError.
-    pub fn as_cell_state(&self) -> LangResult<IntValue<'static>> {
+    pub fn as_cell_state(self) -> LangResult<IntValue<'static>> {
         match self {
-            Value::CellState(i) => Ok(*i),
+            Value::CellState(i) => Ok(i),
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
     /// Returns the LLVM vector value inside if this is Value::Vector; otherwise
     /// a TypeError.
-    pub fn as_vector(&self) -> LangResult<VectorValue<'static>> {
+    pub fn as_vector(self) -> LangResult<VectorValue<'static>> {
         match self {
-            Value::Vector(v) => Ok(*v),
+            Value::Vector(v) => Ok(v),
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
     /// Returns this value as an LLVM basic value if it is representable as one;
     /// otherwise a TypeError.
-    pub fn into_basic_value(&self) -> LangResult<BasicValueEnum<'static>> {
+    pub fn into_basic_value(self) -> LangResult<BasicValueEnum<'static>> {
         match self {
-            Value::Int(i) => Ok((*i).into()),
-            Value::CellState(i) => Ok((*i).into()),
-            Value::Vector(v) => Ok((*v).into()),
+            Value::Int(i) => Ok(i.into()),
+            Value::CellState(i) => Ok(i.into()),
+            Value::Vector(v) => Ok(v.into()),
             // Value::Pattern => Err(InternalError(format!("{} has no BasicValue representation", self).into())),
         }
     }
-    // TODO: figure out what to do with this
+    // TODO: figure out type conversion
     // pub fn coerce(self, compiler: &mut Compiler, span: Span, ty: Type) -> Option<Self> {
     //     // TODO implement type coercion
     //     if self.ty() == ty {

@@ -1,20 +1,24 @@
-use super::super::ast::{ArgValues, FnSignature, Function};
+//! Functions that return literals.
+
+use super::super::ast::{ArgValues, FnSignature, Function, FunctionKind};
 use super::super::compiler::{Compiler, Value};
 use super::super::errors::*;
 use super::super::types::LangInt;
 use super::super::{ConstValue, Type};
 
+/// Built-in function that returns a fixed integer. This struct can be
+/// constructed directly.
 #[derive(Debug, Clone)]
 pub struct Int(pub LangInt);
 impl Function for Int {
     fn name(&self) -> String {
         "<const int>".to_owned()
     }
-    fn is_method(&self) -> bool {
-        false
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Atom
     }
     fn signatures(&self) -> Vec<FnSignature> {
-        vec![FnSignature::constant(Type::Int)]
+        vec![FnSignature::atom(Type::Int)]
     }
     fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
         Ok(Value::Int(

@@ -5,15 +5,15 @@ use std::convert::TryFrom;
 mod tree;
 
 use super::errors::*;
-use super::{Span, Spanned};
-// use super::components::{untyped::*, Cmp, MathOp, Op};
 use super::lexer::*;
+use super::{Span, Spanned};
 pub use tree::*;
 use LangErrorMsg::{
     ElseWithoutIf, Expected, InternalError, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
     TopLevelNonDirective, Unimplemented, Unmatched,
 };
 
+/// Parses the given tokens and returns a ParseTree.
 pub fn parse(source_code: String, tokens: &[Token]) -> LangResult<ParseTree> {
     let mut directives: HashMap<Directive, Vec<DirectiveContents>> = HashMap::new();
     for (directive, contents) in ParseBuilder::from(tokens).directives()?.into_iter() {

@@ -23,34 +23,48 @@ fn get_ctx() -> &'static Context {
     &CTX.get_or(Context::create)
 }
 
-// TODO: add note about mutable references not being strictly required, but
-// doing it anyway b/c it's the Right Thing To Do
+/// JIT compiler providing a slightly higher-level interface to produce LLVM IR.
+///
+/// Inkwell (LLVM wrapper used here) only requires immutable references to most
+/// of its things, but this doesn't make sense because most of the operations
+/// are inherently mutable. To indicate that, many of these methods take mutable
+/// references even though it isn't strictly required.
 #[derive(Debug)]
 pub struct Compiler {
+    /// LLVM module.
     module: Module<'static>,
+    /// LLVM instruction builder.
     builder: Builder<'static>,
+    /// LLVM function currently being built (which may change).
     fn_value_opt: Option<FunctionValue<'static>>,
 
+    /// PointerValues for all variables, indexed by name.
     var_values: HashMap<String, PointerValue<'static>>,
 }
 impl Compiler {
+    /// Returns the LLVM return type of the function currently being built.
     pub fn return_type(&self) -> IntType<'static> {
         get_ctx().i64_type()
     }
+    /// Returns the LLVM type used to represent an integer.
     pub fn int_type(&self) -> IntType<'static> {
         get_ctx().custom_width_int_type(INT_BITS)
     }
+    /// Returns the LLVM type used to represent a cell state.
     pub fn cell_state_type(&self) -> IntType<'static> {
         get_ctx().custom_width_int_type(CELL_STATE_BITS)
     }
 
+    /// Returns the Inkwell instruction builder.
     pub fn builder(&mut self) -> &Builder<'static> {
         &self.builder
     }
+    /// Returns a HashMap of variable pointers, indexed by name.
     pub fn vars(&self) -> &HashMap<String, PointerValue<'static>> {
         &self.var_values
     }
 
+    /// Returns an LLVM intrinsic given its name and function signature.
     pub fn get_llvm_intrinisic(
         &mut self,
         name: &str,
@@ -94,6 +108,8 @@ impl Compiler {
             .is_none()
     }
 
+    /// Builds a conditional expression, using an IntValue of any width. Any
+    /// nonzero value is truthy, and zero is falsey.
     pub fn build_conditional(
         &mut self,
         condition_value: IntValue<'static>,
@@ -130,15 +146,21 @@ impl Compiler {
         Ok(())
     }
 
+    /// Builds instructions to return a cell state.
     pub fn build_return_cell_state(&mut self, value: IntValue<'static>) {
-        self.builder().build_return(Some(&value));
+        let return_type = self.return_type();
+        let return_value = self.builder().build_int_cast(value, return_type, "ret");
+        self.builder().build_return(Some(&return_value));
     }
+    /// Builds instructions to return an error.
     pub fn build_return_error(&mut self, error_index: usize) {
         let return_value = error_index | (1 << 63);
         let return_value = self.return_type().const_int(return_value as u64, true);
         self.builder().build_return(Some(&return_value));
     }
 
+    /// Builds instructions to perform checked integer arithmetic using an LLVM
+    /// intrinsic and returns an error if overflow occurs.
     pub fn build_checked_int_arithmetic(
         &mut self,
         lhs: IntValue<'static>,
@@ -198,36 +220,44 @@ impl Compiler {
 
         Ok(result_value)
     }
+    /// Builds an overflow and division-by-zero check for arguments to a
+    /// division operation (but does not actually perform the division).
     pub fn build_div_check(
         &mut self,
-        lhs: IntValue<'static>,
-        rhs: IntValue<'static>,
+        dividend: IntValue<'static>,
+        divisor: IntValue<'static>,
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
         on_div_by_zero: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<()> {
-        // If the denominator (rhs) is zero, that's a DivideByZero error.
+        // If the divisor is zero, that's a DivideByZero error.
         let zero = self.int_type().const_zero();
         let is_div_by_zero =
             self.builder()
-                .build_int_compare(IntPredicate::EQ, rhs, zero, "isDivByZero");
+                .build_int_compare(IntPredicate::EQ, divisor, zero, "isDivByZero");
 
-        // Branch based on whether the denominator is zero.
+        // Branch based on whether the divisor is zero.
         self.build_conditional(
             is_div_by_zero,
-            // The denominator is zero.
+            // The divisor is zero.
             on_div_by_zero,
-            // The denominator is not zero.
+            // The divisor is not zero.
             |c| {
-                // If the numerator is the minimum possible value and the
-                // denominator is -1, that's an IntegerOverflow error.
+                // If the dividend is the minimum possible value and the divisor
+                // is -1, that's an IntegerOverflow error.
                 let min_value = c.get_min_int_value();
-                let num_is_min_value =
-                    c.builder()
-                        .build_int_compare(IntPredicate::EQ, lhs, min_value, "isMinValue");
+                let num_is_min_value = c.builder().build_int_compare(
+                    IntPredicate::EQ,
+                    dividend,
+                    min_value,
+                    "isMinValue",
+                );
                 let negative_one = c.int_type().const_int(-1i64 as u64, true);
-                let denom_is_neg_one =
-                    c.builder()
-                        .build_int_compare(IntPredicate::EQ, rhs, negative_one, "isNegOne");
+                let denom_is_neg_one = c.builder().build_int_compare(
+                    IntPredicate::EQ,
+                    divisor,
+                    negative_one,
+                    "isNegOne",
+                );
                 let is_overflow =
                     c.builder()
                         .build_and(num_is_min_value, denom_is_neg_one, "isOverflow");
@@ -263,8 +293,3 @@ impl Compiler {
         )
     }
 }
-
-#[derive(Debug, Clone)]
-struct UserFunctionMeta;
-#[derive(Debug, Clone)]
-struct RuleMeta;

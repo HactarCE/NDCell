@@ -16,7 +16,6 @@ mod compiler;
 mod constvalue;
 mod errors;
 mod functions;
-// mod meta;
 mod lexer;
 mod parser;
 mod span;

@@ -1,19 +1,30 @@
+//! Comparison functions.
+
 use inkwell::values::IntValue;
 use std::fmt;
 
-use super::super::ast::{ArgValues, Args, FnSignature, Function, UserFunction};
+use super::super::ast::{ArgValues, Args, FnSignature, Function, FunctionKind, UserFunction};
 use super::super::compiler::{Compiler, Value};
 use super::super::errors::*;
 use super::super::lexer::ComparisonToken;
 use super::super::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::CmpError;
 
+/// Built-in function that performs some fixed number of comparisons.
 #[derive(Debug)]
 pub struct Cmp {
+    /// Types to compare (at least two).
     types: Vec<Type>,
+    /// Individual 2-input comparison functions (one less than the number of
+    /// types).
     comparators: Vec<Comparator>,
 }
 impl Cmp {
+    /// Constructs a new Cmp instance that compares each adjacent pair of the
+    /// given arguments using the corresponding one of the given comparisons.
+    ///
+    /// This method checks the types of the arguments and returns an error if
+    /// they cannot be compared using the given function.
     pub fn try_new(
         userfunc: &mut UserFunction,
         args: &Args,
@@ -42,13 +53,13 @@ impl Function for Cmp {
     fn name(&self) -> String {
         format!("<cmp {:?} {:?}>", self.types, self.comparators)
     }
-    fn is_method(&self) -> bool {
-        false
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Operator
     }
     fn signatures(&self) -> Vec<FnSignature> {
         vec![FnSignature::new(self.types.clone(), Type::Int)]
     }
-    fn compile(&self, compiler: &mut Compiler, mut args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let old_bb = compiler.builder().get_insert_block().unwrap();
 
         // Build a basic block to skip to if the condition is false. The last
@@ -61,16 +72,14 @@ impl Function for Cmp {
         let phi = compiler.builder().build_phi(int_type, "multiCompareMerge");
 
         compiler.builder().position_at_end(old_bb);
-        for (lhs_arg_index, comparator) in self.comparators.iter().enumerate() {
-            // Ensure that both arguments have been computed.
-            args.compile(compiler, lhs_arg_index)?;
-            args.compile(compiler, lhs_arg_index + 1)?;
-            // Compare them.
-            let compare_result = (comparator.compile)(
-                compiler,
-                args.get_compiled(lhs_arg_index).unwrap(),
-                args.get_compiled(lhs_arg_index + 1).unwrap(),
-            )?;
+        // Compile the first argument.
+        let mut lhs = args.compile(compiler, 0)?;
+        for (rhs_arg_index, comparator) in (1..).zip(&self.comparators) {
+            // Compile the second argument of this comparison (which will be the
+            // first argument of the next one).
+            let rhs = args.compile(compiler, rhs_arg_index)?;
+            // Compare the arguments.
+            let compare_result = (comparator.compile)(compiler, lhs, rhs.clone())?;
             // If the condition is false, skip ahead to the merge and give the
             // phi node a value of 0. If it is true, continue on to check the
             // next condition.
@@ -83,6 +92,8 @@ impl Function for Cmp {
                 compiler.builder().get_insert_block().unwrap(),
             )]);
             compiler.builder().position_at_end(next_bb);
+            // The current right-hand side becomes the next left-hand side.
+            lhs = rhs;
         }
 
         // After the last comparison, unconditionally jump directly to the merge
@@ -103,13 +114,21 @@ impl Function for Cmp {
         Ok(Value::Int(phi.as_basic_value().into_int_value()))
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        let args = args.const_eval_all()?;
-        let mut lhs = &args[0];
-        for (rhs, comparator) in args[1..].iter().zip(&self.comparators) {
-            if !(comparator.const_eval)(lhs, rhs)? {
-                // Short-circuit if any comparison returns false.
-                return Ok(Some(ConstValue::Int(0)));
+        let mut lhs = args.const_eval(0)?;
+        for (rhs_arg_index, comparator) in (1_usize..).zip(&self.comparators) {
+            let rhs = args.const_eval(rhs_arg_index)?;
+            if let Some(const_eval_fn) = &comparator.const_eval {
+                // It is possible to evaluate this comparison at compile time.
+                if !(const_eval_fn)(lhs, rhs.clone())? {
+                    // Short-circuit if any comparison returns false.
+                    return Ok(Some(ConstValue::Int(0)));
+                }
+            } else {
+                // It is not possible to evaluate this comparison at compile
+                // time.
+                return Ok(None);
             }
+            // The current right-hand side becomes the next left-hand side.
             lhs = rhs;
         }
         // If all comparisons returned true, then return true.
@@ -117,11 +136,12 @@ impl Function for Cmp {
     }
 }
 
+/// Two-input comparison function.
 struct Comparator {
-    cmp: ComparisonToken,
-    ty: Type,
-    compile: Box<dyn Fn(&mut Compiler, &Value, &Value) -> LangResult<IntValue<'static>>>,
-    const_eval: Box<dyn Fn(&ConstValue, &ConstValue) -> LangResult<bool>>,
+    /// Function to produce LLVM IR that perfomr this comparison.
+    compile: Box<dyn Fn(&mut Compiler, Value, Value) -> LangResult<IntValue<'static>>>,
+    /// Function to evaluate this comparison (optional).
+    const_eval: Option<Box<dyn Fn(ConstValue, ConstValue) -> LangResult<bool>>>,
 }
 impl fmt::Debug for Comparator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -129,6 +149,8 @@ impl fmt::Debug for Comparator {
     }
 }
 impl Comparator {
+    /// Constructs a new comparator that compares the given types using
+    /// the given comparison token (if possible).
     fn try_new(lhs: Spanned<Type>, cmp: ComparisonToken, rhs: Spanned<Type>) -> LangResult<Self> {
         // TODO: convert integers to vectors for comparison
         let span = Span::merge(lhs, rhs);
@@ -146,12 +168,12 @@ impl Comparator {
         }
     }
 
+    /// Constructs a new comparator that compares two values of the same type
+    /// represented internally by integers, signed or unsigned.
     fn int_cmp(ty: Type, cmp: ComparisonToken, signed: bool) -> Self {
         // Convert from ast::Cmp to inkwell::IntPredicate.
         let inkwell_predicate = cmp.inkwell_predicate(signed);
         Self {
-            cmp,
-            ty,
             compile: Box::new(move |compiler, lhs, rhs| {
                 Ok(compiler.builder().build_int_compare(
                     inkwell_predicate,
@@ -160,13 +182,13 @@ impl Comparator {
                     "intCmp",
                 ))
             }),
-            const_eval: match ty {
+            const_eval: Some(match ty {
                 Type::Int => Box::new(move |lhs, rhs| Ok(cmp.eval(lhs.as_int()?, rhs.as_int()?))),
                 Type::CellState => Box::new(move |lhs, rhs| {
                     Ok(cmp.eval(lhs.as_cell_state()?, rhs.as_cell_state()?))
                 }),
                 _ => panic!("Invalid type for int_cmp()"),
-            },
+            }),
         }
     }
 }

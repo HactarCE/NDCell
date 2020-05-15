@@ -8,12 +8,20 @@ use super::super::lexer::{AssignmentToken, ComparisonToken, OperatorToken, Punct
 use super::super::Spanned;
 use LangErrorMsg::RepeatDirective;
 
+/// Parse tree of containing tokens.
 #[derive(Debug, Clone)]
 pub struct ParseTree {
+    /// Raw source code.
     pub source_code: String,
+    /// Directives and their contents.
     pub directives: HashMap<Directive, Vec<DirectiveContents>>,
 }
 impl ParseTree {
+    /// Returns the DirectiveContents of the given directive in this parse tree.
+    ///
+    /// Returns Ok(None) if the directive is absent, Ok(Some(_)) if the
+    /// directive is present once, and Err(RepeatDirective) if the directive is
+    /// present multiple times.
     pub fn get_single_directive(
         &self,
         directive: Directive,
@@ -22,6 +30,7 @@ impl ParseTree {
             None => Ok(None),
             Some([]) => Ok(None),
             Some([x]) => Ok(Some(x)),
+            // TODO: maybe include span in this error
             Some([_, _, ..]) => Err(RepeatDirective(directive.name()).without_span()),
         }
     }
@@ -59,9 +68,12 @@ impl TryFrom<&str> for Directive {
     }
 }
 
+/// Contents of a directive.
 #[derive(Debug, Clone)]
 pub enum DirectiveContents {
+    /// Code block.
     Block(Spanned<StatementBlock>),
+    /// Expression.
     Expr(Spanned<Expr>),
 }
 impl From<Spanned<StatementBlock>> for DirectiveContents {
@@ -75,7 +87,7 @@ impl From<Spanned<Expr>> for DirectiveContents {
     }
 }
 
-/// A single statement, pre-typecheck.
+/// Statement node in the parse tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     /// Sets a variable value.
@@ -110,6 +122,7 @@ pub enum Statement {
     Return(Spanned<Expr>),
 }
 
+/// Expression node in the parse tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     /// Integer literal.
@@ -143,7 +156,9 @@ pub enum Expr {
     },
     /// Comparison between two values.
     Cmp {
+        /// Expressions to compare (at least two).
         exprs: Vec<Spanned<Expr>>,
+        /// Comparison operations (one less than the number of expressions).
         cmps: Vec<ComparisonToken>,
     },
 }

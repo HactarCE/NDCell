@@ -360,9 +360,13 @@ impl KeywordToken {
 }
 
 impl ComparisonToken {
+    /// Returns true if this comparison is based only on equality, or false if
+    /// it also requires an ordering.
     pub fn is_eq_only(self) -> bool {
         self == Self::Eql || self == Self::Neq
     }
+    /// Returns the predicate used by Inkwell that performs this comparison
+    /// operation, given whether the operands are signed or unsigned.
     pub fn inkwell_predicate(self, signed: bool) -> inkwell::IntPredicate {
         use inkwell::IntPredicate::*;
         if signed {
@@ -385,6 +389,7 @@ impl ComparisonToken {
             }
         }
     }
+    /// Evaluates this comparison using the given arguments.
     pub fn eval<T: PartialOrd>(self, lhs: T, rhs: T) -> bool {
         match self {
             Self::Eql => lhs == rhs,

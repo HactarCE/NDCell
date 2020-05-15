@@ -11,7 +11,7 @@ const INTERNAL_VAR_USE_ERROR: LangError = InternalError(std::borrow::Cow::Borrow
 ))
 .without_span();
 
-/// A constant value of any type.
+/// Constant value of any type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConstValue {
     /// Integer
@@ -42,17 +42,17 @@ impl ConstValue {
     }
     /// Returns the integer value inside if this is a ConstValue::Int; otherwise a
     /// TypeError.
-    pub fn as_int(&self) -> LangResult<LangInt> {
+    pub fn as_int(self) -> LangResult<LangInt> {
         match self {
-            ConstValue::Int(i) => Ok(*i),
+            ConstValue::Int(i) => Ok(i),
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
     /// Returns the integer value inside if this is a ConstValue::CellState;
     /// otherwise a TypeError.
-    pub fn as_cell_state(&self) -> LangResult<LangCellState> {
+    pub fn as_cell_state(self) -> LangResult<LangCellState> {
         match self {
-            ConstValue::CellState(i) => Ok(*i),
+            ConstValue::CellState(i) => Ok(i),
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }

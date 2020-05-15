@@ -141,7 +141,7 @@ pub enum LangErrorMsg {
     },
     InvalidArguments {
         name: String,
-        is_method: bool,
+        omit_first: bool,
         expected: Vec<ArgTypes>,
         got: ArgTypes,
     },
@@ -233,16 +233,15 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::InvalidArguments {
                 name,
-                is_method,
+                omit_first,
                 expected,
                 got,
             } => {
                 // Omit first argument if used as a method.
-                let omit_first: bool = *is_method;
                 write!(
                     f,
                     "Invalid arguments {:?} for {}",
-                    got.to_string(omit_first),
+                    got.to_string(*omit_first),
                     name
                 )?;
                 if !expected.is_empty() {
@@ -251,7 +250,7 @@ impl fmt::Display for LangErrorMsg {
                         "; expected {:?}",
                         expected
                             .iter()
-                            .map(|x| x.to_string(omit_first))
+                            .map(|x| x.to_string(*omit_first))
                             .collect::<Vec<_>>()
                             .join(" or ")
                     )?;

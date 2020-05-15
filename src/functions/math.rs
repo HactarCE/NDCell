@@ -1,6 +1,10 @@
+//! Math functions.
+
 use std::convert::TryInto;
 
-use super::super::ast::{ArgValues, ErrorPointRef, FnSignature, Function, UserFunction};
+use super::super::ast::{
+    ArgValues, ErrorPointRef, FnSignature, Function, FunctionKind, UserFunction,
+};
 use super::super::compiler::{Compiler, Value};
 use super::super::errors::*;
 use super::super::lexer::OperatorToken;
@@ -8,11 +12,14 @@ use super::super::types::LangInt;
 use super::super::{ConstValue, Span, Type};
 use LangErrorMsg::{DivideByZero, IntegerOverflow, InternalError, NegativeExponent};
 
+/// Built-in function that negates an integer.
 #[derive(Debug)]
 pub struct NegInt {
+    /// Error returned if overflow occurs.
     overflow_error: ErrorPointRef,
 }
 impl NegInt {
+    /// Returns a new NegInt instance.
     pub fn try_new(userfunc: &mut UserFunction, span: Span) -> LangResult<Self> {
         Ok(Self {
             overflow_error: userfunc.add_error_point(IntegerOverflow.with_span(span)),
@@ -23,13 +30,13 @@ impl Function for NegInt {
     fn name(&self) -> String {
         format!("<unary {:?} operator>", OperatorToken::Minus)
     }
-    fn is_method(&self) -> bool {
-        false
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Operator
     }
     fn signatures(&self) -> Vec<FnSignature> {
         vec![FnSignature::new(vec![Type::Int], Type::Int)]
     }
-    fn compile(&self, compiler: &mut Compiler, mut args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let arg = args.compile(compiler, 0)?.as_int()?;
         // To negate an integer, subtract it from zero.
         Ok(Value::Int(compiler.build_checked_int_arithmetic(
@@ -40,21 +47,27 @@ impl Function for NegInt {
         )?))
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        match args.const_eval_all()?[0].as_int()?.checked_neg() {
+        match args.const_eval(0)?.as_int()?.checked_neg() {
             Some(result) => Ok(Some(ConstValue::Int(result))),
             None => self.overflow_error.err(),
         }
     }
 }
 
+/// Built-in function that performs a fixed two-input integer math operation.
 #[derive(Debug)]
 pub struct BinaryIntOp {
+    /// Token signifying what operation to perform.
     op: OperatorToken,
+    /// Error returned if overflow occurs.
     overflow_error: Option<ErrorPointRef>,
+    /// Error returned if the divisor of an operation is negative.
     div_by_zero_error: Option<ErrorPointRef>,
+    /// Error returned if the exponent is negative.
     negative_exponent_error: Option<ErrorPointRef>,
 }
 impl BinaryIntOp {
+    /// Constructs a new BinaryIntOp instance that performs the given operation.
     pub fn try_new(userfunc: &mut UserFunction, span: Span, op: OperatorToken) -> LangResult<Self> {
         use OperatorToken::*;
         let overflow_error = if matches!(op, Plus | Minus | Asterisk | Slash | Percent) {
@@ -79,12 +92,18 @@ impl BinaryIntOp {
             negative_exponent_error,
         })
     }
+    /// Returns the OverflowError error point; panics if this function cannot
+    /// return an Err(OverflowError).
     fn overflow_error(&self) -> &ErrorPointRef {
         self.overflow_error.as_ref().unwrap()
     }
+    /// Returns the DivideByZero error point; panics if this function cannot
+    /// return an Err(DivideByZero).
     fn div_by_zero_error(&self) -> &ErrorPointRef {
         self.div_by_zero_error.as_ref().unwrap()
     }
+    /// Returns the NegativeExponent error point; panics if this function cannot
+    /// return an Err(NegativeExponent).
     fn negative_exponent_error(&self) -> &ErrorPointRef {
         self.negative_exponent_error.as_ref().unwrap()
     }
@@ -93,13 +112,13 @@ impl Function for BinaryIntOp {
     fn name(&self) -> String {
         format!("<binary {:?} operator>", self.op)
     }
-    fn is_method(&self) -> bool {
-        false
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Operator
     }
     fn signatures(&self) -> Vec<FnSignature> {
         vec![FnSignature::new(vec![Type::Int], Type::Int)]
     }
-    fn compile(&self, compiler: &mut Compiler, mut args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let lhs = args.compile(compiler, 0)?.as_int()?;
         let rhs = args.compile(compiler, 1)?.as_int()?;
         let b = compiler.builder();
@@ -154,9 +173,8 @@ impl Function for BinaryIntOp {
         }))
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        let args = args.const_eval_all()?;
-        let lhs = args[0].as_int()?;
-        let rhs = args[1].as_int()?;
+        let lhs = args.const_eval(0)?.as_int()?;
+        let rhs = args.const_eval(1)?.as_int()?;
         use OperatorToken::*;
         // Perform the operation.
         match self.op {

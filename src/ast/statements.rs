@@ -4,20 +4,33 @@ use super::super::{Span, Type};
 use super::{ExprRef, StatementRef, UserFunction};
 use LangErrorMsg::{CannotAssignTypeToVariable, InternalError, TypeError};
 
+/// List of statements, executed one after another.
 pub type StatementBlock = Vec<StatementRef>;
 
+/// Statement node in the AST.
 pub trait Statement: std::fmt::Debug {
+    /// Returns the span of this statement in the original source code.
     fn span(&self) -> Span;
+    /// Compiles this statement.
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()>;
 }
 
+/// Variable assignment statement, such as `set x = 3`.
 #[derive(Debug)]
 pub struct SetVar {
+    /// Span of this statement in the original source code.
     span: Span,
+    /// Name of the variable to assign to.
     var_name: String,
+    /// Expression to assign.
     value_expr: ExprRef,
 }
 impl SetVar {
+    /// Constructs a new variable assignment statement that assigns the result
+    /// of the given expression to the variable with the given name.
+    ///
+    /// This method creates a new variable if one does not already exist, and
+    /// checks the types of the variable and expression.
     pub fn try_new(
         span: Span,
         userfunc: &mut UserFunction,
@@ -61,14 +74,24 @@ impl Statement for SetVar {
     }
 }
 
+/// A conditional statement, such as `if x == 3 { ... } else { ... }`.
 #[derive(Debug)]
 pub struct If {
+    /// Span of this statement in the original source code.
     span: Span,
+    /// Expression to branch based on.
     cond_expr: ExprRef,
+    /// Block of statement to evaluate if the condition is truthy.
     if_true: StatementBlock,
+    /// Block of statements to evaluate if the condition if falsey.
     if_false: StatementBlock,
 }
 impl If {
+    /// Constructs a new conditional statement branches to either of the given
+    /// blocks depending on whether the result of the given expression is truthy
+    /// (nonzero) or falsey (zero).
+    ///
+    /// This method checks the type of the condition expression.
     pub fn try_new(
         span: Span,
         userfunc: &mut UserFunction,
@@ -136,12 +159,19 @@ impl Statement for If {
     }
 }
 
+/// A return statement, such as `return 3` or `become #live`.
 #[derive(Debug)]
 pub struct Return {
+    /// Span of this statement in the original source code.
     span: Span,
+    /// Expression to return.
     ret_expr: ExprRef,
 }
 impl Return {
+    /// Constructs a new statement that returns the result of the given
+    /// expression from the user function.
+    ///
+    /// This method checks the type of the expression to return.
     pub fn try_new(span: Span, userfunc: &mut UserFunction, ret_expr: ExprRef) -> LangResult<Self> {
         // Check that the expression matches the expected return type.
         let expected = userfunc.return_type();

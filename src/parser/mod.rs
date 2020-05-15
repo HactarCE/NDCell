@@ -1,21 +1,36 @@
-//! Functions for producing an AST.
+//! Functions for producing a parse tree.
+use std::collections::HashMap;
+use std::convert::TryFrom;
 
-use super::super::errors::*;
-use super::super::span::{Span, Spanned};
-use super::components::{untyped::*, Cmp, MathOp, Op};
-use super::tokens::*;
+mod tree;
+
+use super::errors::*;
+use super::{Span, Spanned};
+// use super::components::{untyped::*, Cmp, MathOp, Op};
+use super::lexer::*;
+pub use tree::*;
 use LangErrorMsg::{
-    ElseWithoutIf, Expected, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
+    ElseWithoutIf, Expected, InternalError, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
     TopLevelNonDirective, Unimplemented, Unmatched,
 };
 
-pub fn build_ast(tokens: &[Token]) -> LangResult<Vec<Spanned<Directive>>> {
-    AstBuilder::from(tokens).directives()
+pub fn parse(source_code: String, tokens: &[Token]) -> LangResult<ParseTree> {
+    let mut directives: HashMap<Directive, Vec<DirectiveContents>> = HashMap::new();
+    for (directive, contents) in ParseBuilder::from(tokens).directives()?.into_iter() {
+        directives.entry(directive).or_default().push(contents);
+    }
+    Ok(ParseTree {
+        source_code,
+        directives,
+    })
 }
 
 /// Operator precedence table.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum OpPrecedence {
+    // TODO: implement comma- and semicolon-separated lists
+    // SemicolonList,
+    // CommaList,
     LogicalOr,
     LogicalXor,
     LogicalAnd,
@@ -70,13 +85,13 @@ impl OpPrecedence {
 
 /// Iterator over tokens that produces an untyped AST.
 #[derive(Debug, Copy, Clone)]
-struct AstBuilder<'a> {
+struct ParseBuilder<'a> {
     /// Tokens to feed.
     tokens: &'a [Token<'a>],
     /// Index of the "current" token (None = before start).
     cursor: Option<usize>,
 }
-impl<'a> From<&'a [Token<'a>]> for AstBuilder<'a> {
+impl<'a> From<&'a [Token<'a>]> for ParseBuilder<'a> {
     fn from(tokens: &'a [Token]) -> Self {
         Self {
             tokens,
@@ -84,7 +99,7 @@ impl<'a> From<&'a [Token<'a>]> for AstBuilder<'a> {
         }
     }
 }
-impl<'a> AstBuilder<'a> {
+impl<'a> ParseBuilder<'a> {
     /// Moves the cursor forward and then returns the element at the cursor.
     fn next(&mut self) -> Option<Token<'a>> {
         // Add 1 or set to zero.
@@ -98,18 +113,14 @@ impl<'a> AstBuilder<'a> {
         self.current()
     }
     /// Returns the element at the cursor.
-    fn current(&self) -> Option<Token<'a>> {
+    fn current(self) -> Option<Token<'a>> {
         self.cursor.and_then(|idx| self.tokens.get(idx).copied())
     }
     /// Returns the element after the one at the cursor, without mutably moving
     /// the cursor.
-    fn peek_next(mut self) -> Option<Token<'a>> {
-        self.next()
-    }
-    /// Returns the element before the one at the cursor, without mutably moving
-    /// the cursor.
-    fn peek_prev(mut self) -> Option<Token<'a>> {
-        self.prev()
+    fn peek_next(self) -> Option<Token<'a>> {
+        let mut tmp = self;
+        tmp.next()
     }
 
     /// Returns the span of the current token. If there is no current token,
@@ -140,7 +151,7 @@ impl<'a> AstBuilder<'a> {
     }
     /// Consumes the next symbol and return return a Spanned { ... } of the
     /// result of the given closure if the closure returns LangResult::Ok;
-    /// otherwise rewind the state of the AstBuilder to before the closure was
+    /// otherwise rewind the state of the ParseBuilder to before the closure was
     /// run and then return the LangResult::Err.
     fn expect<T>(&mut self, f: impl Fn(&mut Self) -> LangResult<T>) -> LangResult<Spanned<T>> {
         self.expect_spanned(|b| {
@@ -176,24 +187,23 @@ impl<'a> AstBuilder<'a> {
         }
     }
     /// Consumes a sequence of directives.
-    fn directives(&mut self) -> LangResult<Vec<Spanned<Directive>>> {
+    fn directives(&mut self) -> LangResult<Vec<(Directive, DirectiveContents)>> {
         let mut directives = vec![];
         while self.peek_next().is_some() {
-            directives.push(self.expect(Self::directive)?);
+            directives.push(self.expect(Self::directive)?.inner);
         }
         Ok(directives)
     }
     /// Consumes a directive, which includes one or more arguments given to the
     /// directive. The number of arguments consumed depends on the name of the
     /// directive and the type of arguments passed.
-    fn directive(&mut self) -> LangResult<Directive> {
+    fn directive(&mut self) -> LangResult<(Directive, DirectiveContents)> {
         match self.next().map(|t| t.class) {
-            Some(TokenClass::Directive(directive_name)) => {
-                match directive_name.to_ascii_lowercase().as_ref() {
-                    "transition" => Ok(Directive::Transition(self.expect(Self::block)?.inner)),
-                    _ => self.err(InvalidDirectiveName),
-                }
-            }
+            Some(TokenClass::Directive(directive_name)) => Ok((
+                Directive::try_from(directive_name)
+                    .map_err(|_| InvalidDirectiveName.with_span(self.span()))?,
+                self.expect(Self::block)?.into(),
+            )),
             Some(_) => self.err(TopLevelNonDirective),
             None => self.err(Expected("directive")),
         }
@@ -212,14 +222,12 @@ impl<'a> AstBuilder<'a> {
         loop {
             match self.next().map(|t| t.class) {
                 // There's the beginning of a statement.
-                Some(TokenClass::StatementKeyword(_)) => {
+                Some(TokenClass::Keyword(kw)) if kw.starts_statement() => {
                     self.prev();
                     statements.push(self.expect(Self::statement)?)
                 }
                 // There's a closing brace.
-                Some(TokenClass::Punctuation(PunctuationToken::RBrace)) => {
-                    break;
-                }
+                Some(TokenClass::Punctuation(PunctuationToken::RBrace)) => break,
                 // There's something else.
                 Some(_) => self.err(Expected("statement or '}'"))?,
                 // We've reached the end of the file without closing the block.
@@ -230,9 +238,9 @@ impl<'a> AstBuilder<'a> {
     }
     /// Consumes a statement.
     fn statement(&mut self) -> LangResult<Statement> {
-        use StatementKeywordToken::*;
+        use KeywordToken::*;
         match self.next().map(|t| t.class) {
-            Some(TokenClass::StatementKeyword(kw)) => match kw {
+            Some(TokenClass::Keyword(kw)) if kw.starts_statement() => match kw {
                 Become => Ok(Statement::Become(self.expect(Self::expression)?)),
                 Break => self.err(Unimplemented),
                 Case => self.err(Unimplemented),
@@ -242,10 +250,10 @@ impl<'a> AstBuilder<'a> {
                 If => Ok(Statement::If {
                     cond_expr: self.expect(Self::expression)?,
                     if_true: self.expect(Self::block)?.inner,
-                    if_false: if self.next_token_is_one_of(&[TokenClass::StatementKeyword(Else)]) {
+                    if_false: if self.next_token_is_one_of(&[TokenClass::Keyword(Else)]) {
                         // There's an "else" clause.
                         self.next();
-                        if self.next_token_is_one_of(&[TokenClass::StatementKeyword(If)]) {
+                        if self.next_token_is_one_of(&[TokenClass::Keyword(If)]) {
                             // This is actually an "else if" clause. Treat this
                             // as an "if" nested inside an "else."
                             vec![self.expect(Self::statement)?]
@@ -264,33 +272,23 @@ impl<'a> AstBuilder<'a> {
                 Return => self.err(Unimplemented),
                 Set => Ok({
                     // Get the variable name.
-                    let var = self.expect(Self::var)?;
+                    let var_expr = self.expect(Self::ident)?;
                     // Get the operator to use when assigning (if any). E.g.
                     // `+=` uses the `+` operator.
-                    let assign_op = self.expect(Self::assign_op)?;
+                    let assign_op = self.expect(Self::assign_op)?.inner;
                     // Get the expression to assign into the variable.
-                    let expr = self.expect(Self::expression)?;
+                    let value_expr = self.expect(Self::expression)?;
                     // Construct the statement.
                     Statement::SetVar {
-                        var_expr: var.clone(),
-                        value_expr: if let Some(op) = assign_op.inner {
-                            // Expand OpAssigns like `x += y` into `x = x + y`.
-                            Spanned {
-                                span: assign_op.span,
-                                inner: Expr::Op {
-                                    lhs: Box::new(var),
-                                    op,
-                                    rhs: Box::new(expr),
-                                },
-                            }
-                        } else {
-                            // Just a normal `=` assignment.
-                            expr
-                        },
+                        var_expr,
+                        // TODO: Expand OpAssigns like `x += y` into `x = x + y`.
+                        assign_op,
+                        value_expr,
                     }
                 }),
                 Unless => self.err(Unimplemented),
                 While => self.err(Unimplemented),
+                _ => self.err(Expected("statement")),
             },
             _ => {
                 if let Some(TokenClass::Assignment(_)) = self.peek_next().map(|t| t.class) {
@@ -351,7 +349,7 @@ impl<'a> AstBuilder<'a> {
                 Some(TokenClass::Integer(_)) => self.expect(Self::int),
                 Some(TokenClass::String { .. }) => self.err(Unimplemented),
                 Some(TokenClass::Tag(_)) => self.err(Unimplemented),
-                Some(TokenClass::Ident(_)) => self.expect(Self::var),
+                Some(TokenClass::Ident(_)) => self.expect(Self::ident),
                 _ => {
                     self.next();
                     self.err(Expected("expression"))
@@ -382,9 +380,10 @@ impl<'a> AstBuilder<'a> {
             ret = Spanned {
                 span: Span::merge(op_token, &*operand),
                 inner: match op_token.class {
-                    TokenClass::Operator(OperatorToken::Minus) => Expr::Neg(operand),
-                    TokenClass::Operator(OperatorToken::Tag) => Expr::Tag(operand),
-                    other => panic!("Invalid unary operator: {:?}", other),
+                    TokenClass::Operator(op) => Expr::UnaryOp { op, operand },
+                    other => Err(InternalError(
+                        format!("Invalid unary operator: {:?}", other).into(),
+                    ))?,
                 },
             };
         }
@@ -414,17 +413,14 @@ impl<'a> AstBuilder<'a> {
         for (op_token, rhs) in op_tokens_and_exprs {
             let lhs = Box::new(ret);
             let rhs = Box::new(rhs);
-            let op = match op_token.class {
-                TokenClass::Operator(OperatorToken::Plus) => Op::Math(MathOp::Add),
-                TokenClass::Operator(OperatorToken::Minus) => Op::Math(MathOp::Sub),
-                TokenClass::Operator(OperatorToken::Asterisk) => Op::Math(MathOp::Mul),
-                TokenClass::Operator(OperatorToken::Slash) => Op::Math(MathOp::Div),
-                TokenClass::Operator(OperatorToken::Percent) => Op::Math(MathOp::Rem),
-                other => panic!("Invalid binary operator: {:?}", other),
-            };
             ret = Spanned {
                 span: Span::merge(&*lhs, &*rhs),
-                inner: Expr::Op { lhs, op, rhs },
+                inner: match op_token.class {
+                    TokenClass::Operator(op) => Expr::BinaryOp { lhs, op, rhs },
+                    other => Err(InternalError(
+                        format!("Invalid unary operator: {:?}", other).into(),
+                    ))?,
+                },
             };
         }
         Ok(ret)
@@ -433,7 +429,7 @@ impl<'a> AstBuilder<'a> {
     /// operators. This function is similar to left_binary_op().
     fn comparison_op(&mut self, precedence: OpPrecedence) -> LangResult<Spanned<Expr>> {
         // Get the leftmost expression.
-        let initial = self.expression_with_precedence(precedence.next())?;
+        let mut expressions = vec![self.expression_with_precedence(precedence.next())?];
         let mut comparisons = vec![];
         // Alternate between getting a comparison operator and an expression.
         while let Some(Token {
@@ -442,20 +438,21 @@ impl<'a> AstBuilder<'a> {
         }) = self.peek_next()
         {
             self.next();
-            comparisons.push((
-                Cmp::from(cmp_type),
-                self.expression_with_precedence(precedence.next())?,
-            ));
+            comparisons.push(cmp_type);
+            expressions.push(self.expression_with_precedence(precedence.next())?);
         }
         // If there are no comparisons happening, just return the expression.
         if comparisons.is_empty() {
-            return Ok(initial);
+            return Ok(expressions.drain(..).next().unwrap());
         }
         Ok(Spanned {
             // This comparison spans from the leftmost expression to the
             // rightmost expression.
-            span: Span::merge(&initial, &comparisons.last().unwrap().1),
-            inner: Expr::Cmp(Box::new(initial), comparisons),
+            span: Span::merge(&expressions[0], expressions.last().unwrap()),
+            inner: Expr::Cmp {
+                exprs: expressions,
+                cmps: comparisons,
+            },
         })
     }
     /// Consumes an integer literal.
@@ -465,23 +462,20 @@ impl<'a> AstBuilder<'a> {
             _ => self.err(Expected("integer")),
         }
     }
-    /// Consumes a variable name.
-    fn var(&mut self) -> LangResult<Expr> {
+    /// Consumes an identifier.
+    fn ident(&mut self) -> LangResult<Expr> {
         match self.next().map(|t| t.class) {
-            Some(TokenClass::Ident(s)) => Ok(Expr::Var(s.to_owned())),
+            Some(TokenClass::Ident(s)) => Ok(Expr::Ident(s.to_owned())),
             Some(TokenClass::Keyword(kw)) => self.err(ReservedWord(kw.to_string().into())),
-            Some(TokenClass::StatementKeyword(kw)) => self.err(ReservedWord(kw.to_string().into())),
-            _ => self.err(Expected("variable name")),
+            _ => self.err(Expected("identifier, e.g. variable name")),
         }
     }
     // Consumes an assignment token and returns the operator used in the
     // assignment, if any. (E.g. `+=` uses the `+` operator, while `=` does not
     // use any operator.)
-    fn assign_op(&mut self) -> LangResult<Option<Op>> {
-        use AssignmentToken::*;
+    fn assign_op(&mut self) -> LangResult<AssignmentToken> {
         match self.next().map(|t| t.class) {
-            Some(TokenClass::Assignment(Assign)) => Ok(None),
-            Some(TokenClass::Assignment(OpAssign(op))) => Ok(Some(op)),
+            Some(TokenClass::Assignment(a)) => Ok(a),
             _ => self.err(Expected("assignment symbol, e.g. '='")),
         }
     }

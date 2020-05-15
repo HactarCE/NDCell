@@ -4,9 +4,12 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
-use super::ast::common::{Cmp, Op};
-use super::span::Span;
-use super::types::Type;
+use super::ast::ArgTypes;
+use super::lexer::ComparisonToken;
+use super::{Span, Type, MAX_NDIM, MAX_STATES};
+
+pub const UNCAUGHT_TYPE_ERROR: LangError =
+    LangErrorMsg::InternalError(Cow::Borrowed("Uncaught type error")).without_span();
 
 /// A Result of a LangError and an accompanying line of source code.
 pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
@@ -114,24 +117,44 @@ pub enum LangErrorMsg {
     Unterminated(&'static str),
     Unmatched(char, char),
     Expected(&'static str),
+    ExpectedGot {
+        expected: &'static str,
+        got: &'static str,
+    },
     ReservedWord(Cow<'static, str>),
     ElseWithoutIf,
     MissingSetKeyword,
     TopLevelNonDirective,
     InvalidDirectiveName,
     MissingTransitionFunction,
-    MultipleTransitionFunctions,
-    TypeError { expected: Type, got: Type },
-    OpError { op: Op, lhs: Type, rhs: Type },
-    CmpError { cmp: Cmp, lhs: Type, rhs: Type },
+    RepeatDirective(&'static str),
+    InvalidDimensionCount,
+    InvalidStateCount,
+    TypeError {
+        expected: Type,
+        got: Type,
+    },
+    CmpError {
+        lhs: Type,
+        cmp: ComparisonToken,
+        rhs: Type,
+    },
+    InvalidArguments {
+        name: String,
+        is_method: bool,
+        expected: Vec<ArgTypes>,
+        got: ArgTypes,
+    },
     CannotAssignTypeToVariable(Type),
     UseOfUninitializedVariable,
     BecomeInHelperFunction,
     ReturnInTransitionFunction,
+    CannotEvalAsConst,
 
     // Runtime errors
     IntegerOverflow,
     DivideByZero,
+    NegativeExponent,
     CellStateOutOfRange,
 }
 impl<T: 'static + std::error::Error> From<T> for LangErrorMsg {
@@ -161,6 +184,9 @@ impl fmt::Display for LangErrorMsg {
             Self::Expected(s) => {
                 write!(f, "Expected {}", s)?;
             }
+            Self::ExpectedGot { expected, got } => {
+                write!(f, "Expected {}; got {}", expected, got)?;
+            }
             Self::ReservedWord(s) => {
                 write!(f, "'{}' is a reserved word", s)?;
             }
@@ -179,17 +205,23 @@ impl fmt::Display for LangErrorMsg {
             Self::MissingTransitionFunction => {
                 write!(f, "Missing transition function")?;
             }
-            Self::MultipleTransitionFunctions => {
-                write!(f, "Multiple transition functions")?;
+            Self::RepeatDirective(name) => {
+                write!(f, "Multiple {:?} directives; only one is allowed", name)?;
+            }
+            Self::InvalidDimensionCount => {
+                write!(f, "Number of dimensions must range from 1 to {}", MAX_NDIM)?;
+            }
+            Self::InvalidStateCount => {
+                write!(f, "Number of states must range from 1 to {}", MAX_STATES)?;
             }
 
             Self::TypeError { expected, got } => {
                 write!(f, "Type error: expected {} but got {}", expected, got)?;
             }
-            Self::OpError { op, lhs, rhs } => {
-                write!(f, "Cannot apply operation '{}' to {} and {}", op, lhs, rhs)?;
-            }
-            Self::CmpError { cmp, lhs, rhs } => {
+            // Self::OpError { op, lhs, rhs } => {
+            //     write!(f, "Cannot apply operation '{}' to {} and {}", op, lhs, rhs)?;
+            // }
+            Self::CmpError { lhs, cmp, rhs } => {
                 write!(
                     f,
                     "Type error: cannot compare {} to {} using '{}'",
@@ -197,6 +229,32 @@ impl fmt::Display for LangErrorMsg {
                 )?;
                 if *lhs == Type::CellState && *rhs == Type::CellState {
                     write!(f, "; convert them to integers first using the '#id' tag")?;
+                }
+            }
+            Self::InvalidArguments {
+                name,
+                is_method,
+                expected,
+                got,
+            } => {
+                // Omit first argument if used as a method.
+                let omit_first: bool = *is_method;
+                write!(
+                    f,
+                    "Invalid arguments {:?} for {}",
+                    got.to_string(omit_first),
+                    name
+                )?;
+                if !expected.is_empty() {
+                    write!(
+                        f,
+                        "; expected {:?}",
+                        expected
+                            .iter()
+                            .map(|x| x.to_string(omit_first))
+                            .collect::<Vec<_>>()
+                            .join(" or ")
+                    )?;
                 }
             }
             Self::CannotAssignTypeToVariable(ty) => {
@@ -217,12 +275,18 @@ impl fmt::Display for LangErrorMsg {
                     "Use 'become' instead of 'return' in transition functions"
                 )?;
             }
+            Self::CannotEvalAsConst => {
+                write!(f, "Cannot evaluate this expression as a constant")?;
+            }
 
             Self::IntegerOverflow => {
                 write!(f, "Integer overflow")?;
             }
             Self::DivideByZero => {
                 write!(f, "Divide by zero")?;
+            }
+            Self::NegativeExponent => {
+                write!(f, "Negative exponent")?;
             }
             Self::CellStateOutOfRange => {
                 write!(f, "Cell state out of range")?;

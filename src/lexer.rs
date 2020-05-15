@@ -6,11 +6,9 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
 
-use super::super::errors::*;
-use super::super::span::Span;
-use super::super::types::LangInt;
-use super::common::{Cmp, Op};
-
+use super::errors::*;
+use super::types::LangInt;
+use super::Span;
 use LangErrorMsg::{UnknownSymbol, Unterminated};
 
 /// A list of token patterns, arranged roughly from least to most general.
@@ -127,9 +125,7 @@ impl<'a> Into<Span> for &Token<'a> {
 /// Classification of a token.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TokenClass<'a> {
-    /// Keyword that starts a statement.
-    StatementKeyword(StatementKeywordToken),
-    /// Keyword that does not start a statement.
+    /// Keyword.
     Keyword(KeywordToken),
     /// Assignment operator.
     Assignment(AssignmentToken),
@@ -163,7 +159,6 @@ pub enum TokenClass<'a> {
 impl<'a> fmt::Display for TokenClass<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::StatementKeyword(t) => write!(f, "keyword '{}'", t),
             Self::Keyword(t) => write!(f, "keyword '{}'", t),
             Self::Assignment(t) => write!(f, "assignment operator '{}'", t),
             Self::Comparison(t) => write!(f, "comparison operator '{}'", t),
@@ -188,9 +183,7 @@ impl<'a> fmt::Display for TokenClass<'a> {
 impl<'a> TryFrom<&'a str> for TokenClass<'a> {
     type Error = LangErrorMsg;
     fn try_from(s: &'a str) -> Result<Self, LangErrorMsg> {
-        if let Ok(statement_keyword) = s.parse() {
-            Ok(Self::StatementKeyword(statement_keyword))
-        } else if let Ok(keyword) = s.parse() {
+        if let Ok(keyword) = s.parse() {
             Ok(Self::Keyword(keyword))
         } else if let Ok(assignment) = s.parse() {
             Ok(Self::Assignment(assignment))
@@ -236,9 +229,9 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
 }
 
 enum_with_str_repr! {
-    /// Keyword that starts a statement.
+    /// Keyword.
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    pub enum StatementKeywordToken {
+    pub enum KeywordToken {
         // Loops
         For = "for",
         While = "while",
@@ -260,20 +253,22 @@ enum_with_str_repr! {
 
         // Variables
         Set = "set",
-    }
 
-    /// Keyword that does not start a statement.
-    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    pub enum KeywordToken {
         // Boolean operators
         Or = "or",
         Xor = "xor",
         And = "and",
 
-        // Miscellaneous keywords
+        // Boolean tests
         In = "in",
         Is = "is",
+
+        // Unused reserved words
+        Bind = "bind",
+        Bound = "bound",
+        Static = "static",
         Where = "where",
+        With = "with",
     }
 
     /// Operator.
@@ -297,7 +292,7 @@ enum_with_str_repr! {
         Pipe = "|",
         Caret = "^",
 
-        // Boolean operators are in KeywordToken
+        // Boolean operators and boolean tests are in KeywordToken.
 
         // Miscellaneous operators
         Dot = ".",
@@ -316,6 +311,90 @@ enum_with_str_repr! {
         Comma = ",",
         Semicolon = ";",
     }
+
+    /// Comparison.
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum ComparisonToken {
+        /// Equal.
+        Eql = "==",
+        /// Not equal.
+        Neq = "!=",
+        /// Less than.
+        Lt = "<",
+        /// Greater than.
+        Gt = ">",
+        /// Less than or equal.
+        Lte = "<=",
+        /// Greater than or equal.
+        Gte = ">=",
+    }
+}
+
+impl KeywordToken {
+    pub fn starts_statement(self) -> bool {
+        match self {
+            Self::For
+            | Self::While
+            | Self::Break
+            | Self::Continue
+            | Self::Become
+            | Self::Remain
+            | Self::Return
+            | Self::Case
+            | Self::Else
+            | Self::If
+            | Self::Unless
+            | Self::Set => true,
+            Self::Or
+            | Self::Xor
+            | Self::And
+            | Self::In
+            | Self::Is
+            | Self::Bind
+            | Self::Bound
+            | Self::Static
+            | Self::Where
+            | Self::With => false,
+        }
+    }
+}
+
+impl ComparisonToken {
+    pub fn is_eq_only(self) -> bool {
+        self == Self::Eql || self == Self::Neq
+    }
+    pub fn inkwell_predicate(self, signed: bool) -> inkwell::IntPredicate {
+        use inkwell::IntPredicate::*;
+        if signed {
+            match self {
+                Self::Eql => EQ,
+                Self::Neq => NE,
+                Self::Lt => SLT,
+                Self::Gt => SGT,
+                Self::Lte => SLE,
+                Self::Gte => SGE,
+            }
+        } else {
+            match self {
+                Self::Eql => EQ,
+                Self::Neq => NE,
+                Self::Lt => SLT,
+                Self::Gt => SGT,
+                Self::Lte => SLE,
+                Self::Gte => SGE,
+            }
+        }
+    }
+    pub fn eval<T: PartialOrd>(self, lhs: T, rhs: T) -> bool {
+        match self {
+            Self::Eql => lhs == rhs,
+            Self::Neq => lhs != rhs,
+            Self::Lt => lhs < rhs,
+            Self::Gt => lhs > rhs,
+            Self::Lte => lhs <= rhs,
+            Self::Gte => lhs >= rhs,
+        }
+    }
 }
 
 /// Assignment operator.
@@ -324,7 +403,7 @@ pub enum AssignmentToken {
     /// Simple `=` assignment.
     Assign,
     /// Assignment with an additional operator; e.g. `+=`.
-    OpAssign(Op),
+    OpAssign(OperatorToken),
 }
 impl fmt::Display for AssignmentToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -346,28 +425,30 @@ impl FromStr for AssignmentToken {
             .map(regex::Match::as_str)
         {
             if op_str.is_empty() {
-                return Ok(Self::Assign);
-            } else if let Ok(math_op) = op_str.parse() {
-                return Ok(Self::OpAssign(Op::Math(math_op)));
-            } else if let Ok(shift_op) = op_str.parse() {
-                return Ok(Self::OpAssign(Op::Shift(shift_op)));
-            } else if let Ok(bit_op) = op_str.parse() {
-                return Ok(Self::OpAssign(Op::Bitwise(bit_op)));
+                Ok(Self::Assign)
+            } else if let Ok(op) = op_str.parse() {
+                Ok(Self::OpAssign(op))
+            } else {
+                Err(())
             }
+        } else {
+            Err(())
         }
-        Err(())
+    }
+}
+impl AssignmentToken {
+    /// Returns the token of the operator, if any, that this assignmeent uses.
+    pub fn op(self) -> Option<OperatorToken> {
+        match self {
+            Self::Assign => None,
+            Self::OpAssign(op) => Some(op),
+        }
     }
 }
 
-/// Comparison.
-///
-/// There's no reason to redefine this, since it would be identical to
-/// components::common::Cmp.
-pub type ComparisonToken = Cmp;
-
 #[cfg(test)]
 mod tests {
-    use super::super::super::span::TextPoint;
+    use super::super::span::TextPoint;
     use super::*;
 
     #[test]

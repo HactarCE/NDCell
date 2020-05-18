@@ -110,6 +110,7 @@ impl LangError {
 pub enum LangErrorMsg {
     // Miscellaneous errors
     Unimplemented,
+    UnknownError,
     InternalError(Cow<'static, str>),
 
     // Compile errors
@@ -167,6 +168,9 @@ impl fmt::Display for LangErrorMsg {
         match self {
             Self::Unimplemented => {
                 write!(f, "This feature is unimplemented")?;
+            }
+            Self::UnknownError => {
+                write!(f, "(unknown error)")?;
             }
             Self::InternalError(s) => {
                 write!(f, "Internal error: {}\nThis is a bug in NDCell, not your code. Please report this to the developer!", s)?;
@@ -240,14 +244,14 @@ impl fmt::Display for LangErrorMsg {
                 // Omit first argument if used as a method.
                 write!(
                     f,
-                    "Invalid arguments {:?} for {}",
+                    "Invalid arguments {} for {}",
                     got.to_string(*omit_first),
                     name
                 )?;
                 if !expected.is_empty() {
                     write!(
                         f,
-                        "; expected {:?}",
+                        "; expected {}",
                         expected
                             .iter()
                             .map(|x| x.to_string(*omit_first))

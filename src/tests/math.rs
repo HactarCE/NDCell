@@ -8,7 +8,8 @@ fn test_arithmetic() {
         "
         @transition {
             become #(5 + 4)
-        }",
+        }
+        @states 10",
     );
 
     // Subtraction
@@ -26,7 +27,8 @@ fn test_arithmetic() {
         "
         @transition {
             become #(5 * 4)
-        }",
+        }
+        @states 21",
     );
 
     // Division
@@ -35,7 +37,8 @@ fn test_arithmetic() {
         "
         @transition {
             become #(10 / 3)
-        }",
+        }
+        @states 4",
     );
 
     // Remainder
@@ -53,7 +56,8 @@ fn test_arithmetic() {
         "
         @transition {
             become #-(-12)
-        }",
+        }
+        @states 13",
     );
 }
 

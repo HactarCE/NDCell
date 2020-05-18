@@ -118,43 +118,14 @@ impl Statement for If {
         self.span
     }
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
-        // Evaluate the condition.
         let condition_value = userfunc[self.cond_expr]
             .compile(compiler, userfunc)?
             .as_int()?;
-
-        // Build the destination blocks.
-        let if_true_bb = compiler.append_basic_block("ifTrue");
-        let if_false_bb = compiler.append_basic_block("ifFalse");
-        let merge_bb = compiler.append_basic_block("endIf");
-
-        // Build the switch instruction. We use a switch instead of
-        // conditional_branch because a conditional_branch would require us to
-        // convert to a 1-bit value, which is unnecessary.
-        compiler.builder().build_switch(
+        compiler.build_conditional(
             condition_value,
-            if_true_bb,
-            &[(condition_value.get_type().const_zero(), if_false_bb)],
-        );
-
-        // Build the instructions to execute if true.
-        compiler.builder().position_at_end(if_true_bb);
-        for &statement in &self.if_true {
-            userfunc.compile_statement(compiler, statement)?;
-        }
-        if compiler.needs_terminator() {
-            compiler.builder().build_unconditional_branch(merge_bb);
-        }
-
-        // Build the instructions to execute if false.
-        compiler.builder().position_at_end(if_false_bb);
-        for &statement in &self.if_false {
-            userfunc.compile_statement(compiler, statement)?;
-        }
-        if compiler.needs_terminator() {
-            compiler.builder().build_unconditional_branch(merge_bb);
-        }
-        compiler.builder().position_at_end(merge_bb);
+            |c| userfunc.compile_statement_block(c, &self.if_true),
+            |c| userfunc.compile_statement_block(c, &self.if_false),
+        )?;
         Ok(())
     }
 }
@@ -174,7 +145,7 @@ impl Return {
     /// This method checks the type of the expression to return.
     pub fn try_new(span: Span, userfunc: &mut UserFunction, ret_expr: ExprRef) -> LangResult<Self> {
         // Check that the expression matches the expected return type.
-        let expected = userfunc.return_type();
+        let expected = userfunc.signature().ret;
         let got = userfunc[ret_expr].return_type();
         if expected != got {
             Err(TypeError { expected, got }.with_span(span))?;

@@ -51,7 +51,7 @@ impl Cmp {
 }
 impl Function for Cmp {
     fn name(&self) -> String {
-        format!("<cmp {:?} {:?}>", self.types, self.comparators)
+        format!("{:?} to {:?} comparison", self.types, self.comparators)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator

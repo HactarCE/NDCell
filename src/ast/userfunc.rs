@@ -2,17 +2,17 @@ use std::collections::HashMap;
 use std::ops::Index;
 use std::rc::Rc;
 
-use super::super::compiler::{Compiler, Value};
+use super::super::compiler::{CompiledFunction, Compiler, Value};
 use super::super::errors::*;
 use super::super::functions;
 use super::super::lexer::{OperatorToken, PunctuationToken};
 use super::super::parser;
 use super::super::{ConstValue, Span, Spanned, Type};
 use super::statements;
-use super::{Args, Expr, Function, RuleMeta, Statement, StatementBlock};
+use super::{Args, Expr, FnSignature, Function, RuleMeta, Statement, StatementBlock};
 use LangErrorMsg::{
     BecomeInHelperFunction, Expected, ExpectedGot, InternalError, ReturnInTransitionFunction,
-    UseOfUninitializedVariable,
+    Unimplemented, UseOfUninitializedVariable,
 };
 
 /// A user-defined function node in the AST.
@@ -20,11 +20,15 @@ use LangErrorMsg::{
 pub struct UserFunction {
     /// Metadata of the rule that this user function is part of.
     rule_meta: Rc<RuleMeta>,
-    /// Return type of this function.
-    return_type: Type,
+    /// Name of this function.
+    name: String,
+    /// Signature of this function.
+    signature: FnSignature,
     /// Whether this is the transition function, as opposed to a helper function
     /// (determines whether `become`/`remain` or `return` is accepted).
     is_transition_function: bool,
+    /// Top-level statement block, consisting of StatementRefs to self.statements.
+    top_level_statements: StatementBlock,
     /// List of every statement AST node.
     statements: Vec<Box<dyn Statement>>,
     /// List of every expression AST node.
@@ -39,15 +43,27 @@ impl UserFunction {
     pub fn new_transition_function(rule_meta: Rc<RuleMeta>) -> Self {
         Self {
             is_transition_function: true,
-            ..Self::new_helper_function(rule_meta, Type::CellState)
+            // TODO: take arguments in the transition function
+            // TODO: reserved word for transition function?
+            ..Self::new_helper_function(
+                rule_meta,
+                "transition".to_owned(),
+                FnSignature::atom(Type::CellState),
+            )
         }
     }
     /// Constructs a new helper function that returns the given type.
-    pub fn new_helper_function(rule_meta: Rc<RuleMeta>, return_type: Type) -> Self {
+    pub fn new_helper_function(
+        rule_meta: Rc<RuleMeta>,
+        name: String,
+        signature: FnSignature,
+    ) -> Self {
         Self {
             rule_meta,
-            return_type,
+            name,
+            signature,
             is_transition_function: false,
+            top_level_statements: vec![],
             statements: vec![],
             expressions: vec![],
             variables: HashMap::new(),
@@ -56,13 +72,17 @@ impl UserFunction {
     }
 
     /// Returns the metadata associated with the rule that this function is a
-    /// part of.
+    /// member of.
     pub fn rule_meta(&self) -> &Rc<RuleMeta> {
         &self.rule_meta
     }
-    /// Returns the return type of this user function.
-    pub fn return_type(&self) -> Type {
-        self.return_type
+    /// Returns the name of this function.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    /// Returns the signature of this function.
+    pub fn signature(&self) -> &FnSignature {
+        &self.signature
     }
 
     /// Returns the type of an existing variable with the given name, or an
@@ -84,7 +104,17 @@ impl UserFunction {
         }
     }
 
-    /// Constructs an AST node for a statement block from a parse tree.
+    /// Constructs AST nodes for statements in a block from a parse tree and
+    /// adds those AST nodes to a list of top-level statements (i.e. statements
+    /// that are not inside a loop or conditional block).
+    pub fn build_top_level_statement_block_ast(
+        &mut self,
+        parser_statements: &parser::StatementBlock,
+    ) -> LangResult<()> {
+        self.top_level_statements = self.build_statement_block_ast(parser_statements)?;
+        Ok(())
+    }
+    /// Constructs AST nodes for statements in a block from a parse tree.
     pub fn build_statement_block_ast(
         &mut self,
         parser_statements: &parser::StatementBlock,
@@ -279,6 +309,51 @@ impl UserFunction {
         ErrorPointRef { idx, error }
     }
 
+    /// JIT compiles this function and returns an executable function.
+    pub fn compile(&self, compiler: &mut Compiler) -> LangResult<CompiledFunction> {
+        // Create the LLVM function. TODO: proper function signature
+        let fn_type = compiler.return_type().fn_type(&[], false);
+        // let fn_type = self.signature.llvm_fn_type(compiler)?;
+        compiler.begin_function(&self.name, fn_type, &self.variables)?;
+
+        // Compile the statements.
+        self.compile_statement_block(compiler, &self.top_level_statements)?;
+
+        if compiler.needs_terminator() {
+            // If necessary, add an implicit `return #0` at the end of the
+            // transition function. TODO: change this to `remain` once that's
+            // implemented, and handle other types as well.
+            match self.signature.ret {
+                Type::CellState => {
+                    compiler
+                        .build_return_cell_state(compiler.cell_state_type().const_int(0, false));
+                }
+                _ => Err(Unimplemented)?,
+            }
+        }
+        CompiledFunction::try_new(
+            self.rule_meta.source_code.clone(),
+            self.error_points.clone(),
+            compiler,
+        )
+    }
+
+    /// Compiles a block of statements into LLVM IR, stopping if a terminator
+    /// (e.g. `return`) is reached.
+    pub fn compile_statement_block(
+        &self,
+        compiler: &mut Compiler,
+        block: &StatementBlock,
+    ) -> LangResult<()> {
+        for &statement in block {
+            if !compiler.needs_terminator() {
+                // The function has already returned.
+                return Ok(());
+            }
+            self.compile_statement(compiler, statement)?;
+        }
+        Ok(())
+    }
     /// Compiles a statement into LLVM IR by calling Statement::compile().
     pub fn compile_statement(
         &self,
@@ -287,7 +362,7 @@ impl UserFunction {
     ) -> LangResult<()> {
         self[statement].compile(compiler, self)
     }
-    /// Compiles an expressioin into LLVM IR by calling Expr::compile().
+    /// Compiles an expression into LLVM IR by calling Expr::compile().
     pub fn compile_expr(&self, compiler: &mut Compiler, expr: ExprRef) -> LangResult<Value> {
         self[expr].compile(compiler, self)
     }

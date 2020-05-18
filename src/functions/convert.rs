@@ -32,7 +32,7 @@ impl IntToCellState {
 }
 impl Function for IntToCellState {
     fn name(&self) -> String {
-        format!("<unary {:?} operator>", OperatorToken::Tag)
+        format!("unary {:?} operator", OperatorToken::Tag.to_string())
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator

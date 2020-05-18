@@ -28,7 +28,7 @@ impl NegInt {
 }
 impl Function for NegInt {
     fn name(&self) -> String {
-        format!("<unary {:?} operator>", OperatorToken::Minus)
+        format!("unary {:?} operator", OperatorToken::Minus.to_string())
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
@@ -110,13 +110,13 @@ impl BinaryIntOp {
 }
 impl Function for BinaryIntOp {
     fn name(&self) -> String {
-        format!("<binary {:?} operator>", self.op)
+        format!("binary {:?} operator", self.op.to_string())
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
     fn signatures(&self) -> Vec<FnSignature> {
-        vec![FnSignature::new(vec![Type::Int], Type::Int)]
+        vec![FnSignature::new(vec![Type::Int, Type::Int], Type::Int)]
     }
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let lhs = args.compile(compiler, 0)?.as_int()?;

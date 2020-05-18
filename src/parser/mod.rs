@@ -1,20 +1,22 @@
 //! Functions for producing a parse tree.
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::rc::Rc;
 
 mod tree;
+
+pub use tree::*;
 
 use super::errors::*;
 use super::lexer::*;
 use super::{Span, Spanned};
-pub use tree::*;
 use LangErrorMsg::{
     ElseWithoutIf, Expected, InternalError, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
     TopLevelNonDirective, Unimplemented, Unmatched,
 };
 
 /// Parses the given tokens and returns a ParseTree.
-pub fn parse(source_code: String, tokens: &[Token]) -> LangResult<ParseTree> {
+pub fn parse(source_code: Rc<String>, tokens: &[Token]) -> LangResult<ParseTree> {
     let mut directives: HashMap<Directive, Vec<DirectiveContents>> = HashMap::new();
     for (directive, contents) in ParseBuilder::from(tokens).directives()?.into_iter() {
         directives.entry(directive).or_default().push(contents);
@@ -202,13 +204,23 @@ impl<'a> ParseBuilder<'a> {
             Some(TokenClass::Directive(directive_name)) => Ok((
                 Directive::try_from(directive_name)
                     .map_err(|_| InvalidDirectiveName.with_span(self.span()))?,
-                self.expect(Self::block)?.into(),
+                self.expect(Self::expr_or_block)?.inner,
             )),
             Some(_) => self.err(TopLevelNonDirective),
             None => self.err(Expected("directive")),
         }
     }
-    /// Consumes a block, which consists of statements
+    /// Consumes an expression or code block.
+    fn expr_or_block(&mut self) -> LangResult<DirectiveContents> {
+        match self.peek_next().map(|t| t.class) {
+            Some(TokenClass::Punctuation(PunctuationToken::LBrace)) => {
+                Ok(self.expect(Self::block)?.into())
+            }
+            Some(_) => Ok(self.expect(Self::expression)?.into()),
+            None => self.err(Expected("expression or code block"))?,
+        }
+    }
+    /// Consumes a block, which consists of statements.
     fn block(&mut self) -> LangResult<StatementBlock> {
         // Get a left brace.
         match self.next().map(|t| t.class) {

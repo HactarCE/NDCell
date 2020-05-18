@@ -21,7 +21,7 @@ impl GetVar {
 }
 impl Function for GetVar {
     fn name(&self) -> String {
-        format!("<var {:?}>", self.var_name)
+        format!("variable {:?}", self.var_name)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom

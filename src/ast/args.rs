@@ -71,6 +71,9 @@ impl ArgTypes {
             format!("{:?}", &self.0)
         }
     }
+    pub fn iter(&self) -> impl Iterator<Item = &Type> {
+        self.0.iter()
+    }
 }
 
 /// Wrapper over Args that allows the arguments to be compiled or evaluated.

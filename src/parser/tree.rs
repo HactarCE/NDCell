@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::rc::Rc;
 
 use super::super::errors::*;
 use super::super::lexer::{AssignmentToken, ComparisonToken, OperatorToken, PunctuationToken};
@@ -12,7 +13,7 @@ use LangErrorMsg::RepeatDirective;
 #[derive(Debug, Clone)]
 pub struct ParseTree {
     /// Raw source code.
-    pub source_code: String,
+    pub source_code: Rc<String>,
     /// Directives and their contents.
     pub directives: HashMap<Directive, Vec<DirectiveContents>>,
 }

@@ -10,6 +10,9 @@
 //! contain an identifier that can be used to retrieve them from a UserFunction.
 //! (UserFunction implements Index<StatementRef> and Index<ExprRef> for this.)
 
+use std::convert::TryFrom;
+use std::rc::Rc;
+
 mod args;
 mod expressions;
 mod rule;
@@ -21,3 +24,11 @@ pub use expressions::*;
 pub use rule::*;
 pub use statements::{Statement, StatementBlock};
 pub use userfunc::*;
+
+use super::errors::*;
+
+pub fn make_rule(source_code: Rc<String>) -> LangResult<Rule> {
+    let tokens = super::lexer::tokenize(&source_code)?;
+    let parse_tree = super::parser::parse(source_code.clone(), &tokens)?;
+    Rule::try_from(parse_tree)
+}

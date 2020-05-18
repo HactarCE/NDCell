@@ -94,10 +94,8 @@ impl Expr {
 pub trait Function: std::fmt::Debug {
     /// Returns the end-user-friendly name for this function.
     ///
-    /// For non-functions like operators and properties, the name should be
-    /// surrounded with angle brackets. For methods and properties, the name
-    /// should be prefixed with the type followed by a period (e.g.
-    /// "Pattern.outer").
+    /// For methods and properties, the name should be prefixed with the type
+    /// followed by a period (e.g. "Pattern.outer").
     fn name(&self) -> String;
 
     /// Returns the kind of "function" this is. See FunctionKind for details.
@@ -162,7 +160,7 @@ pub enum FunctionKind {
 
 /// Function signature, consisting of types for the arguments and a return
 /// type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct FnSignature {
     pub args: ArgTypes,
     pub ret: Type,
@@ -185,5 +183,20 @@ impl FnSignature {
     /// Returns true if the given argument types match the arguments of this function signature.
     pub fn matches(&self, args: &ArgTypes) -> bool {
         &self.args == args
+    }
+    /// Returns the LLVM function type that is equivalent to this function signature.
+    pub fn llvm_fn_type(
+        &self,
+        compiler: &Compiler,
+    ) -> LangResult<inkwell::types::FunctionType<'static>> {
+        use inkwell::types::BasicType;
+        // TODO: validate user function args and return value at some point.
+        let llvm_param_types = self
+            .args
+            .iter()
+            .map(|&t| compiler.get_llvm_type(t))
+            .collect::<LangResult<Vec<_>>>()?;
+        let llvm_ret_type = compiler.get_llvm_type(self.ret)?;
+        Ok(llvm_ret_type.fn_type(&llvm_param_types, false))
     }
 }

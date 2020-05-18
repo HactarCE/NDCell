@@ -17,7 +17,8 @@ fn test_branch_nonzero() {
                 }
             }
             become #0
-        }",
+        }
+        @states 11",
     );
 }
 

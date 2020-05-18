@@ -1,20 +1,29 @@
-use inkwell::basic_block::BasicBlock;
-use inkwell::builder::Builder;
-use inkwell::context::Context;
-use inkwell::module::{Linkage, Module};
-use inkwell::types::{FunctionType, IntType};
-use inkwell::values::{BasicValueEnum, FunctionValue, IntValue, PointerValue};
-use inkwell::IntPredicate;
 use std::collections::HashMap;
 use thread_local::ThreadLocal;
 
+use inkwell::basic_block::BasicBlock;
+use inkwell::builder::Builder;
+use inkwell::context::Context;
+use inkwell::execution_engine::ExecutionEngine;
+use inkwell::module::Module;
+use inkwell::types::{BasicTypeEnum, FunctionType, IntType};
+use inkwell::values::{BasicValueEnum, FunctionValue, IntValue, PointerValue};
+use inkwell::{IntPredicate, OptimizationLevel};
+
+mod function;
 mod value;
+
+pub use function::CompiledFunction;
+pub use value::Value;
 
 use super::errors::*;
 use super::types::{CELL_STATE_BITS, INT_BITS};
 use super::Type;
-pub use value::Value;
 use LangErrorMsg::InternalError;
+
+const MODULE_NAME: &'static str = "ndca";
+
+type JitFunction = inkwell::execution_engine::JitFunction<'static, unsafe extern "C" fn() -> u64>;
 
 lazy_static! {
     static ref CTX: ThreadLocal<Context> = ThreadLocal::new();
@@ -34,14 +43,96 @@ pub struct Compiler {
     /// LLVM module.
     module: Module<'static>,
     /// LLVM instruction builder.
-    builder: Builder<'static>,
-    /// LLVM function currently being built (which may change).
+    builder_opt: Option<Builder<'static>>,
+    /// LLVM function currently being built.
     fn_value_opt: Option<FunctionValue<'static>>,
+    /// LLVM functions built by this compiler (which will all be deleted when this
+    /// compiler is dropped).
+    fn_values: Vec<FunctionValue<'static>>,
+    /// LLVM JIT execution engine.
+    execution_engine: ExecutionEngine<'static>,
 
     /// PointerValues for all variables, indexed by name.
-    var_values: HashMap<String, PointerValue<'static>>,
+    var_ptrs: HashMap<String, PointerValue<'static>>,
+}
+impl Drop for Compiler {
+    fn drop(&mut self) {
+        // TODO: is this necessary? awaiting response on Gitter.
+        self.fn_value_opt = None;
+        for fn_value in self.fn_values.drain(..) {
+            unsafe { fn_value.delete() };
+        }
+    }
 }
 impl Compiler {
+    /// Constructs a new compiler with a blank module and "main" function.
+    ///
+    /// After constructing a Compiler, call begin_function() before building any
+    /// instructions.
+    pub fn new() -> LangResult<Self> {
+        let module = get_ctx().create_module(MODULE_NAME);
+        let execution_engine = module
+            .create_jit_execution_engine(OptimizationLevel::None)
+            .map_err(|e| {
+                InternalError(format!("Error creating JIT execution engine: {:?}", e).into())
+                    .without_span()
+            })?;
+        Ok(Self {
+            module,
+            builder_opt: None,
+            fn_value_opt: None,
+            fn_values: vec![],
+            execution_engine,
+
+            var_ptrs: HashMap::new(),
+        })
+    }
+    /// Begins building a new LLVM function, initializing variables and
+    /// positioning the instruction builder accordingly.
+    pub fn begin_function<'a>(
+        &'a mut self,
+        name: &'a str,
+        ty: FunctionType<'static>,
+        variables: &HashMap<String, Type>,
+    ) -> LangResult<()> {
+        let fn_value = self.module.add_function(name, ty, None);
+        self.fn_values.push(fn_value);
+        self.fn_value_opt = Some(fn_value);
+        self.builder_opt = Some(get_ctx().create_builder());
+        let entry_bb = self.append_basic_block("entry");
+        self.builder().position_at_end(entry_bb);
+        // Allocate and initialize variables.
+        self.var_ptrs = variables
+            .iter()
+            .map(|(name, &ty)| {
+                let llvm_type = self.get_llvm_type(ty)?;
+                // Allocate space.
+                let ptr = self
+                    .builder()
+                    .build_alloca(llvm_type, &format!("uservar__{}", name));
+                // Initialize to a default value.
+                let default_value = self.get_default_var_value(ty).ok_or_else(|| {
+                    InternalError("Uncaught invalid type for variable".into()).without_span()
+                })?;
+                self.builder().build_store(ptr, default_value);
+                Ok((name.to_owned(), ptr))
+            })
+            .collect::<LangResult<_>>()?;
+        Ok(())
+    }
+
+    pub unsafe fn get_jit_function(&self) -> LangResult<JitFunction> {
+        let fn_value = self.fn_value();
+        let fn_name = fn_value
+            .get_name()
+            .to_str()
+            .expect("Invalid UTF-8 in LLVM function name (seriously, wtf?)");
+        self.execution_engine.get_function(fn_name).map_err(|_| {
+            InternalError(format!("Failed to find JIT-compiled function {:?}", fn_name).into())
+                .without_span()
+        })
+    }
+
     /// Returns the LLVM return type of the function currently being built.
     pub fn return_type(&self) -> IntType<'static> {
         get_ctx().i64_type()
@@ -57,11 +148,13 @@ impl Compiler {
 
     /// Returns the Inkwell instruction builder.
     pub fn builder(&mut self) -> &Builder<'static> {
-        &self.builder
+        self.builder_opt
+            .as_ref()
+            .expect("Compiler::begin_function() must be called before building LLVM instructions")
     }
     /// Returns a HashMap of variable pointers, indexed by name.
     pub fn vars(&self) -> &HashMap<String, PointerValue<'static>> {
-        &self.var_values
+        &self.var_ptrs
     }
 
     /// Returns an LLVM intrinsic given its name and function signature.
@@ -76,22 +169,20 @@ impl Compiler {
                     Ok(fn_value)
                 } else {
                     Err(InternalError(
-                        "Requested LLVM intrinsics with same name but different type signatures"
+                        "Requested multiple LLVM intrinsics with same name but different type signatures"
                             .into(),
                     )
                     .without_span())
                 }
             }
-            None => Ok(self
-                .module
-                .add_function(name, fn_type, Some(Linkage::External))),
+            None => Ok(self.module.add_function(name, fn_type, None)),
         }
     }
 
     /// Returns the LLVM function that is currently being built.
-    fn fn_value(&self) -> FunctionValue<'static> {
+    pub fn fn_value(&self) -> FunctionValue<'static> {
         self.fn_value_opt
-            .expect("No function value in JIT compiler")
+            .expect("Compiler::begin_function() must be called before retrieving function value")
     }
     /// Appends an LLVM BasicBlock to the end of the current LLVM function and
     /// returns the new BasicBlock.
@@ -100,8 +191,8 @@ impl Compiler {
     }
     /// Returns whether the current LLVM BasicBlock still needs a terminator
     /// instruction (i.e. whether it does NOT yet have one).
-    pub fn needs_terminator(&self) -> bool {
-        self.builder
+    pub fn needs_terminator(&mut self) -> bool {
+        self.builder()
             .get_insert_block()
             .unwrap()
             .get_terminator()
@@ -123,26 +214,27 @@ impl Compiler {
 
         // Build the switch instruction (because condition_value might not be
         // 1-bit).
-        self.builder.build_switch(
+        self.builder().build_switch(
             condition_value,
             if_true_bb,
             &[(condition_value.get_type().const_zero(), if_false_bb)],
         );
 
         // Build the instructions to execute if true.
-        self.builder.position_at_end(if_true_bb);
+        self.builder().position_at_end(if_true_bb);
         build_if_true(self)?;
         if self.needs_terminator() {
-            self.builder.build_unconditional_branch(merge_bb);
+            self.builder().build_unconditional_branch(merge_bb);
         }
 
         // Build the instructions to execute if false.
-        self.builder.position_at_end(if_false_bb);
+        self.builder().position_at_end(if_false_bb);
         build_if_false(self)?;
         if self.needs_terminator() {
-            self.builder.build_unconditional_branch(merge_bb);
+            self.builder().build_unconditional_branch(merge_bb);
         }
-        self.builder.position_at_end(merge_bb);
+
+        self.builder().position_at_end(merge_bb);
         Ok(())
     }
 
@@ -182,7 +274,7 @@ impl Compiler {
         let intrinsic_args = &[lhs.into(), rhs.into()];
 
         // Build a call to an LLVM intrinsic to do the operation.
-        let call_site_value = self.builder.build_call(
+        let call_site_value = self.builder().build_call(
             intrinsic_fn,
             intrinsic_args,
             &format!("tmp_{}", intrinsic_name),
@@ -199,12 +291,12 @@ impl Compiler {
         // of the operation, and a boolean value which is true if overflow
         // occurred. Extract each of those.
         let result_value = self
-            .builder
+            .builder()
             .build_extract_value(return_value, 0, &format!("tmp_{}Result", intrinsic_name))
             .unwrap()
             .into_int_value();
         let is_overflow = self
-            .builder
+            .builder()
             .build_extract_value(return_value, 1, &format!("tmp_{}Overflow", intrinsic_name))
             .unwrap()
             .into_int_value();
@@ -275,15 +367,6 @@ impl Compiler {
         )
     }
 
-    /// Returns the default value for variables of the given type.
-    fn get_default_var_value(&self, ty: Type) -> Option<BasicValueEnum<'static>> {
-        match ty {
-            Type::Int => Some(self.int_type().const_zero().into()),
-            Type::CellState => Some(self.cell_state_type().const_zero().into()),
-            Type::Vector(len) => Some(self.int_type().vec_type(len.into()).const_zero().into()),
-        }
-    }
-
     /// Returns the minimum value representable by signed integers of NDCA's
     /// signed integer type.
     fn get_min_int_value(&self) -> IntValue<'static> {
@@ -291,5 +374,27 @@ impl Compiler {
             self.int_type()
                 .const_int(self.int_type().get_bit_width() as u64 - 1, false),
         )
+    }
+
+    /// Returns the default value for variables of the given type.
+    pub fn get_default_var_value(&self, ty: Type) -> Option<BasicValueEnum<'static>> {
+        match ty {
+            Type::Int => Some(self.int_type().const_zero().into()),
+            Type::CellState => Some(self.cell_state_type().const_zero().into()),
+            Type::Vector(len) => Some(self.int_type().vec_type(len.into()).const_zero().into()),
+        }
+    }
+
+    /// Returns the LLVM type corresponding to the given type in NDCA.
+    pub fn get_llvm_type(&self, ty: Type) -> LangResult<BasicTypeEnum<'static>> {
+        match ty {
+            Type::Int => Ok(self.int_type().into()),
+            Type::CellState => Ok(self.cell_state_type().into()),
+            Type::Vector(len) => Ok(self.int_type().vec_type(len.into()).into()),
+            _ => Err(InternalError(
+                "Attempt to get LLVM representation of type that has none".into(),
+            )
+            .without_span()),
+        }
     }
 }

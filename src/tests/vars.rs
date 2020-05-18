@@ -40,7 +40,8 @@ fn test_variables() {
             if 1 {
                 become #(x + 3)
             }
-        }",
+        }
+        @states 11",
     );
 }
 
@@ -69,4 +70,13 @@ set s = #2
             set s = #2
         }",
     );
+
+    // Return an integer
+    assert_output(
+        Err("TODO"),
+        "
+        @transition {
+            return 0
+        }",
+    )
 }

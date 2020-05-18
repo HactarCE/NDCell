@@ -12,7 +12,7 @@ use super::super::{ConstValue, Type};
 pub struct Int(pub LangInt);
 impl Function for Int {
     fn name(&self) -> String {
-        "<const int>".to_owned()
+        "constant integer".to_owned()
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom

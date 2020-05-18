@@ -24,8 +24,9 @@ fn make_default_states(count: Option<usize>) -> Vec<CellState> {
 
 /// Root node of an abstract syntax tree representing a Rule, along with any
 /// associated metadata (such as cell state information).
+#[derive(Debug)]
 pub struct Rule {
-    /// Metadata describing this rule.
+    /// Metadata (e.g. source code, cell state information).
     meta: Rc<RuleMeta>,
     /// Transition function used to simulate this rule.
     transition_function: UserFunction,
@@ -87,7 +88,11 @@ impl TryFrom<ParseTree> for Rule {
             Some(DirectiveContents::Block(block)) => Err(Expected("expression").with_span(block))?,
         };
 
-        let meta = Rc::new(RuleMeta { ndim, states });
+        let meta = Rc::new(RuleMeta {
+            source_code: parse_tree.source_code.clone(),
+            ndim,
+            states,
+        });
 
         // Build transition function.
         let mut transition_function = UserFunction::new_transition_function(meta.clone());
@@ -97,7 +102,7 @@ impl TryFrom<ParseTree> for Rule {
         {
             // The user gave a block of code.
             DirectiveContents::Block(statements) => {
-                transition_function.build_statement_block_ast(&statements.inner)?;
+                transition_function.build_top_level_statement_block_ast(&statements.inner)?;
             }
             // The user gave an expression as the transition function.
             DirectiveContents::Expr(expr) => {
@@ -112,11 +117,19 @@ impl TryFrom<ParseTree> for Rule {
         })
     }
 }
+impl Rule {
+    /// Returns this rule's transition function.
+    pub fn transition_function(&self) -> &UserFunction {
+        &self.transition_function
+    }
+}
 
 /// Metadata about a rule, such as the number of dimensions and a list of
 /// possible cell states.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuleMeta {
+    /// Raw source code.
+    pub source_code: Rc<String>,
     /// Number of dimensions (from 1 to 6).
     pub ndim: u8,
     /// List of cell states.
@@ -127,6 +140,7 @@ pub struct RuleMeta {
 impl Default for RuleMeta {
     fn default() -> Self {
         Self {
+            source_code: Rc::new(String::new()),
             ndim: DEFAULT_NDIM,
             states: make_default_states(None),
         }

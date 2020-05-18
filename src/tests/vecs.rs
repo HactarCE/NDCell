@@ -38,7 +38,8 @@ fn test_vector_access() {
         @transition {
             set v = [1, 10, 100]
             become #(v.y - v.x)
-        }",
+        }
+        @states 10",
     );
     assert_output(
         Ok(0),
@@ -72,7 +73,8 @@ fn test_vector_ops() {
             // v.sum = 2 + 20 + 200 = 222
             // v.product - v.sum = 8000 - 222 = 7778
             become #(v.product - v.sum - 7700)
-        }",
+        }
+        @states 79",
     );
     // Test ops on vectors of different lengths.
     assert_output(
@@ -81,7 +83,8 @@ fn test_vector_ops() {
         @transition {
             set v = [1, 10, 100] - [1, 10]
             become #(v.sum)
-        }",
+        }
+        @states 101",
     );
     // Test that multiplication and bitwise AND between vectors of different
     // lengths shrink vectors instead of extending them.
@@ -96,7 +99,8 @@ fn test_vector_ops() {
 
             // If the vectors were extended, then the product would be zero.
             become #(a.product + -b.product)
-        }",
+        }
+        @sstates 123",
     );
 }
 
@@ -107,13 +111,15 @@ fn test_vector_constructor() {
         "
         @transition {
             become #(vec4(2).product)
-        }",
+        }
+        @states 16",
     );
     assert_output(
         Ok(2),
         "
         @transition {
             become #(vec2().len - vec2().sum)
-        }",
+        }
+        @states 3",
     );
 }

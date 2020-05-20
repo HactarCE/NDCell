@@ -2,6 +2,14 @@
 
 This is a testing ground for a cellular automaton description language for [NDCell](https://github.com/HactarCE/NDCell).
 
+## Short-term to-do list
+
+* Compile helper functions
+* Debug heleper or transition function
+* Function calls (built-in)
+* Function calls (helper)
+* Debug helper function calls
+
 ## Building on Linux or macOS
 
 1. Download/install Cargo.

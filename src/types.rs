@@ -44,4 +44,14 @@ impl Type {
             Self::Int | Self::CellState | Self::Vector(_) => true,
         }
     }
+    /// Returns the number of bytes used to represent this type in compiled
+    /// code, or None if this type has no runtime representation.
+    pub fn size_of(self) -> Option<usize> {
+        // TODO: test this method along with Value::from_bytes() and to_bytes()
+        match self {
+            Self::Int => Some(std::mem::size_of::<LangInt>()),
+            Self::CellState => Some(std::mem::size_of::<LangCellState>()),
+            Self::Vector(len) => Some(len as usize * Self::Int.size_of().unwrap()),
+        }
+    }
 }

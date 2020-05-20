@@ -293,7 +293,6 @@ impl<'a> ParseBuilder<'a> {
                     // Construct the statement.
                     Statement::SetVar {
                         var_expr,
-                        // TODO: Expand OpAssigns like `x += y` into `x = x + y`.
                         assign_op,
                         value_expr,
                     }

@@ -151,10 +151,10 @@ impl<'a> ParseBuilder<'a> {
     fn err<T>(&self, msg: LangErrorMsg) -> LangResult<T> {
         Err(msg.with_span(self.span()))
     }
-    /// Consumes the next symbol and return return a Spanned { ... } of the
-    /// result of the given closure if the closure returns LangResult::Ok;
-    /// otherwise rewind the state of the ParseBuilder to before the closure was
-    /// run and then return the LangResult::Err.
+    /// Consumes the next symbol and returns a Spanned { ... } of the result of
+    /// the given closure if the closure returns LangResult::Ok; otherwise
+    /// rewind the state of the ParseBuilder to before the closure was run and
+    /// then return the LangResult::Err.
     fn expect<T>(&mut self, f: impl Fn(&mut Self) -> LangResult<T>) -> LangResult<Spanned<T>> {
         self.expect_spanned(|b| {
             b.next();

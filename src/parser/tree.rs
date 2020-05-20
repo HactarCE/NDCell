@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use super::super::errors::*;
 use super::super::lexer::{AssignmentToken, ComparisonToken, OperatorToken, PunctuationToken};
-use super::super::Spanned;
+use super::super::{Span, Spanned};
 use LangErrorMsg::RepeatDirective;
 
 /// Parse tree of containing tokens.
@@ -15,7 +15,7 @@ pub struct ParseTree {
     /// Raw source code.
     pub source_code: Rc<String>,
     /// Directives and their contents.
-    pub directives: HashMap<Directive, Vec<DirectiveContents>>,
+    pub directives: HashMap<Directive, Vec<Spanned<DirectiveContents>>>,
 }
 impl ParseTree {
     /// Returns the DirectiveContents of the given directive in this parse tree.
@@ -26,11 +26,11 @@ impl ParseTree {
     pub fn get_single_directive(
         &self,
         directive: Directive,
-    ) -> LangResult<Option<&DirectiveContents>> {
+    ) -> LangResult<Option<(Span, &DirectiveContents)>> {
         match self.directives.get(&directive).map(Vec::as_slice) {
             None => Ok(None),
             Some([]) => Ok(None),
-            Some([x]) => Ok(Some(x)),
+            Some([x]) => Ok(Some((x.span, &x.inner))),
             // TODO: maybe include span in this error
             Some([_, _, ..]) => Err(RepeatDirective(directive.name()).without_span()),
         }

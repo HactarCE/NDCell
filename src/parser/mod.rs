@@ -17,7 +17,7 @@ use LangErrorMsg::{
 
 /// Parses the given tokens and returns a ParseTree.
 pub fn parse(source_code: Rc<String>, tokens: &[Token]) -> LangResult<ParseTree> {
-    let mut directives: HashMap<Directive, Vec<DirectiveContents>> = HashMap::new();
+    let mut directives: HashMap<Directive, Vec<Spanned<DirectiveContents>>> = HashMap::new();
     for (directive, contents) in ParseBuilder::from(tokens).directives()?.into_iter() {
         directives.entry(directive).or_default().push(contents);
     }
@@ -189,10 +189,15 @@ impl<'a> ParseBuilder<'a> {
         }
     }
     /// Consumes a sequence of directives.
-    fn directives(&mut self) -> LangResult<Vec<(Directive, DirectiveContents)>> {
+    fn directives(&mut self) -> LangResult<Vec<(Directive, Spanned<DirectiveContents>)>> {
         let mut directives = vec![];
         while self.peek_next().is_some() {
-            directives.push(self.expect(Self::directive)?.inner);
+            let Spanned {
+                span,
+                inner: (dir, contents),
+            } = self.expect(Self::directive)?;
+            let inner = contents;
+            directives.push((dir, Spanned { span, inner }));
         }
         Ok(directives)
     }
@@ -225,7 +230,7 @@ impl<'a> ParseBuilder<'a> {
         // Get a left brace.
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LBrace)) => (),
-            _ => self.err(Expected("code block beginning with '{'"))?,
+            _ => self.err(Expected("code block"))?,
         }
         // Record the span of the left brace.
         let open_span = self.span();

@@ -41,8 +41,8 @@ impl TryFrom<ParseTree> for Rule {
             // There is no `@dimensions` directive; use the default.
             None => DEFAULT_NDIM,
             // There is an `@dimensions` directive.
-            Some(DirectiveContents::Expr(expr)) => {
-                let ndim_expr = temp_func.build_expression_ast(expr)?;
+            Some((_span, DirectiveContents::Expr(expr))) => {
+                let ndim_expr = temp_func.build_expression_ast(&expr)?;
                 let ndim_value = temp_func.const_eval_expr(ndim_expr)?;
                 match ndim_value {
                     // The user specified a valid dimension count.
@@ -58,8 +58,8 @@ impl TryFrom<ParseTree> for Rule {
                     .with_span(expr.span))?,
                 }
             }
-            // The user gave a block of code instead of an expression.
-            Some(DirectiveContents::Block(block)) => Err(Expected("expression").with_span(block))?,
+            // The user gave something else instead of an expression.
+            Some((span, _contents)) => Err(Expected("expression").with_span(span))?,
         };
 
         // Get states.
@@ -67,8 +67,8 @@ impl TryFrom<ParseTree> for Rule {
             // There is no `@states` directive; use the default states.
             None => make_default_states(None),
             // There is an `@states` directive.
-            Some(DirectiveContents::Expr(expr)) => {
-                let states_expr = temp_func.build_expression_ast(expr)?;
+            Some((_span, DirectiveContents::Expr(expr))) => {
+                let states_expr = temp_func.build_expression_ast(&expr)?;
                 let states_value = temp_func.const_eval_expr(states_expr)?;
                 match states_value {
                     // The user specified a valid state count.
@@ -84,8 +84,8 @@ impl TryFrom<ParseTree> for Rule {
                     .with_span(expr.span))?,
                 }
             }
-            // The user gave a block of code instead of an expression.
-            Some(DirectiveContents::Block(block)) => Err(Expected("expression").with_span(block))?,
+            // The user gave something else instead of an expression.
+            Some((span, _contents)) => Err(Expected("expression").with_span(span))?,
         };
 
         let meta = Rc::new(RuleMeta {
@@ -101,12 +101,12 @@ impl TryFrom<ParseTree> for Rule {
             .ok_or_else(|| MissingTransitionFunction.without_span())?
         {
             // The user gave a block of code.
-            DirectiveContents::Block(statements) => {
+            (_span, DirectiveContents::Block(statements)) => {
                 transition_function.build_top_level_statement_block_ast(&statements.inner)?;
             }
-            // The user gave an expression as the transition function.
-            DirectiveContents::Expr(expr) => {
-                Err(Expected("code block beginning with '{'").with_span(expr))?;
+            // The user gave something else instead of a code block.
+            (span, _contents) => {
+                Err(Expected("code block").with_span(span))?;
             }
         }
 

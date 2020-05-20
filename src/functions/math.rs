@@ -184,7 +184,7 @@ impl Function for BinaryIntOp {
             Minus => lhs.checked_sub(rhs),
             // Multiplication
             Asterisk => lhs.checked_mul(rhs),
-            // Division or remainder (TODO: use euclidean div and modulo)
+            // Division and remainder (TODO: use euclidean div and modulo)
             Slash | Percent => {
                 if rhs == 0 {
                     self.div_by_zero_error().err()?

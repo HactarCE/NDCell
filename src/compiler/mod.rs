@@ -1,14 +1,33 @@
+//! JIT compiler for the language.
+//!
+//! Most of the logic of compiling individual statements and functions is
+//! present in methods on the AST nodes themselves, but this module manages all
+//! the setup and teardown required.
+//!
+//! When we compile a function, we don't actually know how many arguments it
+//! takes or what its return type is, so we can't encode this in Rust's type
+//! system. Instead we create a struct containing all of the inputs to the
+//! function and pass a pointer to that as the first argument, then create a
+//! variable for the output of the function and pass a pointer to that as the
+//! second argument. The actual return value of the function is just an integer
+//! to indicate any error.
+//!
+//! The values in that first struct I've called "in/out" values, or `inouts`.
+//! Actual function arguments only matter as inputs, but when debugging a
+//! function we can pass variable values as "in/out" values, and read the value
+//! after executing part of the function.
+
 use std::collections::HashMap;
 use thread_local::ThreadLocal;
 
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::execution_engine::ExecutionEngine;
+use inkwell::execution_engine::{ExecutionEngine, JitFunction, UnsafeFunctionPointer};
 use inkwell::module::Module;
-use inkwell::types::{BasicTypeEnum, FunctionType, IntType};
-use inkwell::values::{BasicValueEnum, FunctionValue, IntValue, PointerValue};
-use inkwell::{IntPredicate, OptimizationLevel};
+use inkwell::types::{BasicType, BasicTypeEnum, FunctionType, IntType, StructType, VectorType};
+use inkwell::values::{FunctionValue, IntValue, PointerValue};
+use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 
 mod function;
 mod value;
@@ -18,16 +37,20 @@ pub use value::Value;
 
 use super::errors::*;
 use super::types::{CELL_STATE_BITS, INT_BITS};
-use super::Type;
+use super::{ConstValue, Type};
 use LangErrorMsg::InternalError;
 
+/// Name of the LLVM module.
 const MODULE_NAME: &'static str = "ndca";
 
-type JitFunction = inkwell::execution_engine::JitFunction<'static, unsafe extern "C" fn() -> u64>;
+/// Whether to enable debug mode. TODO: move this to CompilerConfig
+const DEBUG_MODE: bool = false;
 
 lazy_static! {
+    /// Per-thread LLVM context.
     static ref CTX: ThreadLocal<Context> = ThreadLocal::new();
 }
+/// Returns this thread's LLVM context.
 fn get_ctx() -> &'static Context {
     &CTX.get_or(Context::create)
 }
@@ -42,18 +65,10 @@ fn get_ctx() -> &'static Context {
 pub struct Compiler {
     /// LLVM module.
     module: Module<'static>,
-    /// LLVM instruction builder.
-    builder_opt: Option<Builder<'static>>,
-    /// LLVM function currently being built.
-    fn_value_opt: Option<FunctionValue<'static>>,
-    /// LLVM functions built by this compiler (which will all be deleted when this
-    /// compiler is dropped).
-    fn_values: Vec<FunctionValue<'static>>,
     /// LLVM JIT execution engine.
     execution_engine: ExecutionEngine<'static>,
-
-    /// PointerValues for all variables, indexed by name.
-    var_ptrs: HashMap<String, PointerValue<'static>>,
+    /// Function currently being built.
+    function: Option<FunctionInProgress>,
 }
 impl Compiler {
     /// Constructs a new compiler with a blank module and "main" function.
@@ -70,51 +85,181 @@ impl Compiler {
             })?;
         Ok(Self {
             module,
-            builder_opt: None,
-            fn_value_opt: None,
-            fn_values: vec![],
             execution_engine,
-
-            var_ptrs: HashMap::new(),
+            function: None,
         })
     }
-    /// Begins building a new LLVM function, initializing variables and
-    /// positioning the instruction builder accordingly.
-    pub fn begin_function<'a>(
-        &'a mut self,
-        name: &'a str,
-        ty: FunctionType<'static>,
-        variables: &HashMap<String, Type>,
+
+    /// Begins building a new LLVM function that can be called only from LLVM,
+    /// initializing variables and positioning the instruction pointer
+    /// accordingly.
+    pub fn begin_intern_function(
+        &mut self,
+        name: &str,
+        return_type: Type,
+        arg_names: &[String],
+        var_types: &HashMap<String, Type>,
     ) -> LangResult<()> {
-        let fn_value = self.module.add_function(name, ty, None);
-        self.fn_values.push(fn_value);
-        self.fn_value_opt = Some(fn_value);
-        self.builder_opt = Some(get_ctx().create_builder());
-        let entry_bb = self.append_basic_block("entry");
-        self.builder().position_at_end(entry_bb);
-        // Allocate and initialize variables.
-        self.var_ptrs = variables
+        // Determine the LLVM function type (signature).
+        let llvm_return_type = self.get_llvm_type(return_type)?;
+        let llvm_arg_types = arg_names
             .iter()
-            .map(|(name, &ty)| {
-                let llvm_type = self.get_llvm_type(ty)?;
-                // Allocate space.
-                let ptr = self
-                    .builder()
-                    .build_alloca(llvm_type, &format!("uservar__{}", name));
-                // Initialize to a default value.
-                let default_value = self.get_default_var_value(ty).ok_or_else(|| {
-                    InternalError("Uncaught invalid type for variable".into()).without_span()
-                })?;
-                self.builder().build_store(ptr, default_value);
-                Ok((name.to_owned(), ptr))
-            })
-            .collect::<LangResult<_>>()?;
+            .map(|name| self.get_llvm_type(var_types[name]))
+            .collect::<LangResult<Vec<_>>>()?;
+        let fn_type = llvm_return_type.fn_type(&llvm_arg_types, false);
+        // Construct the FunctionInProgress.
+        self.function = Some(FunctionInProgress {
+            llvm_fn: self.module.add_function(name, fn_type, None),
+            builder: get_ctx().create_builder(),
+
+            return_type,
+            return_value_ptr: None,
+
+            inout_struct_type: None,
+            vars_by_name: HashMap::new(),
+        });
+        // Allocate and initialize variables and add them to the HashMap of all
+        // variables.
+        for (name, &ty) in var_types {
+            let var = self.alloca_and_init_var(name.clone(), ty)?;
+            self.function_mut().vars_by_name.insert(name.clone(), var);
+        }
+
         Ok(())
     }
+    /// Begins building a new LLVM function that can be called from Rust code,
+    /// initializing variables and positioning the instruction builder
+    /// accordingly.
+    pub fn begin_extern_function(
+        &mut self,
+        name: &str,
+        return_type: Type,
+        arg_names: &[String],
+        var_types: &HashMap<String, Type>,
+    ) -> LangResult<()> {
+        // TODO: maybe sort variables (and arguments?) by alignment to reduce
+        // unnecessary padding
+        let mut inout_var_names: Vec<&String> = arg_names.iter().collect();
+        let mut alloca_var_names: Vec<&String> = vec![];
+        for (name, _ty) in var_types {
+            if !arg_names.contains(name) {
+                if DEBUG_MODE {
+                    inout_var_names.push(name);
+                } else {
+                    alloca_var_names.push(name);
+                }
+            }
+        }
 
-    pub unsafe fn get_jit_function(&self) -> LangResult<JitFunction> {
-        let fn_value = self.fn_value();
-        let fn_name = fn_value
+        // Determine the LLVM function type (signature).
+        // The first parameter is a pointer to a struct containing all of the
+        // inout parameters.
+        let inout_var_types = inout_var_names
+            .iter()
+            .map(|&name| var_types[name])
+            .map(|ty| self.get_llvm_type(ty))
+            .collect::<LangResult<Vec<_>>>()?;
+        let inout_struct_type = get_ctx().struct_type(&inout_var_types, false);
+        let inout_struct_ptr_type = inout_struct_type
+            .ptr_type(AddressSpace::Generic)
+            .as_basic_type_enum();
+        // The second parameter is a pointer to hold the return value.
+        let return_ptr_type = self
+            .get_llvm_type(return_type)?
+            .ptr_type(AddressSpace::Generic)
+            .as_basic_type_enum();
+        // The actual LLVM return value just signals whether there was an error.
+        let fn_type = self
+            .get_llvm_return_type()
+            .fn_type(&[inout_struct_ptr_type, return_ptr_type], false);
+
+        // Construct the FunctionInProgress.
+        self.function = Some(FunctionInProgress {
+            llvm_fn: self.module.add_function(name, fn_type, None),
+            builder: get_ctx().create_builder(),
+
+            return_type,
+            return_value_ptr: None,
+
+            inout_struct_type: Some(inout_struct_type),
+            vars_by_name: HashMap::new(),
+        });
+        let entry_bb = self.append_basic_block("entry");
+        self.builder().position_at_end(entry_bb);
+
+        // Get pointers to the arguments.
+        let shared_data_ptr = self
+            .llvm_fn()
+            .get_nth_param(0)
+            .unwrap()
+            .into_pointer_value();
+        self.function_mut().return_value_ptr = Some(
+            self.llvm_fn()
+                .get_nth_param(1)
+                .unwrap()
+                .into_pointer_value(),
+        );
+
+        // Add inout variables to the HashMap of all variables.
+        for (element_idx, &name) in inout_var_names.iter().enumerate() {
+            // Get the byte offset of this field (so that Rust code can read and
+            // modify this element).
+            let byte_offset = self
+                .execution_engine
+                .get_target_data()
+                .offset_of_element(&inout_struct_type, element_idx as u32)
+                .unwrap() as usize;
+            // Get a pointer to the corresponding field in the struct.
+            let ptr = self
+                .builder()
+                .build_struct_gep(shared_data_ptr, element_idx as u32, name)
+                .unwrap();
+            // Insert this into the main HashMap of all variables.
+            self.function_mut().vars_by_name.insert(
+                name.clone(),
+                Variable {
+                    name: name.clone(),
+                    ty: var_types[name],
+                    is_arg: arg_names.contains(name),
+                    ptr,
+                    inout_byte_offset: Some(byte_offset),
+                },
+            );
+        }
+        // Allocate and initialize alloca'd variables and add them to the
+        // HashMap of all variables.
+        for name in alloca_var_names {
+            let ty = var_types[name];
+            let var = self.alloca_and_init_var(name.clone(), ty)?;
+            self.function_mut().vars_by_name.insert(name.clone(), var);
+        }
+
+        Ok(())
+    }
+    /// Allocate space on the stack for the given variable and initialize it to a default value.
+    fn alloca_and_init_var(&mut self, name: String, ty: Type) -> LangResult<Variable> {
+        let llvm_type = self.get_llvm_type(ty)?;
+        // Allocate space.
+        let ptr = self.builder().build_alloca(llvm_type, &name);
+        // Initialize to a default value.
+        let default_value = self.get_default_var_value(ty).unwrap().into_basic_value()?;
+        self.builder().build_store(ptr, default_value);
+        Ok(Variable {
+            name,
+            ty,
+            ptr,
+            is_arg: false,
+            inout_byte_offset: None,
+        })
+    }
+
+    /// Finishes JIT compiling a function and returns a function pointer to
+    /// executable assembly.
+    pub unsafe fn get_jit_function<F: UnsafeFunctionPointer>(
+        &self,
+    ) -> LangResult<JitFunction<'static, F>> {
+        let llvm_fn = self.llvm_fn();
+        let fn_name = llvm_fn
             .get_name()
             .to_str()
             .expect("Invalid UTF-8 in LLVM function name (seriously, wtf?)");
@@ -124,10 +269,6 @@ impl Compiler {
         })
     }
 
-    /// Returns the LLVM return type of the function currently being built.
-    pub fn return_type(&self) -> IntType<'static> {
-        get_ctx().i64_type()
-    }
     /// Returns the LLVM type used to represent an integer.
     pub fn int_type(&self) -> IntType<'static> {
         get_ctx().custom_width_int_type(INT_BITS)
@@ -137,15 +278,24 @@ impl Compiler {
         get_ctx().custom_width_int_type(CELL_STATE_BITS)
     }
 
+    /// Returns the function currently being built, panicking if there is none.
+    fn function(&self) -> &FunctionInProgress {
+        self.function.as_ref().expect("Tried to access function being built, but there is none; call Compiler::begin_function() first")
+    }
+    fn function_mut(&mut self) -> &mut FunctionInProgress {
+        self.function.as_mut().expect("Tried to access function being built, but there is none; call Compiler::begin_function() first")
+    }
+    /// Returns the LLVM function that is currently being built.
+    pub fn llvm_fn(&self) -> FunctionValue<'static> {
+        self.function().llvm_fn
+    }
     /// Returns the Inkwell instruction builder.
     pub fn builder(&mut self) -> &Builder<'static> {
-        self.builder_opt
-            .as_ref()
-            .expect("Compiler::begin_function() must be called before building LLVM instructions")
+        &self.function().builder
     }
-    /// Returns a HashMap of variable pointers, indexed by name.
-    pub fn vars(&self) -> &HashMap<String, PointerValue<'static>> {
-        &self.var_ptrs
+    /// Returns a HashMap of variables, indexed by name.
+    pub fn vars(&self) -> &HashMap<String, Variable> {
+        &self.function().vars_by_name
     }
 
     /// Returns an LLVM intrinsic given its name and function signature.
@@ -170,15 +320,10 @@ impl Compiler {
         }
     }
 
-    /// Returns the LLVM function that is currently being built.
-    pub fn fn_value(&self) -> FunctionValue<'static> {
-        self.fn_value_opt
-            .expect("Compiler::begin_function() must be called before retrieving function value")
-    }
     /// Appends an LLVM BasicBlock to the end of the current LLVM function and
     /// returns the new BasicBlock.
     pub fn append_basic_block(&mut self, name: &str) -> BasicBlock<'static> {
-        get_ctx().append_basic_block(self.fn_value(), name)
+        get_ctx().append_basic_block(self.llvm_fn(), name)
     }
     /// Returns whether the current LLVM BasicBlock still needs a terminator
     /// instruction (i.e. whether it does NOT yet have one).
@@ -229,17 +374,20 @@ impl Compiler {
         Ok(())
     }
 
-    /// Builds instructions to return a cell state.
-    pub fn build_return_cell_state(&mut self, value: IntValue<'static>) {
-        let return_type = self.return_type();
-        let return_value = self.builder().build_int_cast(value, return_type, "ret");
-        self.builder().build_return(Some(&return_value));
+    /// Builds instructions to return a value.
+    pub fn build_return_ok(&mut self, value: Value) -> LangResult<()> {
+        let ptr = self.function().return_value_ptr.unwrap();
+        self.builder().build_store(ptr, value.into_basic_value()?);
+        let llvm_return_value = self.get_llvm_return_type().const_int(u64::MAX, true);
+        self.builder().build_return(Some(&llvm_return_value));
+        Ok(())
     }
     /// Builds instructions to return an error.
-    pub fn build_return_error(&mut self, error_index: usize) {
-        let return_value = error_index | (1 << 63);
-        let return_value = self.return_type().const_int(return_value as u64, true);
-        self.builder().build_return(Some(&return_value));
+    pub fn build_return_err(&mut self, error_index: usize) {
+        let llvm_return_value = self
+            .get_llvm_return_type()
+            .const_int(error_index as u64, false);
+        self.builder().build_return(Some(&llvm_return_value));
     }
 
     /// Builds instructions to perform checked integer arithmetic using an LLVM
@@ -367,13 +515,28 @@ impl Compiler {
         )
     }
 
-    /// Returns the default value for variables of the given type.
-    pub fn get_default_var_value(&self, ty: Type) -> Option<BasicValueEnum<'static>> {
-        match ty {
-            Type::Int => Some(self.int_type().const_zero().into()),
-            Type::CellState => Some(self.cell_state_type().const_zero().into()),
-            Type::Vector(len) => Some(self.int_type().vec_type(len.into()).const_zero().into()),
+    /// Constructs a Value from a ConstValue.
+    pub fn value_from_const(&self, const_value: ConstValue) -> Value {
+        match const_value {
+            ConstValue::Int(i) => Value::Int(self.int_type().const_int(i as u64, true)),
+            ConstValue::CellState(i) => {
+                Value::CellState(self.cell_state_type().const_int(i as u64, false))
+            }
+            ConstValue::Vector(values) => Value::Vector(VectorType::const_vector(
+                &values
+                    .iter()
+                    .map(|&i| {
+                        self.value_from_const(ConstValue::Int(i))
+                            .into_basic_value()
+                            .expect("Failed to convert ConstValue to Value")
+                    })
+                    .collect::<Vec<_>>(),
+            )),
         }
+    }
+    /// Returns the default value for variables of the given type.
+    pub fn get_default_var_value(&self, ty: Type) -> Option<Value> {
+        Some(self.value_from_const(ConstValue::default(ty)?))
     }
 
     /// Returns the LLVM type corresponding to the given type in NDCA.
@@ -388,4 +551,46 @@ impl Compiler {
             .without_span()),
         }
     }
+    /// Returns the LLVM type actually returned from this function (as opposed
+    /// to the type semantically returned).
+    pub fn get_llvm_return_type(&self) -> IntType<'static> {
+        get_ctx().i32_type()
+    }
+}
+
+#[derive(Debug)]
+/// A function in the process of being compiled to LLVM.
+struct FunctionInProgress {
+    /// LLVM function currently being built.
+    llvm_fn: FunctionValue<'static>,
+    /// LLVM instruction builder.
+    builder: Builder<'static>,
+
+    /// Struct type used to input arguments, output a return value, and debug
+    /// variables if debugging is enabled.
+    inout_struct_type: Option<StructType<'static>>,
+
+    /// Return type of this function.
+    return_type: Type,
+    /// Pointer to the place to put the return value.
+    return_value_ptr: Option<PointerValue<'static>>,
+
+    /// Variables, indexed by name.
+    vars_by_name: HashMap<String, Variable>,
+}
+
+/// Compiled variable.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Variable {
+    /// Name of this variable.
+    pub name: String,
+    /// Type of this variable.
+    pub ty: Type,
+    /// Whether this variable is an argument.
+    pub is_arg: bool,
+
+    /// The LLVM pointer to where this variable is stored.
+    pub ptr: PointerValue<'static>,
+    /// The offset of this variable in `inout_bytes`, if it is stored there.
+    pub inout_byte_offset: Option<usize>,
 }

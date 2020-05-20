@@ -62,10 +62,11 @@ impl Statement for SetVar {
         self.span
     }
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
-        let var_ptr = *compiler
+        let var_ptr = compiler
             .vars()
             .get(&self.var_name)
-            .ok_or_else(|| InternalError("Invalid variable index".into()))?;
+            .ok_or_else(|| InternalError("Invalid variable index".into()))?
+            .ptr;
         let value = userfunc
             .compile_expr(compiler, self.value_expr)?
             .into_basic_value()?;
@@ -145,7 +146,7 @@ impl Return {
     /// This method checks the type of the expression to return.
     pub fn try_new(span: Span, userfunc: &mut UserFunction, ret_expr: ExprRef) -> LangResult<Self> {
         // Check that the expression matches the expected return type.
-        let expected = userfunc.signature().ret;
+        let expected = userfunc.return_type();
         let got = userfunc[ret_expr].return_type();
         if expected != got {
             Err(TypeError { expected, got }.with_span(span))?;
@@ -158,11 +159,8 @@ impl Statement for Return {
         self.span
     }
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
-        let return_value = userfunc
-            .compile_expr(compiler, self.ret_expr)?
-            .into_basic_value()?
-            .into_int_value();
-        compiler.build_return_cell_state(return_value);
+        let return_value = userfunc.compile_expr(compiler, self.ret_expr)?;
+        compiler.build_return_ok(return_value)?;
         Ok(())
     }
 }

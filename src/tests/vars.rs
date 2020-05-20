@@ -1,9 +1,9 @@
-use super::assert_output;
+use super::{assert_output, ConstValue};
 
 #[test]
 fn test_variable_init() {
     assert_output(
-        Ok(0),
+        Ok(ConstValue::CellState(0)),
         "
         @transition {
             if 0 {
@@ -31,7 +31,7 @@ become #(x)
 #[test]
 fn test_variables() {
     assert_output(
-        Ok(10),
+        Ok(ConstValue::CellState(10)),
         "
         @transition {
             set x = 3

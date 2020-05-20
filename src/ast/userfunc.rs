@@ -9,10 +9,10 @@ use super::super::lexer::{OperatorToken, PunctuationToken};
 use super::super::parser;
 use super::super::{ConstValue, Span, Spanned, Type};
 use super::statements;
-use super::{Args, Expr, FnSignature, Function, RuleMeta, Statement, StatementBlock};
+use super::{Args, Expr, Function, RuleMeta, Statement, StatementBlock};
 use LangErrorMsg::{
     BecomeInHelperFunction, Expected, ExpectedGot, InternalError, ReturnInTransitionFunction,
-    Unimplemented, UseOfUninitializedVariable,
+    UseOfUninitializedVariable,
 };
 
 /// A user-defined function node in the AST.
@@ -22,11 +22,10 @@ pub struct UserFunction {
     rule_meta: Rc<RuleMeta>,
     /// Name of this function.
     name: String,
-    /// Signature of this function.
-    signature: FnSignature,
     /// Whether this is the transition function, as opposed to a helper function
     /// (determines whether `become`/`remain` or `return` is accepted).
     is_transition_function: bool,
+
     /// Top-level statement block, consisting of StatementRefs to self.statements.
     top_level_statements: StatementBlock,
     /// List of every statement AST node.
@@ -35,8 +34,13 @@ pub struct UserFunction {
     expressions: Vec<Expr>,
     /// List of every possible runtime error.
     error_points: Vec<LangError>,
+
     /// HashMap of variable types, indexed by name.
     variables: HashMap<String, Type>,
+    /// List of variable names for arguments.
+    arg_names: Vec<String>,
+    /// Return ttype of this function.
+    return_type: Type,
 }
 impl UserFunction {
     /// Constructs a new transition function.
@@ -45,29 +49,35 @@ impl UserFunction {
             is_transition_function: true,
             // TODO: take arguments in the transition function
             // TODO: reserved word for transition function?
-            ..Self::new_helper_function(
-                rule_meta,
-                "transition".to_owned(),
-                FnSignature::atom(Type::CellState),
-            )
+            ..Self::new_helper_function(rule_meta, "transition".to_owned(), vec![], Type::CellState)
         }
     }
     /// Constructs a new helper function that returns the given type.
     pub fn new_helper_function(
         rule_meta: Rc<RuleMeta>,
         name: String,
-        signature: FnSignature,
+        args: Vec<(String, Type)>,
+        return_type: Type,
     ) -> Self {
+        let mut variables = HashMap::new();
+        let mut arg_names = vec![];
+        for (name, ty) in args {
+            variables.insert(name.clone(), ty);
+            arg_names.push(name);
+        }
         Self {
             rule_meta,
             name,
-            signature,
             is_transition_function: false,
+
             top_level_statements: vec![],
             statements: vec![],
             expressions: vec![],
-            variables: HashMap::new(),
             error_points: vec![],
+
+            arg_names,
+            variables,
+            return_type,
         }
     }
 
@@ -80,9 +90,14 @@ impl UserFunction {
     pub fn name(&self) -> &str {
         &self.name
     }
-    /// Returns the signature of this function.
-    pub fn signature(&self) -> &FnSignature {
-        &self.signature
+
+    /// Returns the names of the arguments to this function.
+    pub fn arg_names(&self) -> &[String] {
+        &self.arg_names
+    }
+    /// Returns the return type of this function.
+    pub fn return_type(&self) -> Type {
+        self.return_type
     }
 
     /// Returns the type of an existing variable with the given name, or an
@@ -311,10 +326,12 @@ impl UserFunction {
 
     /// JIT compiles this function and returns an executable function.
     pub fn compile(&self, compiler: &mut Compiler) -> LangResult<CompiledFunction> {
-        // Create the LLVM function. TODO: proper function signature
-        let fn_type = compiler.return_type().fn_type(&[], false);
-        // let fn_type = self.signature.llvm_fn_type(compiler)?;
-        compiler.begin_function(&self.name, fn_type, &self.variables)?;
+        compiler.begin_extern_function(
+            &self.name,
+            self.return_type(),
+            &self.arg_names,
+            &self.variables,
+        )?;
 
         // Compile the statements.
         self.compile_statement_block(compiler, &self.top_level_statements)?;
@@ -323,13 +340,8 @@ impl UserFunction {
             // If necessary, add an implicit `return #0` at the end of the
             // transition function. TODO: change this to `remain` once that's
             // implemented, and handle other types as well.
-            match self.signature.ret {
-                Type::CellState => {
-                    compiler
-                        .build_return_cell_state(compiler.cell_state_type().const_int(0, false));
-                }
-                _ => Err(Unimplemented)?,
-            }
+            let default_return_value = compiler.get_default_var_value(self.return_type()).unwrap();
+            compiler.build_return_ok(default_return_value)?;
         }
         CompiledFunction::try_new(
             self.rule_meta.source_code.clone(),
@@ -403,7 +415,7 @@ pub struct ErrorPointRef {
 impl ErrorPointRef {
     /// Compiles LLVM IR that returns this error.
     pub fn compile(&self, compiler: &mut Compiler) {
-        compiler.build_return_error(self.idx);
+        compiler.build_return_err(self.idx);
     }
     /// Returns the LangError that this refers to.
     pub fn error(&self) -> LangError {

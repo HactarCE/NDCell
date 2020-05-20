@@ -69,10 +69,10 @@ Please specify a file to run. E.g.
 
 /// Runs the given rule's transition function using the compiler and returns the
 /// result.
-fn compile_and_run(source_code: Rc<String>) -> LangResult<types::LangCellState> {
+fn compile_and_run(source_code: Rc<String>) -> LangResult<ConstValue> {
     let rule = ast::make_rule(source_code.clone())?;
     let mut compiler = compiler::Compiler::new()?;
-    let transition_function = rule.transition_function().compile(&mut compiler)?;
+    let mut transition_function = rule.transition_function().compile(&mut compiler)?;
     transition_function.call()
 }
 

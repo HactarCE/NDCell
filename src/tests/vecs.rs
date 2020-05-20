@@ -1,4 +1,4 @@
-use super::assert_output;
+use super::{assert_output, ConstValue};
 
 #[test]
 fn test_vector_types() {
@@ -33,7 +33,7 @@ fn test_vector_types() {
 #[test]
 fn test_vector_access() {
     assert_output(
-        Ok(9),
+        Ok(ConstValue::CellState(9)),
         "
         @transition {
             set v = [1, 10, 100]
@@ -42,7 +42,7 @@ fn test_vector_access() {
         @states 10",
     );
     assert_output(
-        Ok(0),
+        Ok(ConstValue::CellState(0)),
         "
         @transition {
             set v = [1, 10, 100]
@@ -50,7 +50,7 @@ fn test_vector_access() {
         }",
     );
     assert_output(
-        Ok(0),
+        Ok(ConstValue::CellState(0)),
         "
         @transition {
             set v = [1, 10, 100]
@@ -63,7 +63,7 @@ fn test_vector_access() {
 fn test_vector_ops() {
     // Test addition, product, and sum.
     assert_output(
-        Ok(78),
+        Ok(ConstValue::CellState(78)),
         "
         @transition {
             set v = [1, 10, 100]
@@ -78,7 +78,7 @@ fn test_vector_ops() {
     );
     // Test ops on vectors of different lengths.
     assert_output(
-        Ok(100),
+        Ok(ConstValue::CellState(100)),
         "
         @transition {
             set v = [1, 10, 100] - [1, 10]
@@ -89,7 +89,7 @@ fn test_vector_ops() {
     // Test that multiplication and bitwise AND between vectors of different
     // lengths shrink vectors instead of extending them.
     assert_output(
-        Ok(122),
+        Ok(ConstValue::CellState(122)),
         "
         @transition {
             set a = [1, 10, 100] & [3, 3] // [1, 2]
@@ -107,7 +107,7 @@ fn test_vector_ops() {
 #[test]
 fn test_vector_constructor() {
     assert_output(
-        Ok(16),
+        Ok(ConstValue::CellState(16)),
         "
         @transition {
             become #(vec4(2).product)
@@ -115,7 +115,7 @@ fn test_vector_constructor() {
         @states 16",
     );
     assert_output(
-        Ok(2),
+        Ok(ConstValue::CellState(2)),
         "
         @transition {
             become #(vec2().len - vec2().sum)

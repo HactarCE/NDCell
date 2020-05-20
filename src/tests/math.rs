@@ -1,10 +1,10 @@
-use super::assert_output;
+use super::{assert_output, ConstValue};
 
 #[test]
 fn test_arithmetic() {
     // Addition
     assert_output(
-        Ok(9),
+        Ok(ConstValue::CellState(9)),
         "
         @transition {
             become #(5 + 4)
@@ -14,7 +14,7 @@ fn test_arithmetic() {
 
     // Subtraction
     assert_output(
-        Ok(1),
+        Ok(ConstValue::CellState(1)),
         "
         @transition {
             become #(5 - 4)
@@ -23,7 +23,7 @@ fn test_arithmetic() {
 
     // Multiplication
     assert_output(
-        Ok(20),
+        Ok(ConstValue::CellState(20)),
         "
         @transition {
             become #(5 * 4)
@@ -33,7 +33,7 @@ fn test_arithmetic() {
 
     // Division
     assert_output(
-        Ok(3),
+        Ok(ConstValue::CellState(3)),
         "
         @transition {
             become #(10 / 3)
@@ -43,7 +43,7 @@ fn test_arithmetic() {
 
     // Remainder
     assert_output(
-        Ok(1),
+        Ok(ConstValue::CellState(1)),
         "
         @transition {
             become #(10 % 3)
@@ -52,7 +52,7 @@ fn test_arithmetic() {
 
     // Negation
     assert_output(
-        Ok(12),
+        Ok(ConstValue::CellState(12)),
         "
         @transition {
             become #-(-12)

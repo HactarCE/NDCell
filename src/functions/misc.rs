@@ -30,7 +30,7 @@ impl Function for GetVar {
         vec![FnSignature::atom(self.var_type)]
     }
     fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
-        let var_ptr = compiler.vars()[&self.var_name];
+        let var_ptr = compiler.vars()[&self.var_name].ptr;
         let value = compiler.builder().build_load(var_ptr, &self.var_name);
         Ok(Value::from_basic_value(self.var_type, value))
     }

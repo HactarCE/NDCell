@@ -1,9 +1,9 @@
-use super::assert_output;
+use super::{assert_output, ConstValue};
 
 #[test]
 fn test_branch_nonzero() {
     assert_output(
-        Ok(10),
+        Ok(ConstValue::CellState(10)),
         "
         @transition {
             if 0 {
@@ -25,7 +25,7 @@ fn test_branch_nonzero() {
 #[test]
 fn test_cmp() {
     assert_output(
-        Ok(1),
+        Ok(ConstValue::CellState(1)),
         "
         @transition {
             set x = 3

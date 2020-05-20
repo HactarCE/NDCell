@@ -55,15 +55,6 @@ pub struct Compiler {
     /// PointerValues for all variables, indexed by name.
     var_ptrs: HashMap<String, PointerValue<'static>>,
 }
-impl Drop for Compiler {
-    fn drop(&mut self) {
-        // TODO: is this necessary? awaiting response on Gitter.
-        self.fn_value_opt = None;
-        for fn_value in self.fn_values.drain(..) {
-            unsafe { fn_value.delete() };
-        }
-    }
-}
 impl Compiler {
     /// Constructs a new compiler with a blank module and "main" function.
     ///

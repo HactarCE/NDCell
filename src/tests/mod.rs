@@ -62,7 +62,7 @@ fn assert_output<'a>(expected: Result<ConstValue, &'a str>, source_code: &str) {
 
     assert!(
         expected_result == actual_result,
-        "\n\nExpected:\n{:?}\n\nGot:\n{:?}\n\nRule source code:\n{}\n\n",
+        "\n\nExpected:\n{}\n\nGot:\n{}\n\nRule source code:\n{}\n\n",
         display_result(&expected_result),
         display_result(&actual_result),
         source_code

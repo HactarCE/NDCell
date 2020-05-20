@@ -73,10 +73,12 @@ set s = #2
 
     // Return an integer
     assert_output(
-        Err("TODO"),
+        Err("Error at line 3; column 13
+become 0
+^^^^^^^^   Type error: expected cell state but got integer"),
         "
         @transition {
-            return 0
+            become 0
         }",
     )
 }

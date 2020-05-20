@@ -35,7 +35,7 @@ impl ConstValue {
         }
     }
     /// Constructs a default value of the given type.
-    pub fn from_type(ty: Type) -> Option<Self> {
+    pub fn default(ty: Type) -> Option<Self> {
         match ty {
             Type::Int => Some(Self::Int(0)),
             Type::CellState => Some(Self::CellState(0)),

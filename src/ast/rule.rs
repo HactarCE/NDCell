@@ -33,11 +33,11 @@ pub struct Rule {
 }
 impl TryFrom<ParseTree> for Rule {
     type Error = LangError;
-    fn try_from(parse_tree: ParseTree) -> LangResult<Self> {
+    fn try_from(mut parse_tree: ParseTree) -> LangResult<Self> {
         let mut temp_func = UserFunction::default();
 
         // Get number of dimensions.
-        let ndim = match parse_tree.get_single_directive(Directive::Dimensions)? {
+        let ndim = match parse_tree.take_single_directive(Directive::Dimensions)? {
             // There is no `@dimensions` directive; use the default.
             None => DEFAULT_NDIM,
             // There is an `@dimensions` directive.
@@ -63,7 +63,7 @@ impl TryFrom<ParseTree> for Rule {
         };
 
         // Get states.
-        let states = match parse_tree.get_single_directive(Directive::States)? {
+        let states = match parse_tree.take_single_directive(Directive::States)? {
             // There is no `@states` directive; use the default states.
             None => make_default_states(None),
             // There is an `@states` directive.
@@ -97,7 +97,7 @@ impl TryFrom<ParseTree> for Rule {
         // Build transition function.
         let mut transition_function = UserFunction::new_transition_function(meta.clone());
         match parse_tree
-            .get_single_directive(Directive::Transition)?
+            .take_single_directive(Directive::Transition)?
             .ok_or_else(|| MissingTransitionFunction.without_span())?
         {
             // The user gave a block of code.

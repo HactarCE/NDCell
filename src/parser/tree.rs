@@ -23,17 +23,28 @@ impl ParseTree {
     /// Returns Ok(None) if the directive is absent, Ok(Some(_)) if the
     /// directive is present once, and Err(RepeatDirective) if the directive is
     /// present multiple times.
-    pub fn get_single_directive(
-        &self,
+    pub fn take_single_directive(
+        &mut self,
         directive: Directive,
-    ) -> LangResult<Option<(Span, &DirectiveContents)>> {
-        match self.directives.get(&directive).map(Vec::as_slice) {
-            None => Ok(None),
-            Some([]) => Ok(None),
-            Some([x]) => Ok(Some((x.span, &x.inner))),
-            // TODO: maybe include span in this error
-            Some([_, _, ..]) => Err(RepeatDirective(directive.name()).without_span()),
-        }
+    ) -> LangResult<Option<(Span, DirectiveContents)>> {
+        // Get a list of the instances of this directive.
+        let instances = self.directives.remove(&directive).unwrap_or_default();
+        let mut iter = instances.into_iter();
+        // Take the first one.
+        iter.next()
+            .map(|contents| {
+                if let Some(second_contents) = iter.next() {
+                    // If there's some second instance of this directive, that's
+                    // an error.
+                    Err(RepeatDirective(directive.name()).with_span(second_contents.span))
+                } else {
+                    // Otherwise everything is good.
+                    Ok((contents.span, contents.inner))
+                }
+            })
+            // Flip None to Ok(None), because it's ok if this directive isn't
+            // present.
+            .transpose()
     }
 }
 

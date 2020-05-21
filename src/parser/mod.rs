@@ -289,7 +289,7 @@ impl<'a> ParseBuilder<'a> {
                 Return => self.err(Unimplemented),
                 Set => Ok({
                     // Get the variable name.
-                    let var_expr = self.expect(Self::ident)?;
+                    let var_name = self.expect(Self::ident)?;
                     // Get the operator to use when assigning (if any). E.g.
                     // `+=` uses the `+` operator.
                     let assign_op = self.expect(Self::assign_op)?.inner;
@@ -297,7 +297,7 @@ impl<'a> ParseBuilder<'a> {
                     let value_expr = self.expect(Self::expression)?;
                     // Construct the statement.
                     Statement::SetVar {
-                        var_expr,
+                        var_name,
                         assign_op,
                         value_expr,
                     }
@@ -365,7 +365,9 @@ impl<'a> ParseBuilder<'a> {
                 Some(TokenClass::Integer(_)) => self.expect(Self::int),
                 Some(TokenClass::String { .. }) => self.err(Unimplemented),
                 Some(TokenClass::Tag(_)) => self.err(Unimplemented),
-                Some(TokenClass::Ident(_)) => self.expect(Self::ident),
+                Some(TokenClass::Ident(_)) => self
+                    .expect(Self::ident)
+                    .map(|spanned| spanned.map(Expr::Ident)),
                 _ => {
                     self.next();
                     self.err(Expected("expression"))
@@ -479,9 +481,9 @@ impl<'a> ParseBuilder<'a> {
         }
     }
     /// Consumes an identifier.
-    fn ident(&mut self) -> LangResult<Expr> {
+    fn ident(&mut self) -> LangResult<String> {
         match self.next().map(|t| t.class) {
-            Some(TokenClass::Ident(s)) => Ok(Expr::Ident(s.to_owned())),
+            Some(TokenClass::Ident(s)) => Ok(s.to_owned()),
             Some(TokenClass::Keyword(kw)) => self.err(ReservedWord(kw.to_string().into())),
             _ => self.err(Expected("identifier, e.g. variable name")),
         }

@@ -141,21 +141,17 @@ impl UserFunction {
             let new_statement: Box<dyn Statement> = match &parser_statement.inner {
                 // Variable assignment statement
                 parser::Statement::SetVar {
-                    var_expr,
+                    var_name,
                     assign_op,
                     value_expr,
                 } => {
-                    if let parser::Expr::Ident(var_name) = &var_expr.inner {
                         // Handle assignments with operators (e.g. `x += 3`).
                         let value_expr = match assign_op.op() {
                             Some(op) => self.build_expression_ast(&Spanned {
                                 span,
                                 inner: parser::Expr::BinaryOp {
-                                    lhs: Box::new(Spanned {
-                                        span: var_expr.span,
-                                        inner: parser::Expr::Ident(var_name.to_owned()),
-                                    }),
-                                    op: op,
+                                lhs: Box::new(var_name.clone().map(parser::Expr::Ident)),
+                                op,
                                     rhs: Box::new(value_expr.clone()),
                                 },
                             })?,
@@ -164,12 +160,9 @@ impl UserFunction {
                         Box::new(statements::SetVar::try_new(
                             span,
                             self,
-                            var_name.to_owned(),
+                        var_name.inner.clone(),
                             value_expr,
                         )?)
-                    } else {
-                        Err(Expected("variable name").with_span(parser_statement.span))?
-                    }
                 }
                 // If statement
                 parser::Statement::If {

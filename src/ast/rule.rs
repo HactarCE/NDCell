@@ -10,7 +10,7 @@ use super::super::{ConstValue, Type, MAX_NDIM, MAX_STATES};
 use super::{FnSignature, UserFunction};
 use LangErrorMsg::{
     Expected, FunctionNameConflict, InternalError, InvalidDimensionCount, InvalidStateCount,
-    MissingTransitionFunction, TypeError,
+    TypeError,
 };
 
 /// Number of dimensions to use when the user doesn't specify.
@@ -137,18 +137,17 @@ impl TryFrom<ParseTree> for Rule {
 
         // Build transition function.
         let mut transition_function = UserFunction::new_transition_function(meta.clone());
-        match parse_tree
-            .take_single_directive(Directive::Transition)?
-            .ok_or_else(|| MissingTransitionFunction.without_span())?
-        {
+        match parse_tree.take_single_directive(Directive::Transition)? {
             // The user gave a block of code.
-            (_span, DirectiveContents::Block(statements)) => {
+            Some((_span, DirectiveContents::Block(statements))) => {
                 transition_function.build_top_level_statement_block_ast(&statements.inner)?;
             }
             // The user gave something else instead of a code block.
-            (span, _contents) => {
+            Some((span, _contents)) => {
                 Err(Expected("code block").with_span(span))?;
             }
+            // The user did not provide a transition function.
+            None => transition_function.build_top_level_statement_block_ast(&vec![])?,
         }
 
         // No directive left behind!

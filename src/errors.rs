@@ -127,7 +127,6 @@ pub enum LangErrorMsg {
     MissingSetKeyword,
     TopLevelNonDirective,
     InvalidDirectiveName,
-    MissingTransitionFunction,
     RepeatDirective(&'static str),
     FunctionNameConflict,
     InvalidDimensionCount,
@@ -206,9 +205,6 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::InvalidDirectiveName => {
                 write!(f, "Invalid directive name")?;
-            }
-            Self::MissingTransitionFunction => {
-                write!(f, "Missing transition function")?;
             }
             Self::RepeatDirective(name) => {
                 write!(f, "Multiple {:?} directives; only one is allowed", name)?;

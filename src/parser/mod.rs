@@ -518,4 +518,32 @@ impl<'a> ParseBuilder<'a> {
             None => Err(Unmatched('(', ')').with_span(open_span)),
         }
     }
+    /// Consumes a list of things (using the given matcher) separated by a given
+    /// separator token and ending with any of the given end tokens.
+    ///
+    /// Does not consume the end token.
+    fn list<T>(
+        &mut self,
+        sep_tokens: &[TokenClass],
+        end_tokens: &[TokenClass],
+        mut inner_matcher: impl FnMut(&mut Self) -> LangResult<T>,
+        expected_msg: &'static str,
+    ) -> LangResult<Vec<Spanned<T>>> {
+        let mut ret = vec![];
+        loop {
+            if self.next_token_is_one_of(&end_tokens) {
+                return Ok(ret);
+            }
+            ret.push(self.expect(&mut inner_matcher)?);
+            if self.next_token_is_one_of(&end_tokens) {
+                return Ok(ret);
+            } else if self.next_token_is_one_of(&sep_tokens) {
+                self.next();
+                continue;
+            } else {
+                self.next();
+                return self.err(Expected(expected_msg));
+            }
+        }
+    }
 }

@@ -12,6 +12,9 @@ pub type LangCellState = u8;
 /// Number of bits in an NDCA cell state.
 pub const CELL_STATE_BITS: u32 = 8;
 
+/// Maximum length for a vector.
+pub const MAX_VECTOR_LEN: usize = 256;
+
 /// Any data type.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Type {

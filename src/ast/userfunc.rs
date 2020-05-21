@@ -11,7 +11,7 @@ use super::super::{ConstValue, Span, Spanned, Type};
 use super::statements;
 use super::{Args, Expr, Function, RuleMeta, Statement, StatementBlock};
 use LangErrorMsg::{
-    BecomeInHelperFunction, Expected, ExpectedGot, InternalError, ReturnInTransitionFunction,
+    BecomeInHelperFunction, ExpectedGot, InternalError, ReturnInTransitionFunction,
     UseOfUninitializedVariable,
 };
 
@@ -145,24 +145,24 @@ impl UserFunction {
                     assign_op,
                     value_expr,
                 } => {
-                        // Handle assignments with operators (e.g. `x += 3`).
-                        let value_expr = match assign_op.op() {
-                            Some(op) => self.build_expression_ast(&Spanned {
-                                span,
-                                inner: parser::Expr::BinaryOp {
+                    // Handle assignments with operators (e.g. `x += 3`).
+                    let value_expr = match assign_op.op() {
+                        Some(op) => self.build_expression_ast(&Spanned {
+                            span,
+                            inner: parser::Expr::BinaryOp {
                                 lhs: Box::new(var_name.clone().map(parser::Expr::Ident)),
                                 op,
-                                    rhs: Box::new(value_expr.clone()),
-                                },
-                            })?,
-                            None => self.build_expression_ast(&value_expr)?,
-                        };
-                        Box::new(statements::SetVar::try_new(
-                            span,
-                            self,
+                                rhs: Box::new(value_expr.clone()),
+                            },
+                        })?,
+                        None => self.build_expression_ast(&value_expr)?,
+                    };
+                    Box::new(statements::SetVar::try_new(
+                        span,
+                        self,
                         var_name.inner.clone(),
-                            value_expr,
-                        )?)
+                        value_expr,
+                    )?)
                 }
                 // If statement
                 parser::Statement::If {

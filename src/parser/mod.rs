@@ -318,7 +318,7 @@ impl<'a> ParseBuilder<'a> {
                     },
                 }),
                 Remain => self.err(Unimplemented),
-                Return => self.err(Unimplemented),
+                Return => Ok(Statement::Return(self.expect(Self::expression)?)),
                 Set => Ok({
                     // Get the variable name.
                     let var_name = self.expect(Self::ident)?;

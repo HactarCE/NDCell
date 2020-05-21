@@ -174,6 +174,10 @@ impl Rule {
     pub fn transition_function(&self) -> &UserFunction {
         &self.transition_function
     }
+    /// Returns this rule's helper functions.
+    pub fn helper_functions(&self) -> &HashMap<String, UserFunction> {
+        &self.helper_functions
+    }
 }
 
 /// Metadata about a rule, such as the number of dimensions and a list of

@@ -195,31 +195,59 @@ impl<'a> ParseBuilder<'a> {
     fn directives(&mut self) -> LangResult<Vec<(Directive, Spanned<DirectiveContents>)>> {
         let mut directives = vec![];
         while self.peek_next().is_some() {
-            let Spanned {
-                span,
-                inner: (dir, contents),
-            } = self.expect(Self::directive)?;
-            let inner = contents;
-            directives.push((dir, Spanned { span, inner }));
+            directives.push(self.expect(Self::directive)?.inner);
         }
         Ok(directives)
     }
     /// Consumes a directive, which includes one or more arguments given to the
     /// directive. The number of arguments consumed depends on the name of the
     /// directive and the type of arguments passed.
-    fn directive(&mut self) -> LangResult<(Directive, DirectiveContents)> {
+    fn directive(&mut self) -> LangResult<(Directive, Spanned<DirectiveContents>)> {
         match self.next().map(|t| t.class) {
-            Some(TokenClass::Directive(directive_name)) => Ok((
-                Directive::try_from(directive_name)
-                    .map_err(|_| InvalidDirectiveName.with_span(self.span()))?,
-                self.expect(Self::expr_or_block)?.inner,
-            )),
+            Some(TokenClass::Directive(directive_name)) => {
+                let directive = Directive::try_from(directive_name)
+                    .map_err(|_| InvalidDirectiveName.with_span(self.span()))?;
+                let contents = match directive {
+                    Directive::Function => self.expect(Self::function_definition)?,
+                    _ => self.expect(Self::simple_directive_contents)?,
+                };
+                Ok((directive, contents))
+            }
             Some(_) => self.err(TopLevelNonDirective),
             None => self.err(Expected("directive")),
         }
     }
-    /// Consumes an expression or code block.
-    fn expr_or_block(&mut self) -> LangResult<DirectiveContents> {
+    /// Consumes a function definition.
+    fn function_definition(&mut self) -> LangResult<DirectiveContents> {
+        Ok(DirectiveContents::Func(HelperFunc {
+            return_type: self.expect(Self::type_name)?,
+            name: self.expect(Self::ident)?,
+            args: self
+                .expect(|pb| {
+                    pb.paren(|pb| {
+                        pb.list(
+                            &[TokenClass::Punctuation(PunctuationToken::Comma)],
+                            &[TokenClass::Punctuation(PunctuationToken::RParen)],
+                            Self::function_param,
+                            "function parameter",
+                        )
+                    })
+                })?
+                .inner
+                .inner,
+            body: self.expect(Self::block)?,
+        }))
+    }
+    /// Consumes a parmeter definition, consisting of a type followed by an
+    /// identifier.
+    fn function_param(&mut self) -> LangResult<(Spanned<TypeToken>, Spanned<String>)> {
+        let ty = self.expect(Self::type_name)?;
+        let name = self.expect(Self::ident)?;
+        Ok((ty, name))
+    }
+    /// Consumes the contents of a (syntactically) simple directive, either an
+    /// expression or code block.
+    fn simple_directive_contents(&mut self) -> LangResult<DirectiveContents> {
         match self.peek_next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LBrace)) => {
                 Ok(self.expect(Self::block)?.into())
@@ -228,6 +256,7 @@ impl<'a> ParseBuilder<'a> {
             None => self.err(Expected("expression or code block"))?,
         }
     }
+
     /// Consumes a block, which consists of statements.
     fn block(&mut self) -> LangResult<StatementBlock> {
         // Get a left brace.

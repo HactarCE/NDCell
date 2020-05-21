@@ -16,6 +16,10 @@ pub const CELL_STATE_BITS: u32 = 8;
 pub const MAX_VECTOR_LEN: usize = 256;
 
 /// Any data type.
+///
+/// When adding new types, make sure that check lexer::TypeToken and add a
+/// corresponding variant there if needed. Also update the list in the error
+/// message in parser::ParseBuilder::type_name().
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Type {
     /// Integer.

@@ -5,7 +5,9 @@ use std::convert::TryFrom;
 use std::rc::Rc;
 
 use super::super::errors::*;
-use super::super::lexer::{AssignmentToken, ComparisonToken, OperatorToken, PunctuationToken};
+use super::super::lexer::{
+    AssignmentToken, ComparisonToken, OperatorToken, PunctuationToken, TypeToken,
+};
 use super::super::{Span, Spanned};
 use LangErrorMsg::RepeatDirective;
 
@@ -58,6 +60,8 @@ pub enum Directive {
     States,
     /// Number of dimensions.
     Dimensions,
+    /// Helper function.
+    Function,
 }
 impl Directive {
     pub fn name(self) -> &'static str {
@@ -65,6 +69,7 @@ impl Directive {
             Self::Transition => "transition",
             Self::States => "states",
             Self::Dimensions => "dimensions",
+            Self::Function => "function",
         }
     }
 }
@@ -75,6 +80,7 @@ impl TryFrom<&str> for Directive {
             "transition" => Ok(Self::Transition),
             "states" => Ok(Self::States),
             "dim" | "dimen" | "dimensions" | "ndim" => Ok(Self::Dimensions),
+            "fn" | "function" => Ok(Self::Function),
             _ => Err(()),
         }
     }
@@ -87,6 +93,8 @@ pub enum DirectiveContents {
     Block(Spanned<StatementBlock>),
     /// Expression.
     Expr(Spanned<Expr>),
+    /// Function definition.
+    Func(HelperFunc),
 }
 impl From<Spanned<StatementBlock>> for DirectiveContents {
     fn from(block: Spanned<StatementBlock>) -> Self {
@@ -97,6 +105,19 @@ impl From<Spanned<Expr>> for DirectiveContents {
     fn from(expr: Spanned<Expr>) -> Self {
         Self::Expr(expr)
     }
+}
+
+/// Helper function node in the parse tree.
+#[derive(Debug, Clone)]
+pub struct HelperFunc {
+    /// Type returned by the helper function.
+    pub return_type: Spanned<TypeToken>,
+    /// Name of the helper function.
+    pub name: Spanned<String>,
+    /// Arguments passed to the helper function (name and type).
+    pub args: Vec<Spanned<(Spanned<TypeToken>, Spanned<String>)>>,
+    /// Body of the helper function.
+    pub body: Spanned<StatementBlock>,
 }
 
 /// Statement node in the parse tree.

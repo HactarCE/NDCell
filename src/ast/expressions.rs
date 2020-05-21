@@ -2,6 +2,7 @@
 
 use super::super::compiler::*;
 use super::super::errors::*;
+use super::super::parser;
 use super::super::{ConstValue, Span, Type};
 use super::{ArgTypes, ArgValues, Args, UserFunction};
 use LangErrorMsg::{CannotEvalAsConst, InternalError, InvalidArguments};

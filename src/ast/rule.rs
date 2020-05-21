@@ -1,14 +1,16 @@
 //! Root node of the AST.
 
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
 use super::super::errors::*;
-use super::super::parser::{Directive, DirectiveContents, ParseTree};
+use super::super::parser::{Directive, DirectiveContents, HelperFunc, ParseTree};
 use super::super::{ConstValue, Type, MAX_NDIM, MAX_STATES};
-use super::UserFunction;
+use super::{FnSignature, UserFunction};
 use LangErrorMsg::{
-    Expected, InvalidDimensionCount, InvalidStateCount, MissingTransitionFunction, TypeError,
+    Expected, FunctionNameConflict, InternalError, InvalidDimensionCount, InvalidStateCount,
+    MissingTransitionFunction, TypeError,
 };
 
 /// Number of dimensions to use when the user doesn't specify.
@@ -28,6 +30,8 @@ fn make_default_states(count: Option<usize>) -> Vec<CellState> {
 pub struct Rule {
     /// Metadata (e.g. source code, cell state information).
     meta: Rc<RuleMeta>,
+    /// Helper functions.
+    helper_functions: HashMap<String, UserFunction>,
     /// Transition function used to simulate this rule.
     transition_function: UserFunction,
 }
@@ -88,11 +92,48 @@ impl TryFrom<ParseTree> for Rule {
             Some((span, _contents)) => Err(Expected("expression").with_span(span))?,
         };
 
+        // Gather a list of helper functions.
+        let helper_function_parse_trees: Vec<HelperFunc> = parse_tree
+            .directives
+            .remove(&Directive::Function)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|contents| match contents.inner {
+                DirectiveContents::Func(f) => Ok(f),
+                _ => Err(
+                    InternalError("Invalid parse tree on helper function".into()).without_span(),
+                ),
+            })
+            .collect::<LangResult<Vec<_>>>()?;
+        let mut helper_function_signatures = HashMap::new();
+        for helper_func in &helper_function_parse_trees {
+            if helper_function_signatures.contains_key(&helper_func.name.inner) {
+                Err(FunctionNameConflict.with_span(helper_func.name.span))?;
+            } else {
+                helper_function_signatures.insert(
+                    helper_func.name.inner.clone(),
+                    FnSignature::from_helper_function_parse_tree(helper_func, ndim),
+                );
+            }
+        }
+
         let meta = Rc::new(RuleMeta {
             source_code: parse_tree.source_code.clone(),
             ndim,
             states,
+            helper_function_signatures,
         });
+
+        // Build helper functions.
+        let helper_functions = helper_function_parse_trees
+            .into_iter()
+            .map(|helper_func| {
+                Ok((
+                    helper_func.name.inner.clone(),
+                    UserFunction::build_helper_function(&meta, helper_func)?,
+                ))
+            })
+            .collect::<LangResult<HashMap<_, _>>>()?;
 
         // Build transition function.
         let mut transition_function = UserFunction::new_transition_function(meta.clone());
@@ -110,9 +151,20 @@ impl TryFrom<ParseTree> for Rule {
             }
         }
 
+        // No directive left behind!
+        if let Some((dir, _contents)) = parse_tree
+            .directives
+            .drain()
+            .filter(|(_, v)| !v.is_empty())
+            .next()
+        {
+            Err(InternalError(format!("Unused directive {:?}", dir).into()))?;
+        }
+
         // Construct the rule.
         Ok(Rule {
             meta,
+            helper_functions,
             transition_function,
         })
     }
@@ -134,6 +186,8 @@ pub struct RuleMeta {
     pub ndim: u8,
     /// List of cell states.
     pub states: Vec<CellState>,
+    /// Map of names and signatures of helper functions.
+    pub helper_function_signatures: HashMap<String, FnSignature>,
     // /// Cell state tags.
     // tags: HashMap<String, Tag>,
 }
@@ -143,6 +197,7 @@ impl Default for RuleMeta {
             source_code: Rc::new(String::new()),
             ndim: DEFAULT_NDIM,
             states: make_default_states(None),
+            helper_function_signatures: HashMap::new(),
         }
     }
 }

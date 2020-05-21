@@ -129,6 +129,7 @@ pub enum LangErrorMsg {
     InvalidDirectiveName,
     MissingTransitionFunction,
     RepeatDirective(&'static str),
+    FunctionNameConflict,
     InvalidDimensionCount,
     InvalidStateCount,
     TypeError {
@@ -211,6 +212,9 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::RepeatDirective(name) => {
                 write!(f, "Multiple {:?} directives; only one is allowed", name)?;
+            }
+            Self::FunctionNameConflict => {
+                write!(f, "There is already a function with this name")?;
             }
             Self::InvalidDimensionCount => {
                 write!(f, "Number of dimensions must range from 1 to {}", MAX_NDIM)?;

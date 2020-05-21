@@ -71,6 +71,7 @@ impl ArgTypes {
             format!("{:?}", &self.0)
         }
     }
+    /// Returns an iterator over the argument types.
     pub fn iter(&self) -> impl Iterator<Item = &Type> {
         self.0.iter()
     }

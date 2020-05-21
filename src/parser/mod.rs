@@ -312,7 +312,7 @@ impl<'a> ParseBuilder<'a> {
             _ => {
                 if let Some(TokenClass::Assignment(_)) = self.peek_next().map(|t| t.class) {
                     // Give the user a nicer error message if they forgot the
-                    // `set` keyword.
+                    // `set` keyword. TODO: Test this in tests/syntax.rs
                     self.err(MissingSetKeyword)
                 } else {
                     self.err(Expected("statement"))
@@ -488,7 +488,8 @@ impl<'a> ParseBuilder<'a> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Ident(s)) => Ok(s.to_owned()),
             Some(TokenClass::Keyword(kw)) => self.err(ReservedWord(kw.to_string().into())),
-            _ => self.err(Expected("identifier, e.g. variable name")),
+            Some(TokenClass::Type(ty)) => self.err(ReservedWord(ty.to_string().into())),
+            _ => self.err(Expected("identifier, i.e. variable or function name")),
         }
     }
     /// Consumes an assignment token and returns the operator used in the
@@ -497,7 +498,7 @@ impl<'a> ParseBuilder<'a> {
     fn assign_op(&mut self) -> LangResult<AssignmentToken> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Assignment(a)) => Ok(a),
-            _ => self.err(Expected("assignment symbol, e.g. '='")),
+            _ => self.err(Expected("assignment symbol, e.g. '=' or '+='")),
         }
     }
     /// Consumes a pair of parentheses with the given matcher run inside.

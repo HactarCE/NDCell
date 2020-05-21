@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use super::errors::*;
 use super::types::LangInt;
-use super::Span;
+use super::{Span, Type};
 use LangErrorMsg::{UnknownSymbol, Unterminated};
 
 /// A list of token patterns, arranged roughly from least to most general.
@@ -67,6 +67,9 @@ lazy_static! {
     static ref LINE_COMMENT_PATTERN: Regex = Regex::new(r#"^//"#).unwrap();
     /// A regex that matches an assignment operator.
     static ref ASSIGN_PATTERN: Regex = Regex::new(r#"^(.?.?)=$"#).unwrap();
+
+    /// A regex that matches a vector type name.
+    static ref VEC_TYPE_PATTERN: Regex = Regex::new(r#"vec(\d+)"#).unwrap();
 }
 
 /// Splits a string into tokens and returns them as a Vec, with all comments
@@ -127,6 +130,8 @@ impl<'a> Into<Span> for &Token<'a> {
 pub enum TokenClass<'a> {
     /// Keyword.
     Keyword(KeywordToken),
+    /// Type name.
+    Type(TypeToken),
     /// Assignment operator.
     Assignment(AssignmentToken),
     /// Comparison operator.
@@ -160,6 +165,7 @@ impl<'a> fmt::Display for TokenClass<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Keyword(t) => write!(f, "keyword '{}'", t),
+            Self::Type(t) => write!(f, "type '{}'", t),
             Self::Assignment(t) => write!(f, "assignment operator '{}'", t),
             Self::Comparison(t) => write!(f, "comparison operator '{}'", t),
             Self::Operator(t) => write!(f, "operator '{}'", t),
@@ -185,6 +191,8 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
     fn try_from(s: &'a str) -> Result<Self, LangErrorMsg> {
         if let Ok(keyword) = s.parse() {
             Ok(Self::Keyword(keyword))
+        } else if let Ok(ty) = s.parse() {
+            Ok(Self::Type(ty))
         } else if let Ok(assignment) = s.parse() {
             Ok(Self::Assignment(assignment))
         } else if let Ok(comparison) = s.parse() {
@@ -398,6 +406,58 @@ impl ComparisonToken {
             Self::Gt => lhs > rhs,
             Self::Lte => lhs <= rhs,
             Self::Gte => lhs >= rhs,
+        }
+    }
+}
+
+/// Type name.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum TypeToken {
+    Int,
+    CellState,
+    Vector(Option<usize>),
+}
+impl fmt::Display for TypeToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Int => write!(f, "int"),
+            Self::CellState => write!(f, "cellstate"),
+            Self::Vector(None) => write!(f, "vec"),
+            Self::Vector(Some(len)) => write!(f, "vec{}", len),
+        }
+    }
+}
+impl FromStr for TypeToken {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        // TODO: test this method
+        if let Some(len_str) = VEC_TYPE_PATTERN
+            .captures(s)
+            .and_then(|captures| captures.get(1))
+            .as_ref()
+            .map(regex::Match::as_str)
+        {
+            if let Ok(len @ 1..=super::types::MAX_VECTOR_LEN) = len_str.parse() {
+                return Ok(Self::Vector(Some(len)));
+            }
+        }
+        match s {
+            "int" => Ok(Self::Int),
+            "cellstate" => Ok(Self::CellState),
+            "vec" => Ok(Self::Vector(None)),
+            _ => Err(()),
+        }
+    }
+}
+impl TypeToken {
+    /// Returns the Type corresponding to the given TypeToken, in an automaton
+    /// with the given number of dimensions.
+    pub fn resolve(self, ndim: u8) -> Type {
+        match self {
+            Self::Int => Type::Int,
+            Self::CellState => Type::CellState,
+            Self::Vector(None) => Type::Vector(ndim as usize),
+            Self::Vector(Some(len)) => Type::Vector(len),
         }
     }
 }

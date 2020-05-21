@@ -491,9 +491,9 @@ impl<'a> ParseBuilder<'a> {
             _ => self.err(Expected("identifier, e.g. variable name")),
         }
     }
-    // Consumes an assignment token and returns the operator used in the
-    // assignment, if any. (E.g. `+=` uses the `+` operator, while `=` does not
-    // use any operator.)
+    /// Consumes an assignment token and returns the operator used in the
+    /// assignment, if any. (E.g. `+=` uses the `+` operator, while `=` does not
+    /// use any operator.)
     fn assign_op(&mut self) -> LangResult<AssignmentToken> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Assignment(a)) => Ok(a),

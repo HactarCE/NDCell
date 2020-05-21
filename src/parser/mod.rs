@@ -155,7 +155,7 @@ impl<'a> ParseBuilder<'a> {
     /// the given closure if the closure returns LangResult::Ok; otherwise
     /// rewind the state of the ParseBuilder to before the closure was run and
     /// then return the LangResult::Err.
-    fn expect<T>(&mut self, f: impl Fn(&mut Self) -> LangResult<T>) -> LangResult<Spanned<T>> {
+    fn expect<T>(&mut self, f: impl FnOnce(&mut Self) -> LangResult<T>) -> LangResult<Spanned<T>> {
         self.expect_spanned(|b| {
             b.next();
             let start = b.span();
@@ -168,9 +168,11 @@ impl<'a> ParseBuilder<'a> {
             })
         })
     }
+    /// Executes the given closure, reverting the state of the ParseBuilder if
+    /// it returns LangResult::Err.
     fn expect_spanned<T>(
         &mut self,
-        f: impl Fn(&mut Self) -> LangResult<Spanned<T>>,
+        f: impl FnOnce(&mut Self) -> LangResult<Spanned<T>>,
     ) -> LangResult<Spanned<T>> {
         let prior_state = *self;
         let ret = f(self);
@@ -188,6 +190,7 @@ impl<'a> ParseBuilder<'a> {
             false
         }
     }
+
     /// Consumes a sequence of directives.
     fn directives(&mut self) -> LangResult<Vec<(Directive, Spanned<DirectiveContents>)>> {
         let mut directives = vec![];
@@ -360,7 +363,7 @@ impl<'a> ParseBuilder<'a> {
                 Some(TokenClass::Punctuation(PunctuationToken::LParen)) => {
                     // Expressions inside parentheses always start again at the
                     // lowest precedence level.
-                    self.expect_spanned(|tf| tf.paren(Self::expression))
+                    self.expect_spanned(|pb| pb.paren(Self::expression))
                 }
                 Some(TokenClass::Integer(_)) => self.expect(Self::int),
                 Some(TokenClass::String { .. }) => self.err(Unimplemented),
@@ -500,7 +503,7 @@ impl<'a> ParseBuilder<'a> {
     /// Consumes a pair of parentheses with the given matcher run inside.
     fn paren<T>(
         &mut self,
-        inner_matcher: impl Fn(&mut Self) -> LangResult<T>,
+        inner_matcher: impl FnOnce(&mut Self) -> LangResult<T>,
     ) -> LangResult<Spanned<T>> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Punctuation(PunctuationToken::LParen)) => (),

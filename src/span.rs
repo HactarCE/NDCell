@@ -119,6 +119,13 @@ impl<T> Spanned<T> {
             inner,
         }
     }
+    /// Apply a function to the inside of this Spanned<T>.
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Spanned<U> {
+        Spanned {
+            span: self.span,
+            inner: f(self.inner),
+        }
+    }
 }
 
 #[cfg(test)]

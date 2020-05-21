@@ -20,7 +20,7 @@ pub enum Type {
     /// Cell state.
     CellState,
     /// Vector of a specific length (from 1 to 256).
-    Vector(u16),
+    Vector(usize),
 }
 impl Default for Type {
     fn default() -> Self {

@@ -21,7 +21,7 @@ impl Value {
         match self {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
-            Self::Vector(v) => Type::Vector(v.get_type().get_size() as u16),
+            Self::Vector(v) => Type::Vector(v.get_type().get_size() as usize),
         }
     }
     /// Constructs a value of the given type from an LLVM basic value.

@@ -30,7 +30,7 @@ impl ConstValue {
         match self {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
-            Self::Vector(values) => Type::Vector(values.len() as u16),
+            Self::Vector(values) => Type::Vector(values.len()),
             // Self::Pattern(_) => Type::Pattern,
         }
     }

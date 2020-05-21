@@ -80,6 +80,23 @@ impl UserFunction {
             return_type,
         }
     }
+    pub fn build_helper_function(
+        rule_meta: &Rc<RuleMeta>,
+        helper_func: parser::HelperFunc,
+    ) -> LangResult<Self> {
+        let mut ret = Self::new_helper_function(
+            rule_meta.clone(),
+            helper_func.name.inner,
+            helper_func
+                .args
+                .into_iter()
+                .map(|arg| (arg.inner.1.inner, arg.inner.0.inner.resolve(rule_meta.ndim)))
+                .collect(),
+            helper_func.return_type.inner.resolve(rule_meta.ndim),
+        );
+        ret.build_top_level_statement_block_ast(&helper_func.body.inner)?;
+        Ok(ret)
+    }
 
     /// Returns the metadata associated with the rule that this function is a
     /// member of.

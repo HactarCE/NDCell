@@ -180,6 +180,17 @@ impl FnSignature {
         let args = args.into();
         Self { args, ret }
     }
+    /// Constructs a function signature from a helper function parse tree node.
+    pub fn from_helper_function_parse_tree(helper_func: &parser::HelperFunc, ndim: u8) -> Self {
+        Self::new(
+            helper_func
+                .args
+                .iter()
+                .map(|arg| arg.inner.0.inner.resolve(ndim))
+                .collect::<Vec<_>>(),
+            helper_func.return_type.inner.resolve(ndim),
+        )
+    }
     /// Returns true if the given argument types match the arguments of this function signature.
     pub fn matches(&self, args: &ArgTypes) -> bool {
         &self.args == args

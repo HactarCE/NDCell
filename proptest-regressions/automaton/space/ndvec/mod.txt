@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc c3228b4b1d5b141709c9e396613490f71a8a1bddc80fc325d7963f2c56c7986b # shrinks to pos1 = NdVec([0, 0, -1]), pos2 = NdVec([0, 0, 0]), scalar = 2, shift = 0

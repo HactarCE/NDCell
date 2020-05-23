@@ -1,8 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 15c0d778b8d677b2f62ed2286df99b2ee0b5b498a63bcd19dd1bb5ca5e374320 # shrinks to n = 0
-cc 48d2b8cb2e0ace36fda995cb6a1daa91e129014ab2570b9dc76e065d56dee03c # shrinks to start = NdVec([0, 0, 0]), end = NdVec([0, 0, -1])

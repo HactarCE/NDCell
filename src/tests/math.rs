@@ -1,4 +1,25 @@
-use super::{assert_output, ConstValue};
+use proptest::prelude::*;
+
+use super::{assert_func_output, assert_output, ConstValue, LangInt};
+
+proptest! {
+    #[test]
+    fn proptest_arithmetic(x: LangInt, y: LangInt) {
+        // Addition
+        let source_code = "@function int test(int x, int y) { return x + y }";
+        let expected = x.checked_add(y).map(ConstValue::Int).ok_or(
+            "Error at line 1; column 43
+@function int test(int x, int y) { return x + y }
+                                          ^^^^^   Integer overflow",
+        );
+        assert_func_output(
+            &[ConstValue::Int(x), ConstValue::Int(y)],
+            expected,
+            source_code,
+            Some("test"),
+        );
+    }
+}
 
 #[test]
 fn test_arithmetic() {

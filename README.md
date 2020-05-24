@@ -4,11 +4,12 @@ This is a testing ground for a cellular automaton description language for [NDCe
 
 ## Short-term to-do list
 
-* Compile helper functions
-* Debug heleper or transition function
-* Function calls (built-in)
-* Function calls (helper)
-* Debug helper function calls
+* [ ] Compile helper functions
+* [ ] Function calls (built-in)
+* [ ] Function calls (helper)
+* [ ] Debug helper or transition function
+* [ ] Debug function calls
+* [ ] unary `+` operator
 
 ## Building on Linux or macOS
 

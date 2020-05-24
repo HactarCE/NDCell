@@ -1,9 +1,26 @@
-use super::{assert_fn_result, compile_test, ConstValue, LangInt};
+use super::{
+    assert_fn_result, assert_threadlocal_fn_result, compile_test, test_values, CompiledFunction,
+    ConstValue, LangInt,
+};
+
+thread_local! {
+    static IF_FN: CompiledFunction =
+        compile_test("@function int test(int cond) { if cond { return 10 } else { return 20 } }");
+}
+
+#[test]
+fn test_condition_values() {
+    for &cond in test_values() {
+        let args = [ConstValue::Int(cond)];
+        let expected = Ok(ConstValue::Int(if cond != 0 { 10 } else { 20 }));
+        assert_threadlocal_fn_result(&IF_FN, &args, expected);
+    }
+}
 
 #[test]
 fn test_branching() {
-    for &cond1 in &[None, Some(-5), Some(0), Some(5)] {
-        for &cond2 in &[None, Some(-5), Some(0), Some(5)] {
+    for &cond1 in &[None, Some(0), Some(1)] {
+        for &cond2 in &[None, Some(0), Some(1)] {
             for &add_else in &[false, true] {
                 for &ret_val1 in &[None, Some(10)] {
                     for &ret_val2 in &[None, Some(20)] {

@@ -7,6 +7,7 @@ use super::super::errors::*;
 use super::super::{ConstValue, Type};
 use super::Compiler;
 use LangErrorMsg::InternalError;
+
 /// Compiled user function with allocated space for arguments, return value, and
 /// optionally debug values to it.
 ///
@@ -156,6 +157,11 @@ impl CompiledFunction {
             ty: value.ty,
             bytes: &mut self.inout_bytes[start..end],
         }
+    }
+
+    /// Returns the source code of the rule that this function is part of.
+    pub fn source_code(&self) -> &Rc<String> {
+        &self.meta.source_code
     }
 }
 

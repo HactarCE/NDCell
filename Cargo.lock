@@ -326,6 +326,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52ba6eb47c2131e784a38b726eb54c1e1484904f013e576a25354d0124161af6"
 
 [[package]]
+name = "either"
+version = "1.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb1f6b1ce1c140482ea30ddd3335fc0024ac7ee112895426e0a629a6c20adfe3"
+
+[[package]]
 name = "enum_dispatch"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -438,7 +444,7 @@ dependencies = [
  "gl_generator 0.11.0",
  "glutin",
  "lazy_static",
- "smallvec",
+ "smallvec 0.6.13",
  "takeable-option",
 ]
 
@@ -462,7 +468,7 @@ dependencies = [
  "libloading",
  "objc",
  "osmesa-sys",
- "parking_lot",
+ "parking_lot 0.9.0",
  "wayland-client",
  "winapi",
  "winit",
@@ -532,7 +538,7 @@ dependencies = [
  "glium",
  "imgui-sys",
  "lazy_static",
- "parking_lot",
+ "parking_lot 0.9.0",
 ]
 
 [[package]]
@@ -562,6 +568,30 @@ checksum = "6c63c45c058634dbc045dde485a7baf0f4321b77c00cca90c5d2d9b3ab2f5eec"
 dependencies = [
  "imgui",
  "winit",
+]
+
+[[package]]
+name = "inkwell"
+version = "0.1.0"
+source = "git+https://github.com/TheDan64/inkwell?branch=llvm8-0#9aabeab21188dcb512b877c1ca9bda94d7d959ee"
+dependencies = [
+ "either",
+ "inkwell_internals",
+ "libc",
+ "llvm-sys",
+ "once_cell",
+ "parking_lot 0.10.2",
+ "regex",
+]
+
+[[package]]
+name = "inkwell_internals"
+version = "0.1.0"
+source = "git+https://github.com/TheDan64/inkwell?branch=llvm8-0#9aabeab21188dcb512b877c1ca9bda94d7d959ee"
+dependencies = [
+ "proc-macro2 1.0.16",
+ "quote 1.0.6",
+ "syn",
 ]
 
 [[package]]
@@ -599,6 +629,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5cc7ad3d82c845bdb5dde34ffdcc7a5fb4d2996e1e1ee0f19c33bc80e15196b9"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "llvm-sys"
+version = "80.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf2969773884a5701f0c255e2a14d48d4522a66db898ec1088cb21879a228377"
+dependencies = [
+ "cc",
+ "lazy_static",
+ "libc",
+ "regex",
+ "semver",
 ]
 
 [[package]]
@@ -688,6 +731,17 @@ dependencies = [
  "proptest",
  "regex",
  "seahash",
+]
+
+[[package]]
+name = "ndcell_lang"
+version = "0.1.0"
+dependencies = [
+ "inkwell",
+ "lazy_static",
+ "proptest",
+ "regex",
+ "thread_local",
 ]
 
 [[package]]
@@ -871,8 +925,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f842b1982eb6c2fe34036a4fbfb06dd185a3f5c8edfaacdf7d1ea10b07de6252"
 dependencies = [
  "lock_api",
- "parking_lot_core",
+ "parking_lot_core 0.6.2",
  "rustc_version",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3a704eb390aafdc107b0e392f56a82b668e3a71366993b5340f5833fd62505e"
+dependencies = [
+ "lock_api",
+ "parking_lot_core 0.7.2",
 ]
 
 [[package]]
@@ -886,7 +950,21 @@ dependencies = [
  "libc",
  "redox_syscall",
  "rustc_version",
- "smallvec",
+ "smallvec 0.6.13",
+ "winapi",
+]
+
+[[package]]
+name = "parking_lot_core"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d58c7c768d4ba344e3e8d72518ac13e259d7c7ade24167003b8488e10b6740a3"
+dependencies = [
+ "cfg-if",
+ "cloudabi",
+ "libc",
+ "redox_syscall",
+ "smallvec 1.4.0",
  "winapi",
 ]
 
@@ -1351,6 +1429,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "smallvec"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7cb5678e1615754284ec264d9bb5b4c27d2018577fd90ac0ceb578591ed5ee4"
+
+[[package]]
 name = "smithay-client-toolkit"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1588,7 +1672,7 @@ dependencies = [
  "libc",
  "log",
  "objc",
- "parking_lot",
+ "parking_lot 0.9.0",
  "percent-encoding",
  "raw-window-handle",
  "smithay-client-toolkit",

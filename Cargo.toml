@@ -1,10 +1,2 @@
 [workspace]
-members = [ "core", "ui" ]
-
-# [lib]
-# name = "ndcell_lib"
-# path = "core/src/lib.rs"
-
-# [[bin]]
-# name = "ndcell"
-# path = "ui/src/main.rs"
+members = [ "core", "lang", "ui" ]

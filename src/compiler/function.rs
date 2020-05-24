@@ -63,13 +63,10 @@ impl CompiledFunction {
         let inout_bytes = vec![
             0u8;
             compiler
-                .function()
-                .inout_struct_type
-                .unwrap()
-                .size_of()
-                .unwrap()
-                .get_zero_extended_constant()
-                .unwrap() as usize
+                .execution_engine
+                .get_target_data()
+                .get_store_size(&compiler.function().inout_struct_type.unwrap())
+                as usize
         ];
 
         // Allocate space for the return value.
@@ -90,6 +87,18 @@ impl CompiledFunction {
             inout_bytes,
             out_bytes,
         })
+    }
+
+    // TODO: document
+    pub fn set_args(&mut self, args: &[ConstValue]) {
+        if args.len() != self.meta.arg_count {
+            panic!("Wrong number of arguments passed to JIT function",);
+        }
+        // TODO these aren't great variable names
+        // maybe "Param" instead of "InOutValue"?
+        for (idx, arg) in args.iter().enumerate() {
+            self.value_mut(idx).set(arg);
+        }
     }
 
     /// Calls this compiled function and returns its return value.
@@ -212,7 +221,7 @@ impl<'a> InOutValueMut<'a> {
     /// Sets the value.
     ///
     /// Panics if given a value of the wrong type.
-    pub fn set(&mut self, value: ConstValue) {
+    pub fn set(&mut self, value: &ConstValue) {
         assert_eq!(
             value.ty(),
             self.ty,

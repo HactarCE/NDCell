@@ -38,8 +38,8 @@ impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Int => write!(f, "integer"),
-            Self::CellState => write!(f, "cell state"),
-            Self::Vector(len) => write!(f, "vector of length {}", len),
+            Self::CellState => write!(f, "cellstate"),
+            Self::Vector(len) => write!(f, "vec{}", len),
         }
     }
 }

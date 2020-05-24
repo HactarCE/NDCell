@@ -69,7 +69,7 @@ lazy_static! {
     static ref ASSIGN_PATTERN: Regex = Regex::new(r#"^(.?.?)=$"#).unwrap();
 
     /// A regex that matches a vector type name.
-    static ref VEC_TYPE_PATTERN: Regex = Regex::new(r#"vec(\d+)"#).unwrap();
+    static ref VEC_TYPE_PATTERN: Regex = Regex::new(r#"vec(tor)?(\d+)"#).unwrap();
 }
 
 /// Splits a string into tokens and returns them as a Vec, with all comments
@@ -442,9 +442,9 @@ impl FromStr for TypeToken {
             }
         }
         match s {
-            "int" => Ok(Self::Int),
+            "int" | "integer" => Ok(Self::Int),
             "cellstate" => Ok(Self::CellState),
-            "vec" => Ok(Self::Vector(None)),
+            "vec" | "vector" => Ok(Self::Vector(None)),
             _ => Err(()),
         }
     }

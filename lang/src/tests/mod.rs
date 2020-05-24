@@ -1,9 +1,12 @@
 //! NDCA black-box test suite.
 
 use std::rc::Rc;
+use std::thread::LocalKey;
 
-// mod cmp;
+mod branch;
+mod cmp;
 mod math;
+mod values;
 // mod vars;
 // mod vecs;
 
@@ -12,19 +15,7 @@ use super::compiler::{CompiledFunction, Compiler};
 use super::errors::CompleteLangResult;
 use super::types::LangInt;
 use super::ConstValue;
-
-/// Integer corner cases to be used as inputs for testing.
-const INT_TEST_VALUES: &[LangInt] = &[
-    LangInt::MIN,
-    LangInt::MIN + 1,
-    -2,
-    -1,
-    0,
-    1,
-    2,
-    LangInt::MAX - 1,
-    LangInt::MAX,
-];
+use values::*;
 
 // #[test]
 // fn test_become() {
@@ -57,6 +48,11 @@ const INT_TEST_VALUES: &[LangInt] = &[
 //     );
 // }
 
+/// Compiles the function named "test" in the given source code, panicking if compilation fails.
+fn compile_test(source_code: &str) -> CompiledFunction {
+    compile(Some("test"), source_code).unwrap()
+}
+
 /// Compiles the specified function of the given source code. If the function
 /// name is None, then the transition function is returned.
 fn compile(fn_name: Option<&str>, source_code: &str) -> CompleteLangResult<CompiledFunction> {
@@ -72,12 +68,20 @@ fn compile(fn_name: Option<&str>, source_code: &str) -> CompleteLangResult<Compi
         .map_err(|e| e.with_source(source_code))
 }
 
-fn assert_fn_result(
-    function: &CompiledFunction,
+fn assert_threadlocal_fn_result(
+    function: &'static LocalKey<CompiledFunction>,
     args: &[ConstValue],
     expected: Result<ConstValue, (&str, &str)>,
 ) {
-    let mut function = function.clone();
+    let mut function = function.with(|f| f.clone());
+    assert_fn_result(&mut function, args, expected);
+}
+
+fn assert_fn_result(
+    function: &mut CompiledFunction,
+    args: &[ConstValue],
+    expected: Result<ConstValue, (&str, &str)>,
+) {
     let expected_result = expected.map_err(|(a, b)| (a.to_owned(), b.to_owned()));
     function.set_args(args);
     let actual_result = function
@@ -86,7 +90,7 @@ fn assert_fn_result(
     assert_eq!(
         expected_result,
         actual_result.map_err(|e| e.pair()),
-        "\n\nRule source code:\n{}\n\n",
+        "<-- actual\n\nRule source code:\n{}\n\n",
         function.source_code()
     );
 }

@@ -67,6 +67,13 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 - [ ] Breakpoints
     + [ ] ... at generation X
     + [ ] ... when given cell is nonzero
+- [ ] Info when hovering over a cell
+    + [ ] show neighborhood
+    + [ ] flash next state (maybe when certain key is held)
+    + [ ] sidebar
+        * [ ] display ID
+        * [ ] display tags
+        * [ ] display custom info (`@hoverinfo`)
 
 ### Grid display
 

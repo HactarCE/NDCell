@@ -13,7 +13,7 @@ uint texture_width = uint(textureSize(quadtree_texture, 0).x);
 
 // Returns the value of the given branch of the given node. `node` is the index
 // of the node (also the Y position of the row for this node). `branch` is
-// the index (also X position) of the branch, which is a int from 0 to 3.
+// the index (also X position) of the branch, which is an int from 0 to 3.
 uint getNodeBranch(uint node, bool branch_x, bool branch_y) {
     uvec2 texel_pos = uvec2(node % texture_width, node / texture_width);
     uvec4 branches = texelFetch(quadtree_texture, ivec2(texel_pos), 0);

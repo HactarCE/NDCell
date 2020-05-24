@@ -166,12 +166,14 @@ pub enum LangErrorMsg {
     BecomeInHelperFunction,
     ReturnInTransitionFunction,
     CannotEvalAsConst,
+    VectorDivideByZero,
 
     // Runtime errors
     IntegerOverflow,
     DivideByZero,
     NegativeExponent,
     CellStateOutOfRange,
+    IndexOutOfBounds,
 }
 impl<T: 'static + std::error::Error> From<T> for LangErrorMsg {
     fn from(error: T) -> Self {
@@ -296,6 +298,9 @@ impl fmt::Display for LangErrorMsg {
             Self::CannotEvalAsConst => {
                 write!(f, "Cannot evaluate this expression as a constant")?;
             }
+            Self::VectorDivideByZero => {
+                write!(f, "Vector length mismatch causes divide by zero")?;
+            }
 
             Self::IntegerOverflow => {
                 write!(f, "Integer overflow")?;
@@ -308,6 +313,9 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::CellStateOutOfRange => {
                 write!(f, "Cell state out of range")?;
+            }
+            Self::IndexOutOfBounds => {
+                write!(f, "Index out of bounds")?;
             }
         }
         Ok(())

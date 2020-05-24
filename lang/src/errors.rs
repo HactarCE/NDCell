@@ -23,7 +23,8 @@ pub struct LangErrorWithSource {
     pub source_line: Option<String>,
     /// The 1-indexed line number of the error location (if any).
     pub line_num: Option<usize>,
-    /// The span of the error location (if any).
+    /// The 1-indexed character span of the error location within the given line
+    /// (if any).
     pub span: Option<(usize, usize)>,
     /// The type of error.
     pub msg: LangErrorMsg,
@@ -55,6 +56,20 @@ impl fmt::Display for LangErrorWithSource {
     }
 }
 impl Error for LangErrorWithSource {}
+impl LangErrorWithSource {
+    /// Returns a pair (source_code, error_msg) that succinctly gives the error
+    /// location; especially useful in tests, since the exact formatting of
+    /// errors may change in the future.
+    pub fn pair(&self) -> (String, String) {
+        let source: String;
+        if let (Some(line), Some((start, end))) = (&self.source_line, self.span) {
+            source = line[(start - 1)..(end - 1)].to_owned();
+        } else {
+            source = "".to_owned();
+        }
+        (source, self.msg.to_string())
+    }
+}
 
 /// An error type and an accompanying span.
 #[derive(Debug, Clone)]

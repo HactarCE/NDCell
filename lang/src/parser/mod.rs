@@ -278,7 +278,13 @@ impl<'a> ParseBuilder<'a> {
                 // There's a closing brace.
                 Some(TokenClass::Punctuation(PunctuationToken::RBrace)) => break,
                 // There's something else.
-                Some(_) => self.err(Expected("statement or '}'"))?,
+                Some(_) => {
+                    if let Some(TokenClass::Assignment(_)) = self.peek_next().map(|t| t.class) {
+                        self.err(MissingSetKeyword)?
+                    } else {
+                        self.err(Expected("statement or '}'"))?
+                    }
+                }
                 // We've reached the end of the file without closing the block.
                 None => Err(Unmatched('{', '}').with_span(open_span))?,
             }
@@ -338,15 +344,7 @@ impl<'a> ParseBuilder<'a> {
                 While => self.err(Unimplemented),
                 _ => self.err(Expected("statement")),
             },
-            _ => {
-                if let Some(TokenClass::Assignment(_)) = self.peek_next().map(|t| t.class) {
-                    // Give the user a nicer error message if they forgot the
-                    // `set` keyword. TODO: Test this in tests/syntax.rs
-                    self.err(MissingSetKeyword)
-                } else {
-                    self.err(Expected("statement"))
-                }
-            }
+            _ => self.err(Expected("statement")),
         }
     }
     /// Consumes a nested expression.

@@ -1,84 +1,70 @@
-use super::{assert_output, ConstValue};
+use super::{assert_compile_error, assert_fn_result, compile_test_fn, ConstValue};
 
+/// Tests assertions.
 #[test]
-fn test_variable_init() {
-    assert_output(
-        Ok(ConstValue::CellState(0)),
-        "
-        @transition {
-            if 0 {
-                // never executed, but declares x as an integer
-                set x = 5
-            }
-            become #(x)
+fn test_assertions() {
+    let mut f = compile_test_fn(
+        "@function int test() {
+            assert 3 == 3
+            assert 3 == 2
         }",
     );
+    let expected = Err(("3 == 2", "Assertion failed"));
+    assert_fn_result(&mut f, &[], expected);
 }
 
+/// Tests that the AST generator gives a nicer error when the user forgets the
+/// 'set' keyword.
 #[test]
-fn test_variable_undeclared() {
-    assert_output(
-        Err("Error at line 3; column 22
-become #(x)
-         ^   This variable must be initialized before it is used"),
-        "
-        @transition {
-            become #(x)
+fn test_missing_set_error() {
+    let expected = ("x", "Variable assignment requires the 'set' keyword");
+
+    let source_code = "@function int test() { x = 3 }";
+    assert_compile_error(source_code, expected);
+
+    let source_code = "@function int test() { x *= 3 }";
+    assert_compile_error(source_code, expected);
+}
+
+/// Tests that undeclared variables produce an error when generating the AST.
+#[test]
+fn test_undeclared_variable_error() {
+    let expected = ("x", "This variable must be initialized before it is used");
+
+    let source_code = "@function int test() { return x }";
+    assert_compile_error(source_code, expected);
+
+    let source_code = "@function int test() { set x += 1 }";
+    assert_compile_error(source_code, expected);
+
+    let source_code = "@function int test() { set y = x }";
+    assert_compile_error(source_code, expected);
+}
+
+/// Tests that integer variables are automatically initialized to 0.
+#[test]
+fn test_var_init() {
+    let mut f = compile_test_fn(
+        "@function int test() {
+            if 0 { set x = 5 } // never executed, but declares x as an integer
+            return x
         }",
     );
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
 }
 
+/// Tests basic variable usage.
 #[test]
 fn test_variables() {
-    assert_output(
-        Ok(ConstValue::CellState(10)),
-        "
-        @transition {
+    let mut f = compile_test_fn(
+        "@function int test() {
             set x = 3
             set another_variable = 9
             set x = another_variable - 2
             if 1 {
-                become #(x + 3)
+                return x + 3
             }
-        }
-        @states 11",
-    );
-}
-
-#[test]
-fn test_variable_types() {
-    // Cell state -> integer
-    assert_output(
-        Err("Error at line 4; column 21
-set s = 3
-        ^   Type error: expected cell state but got integer"),
-        "
-        @transition {
-            set s = #2
-            set s = 3
         }",
     );
-
-    // Integer -> cell state
-    assert_output(
-        Err("Error at line 4; column 21
-set s = #2
-        ^^   Type error: expected integer but got cell state"),
-        "
-        @transition {
-            set s = 3
-            set s = #2
-        }",
-    );
-
-    // Return an integer
-    assert_output(
-        Err("Error at line 3; column 13
-become 0
-^^^^^^^^   Type error: expected cell state but got integer"),
-        "
-        @transition {
-            become 0
-        }",
-    )
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(10)));
 }

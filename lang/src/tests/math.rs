@@ -1,22 +1,23 @@
 use proptest::prelude::*;
 
 use super::{
-    assert_threadlocal_fn_result, compile_test, test_values, CompiledFunction, ConstValue, LangInt,
+    assert_threadlocal_fn_result, compile_test_fn, test_values, CompiledFunction, ConstValue,
+    LangInt,
 };
 
 thread_local! {
     static ADD_FN: CompiledFunction =
-        compile_test("@function int test(int x, int y) { return x + y }");
+        compile_test_fn("@function int test(int x, int y) { return x + y }");
     static SUB_FN: CompiledFunction =
-        compile_test("@function int test(int x, int y) { return x - y }");
+        compile_test_fn("@function int test(int x, int y) { return x - y }");
     static MUL_FN: CompiledFunction =
-        compile_test("@function int test(int x, int y) { return x * y }");
+        compile_test_fn("@function int test(int x, int y) { return x * y }");
     static DIV_FN: CompiledFunction =
-        compile_test("@function int test(int x, int y) { return x / y }");
+        compile_test_fn("@function int test(int x, int y) { return x / y }");
     static MOD_FN: CompiledFunction =
-        compile_test("@function int test(int x, int y) { return x % y }");
+        compile_test_fn("@function int test(int x, int y) { return x % y }");
     static NEG_FN: CompiledFunction =
-        compile_test("@function int test(int x, int y) { return -x }");
+        compile_test_fn("@function int test(int x, int y) { return -x }");
 }
 
 // Test with random inputs.

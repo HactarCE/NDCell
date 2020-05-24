@@ -1,11 +1,11 @@
 use super::{
-    assert_fn_result, assert_threadlocal_fn_result, compile_test, test_values, CompiledFunction,
+    assert_fn_result, assert_threadlocal_fn_result, compile_test_fn, test_values, CompiledFunction,
     ConstValue, LangInt,
 };
 
 thread_local! {
     static IF_FN: CompiledFunction =
-        compile_test("@function int test(int cond) { if cond { return 10 } else { return 20 } }");
+        compile_test_fn("@function int test(int cond) { if cond { return 10 } else { return 20 } }");
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn test_branching() {
                                 source_code.push_str("}");
                                 let expected_ret = ConstValue::Int(expected_ret.unwrap_or(0));
 
-                                let mut function = compile_test(&source_code);
+                                let mut function = compile_test_fn(&source_code);
                                 assert_fn_result(&mut function, &[], Ok(expected_ret));
                             }
                         }

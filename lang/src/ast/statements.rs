@@ -149,7 +149,7 @@ impl Return {
         let expected = userfunc.return_type();
         let got = userfunc[ret_expr].return_type();
         if expected != got {
-            Err(TypeError { expected, got }.with_span(span))?;
+            Err(TypeError { expected, got }.with_span(userfunc[ret_expr].span()))?;
         }
         Ok(Self { span, ret_expr })
     }

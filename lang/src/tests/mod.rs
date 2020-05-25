@@ -6,6 +6,7 @@ use std::thread::LocalKey;
 mod branch;
 mod cmp;
 mod debug;
+mod funcs;
 mod math;
 mod types;
 mod values;
@@ -26,6 +27,24 @@ fn assert_compile_error(source_code: &str, expected: (&str, &str)) {
     let actual_result = make_ast(source_code);
     match actual_result {
         Ok(rule) => assert!(false, "Rule should have produced error {:?}, but instead it produced this AST:\n{:#?}\n\nRule source code:\n{}\n\n", expected_err, rule, source_code),
+        Err(actual_err) => assert_eq!(
+            expected_err,
+            actual_err.pair(),
+            "<-- actual\n\nRule source code:\n{}\n\n",
+            source_code
+        )
+    }
+}
+
+/// Asserts that the given source code produces the giiven error when attempting
+/// to compile the function with the given name (or the transition function, if
+/// the function name is None).
+fn assert_fn_compile_error(fn_name: Option<&str>, source_code: &str, expected: (&str, &str)) {
+    let expected_err = (expected.0.to_owned(), expected.1.to_owned());
+    let actual_result = compile_fn(fn_name, source_code);
+    match actual_result {
+
+        Ok(_) => assert!(false, "Rule should have produced error {:?}, but instead it compiled successfully.\n\nRule source code:\n{}\n\n", expected_err,  source_code),
         Err(actual_err) => assert_eq!(
             expected_err,
             actual_err.pair(),

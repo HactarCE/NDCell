@@ -262,6 +262,9 @@ enum_with_str_repr! {
         // Variables
         Set = "set",
 
+        // Debugging
+        Assert = "assert",
+
         // Boolean operators
         Or = "or",
         Xor = "xor",
@@ -352,7 +355,8 @@ impl KeywordToken {
             | Self::Else
             | Self::If
             | Self::Unless
-            | Self::Set => true,
+            | Self::Set
+            | Self::Assert => true,
             Self::Or
             | Self::Xor
             | Self::And

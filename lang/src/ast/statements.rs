@@ -1,8 +1,8 @@
 use super::super::compiler::*;
 use super::super::errors::*;
 use super::super::{Span, Type};
-use super::{ExprRef, StatementRef, UserFunction};
-use LangErrorMsg::{CannotAssignTypeToVariable, InternalError, TypeError};
+use super::{ErrorPointRef, ExprRef, StatementRef, UserFunction};
+use LangErrorMsg::{AssertionFailed, CannotAssignTypeToVariable, InternalError, TypeError};
 
 /// List of statements, executed one after another.
 pub type StatementBlock = Vec<StatementRef>;
@@ -13,6 +13,48 @@ pub trait Statement: std::fmt::Debug {
     fn span(&self) -> Span;
     /// Compiles this statement.
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()>;
+}
+
+/// Assertion, such as `assert 2 + 2 == 4`.
+#[derive(Debug)]
+pub struct Assert {
+    /// Span of this statement in the original source code.
+    span: Span,
+    /// Expression to test.
+    expr: ExprRef,
+    /// Assertion LangError.
+    error: ErrorPointRef,
+}
+impl Assert {
+    /// Constructs a new assertion statement that checks the result of the given
+    /// expression and errors if it is nonzero.
+    ///
+    /// This method checks the type of the expression.
+    pub fn try_new(
+        span: Span,
+        userfunc: &mut UserFunction,
+        expr: ExprRef,
+        msg: Option<String>,
+    ) -> LangResult<Self> {
+        let expr_span = userfunc[expr].span();
+        let expected = Type::Int;
+        let got = userfunc[expr].return_type();
+        if expected != got {
+            Err(TypeError { expected, got }.with_span(expr_span))?;
+        }
+        let error = userfunc.add_error_point(AssertionFailed(msg).with_span(expr_span));
+        Ok(Self { span, expr, error })
+    }
+}
+impl Statement for Assert {
+    fn span(&self) -> Span {
+        self.span
+    }
+    fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
+        let assert_value = userfunc.compile_expr(compiler, self.expr)?.as_int()?;
+        compiler.build_conditional(assert_value, |_| Ok(()), |c| Ok(self.error.compile(c)))?;
+        Ok(())
+    }
 }
 
 /// Variable assignment statement, such as `set x = 3`.

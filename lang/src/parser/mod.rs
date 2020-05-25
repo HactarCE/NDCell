@@ -296,6 +296,19 @@ impl<'a> ParseBuilder<'a> {
         use KeywordToken::*;
         match self.next().map(|t| t.class) {
             Some(TokenClass::Keyword(kw)) if kw.starts_statement() => match kw {
+                Assert => Ok(Statement::Assert {
+                    expr: self.expect(Self::expression)?,
+                    msg: {
+                        if self.next_token_is_one_of(&[TokenClass::Punctuation(
+                            PunctuationToken::Comma,
+                        )]) {
+                            self.next();
+                            Some(self.expect(Self::string)?)
+                        } else {
+                            None
+                        }
+                    },
+                }),
                 Become => Ok(Statement::Become(self.expect(Self::expression)?)),
                 Break => self.err(Unimplemented),
                 Case => self.err(Unimplemented),
@@ -524,6 +537,21 @@ impl<'a> ParseBuilder<'a> {
             Some(TokenClass::Keyword(kw)) => self.err(ReservedWord(kw.to_string().into())),
             Some(TokenClass::Type(ty)) => self.err(ReservedWord(ty.to_string().into())),
             _ => self.err(Expected("identifier, i.e. variable or function name")),
+        }
+    }
+    /// Consumes a string literal.
+    fn string(&mut self) -> LangResult<StringLiteral> {
+        match self.next().map(|t| t.class) {
+            Some(TokenClass::String {
+                prefix,
+                quote,
+                contents,
+            }) => Ok(StringLiteral {
+                prefix,
+                quote,
+                contents: contents.to_owned(),
+            }),
+            _ => self.err(Expected("string")),
         }
     }
     /// Consumes an assignment token and returns the operator used in the

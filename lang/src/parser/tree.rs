@@ -123,6 +123,13 @@ pub struct HelperFunc {
 /// Statement node in the parse tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
+    /// Asserts that a condition is fulfilled.
+    Assert {
+        /// Condition.
+        expr: Spanned<Expr>,
+        /// Error message to output if the condition is falsey.
+        msg: Option<Spanned<StringLiteral>>,
+    },
     /// Sets a variable value.
     SetVar {
         /// Variable to set.
@@ -162,6 +169,8 @@ pub enum Expr {
     Int(i64),
     /// Identifier.
     Ident(String),
+    /// String literal.
+    String(StringLiteral),
     /// Parethetical or bracketed group.
     Group {
         /// Punctuation token at the beginning of the group.
@@ -194,4 +203,16 @@ pub enum Expr {
         /// Comparison operations (one less than the number of expressions).
         cmps: Vec<ComparisonToken>,
     },
+}
+
+/// String literal node in the parse tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StringLiteral {
+    /// Optional single-character prefix (like Python's `r"..."` and
+    /// `f"..."` strings).
+    pub prefix: Option<char>,
+    /// The quote character used (either single quote or double quote).
+    pub quote: char,
+    /// The contents of the string.
+    pub contents: String,
 }

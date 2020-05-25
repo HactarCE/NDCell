@@ -11,7 +11,7 @@ use super::super::{ConstValue, Span, Spanned, Type};
 use super::statements;
 use super::{Args, Expr, Function, RuleMeta, Statement, StatementBlock};
 use LangErrorMsg::{
-    BecomeInHelperFunction, ExpectedGot, InternalError, ReturnInTransitionFunction,
+    BecomeInHelperFunction, ExpectedGot, InternalError, ReturnInTransitionFunction, Unimplemented,
     UseOfUninitializedVariable,
 };
 
@@ -156,6 +156,17 @@ impl UserFunction {
             let span = parser_statement.span;
 
             let new_statement: Box<dyn Statement> = match &parser_statement.inner {
+                // Assertion
+                parser::Statement::Assert { expr, msg } => {
+                    let expr = self.build_expression_ast(&expr)?;
+                    Box::new(statements::Assert::try_new(
+                        span,
+                        self,
+                        expr,
+                        msg.as_ref()
+                            .map(|string_lit| string_lit.inner.contents.to_owned()),
+                    )?)
+                }
                 // Variable assignment statement
                 parser::Statement::SetVar {
                     var_name,
@@ -238,6 +249,11 @@ impl UserFunction {
             parser::Expr::Ident(s) => {
                 args = Args::none();
                 function = Box::new(functions::misc::GetVar::try_new(self, span, s.to_owned())?);
+            }
+            // String literal
+            parser::Expr::String(_) => {
+                args = Args::none();
+                function = Err(Unimplemented)?;
             }
             // Parenthetical/bracketed group
             parser::Expr::Group { start_token, inner } => {

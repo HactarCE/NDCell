@@ -2,14 +2,12 @@
 
 use std::convert::TryInto;
 
-use super::super::ast::{
-    ArgValues, ErrorPointRef, FnSignature, Function, FunctionKind, UserFunction,
-};
-use super::super::compiler::{Compiler, Value};
-use super::super::errors::*;
-use super::super::lexer::OperatorToken;
-use super::super::types::LangInt;
-use super::super::{ConstValue, Span, Type};
+use crate::ast::{ArgValues, ErrorPointRef, FnSignature, Function, FunctionKind, UserFunction};
+use crate::compiler::{Compiler, Value};
+use crate::errors::*;
+use crate::lexer::OperatorToken;
+use crate::types::LangInt;
+use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{DivideByZero, IntegerOverflow, InternalError, NegativeExponent};
 
 /// Built-in function that negates an integer.

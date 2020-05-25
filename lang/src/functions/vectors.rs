@@ -2,11 +2,11 @@
 
 use inkwell::types::VectorType;
 
-use super::super::ast::{ArgValues, FnSignature, Function, FunctionKind, UserFunction};
-use super::super::compiler::{Compiler, Value};
-use super::super::errors::*;
-use super::super::types::MAX_VECTOR_LEN;
-use super::super::{Span, Type};
+use crate::ast::{ArgValues, FnSignature, Function, FunctionKind, UserFunction};
+use crate::compiler::{Compiler, Value};
+use crate::errors::*;
+use crate::types::MAX_VECTOR_LEN;
+use crate::{Span, Type};
 use LangErrorMsg::VectorTooBig;
 
 /// Built-in function that constructs a vector from its arguments.

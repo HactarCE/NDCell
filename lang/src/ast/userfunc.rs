@@ -2,14 +2,13 @@ use std::collections::HashMap;
 use std::ops::Index;
 use std::rc::Rc;
 
-use super::super::compiler::{CompiledFunction, Compiler, Value};
-use super::super::errors::*;
-use super::super::functions;
-use super::super::lexer::OperatorToken;
-use super::super::parser;
-use super::super::{ConstValue, Span, Spanned, Type};
-use super::statements;
-use super::{Args, Expr, Function, RuleMeta, Statement, StatementBlock};
+use super::{statements, Args, Expr, Function, RuleMeta, Statement, StatementBlock};
+use crate::compiler::{CompiledFunction, Compiler, Value};
+use crate::errors::*;
+use crate::functions;
+use crate::lexer::OperatorToken;
+use crate::parser;
+use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{
     BecomeInHelperFunction, ExpectedGot, InternalError, ReturnInTransitionFunction, Unimplemented,
     UseOfUninitializedVariable,

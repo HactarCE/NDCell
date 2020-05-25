@@ -1,10 +1,10 @@
 //! High-level representations of expressions in the AST.
 
-use super::super::compiler::*;
-use super::super::errors::*;
-use super::super::parser;
-use super::super::{ConstValue, Span, Type};
 use super::{ArgTypes, ArgValues, Args, UserFunction};
+use crate::compiler::*;
+use crate::errors::*;
+use crate::parser;
+use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{CannotEvalAsConst, InternalError, InvalidArguments};
 
 /// Expression node in the AST.

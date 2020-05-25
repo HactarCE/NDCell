@@ -3,14 +3,14 @@
 use inkwell::IntPredicate;
 use std::rc::Rc;
 
-use super::super::ast::{
+use crate::ast::{
     ArgValues, ErrorPointRef, FnSignature, Function, FunctionKind, RuleMeta, UserFunction,
 };
-use super::super::compiler::{Compiler, Value};
-use super::super::errors::*;
-use super::super::lexer::OperatorToken;
-use super::super::types::{LangCellState, LangInt};
-use super::super::{ConstValue, Span, Type};
+use crate::compiler::{Compiler, Value};
+use crate::errors::*;
+use crate::lexer::OperatorToken;
+use crate::types::{LangCellState, LangInt};
+use crate::{ConstValue, Span, Type};
 use LangErrorMsg::CellStateOutOfRange;
 
 /// Built-in function that returns the cell state with the given ID.

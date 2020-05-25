@@ -12,11 +12,11 @@ mod values;
 mod vars;
 mod vecs;
 
-use super::ast;
-use super::compiler::{CompiledFunction, Compiler};
-use super::errors::CompleteLangResult;
-use super::types::LangInt;
-use super::ConstValue;
+use crate::ast;
+use crate::compiler::{CompiledFunction, Compiler};
+use crate::errors::CompleteLangResult;
+use crate::types::LangInt;
+use crate::ConstValue;
 use values::*;
 
 /// Asserts that the given source code produces the given error when attempting

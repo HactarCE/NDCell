@@ -2,8 +2,8 @@
 
 use std::convert::TryInto;
 
-use super::errors::*;
-use super::types::{LangCellState, LangInt, Type};
+use crate::errors::*;
+use crate::types::{LangCellState, LangInt, Type};
 use LangErrorMsg::InternalError;
 
 /// InternalError reported when a variable is used improperly and it was not

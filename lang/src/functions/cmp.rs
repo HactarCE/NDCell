@@ -3,11 +3,11 @@
 use inkwell::values::IntValue;
 use std::fmt;
 
-use super::super::ast::{ArgValues, Args, FnSignature, Function, FunctionKind, UserFunction};
-use super::super::compiler::{Compiler, Value};
-use super::super::errors::*;
-use super::super::lexer::ComparisonToken;
-use super::super::{ConstValue, Span, Spanned, Type};
+use crate::ast::{ArgValues, Args, FnSignature, Function, FunctionKind, UserFunction};
+use crate::compiler::{Compiler, Value};
+use crate::errors::*;
+use crate::lexer::ComparisonToken;
+use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::CmpError;
 
 /// Built-in function that performs some fixed number of comparisons.

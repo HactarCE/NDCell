@@ -6,9 +6,9 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
 
-use super::errors::*;
-use super::types::LangInt;
-use super::{Span, Type};
+use crate::errors::*;
+use crate::types::{LangInt, MAX_VECTOR_LEN};
+use crate::{Span, Type};
 use LangErrorMsg::{UnknownSymbol, Unterminated};
 
 /// A list of token patterns, arranged roughly from least to most general.
@@ -443,7 +443,7 @@ impl FromStr for TypeToken {
             .as_ref()
             .map(regex::Match::as_str)
         {
-            if let Ok(len @ 1..=super::types::MAX_VECTOR_LEN) = len_str.parse() {
+            if let Ok(len @ 1..=MAX_VECTOR_LEN) = len_str.parse() {
                 return Ok(Self::Vector(Some(len)));
             }
         }
@@ -519,8 +519,8 @@ impl AssignmentToken {
 
 #[cfg(test)]
 mod tests {
-    use super::super::span::TextPoint;
     use super::*;
+    use crate::span::TextPoint;
 
     #[test]
     fn test_tokenizer() {

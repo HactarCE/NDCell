@@ -2,8 +2,8 @@
 
 use inkwell::values::{BasicValueEnum, IntValue, VectorValue};
 
-use super::super::errors::*;
-use super::super::Type;
+use crate::errors::*;
+use crate::Type;
 
 /// A value of any type.
 #[derive(Debug, Clone, PartialEq, Eq)]

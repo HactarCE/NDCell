@@ -7,10 +7,10 @@ mod tree;
 
 pub use tree::*;
 
-use super::errors::*;
-use super::lexer::*;
-use super::types::LangInt;
-use super::{Span, Spanned};
+use crate::errors::*;
+use crate::lexer::*;
+use crate::types::LangInt;
+use crate::{Span, Spanned};
 use LangErrorMsg::{
     ElseWithoutIf, Expected, InternalError, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
     TopLevelNonDirective, Unimplemented, Unmatched,

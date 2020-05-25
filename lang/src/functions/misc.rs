@@ -1,9 +1,9 @@
 //! Miscellaneous functions.
 
-use super::super::ast::{ArgValues, FnSignature, Function, FunctionKind, UserFunction};
-use super::super::compiler::{Compiler, Value};
-use super::super::errors::*;
-use super::super::{Span, Type};
+use crate::ast::{ArgValues, FnSignature, Function, FunctionKind, UserFunction};
+use crate::compiler::{Compiler, Value};
+use crate::errors::*;
+use crate::{Span, Type};
 
 /// Built-in function that returns a fixed variable.
 #[derive(Debug, Clone)]

@@ -3,9 +3,9 @@
 use inkwell::execution_engine::JitFunction;
 use std::rc::Rc;
 
-use super::super::errors::*;
-use super::super::{ConstValue, Type};
 use super::Compiler;
+use crate::errors::*;
+use crate::{ConstValue, Type};
 use LangErrorMsg::InternalError;
 
 /// Compiled user function with allocated space for arguments, return value, and

@@ -25,7 +25,7 @@ pub use rule::*;
 pub use statements::{Statement, StatementBlock};
 pub use userfunc::*;
 
-use super::errors::*;
+use crate::errors::*;
 
 pub fn make_rule(source_code: Rc<String>) -> LangResult<Rule> {
     let tokens = super::lexer::tokenize(&source_code)?;

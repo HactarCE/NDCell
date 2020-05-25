@@ -3,10 +3,10 @@
 use std::borrow::Cow;
 use std::ops::Index;
 
-use super::super::compiler::*;
-use super::super::errors::*;
-use super::super::{ConstValue, Type};
 use super::{Expr, ExprRef, UserFunction};
+use crate::compiler::*;
+use crate::errors::*;
+use crate::{ConstValue, Type};
 use LangErrorMsg::InternalError;
 
 /// Error returned when an argument index is out of range (which should never happen).

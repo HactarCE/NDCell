@@ -35,9 +35,9 @@ mod value;
 pub use function::CompiledFunction;
 pub use value::Value;
 
-use super::errors::*;
-use super::types::{CELL_STATE_BITS, INT_BITS};
-use super::{ConstValue, Type};
+use crate::errors::*;
+use crate::types::{CELL_STATE_BITS, INT_BITS};
+use crate::{ConstValue, Type};
 use LangErrorMsg::InternalError;
 
 /// Name of the LLVM module.

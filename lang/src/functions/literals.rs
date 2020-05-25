@@ -1,10 +1,10 @@
 //! Functions that return literals.
 
-use super::super::ast::{ArgValues, FnSignature, Function, FunctionKind};
-use super::super::compiler::{Compiler, Value};
-use super::super::errors::*;
-use super::super::types::LangInt;
-use super::super::{ConstValue, Type};
+use crate::ast::{ArgValues, FnSignature, Function, FunctionKind};
+use crate::compiler::{Compiler, Value};
+use crate::errors::*;
+use crate::types::LangInt;
+use crate::{ConstValue, Type};
 
 /// Built-in function that returns a fixed integer. This struct can be
 /// constructed directly.

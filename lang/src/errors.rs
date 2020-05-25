@@ -4,10 +4,10 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
-use super::ast::ArgTypes;
-use super::lexer::ComparisonToken;
-use super::types::MAX_VECTOR_LEN;
-use super::{Span, Type, MAX_NDIM, MAX_STATES};
+use crate::ast::ArgTypes;
+use crate::lexer::ComparisonToken;
+use crate::types::MAX_VECTOR_LEN;
+use crate::{Span, Type, MAX_NDIM, MAX_STATES};
 
 pub const UNCAUGHT_TYPE_ERROR: LangError =
     LangErrorMsg::InternalError(Cow::Borrowed("Uncaught type error")).without_span();

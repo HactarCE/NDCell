@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
-use super::super::errors::*;
-use super::super::lexer::{AssignmentToken, ComparisonToken, OperatorToken, TypeToken};
-use super::super::{Span, Spanned};
+use crate::errors::*;
+use crate::lexer::{AssignmentToken, ComparisonToken, OperatorToken, TypeToken};
+use crate::{Span, Spanned};
 use LangErrorMsg::RepeatDirective;
 
 /// Parse tree of containing tokens.

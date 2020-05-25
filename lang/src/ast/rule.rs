@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
-use super::super::errors::*;
-use super::super::parser::{Directive, DirectiveContents, HelperFunc, ParseTree};
-use super::super::{ConstValue, Type, MAX_NDIM, MAX_STATES};
 use super::{FnSignature, UserFunction};
+use crate::errors::*;
+use crate::parser::{Directive, DirectiveContents, HelperFunc, ParseTree};
+use crate::{ConstValue, Type, MAX_NDIM, MAX_STATES};
 use LangErrorMsg::{
     Expected, FunctionNameConflict, InternalError, InvalidDimensionCount, InvalidStateCount,
     TypeError,

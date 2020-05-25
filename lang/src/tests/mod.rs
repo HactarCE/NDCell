@@ -5,6 +5,7 @@ use std::thread::LocalKey;
 
 mod branch;
 mod cmp;
+mod debug;
 mod math;
 mod types;
 mod values;

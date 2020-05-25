@@ -1,18 +1,5 @@
 use super::{assert_compile_error, assert_fn_result, compile_test_fn, ConstValue};
 
-/// Tests assertions.
-#[test]
-fn test_assertions() {
-    let mut f = compile_test_fn(
-        "@function int test() {
-            assert 3 == 3
-            assert 3 == 2
-        }",
-    );
-    let expected = Err(("3 == 2", "Assertion failed"));
-    assert_fn_result(&mut f, &[], expected);
-}
-
 /// Tests that the AST generator gives a nicer error when the user forgets the
 /// 'set' keyword.
 #[test]

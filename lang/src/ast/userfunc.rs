@@ -258,15 +258,19 @@ impl UserFunction {
                 args = Args::none();
                 function = Err(Unimplemented)?;
             }
-            // Parenthetical/bracketed group
-            parser::Expr::Group { start_token, inner } => {
-                use PunctuationToken::*;
-                match start_token {
-                    LParen => return self.build_expression_ast(inner),
-                    LBracket => todo!("Construct vector"),
-                    _ => return Err(InternalError("Invalid group".into()).with_span(span)),
-                }
+            // Vector literal
+            parser::Expr::Vector(exprs) => {
+                args = Args::from(
+                    exprs
+                        .iter()
+                        .map(|expr| self.build_expression_ast(expr))
+                        .collect::<LangResult<Vec<_>>>()?,
+                );
+                function = todo!();
+                // function = Box::new(functions::vectors::BuildVec);
             }
+            // Parenthetical group
+            parser::Expr::ParenExpr(expr) => return self.build_expression_ast(expr),
             // Comma-separated list
             parser::Expr::List(_) => {
                 return Err(ExpectedGot {

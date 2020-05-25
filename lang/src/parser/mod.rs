@@ -9,6 +9,7 @@ pub use tree::*;
 
 use super::errors::*;
 use super::lexer::*;
+use super::types::LangInt;
 use super::{Span, Spanned};
 use LangErrorMsg::{
     ElseWithoutIf, Expected, InternalError, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
@@ -224,7 +225,7 @@ impl<'a> ParseBuilder<'a> {
             name: self.expect(Self::ident)?,
             args: self
                 .expect(|pb| {
-                    pb.paren(|pb| {
+                    pb.pair("(", ")", |pb| {
                         pb.list(
                             &[TokenClass::Punctuation(PunctuationToken::Comma)],
                             &[TokenClass::Punctuation(PunctuationToken::RParen)],
@@ -408,12 +409,15 @@ impl<'a> ParseBuilder<'a> {
             OpPrecedence::Comparison => self.comparison_op(precedence),
             // TODO add remaining precedence levels
             OpPrecedence::Atom => match self.peek_next().map(|t| t.class) {
+                Some(TokenClass::Punctuation(PunctuationToken::LBracket)) => self
+                    .expect_spanned(Self::vector)
+                    .map(|s| s.map(Expr::Vector)),
                 Some(TokenClass::Punctuation(PunctuationToken::LParen)) => {
                     // Expressions inside parentheses always start again at the
                     // lowest precedence level.
-                    self.expect_spanned(|pb| pb.paren(Self::expression))
+                    self.expect_spanned(|pb| pb.pair("(", ")", Self::expression))
                 }
-                Some(TokenClass::Integer(_)) => self.expect(Self::int),
+                Some(TokenClass::Integer(_)) => self.expect(Self::int).map(|s| s.map(Expr::Int)),
                 Some(TokenClass::String { .. }) => self.err(Unimplemented),
                 Some(TokenClass::Tag(_)) => self.err(Unimplemented),
                 Some(TokenClass::Ident(_)) => self
@@ -525,9 +529,9 @@ impl<'a> ParseBuilder<'a> {
         })
     }
     /// Consumes an integer literal.
-    fn int(&mut self) -> LangResult<Expr> {
+    fn int(&mut self) -> LangResult<LangInt> {
         match self.next().map(|t| t.class) {
-            Some(TokenClass::Integer(i)) => Ok(Expr::Int(i)),
+            Some(TokenClass::Integer(i)) => Ok(i),
             _ => self.err(Expected("integer")),
         }
     }
@@ -562,6 +566,18 @@ impl<'a> ParseBuilder<'a> {
             _ => self.err(Expected("string")),
         }
     }
+    fn vector(&mut self) -> LangResult<Spanned<Vec<Spanned<Expr>>>> {
+        self.expect_spanned(|pb| {
+            pb.pair("[", "]", |pb| {
+                pb.list(
+                    &[TokenClass::Punctuation(PunctuationToken::Comma)],
+                    &[TokenClass::Punctuation(PunctuationToken::RBracket)],
+                    Self::expression,
+                    "expression",
+                )
+            })
+        })
+    }
     /// Consumes an assignment token and returns the operator used in the
     /// assignment, if any. (E.g. `+=` uses the `+` operator, while `=` does not
     /// use any operator.)
@@ -571,22 +587,28 @@ impl<'a> ParseBuilder<'a> {
             _ => self.err(Expected("assignment symbol, e.g. '=' or '+='")),
         }
     }
-    /// Consumes a pair of parentheses with the given matcher run inside.
-    fn paren<T>(
+    /// Consumes a pair of symbols (parentheses, brackets, etc.) with the given
+    /// matcher run inside. TODO: use pair() for statement blocks as well
+    fn pair<T>(
         &mut self,
+        open: &'static str,
+        close: &'static str,
         inner_matcher: impl FnOnce(&mut Self) -> LangResult<T>,
     ) -> LangResult<Spanned<T>> {
-        match self.next().map(|t| t.class) {
-            Some(TokenClass::Punctuation(PunctuationToken::LParen)) => (),
-            _ => self.err(Expected("parenthetical expression beginning with '('"))?,
+        if self.next().map(|t| t.class) != Some(TokenClass::Punctuation(open.parse().unwrap())) {
+            self.err(Expected("parenthetical expression beginning with '('"))?;
         }
         // Record the span of the left paren.
         let open_span = self.span();
         let expr = self.expect(inner_matcher)?;
         match self.next().map(|t| t.class) {
-            Some(TokenClass::Punctuation(PunctuationToken::RParen)) => Ok(expr),
-            Some(_) => self.err(Expected("')'")),
-            None => Err(Unmatched('(', ')').with_span(open_span)),
+            Some(TokenClass::Punctuation(punc)) if punc == close.parse().unwrap() => Ok(expr),
+            Some(_) => self.err(Expected(close)),
+            None => Err(
+                // TODO: this is ugly; how to do it better?
+                Unmatched(open.chars().next().unwrap(), close.chars().next().unwrap())
+                    .with_span(open_span),
+            ),
         }
     }
     /// Consumes a list of things (using the given matcher) separated by a given

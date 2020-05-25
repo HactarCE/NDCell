@@ -5,9 +5,7 @@ use std::convert::TryFrom;
 use std::rc::Rc;
 
 use super::super::errors::*;
-use super::super::lexer::{
-    AssignmentToken, ComparisonToken, OperatorToken, PunctuationToken, TypeToken,
-};
+use super::super::lexer::{AssignmentToken, ComparisonToken, OperatorToken, TypeToken};
 use super::super::{Span, Spanned};
 use LangErrorMsg::RepeatDirective;
 
@@ -176,14 +174,11 @@ pub enum Expr {
     Ident(String),
     /// String literal.
     String(StringLiteral),
-    /// Parethetical or bracketed group.
-    Group {
-        /// Punctuation token at the beginning of the group.
-        start_token: PunctuationToken,
-        /// List of comma-separated members.
-        inner: Box<Spanned<Expr>>,
-    },
-    /// Comma-separated list.
+    /// Vector literal.
+    Vector(Vec<Spanned<Expr>>),
+    /// Parethetical group.
+    ParenExpr(Box<Spanned<Expr>>),
+    /// Comma-separated list. TODO: is this necessary?
     List(Vec<Box<Spanned<Expr>>>),
     /// Operation on one value.
     UnaryOp {

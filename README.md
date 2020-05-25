@@ -1,7 +1,7 @@
 # NDCell [![](https://img.shields.io/discord/560924453245288459.svg?colorB=7289DA)](https://discord.gg/vdJwHQF)
 
-_Any number of dimensions_
-_Any neighborhood range_
+_Any number of dimensions_  
+_Any neighborhood range_  
 _Any computable transition function_
 
 **Simulate _any_ cellular automaton**

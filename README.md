@@ -10,8 +10,9 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ## Short-term to-do list
 
-- [ ] Begin work on custom rules
-- [ ] Refactor all imports to use preludes
+- [x] Begin work on custom rules
+    + See [`dev/lang/README.md`](https://github.com/HactarCE/NDCell/blob/dev/lang/README.md#short-term-to-do-list)
+- [ ] Refactor imports to use preludes (maybe?)
 
 ## Long-term to-do list
 

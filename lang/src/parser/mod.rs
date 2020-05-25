@@ -47,9 +47,9 @@ enum OpPrecedence {
     MulDiv,
     UnaryPrefix,
     Exp,
-    Dot,
     ArrayIndex,
     FunctionCall,
+    Dot,
     Atom,
 }
 impl OpPrecedence {
@@ -77,10 +77,10 @@ impl OpPrecedence {
             Self::AddSub => Self::MulDiv,
             Self::MulDiv => Self::UnaryPrefix,
             Self::UnaryPrefix => Self::Exp,
-            Self::Exp => Self::Dot,
-            Self::Dot => Self::ArrayIndex,
+            Self::Exp => Self::ArrayIndex,
             Self::ArrayIndex => Self::FunctionCall,
-            Self::FunctionCall => Self::Atom,
+            Self::FunctionCall => Self::Dot,
+            Self::Dot => Self::Atom,
             Self::Atom => panic!("Tried to get operator precedence level beyond {:?}", self),
         }
     }

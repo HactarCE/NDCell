@@ -8,7 +8,9 @@ use crate::{Span, Type};
 /// Built-in function that returns a fixed variable.
 #[derive(Debug, Clone)]
 pub struct GetVar {
+    /// Name of variable to get.
     pub var_name: String,
+    /// Type of this variable.
     pub var_type: Type,
 }
 impl GetVar {

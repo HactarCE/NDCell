@@ -5,7 +5,7 @@ use std::rc::Rc;
 use super::super::compiler::{CompiledFunction, Compiler, Value};
 use super::super::errors::*;
 use super::super::functions;
-use super::super::lexer::{OperatorToken, PunctuationToken};
+use super::super::lexer::OperatorToken;
 use super::super::parser;
 use super::super::{ConstValue, Span, Spanned, Type};
 use super::statements;
@@ -266,8 +266,11 @@ impl UserFunction {
                         .map(|expr| self.build_expression_ast(expr))
                         .collect::<LangResult<Vec<_>>>()?,
                 );
-                function = todo!();
-                // function = Box::new(functions::vectors::BuildVec);
+                function = Box::new(functions::vectors::BuildVec::try_new(
+                    self,
+                    span,
+                    args.len(),
+                )?);
             }
             // Parenthetical group
             parser::Expr::ParenExpr(expr) => return self.build_expression_ast(expr),

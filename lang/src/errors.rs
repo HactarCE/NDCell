@@ -6,6 +6,7 @@ use std::fmt;
 
 use super::ast::ArgTypes;
 use super::lexer::ComparisonToken;
+use super::types::MAX_VECTOR_LEN;
 use super::{Span, Type, MAX_NDIM, MAX_STATES};
 
 pub const UNCAUGHT_TYPE_ERROR: LangError =
@@ -166,6 +167,7 @@ pub enum LangErrorMsg {
     BecomeInHelperFunction,
     ReturnInTransitionFunction,
     CannotEvalAsConst,
+    VectorTooBig,
     VectorDivideByZero,
 
     // Runtime errors
@@ -299,6 +301,13 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::CannotEvalAsConst => {
                 write!(f, "Cannot evaluate this expression as a constant")?;
+            }
+            Self::VectorTooBig => {
+                write!(
+                    f,
+                    "Too many elements in vector; maximum is {}",
+                    MAX_VECTOR_LEN
+                )?;
             }
             Self::VectorDivideByZero => {
                 write!(f, "Vector length mismatch causes divide by zero")?;

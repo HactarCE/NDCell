@@ -68,7 +68,7 @@ fn assert_fn_result(
 
 /// Compiles the function named "test" in the given source code, panicking if compilation fails.
 fn compile_test_fn(source_code: &str) -> CompiledFunction {
-    compile_fn(Some("test"), source_code).unwrap()
+    compile_fn(Some("test"), source_code).expect("Compilation failed")
 }
 
 /// Compiles the specified function of the given source code. If the function

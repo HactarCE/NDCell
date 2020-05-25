@@ -159,13 +159,16 @@ impl UserFunction {
                 // Assertion
                 parser::Statement::Assert { expr, msg } => {
                     let expr = self.build_expression_ast(&expr)?;
-                    Box::new(statements::Assert::try_new(
-                        span,
-                        self,
-                        expr,
-                        msg.as_ref()
-                            .map(|string_lit| string_lit.inner.contents.to_owned()),
-                    )?)
+                    let msg = msg
+                        .as_ref()
+                        .map(|string_lit| string_lit.inner.contents.to_owned());
+                    Box::new(statements::Assert::try_new(span, self, expr, msg)?)
+                }
+                parser::Statement::Error { msg } => {
+                    let msg = msg
+                        .as_ref()
+                        .map(|string_lit| string_lit.inner.contents.to_owned());
+                    Box::new(statements::Error::try_new(span, self, msg)?)
                 }
                 // Variable assignment statement
                 parser::Statement::SetVar {

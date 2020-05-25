@@ -175,6 +175,7 @@ pub enum LangErrorMsg {
     CellStateOutOfRange,
     IndexOutOfBounds,
     AssertionFailed(Option<String>),
+    UserError(Option<String>),
 }
 impl<T: 'static + std::error::Error> From<T> for LangErrorMsg {
     fn from(error: T) -> Self {
@@ -320,6 +321,12 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::AssertionFailed(msg) => {
                 write!(f, "Assertion failed")?;
+                if let Some(msg) = msg {
+                    write!(f, ": {:?}", msg)?;
+                }
+            }
+            Self::UserError(msg) => {
+                write!(f, "Error")?;
                 if let Some(msg) = msg {
                     write!(f, ": {:?}", msg)?;
                 }

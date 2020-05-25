@@ -264,6 +264,7 @@ enum_with_str_repr! {
 
         // Debugging
         Assert = "assert",
+        Error = "error",
 
         // Boolean operators
         Or = "or",
@@ -356,7 +357,8 @@ impl KeywordToken {
             | Self::If
             | Self::Unless
             | Self::Set
-            | Self::Assert => true,
+            | Self::Assert
+            | Self::Error => true,
             Self::Or
             | Self::Xor
             | Self::And

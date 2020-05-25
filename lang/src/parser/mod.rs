@@ -314,6 +314,14 @@ impl<'a> ParseBuilder<'a> {
                 Case => self.err(Unimplemented),
                 Continue => self.err(Unimplemented),
                 Else => self.err(ElseWithoutIf),
+                Error => Ok(Statement::Error {
+                    msg: {
+                        match self.peek_next().map(|t| t.class) {
+                            Some(TokenClass::String { .. }) => Some(self.expect(Self::string)?),
+                            _ => None,
+                        }
+                    },
+                }),
                 For => self.err(Unimplemented),
                 If => Ok(Statement::If {
                     cond_expr: self.expect(Self::expression)?,

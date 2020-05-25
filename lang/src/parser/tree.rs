@@ -130,6 +130,11 @@ pub enum Statement {
         /// Error message to output if the condition is falsey.
         msg: Option<Spanned<StringLiteral>>,
     },
+    /// Errors unconditionally.
+    Error {
+        /// Error message to output if the condition is falsey.
+        msg: Option<Spanned<StringLiteral>>,
+    },
     /// Sets a variable value.
     SetVar {
         /// Variable to set.

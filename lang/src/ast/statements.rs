@@ -2,7 +2,9 @@ use super::super::compiler::*;
 use super::super::errors::*;
 use super::super::{Span, Type};
 use super::{ErrorPointRef, ExprRef, StatementRef, UserFunction};
-use LangErrorMsg::{AssertionFailed, CannotAssignTypeToVariable, InternalError, TypeError};
+use LangErrorMsg::{
+    AssertionFailed, CannotAssignTypeToVariable, InternalError, TypeError, UserError,
+};
 
 /// List of statements, executed one after another.
 pub type StatementBlock = Vec<StatementRef>;
@@ -22,7 +24,7 @@ pub struct Assert {
     span: Span,
     /// Expression to test.
     expr: ExprRef,
-    /// Assertion LangError.
+    /// Error to throw if the expression is falsey.
     error: ErrorPointRef,
 }
 impl Assert {
@@ -53,6 +55,35 @@ impl Statement for Assert {
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
         let assert_value = userfunc.compile_expr(compiler, self.expr)?.as_int()?;
         compiler.build_conditional(assert_value, |_| Ok(()), |c| Ok(self.error.compile(c)))?;
+        Ok(())
+    }
+}
+
+/// Error statement, such as `error "this is bad"`.
+#[derive(Debug)]
+pub struct Error {
+    /// Span of this statement in the original source code.
+    span: Span,
+    /// Error to throw.
+    error: ErrorPointRef,
+}
+impl Error {
+    /// Constructs a new error statement that throws an error unconditionally.
+    pub fn try_new(
+        span: Span,
+        userfunc: &mut UserFunction,
+        msg: Option<String>,
+    ) -> LangResult<Self> {
+        let error = userfunc.add_error_point(UserError(msg).with_span(span));
+        Ok(Self { span, error })
+    }
+}
+impl Statement for Error {
+    fn span(&self) -> Span {
+        self.span
+    }
+    fn compile(&self, compiler: &mut Compiler, _userfunc: &UserFunction) -> LangResult<()> {
+        self.error.compile(compiler);
         Ok(())
     }
 }

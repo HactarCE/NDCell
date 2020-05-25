@@ -20,7 +20,7 @@ pub const MAX_VECTOR_LEN: usize = 256;
 /// When adding new types, make sure that check lexer::TypeToken and add a
 /// corresponding variant there if needed. Also update the list in the error
 /// message in parser::ParseBuilder::type_name().
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Type {
     /// Integer.
     Int,
@@ -34,12 +34,21 @@ impl Default for Type {
         Self::Int
     }
 }
+impl fmt::Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Int => write!(f, "int"),
+            Self::CellState => write!(f, "cellstate"),
+            Self::Vector(len) => write!(f, "vec{}", len),
+        }
+    }
+}
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Int => write!(f, "integer"),
             Self::CellState => write!(f, "cellstate"),
-            Self::Vector(len) => write!(f, "vec{}", len),
+            Self::Vector(len) => write!(f, "vector{}", len),
         }
     }
 }

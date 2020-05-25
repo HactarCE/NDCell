@@ -47,7 +47,7 @@ impl Expr {
                 omit_first: matches!(func.kind(), FunctionKind::Method | FunctionKind::Property),
                 expected: func.signatures().iter().map(|s| s.args.clone()).collect(),
                 got: arg_types,
-            })?;
+            }.with_span(span))?;
         Ok(Self {
             span,
             func,

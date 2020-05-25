@@ -10,8 +10,8 @@ use crate::lexer::OperatorToken;
 use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{
-    BecomeInHelperFunction, ExpectedGot, InternalError, ReturnInTransitionFunction, Unimplemented,
-    UseOfUninitializedVariable,
+    BecomeInHelperFunction, Expected, ExpectedGot, FunctionLookupError, InternalError,
+    ReturnInTransitionFunction, Unimplemented, UseOfUninitializedVariable,
 };
 
 /// A user-defined function node in the AST.
@@ -34,11 +34,11 @@ pub struct UserFunction {
     /// List of every possible runtime error.
     error_points: Vec<LangError>,
 
-    /// HashMap of variable types, indexed by name.
+    /// HashMap of variable types (including arguments), indexed by name.
     variables: HashMap<String, Type>,
     /// List of variable names for arguments.
     arg_names: Vec<String>,
-    /// Return ttype of this function.
+    /// Return type of this function.
     return_type: Type,
 }
 impl UserFunction {
@@ -163,6 +163,7 @@ impl UserFunction {
                         .map(|string_lit| string_lit.inner.contents.to_owned());
                     Box::new(statements::Assert::try_new(span, self, expr, msg)?)
                 }
+                // Error
                 parser::Statement::Error { msg } => {
                     let msg = msg
                         .as_ref()
@@ -216,7 +217,6 @@ impl UserFunction {
                         Err(BecomeInHelperFunction.with_span(span))?
                     }
                 }
-
                 // Retrurn statement (In a helper function, `return` should be used, not `become`.)
                 parser::Statement::Return(ret_expr) => {
                     if self.is_transition_function {
@@ -231,6 +231,16 @@ impl UserFunction {
             block.push(self.add_statement(new_statement));
         }
         Ok(block)
+    }
+    /// Constructs the AST nodes for a list of expressions.
+    pub fn build_expression_list_ast(
+        &mut self,
+        parser_exprs: &[Spanned<parser::Expr>],
+    ) -> LangResult<Vec<ExprRef>> {
+        parser_exprs
+            .iter()
+            .map(|e| self.build_expression_ast(e))
+            .collect()
     }
     /// Constructs an AST node for an expression from a parse tree.
     pub fn build_expression_ast(
@@ -323,13 +333,36 @@ impl UserFunction {
             },
             // Comparison
             parser::Expr::Cmp { exprs, cmps } => {
-                args = Args::from(
-                    exprs
-                        .iter()
-                        .map(|e| self.build_expression_ast(e))
-                        .collect::<LangResult<Vec<_>>>()?,
-                );
+                args = Args::from(self.build_expression_list_ast(exprs)?);
                 function = Box::new(functions::cmp::Cmp::try_new(self, &args, cmps.clone())?);
+            }
+            // Function call
+            parser::Expr::FnCall {
+                func: func_expr,
+                args: arg_exprs,
+            } => {
+                args = Args::from(self.build_expression_list_ast(arg_exprs)?);
+                function = match &func_expr.inner {
+                    parser::Expr::Ident(func_name) => {
+                        if self
+                            .rule_meta()
+                            .helper_function_signatures
+                            .contains_key(func_name)
+                        {
+                            // User-defined function
+                            Box::new(functions::misc::CallUserFn::try_new(
+                                self,
+                                span,
+                                func_name.to_owned(),
+                            )?)
+                        } else {
+                            // Built-in function
+                            functions::lookup_function_name(func_name)
+                                .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
+                        }
+                    }
+                    _ => Err(Expected("function name").with_span(func_expr.span))?,
+                };
             }
         };
 

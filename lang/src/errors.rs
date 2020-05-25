@@ -169,6 +169,7 @@ pub enum LangErrorMsg {
     CannotEvalAsConst,
     VectorTooBig,
     VectorDivideByZero,
+    FunctionLookupError,
 
     // Runtime errors
     IntegerOverflow,
@@ -311,6 +312,9 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::VectorDivideByZero => {
                 write!(f, "Vector length mismatch causes divide by zero")?;
+            }
+            Self::FunctionLookupError => {
+                write!(f, "There is no function with this name")?;
             }
 
             Self::IntegerOverflow => {

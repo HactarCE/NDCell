@@ -408,6 +408,31 @@ impl<'a> ParseBuilder<'a> {
             ),
             OpPrecedence::Comparison => self.comparison_op(precedence),
             // TODO add remaining precedence levels
+            OpPrecedence::FunctionCall => {
+                let mut ret = self.expression_with_precedence(precedence.next())?;
+                while self.peek_next().map(|t| t.class)
+                    == Some(TokenClass::Punctuation(PunctuationToken::LParen))
+                {
+                    let arg_list = self.expect_spanned(|pb| {
+                        pb.pair("(", ")", |pb| {
+                            pb.list(
+                                &[TokenClass::Punctuation(PunctuationToken::Comma)],
+                                &[TokenClass::Punctuation(PunctuationToken::RParen)],
+                                Self::expression,
+                                "expression",
+                            )
+                        })
+                    })?;
+                    ret = Spanned {
+                        span: Span::merge(&ret, &arg_list),
+                        inner: Expr::FnCall {
+                            func: Box::new(ret),
+                            args: arg_list.inner,
+                        },
+                    }
+                }
+                Ok(ret)
+            }
             OpPrecedence::Atom => match self.peek_next().map(|t| t.class) {
                 Some(TokenClass::Punctuation(PunctuationToken::LBracket)) => self
                     .expect_spanned(Self::vector)

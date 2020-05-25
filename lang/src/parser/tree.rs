@@ -203,6 +203,13 @@ pub enum Expr {
         /// Comparison operations (one less than the number of expressions).
         cmps: Vec<ComparisonToken>,
     },
+    /// Function or method call.
+    FnCall {
+        /// Function to call.
+        func: Box<Spanned<Expr>>,
+        /// List of arguments.
+        args: Vec<Spanned<Expr>>,
+    },
 }
 
 /// String literal node in the parse tree.

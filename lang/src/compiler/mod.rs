@@ -545,10 +545,10 @@ impl Compiler {
             Type::Int => Ok(self.int_type().into()),
             Type::CellState => Ok(self.cell_state_type().into()),
             Type::Vector(len) => Ok(self.int_type().vec_type(len as u32).into()),
-            _ => Err(InternalError(
-                "Attempt to get LLVM representation of type that has none".into(),
-            )
-            .without_span()),
+            // Type::Pattern => Err(InternalError(
+            //     "Attempt to get LLVM representation of type that has none".into(),
+            // )
+            // .without_span()),
         }
     }
     /// Returns the LLVM type actually returned from this function (as opposed

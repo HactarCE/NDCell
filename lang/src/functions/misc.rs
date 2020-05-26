@@ -29,8 +29,8 @@ impl Function for GetVar {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom
     }
-    fn signatures(&self) -> Vec<FnSignature> {
-        vec![FnSignature::atom(self.var_type)]
+    fn signature(&self) -> FnSignature {
+        FnSignature::atom(self.var_type)
     }
     fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
         let var_ptr = compiler.vars()[&self.var_name].ptr;
@@ -73,8 +73,8 @@ impl Function for CallUserFn {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Function
     }
-    fn signatures(&self) -> Vec<FnSignature> {
-        vec![self.signature.clone()]
+    fn signature(&self) -> FnSignature {
+        self.signature.clone()
     }
     fn compile(&self, _compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
         Err(self.unimplemented_error.clone())

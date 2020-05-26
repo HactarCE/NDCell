@@ -32,11 +32,8 @@ impl Function for BuildVec {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom
     }
-    fn signatures(&self) -> Vec<FnSignature> {
-        vec![FnSignature::new(
-            vec![Type::Int; self.len],
-            Type::Vector(self.len),
-        )]
+    fn signature(&self) -> FnSignature {
+        FnSignature::new(vec![Type::Int; self.len], Type::Vector(self.len))
     }
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let args = (0..self.len)

@@ -159,7 +159,7 @@ pub enum LangErrorMsg {
     InvalidArguments {
         name: String,
         omit_first: bool,
-        expected: Vec<ArgTypes>,
+        expected: ArgTypes,
         got: ArgTypes,
     },
     CannotAssignTypeToVariable(Type),
@@ -266,21 +266,11 @@ impl fmt::Display for LangErrorMsg {
                 // Omit first argument if used as a method.
                 write!(
                     f,
-                    "Invalid arguments {} for {}",
+                    "Invalid arguments {} for {}; expected {}",
                     got.to_string(*omit_first),
-                    name
+                    name,
+                    expected.to_string(*omit_first)
                 )?;
-                if !expected.is_empty() {
-                    write!(
-                        f,
-                        "; expected {}",
-                        expected
-                            .iter()
-                            .map(|x| x.to_string(*omit_first))
-                            .collect::<Vec<_>>()
-                            .join(" or ")
-                    )?;
-                }
             }
             Self::CannotAssignTypeToVariable(ty) => {
                 write!(f, "Cannot assign {} to variable", ty)?;

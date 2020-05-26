@@ -17,8 +17,8 @@ impl Function for Int {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom
     }
-    fn signatures(&self) -> Vec<FnSignature> {
-        vec![FnSignature::atom(Type::Int)]
+    fn signature(&self) -> FnSignature {
+        FnSignature::atom(Type::Int)
     }
     fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
         Ok(Value::Int(

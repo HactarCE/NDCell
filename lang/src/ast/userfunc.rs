@@ -296,7 +296,7 @@ impl UserFunction {
                 // Negation
                 OperatorToken::Minus => {
                     args = Args::from(vec![self.build_expression_ast(operand)?]);
-                    function = Box::new(functions::math::NegInt::try_new(self, span)?);
+                    function = Box::new(functions::math::Negate::try_new(self, span)?);
                 }
                 // Get cell state from integer ID
                 OperatorToken::Tag => {
@@ -319,11 +319,13 @@ impl UserFunction {
                 | OperatorToken::TripleGreaterThan
                 | OperatorToken::Ampersand
                 | OperatorToken::Pipe => {
-                    args = Args::from(vec![
-                        self.build_expression_ast(lhs)?,
-                        self.build_expression_ast(rhs)?,
-                    ]);
-                    function = Box::new(functions::math::BinaryIntOp::try_new(self, span, *op)?);
+                    let lhs = self.build_expression_ast(lhs)?;
+                    let rhs = self.build_expression_ast(rhs)?;
+                    args = Args::from(vec![lhs, rhs]);
+                    let arg_types = (self[lhs].return_type(), self[rhs].return_type());
+                    function = Box::new(functions::math::BinaryOp::try_new(
+                        self, span, *op, arg_types,
+                    )?);
                 }
                 // Method call
                 OperatorToken::Dot => todo!("Method call"),

@@ -38,21 +38,23 @@ impl Expr {
     ) -> LangResult<Self> {
         let arg_types = args.types(userfunc);
         // Figure out the function signature, which will tells us the return
-        // type. If there is no matching function signature, then return an
+        // type. If the function signature does not match, then return an
         // Err(InvalidArguments).
-        let signature = func
-            .get_signature(&arg_types)
-            .ok_or_else(|| InvalidArguments {
+        if !func.takes_args(&arg_types) {
+            Err(InvalidArguments {
                 name: func.name(),
                 omit_first: matches!(func.kind(), FunctionKind::Method | FunctionKind::Property),
-                expected: func.signatures().iter().map(|s| s.args.clone()).collect(),
+                expected: func.signature().args.clone(),
                 got: arg_types,
-            }.with_span(span))?;
+            }
+            .with_span(span))?;
+        }
+        let return_type = func.return_type();
         Ok(Self {
             span,
             func,
             args,
-            return_type: signature.ret,
+            return_type,
         })
     }
     /// Compiles this expression and returns the resulting Value.
@@ -102,18 +104,15 @@ pub trait Function: std::fmt::Debug {
     /// Returns the kind of "function" this is. See FunctionKind for details.
     fn kind(&self) -> FunctionKind;
 
-    /// Returns a list of valid signatures for this function.
-    ///
-    /// If a custom implementation of get_signature() is provided, then this
-    /// function may return an empty vec![].
-    fn signatures(&self) -> Vec<FnSignature>;
-
-    /// Returns the signature this function uses if passed the given arguments.
-    ///
-    /// By default, this method returns the first matching FnSignature from
-    /// signatures().
-    fn get_signature(&self, args: &ArgTypes) -> Option<FnSignature> {
-        self.signatures().into_iter().find(|s| s.matches(args))
+    /// Returns the signature of this function.
+    fn signature(&self) -> FnSignature;
+    /// Returns true if these argument match the signature of this function.
+    fn takes_args(&self, arg_types: &ArgTypes) -> bool {
+        self.signature().matches(arg_types)
+    }
+    /// Returns the return type of this function.
+    fn return_type(&self) -> Type {
+        self.signature().ret
     }
 
     /// Compiles this function using the given arguments and returns the Value
@@ -193,8 +192,8 @@ impl FnSignature {
         )
     }
     /// Returns true if the given argument types match the arguments of this function signature.
-    pub fn matches(&self, args: &ArgTypes) -> bool {
-        &self.args == args
+    pub fn matches(&self, arg_types: &ArgTypes) -> bool {
+        &self.args == arg_types
     }
     /// Returns the LLVM function type that is equivalent to this function signature.
     pub fn llvm_fn_type(

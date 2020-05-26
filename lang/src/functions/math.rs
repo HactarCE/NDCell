@@ -12,27 +12,27 @@ use LangErrorMsg::{DivideByZero, IntegerOverflow, InternalError, NegativeExponen
 
 /// Built-in function that negates an integer.
 #[derive(Debug)]
-pub struct NegInt {
+pub struct Negate {
     /// Error returned if overflow occurs.
     overflow_error: ErrorPointRef,
 }
-impl NegInt {
+impl Negate {
     /// Returns a new NegInt instance.
     pub fn try_new(userfunc: &mut UserFunction, span: Span) -> LangResult<Self> {
-        Ok(Self {
+        Ok(Negate {
             overflow_error: userfunc.add_error_point(IntegerOverflow.with_span(span)),
         })
     }
 }
-impl Function for NegInt {
+impl Function for Negate {
     fn name(&self) -> String {
         format!("unary {:?} operator", OperatorToken::Minus.to_string())
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
-    fn signatures(&self) -> Vec<FnSignature> {
-        vec![FnSignature::new(vec![Type::Int], Type::Int)]
+    fn signature(&self) -> FnSignature {
+        FnSignature::new(vec![Type::Int], Type::Int)
     }
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let arg = args.compile(compiler, 0)?.as_int()?;
@@ -54,9 +54,11 @@ impl Function for NegInt {
 
 /// Built-in function that performs a fixed two-input integer math operation.
 #[derive(Debug)]
-pub struct BinaryIntOp {
+pub struct BinaryOp {
     /// Token signifying what operation to perform.
     op: OperatorToken,
+    /// Argument types,
+    arg_types: (Type, Type),
     /// Error returned if overflow occurs.
     overflow_error: Option<ErrorPointRef>,
     /// Error returned if the divisor of an operation is negative.
@@ -64,9 +66,14 @@ pub struct BinaryIntOp {
     /// Error returned if the exponent is negative.
     negative_exponent_error: Option<ErrorPointRef>,
 }
-impl BinaryIntOp {
+impl BinaryOp {
     /// Constructs a new BinaryIntOp instance that performs the given operation.
-    pub fn try_new(userfunc: &mut UserFunction, span: Span, op: OperatorToken) -> LangResult<Self> {
+    pub fn try_new(
+        userfunc: &mut UserFunction,
+        span: Span,
+        op: OperatorToken,
+        arg_types: (Type, Type),
+    ) -> LangResult<Self> {
         use OperatorToken::*;
         let overflow_error = if matches!(op, Plus | Minus | Asterisk | Slash | Percent) {
             Some(userfunc.add_error_point(IntegerOverflow.with_span(span)))
@@ -83,8 +90,9 @@ impl BinaryIntOp {
         } else {
             None
         };
-        Ok(Self {
+        Ok(BinaryOp {
             op,
+            arg_types,
             overflow_error,
             div_by_zero_error,
             negative_exponent_error,
@@ -106,15 +114,15 @@ impl BinaryIntOp {
         self.negative_exponent_error.as_ref().unwrap()
     }
 }
-impl Function for BinaryIntOp {
+impl Function for BinaryOp {
     fn name(&self) -> String {
         format!("binary {:?} operator", self.op.to_string())
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
-    fn signatures(&self) -> Vec<FnSignature> {
-        vec![FnSignature::new(vec![Type::Int, Type::Int], Type::Int)]
+    fn signature(&self) -> FnSignature {
+        FnSignature::new(vec![Type::Int, Type::Int], Type::Int)
     }
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let lhs = args.compile(compiler, 0)?.as_int()?;

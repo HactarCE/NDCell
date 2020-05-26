@@ -56,8 +56,8 @@ impl Function for Cmp {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
-    fn signatures(&self) -> Vec<FnSignature> {
-        vec![FnSignature::new(self.types.clone(), Type::Int)]
+    fn signature(&self) -> FnSignature {
+        FnSignature::new(self.types.clone(), Type::Int)
     }
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let old_bb = compiler.builder().get_insert_block().unwrap();

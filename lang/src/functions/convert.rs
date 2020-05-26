@@ -37,8 +37,8 @@ impl Function for IntToCellState {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
-    fn signatures(&self) -> Vec<FnSignature> {
-        vec![FnSignature::new(vec![Type::Int], Type::CellState)]
+    fn signature(&self) -> FnSignature {
+        FnSignature::new(vec![Type::Int], Type::CellState)
     }
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         // Check that the value is a valid cell state.

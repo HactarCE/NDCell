@@ -8,6 +8,7 @@ mod totalistic;
 
 pub use totalistic::*;
 
+/// Type alias for a CA transition function.
 pub type TransitionFunction<'a, C, D> = Box<dyn 'a + FnMut(NdArrayView<C, D>) -> C>;
 
 /// A cellular automaton rule.

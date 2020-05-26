@@ -178,8 +178,6 @@ pub enum Expr {
     Vector(Vec<Spanned<Expr>>),
     /// Parethetical group.
     ParenExpr(Box<Spanned<Expr>>),
-    /// Comma-separated list. TODO: is this necessary?
-    List(Vec<Box<Spanned<Expr>>>),
     /// Operation on one value.
     UnaryOp {
         /// Operator.

@@ -31,9 +31,6 @@ pub fn parse(source_code: Rc<String>, tokens: &[Token]) -> LangResult<ParseTree>
 /// Operator precedence table.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum OpPrecedence {
-    // TODO: implement comma- and semicolon-separated lists
-    // SemicolonList,
-    // CommaList,
     LogicalOr,
     LogicalXor,
     LogicalAnd,

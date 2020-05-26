@@ -10,7 +10,7 @@ use crate::lexer::OperatorToken;
 use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{
-    BecomeInHelperFunction, Expected, ExpectedGot, FunctionLookupError, InternalError,
+    BecomeInHelperFunction, Expected, FunctionLookupError, InternalError,
     ReturnInTransitionFunction, Unimplemented, UseOfUninitializedVariable,
 };
 
@@ -283,14 +283,6 @@ impl UserFunction {
             }
             // Parenthetical group
             parser::Expr::ParenExpr(expr) => return self.build_expression_ast(expr),
-            // Comma-separated list
-            parser::Expr::List(_) => {
-                return Err(ExpectedGot {
-                    expected: "expression",
-                    got: "comma-separated list",
-                }
-                .with_span(span))
-            }
             // Unary operator
             parser::Expr::UnaryOp { op, operand } => match op {
                 // Negation

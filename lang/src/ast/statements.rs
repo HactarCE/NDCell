@@ -2,9 +2,7 @@ use super::{ErrorPointRef, ExprRef, StatementRef, UserFunction};
 use crate::compiler::*;
 use crate::errors::*;
 use crate::{Span, Type};
-use LangErrorMsg::{
-    AssertionFailed, CannotAssignTypeToVariable, InternalError, TypeError, UserError,
-};
+use LangErrorMsg::{AssertionFailed, CannotAssignTypeToVariable, InternalError, UserError};
 
 /// List of statements, executed one after another.
 pub type StatementBlock = Vec<StatementRef>;
@@ -39,11 +37,8 @@ impl Assert {
         msg: Option<String>,
     ) -> LangResult<Self> {
         let expr_span = userfunc[expr].span();
-        let expected = Type::Int;
-        let got = userfunc[expr].return_type();
-        if expected != got {
-            Err(TypeError { expected, got }.with_span(expr_span))?;
-        }
+        let expr_type = userfunc[expr].return_type();
+        expr_type.expect_eq(Type::Int, expr_span)?;
         let error = userfunc.add_error_point(AssertionFailed(msg).with_span(expr_span));
         Ok(Self { span, expr, error })
     }
@@ -118,11 +113,8 @@ impl SetVar {
         }
         // Check that the type of the result of the expression matches the type
         // of the variable.
-        let got = expr_type;
-        let expected = userfunc.get_or_create_var(&var_name, got);
-        if expected != got {
-            Err(TypeError { expected, got }.with_span(value_expr_span))?;
-        }
+        let expected = userfunc.get_or_create_var(&var_name, expr_type);
+        expr_type.expect_eq(expected, value_expr_span)?;
         Ok(Self {
             span,
             var_name,
@@ -173,12 +165,9 @@ impl If {
         if_true: StatementBlock,
         if_false: StatementBlock,
     ) -> LangResult<Self> {
-        let expected = Type::Int;
-        let got = userfunc[cond_expr].return_type();
-        if expected != got {
-            let cond_expr_span = userfunc[cond_expr].span();
-            Err(TypeError { expected, got }.with_span(cond_expr_span))?;
-        }
+        let cond_expr_type = userfunc[cond_expr].return_type();
+        let cond_expr_span = userfunc[cond_expr].span();
+        cond_expr_type.expect_eq(Type::Int, cond_expr_span)?;
         Ok(Self {
             span,
             cond_expr,
@@ -219,11 +208,10 @@ impl Return {
     /// This method checks the type of the expression to return.
     pub fn try_new(span: Span, userfunc: &mut UserFunction, ret_expr: ExprRef) -> LangResult<Self> {
         // Check that the expression matches the expected return type.
+        let ret_expr_type = userfunc[ret_expr].return_type();
+        let ret_expr_span = userfunc[ret_expr].span();
         let expected = userfunc.return_type();
-        let got = userfunc[ret_expr].return_type();
-        if expected != got {
-            Err(TypeError { expected, got }.with_span(userfunc[ret_expr].span()))?;
-        }
+        ret_expr_type.expect_eq(expected, ret_expr_span)?;
         Ok(Self { span, ret_expr })
     }
 }

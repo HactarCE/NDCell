@@ -26,7 +26,9 @@ use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction, UnsafeFunctionPointer};
 use inkwell::module::Module;
 use inkwell::types::{BasicType, BasicTypeEnum, FunctionType, IntType, StructType, VectorType};
-use inkwell::values::{FunctionValue, IntValue, PointerValue};
+use inkwell::values::{
+    BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue, VectorValue,
+};
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 
 mod function;
@@ -53,6 +55,23 @@ lazy_static! {
 /// Returns this thread's LLVM context.
 fn get_ctx() -> &'static Context {
     &CTX.get_or(Context::create)
+}
+
+/// Returns the name of an LLVM type used in names of intrinsics (e.g. "i32" for
+/// a 32-bit integer, or "v3i64" for a vector of three 64-bit integers).
+fn llvm_intrinsic_type_name(ty: BasicTypeEnum<'static>) -> String {
+    match ty {
+        BasicTypeEnum::ArrayType(_) => unimplemented!(),
+        BasicTypeEnum::IntType(ty) => format!("i{}", ty.get_bit_width()),
+        BasicTypeEnum::FloatType(_) => unimplemented!(),
+        BasicTypeEnum::PointerType(_) => unimplemented!(),
+        BasicTypeEnum::StructType(_) => unimplemented!(),
+        BasicTypeEnum::VectorType(ty) => format!(
+            "v{}{}",
+            ty.get_size(),
+            llvm_intrinsic_type_name(ty.get_element_type())
+        ),
+    }
 }
 
 /// JIT compiler providing a slightly higher-level interface to produce LLVM IR.
@@ -394,15 +413,15 @@ impl Compiler {
     /// intrinsic and returns an error if overflow occurs.
     pub fn build_checked_int_arithmetic(
         &mut self,
-        lhs: IntValue<'static>,
-        rhs: IntValue<'static>,
+        lhs: BasicValueEnum<'static>,
+        rhs: BasicValueEnum<'static>,
         name: &str,
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
-    ) -> LangResult<IntValue<'static>> {
+    ) -> LangResult<BasicValueEnum<'static>> {
         let intrinsic_name = format!(
-            "llvm.{}.with.overflow.i{}",
+            "llvm.{}.with.overflow.{}",
             name,
-            self.int_type().get_bit_width()
+            llvm_intrinsic_type_name(lhs.get_type())
         );
         let intrinsic_return_type = get_ctx().struct_type(
             &[self.int_type().into(), get_ctx().bool_type().into()],
@@ -410,14 +429,12 @@ impl Compiler {
         );
         let intrinsic_fn_type = intrinsic_return_type.fn_type(&[self.int_type().into(); 2], false);
         let intrinsic_fn = self.get_llvm_intrinisic(&intrinsic_name, intrinsic_fn_type)?;
-        let intrinsic_args = &[lhs.into(), rhs.into()];
+        let intrinsic_args = &[lhs, rhs];
 
         // Build a call to an LLVM intrinsic to do the operation.
-        let call_site_value = self.builder().build_call(
-            intrinsic_fn,
-            intrinsic_args,
-            &format!("tmp_{}", intrinsic_name),
-        );
+        let call_site_value =
+            self.builder()
+                .build_call(intrinsic_fn, intrinsic_args, "tmp_checked_result");
 
         // Get the actual return value of the function.
         let return_value = call_site_value
@@ -426,17 +443,16 @@ impl Compiler {
             .unwrap()
             .into_struct_value();
 
-        // This return value is a struct with two elements: the integer result
-        // of the operation, and a boolean value which is true if overflow
-        // occurred. Extract each of those.
+        // This return value is a struct with two elements: the result of the
+        // operation, and a boolean value which is true if overflow occurred.
+        // Extract each of those.
         let result_value = self
             .builder()
-            .build_extract_value(return_value, 0, &format!("tmp_{}Result", intrinsic_name))
-            .unwrap()
-            .into_int_value();
+            .build_extract_value(return_value, 0, "tmp_result")
+            .unwrap();
         let is_overflow = self
             .builder()
-            .build_extract_value(return_value, 1, &format!("tmp_{}Overflow", intrinsic_name))
+            .build_extract_value(return_value, 1, "tmp_overflow")
             .unwrap()
             .into_int_value();
 
@@ -451,21 +467,80 @@ impl Compiler {
 
         Ok(result_value)
     }
-    /// Builds an overflow and division-by-zero check for arguments to a
-    /// division operation (but does not actually perform the division).
-    pub fn build_div_check(
+    /// Builds an overflow and division-by-zero check for **integer** arguments
+    /// to a division operation (but does not actually perform the division).
+    pub fn build_int_div_check(
         &mut self,
         dividend: IntValue<'static>,
         divisor: IntValue<'static>,
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
         on_div_by_zero: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<()> {
-        // If the divisor is zero, that's a DivideByZero error.
+        // Generate the required constants.
         let zero = self.int_type().const_zero();
+        let min_value = self.get_min_int_value();
+        let negative_one = self.int_type().const_int(-1i64 as u64, true);
+        // Call the generic function.
+        self.build_generic_div_check(
+            dividend,
+            divisor,
+            zero,
+            min_value,
+            negative_one,
+            on_overflow,
+            on_div_by_zero,
+        )
+    }
+    /// Builds an overflow and division-by-zero check for **integer** arguments
+    /// to a division operation (but does not actually perform the division).
+    pub fn build_vec_div_check(
+        &mut self,
+        dividend: VectorValue<'static>,
+        divisor: VectorValue<'static>,
+        on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
+        on_div_by_zero: impl FnOnce(&mut Self) -> LangResult<()>,
+    ) -> LangResult<()> {
+        let len = dividend
+            .get_type()
+            .as_basic_type_enum()
+            .into_vector_type()
+            .get_size() as usize;
+        // Generate the required constants.
+        let zero = self.int_type().const_zero();
+        let min_value = self.get_min_int_value();
+        let negative_one = self.int_type().const_int(-1i64 as u64, true);
+        // Convert them to vectors of the proper length.
+        let zero = self.build_vector_cast(Value::Int(zero), len)?;
+        let min_value = self.build_vector_cast(Value::Int(min_value), len)?;
+        let negative_one = self.build_vector_cast(Value::Int(negative_one), len)?;
+        // Call the generic function.
+        self.build_generic_div_check(
+            dividend,
+            divisor,
+            zero,
+            min_value,
+            negative_one,
+            on_overflow,
+            on_div_by_zero,
+        )
+    }
+    /// Builds an overflow and division-by-zero check for arguments to a
+    /// division operation (but does not actually perform the division).
+    fn build_generic_div_check<T: IntMathValue<'static> + Copy>(
+        &mut self,
+        dividend: T,
+        divisor: T,
+        zero: T,
+        min_value: T,
+        negative_one: T,
+        on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
+        on_div_by_zero: impl FnOnce(&mut Self) -> LangResult<()>,
+    ) -> LangResult<()> {
+        // If the divisor is zero, that's a DivideByZero error.
         let is_div_by_zero =
             self.builder()
                 .build_int_compare(IntPredicate::EQ, divisor, zero, "isDivByZero");
-
+        let is_div_by_zero = self.build_reduce("or", is_div_by_zero.as_basic_value_enum())?;
         // Branch based on whether the divisor is zero.
         self.build_conditional(
             is_div_by_zero,
@@ -475,14 +550,12 @@ impl Compiler {
             |c| {
                 // If the dividend is the minimum possible value and the divisor
                 // is -1, that's an IntegerOverflow error.
-                let min_value = c.get_min_int_value();
                 let num_is_min_value = c.builder().build_int_compare(
                     IntPredicate::EQ,
                     dividend,
                     min_value,
                     "isMinValue",
                 );
-                let negative_one = c.int_type().const_int(-1i64 as u64, true);
                 let denom_is_neg_one = c.builder().build_int_compare(
                     IntPredicate::EQ,
                     divisor,
@@ -492,6 +565,7 @@ impl Compiler {
                 let is_overflow =
                     c.builder()
                         .build_and(num_is_min_value, denom_is_neg_one, "isOverflow");
+                let is_overflow = c.build_reduce("or", is_overflow.as_basic_value_enum())?;
 
                 // Branch based on whether there is overflow.
                 c.build_conditional(
@@ -504,6 +578,84 @@ impl Compiler {
                 )
             },
         )
+    }
+
+    /// Builds a cast of an integer to a vector (by using that integer value for
+    /// each vector component) or from a vector of one length to another (by
+    /// trimming excess values or by extending with zeros).
+    pub fn build_vector_cast(
+        &mut self,
+        value: Value,
+        len: usize,
+    ) -> LangResult<VectorValue<'static>> {
+        let values: Vec<IntValue<'static>> = match value {
+            // Make a list of integers
+            Value::Int(i) => vec![i; len],
+            Value::Vector(v) if v.get_type().get_size() as usize == len => return Ok(v),
+            Value::Vector(v) => (0..len)
+                .into_iter()
+                .map(|i| {
+                    if i < v.get_type().get_size() as usize {
+                        let idx = self.int_type().const_int(i as u64, false);
+                        self.builder()
+                            .build_extract_element(v, idx, &format!("vec_extract_{}", i))
+                            .into_int_value()
+                    } else {
+                        self.int_type().const_zero()
+                    }
+                })
+                .collect(),
+            _ => Err(InternalError(
+                format!("Cannot convert {} to vector", value.ty()).into(),
+            ))?,
+        };
+        let mut ret = self.int_type().vec_type(len as u32).get_undef();
+        for i in 0..len {
+            let idx = self.int_type().const_int(i as u64, false);
+            ret = self.builder().build_insert_element(
+                ret,
+                values[i],
+                idx,
+                &format!("vec_build_{}", i),
+            );
+        }
+        Ok(ret)
+    }
+    /// Builds a reduction of a vector to an integer using the given operation.
+    /// If the argument is already an integer, returns the integernice
+    fn build_reduce(
+        &mut self,
+        op: &str,
+        value: BasicValueEnum<'static>,
+    ) -> LangResult<IntValue<'static>> {
+        match value {
+            BasicValueEnum::ArrayValue(_) => unimplemented!(),
+            BasicValueEnum::FloatValue(_) => unimplemented!(),
+            BasicValueEnum::IntValue(i) => Ok(i),
+            BasicValueEnum::PointerValue(_) => unimplemented!(),
+            BasicValueEnum::StructValue(_) => unimplemented!(),
+            BasicValueEnum::VectorValue(v) => {
+                let fn_type = v
+                    .get_type()
+                    .get_element_type()
+                    .fn_type(&[value.get_type()], false);
+                let reduce_fn = self.get_llvm_intrinisic(
+                    &format!(
+                        "llvm.experimental.vector.reduce.{}.{}",
+                        op,
+                        llvm_intrinsic_type_name(value.get_type())
+                    ),
+                    fn_type,
+                )?;
+                Ok(self
+                    .builder()
+                    .build_call(reduce_fn, &[value], &format!("reduce_{}", op))
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap()
+                    .into_int_value())
+            }
+        }
     }
 
     /// Returns the minimum value representable by signed integers of NDCA's

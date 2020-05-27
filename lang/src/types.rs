@@ -15,6 +15,10 @@ pub const CELL_STATE_BITS: u32 = 8;
 /// Maximum length for a vector.
 pub const MAX_VECTOR_LEN: usize = 256;
 
+use crate::errors::*;
+use crate::Span;
+use LangErrorMsg::{CustomTypeError, TypeError};
+
 /// Any data type.
 ///
 /// When adding new types, make sure that check lexer::TypeToken and add a
@@ -68,6 +72,35 @@ impl Type {
             Self::Int => Some(std::mem::size_of::<LangInt>()),
             Self::CellState => Some(std::mem::size_of::<LangCellState>()),
             Self::Vector(len) => Some(len as usize * Self::Int.size_of().unwrap()),
+        }
+    }
+
+    /// Returns a TypeError where this type is the "got" type, given an
+    /// "expected" type.
+    pub fn type_error(self, expected: Type) -> LangErrorMsg {
+        TypeError {
+            expected,
+            got: self,
+        }
+    }
+    /// Returns a TypeError with the given span if this type is not `expected`.
+    pub fn expect_eq(self, expected: Type, span: Span) -> LangResult<()> {
+        if self == expected {
+            Ok(())
+        } else {
+            Err(self.type_error(expected).with_span(span))
+        }
+    }
+    /// Returns a CustomTypeError with the given span if this type is not an
+    /// integer or vector.
+    pub fn expect_int_or_vec(self, span: Span) -> LangResult<()> {
+        match self {
+            Self::Int | Self::Vector(_) => Ok(()),
+            _ => Err(CustomTypeError {
+                expected: "integer or vector",
+                got: self,
+            }
+            .with_span(span)),
         }
     }
 }

@@ -70,20 +70,4 @@ impl Value {
             // Value::Pattern => Err(InternalError(format!("{} has no BasicValue representation", self).into())),
         }
     }
-    // TODO: figure out type conversion
-    // pub fn coerce(self, compiler: &mut Compiler, span: Span, ty: Type) -> Option<Self> {
-    //     // TODO implement type coercion
-    //     if self.ty() == ty {
-    //         Some(self)
-    //     } else {
-    //         None
-    //     }
-
-    //     // match self {
-    //     //     Value::Int(i) => match ty {
-    //     //         Type::Int => Value::Int(i),
-    //     //         Type::Vector(v) =>
-    //     //     }
-    //     // }
-    // }
 }

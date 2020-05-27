@@ -151,6 +151,10 @@ pub enum LangErrorMsg {
         expected: Type,
         got: Type,
     },
+    CustomTypeError {
+        expected: &'static str,
+        got: Type,
+    },
     CmpError {
         lhs: Type,
         cmp: ComparisonToken,
@@ -244,9 +248,9 @@ impl fmt::Display for LangErrorMsg {
             Self::TypeError { expected, got } => {
                 write!(f, "Type error: expected {} but got {}", expected, got)?;
             }
-            // Self::OpError { op, lhs, rhs } => {
-            //     write!(f, "Cannot apply operation '{}' to {} and {}", op, lhs, rhs)?;
-            // }
+            Self::CustomTypeError { expected, got } => {
+                write!(f, "Type error: expected {} but got {}", expected, got)?;
+            }
             Self::CmpError { lhs, cmp, rhs } => {
                 write!(
                     f,

@@ -50,7 +50,7 @@ If you don't want to build LLVM from source (and you probably don't) but you tru
 
 1. Download/install [CMake](https://cmake.org/download/). WSL or Cygwin `cmake` might work, but I wouldn't count on it.
 2. Download [LLVM](https://releases.llvm.org/download.html) 8.0.0 source code. The precompiled binaries probably won't work, but you can try.
-3. Extract the LLVM source code somewhere, like `C:\LLVM_source_code`. Now you should have a bunch of folders and files directly intside `C:\LLVM_source_code` including `CMakeLists.txt`.
+3. Extract the LLVM source code somewhere, like `C:\LLVM_source_code`. Now you should have a bunch of folders and files directly inside `C:\LLVM_source_code` including `CMakeLists.txt`.
 4. Make a new empty folder, like `C:\LLVM_solution`.
 5. Run this, replacing the path names accordingly if you used different paths for things:
 

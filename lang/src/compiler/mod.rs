@@ -410,7 +410,8 @@ impl Compiler {
     }
 
     /// Builds instructions to perform checked integer arithmetic using an LLVM
-    /// intrinsic and returns an error if overflow occurs.
+    /// intrinsic and returns an error if overflow occurs. Both operands must
+    /// either be integers or vectors of the same length.
     pub fn build_checked_int_arithmetic(
         &mut self,
         lhs: BasicValueEnum<'static>,
@@ -419,16 +420,29 @@ impl Compiler {
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<BasicValueEnum<'static>> {
         let arg_type = lhs.get_type();
-        let bool_vec_type = get_ctx()
-            .bool_type()
-            .vec_type(arg_type.into_vector_type().get_size())
-            .into();
+
+        // LLVM has intrinsics that perform some math with overflow checks.
+        // First, get the name of the intrinsic we want to use (e.g.
+        // "llvm.sadd.with.overflow.i64" for signed addition on i64).
         let intrinsic_name = format!(
             "llvm.{}.with.overflow.{}",
             name,
             llvm_intrinsic_type_name(arg_type)
         );
-        let intrinsic_return_type = get_ctx().struct_type(&[arg_type, bool_vec_type], false);
+        // That intrinsic will return a struct containing the result and a
+        // boolean indicated whether overflow occurred. But if we're doing this
+        // on a vector then the overflow flag will be a whole vector of booleans
+        // instead.
+        let bool_type;
+        if arg_type.is_vector_type() {
+            bool_type = get_ctx()
+                .bool_type()
+                .vec_type(arg_type.into_vector_type().get_size())
+                .into();
+        } else {
+            bool_type = get_ctx().bool_type().into();
+        }
+        let intrinsic_return_type = get_ctx().struct_type(&[arg_type, bool_type], false);
         let intrinsic_fn_type = intrinsic_return_type.fn_type(&[arg_type; 2], false);
         let intrinsic_fn = self.get_llvm_intrinisic(&intrinsic_name, intrinsic_fn_type)?;
         let intrinsic_args = &[lhs, rhs];

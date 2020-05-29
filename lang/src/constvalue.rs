@@ -58,6 +58,24 @@ impl ConstValue {
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
+    /// Converts this value to a vector of the specified length if this is a
+    /// ConstValue::Int or ConstValue::Vector; otherwise returns a TypeError.
+    pub fn coerce_to_vector(self, len: usize) -> LangResult<Vec<LangInt>> {
+        match self {
+            Self::Int(i) => Ok(vec![i; len]),
+            Self::Vector(mut v) => {
+                if v.len() < len {
+                    // Not long enough; extend with zeros.
+                    v.extend(std::iter::repeat(0).take(len - v.len()));
+                } else if v.len() > len {
+                    // Too long; truncate.
+                    v.truncate(len);
+                }
+                Ok(v)
+            }
+            _ => Err(UNCAUGHT_TYPE_ERROR),
+        }
+    }
     /// Constructs a value of the given type from raw bytes. Panics if given an
     /// invalid value or invalid type.
     pub fn from_bytes(ty: Type, bytes: &[u8]) -> Self {

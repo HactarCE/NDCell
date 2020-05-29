@@ -1,4 +1,4 @@
-use super::{assert_compile_error, assert_fn_result, compile_test_fn, ConstValue};
+use super::{assert_fn_result, compile_test_fn, ConstValue};
 
 #[test]
 fn test_vector_access() {
@@ -67,29 +67,78 @@ fn test_vector_access() {
     );
     let expected = Ok(ConstValue::Int(0));
     assert_fn_result(&mut f, &[], expected);
+
+    // Test division by zero.
+    let mut f = compile_test_fn(
+        "@function int test() {
+            set b = [4, 5, 6] / [1, 2, 0]
+        }",
+    );
+    let expected = Err(("[4, 5, 6] / [1, 2, 0]", "Divide by zero"));
+    assert_fn_result(&mut f, &[], expected);
+
+    let mut f = compile_test_fn(
+        "@function int test() {
+            set b = [4, 5, 6] % [1, 0, 2]
+        }",
+    );
+    let expected = Err(("[4, 5, 6] % [1, 0, 2]", "Divide by zero"));
+    assert_fn_result(&mut f, &[], expected);
+}
+
+#[test]
+fn test_vector_cmp() {
+    let test_ints = [-10, 0, 10];
+    let test_vec2s: Vec<_> = iproduct!(&test_ints, &test_ints)
+        .map(|(&a, &b)| ConstValue::Vector(vec![a, b]))
+        .collect();
+    let test_vec3s: Vec<_> = iproduct!(&test_ints, &test_ints, &test_ints)
+        .map(|(&a, &b, &c)| ConstValue::Vector(vec![a, b, c]))
+        .collect();
+
+    let mut cmp_same_fn = compile_test_fn(
+        "@function int test(vec3 a, vec3 b) {
+                assert (a == b) == (a.x == b.x and a.y == b.y and a.z == b.z)
+                assert (a != b) == (a.x != b.x or  a.y != b.y or  a.z != b.z)
+                assert (a >  b) == (a.x >  b.x and a.y >  b.y and a.z >  b.z)
+                assert (a <  b) == (a.x <  b.x and a.y <  b.y and a.z <  b.z)
+                assert (a >= b) == (a.x >= b.x and a.y >= b.y and a.z >= b.z)
+                assert (a <= b) == (a.x <= b.x and a.y <= b.y and a.z <= b.z)
+            }",
+    );
+    for a in &test_vec3s {
+        for b in &test_vec3s {
+            assert_fn_result(
+                &mut cmp_same_fn,
+                &[a.clone(), b.clone()],
+                Ok(ConstValue::Int(0)),
+            );
+        }
+    }
+
+    let mut cmp_mixed_fn = compile_test_fn(
+        "@function int test(vec2 a, vec3 b) {
+            assert (a == b) == (a == b) == (a.x == b.x and a.y == b.y and 0 == b.z)
+            assert (a != b) == (a != b) == (a.x != b.x or  a.y != b.y or  0 != b.z)
+            assert (a >  b) == (a <  b) == (a.x >  b.x and a.y >  b.y and 0 >  b.z)
+            assert (a <  b) == (a >  b) == (a.x <  b.x and a.y <  b.y and 0 <  b.z)
+            assert (a >= b) == (a <= b) == (a.x >= b.x and a.y >= b.y and 0 >= b.z)
+            assert (a <= b) == (a >= b) == (a.x <= b.x and a.y <= b.y and 0 <= b.z)
+        }",
+    );
+    for a in &test_vec2s {
+        for b in &test_vec3s {
+            assert_fn_result(
+                &mut cmp_mixed_fn,
+                &[a.clone(), b.clone()],
+                Ok(ConstValue::Int(0)),
+            );
+        }
+    }
 }
 
 #[test]
 fn test_vector_ops() {
-    // Test compile-time division by zero.
-    let source_code = "@function int test() {
-        set b = [4, 5, 6] / [1, 2]
-    }";
-    let expected = (
-        "[4, 5, 6] / [1, 2]",
-        "Vector length mismatch causes divide by zero",
-    );
-    assert_compile_error(source_code, expected);
-
-    let source_code = "@function int test() {
-        set b = [4, 5, 6] % [1, 2]
-    }";
-    let expected = (
-        "[4, 5, 6] % [1, 2]",
-        "Vector length mismatch causes divide by zero",
-    );
-    assert_compile_error(source_code, expected);
-
     // Test all the stuff that shouldn't fail
     let mut f = compile_test_fn(
         "@function int test() {
@@ -147,14 +196,19 @@ fn test_vector_ops() {
 
             // Division
             set c = [10, 20] / [4, 5, 6]
-            assert c.len == 2
+            set d = [40, 50, 60] / [1, 2]
+            assert c.len == d.len == 2
             assert c == [2, 4]
+            assert d == [40, 25]
             assert c.product == 8
+            assert d.product == 40 * 25
 
             // Modulo
             set c = [10, 20] % [4, 5, 6]
-            assert c.len == 2
+            set d = [42, 50, 61] % [10, 20]
+            assert c.len == d.len == 2
             assert c == [2, 0]
+            assert d == [2, 10]
         }",
     );
     assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));

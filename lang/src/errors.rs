@@ -172,7 +172,6 @@ pub enum LangErrorMsg {
     ReturnInTransitionFunction,
     CannotEvalAsConst,
     VectorTooBig,
-    VectorDivideByZero,
     FunctionLookupError,
 
     // Runtime errors
@@ -303,9 +302,6 @@ impl fmt::Display for LangErrorMsg {
                     "Too many elements in vector; maximum is {}",
                     MAX_VECTOR_LEN
                 )?;
-            }
-            Self::VectorDivideByZero => {
-                write!(f, "Vector length mismatch causes divide by zero")?;
             }
             Self::FunctionLookupError => {
                 write!(f, "There is no function with this name")?;

@@ -19,72 +19,58 @@ fn test_condition_values() {
 
 #[test]
 fn test_branching() {
-    for &cond1 in &[None, Some(0), Some(1)] {
-        for &cond2 in &[None, Some(0), Some(1)] {
-            for &add_else in &[false, true] {
-                for &ret_val1 in &[None, Some(10)] {
-                    for &ret_val2 in &[None, Some(20)] {
-                        for &ret_val3 in &[None, Some(30)] {
-                            for &ret_val4 in &[None, Some(40)] {
-                                let mut expected_ret = None;
-                                let mut skip_to_end = false;
-                                let mut source_code = String::new();
-                                source_code.push_str("@function int test() {");
-                                if let Some(cond1) = cond1 {
-                                    source_code.push_str(" if ");
-                                    source_code.push_str(&cond1.to_string());
-                                    source_code.push_str("{");
-                                    push_ret(
-                                        &mut source_code,
-                                        ret_val1,
-                                        &mut expected_ret,
-                                        cond1 != 0,
-                                    );
-                                    if cond1 != 0 {
-                                        skip_to_end = true;
-                                    }
-                                    source_code.push_str("}");
-
-                                    if let Some(cond2) = cond2 {
-                                        source_code.push_str("else if ");
-                                        source_code.push_str(&cond2.to_string());
-                                        source_code.push_str("{");
-                                        push_ret(
-                                            &mut source_code,
-                                            ret_val2,
-                                            &mut expected_ret,
-                                            !skip_to_end && cond2 != 0,
-                                        );
-                                        if cond2 != 0 {
-                                            skip_to_end = true;
-                                        }
-                                        source_code.push_str("}");
-                                    }
-
-                                    if add_else {
-                                        source_code.push_str("else {");
-                                        push_ret(
-                                            &mut source_code,
-                                            ret_val3,
-                                            &mut expected_ret,
-                                            !skip_to_end,
-                                        );
-                                        source_code.push_str("}");
-                                    }
-
-                                    push_ret(&mut source_code, ret_val4, &mut expected_ret, true);
-                                }
-                                source_code.push_str("}");
-                                let expected_ret = ConstValue::Int(expected_ret.unwrap_or(0));
-
-                                let mut function = compile_test_fn(&source_code);
-                                assert_fn_result(&mut function, &[], Ok(expected_ret));
-                            }
-                        }
-                    }
-                }
+    for (&cond1, &cond2, &add_else, &ret_val1, &ret_val2, &ret_val3, &ret_val4) in iproduct!(
+        &[None, Some(0), Some(1)], // cond1
+        &[None, Some(0), Some(1)], // cond2
+        &[false, true],            // add_else
+        &[None, Some(10)],         // ret_val1
+        &[None, Some(20)],         // ret_val2
+        &[None, Some(30)],         // ret_val3
+        &[None, Some(40)]          // ret_val4
+    ) {
+        let mut expected_ret = None;
+        let mut skip_to_end = false;
+        let mut source_code = String::new();
+        source_code.push_str("@function int test() {");
+        if let Some(cond1) = cond1 {
+            source_code.push_str(" if ");
+            source_code.push_str(&cond1.to_string());
+            source_code.push_str("{");
+            push_ret(&mut source_code, ret_val1, &mut expected_ret, cond1 != 0);
+            if cond1 != 0 {
+                skip_to_end = true;
             }
+            source_code.push_str("}");
+
+            if let Some(cond2) = cond2 {
+                source_code.push_str("else if ");
+                source_code.push_str(&cond2.to_string());
+                source_code.push_str("{");
+                push_ret(
+                    &mut source_code,
+                    ret_val2,
+                    &mut expected_ret,
+                    !skip_to_end && cond2 != 0,
+                );
+                if cond2 != 0 {
+                    skip_to_end = true;
+                }
+                source_code.push_str("}");
+            }
+
+            if add_else {
+                source_code.push_str("else {");
+                push_ret(&mut source_code, ret_val3, &mut expected_ret, !skip_to_end);
+                source_code.push_str("}");
+            }
+
+            push_ret(&mut source_code, ret_val4, &mut expected_ret, true);
         }
+        source_code.push_str("}");
+        let expected_ret = ConstValue::Int(expected_ret.unwrap_or(0));
+
+        let mut function = compile_test_fn(&source_code);
+        assert_fn_result(&mut function, &[], Ok(expected_ret));
     }
 }
 

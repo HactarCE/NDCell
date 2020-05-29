@@ -77,4 +77,8 @@ fn compile_and_run(source_code: Rc<String>) -> LangResult<ConstValue> {
 }
 
 #[cfg(test)]
+#[macro_use]
+extern crate itertools;
+
+#[cfg(test)]
 mod tests;

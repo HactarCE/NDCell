@@ -625,7 +625,7 @@ impl Compiler {
     }
     /// Builds a reduction of a vector to an integer using the given operation.
     /// If the argument is already an integer, returns the integernice
-    fn build_reduce(
+    pub fn build_reduce(
         &mut self,
         op: &str,
         value: BasicValueEnum<'static>,
@@ -645,6 +645,7 @@ impl Compiler {
                     &format!(
                         "llvm.experimental.vector.reduce.{}.{}",
                         op,
+                        // Get name of input type.
                         llvm_intrinsic_type_name(value.get_type())
                     ),
                     fn_type,

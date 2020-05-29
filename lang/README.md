@@ -15,7 +15,7 @@ This is a testing ground for a cellular automaton description language for [NDCe
 ## Building on Linux or macOS
 
 1. Download/install Cargo.
-2. Download [LLVM](https://releases.llvm.org/download.html) 8.0.0 precompiled binaries and extract them somewhere.
+2. Download [LLVM](https://releases.llvm.org/download.html) 10.0.0 precompiled binaries and extract them somewhere.
 3. Either put those LLVM binaries somewhere in your path so that they are accessible on the command line, or set an environment variable `LLVM_SYS_60_PREFIX` containing the path pointing to wherever you extracted LLVM.
 4. Clone this project and build/run:
 
@@ -46,15 +46,15 @@ What you'll need:
 
 Fair warning: I don't do C or C++ development so it's entirely possible that I've completely butchered the proper build process, but this is what finally worked for me.
 
-If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://1drv.ms/u/s!AnInQYQ5foGShYoeG6MVAUedmPYTzw?e=JPwA8f). (SHA256 = `a8cf68f8f313170ad174030e4689239f6d5b8854aca75a4aedf1670ed4fdb5aa`) Extract that somewhere and skip to step #11, using the path where you extracted it place of `C:\LLVM_solution\MinSizeRel`. I don't promise that this will work, but it's waaaay easier than compiling LLVM yourself.
+If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://1drv.ms/u/s!AnInQYQ5foGSi7hmxnhb-hG1mCmWAw?e=HVPNn9). (SHA256 = `676a81c273653c87682696afa0d73762cf07720d637e57439d743fe4321ea342`) Extract that somewhere and skip to step #11, using the path where you extracted it place of `C:\LLVM_solution\MinSizeRel`. I can't promise that this will work, but it's waaaay easier than compiling LLVM yourself.
 
 1. Download/install [CMake](https://cmake.org/download/). WSL or Cygwin `cmake` might work, but I wouldn't count on it.
-2. Download [LLVM](https://releases.llvm.org/download.html) 8.0.0 source code. The precompiled binaries probably won't work, but you can try.
+2. Download [LLVM](https://releases.llvm.org/download.html) 10.0.0 source code. The precompiled binaries probably won't work, but you can try.
 3. Extract the LLVM source code somewhere, like `C:\LLVM_source_code`. Now you should have a bunch of folders and files directly inside `C:\LLVM_source_code` including `CMakeLists.txt`.
 4. Make a new empty folder, like `C:\LLVM_solution`.
 5. Run this, replacing the path names accordingly if you used different paths for things:
 
-```
+```bat
 cd C:\LLVM_solution
 cmake.exe 'C:\LLVM_source_code' -Thost=x64 -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_ENABLE_IDE=1
 ```
@@ -65,10 +65,10 @@ By the way, **do not use cmake-gui**. I don't think there's any way to make it u
 
 6. Open Visual Studio and load the project at `C:\LLVM_solution`.
 7. Make sure `MinSizeRel` is selected as the build configuration (it might be `Debug` by default) and build the project. This took around 30 minutes on my computer and it uses all of your CPU cores, so go eat lunch or something while you wait.
-7. Now there should be a folder at `C:\LLVM_solution\MinSizeRel` that contains folders named `bin` and `lib`. If that's there, good.
-8. Copy `C:\LLVM_solution\include` into `C:\LLVM_solution\MinSizeRel` so that the new `include` folder is next to `bin` and `lib`.
-9. Also copy the contents of `C:\LLVM_source_code\include` into `C:\LLVM_solution\MinSizeRel\include`, merging the contents. There might be a file or two that are overwritten and that's fine.
-10. Finally, make a new environment variable (system variable or user variable, doesn't matter) called `LLVM_SYS_80_PREFIX` with the value `C:\LLVM_solution\MinSizeRel`. Reboot to make sure this takes effect.
+8. Now there should be a folder at `C:\LLVM_solution\MinSizeRel` that contains folders named `bin` and `lib`. If that's there, good.
+9. Copy `C:\LLVM_solution\include` into `C:\LLVM_solution\MinSizeRel` so that the new `include` folder is next to `bin` and `lib`.
+10. Also copy the contents of `C:\LLVM_source_code\include` into `C:\LLVM_solution\MinSizeRel\include`, merging the contents. There might be a file or two that are overwritten and that's fine.
+11. Finally, make a new environment variable (system variable or user variable, doesn't matter) called `LLVM_SYS_80_PREFIX` with the value `C:\LLVM_solution\MinSizeRel`. Reboot to make sure this takes effect.
 
 ### Part 3 - Building NDCA
 

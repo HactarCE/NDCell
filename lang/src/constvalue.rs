@@ -39,7 +39,7 @@ impl ConstValue {
         match ty {
             Type::Int => Some(Self::Int(0)),
             Type::CellState => Some(Self::CellState(0)),
-            Type::Vector(len) => Some(Self::Vector(vec![0; len as usize])),
+            Type::Vector(len) => Some(Self::Vector(vec![0; len])),
         }
     }
     /// Returns the integer value inside if this is a ConstValue::Int; otherwise a

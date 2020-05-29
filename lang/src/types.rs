@@ -71,7 +71,7 @@ impl Type {
         match self {
             Self::Int => Some(std::mem::size_of::<LangInt>()),
             Self::CellState => Some(std::mem::size_of::<LangCellState>()),
-            Self::Vector(len) => Some(len as usize * Self::Int.size_of().unwrap()),
+            Self::Vector(len) => Some(len * Self::Int.size_of().unwrap()),
         }
     }
 

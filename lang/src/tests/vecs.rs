@@ -48,7 +48,7 @@ fn test_vector_access() {
     let mut f = compile_test_fn(
         "@function int test() {
             set v = [1, 10, 100]
-            v.w = 0
+            set v.w = 0
         }",
     );
     let expected = Err(("w", "Index out of bounds"));
@@ -109,15 +109,15 @@ fn test_vector_ops() {
             assert v.sum == 3 + 12 + 102
 
             // Test arithmetic operations between vector and integer
-            v += [2, 2, 2]
+            set v += [2, 2, 2]
             assert v == [3, 12, 102]
-            v /= 3
+            set v /= 3
             assert v == [1, 4, 34]
-            v *= 1
+            set v *= 2
             assert v == [2, 8, 68]
-            v %= 10
+            set v %= 10
             assert v == [2, 8, 8]
-            v -= 10
+            set v -= 10
             assert v == [-8, -2, -2]
             assert -v == [8, 2, 2]
 

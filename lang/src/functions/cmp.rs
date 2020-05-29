@@ -156,14 +156,11 @@ impl Comparator {
         let span = Span::merge(lhs, rhs);
         let lhs = lhs.inner;
         let rhs = rhs.inner;
-        if lhs != rhs {
-            return Err(CmpError { lhs, cmp, rhs }.with_span(span));
-        }
         let ty = lhs;
         let eq_only = cmp == ComparisonToken::Eql || cmp == ComparisonToken::Neq;
-        match ty {
-            Type::Int => Ok(Self::int_cmp(ty, cmp, true)),
-            Type::CellState if eq_only => Ok(Self::int_cmp(ty, cmp, false)),
+        match (lhs, rhs) {
+            (Type::Int, Type::Int) => Ok(Self::int_cmp(ty, cmp, true)),
+            (Type::CellState, Type::CellState) if eq_only => Ok(Self::int_cmp(ty, cmp, false)),
             _ => Err(CmpError { lhs, cmp, rhs }.with_span(span)),
         }
     }

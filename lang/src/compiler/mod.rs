@@ -418,16 +418,18 @@ impl Compiler {
         name: &str,
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<BasicValueEnum<'static>> {
+        let arg_type = lhs.get_type();
+        let bool_vec_type = get_ctx()
+            .bool_type()
+            .vec_type(arg_type.into_vector_type().get_size())
+            .into();
         let intrinsic_name = format!(
             "llvm.{}.with.overflow.{}",
             name,
-            llvm_intrinsic_type_name(lhs.get_type())
+            llvm_intrinsic_type_name(arg_type)
         );
-        let intrinsic_return_type = get_ctx().struct_type(
-            &[self.int_type().into(), get_ctx().bool_type().into()],
-            false,
-        );
-        let intrinsic_fn_type = intrinsic_return_type.fn_type(&[self.int_type().into(); 2], false);
+        let intrinsic_return_type = get_ctx().struct_type(&[arg_type, bool_vec_type], false);
+        let intrinsic_fn_type = intrinsic_return_type.fn_type(&[arg_type; 2], false);
         let intrinsic_fn = self.get_llvm_intrinisic(&intrinsic_name, intrinsic_fn_type)?;
         let intrinsic_args = &[lhs, rhs];
 
@@ -450,11 +452,11 @@ impl Compiler {
             .builder()
             .build_extract_value(return_value, 0, "tmp_result")
             .unwrap();
-        let is_overflow = self
+        let is_overflow_vec = self
             .builder()
             .build_extract_value(return_value, 1, "tmp_overflow")
-            .unwrap()
-            .into_int_value();
+            .unwrap();
+        let is_overflow = self.build_reduce("or", is_overflow_vec)?;
 
         // Branch based on whether there is overflow.
         self.build_conditional(

@@ -50,6 +50,6 @@ fn main() {
     #[cfg(unix)]
     {
         debug!("Launching UI");
-        ui::show_gui();
+        gui::show_gui();
     }
 }

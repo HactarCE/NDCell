@@ -1,9 +1,15 @@
 language: rust
+
 cache: cargo
+
+services:
+  - xvfb
+
 before_install:
   - wget https://apt.llvm.org/llvm.sh
   - chmod +x llvm.sh
   - sudo ./llvm.sh 10
+
 script:
   - cargo build --verbose --all
   - cargo test --verbose --all

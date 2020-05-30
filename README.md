@@ -1,4 +1,4 @@
-# NDCell [![](https://img.shields.io/discord/560924453245288459.svg?colorB=7289DA)](https://discord.gg/vdJwHQF)
+# NDCell [![Discord server](https://img.shields.io/discord/560924453245288459.svg?colorB=7289DA)](https://discord.gg/vdJwHQF) [![Build Status](https://travis-ci.org/HactarCE/NDCell.svg?branch=master)](https://travis-ci.org/HactarCE/NDCell)
 
 _Any number of dimensions_  
 _Any neighborhood range_  

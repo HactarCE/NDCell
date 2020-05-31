@@ -19,6 +19,8 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 Builds are automatically generated for every push to the `master` branch. **To get the latest build, click [here][Builds link] and click on the first run with a green check mark, which will contain builds for Windows, Linux, and macOS.**
 
+On Linux and macOS, the file might not be executable by default -- to fix this, open a terminal in the same folder as the `ndcell` file and run `chmod a+x ndcell`.
+
 ## Short-term to-do list
 
 - [x] Begin work on custom rules

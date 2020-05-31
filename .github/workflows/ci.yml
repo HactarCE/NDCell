@@ -10,22 +10,19 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build
+  test:
+    name: Run tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install LLVM
         run: wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 10
-      - name: Install ImGui dependencies
-        run: sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev
-      - name: Build
-        run: cargo build --verbose --all
-
-  test:
-    name: Run tests
-    needs: [build]
-    runs-on: ubuntu-latest
-    steps:
       - name: Run tests
-        run: cargo test --verbose --all
+        run: cargo test --verbose --package ndcell_core --package ndcell_lang

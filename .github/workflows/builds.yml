@@ -73,7 +73,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Download LLVM
         run: |
-          wget https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-apple-darwin.tar.xz -o ~/llvm.tar.xz
+          wget https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-apple-darwin.tar.xz -O ~/llvm.tar.xz
           tar -xf ~/llvm.tar.xz -C ~/LLVM
       - name: Build NDCell
         run: cargo build --release

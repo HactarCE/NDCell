@@ -17,7 +17,7 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ## Downloads
 
-Builds are automatically generated for every push to the `master` branch. **To get the latest build, click [here] and click on the first run with a green check mark, which will contain builds for Windows, Linux, and macOS.**
+Builds are automatically generated for every push to the `master` branch. **To get the latest build, click [here][Builds link] and click on the first run with a green check mark, which will contain builds for Windows, Linux, and macOS.**
 
 ## Short-term to-do list
 

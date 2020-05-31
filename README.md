@@ -1,4 +1,11 @@
-# NDCell [![](https://img.shields.io/discord/560924453245288459.svg?colorB=7289DA)](https://discord.gg/vdJwHQF)
+# NDCell [![Tests badge]][Tests link] [![Builds badge]][Builds link] [![Discord badge]][Discord link]
+
+[Discord badge]: https://img.shields.io/discord/560924453245288459.svg?colorB=7289DA "Discord server invite"
+[Discord link]: https://discord.gg/vdJwHQF
+[Tests badge]: https://github.com/HactarCE/NDCell/workflows/Run%20tests/badge.svg "Test results"
+[Tests link]: https://github.com/HactarCE/NDCell/actions?query=workflow%3A%22Run+tests%22
+[Builds badge]: https://github.com/HactarCE/NDCell/workflows/Build%20latest/badge.svg "Download latest build"
+[Builds link]: https://github.com/HactarCE/NDCell/actions?query=workflow%3A%22Build+latest%22
 
 _Any number of dimensions_  
 _Any neighborhood range_  
@@ -8,10 +15,17 @@ _Any computable transition function_
 
 An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
+## Downloads
+
+Builds are automatically generated for every push to the `master` branch. **To get the latest build, click [here][Builds link] and click on the first run with a green check mark, which will contain builds for Windows, Linux, and macOS.**
+
+On Linux and macOS, the file might not be executable by default -- to fix this, open a terminal in the same folder as the `ndcell` file and run `chmod a+x ndcell`.
+
 ## Short-term to-do list
 
-- [ ] Begin work on custom rules
-- [ ] Refactor all imports to use preludes
+- [x] Begin work on custom rules
+    + See [`dev/lang/README.md`](https://github.com/HactarCE/NDCell/blob/dev/lang/README.md#short-term-to-do-list)
+- [ ] Refactor imports to use preludes (maybe?)
 
 ## Long-term to-do list
 

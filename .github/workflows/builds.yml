@@ -1,0 +1,85 @@
+name: Build latest
+
+on:
+  push:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+
+  windows:
+    name: Build Windows latest
+    runs-on: windows-latest
+    env:
+      LLVM_SYS_100_PREFIX: C:\LLVM
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Download LLVM
+        run: git clone https://github.com/HactarCE/LLVM-MSVC-Win64-Dev C:\LLVM
+      - name: Build NDCell
+        run: cargo build --release
+      - name: Upload executable
+        uses: actions/upload-artifact@v2
+        with:
+          name: Windows build
+          path: target/release/ndcell.exe
+
+  linux:
+    name: Build Linux latest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install LLVM
+        run: wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 10
+      - name: Install ImGui dependencies
+        run: sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev
+      - name: Build NDCell
+        run: cargo build --release
+      - name: Upload executable
+        uses: actions/upload-artifact@v2
+        with:
+          name: Linux build
+          path: target/release/ndcell
+
+  macos:
+    name: Build macOS latest
+    runs-on: macos-latest
+    env:
+      LLVM_SYS_100_PREFIX: ~/LLVM
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Download LLVM
+        run: |
+          wget https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-apple-darwin.tar.xz -O /tmp/llvm.tar.xz
+          tar -xvf /tmp/llvm.tar.xz -C /tmp
+          mv /tmp/clang+llvm-10.0.0-x86_64-apple-darwin ~/LLVM
+      - name: Build NDCell
+        run: cargo build --release
+      - name: Upload executable
+        uses: actions/upload-artifact@v2
+        with:
+          name: macOS build
+          path: target/release/ndcell

@@ -1,4 +1,11 @@
-# NDCell [![Discord server](https://img.shields.io/discord/560924453245288459.svg?colorB=7289DA)](https://discord.gg/vdJwHQF) [![Build Status](https://travis-ci.org/HactarCE/NDCell.svg?branch=master)](https://travis-ci.org/HactarCE/NDCell)
+# NDCell [![Tests badge]][Tests link] [![Builds badge]][Builds link] [![Discord badge]][Discord link]
+
+[Discord badge]: https://img.shields.io/discord/560924453245288459.svg?colorB=7289DA "Discord server invite"
+[Discord link]: https://discord.gg/vdJwHQF
+[Tests badge]: https://github.com/HactarCE/NDCell/workflows/Run%20tests/badge.svg "Test results"
+[Tests link]: https://github.com/HactarCE/NDCell/actions?query=workflow%3A%22Run+tests%22
+[Builds badge]: https://github.com/HactarCE/NDCell/workflows/Build%20latest/badge.svg "Download latest build"
+[Builds link]: https://github.com/HactarCE/NDCell/actions?query=workflow%3A%22Build+latest%22
 
 _Any number of dimensions_  
 _Any neighborhood range_  
@@ -7,6 +14,10 @@ _Any computable transition function_
 **Simulate _any_ cellular automaton**
 
 An N-dimensional cellular automaton simulation program. Maybe. Someday.
+
+## Downloads
+
+Builds are automatically generated for every push to the `master` branch. **To get the latest build, click [here] and click on the first run with a green check mark, which will contain builds for Windows, Linux, and macOS.**
 
 ## Short-term to-do list
 

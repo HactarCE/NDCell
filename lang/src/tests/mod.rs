@@ -3,6 +3,7 @@
 use std::rc::Rc;
 use std::thread::LocalKey;
 
+mod bools;
 mod branch;
 mod cmp;
 mod debug;

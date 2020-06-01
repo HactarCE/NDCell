@@ -16,7 +16,7 @@ pub const CELL_STATE_BITS: u32 = 8;
 pub const MAX_VECTOR_LEN: usize = 256;
 
 use crate::errors::*;
-use crate::Span;
+use crate::Spanned;
 use LangErrorMsg::{CustomTypeError, TypeError};
 
 /// Any data type.
@@ -83,24 +83,26 @@ impl Type {
             got: self,
         }
     }
-    /// Returns a TypeError with the given span if this type is not `expected`.
-    pub fn expect_eq(self, expected: Type, span: Span) -> LangResult<()> {
-        if self == expected {
+}
+
+impl Spanned<Type> {
+    /// Returns a TypeError if this type does not match the given expected type.
+    pub fn check_eq(self, expected: Type) -> LangResult<()> {
+        if self.inner == expected {
             Ok(())
         } else {
-            Err(self.type_error(expected).with_span(span))
+            Err(self.inner.type_error(expected).with_span(self.span))
         }
     }
-    /// Returns a CustomTypeError with the given span if this type is not an
-    /// integer or vector.
-    pub fn expect_int_or_vec(self, span: Span) -> LangResult<()> {
-        match self {
-            Self::Int | Self::Vector(_) => Ok(()),
+    /// Returns a CustomTypeError if this type is not an integer or vector.
+    pub fn check_int_or_vec(self) -> LangResult<()> {
+        match self.inner {
+            Type::Int | Type::Vector(_) => Ok(()),
             _ => Err(CustomTypeError {
                 expected: "integer or vector",
-                got: self,
+                got: self.inner,
             }
-            .with_span(span)),
+            .with_span(self.span)),
         }
     }
 }

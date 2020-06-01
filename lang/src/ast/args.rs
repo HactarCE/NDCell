@@ -97,4 +97,11 @@ impl<'a> ArgValues<'a> {
             None => Err(ARG_OUT_OF_RANGE),
         }
     }
+    /// Evaluates all arguments and returns the resulting ConstValues.
+    pub fn const_eval_all(&self) -> LangResult<Vec<ConstValue>> {
+        self.arg_asts
+            .iter_refs()
+            .map(|&expr| self.userfunc.const_eval_expr(expr))
+            .collect()
+    }
 }

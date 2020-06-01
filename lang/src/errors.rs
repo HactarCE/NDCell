@@ -4,7 +4,6 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
-use crate::ast::ArgTypes;
 use crate::lexer::ComparisonToken;
 use crate::types::MAX_VECTOR_LEN;
 use crate::{Span, Type, MAX_NDIM, MAX_STATES};
@@ -162,9 +161,8 @@ pub enum LangErrorMsg {
     },
     InvalidArguments {
         name: String,
-        omit_first: bool,
-        expected: ArgTypes,
-        got: ArgTypes,
+        is_method: bool,
+        arg_types: Vec<Type>,
     },
     CannotAssignTypeToVariable(Type),
     UseOfUninitializedVariable,
@@ -262,18 +260,16 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::InvalidArguments {
                 name,
-                omit_first,
-                expected,
-                got,
+                is_method,
+                arg_types,
             } => {
                 // Omit first argument if used as a method.
-                write!(
-                    f,
-                    "Invalid arguments {} for {}; expected {}",
-                    got.to_string(*omit_first),
-                    name,
-                    expected.to_string(*omit_first)
-                )?;
+                let arg_slice = if *is_method && !arg_types.is_empty() {
+                    &arg_types[1..]
+                } else {
+                    &arg_types
+                };
+                write!(f, "Invalid arguments {:?} for {}", arg_slice, name,)?;
             }
             Self::CannotAssignTypeToVariable(ty) => {
                 write!(f, "Cannot assign {} to variable", ty)?;

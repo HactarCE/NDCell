@@ -118,12 +118,12 @@ fn test_vector_cmp() {
 
     let mut cmp_mixed_fn = compile_test_fn(
         "@function int test(vec2 a, vec3 b) {
-            assert (a == b) == (a == b) == (a.x == b.x and a.y == b.y and 0 == b.z)
-            assert (a != b) == (a != b) == (a.x != b.x or  a.y != b.y or  0 != b.z)
-            assert (a >  b) == (a <  b) == (a.x >  b.x and a.y >  b.y and 0 >  b.z)
-            assert (a <  b) == (a >  b) == (a.x <  b.x and a.y <  b.y and 0 <  b.z)
-            assert (a >= b) == (a <= b) == (a.x >= b.x and a.y >= b.y and 0 >= b.z)
-            assert (a <= b) == (a >= b) == (a.x <= b.x and a.y <= b.y and 0 <= b.z)
+            assert (a == b) == (b == a) == (a.x == b.x and a.y == b.y and 0 == b.z)
+            assert (a != b) == (b != a) == (a.x != b.x or  a.y != b.y or  0 != b.z)
+            assert (a >  b) == (b <  a) == (a.x >  b.x and a.y >  b.y and 0 >  b.z)
+            assert (a <  b) == (b >  a) == (a.x <  b.x and a.y <  b.y and 0 <  b.z)
+            assert (a >= b) == (b <= a) == (a.x >= b.x and a.y >= b.y and 0 >= b.z)
+            assert (a <= b) == (b >= a) == (a.x <= b.x and a.y <= b.y and 0 <= b.z)
         }",
     );
     for a in &test_vec2s {

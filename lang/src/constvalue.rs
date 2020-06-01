@@ -4,14 +4,6 @@ use std::convert::TryInto;
 
 use crate::errors::*;
 use crate::types::{LangCellState, LangInt, Type};
-use LangErrorMsg::InternalError;
-
-/// InternalError reported when a variable is used improperly and it was not
-/// caught by the type checker.
-const INTERNAL_VAR_USE_ERROR: LangError = InternalError(std::borrow::Cow::Borrowed(
-    "Invalid variable use not caught by type checker",
-))
-.without_span();
 
 /// Constant value of any type.
 #[derive(Debug, Clone, PartialEq, Eq)]

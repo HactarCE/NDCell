@@ -1,17 +1,11 @@
 //! Structs for passing arguments to functions.
 
-use std::borrow::Cow;
 use std::ops::Index;
 
 use super::{Expr, ExprRef, UserFunction};
 use crate::compiler::*;
 use crate::errors::*;
 use crate::{ConstValue, Spanned, Type};
-use LangErrorMsg::InternalError;
-
-/// Error returned when an argument index is out of range (which should never happen).
-const ARG_OUT_OF_RANGE: LangError =
-    InternalError(Cow::Borrowed("Argument index out of range")).without_span();
 
 /// Collection of expressions passed as arguments to a function.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

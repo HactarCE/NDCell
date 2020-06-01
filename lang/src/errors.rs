@@ -8,12 +8,26 @@ use crate::lexer::ComparisonToken;
 use crate::types::MAX_VECTOR_LEN;
 use crate::{Span, Type, MAX_NDIM, MAX_STATES};
 
+/// InternalError returned when an argument index is out of range (which should
+/// never happen).
+pub const ARG_OUT_OF_RANGE: LangError =
+    LangErrorMsg::InternalError(Cow::Borrowed("Argument index out of range")).without_span();
+
+/// InternalError returned when a variable is used improperly and it was not
+/// caught by the type checker.
+const INVALID_VARIABLE_USE: LangError = LangErrorMsg::InternalError(std::borrow::Cow::Borrowed(
+    "Invalid variable use not caught by type checker",
+))
+.without_span();
+
+/// InternalError returned when a TypeError occurs in a place where it should
+/// have already been caught.
 pub const UNCAUGHT_TYPE_ERROR: LangError =
     LangErrorMsg::InternalError(Cow::Borrowed("Uncaught type error")).without_span();
 
-/// A Result of a LangError and an accompanying line of source code.
+/// Result of a LangError with an accompanying line of source code.
 pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
-/// A Result of a LangError.
+/// Result of a LangError.
 pub type LangResult<T> = Result<T, LangError>;
 
 /// An error type and an accompanying line and span of source code.

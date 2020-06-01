@@ -10,7 +10,7 @@ macro_rules! enum_with_str_repr {
             // Get enum attributes (including #[derive] and docs).
             $(#[$enum_attr:meta])*
             // Get enum definition line.
-            pub enum $enum_name:ident {
+            $vis:vis enum $enum_name:ident {
                 // For each variant ...
                 $(
                     // Get variant attributes (including docs).
@@ -25,14 +25,14 @@ macro_rules! enum_with_str_repr {
         // For each enum ...
         $(
             $(#[$enum_attr])*
-            pub enum $enum_name {
+            $vis enum $enum_name {
                 $(
                     $(#[$variant_attr])*
                     $variant_name,
                 )*
             }
             impl std::fmt::Display for $enum_name {
-                fn fmt(&self, f: &mut std::fmt::Formatter) -> fmt::Result {
+                fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                     match self {
                         $(
                             <$enum_name>::$variant_name => write!(f, "{}", $variant_str),

@@ -1,8 +1,8 @@
 use proptest::prelude::*;
 
 use super::{
-    assert_threadlocal_fn_result, compile_test_fn, test_values, CompiledFunction, ConstValue,
-    LangInt,
+    assert_fn_result, assert_threadlocal_fn_result, compile_test_fn, test_values, CompiledFunction,
+    ConstValue, LangInt,
 };
 
 thread_local! {
@@ -90,4 +90,26 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
         .map(ConstValue::Int)
         .ok_or(("-x", overflow_err_msg));
     assert_threadlocal_fn_result(&NEG_FN, &args, expected);
+}
+
+#[test]
+fn test_abs() {
+    let mut f = compile_test_fn(
+        "@function int test(int x) {
+            if x < 0 {
+                assert abs(x) == x.abs == -x
+            } else {
+                assert abs(x) == x.abs == x
+            }
+        }",
+    );
+    for &x in test_values() {
+        let expected;
+        if x == LangInt::MIN {
+            expected = Err(("abs(x)", "Integer overflow"))
+        } else {
+            expected = Ok(ConstValue::Int(0));
+        }
+        assert_fn_result(&mut f, &[ConstValue::Int(x)], expected);
+    }
 }

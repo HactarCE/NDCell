@@ -42,8 +42,8 @@ impl ConstValue {
             Type::Vector(len) => Some(Self::Vector(vec![0; len])),
         }
     }
-    /// Returns the integer value inside if this is a ConstValue::Int; otherwise a
-    /// TypeError.
+    /// Returns the integer value inside if this is a ConstValue::Int; otherwise
+    /// returns an InternalError.
     pub fn as_int(self) -> LangResult<LangInt> {
         match self {
             Self::Int(i) => Ok(i),
@@ -51,7 +51,7 @@ impl ConstValue {
         }
     }
     /// Returns the integer value inside if this is a ConstValue::CellState;
-    /// otherwise a TypeError.
+    /// otherwise an InternalError.
     pub fn as_cell_state(self) -> LangResult<LangCellState> {
         match self {
             Self::CellState(i) => Ok(i),
@@ -59,7 +59,8 @@ impl ConstValue {
         }
     }
     /// Converts this value to a vector of the specified length if this is a
-    /// ConstValue::Int or ConstValue::Vector; otherwise returns a TypeError.
+    /// ConstValue::Int or ConstValue::Vector; otherwise returns an
+    /// InternalError.
     pub fn coerce_to_vector(self, len: usize) -> LangResult<Vec<LangInt>> {
         match self {
             Self::Int(i) => Ok(vec![i; len]),

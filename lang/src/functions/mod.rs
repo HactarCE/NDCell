@@ -3,6 +3,7 @@
 pub mod cmp;
 pub mod convert;
 pub mod literals;
+pub mod logic;
 pub mod math;
 pub mod misc;
 pub mod vectors;

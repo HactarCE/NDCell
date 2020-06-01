@@ -295,7 +295,7 @@ impl UserFunction {
                 }
                 _ => return Err(InternalError("Invalid unary operator".into()).with_span(span)),
             },
-            // Binary operator
+            // Binary mathematical/bitwise operator
             parser::Expr::BinaryOp { lhs, op, rhs } => match op {
                 // Math
                 OperatorToken::Plus
@@ -320,13 +320,24 @@ impl UserFunction {
                 _ => return Err(InternalError("Invalid binary operator".into()).with_span(span)),
             },
             // Logical NOT
-            parser::Expr::LogicalNot(expr) => todo!("logical boolean operation"),
-            // Logical OR
-            parser::Expr::LogicalOr { lhs, rhs } => todo!("logical boolean operation"),
-            // Logical XOR
-            parser::Expr::LogicalXor { lhs, rhs } => todo!("logical boolean operation"),
-            // Logical AND
-            parser::Expr::LogicalAnd { lhs, rhs } => todo!("logical boolean operation"),
+            parser::Expr::LogicalNot(expr) => {
+                args = Args::from(vec![self.build_expression_ast(expr)?]);
+                func = Box::new(functions::logic::LogicalNot::construct);
+            }
+            // Binary logical operator
+            parser::Expr::LogicalOr { lhs, rhs }
+            | parser::Expr::LogicalXor { lhs, rhs }
+            | parser::Expr::LogicalAnd { lhs, rhs } => {
+                let lhs = self.build_expression_ast(lhs)?;
+                let rhs = self.build_expression_ast(rhs)?;
+                args = Args::from(vec![lhs, rhs]);
+                func = functions::logic::LogicalBinaryOp::with_op(match &parser_expr.inner {
+                    parser::Expr::LogicalOr { .. } => functions::logic::LogicalBinOpType::Or,
+                    parser::Expr::LogicalXor { .. } => functions::logic::LogicalBinOpType::Xor,
+                    parser::Expr::LogicalAnd { .. } => functions::logic::LogicalBinOpType::And,
+                    _ => unreachable!(),
+                })
+            }
             // Comparison
             parser::Expr::Cmp { exprs, cmps } => {
                 args = Args::from(self.build_expression_list_ast(exprs)?);

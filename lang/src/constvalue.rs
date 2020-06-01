@@ -43,10 +43,18 @@ impl ConstValue {
         }
     }
     /// Returns the integer value inside if this is a ConstValue::CellState;
-    /// otherwise an InternalError.
+    /// otherwise returns an InternalError.
     pub fn as_cell_state(self) -> LangResult<LangCellState> {
         match self {
             Self::CellState(i) => Ok(i),
+            _ => Err(UNCAUGHT_TYPE_ERROR),
+        }
+    }
+    /// Returns the vector value inside if this is a ConstValue::Vector;
+    /// otherwise returns an InternalError.
+    pub fn as_vector(self) -> LangResult<Vec<LangInt>> {
+        match self {
+            Self::Vector(v) => Ok(v),
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }

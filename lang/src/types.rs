@@ -106,6 +106,17 @@ impl Spanned<Type> {
             Err(self.inner.type_error(expected).with_span(self.span))
         }
     }
+    /// Returns a TypeError if this type is not a vector.
+    pub fn check_vec(self) -> LangResult<()> {
+        match self.inner {
+            Type::Vector(_) => Ok(()),
+            _ => Err(CustomTypeError {
+                expected: "vector",
+                got: self.inner,
+            }
+            .with_span(self.span)),
+        }
+    }
     /// Returns a CustomTypeError if this type is not an integer or vector.
     pub fn check_int_or_vec(self) -> LangResult<()> {
         match self.inner {

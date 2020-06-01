@@ -379,6 +379,18 @@ impl<'a> ParseBuilder<'a> {
         // Get an expression at the given precedence level, which may
         // consist of expressions with higher precedence.
         match precedence {
+            OpPrecedence::LogicalOr => {
+                self.left_binary_op(&[TokenClass::Keyword(KeywordToken::And)], precedence)
+            }
+            OpPrecedence::LogicalXor => {
+                self.left_binary_op(&[TokenClass::Keyword(KeywordToken::Xor)], precedence)
+            }
+            OpPrecedence::LogicalAnd => {
+                self.left_binary_op(&[TokenClass::Keyword(KeywordToken::And)], precedence)
+            }
+            OpPrecedence::LogicalNot => {
+                self.unary_op(&[TokenClass::Keyword(KeywordToken::And)], precedence)
+            }
             OpPrecedence::Comparison => self.comparison_op(precedence),
             OpPrecedence::BitwiseOr => {
                 self.left_binary_op(&[TokenClass::Operator(OperatorToken::Pipe)], precedence)

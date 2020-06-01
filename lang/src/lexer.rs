@@ -270,6 +270,7 @@ enum_with_str_repr! {
         Or = "or",
         Xor = "xor",
         And = "and",
+        Not = "not",
 
         // Boolean tests
         In = "in",
@@ -362,6 +363,7 @@ impl KeywordToken {
             Self::Or
             | Self::Xor
             | Self::And
+            | Self::Not
             | Self::In
             | Self::Is
             | Self::Bind

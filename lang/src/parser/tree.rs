@@ -176,8 +176,10 @@ pub enum Expr {
     String(StringLiteral),
     /// Vector literal.
     Vector(Vec<Spanned<Expr>>),
+
     /// Parethetical group.
     ParenExpr(Box<Spanned<Expr>>),
+
     /// Operation on one value.
     UnaryOp {
         /// Operator.
@@ -194,6 +196,31 @@ pub enum Expr {
         /// Right-hand-side operand.
         rhs: Box<Spanned<Expr>>,
     },
+
+    /// Boolean logical NOT.
+    LogicalNot(Box<Spanned<Expr>>),
+    /// Boolean logical OR.
+    LogicalOr {
+        /// Left-hand-side operand.
+        lhs: Box<Spanned<Expr>>,
+        /// Right-hand-side operand.
+        rhs: Box<Spanned<Expr>>,
+    },
+    /// Boolean logical XOR.
+    LogicalXor {
+        /// Left-hand-side operand.
+        lhs: Box<Spanned<Expr>>,
+        /// Right-hand-side operand.
+        rhs: Box<Spanned<Expr>>,
+    },
+    /// Boolean logical AND.
+    LogicalAnd {
+        /// Left-hand-side operand.
+        lhs: Box<Spanned<Expr>>,
+        /// Right-hand-side operand.
+        rhs: Box<Spanned<Expr>>,
+    },
+
     /// Comparison between two values.
     Cmp {
         /// Expressions to compare (at least two).
@@ -201,6 +228,7 @@ pub enum Expr {
         /// Comparison operations (one less than the number of expressions).
         cmps: Vec<ComparisonToken>,
     },
+
     /// Function or method call.
     FnCall {
         /// Function to call.

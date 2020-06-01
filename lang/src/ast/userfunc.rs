@@ -319,6 +319,14 @@ impl UserFunction {
                 OperatorToken::DotDot => todo!("Range"),
                 _ => return Err(InternalError("Invalid binary operator".into()).with_span(span)),
             },
+            // Logical NOT
+            parser::Expr::LogicalNot(expr) => todo!("logical boolean operation"),
+            // Logical OR
+            parser::Expr::LogicalOr { lhs, rhs } => todo!("logical boolean operation"),
+            // Logical XOR
+            parser::Expr::LogicalXor { lhs, rhs } => todo!("logical boolean operation"),
+            // Logical AND
+            parser::Expr::LogicalAnd { lhs, rhs } => todo!("logical boolean operation"),
             // Comparison
             parser::Expr::Cmp { exprs, cmps } => {
                 args = Args::from(self.build_expression_list_ast(exprs)?);

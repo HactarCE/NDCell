@@ -6,7 +6,7 @@ use std::ops::Index;
 use super::{Expr, ExprRef, UserFunction};
 use crate::compiler::*;
 use crate::errors::*;
-use crate::{ConstValue, Type};
+use crate::{ConstValue, Spanned, Type};
 use LangErrorMsg::InternalError;
 
 /// Error returned when an argument index is out of range (which should never happen).
@@ -50,32 +50,12 @@ impl Args {
     }
     /// Returns the types of this Args.
     pub fn types(&self, userfunc: &UserFunction) -> ArgTypes {
-        ArgTypes(self.iter(userfunc).map(Expr::return_type).collect())
+        self.iter(userfunc).map(Expr::spanned_type).collect()
     }
 }
 
-/// Collection of argument types.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct ArgTypes(Vec<Type>);
-impl From<Vec<Type>> for ArgTypes {
-    fn from(types: Vec<Type>) -> Self {
-        Self(types)
-    }
-}
-impl ArgTypes {
-    /// Returns an end-user-friendly string representation of this ArgTypes.
-    pub fn to_string(&self, omit_first: bool) -> String {
-        if omit_first && !self.0.is_empty() {
-            format!("{:?}", &self.0[1..])
-        } else {
-            format!("{:?}", &self.0)
-        }
-    }
-    /// Returns an iterator over the argument types.
-    pub fn iter(&self) -> impl Iterator<Item = &Type> {
-        self.0.iter()
-    }
-}
+/// Collection of argument types with associated spans.
+pub type ArgTypes = Vec<Spanned<Type>>;
 
 /// Wrapper over Args that allows the arguments to be compiled or evaluated.
 #[derive(Debug, Copy, Clone)]

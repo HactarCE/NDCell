@@ -432,7 +432,11 @@ impl<'a> ParseBuilder<'a> {
                 ],
                 precedence,
             ),
-            // TODO add remaining precedence levels
+            OpPrecedence::Exp => self.right_binary_op(
+                &[TokenClass::Operator(OperatorToken::DoubleAsterisk)],
+                precedence,
+            ),
+            OpPrecedence::ArrayIndex => self.expression_with_precedence(precedence.next()), // TODO: array indexing
             OpPrecedence::FunctionCall => {
                 // Function calls include attribute/method access.
                 let mut ret = self.expression_with_precedence(precedence.next())?;
@@ -498,7 +502,6 @@ impl<'a> ParseBuilder<'a> {
                     self.err(Expected("expression"))
                 }
             },
-            _ => self.expression_with_precedence(precedence.next()),
         }
     }
     /// Consumes an expression consisting of any number of the given unary
@@ -565,7 +568,43 @@ impl<'a> ParseBuilder<'a> {
                     TokenClass::Keyword(KeywordToken::Xor) => Expr::LogicalXor { lhs, rhs },
                     TokenClass::Keyword(KeywordToken::And) => Expr::LogicalAnd { lhs, rhs },
                     other => Err(InternalError(
-                        format!("Invalid unary operator: {:?}", other).into(),
+                        format!("Invalid left-associative binary operator: {:?}", other).into(),
+                    ))?,
+                },
+            };
+        }
+        Ok(ret)
+    }
+    /// Consumes an expression consisting of any number of the given
+    /// right-associative binary operators applied to expressions of the given
+    /// precedence level or higher.
+    fn right_binary_op(
+        &mut self,
+        token_classes: &[TokenClass],
+        precedence: OpPrecedence,
+    ) -> LangResult<Spanned<Expr>> {
+        // Alternate between getting an expresssion and an operator.
+        let mut op_tokens_and_exprs = vec![];
+        while self.next_token_is_one_of(token_classes) {
+            op_tokens_and_exprs.push((
+                self.expression_with_precedence(precedence.next())?,
+                self.next().unwrap(),
+            ));
+        }
+        // Get the rightmost expression.
+        let initial = self.expression_with_precedence(precedence.next())?;
+        // Process operations from left to right so that the rightmost is the
+        // outermost.
+        let mut ret = initial;
+        for (lhs, op_token) in op_tokens_and_exprs {
+            let lhs = Box::new(lhs);
+            let rhs = Box::new(ret);
+            ret = Spanned {
+                span: Span::merge(&*lhs, &*rhs),
+                inner: match op_token.class {
+                    TokenClass::Operator(op) => Expr::BinaryOp { lhs, op, rhs },
+                    other => Err(InternalError(
+                        format!("Invalid right-associative binary operator: {:?}", other).into(),
                     ))?,
                 },
             };

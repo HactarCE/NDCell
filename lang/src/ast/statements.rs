@@ -2,7 +2,7 @@ use super::{ErrorPointRef, ExprRef, StatementRef, UserFunction};
 use crate::compiler::*;
 use crate::errors::*;
 use crate::{Span, Type};
-use LangErrorMsg::{AssertionFailed, CannotAssignTypeToVariable, InternalError, UserError};
+use LangErrorMsg::{AssertionFailed, CannotAssignTypeToVariable, UserError};
 
 /// List of statements, executed one after another.
 pub type StatementBlock = Vec<StatementRef>;
@@ -93,36 +93,37 @@ impl Statement for Error {
 pub struct SetVar {
     /// Span of this statement in the original source code.
     span: Span,
-    /// Name of the variable to assign to.
-    var_name: String,
-    /// Expression to assign.
-    value_expr: ExprRef,
+    /// Expression to assign to (left-hand side).
+    destination_expr: ExprRef,
+    /// Expression to assign from (right-hand side).
+    source_expr: ExprRef,
 }
 impl SetVar {
     /// Constructs a new variable assignment statement that assigns the result
     /// of the given expression to the variable with the given name.
     ///
-    /// This method creates a new variable if one does not already exist, and
-    /// checks the types of the variable and expression.
+    /// This method also the types of the source and destination expressions to
+    /// ensure that they match.
     pub fn try_new(
         span: Span,
         userfunc: &mut UserFunction,
-        var_name: String,
-        value_expr: ExprRef,
+        destination_expr: ExprRef,
+        source_expr: ExprRef,
     ) -> LangResult<Self> {
-        // Check that the result of the expression can be stored in a variable.
-        let expr_type = userfunc[value_expr].return_type();
-        if !expr_type.has_runtime_representation() {
-            Err(CannotAssignTypeToVariable(expr_type).with_span(userfunc[value_expr].span()))?;
+        // Check that the result of the source expression can be stored in a
+        // variable at all.
+        let source_expr_type = userfunc[source_expr].return_type();
+        if !source_expr_type.has_runtime_representation() {
+            Err(CannotAssignTypeToVariable(source_expr_type)
+                .with_span(userfunc[source_expr].span()))?;
         }
-        // Check that the type of the result of the expression matches the type
-        // of the variable.
-        let expected = userfunc.get_or_create_var(&var_name, expr_type);
-        userfunc[value_expr].spanned_type().check_eq(expected)?;
+        // Check the types of the source and destinations.
+        let expected = userfunc[destination_expr].assign_type(userfunc)?;
+        userfunc[source_expr].spanned_type().check_eq(expected)?;
         Ok(Self {
             span,
-            var_name,
-            value_expr,
+            destination_expr,
+            source_expr,
         })
     }
 }
@@ -131,15 +132,8 @@ impl Statement for SetVar {
         self.span
     }
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
-        let var_ptr = compiler
-            .vars()
-            .get(&self.var_name)
-            .ok_or_else(|| InternalError("Invalid variable index".into()))?
-            .ptr;
-        let value = userfunc
-            .compile_expr(compiler, self.value_expr)?
-            .into_basic_value()?;
-        compiler.builder().build_store(var_ptr, value);
+        let value = userfunc.compile_expr(compiler, self.source_expr)?;
+        userfunc[self.destination_expr].compile_assign(compiler, userfunc, value)?;
         Ok(())
     }
 }

@@ -136,7 +136,7 @@ pub enum Statement {
     /// Sets a variable value.
     SetVar {
         /// Variable to set.
-        var_name: Spanned<String>,
+        var_expr: Spanned<Expr>,
         /// Assignment operator.
         assign_op: AssignmentToken,
         /// Value to store in the variable.

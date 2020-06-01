@@ -342,7 +342,7 @@ impl<'a> ParseBuilder<'a> {
                 Return => Ok(Statement::Return(self.expect(Self::expression)?)),
                 Set => Ok({
                     // Get the variable name.
-                    let var_name = self.expect(Self::ident)?;
+                    let var_expr = self.expect(Self::expression)?;
                     // Get the operator to use when assigning (if any). E.g.
                     // `+=` uses the `+` operator.
                     let assign_op = self.expect(Self::assign_op)?.inner;
@@ -350,7 +350,7 @@ impl<'a> ParseBuilder<'a> {
                     let value_expr = self.expect(Self::expression)?;
                     // Construct the statement.
                     Statement::SetVar {
-                        var_name,
+                        var_expr,
                         assign_op,
                         value_expr,
                     }

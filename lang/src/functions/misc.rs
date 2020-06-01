@@ -1,7 +1,7 @@
 //! Miscellaneous functions.
 
 use super::FuncConstructor;
-use crate::ast::{ArgTypes, ArgValues, FnSignature, Function, FunctionKind};
+use crate::ast::{ArgTypes, ArgValues, AssignableFunction, FnSignature, Function, FunctionKind};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::{Span, Type};
@@ -51,6 +51,23 @@ impl Function for GetVar {
         let var_ptr = compiler.vars()[&self.var_name].ptr;
         let value = compiler.builder().build_load(var_ptr, &self.var_name);
         Ok(Value::from_basic_value(self.var_type, value))
+    }
+    fn as_assignable<'a>(&self, _args: &'a ArgValues) -> Option<&dyn AssignableFunction> {
+        Some(self)
+    }
+}
+impl AssignableFunction for GetVar {
+    fn compile_assign(
+        &self,
+        compiler: &mut Compiler,
+        _args: ArgValues,
+        value: Value,
+    ) -> LangResult<()> {
+        let var_ptr = compiler.vars()[&self.var_name].ptr;
+        compiler
+            .builder()
+            .build_store(var_ptr, value.into_basic_value()?);
+        Ok(())
     }
 }
 

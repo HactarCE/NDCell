@@ -172,7 +172,7 @@ impl UserFunction {
                 }
                 // Variable assignment statement
                 parser::Statement::SetVar {
-                    var_name,
+                    var_expr,
                     assign_op,
                     value_expr,
                 } => {
@@ -181,18 +181,21 @@ impl UserFunction {
                         Some(op) => self.build_expression_ast(&Spanned {
                             span,
                             inner: parser::Expr::BinaryOp {
-                                lhs: Box::new(var_name.clone().map(parser::Expr::Ident)),
+                                lhs: Box::new(var_expr.clone()),
                                 op,
                                 rhs: Box::new(value_expr.clone()),
                             },
                         })?,
                         None => self.build_expression_ast(&value_expr)?,
                     };
+                    // Register a new variable if necessary.
+                    if let parser::Expr::Ident(var_name) = &var_expr.inner {
+                        self.get_or_create_var(var_name, self[value_expr].return_type());
+                    }
+                    // Construct the statement.
+                    let var_expr = self.build_expression_ast(var_expr)?;
                     Box::new(statements::SetVar::try_new(
-                        span,
-                        self,
-                        var_name.inner.clone(),
-                        value_expr,
+                        span, self, var_expr, value_expr,
                     )?)
                 }
                 // If statement

@@ -380,7 +380,7 @@ impl<'a> ParseBuilder<'a> {
         // consist of expressions with higher precedence.
         match precedence {
             OpPrecedence::LogicalOr => {
-                self.left_binary_op(&[TokenClass::Keyword(KeywordToken::And)], precedence)
+                self.left_binary_op(&[TokenClass::Keyword(KeywordToken::Or)], precedence)
             }
             OpPrecedence::LogicalXor => {
                 self.left_binary_op(&[TokenClass::Keyword(KeywordToken::Xor)], precedence)
@@ -389,7 +389,7 @@ impl<'a> ParseBuilder<'a> {
                 self.left_binary_op(&[TokenClass::Keyword(KeywordToken::And)], precedence)
             }
             OpPrecedence::LogicalNot => {
-                self.unary_op(&[TokenClass::Keyword(KeywordToken::And)], precedence)
+                self.unary_op(&[TokenClass::Keyword(KeywordToken::Not)], precedence)
             }
             OpPrecedence::Comparison => self.comparison_op(precedence),
             OpPrecedence::BitwiseOr => {
@@ -524,6 +524,7 @@ impl<'a> ParseBuilder<'a> {
                 span: Span::merge(op_token, &*operand),
                 inner: match op_token.class {
                     TokenClass::Operator(op) => Expr::UnaryOp { op, operand },
+                    TokenClass::Keyword(KeywordToken::Not) => Expr::LogicalNot(operand),
                     other => Err(InternalError(
                         format!("Invalid unary operator: {:?}", other).into(),
                     ))?,

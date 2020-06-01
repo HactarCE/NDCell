@@ -1,19 +1,17 @@
-use super::{
-    assert_fn_result, assert_threadlocal_fn_result, compile_test_fn, test_values, CompiledFunction,
-    ConstValue, LangInt,
-};
-
-thread_local! {
-    static IF_FN: CompiledFunction =
-        compile_test_fn("@function int test(int cond) { if cond { return 10 } else { return 20 } }");
-}
+use super::{assert_fn_result, compile_test_fn, test_values, ConstValue, LangInt};
 
 #[test]
 fn test_condition_values() {
     for &cond in test_values() {
+        let mut f = compile_test_fn(
+            "@function int test(int cond) {
+                if cond { return 10 }
+                else { return 20 }
+            }",
+        );
         let args = [ConstValue::Int(cond)];
         let expected = Ok(ConstValue::Int(if cond != 0 { 10 } else { 20 }));
-        assert_threadlocal_fn_result(&IF_FN, &args, expected);
+        assert_fn_result(&mut f, &args, expected);
     }
 }
 

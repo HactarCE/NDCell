@@ -85,6 +85,13 @@ impl<'a> ArgValues<'a> {
             None => Err(ARG_OUT_OF_RANGE),
         }
     }
+    /// Compiles all arguments and return the resulting Values.
+    pub fn compile_all(&self, compiler: &mut Compiler) -> LangResult<Vec<Value>> {
+        self.arg_asts
+            .iter_refs()
+            .map(|&expr| self.userfunc.compile_expr(compiler, expr))
+            .collect()
+    }
     /// Evaluates the argument at the given index as a constant and returns the
     /// resulting ConstValue.
     ///

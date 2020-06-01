@@ -44,8 +44,7 @@ enum OpPrecedence {
     MulDiv,
     UnaryPrefix,
     Exp,
-    ArrayIndex,
-    FunctionCall,
+    Postfix,
     Atom,
 }
 impl OpPrecedence {
@@ -73,9 +72,8 @@ impl OpPrecedence {
             Self::AddSub => Self::MulDiv,
             Self::MulDiv => Self::UnaryPrefix,
             Self::UnaryPrefix => Self::Exp,
-            Self::Exp => Self::ArrayIndex,
-            Self::ArrayIndex => Self::FunctionCall,
-            Self::FunctionCall => Self::Atom,
+            Self::Exp => Self::Postfix,
+            Self::Postfix => Self::Atom,
             Self::Atom => panic!("Tried to get operator precedence level beyond {:?}", self),
         }
     }
@@ -436,48 +434,75 @@ impl<'a> ParseBuilder<'a> {
                 &[TokenClass::Operator(OperatorToken::DoubleAsterisk)],
                 precedence,
             ),
-            OpPrecedence::ArrayIndex => self.expression_with_precedence(precedence.next()), // TODO: array indexing
-            OpPrecedence::FunctionCall => {
+            OpPrecedence::Postfix => {
                 // Function calls include attribute/method access.
                 let mut ret = self.expression_with_precedence(precedence.next())?;
+                let old_span = ret.span;
                 const PERIOD_TOKEN: TokenClass = TokenClass::Punctuation(PunctuationToken::Period);
                 const LPAREN_TOKEN: TokenClass = TokenClass::Punctuation(PunctuationToken::LParen);
-                while self.next_token_is_one_of(&[PERIOD_TOKEN, LPAREN_TOKEN]) {
-                    let mut args = vec![];
-                    let mut is_method = false;
-                    let mut span = ret.span;
-                    // Handle `.function_name()`.
-                    if self.next_token_is_one_of(&[PERIOD_TOKEN]) {
-                        is_method = true;
-                        self.next();
-                        args.push(ret);
-                        ret = self.expect(Self::ident)?.map(Expr::Ident);
-                        span = Span::merge(args[0].span, ret.span);
-                    }
-                    // Handle `(arg1, arg2)`.
-                    if self.next_token_is_one_of(&[LPAREN_TOKEN]) {
-                        let args_list = self.expect(|pb| {
-                            Ok(pb
-                                .pair("(", ")", |pb| {
-                                    pb.list(
-                                        &[TokenClass::Punctuation(PunctuationToken::Comma)],
-                                        &[TokenClass::Punctuation(PunctuationToken::RParen)],
-                                        Self::expression,
-                                        "expression",
-                                    )
-                                })?
-                                .inner)
-                        })?;
-                        args.extend(args_list.inner);
-                        span = Span::merge(span, args_list.span);
-                    }
-                    ret = Spanned {
-                        span,
-                        inner: Expr::FnCall {
-                            is_method,
-                            func: Box::new(ret),
-                            args,
-                        },
+                const LBRACK_TOKEN: TokenClass =
+                    TokenClass::Punctuation(PunctuationToken::LBracket);
+                loop {
+                    match self.peek_next().map(|t| t.class) {
+                        // Handle `.function_name()`.
+                        Some(PERIOD_TOKEN) => {
+                            let object = Box::new(ret);
+                            self.next();
+                            let attribute = self.expect(Self::ident)?;
+                            let span = Span::merge(old_span, object.span);
+                            ret = Spanned {
+                                span,
+                                inner: Expr::GetAttr { object, attribute },
+                            };
+                        }
+                        // Handle `(arg1, arg2)`.
+                        Some(LPAREN_TOKEN) => {
+                            let spanned_args = self.expect(|pb| {
+                                Ok(pb
+                                    .pair("(", ")", |pb| {
+                                        pb.list(
+                                            &[TokenClass::Punctuation(PunctuationToken::Comma)],
+                                            &[TokenClass::Punctuation(PunctuationToken::RParen)],
+                                            Self::expression,
+                                            "expression",
+                                        )
+                                    })?
+                                    .inner)
+                            })?;
+                            let span = Span::merge(old_span, spanned_args.span);
+                            let args = spanned_args.inner;
+                            ret = Spanned {
+                                span,
+                                inner: Expr::FnCall {
+                                    func: Box::new(ret),
+                                    args,
+                                },
+                            }
+                        }
+                        // Handle `[idx]`
+                        Some(LBRACK_TOKEN) => {
+                            let object = Box::new(ret);
+                            let spanned_args = self.expect(|pb| {
+                                Ok(pb
+                                    .pair("[", "]", |pb| {
+                                        pb.list(
+                                            &[TokenClass::Punctuation(PunctuationToken::Comma)],
+                                            &[TokenClass::Punctuation(PunctuationToken::RBracket)],
+                                            Self::expression,
+                                            "expression",
+                                        )
+                                    })?
+                                    .inner)
+                            })?;
+                            let span = Span::merge(old_span, spanned_args.span);
+                            let args = spanned_args.inner;
+                            ret = Spanned {
+                                span,
+                                inner: Expr::Index { object, args },
+                            }
+                        }
+                        // On anything else, end the loop.
+                        _ => break,
                     }
                 }
                 Ok(ret)

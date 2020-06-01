@@ -178,6 +178,7 @@ pub enum LangErrorMsg {
         is_method: bool,
         arg_types: Vec<Type>,
     },
+    CannotIndexType(Type),
     CannotAssignTypeToVariable(Type),
     UseOfUninitializedVariable,
     BecomeInHelperFunction,
@@ -284,6 +285,9 @@ impl fmt::Display for LangErrorMsg {
                     &arg_types
                 };
                 write!(f, "Invalid arguments {:?} for {}", arg_slice, name,)?;
+            }
+            Self::CannotIndexType(ty) => {
+                write!(f, "Cannot index {}", ty)?;
             }
             Self::CannotAssignTypeToVariable(ty) => {
                 write!(f, "Cannot assign {} to variable", ty)?;

@@ -10,7 +10,7 @@ use crate::lexer::OperatorToken;
 use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{
-    BecomeInHelperFunction, Expected, FunctionLookupError, InternalError,
+    BecomeInHelperFunction, CannotIndexType, Expected, FunctionLookupError, InternalError,
     ReturnInTransitionFunction, Unimplemented, UseOfUninitializedVariable,
 };
 
@@ -343,37 +343,58 @@ impl UserFunction {
                 args = Args::from(self.build_expression_list_ast(exprs)?);
                 func = functions::cmp::Cmp::with_comparisons(cmps.clone());
             }
+            // Attribute access
+            parser::Expr::GetAttr { object, attribute } => {
+                args = Args::from(vec![self.build_expression_ast(object)?]);
+                func = functions::lookup_method(self[args[0]].return_type(), &attribute.inner)
+                    .ok_or_else(|| FunctionLookupError.with_span(attribute.span))?;
+            }
             // Function call
             parser::Expr::FnCall {
-                is_method,
                 func: func_expr,
                 args: arg_exprs,
             } => {
-                args = Args::from(self.build_expression_list_ast(arg_exprs)?);
+                let mut args_list = self.build_expression_list_ast(arg_exprs)?;
                 func = match &func_expr.inner {
                     parser::Expr::Ident(func_name) => {
-                        if !is_method
-                            && self
-                                .rule_meta()
-                                .helper_function_signatures
-                                .contains_key(func_name)
+                        if self
+                            .rule_meta()
+                            .helper_function_signatures
+                            .contains_key(func_name)
                         {
                             // User-defined function
                             functions::misc::CallUserFn::with_name(func_name.to_owned())
                         } else {
-                            match is_method {
-                                // Built-in function
-                                false => functions::lookup_function(func_name),
-                                // Built-in method
-                                true => {
-                                    functions::lookup_method(self[args[0]].return_type(), func_name)
-                                }
-                            }
-                            .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
+                            // Built-in function
+                            functions::lookup_function(func_name)
+                                .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
                         }
+                    }
+                    parser::Expr::GetAttr {
+                        object,
+                        attribute: method_name,
+                    } => {
+                        args_list.insert(0, self.build_expression_ast(object)?);
+                        // Built-in method
+                        let ty = self[args_list[0]].return_type();
+                        functions::lookup_method(ty, &method_name.inner)
+                            .ok_or_else(|| FunctionLookupError.with_span(method_name.span))?
                     }
                     _ => Err(Expected("function name").with_span(func_expr.span))?,
                 };
+                args = Args::from(args_list);
+            }
+            parser::Expr::Index {
+                object,
+                args: index_args,
+            } => {
+                let mut args_list = vec![self.build_expression_ast(object)?];
+                args_list.extend(self.build_expression_list_ast(index_args)?);
+                args = Args::from(args_list);
+                func = match self[args[0]].return_type() {
+                    Type::Vector(_) => functions::vectors::Access::with_component_idx(None),
+                    ty => Err(CannotIndexType(ty))?,
+                }
             }
         };
 

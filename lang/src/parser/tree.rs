@@ -229,14 +229,26 @@ pub enum Expr {
         cmps: Vec<ComparisonToken>,
     },
 
-    /// Function or method call.
+    /// Attribute/method access.
+    GetAttr {
+        /// The object whose attribute to access.
+        object: Box<Spanned<Expr>>,
+        /// The name of the attribute to access.
+        attribute: Spanned<String>,
+    },
+    /// Function call.
     FnCall {
         /// Function to call.
         func: Box<Spanned<Expr>>,
         /// List of arguments.
         args: Vec<Spanned<Expr>>,
-        // Whether this call was made using arg1.f() syntax or f(arg1) syntax.
-        is_method: bool,
+    },
+    /// Indexing access.
+    Index {
+        /// The object to index.
+        object: Box<Spanned<Expr>>,
+        /// The arguments used to index it.
+        args: Vec<Spanned<Expr>>,
     },
 }
 

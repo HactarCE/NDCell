@@ -73,9 +73,8 @@ fn assert_fn_result(
     expected: Result<ConstValue, (&str, &str)>,
 ) {
     let expected_result = expected.map_err(|(a, b)| (a.to_owned(), b.to_owned()));
-    function.set_args(args);
     let actual_result = function
-        .call()
+        .call(args)
         .map_err(|e| e.with_source(function.source_code()));
     assert_eq!(
         expected_result,

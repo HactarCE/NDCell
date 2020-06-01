@@ -687,7 +687,7 @@ impl Compiler {
         Ok(ret)
     }
     /// Builds a reduction of a vector to an integer using the given operation.
-    /// If the argument is already an integer, returns the integernice
+    /// If the argument is already an integer, returns the integer.
     pub fn build_reduce(
         &mut self,
         op: &str,

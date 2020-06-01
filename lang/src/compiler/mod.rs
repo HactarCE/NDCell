@@ -633,7 +633,7 @@ impl Compiler {
         // If we are shifting a negative number of bits, or more bits than there
         // are in the integer type, that's an IntegerOverflow error.
         let is_overflow = self.builder().build_int_compare(
-            IntPredicate::ULT,
+            IntPredicate::ULT, // Unsigned Less-Than
             shift_amt,
             max_shift,
             "bitshiftOverflowCheck",

@@ -63,10 +63,12 @@ impl NegOrAbs {
             NegOrAbsMode::AbsFunc | NegOrAbsMode::AbsMethod => {
                 // Select between the original argument and the value we just
                 // computed depending on whether it was negative.
-                let selector =
-                    compiler
-                        .builder()
-                        .build_int_compare(IntPredicate::SLT, arg, zero, "absSelect");
+                let selector = compiler.builder().build_int_compare(
+                    IntPredicate::SLT, // Signed Less-Than
+                    arg,
+                    zero,
+                    "absSelect",
+                );
                 compiler.builder().build_select(
                     selector,
                     negated,

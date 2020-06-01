@@ -7,6 +7,7 @@ use crate::errors::*;
 use crate::types::LangInt;
 use crate::{ConstValue, Span, Type};
 
+/// Built-in function that inverts a boolean value.
 #[derive(Debug)]
 pub struct LogicalNot {
     /// Type to invert (should have a length of 1).
@@ -60,11 +61,12 @@ pub enum LogicalBinOpType {
     And,
 }
 
+/// Built-in function that performs a fixed two-input boolean logic operation.
 #[derive(Debug)]
 pub struct LogicalBinaryOp {
     /// Which boolean operation to perform.
     op: LogicalBinOpType,
-    /// Types to compare (should have a length of 2).
+    /// Types to apply the operation to (should have a length of 2).
     arg_types: ArgTypes,
 }
 impl LogicalBinaryOp {

@@ -20,6 +20,7 @@ pub type FuncConstructor =
 /// FuncConstructor.
 pub type FuncResult = LangResult<Box<dyn ast::Function>>;
 
+/// Returns a constructor for the function with the given name.
 pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
     match name {
         "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsFunc)),
@@ -28,6 +29,7 @@ pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
     }
 }
 
+/// Returns a constructor for the method on the given type with the given name.
 pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
     match ty {
         Type::Int => match name {

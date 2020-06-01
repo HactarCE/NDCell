@@ -11,6 +11,7 @@ use LangErrorMsg::VectorTooBig;
 /// Built-in function that constructs a vector from its arguments.
 #[derive(Debug)]
 pub struct BuildVec {
+    /// Argument types (should be empty).
     arg_types: ArgTypes,
 }
 impl BuildVec {

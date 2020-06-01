@@ -6,7 +6,7 @@ use crate::errors::*;
 use crate::functions;
 use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
-use LangErrorMsg::{CannotEvalAsConst, InternalError, InvalidArguments};
+use LangErrorMsg::{CannotAssignToExpr, CannotEvalAsConst, InternalError, InvalidArguments};
 
 /// Expression node in the AST.
 #[derive(Debug)]
@@ -83,6 +83,29 @@ impl Expr {
             Err(InternalError("Expression returned wrong type".into()).with_span(self.span()))
         }
     }
+
+    /// Returns the type that can be assigned to this expression, or an error if
+    /// this expression cannot be assigned to.
+    pub fn assign_type(&self, userfunc: &UserFunction) -> LangResult<Type> {
+        self.func
+            .as_assignable(&self.args.values(userfunc))
+            .ok_or_else(|| CannotAssignToExpr.with_span(self.span()))?
+            .assign_type(self.span)
+    }
+    /// Returns a pointer value to the assignable value resulting from this
+    /// expression.
+    pub fn compile_assign(
+        &self,
+        compiler: &mut Compiler,
+        userfunc: &UserFunction,
+        value: Value,
+    ) -> LangResult<()> {
+        let arg_values: ArgValues = self.args.values(userfunc);
+        self.func
+            .as_assignable(&arg_values)
+            .ok_or_else(|| CannotAssignToExpr.with_span(self.span()))?
+            .compile_assign(compiler, arg_values, value)
+    }
 }
 
 /// "Function" that takes zero or more arguments and returns a value that can be
@@ -145,6 +168,32 @@ pub trait Function: std::fmt::Debug {
     /// invalid types.
     fn const_eval(&self, _args: ArgValues) -> LangResult<Option<ConstValue>> {
         Ok(None)
+    }
+
+    /// Returns this function's implementation for compile_get_ptr(), or None if
+    /// it has none.
+    fn as_assignable<'a>(&self, _args: &'a ArgValues) -> Option<&dyn AssignableFunction> {
+        None
+    }
+}
+
+/// Function that can be assigned to with a "set" statement.
+///
+/// This is used for variable assignment, and only makes sense for a handful of
+/// functions (e.g. variable or vector access).
+pub trait AssignableFunction: Function {
+    /// Returns a pointer value to the assignable value resulting from this
+    /// function.
+    fn compile_assign(
+        &self,
+        compiler: &mut Compiler,
+        _args: ArgValues,
+        value: Value,
+    ) -> LangResult<()>;
+    /// Returns the type of value that should be assigned to this function,
+    /// which by default is the same as its return type.
+    fn assign_type(&self, span: Span) -> LangResult<Type> {
+        self.return_type(span)
     }
 }
 

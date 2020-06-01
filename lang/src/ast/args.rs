@@ -101,4 +101,25 @@ impl<'a> ArgValues<'a> {
     pub fn const_eval_all(&self) -> LangResult<Vec<ConstValue>> {
         (0..self.len()).map(|i| self.const_eval(i)).collect()
     }
+
+    /// Returns whether the given argument can be assigned to.
+    pub fn can_assign(&self, idx: usize) -> bool {
+        self.get_expr(idx)
+            .unwrap()
+            .assign_type(self.userfunc)
+            .is_ok()
+    }
+    /// Compiles an assignment to the assignable value resulting from the
+    /// argument at the given index.
+    pub fn compile_assign(
+        &self,
+        compiler: &mut Compiler,
+        idx: usize,
+        value: Value,
+    ) -> LangResult<()> {
+        match self.arg_asts.0.get(idx) {
+            Some(arg) => self.userfunc[*arg].compile_assign(compiler, self.userfunc, value),
+            None => Err(ARG_OUT_OF_RANGE),
+        }
+    }
 }

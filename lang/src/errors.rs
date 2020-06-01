@@ -179,6 +179,7 @@ pub enum LangErrorMsg {
         arg_types: Vec<Type>,
     },
     CannotIndexType(Type),
+    CannotAssignToExpr,
     CannotAssignTypeToVariable(Type),
     UseOfUninitializedVariable,
     BecomeInHelperFunction,
@@ -288,6 +289,9 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::CannotIndexType(ty) => {
                 write!(f, "Cannot index {}", ty)?;
+            }
+            Self::CannotAssignToExpr => {
+                write!(f, "Cannot assign to this expression")?;
             }
             Self::CannotAssignTypeToVariable(ty) => {
                 write!(f, "Cannot assign {} to variable", ty)?;

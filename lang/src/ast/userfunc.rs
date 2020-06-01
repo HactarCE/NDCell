@@ -217,7 +217,7 @@ impl UserFunction {
                         Err(BecomeInHelperFunction.with_span(span))?
                     }
                 }
-                // Retrurn statement (In a helper function, `return` should be used, not `become`.)
+                // Return statement (In a helper function, `return` should be used, not `become`.)
                 parser::Statement::Return(ret_expr) => {
                     if self.is_transition_function {
                         Err(ReturnInTransitionFunction.with_span(span))?

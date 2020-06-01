@@ -57,8 +57,9 @@ impl fmt::Display for Type {
     }
 }
 impl Type {
-    /// Returns true if this type has a representation in compiled code or false
-    /// otherwise; i.e. whether a variable can contain a value of this type.
+    /// Returns true if this type has a representation in compiled code, or
+    /// false otherwise; i.e. whether a variable can contain a value of this
+    /// type.
     pub fn has_runtime_representation(self) -> bool {
         match self {
             Self::Int | Self::CellState | Self::Vector(_) => true,
@@ -72,6 +73,17 @@ impl Type {
             Self::Int => Some(std::mem::size_of::<LangInt>()),
             Self::CellState => Some(std::mem::size_of::<LangCellState>()),
             Self::Vector(len) => Some(len * Self::Int.size_of().unwrap()),
+        }
+    }
+
+    /// Returns true if this type can bde converted to a boolean, or false
+    /// otherwise.
+    ///
+    /// When updating this, make sure to also update ConstValue::to_bool() and
+    /// Compiler::build_convert_to_bool()
+    pub fn can_convert_to_bool(self) -> bool {
+        match self {
+            Self::Int | Self::CellState | Self::Vector(_) => true,
         }
     }
 
@@ -103,6 +115,18 @@ impl Spanned<Type> {
                 got: self.inner,
             }
             .with_span(self.span)),
+        }
+    }
+    /// Returns a CustomTypeError if this type cannot be converted to a boolean.
+    pub fn check_can_convert_to_bool(self) -> LangResult<()> {
+        if self.inner.can_convert_to_bool() {
+            Ok(())
+        } else {
+            Err(CustomTypeError {
+                expected: "type that can be converted to boolean",
+                got: self.inner,
+            }
+            .with_span(self.span))
         }
     }
 }

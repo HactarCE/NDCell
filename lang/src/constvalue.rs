@@ -58,6 +58,15 @@ impl ConstValue {
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
+    /// Converts this value to a boolean if it can be converted; otherwise
+    /// returns an InternalError.
+    pub fn to_bool(self) -> LangResult<bool> {
+        match self {
+            Self::Int(i) => Ok(i != 0),
+            Self::CellState(i) => Ok(i != 0),
+            Self::Vector(v) => Ok(v.into_iter().any(|i| i != 0)),
+        }
+    }
     /// Converts this value to a vector of the specified length if this is a
     /// ConstValue::Int or ConstValue::Vector; otherwise returns an
     /// InternalError.

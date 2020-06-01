@@ -644,6 +644,25 @@ impl Compiler {
         Ok(())
     }
 
+    /// Builds a cast from any type to a boolean, represented using the normal
+    /// integer type (either 0 or 1).
+    pub fn build_convert_to_bool(&mut self, value: Value) -> LangResult<IntValue<'static>> {
+        match value {
+            Value::Int(_) | Value::CellState(_) | Value::Vector(_) => Ok({
+                // Reduce using bitwise OR if it is a vector.
+                let value = self.build_reduce("or", value.into_basic_value()?)?;
+                // Compare to zero.
+                let zero = value.get_type().const_zero();
+                let is_nonzero =
+                    self.builder()
+                        .build_int_compare(IntPredicate::NE, value, zero, "isTrue");
+                // Cast to integer.
+                let ret_type = self.int_type();
+                self.builder()
+                    .build_int_z_extend(is_nonzero, ret_type, "toBool")
+            }),
+        }
+    }
     /// Builds a cast of an integer to a vector (by using that integer value for
     /// each vector component) or from a vector of one length to another (by
     /// trimming excess values or by extending with zeros).

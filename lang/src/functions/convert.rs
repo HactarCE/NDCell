@@ -120,38 +120,21 @@ impl Function for ToBool {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         match self.arg_types.as_slice() {
-            [ty] => match ty.inner {
-                Type::Int | Type::CellState | Type::Vector(_) => Ok(Type::Int),
-            },
+            [ty] => {
+                ty.check_can_convert_to_bool()?;
+                Ok(Type::Int)
+            }
             _ => Err(self.invalid_args_err(span)),
         }
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let arg = args.compile(compiler, 0)?;
-        Ok(Value::Int(match arg {
-            Value::Int(_) | Value::CellState(_) | Value::Vector(_) => {
-                // Reduce using bitwise OR if it is a vector.
-                let value = compiler.build_reduce("or", arg.into_basic_value()?)?;
-                // Compare to zero.
-                let zero = value.get_type().const_zero();
-                let is_nonzero =
-                    compiler
-                        .builder()
-                        .build_int_compare(IntPredicate::NE, value, zero, "isTrue");
-                // Cast to integer.
-                let ret_type = compiler.int_type();
-                compiler
-                    .builder()
-                    .build_int_z_extend(is_nonzero, ret_type, "toBool")
-            }
-        }))
+        compiler.build_convert_to_bool(arg).map(|i| Value::Int(i))
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        Ok(Some(ConstValue::Int(match args.const_eval(0)? {
-            ConstValue::Int(i) => i != 0,
-            ConstValue::CellState(i) => i != 0,
-            ConstValue::Vector(v) => v.into_iter().any(|i| i != 0),
-        } as LangInt)))
+        Ok(Some(ConstValue::Int(
+            args.const_eval(0)?.to_bool()? as LangInt
+        )))
     }
 }

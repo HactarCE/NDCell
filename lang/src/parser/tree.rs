@@ -207,6 +207,8 @@ pub enum Expr {
         func: Box<Spanned<Expr>>,
         /// List of arguments.
         args: Vec<Spanned<Expr>>,
+        // Whether this call was made using arg1.f() syntax or f(arg1) syntax.
+        is_method: bool,
     },
 }
 

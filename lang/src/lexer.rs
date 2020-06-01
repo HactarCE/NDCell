@@ -307,7 +307,6 @@ enum_with_str_repr! {
         // Boolean operators and boolean tests are in KeywordToken.
 
         // Miscellaneous operators
-        Dot = ".",
         DotDot = "..",
         Tag = "#",
     }
@@ -322,6 +321,7 @@ enum_with_str_repr! {
         RBrace = "}",
         Comma = ",",
         Semicolon = ";",
+        Period = ".",
     }
 
     /// Comparison.

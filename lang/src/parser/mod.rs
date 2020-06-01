@@ -46,7 +46,6 @@ enum OpPrecedence {
     Exp,
     ArrayIndex,
     FunctionCall,
-    Dot,
     Atom,
 }
 impl OpPrecedence {
@@ -76,8 +75,7 @@ impl OpPrecedence {
             Self::UnaryPrefix => Self::Exp,
             Self::Exp => Self::ArrayIndex,
             Self::ArrayIndex => Self::FunctionCall,
-            Self::FunctionCall => Self::Dot,
-            Self::Dot => Self::Atom,
+            Self::FunctionCall => Self::Atom,
             Self::Atom => panic!("Tried to get operator precedence level beyond {:?}", self),
         }
     }
@@ -406,25 +404,45 @@ impl<'a> ParseBuilder<'a> {
             OpPrecedence::Comparison => self.comparison_op(precedence),
             // TODO add remaining precedence levels
             OpPrecedence::FunctionCall => {
+                // Function calls include attribute/method access.
                 let mut ret = self.expression_with_precedence(precedence.next())?;
-                while self.peek_next().map(|t| t.class)
-                    == Some(TokenClass::Punctuation(PunctuationToken::LParen))
-                {
-                    let arg_list = self.expect_spanned(|pb| {
-                        pb.pair("(", ")", |pb| {
-                            pb.list(
-                                &[TokenClass::Punctuation(PunctuationToken::Comma)],
-                                &[TokenClass::Punctuation(PunctuationToken::RParen)],
-                                Self::expression,
-                                "expression",
-                            )
-                        })
-                    })?;
+                const PERIOD_TOKEN: TokenClass = TokenClass::Punctuation(PunctuationToken::Period);
+                const LPAREN_TOKEN: TokenClass = TokenClass::Punctuation(PunctuationToken::LParen);
+                while self.next_token_is_one_of(&[PERIOD_TOKEN, LPAREN_TOKEN]) {
+                    let mut args = vec![];
+                    let mut is_method = false;
+                    let mut span = ret.span;
+                    // Handle `.function_name()`.
+                    if self.next_token_is_one_of(&[PERIOD_TOKEN]) {
+                        is_method = true;
+                        self.next();
+                        args.push(ret);
+                        ret = self.expect(Self::ident)?.map(Expr::Ident);
+                        span = Span::merge(args[0].span, ret.span);
+                    }
+                    // Handle `(arg1, arg2)`.
+                    if self.next_token_is_one_of(&[LPAREN_TOKEN]) {
+                        let args_list = self.expect(|pb| {
+                            Ok(pb
+                                .pair("(", ")", |pb| {
+                                    pb.list(
+                                        &[TokenClass::Punctuation(PunctuationToken::Comma)],
+                                        &[TokenClass::Punctuation(PunctuationToken::RParen)],
+                                        Self::expression,
+                                        "expression",
+                                    )
+                                })?
+                                .inner)
+                        })?;
+                        args.extend(args_list.inner);
+                        span = Span::merge(span, args_list.span);
+                    }
                     ret = Spanned {
-                        span: Span::merge(&ret, &arg_list),
+                        span,
                         inner: Expr::FnCall {
+                            is_method,
                             func: Box::new(ret),
-                            args: arg_list.inner,
+                            args,
                         },
                     }
                 }

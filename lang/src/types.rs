@@ -106,10 +106,11 @@ impl Spanned<Type> {
             Err(self.inner.type_error(expected).with_span(self.span))
         }
     }
-    /// Returns a TypeError if this type is not a vector.
-    pub fn check_vec(self) -> LangResult<()> {
+    /// Returns a TypeError if this type is not a vector; otherwise returns the
+    /// length of the vector.
+    pub fn check_vec(self) -> LangResult<usize> {
         match self.inner {
-            Type::Vector(_) => Ok(()),
+            Type::Vector(len) => Ok(len),
             _ => Err(CustomTypeError {
                 expected: "vector",
                 got: self.inner,

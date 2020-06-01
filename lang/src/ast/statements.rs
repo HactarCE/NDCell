@@ -21,7 +21,7 @@ pub struct Assert {
     /// Span of this statement in the original source code.
     span: Span,
     /// Expression to test.
-    expr: ExprRef,
+    assert_expr: ExprRef,
     /// Error to throw if the expression is falsey.
     error: ErrorPointRef,
 }
@@ -33,14 +33,17 @@ impl Assert {
     pub fn try_new(
         span: Span,
         userfunc: &mut UserFunction,
-        expr: ExprRef,
+        assert_expr: ExprRef,
         msg: Option<String>,
     ) -> LangResult<Self> {
-        let expr_span = userfunc[expr].span();
-        let expr_type = userfunc[expr].return_type();
-        expr_type.expect_eq(Type::Int, expr_span)?;
-        let error = userfunc.add_error_point(AssertionFailed(msg).with_span(expr_span));
-        Ok(Self { span, expr, error })
+        userfunc[assert_expr].spanned_type().check_eq(Type::Int)?;
+        let error =
+            userfunc.add_error_point(AssertionFailed(msg).with_span(userfunc[assert_expr].span()));
+        Ok(Self {
+            span,
+            assert_expr,
+            error,
+        })
     }
 }
 impl Statement for Assert {
@@ -48,7 +51,9 @@ impl Statement for Assert {
         self.span
     }
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
-        let assert_value = userfunc.compile_expr(compiler, self.expr)?.as_int()?;
+        let assert_value = userfunc
+            .compile_expr(compiler, self.assert_expr)?
+            .as_int()?;
         compiler.build_conditional(assert_value, |_| Ok(()), |c| Ok(self.error.compile(c)))?;
         Ok(())
     }
@@ -105,16 +110,15 @@ impl SetVar {
         var_name: String,
         value_expr: ExprRef,
     ) -> LangResult<Self> {
-        let value_expr_span = userfunc[value_expr].span();
         // Check that the result of the expression can be stored in a variable.
         let expr_type = userfunc[value_expr].return_type();
         if !expr_type.has_runtime_representation() {
-            Err(CannotAssignTypeToVariable(expr_type).with_span(value_expr_span))?;
+            Err(CannotAssignTypeToVariable(expr_type).with_span(userfunc[value_expr].span()))?;
         }
         // Check that the type of the result of the expression matches the type
         // of the variable.
         let expected = userfunc.get_or_create_var(&var_name, expr_type);
-        expr_type.expect_eq(expected, value_expr_span)?;
+        userfunc[value_expr].spanned_type().check_eq(expected)?;
         Ok(Self {
             span,
             var_name,
@@ -165,9 +169,7 @@ impl If {
         if_true: StatementBlock,
         if_false: StatementBlock,
     ) -> LangResult<Self> {
-        let cond_expr_type = userfunc[cond_expr].return_type();
-        let cond_expr_span = userfunc[cond_expr].span();
-        cond_expr_type.expect_eq(Type::Int, cond_expr_span)?;
+        userfunc[cond_expr].spanned_type().check_eq(Type::Int)?;
         Ok(Self {
             span,
             cond_expr,
@@ -208,10 +210,9 @@ impl Return {
     /// This method checks the type of the expression to return.
     pub fn try_new(span: Span, userfunc: &mut UserFunction, ret_expr: ExprRef) -> LangResult<Self> {
         // Check that the expression matches the expected return type.
-        let ret_expr_type = userfunc[ret_expr].return_type();
-        let ret_expr_span = userfunc[ret_expr].span();
-        let expected = userfunc.return_type();
-        ret_expr_type.expect_eq(expected, ret_expr_span)?;
+        userfunc[ret_expr]
+            .spanned_type()
+            .check_eq(userfunc.return_type())?;
         Ok(Self { span, ret_expr })
     }
 }

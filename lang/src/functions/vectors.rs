@@ -9,7 +9,7 @@ use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::types::{LangInt, MAX_VECTOR_LEN};
 use crate::{ConstValue, Span, Type};
-use LangErrorMsg::{IndexOutOfBounds, VectorTooBig};
+use LangErrorMsg::{IndexOutOfBounds, IntegerOverflow, VectorTooBig};
 
 /// Built-in function that constructs a vector from its arguments.
 #[derive(Debug)]
@@ -223,6 +223,233 @@ impl Function for Access {
                 .get(idx)
                 .copied()
                 .unwrap_or(0),
+        )))
+    }
+}
+
+/// Whether to take a sum or product of a vector.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum SumOrProduct {
+    /// Add up all the components.
+    Sum,
+    /// Multply all the components.
+    Product,
+}
+
+#[derive(Debug)]
+pub struct Reduce {
+    /// Vector to reduce (should be vec![Type::Vector(_)]).
+    arg_types: ArgTypes,
+    /// How to reduce the vector.
+    mode: SumOrProduct,
+    /// Error returned if overflow occurs.
+    overflow_error: ErrorPointRef,
+}
+impl Reduce {
+    /// Returns a constructor for a new Reduce instance that computes the sum of
+    /// a vector's components.
+    pub fn sum() -> FuncConstructor {
+        Self::with_mode(SumOrProduct::Sum)
+    }
+    /// Returns a constructor for a new Reduce instance that computes the
+    /// product of a vector's components.
+    pub fn product() -> FuncConstructor {
+        Self::with_mode(SumOrProduct::Product)
+    }
+    /// Returns a constructor for a new Reduce instance with the given mode.
+    fn with_mode(mode: SumOrProduct) -> FuncConstructor {
+        Box::new(move |userfunc, span, arg_types| {
+            let overflow_error = userfunc.add_error_point(IntegerOverflow.with_span(span));
+            Ok(Box::new(Self {
+                arg_types,
+                mode,
+                overflow_error,
+            }))
+        })
+    }
+}
+impl Function for Reduce {
+    fn name(&self) -> String {
+        format!(
+            "vector.{}",
+            match self.mode {
+                SumOrProduct::Sum => "sum",
+                SumOrProduct::Product => "product",
+            }
+        )
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Property
+    }
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        if self.arg_types.len() != 1 {
+            Err(self.invalid_args_err(span))?;
+        }
+        self.arg_types[0].check_vec()?;
+        Ok(Type::Int)
+    }
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        // Extract all the elements.
+        let int_type = compiler.int_type();
+        let arg = args.compile(compiler, 0)?.as_vector()?;
+        let components: Vec<_> = (0..arg.get_type().get_size())
+            .map(|i| {
+                compiler
+                    .builder()
+                    .build_extract_element(arg, int_type.const_int(i as u64, false), "")
+                    .into_int_value()
+            })
+            .collect();
+        // Compute the sum/product.
+        let mut components = components.into_iter();
+        let initial = components.next().unwrap();
+        let name = match self.mode {
+            SumOrProduct::Sum => "sadd",     // Signed Add
+            SumOrProduct::Product => "smul", // Signed Multiply
+        };
+        let result = components.try_fold(initial, |lhs, rhs| {
+            compiler
+                .build_checked_int_arithmetic(lhs, rhs, name, |c| {
+                    Ok(self.overflow_error.compile(c))
+                })
+                .map(|i| i.into_int_value())
+        })?;
+        Ok(Value::Int(result))
+    }
+    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+        let mut components = args.const_eval(0)?.as_vector()?.into_iter();
+        let initial = components.next().unwrap();
+        let fold_fn = match self.mode {
+            SumOrProduct::Sum => LangInt::checked_add,
+            SumOrProduct::Product => LangInt::checked_mul,
+        };
+        let result = components
+            .try_fold(initial, fold_fn)
+            .ok_or(self.overflow_error.error())?;
+        Ok(Some(ConstValue::Int(result)))
+    }
+}
+
+enum_with_str_repr! {
+    /// Whether to get the minimum or maximum component of a vector.
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    enum MinMaxMode {
+        /// Get the maximum component. ("smax")
+        Max = "max",
+        /// Get the minimum component. ("smin")
+        Min = "min",
+    }
+}
+
+#[derive(Debug)]
+pub struct MinMax {
+    /// Vector to get the minimum or maximum of (should be
+    /// vec![Type::Vector(_)]).
+    arg_types: ArgTypes,
+    /// Whether to take the minimum or the maximum of the vector.
+    mode: MinMaxMode,
+}
+impl MinMax {
+    /// Returns a constructor for a new MinMax instance that finds the maximum
+    /// of a vector's components.
+    pub fn max() -> FuncConstructor {
+        Self::with_mode(MinMaxMode::Max)
+    }
+    /// Returns a constructor for a new MinMax instance that finds the minimum
+    /// of a vector's components.
+    pub fn min() -> FuncConstructor {
+        Self::with_mode(MinMaxMode::Min)
+    }
+    /// Returns a constructor for a new MinMax instance with the given mode.
+    fn with_mode(mode: MinMaxMode) -> FuncConstructor {
+        Box::new(move |_userfunc, _span, arg_types| Ok(Box::new(Self { arg_types, mode })))
+    }
+}
+impl Function for MinMax {
+    fn name(&self) -> String {
+        format!(
+            "{}.{}",
+            self.arg_types[0].inner,
+            match self.mode {
+                MinMaxMode::Max => "max",
+                MinMaxMode::Min => "min",
+            }
+        )
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Property
+    }
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        if self.arg_types.len() != 1 {
+            Err(self.invalid_args_err(span))?;
+        }
+        self.arg_types[0].check_vec()?;
+        Ok(Type::Int)
+    }
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        let arg = args.compile(compiler, 0)?.into_basic_value()?;
+        compiler
+            .build_reduce(&self.mode.to_string(), arg)
+            .map(Value::Int)
+    }
+    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+        let iter = args.const_eval(0)?.as_vector()?.into_iter();
+        Ok(Some(ConstValue::Int(match self.mode {
+            MinMaxMode::Max => iter.max().unwrap(),
+            MinMaxMode::Min => iter.min().unwrap(),
+        })))
+    }
+}
+
+#[derive(Debug)]
+pub struct GetLen {
+    /// Vector to return the length of (should be vec![Type::Vector(_)]).
+    arg_types: ArgTypes,
+}
+impl GetLen {
+    /// Constructs a new GetLen instance.
+    pub fn construct(_userfunc: &mut UserFunction, _span: Span, arg_types: ArgTypes) -> FuncResult {
+        Ok(Box::new(Self { arg_types }))
+    }
+}
+impl Function for GetLen {
+    fn name(&self) -> String {
+        "vector.len".to_owned()
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Property
+    }
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        if self.arg_types.len() != 1 {
+            Err(self.invalid_args_err(span))?;
+        }
+        self.arg_types[0].check_vec()?;
+        Ok(Type::Int)
+    }
+
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        let ret = args
+            .compile(compiler, 0)?
+            .as_vector()?
+            .get_type()
+            .get_size();
+        Ok(Value::Int(compiler.int_type().const_int(ret as u64, false)))
+    }
+
+    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+        Ok(Some(ConstValue::Int(
+            args.const_eval(0)?.as_vector()?.len() as LangInt,
         )))
     }
 }

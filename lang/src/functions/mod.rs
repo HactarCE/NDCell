@@ -38,6 +38,11 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
         },
         Type::CellState => todo!("methods on cell states"),
         Type::Vector(_) => match name {
+            // Reductions
+            "max" => Some(vectors::MinMax::max()),
+            "min" => Some(vectors::MinMax::min()),
+            "sum" => Some(vectors::Reduce::sum()),
+            "product" => Some(vectors::Reduce::product()),
             // Component access
             "x" => Some(vectors::Access::with_component_idx(Some(0))),
             "y" => Some(vectors::Access::with_component_idx(Some(1))),
@@ -45,6 +50,8 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "w" => Some(vectors::Access::with_component_idx(Some(3))),
             "u" => Some(vectors::Access::with_component_idx(Some(4))),
             "v" => Some(vectors::Access::with_component_idx(Some(5))),
+            // Miscellaneous
+            "len" => Some(Box::new(vectors::GetLen::construct)),
             _ => None,
         },
     }

@@ -153,12 +153,12 @@ fn test_vector_ops() {
             assert [-1, 2] != [-1, 2, 1]
 
             // Test product and sum.
-            set v = [1, 10, 100]
-            assert v.product == 3 * 12 * 102
-            assert v.sum == 3 + 12 + 102
+            set v = [-4, 5, 95]
+            assert v.product == -4 * 5 * 95
+            assert v.sum == -4 + 5 + 95
 
             // Test arithmetic operations between vector and integer
-            set v += [2, 2, 2]
+            set v += 7
             assert v == [3, 12, 102]
             set v /= 3
             assert v == [1, 4, 34]

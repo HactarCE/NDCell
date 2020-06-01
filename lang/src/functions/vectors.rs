@@ -13,17 +13,17 @@ use LangErrorMsg::{IndexOutOfBounds, VectorTooBig};
 
 /// Built-in function that constructs a vector from its arguments.
 #[derive(Debug)]
-pub struct BuildVec {
+pub struct Build {
     /// Argument types (should be empty).
     arg_types: ArgTypes,
 }
-impl BuildVec {
-    /// Constructs a new BuildVec instance.
+impl Build {
+    /// Constructs a new Build instance.
     pub fn construct(_userfunc: &mut UserFunction, _span: Span, arg_types: ArgTypes) -> FuncResult {
         Ok(Box::new(Self { arg_types }))
     }
 }
-impl Function for BuildVec {
+impl Function for Build {
     fn name(&self) -> String {
         "vector literal".to_owned()
     }
@@ -100,7 +100,7 @@ impl Function for BuildVec {
 
 /// Built-in function that returns a single component of a vector.
 #[derive(Debug)]
-pub struct VecAccess {
+pub struct Access {
     /// Vector from which to extract a component (should be
     /// vec![Type::Vector(_)]).
     arg_types: ArgTypes,
@@ -110,12 +110,12 @@ pub struct VecAccess {
     ///
     out_of_bounds_error: ErrorPointRef,
 }
-impl VecAccess {
-    /// Returns a constructor for a new VecAccess instance that returns the
+impl Access {
+    /// Returns a constructor for a new Access instance that returns the
     /// component at the given index.
     pub fn with_component_idx(component_idx: Option<LangInt>) -> FuncConstructor {
         Box::new(move |userfunc, span, arg_types| {
-            let arg_span = arg_types.get(0).map(|sp| sp.span).unwrap_or(span);
+            let arg_span = arg_types.get(1).map(|sp| sp.span).unwrap_or(span);
             let out_of_bounds_error =
                 userfunc.add_error_point(IndexOutOfBounds.with_span(arg_span));
             Ok(Box::new(Self {
@@ -126,7 +126,7 @@ impl VecAccess {
         })
     }
 }
-impl Function for VecAccess {
+impl Function for Access {
     fn name(&self) -> String {
         "vector access".to_owned()
     }

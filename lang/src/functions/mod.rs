@@ -38,12 +38,13 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
         },
         Type::CellState => todo!("methods on cell states"),
         Type::Vector(_) => match name {
-            "x" => Some(vectors::VecAccess::with_component_idx(Some(0))),
-            "y" => Some(vectors::VecAccess::with_component_idx(Some(1))),
-            "z" => Some(vectors::VecAccess::with_component_idx(Some(2))),
-            "w" => Some(vectors::VecAccess::with_component_idx(Some(3))),
-            "u" => Some(vectors::VecAccess::with_component_idx(Some(4))),
-            "v" => Some(vectors::VecAccess::with_component_idx(Some(5))),
+            // Component access
+            "x" => Some(vectors::Access::with_component_idx(Some(0))),
+            "y" => Some(vectors::Access::with_component_idx(Some(1))),
+            "z" => Some(vectors::Access::with_component_idx(Some(2))),
+            "w" => Some(vectors::Access::with_component_idx(Some(3))),
+            "u" => Some(vectors::Access::with_component_idx(Some(4))),
+            "v" => Some(vectors::Access::with_component_idx(Some(5))),
             _ => None,
         },
     }

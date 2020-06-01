@@ -17,7 +17,7 @@ use LangErrorMsg::CellStateOutOfRange;
 /// Built-in function that returns the cell state with the given ID.
 #[derive(Debug)]
 pub struct IntToCellState {
-    /// Types of arguments passed to this function.
+    /// Type to convert from (should be vec![Type::Int]).
     arg_types: ArgTypes,
     /// Rule metadata (used to determine maximum cell state ID).
     rule_meta: Rc<RuleMeta>,
@@ -38,6 +38,9 @@ impl Function for IntToCellState {
     fn name(&self) -> String {
         format!("unary {:?} operator", OperatorToken::Tag.to_string())
     }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Operator
+    }
     fn arg_types(&self) -> ArgTypes {
         self.arg_types.clone()
     }
@@ -47,9 +50,6 @@ impl Function for IntToCellState {
         }
         self.arg_types[0].check_eq(Type::Int)?;
         Ok(Type::CellState)
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Operator
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
@@ -92,5 +92,66 @@ impl Function for IntToCellState {
         } else {
             self.out_of_range_error.err()
         }
+    }
+}
+
+/// Built-in function that converts a value to a boolean.
+#[derive(Debug)]
+pub struct ToBool {
+    /// Type to convert from (should have a length of 1).
+    arg_types: ArgTypes,
+}
+impl ToBool {
+    /// Constructs a new ToBool instance.
+    pub fn construct(_userfunc: &mut UserFunction, _span: Span, arg_types: ArgTypes) -> FuncResult {
+        Ok(Box::new(Self { arg_types }))
+    }
+}
+impl Function for ToBool {
+    fn name(&self) -> String {
+        "bool".to_owned()
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Function
+    }
+
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        match self.arg_types.as_slice() {
+            [ty] => match ty.inner {
+                Type::Int | Type::CellState | Type::Vector(_) => Ok(Type::Int),
+            },
+            _ => Err(self.invalid_args_err(span)),
+        }
+    }
+
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        let arg = args.compile(compiler, 0)?;
+        Ok(Value::Int(match arg {
+            Value::Int(_) | Value::CellState(_) | Value::Vector(_) => {
+                // Reduce using bitwise OR if it is a vector.
+                let value = compiler.build_reduce("or", arg.into_basic_value()?)?;
+                // Compare to zero.
+                let zero = value.get_type().const_zero();
+                let is_nonzero =
+                    compiler
+                        .builder()
+                        .build_int_compare(IntPredicate::NE, value, zero, "isTrue");
+                // Cast to integer.
+                let ret_type = compiler.int_type();
+                compiler
+                    .builder()
+                    .build_int_z_extend(is_nonzero, ret_type, "toBool")
+            }
+        }))
+    }
+    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+        Ok(Some(ConstValue::Int(match args.const_eval(0)? {
+            ConstValue::Int(i) => i != 0,
+            ConstValue::CellState(i) => i != 0,
+            ConstValue::Vector(v) => v.into_iter().any(|i| i != 0),
+        } as LangInt)))
     }
 }

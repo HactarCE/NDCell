@@ -22,6 +22,7 @@ pub type FuncResult = LangResult<Box<dyn ast::Function>>;
 pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
     match name {
         "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsFunc)),
+        "bool" => Some(Box::new(convert::ToBool::construct)),
         _ => None,
     }
 }

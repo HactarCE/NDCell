@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::ops::Index;
 use std::rc::Rc;
 
-use super::{statements, Args, Expr, Function, RuleMeta, Statement, StatementBlock};
+use super::{statements, Args, Expr, RuleMeta, Statement, StatementBlock};
 use crate::compiler::{CompiledFunction, Compiler, Value};
 use crate::errors::*;
 use crate::functions;
@@ -249,23 +249,23 @@ impl UserFunction {
     ) -> LangResult<ExprRef> {
         let span = parser_expr.span;
         let args: Args;
-        let function: Box<dyn Function>;
+        let func: functions::FuncConstructor;
 
         match &parser_expr.inner {
             // Integer literal
             parser::Expr::Int(i) => {
                 args = Args::none();
-                function = Box::new(functions::literals::Int(*i));
+                func = functions::literals::Int::with_value(*i);
             }
             // Identifier (variable)
             parser::Expr::Ident(s) => {
                 args = Args::none();
-                function = Box::new(functions::misc::GetVar::try_new(self, span, s.to_owned())?);
+                func = Box::new(functions::misc::GetVar::with_name(s.to_owned()));
             }
             // String literal
             parser::Expr::String(_) => {
                 args = Args::none();
-                function = Err(Unimplemented)?;
+                func = Err(Unimplemented)?;
             }
             // Vector literal
             parser::Expr::Vector(exprs) => {
@@ -275,11 +275,7 @@ impl UserFunction {
                         .map(|expr| self.build_expression_ast(expr))
                         .collect::<LangResult<Vec<_>>>()?,
                 );
-                function = Box::new(functions::vectors::BuildVec::try_new(
-                    self,
-                    span,
-                    args.len(),
-                )?);
+                func = Box::new(functions::vectors::BuildVec::construct);
             }
             // Parenthetical group
             parser::Expr::ParenExpr(expr) => return self.build_expression_ast(expr),
@@ -287,13 +283,15 @@ impl UserFunction {
             parser::Expr::UnaryOp { op, operand } => match op {
                 // Negation
                 OperatorToken::Minus => {
-                    args = Args::from(vec![self.build_expression_ast(operand)?]);
-                    function = Box::new(functions::math::Negate::try_new(self, span)?);
+                    let arg = self.build_expression_ast(operand)?;
+                    args = Args::from(vec![arg]);
+                    let mode = functions::math::NegOrAbsMode::Negate;
+                    func = functions::math::NegOrAbs::with_mode(mode);
                 }
                 // Get cell state from integer ID
                 OperatorToken::Tag => {
                     args = Args::from(vec![self.build_expression_ast(operand)?]);
-                    function = Box::new(functions::convert::IntToCellState::try_new(self, span)?);
+                    func = Box::new(functions::convert::IntToCellState::construct);
                 }
                 _ => return Err(InternalError("Invalid unary operator".into()).with_span(span)),
             },
@@ -314,13 +312,8 @@ impl UserFunction {
                     let lhs = self.build_expression_ast(lhs)?;
                     let rhs = self.build_expression_ast(rhs)?;
                     args = Args::from(vec![lhs, rhs]);
-                    let arg_types = (self[lhs].return_type(), self[rhs].return_type());
-                    function = Box::new(functions::math::BinaryOp::try_new(
-                        self, span, *op, arg_types,
-                    )?);
+                    func = functions::math::BinaryOp::with_op(*op);
                 }
-                // Method call
-                OperatorToken::Dot => todo!("Method call"),
                 // Range
                 OperatorToken::DotDot => todo!("Range"),
                 _ => return Err(InternalError("Invalid binary operator".into()).with_span(span)),
@@ -328,31 +321,35 @@ impl UserFunction {
             // Comparison
             parser::Expr::Cmp { exprs, cmps } => {
                 args = Args::from(self.build_expression_list_ast(exprs)?);
-                function = Box::new(functions::cmp::Cmp::try_new(self, &args, cmps.clone())?);
+                func = functions::cmp::Cmp::with_comparisons(cmps.clone());
             }
             // Function call
             parser::Expr::FnCall {
+                is_method,
                 func: func_expr,
                 args: arg_exprs,
             } => {
                 args = Args::from(self.build_expression_list_ast(arg_exprs)?);
-                function = match &func_expr.inner {
+                func = match &func_expr.inner {
                     parser::Expr::Ident(func_name) => {
-                        if self
-                            .rule_meta()
-                            .helper_function_signatures
-                            .contains_key(func_name)
+                        if !is_method
+                            && self
+                                .rule_meta()
+                                .helper_function_signatures
+                                .contains_key(func_name)
                         {
                             // User-defined function
-                            Box::new(functions::misc::CallUserFn::try_new(
-                                self,
-                                span,
-                                func_name.to_owned(),
-                            )?)
+                            functions::misc::CallUserFn::with_name(func_name.to_owned())
                         } else {
-                            // Built-in function
-                            functions::lookup_function_name(func_name)
-                                .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
+                            match is_method {
+                                // Built-in function
+                                false => functions::lookup_function(func_name),
+                                // Built-in method
+                                true => {
+                                    functions::lookup_method(self[args[0]].return_type(), func_name)
+                                }
+                            }
+                            .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
                         }
                     }
                     _ => Err(Expected("function name").with_span(func_expr.span))?,
@@ -360,7 +357,7 @@ impl UserFunction {
             }
         };
 
-        let expr = Expr::try_new(span, self, function, args)?;
+        let expr = Expr::try_new(self, span, args, func)?;
         Ok(self.add_expr(expr))
     }
 

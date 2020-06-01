@@ -7,17 +7,31 @@ pub mod math;
 pub mod misc;
 pub mod vectors;
 
-pub fn lookup_function_name(name: &str) -> Option<Box<dyn crate::ast::Function>> {
+use crate::ast;
+use crate::errors::*;
+use crate::{Span, Type};
+
+/// FnOnce that constructs a Box<dyn ast::Function>, given some standard
+/// arguments.
+pub type FuncConstructor =
+    Box<dyn FnOnce(&mut ast::UserFunction, Span, ast::ArgTypes) -> FuncResult>;
+/// Shorthand for LangResult<Box<dyn ast::Function>>, which is returned from a
+/// FuncConstructor.
+pub type FuncResult = LangResult<Box<dyn ast::Function>>;
+
+pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
     match name {
-        "abs" => todo!("absolute value function"),
+        "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsFunc)),
         _ => None,
     }
 }
 
-pub fn lookup_method_name(ty: crate::Type, _name: &str) -> Option<Box<dyn crate::ast::Function>> {
-    use crate::Type;
+pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
     match ty {
-        Type::Int => todo!("methods on integers"),
+        Type::Int => match name {
+            "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsMethod)),
+            _ => None,
+        },
         Type::CellState => todo!("methods on cell states"),
         Type::Vector(_) => todo!("methods on vectors"),
     }

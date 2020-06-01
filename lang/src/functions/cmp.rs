@@ -3,7 +3,8 @@
 use inkwell::values::IntValue;
 use std::fmt;
 
-use crate::ast::{ArgValues, Args, FnSignature, Function, FunctionKind, UserFunction};
+use super::FuncConstructor;
+use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::lexer::ComparisonToken;
@@ -14,51 +15,44 @@ use LangErrorMsg::CmpError;
 #[derive(Debug)]
 pub struct Cmp {
     /// Types to compare (at least two).
-    types: Vec<Type>,
+    args: ArgTypes,
     /// Individual 2-input comparison functions (one less than the number of
     /// types).
     comparators: Vec<Comparator>,
 }
 impl Cmp {
-    /// Constructs a new Cmp instance that compares each adjacent pair of the
-    /// given arguments using the corresponding one of the given comparisons.
-    ///
-    /// This method checks the types of the arguments and returns an error if
-    /// they cannot be compared using the given function.
-    pub fn try_new(
-        userfunc: &mut UserFunction,
-        args: &Args,
-        comparisons: Vec<ComparisonToken>,
-    ) -> LangResult<Self> {
-        let types: Vec<Spanned<Type>> = args
-            .iter(userfunc)
-            .map(|e| Spanned {
-                span: e.span(),
-                inner: e.return_type(),
-            })
-            .collect();
-        let comparisons_iter = comparisons.iter();
-        let type_pair_iter = types.iter().zip(types.iter().skip(1));
-        let comparators = comparisons_iter
-            .zip(type_pair_iter)
-            .map(|(&cmp, (&lhs, &rhs))| Comparator::try_new(lhs, cmp, rhs))
-            .collect::<LangResult<Vec<_>>>()?;
-        Ok(Self {
-            types: types.iter().map(|s| s.inner).collect(),
-            comparators,
+    /// Returns a constructor for a new Cmp instance that compares each adjacent
+    /// pair of the given arguments using the corresponding one of the given
+    /// comparisons.
+    pub fn with_comparisons(comparisons: Vec<ComparisonToken>) -> FuncConstructor {
+        Box::new(move |_userfunc, _span, args| {
+            let comparisons_iter = comparisons.iter();
+            // Iterate over adjacent pairs.
+            let type_pair_iter = args.windows(2);
+            let comparators = comparisons_iter
+                .zip(type_pair_iter)
+                .map(|(&cmp, types)| Comparator::try_new(types[0], cmp, types[1]))
+                .collect::<LangResult<Vec<_>>>()?;
+            Ok(Box::new(Self { args, comparators }))
         })
     }
 }
 impl Function for Cmp {
     fn name(&self) -> String {
-        format!("{:?} to {:?} comparison", self.types, self.comparators)
+        format!("{:?} to {:?} comparison", self.args, self.comparators)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
-    fn signature(&self) -> FnSignature {
-        FnSignature::new(self.types.clone(), Type::Int)
+    fn arg_types(&self) -> ArgTypes {
+        self.args.clone()
     }
+    fn return_type(&self, _span: Span) -> LangResult<Type> {
+        // We checked argument types in the constructor, so we don't need to
+        // worry about doing that here.
+        Ok(Type::Int)
+    }
+
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let old_bb = compiler.builder().get_insert_block().unwrap();
 
@@ -161,6 +155,15 @@ impl Comparator {
         match (lhs, rhs) {
             (Type::Int, Type::Int) => Ok(Self::int_cmp(ty, cmp, true)),
             (Type::CellState, Type::CellState) if eq_only => Ok(Self::int_cmp(ty, cmp, false)),
+            (Type::Vector(len), Type::Int) | (Type::Int, Type::Vector(len)) => {
+                // Coerce the integer to a vector of the same length.
+                Ok(Self::vec_cmp(len, cmp))
+            }
+            (Type::Vector(len1), Type::Vector(len2)) => {
+                // Extend the shorter vector to the length of the longer one.
+                let len = std::cmp::max(len1, len2);
+                Ok(Self::vec_cmp(len, cmp))
+            }
             _ => Err(CmpError { lhs, cmp, rhs }.with_span(span)),
         }
     }
@@ -186,6 +189,45 @@ impl Comparator {
                 }),
                 _ => panic!("Invalid type for int_cmp()"),
             }),
+        }
+    }
+    /// Constructs a new comparator that compares two signed integer or vector
+    /// values by coercing both to vectors of the given length.
+    fn vec_cmp(len: usize, cmp: ComparisonToken) -> Self {
+        // Convert from ast::Cmp to inkwell::IntPredicate.
+        let inkwell_predicate = cmp.inkwell_predicate(true);
+        Self {
+            compile: Box::new(move |compiler, lhs, rhs| {
+                // Get vectors of integers.
+                let lhs = compiler.build_vector_cast(lhs, len)?;
+                let rhs = compiler.build_vector_cast(rhs, len)?;
+                // Get a vector of booleans (result of comparison for each
+                // component).
+                let bool_vec =
+                    compiler
+                        .builder()
+                        .build_int_compare(inkwell_predicate, lhs, rhs, "vecCmp");
+                // Collapse that down to a single boolean.
+                let result = compiler.build_reduce(
+                    match cmp {
+                        // Only one component has to be unequal to satisfy `!=`.
+                        ComparisonToken::Neq => "or",
+                        // For all the other comparisons, the condition must be true for all components.
+                        _ => "and",
+                    },
+                    bool_vec.into(),
+                )?;
+                Ok(result)
+            }),
+            const_eval: Some(Box::new(move |lhs, rhs| {
+                // Get vectors of integers.
+                let lhs = lhs.coerce_to_vector(len)?;
+                let rhs = rhs.coerce_to_vector(len)?;
+                // Compare them componentwise, checking that all the comparisons
+                // are true.
+                let result = lhs.into_iter().zip(rhs).all(|(l, r)| cmp.eval(l, r));
+                Ok(result)
+            })),
         }
     }
 }

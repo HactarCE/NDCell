@@ -1,6 +1,7 @@
 //! Miscellaneous functions.
 
-use crate::ast::{ArgValues, FnSignature, Function, FunctionKind, UserFunction};
+use super::FuncConstructor;
+use crate::ast::{ArgTypes, ArgValues, FnSignature, Function, FunctionKind};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::{Span, Type};
@@ -10,16 +11,23 @@ use LangErrorMsg::{InternalError, Unimplemented};
 #[derive(Debug, Clone)]
 pub struct GetVar {
     /// Name of variable to get.
-    pub var_name: String,
+    var_name: String,
     /// Type of this variable.
-    pub var_type: Type,
+    var_type: Type,
 }
 impl GetVar {
-    /// Returns a new GetVar instance that returns the value of the variable
-    /// with the given name.
-    pub fn try_new(userfunc: &mut UserFunction, span: Span, var_name: String) -> LangResult<Self> {
-        let var_type = userfunc.try_get_var(span, &var_name)?;
-        Ok(Self { var_name, var_type })
+    /// Returns a constructor for a new GetVar instance with the given variable
+    /// name.
+    pub fn with_name(var_name: String) -> FuncConstructor {
+        Box::new(|userfunc, span, arg_types| {
+            if !arg_types.is_empty() {
+                Err(InternalError(
+                    "Arguments passed to variable access function".into(),
+                ))?;
+            }
+            let var_type = userfunc.try_get_var(span, &var_name)?;
+            Ok(Box::new(Self { var_name, var_type }))
+        })
     }
 }
 impl Function for GetVar {
@@ -29,9 +37,16 @@ impl Function for GetVar {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom
     }
-    fn signature(&self) -> FnSignature {
-        FnSignature::atom(self.var_type)
+
+    fn arg_types(&self) -> crate::ast::ArgTypes {
+        vec![]
     }
+    fn return_type(&self, _span: Span) -> LangResult<Type> {
+        // We checked argument types in the constructor, so we don't need to
+        // worry about doing that here.
+        Ok(self.var_type)
+    }
+
     fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
         let var_ptr = compiler.vars()[&self.var_name].ptr;
         let value = compiler.builder().build_load(var_ptr, &self.var_name);
@@ -44,25 +59,30 @@ impl Function for GetVar {
 pub struct CallUserFn {
     /// Name of user function to call.
     func_name: String,
-    /// Signature of functioin.
+    /// Types of arguments passed to the function.
+    arg_types: ArgTypes,
+    /// Signature of the function.
     signature: FnSignature,
     /// Error to give when the user tries to actually compile this.
     unimplemented_error: LangError,
 }
 impl CallUserFn {
-    /// Returns a new CallUserFn instance that calls the function with name
-    /// `func_name`.
-    pub fn try_new(userfunc: &mut UserFunction, span: Span, func_name: String) -> LangResult<Self> {
-        let signature = userfunc
-            .rule_meta()
-            .helper_function_signatures
-            .get(&func_name)
-            .ok_or_else(|| InternalError("Cannot find user function".into()).without_span())?
-            .clone();
-        Ok(Self {
-            func_name,
-            signature,
-            unimplemented_error: Unimplemented.with_span(span),
+    /// Returns a constructor for a new CallUserFn instance that calls the
+    /// function with the given name.
+    pub fn with_name(func_name: String) -> FuncConstructor {
+        Box::new(|userfunc, span, arg_types| {
+            let signature = userfunc
+                .rule_meta()
+                .helper_function_signatures
+                .get(&func_name)
+                .ok_or_else(|| InternalError("Cannot find user function".into()).without_span())?
+                .clone();
+            Ok(Box::new(Self {
+                func_name,
+                arg_types,
+                signature,
+                unimplemented_error: Unimplemented.with_span(span),
+            }))
         })
     }
 }
@@ -73,9 +93,18 @@ impl Function for CallUserFn {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Function
     }
-    fn signature(&self) -> FnSignature {
-        self.signature.clone()
+
+    fn arg_types(&self) -> crate::ast::ArgTypes {
+        self.arg_types.clone()
     }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        if self.signature.matches(&self.arg_types) {
+            Ok(self.signature.ret)
+        } else {
+            Err(self.invalid_args_err(span))
+        }
+    }
+
     fn compile(&self, _compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
         Err(self.unimplemented_error.clone())
     }

@@ -3,8 +3,9 @@
 use inkwell::IntPredicate;
 use std::rc::Rc;
 
+use super::FuncResult;
 use crate::ast::{
-    ArgValues, ErrorPointRef, FnSignature, Function, FunctionKind, RuleMeta, UserFunction,
+    ArgTypes, ArgValues, ErrorPointRef, Function, FunctionKind, RuleMeta, UserFunction,
 };
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
@@ -16,6 +17,8 @@ use LangErrorMsg::CellStateOutOfRange;
 /// Built-in function that returns the cell state with the given ID.
 #[derive(Debug)]
 pub struct IntToCellState {
+    /// Types of arguments passed to this function.
+    arg_types: ArgTypes,
     /// Rule metadata (used to determine maximum cell state ID).
     rule_meta: Rc<RuleMeta>,
     /// Error returned if the given cell state ID is out of range.
@@ -23,23 +26,32 @@ pub struct IntToCellState {
 }
 impl IntToCellState {
     /// Constructs a new IntToCellState instance.
-    pub fn try_new(userfunc: &mut UserFunction, span: Span) -> LangResult<Self> {
-        Ok(Self {
+    pub fn construct(userfunc: &mut UserFunction, span: Span, arg_types: ArgTypes) -> FuncResult {
+        Ok(Box::new(Self {
             rule_meta: userfunc.rule_meta().clone(),
             out_of_range_error: userfunc.add_error_point(CellStateOutOfRange.with_span(span)),
-        })
+            arg_types,
+        }))
     }
 }
 impl Function for IntToCellState {
     fn name(&self) -> String {
         format!("unary {:?} operator", OperatorToken::Tag.to_string())
     }
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        if self.arg_types.len() != 1 {
+            Err(self.invalid_args_err(span))?;
+        }
+        self.arg_types[0].check_eq(Type::Int)?;
+        Ok(Type::CellState)
+    }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
-    fn signature(&self) -> FnSignature {
-        FnSignature::new(vec![Type::Int], Type::CellState)
-    }
+
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         // Check that the value is a valid cell state.
         let cell_state_value = args.compile(compiler, 0)?.as_int()?;

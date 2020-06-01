@@ -3,8 +3,9 @@
 use super::{ArgTypes, ArgValues, Args, UserFunction};
 use crate::compiler::*;
 use crate::errors::*;
+use crate::functions;
 use crate::parser;
-use crate::{ConstValue, Span, Type};
+use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{CannotEvalAsConst, InternalError, InvalidArguments};
 
 /// Expression node in the AST.
@@ -28,28 +29,25 @@ impl Expr {
     pub fn return_type(&self) -> Type {
         self.return_type
     }
+    /// Returns the type that this expression evaluates to along with its span
+    /// in the original source code.
+    pub fn spanned_type(&self) -> Spanned<Type> {
+        Spanned {
+            span: self.span(),
+            inner: self.return_type(),
+        }
+    }
     /// Constructs a new expression by applying the given Args to the given
     /// Function.
     pub fn try_new(
-        span: Span,
         userfunc: &mut UserFunction,
-        func: Box<dyn Function>,
+        span: Span,
         args: Args,
+        func_constructor: functions::FuncConstructor,
     ) -> LangResult<Self> {
         let arg_types = args.types(userfunc);
-        // Figure out the function signature, which will tells us the return
-        // type. If the function signature does not match, then return an
-        // Err(InvalidArguments).
-        if !func.takes_args(&arg_types) {
-            Err(InvalidArguments {
-                name: func.name(),
-                omit_first: matches!(func.kind(), FunctionKind::Method | FunctionKind::Property),
-                expected: func.signature().args.clone(),
-                got: arg_types,
-            }
-            .with_span(span))?;
-        }
-        let return_type = func.return_type();
+        let func = func_constructor(userfunc, span, arg_types)?;
+        let return_type = func.return_type(span)?;
         Ok(Self {
             span,
             func,
@@ -87,10 +85,11 @@ impl Expr {
     }
 }
 
-/// A "function" that takes zero or more arguments and returns a value that can
-/// be compiled and optionally compile-time evaluated.
+/// "Function" that takes zero or more arguments and returns a value that can be
+/// compiled and optionally compile-time evaluated. The argument types that
+/// function takes are baked into the function when it is constructed.
 ///
-/// This language uses a VERY broad definition of "function" so that all kinds
+/// This language uses a very broad definition of "function" so that all kinds
 /// of expressions can be represented using the same system. Properties/methods,
 /// operators, variable access, etc. all have corresponding "Function"
 /// implementors.
@@ -104,15 +103,22 @@ pub trait Function: std::fmt::Debug {
     /// Returns the kind of "function" this is. See FunctionKind for details.
     fn kind(&self) -> FunctionKind;
 
-    /// Returns the signature of this function.
-    fn signature(&self) -> FnSignature;
-    /// Returns true if these argument match the signature of this function.
-    fn takes_args(&self, arg_types: &ArgTypes) -> bool {
-        self.signature().matches(arg_types)
-    }
-    /// Returns the return type of this function.
-    fn return_type(&self) -> Type {
-        self.signature().ret
+    /// Returns the types of arguments passed to this function.
+    fn arg_types(&self) -> ArgTypes;
+    /// Returns the return type of this function, or an error (e.g.
+    /// InvalidArguments) if the function is passed invalid arguments.
+    fn return_type(&self, span: Span) -> LangResult<Type>;
+
+    /// Returns an InvalidArguments error for this set of arguments.
+    fn invalid_args_err(&self, span: Span) -> LangError {
+        // TODO: when #[feature(never_type)] stabalizes, use that here and
+        // return LangResult<!>.
+        InvalidArguments {
+            name: self.name(),
+            is_method: matches!(self.kind(), FunctionKind::Method | FunctionKind::Property),
+            arg_types: self.arg_types().into_iter().map(|sp| sp.inner).collect(),
+        }
+        .with_span(span)
     }
 
     /// Compiles this function using the given arguments and returns the Value
@@ -162,7 +168,7 @@ pub enum FunctionKind {
 /// type.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct FnSignature {
-    pub args: ArgTypes,
+    pub args: Vec<Type>,
     pub ret: Type,
 }
 impl FnSignature {
@@ -176,7 +182,7 @@ impl FnSignature {
         Self::new(vec![self_type], ret)
     }
     /// Constructs any arbitrary function signature.
-    pub fn new(args: impl Into<ArgTypes>, ret: Type) -> Self {
+    pub fn new(args: Vec<Type>, ret: Type) -> Self {
         let args = args.into();
         Self { args, ret }
     }
@@ -193,7 +199,7 @@ impl FnSignature {
     }
     /// Returns true if the given argument types match the arguments of this function signature.
     pub fn matches(&self, arg_types: &ArgTypes) -> bool {
-        &self.args == arg_types
+        arg_types.iter().map(|s| &s.inner).eq(&self.args)
     }
     /// Returns the LLVM function type that is equivalent to this function signature.
     pub fn llvm_fn_type(

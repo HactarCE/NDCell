@@ -71,37 +71,34 @@ impl<'a> ArgValues<'a> {
     pub fn len(&self) -> usize {
         self.arg_asts.len()
     }
-    /// Compiles the argument at the given index and returns the resulting
-    /// Value.
-    pub fn compile(&self, compiler: &mut Compiler, idx: usize) -> LangResult<Value> {
+    /// Returns the expression of the argument at the given index.
+    pub fn get_expr(&self, idx: usize) -> LangResult<&Expr> {
         match self.arg_asts.0.get(idx) {
-            Some(arg) => self.userfunc.compile_expr(compiler, *arg),
+            Some(arg) => Ok(&self.userfunc[*arg]),
             None => Err(ARG_OUT_OF_RANGE),
         }
     }
+
+    /// Compiles the argument at the given index and returns the resulting
+    /// Value.
+    pub fn compile(&self, compiler: &mut Compiler, idx: usize) -> LangResult<Value> {
+        self.get_expr(idx)?.compile(compiler, self.userfunc)
+    }
     /// Compiles all arguments and return the resulting Values.
     pub fn compile_all(&self, compiler: &mut Compiler) -> LangResult<Vec<Value>> {
-        self.arg_asts
-            .iter_refs()
-            .map(|&expr| self.userfunc.compile_expr(compiler, expr))
-            .collect()
+        (0..self.len()).map(|i| self.compile(compiler, i)).collect()
     }
+
     /// Evaluates the argument at the given index as a constant and returns the
     /// resulting ConstValue.
     ///
     /// Returns Err(CannotEvalAsConst) if the expression cannot be evaluated at
     /// compile time.
     pub fn const_eval(&self, idx: usize) -> LangResult<ConstValue> {
-        match self.arg_asts.0.get(idx) {
-            Some(arg) => self.userfunc.const_eval_expr(*arg),
-            None => Err(ARG_OUT_OF_RANGE),
-        }
+        self.get_expr(idx)?.const_eval(self.userfunc)
     }
     /// Evaluates all arguments and returns the resulting ConstValues.
     pub fn const_eval_all(&self) -> LangResult<Vec<ConstValue>> {
-        self.arg_asts
-            .iter_refs()
-            .map(|&expr| self.userfunc.const_eval_expr(expr))
-            .collect()
+        (0..self.len()).map(|i| self.const_eval(i)).collect()
     }
 }

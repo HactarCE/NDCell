@@ -483,6 +483,7 @@ impl Compiler {
 
         Ok(result_value)
     }
+
     /// Builds an overflow and division-by-zero check for **integer** arguments
     /// to a division operation (but does not actually perform the division).
     pub fn build_int_div_check(
@@ -507,7 +508,7 @@ impl Compiler {
             on_div_by_zero,
         )
     }
-    /// Builds an overflow and division-by-zero check for **integer** arguments
+    /// Builds an overflow and division-by-zero check for **vector** arguments
     /// to a division operation (but does not actually perform the division).
     pub fn build_vec_div_check(
         &mut self,
@@ -516,11 +517,7 @@ impl Compiler {
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
         on_div_by_zero: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<()> {
-        let len = dividend
-            .get_type()
-            .as_basic_type_enum()
-            .into_vector_type()
-            .get_size() as usize;
+        let len = dividend.get_type().get_size() as usize;
         // Generate the required constants.
         let zero = self.int_type().const_zero();
         let min_value = self.get_min_int_value();
@@ -594,6 +591,57 @@ impl Compiler {
                 )
             },
         )
+    }
+
+    /// Builds an overflow check for **integer** RHS argument to a bitshift
+    /// operation (but does not actually perform the bitshift).
+    pub fn build_bitshift_int_check(
+        &mut self,
+        shift_amt: IntValue<'static>,
+        on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
+    ) -> LangResult<()> {
+        // Generate the required constants.
+        let bit_width = self.int_type().get_bit_width();
+        let max_shift = self.int_type().const_int(bit_width as u64, false);
+        // Call the generic function.
+        self.build_generic_bitshift_check(shift_amt, max_shift, on_overflow)
+    }
+    /// Builds an overflow check for **vector** RHS argument to a bitshift
+    /// operation (but does not actually perform the bitshift).
+    pub fn build_bitshift_vec_check(
+        &mut self,
+        shift_amt: VectorValue<'static>,
+        on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
+    ) -> LangResult<()> {
+        let len = shift_amt.get_type().get_size() as usize;
+        // Generate the required constants.
+        let bit_width = self.int_type().get_bit_width();
+        let max_shift = self.int_type().const_int(bit_width as u64, false);
+        // Convert them to vectors of the proper length.
+        let max_shift = self.build_vector_cast(Value::Int(max_shift), len)?;
+        // Call the generic function.
+        self.build_generic_bitshift_check(shift_amt, max_shift, on_overflow)
+    }
+    /// Builds an overflow check for RHS argument to a bitshift operation (but
+    /// does not actually perform the bitshift).
+    pub fn build_generic_bitshift_check<T: IntMathValue<'static>>(
+        &mut self,
+        shift_amt: T,
+        max_shift: T,
+        on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
+    ) -> LangResult<()> {
+        // If we are shifting a negative number of bits, or more bits than there
+        // are in the integer type, that's an IntegerOverflow error.
+        let is_overflow = self.builder().build_int_compare(
+            IntPredicate::ULT,
+            shift_amt,
+            max_shift,
+            "bitshiftOverflowCheck",
+        );
+        let is_overflow = self.build_reduce("or", is_overflow.as_basic_value_enum())?;
+        // Branch based on whether the shift amount is out of range.
+        self.build_conditional(is_overflow, |_| Ok(()), on_overflow)?;
+        Ok(())
     }
 
     /// Builds a cast of an integer to a vector (by using that integer value for

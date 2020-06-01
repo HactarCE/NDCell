@@ -160,7 +160,16 @@ impl BinaryOp {
         Box::new(move |userfunc, span, arg_types| {
             // Construct errors.
             use OperatorToken::*;
-            let overflow_error = if matches!(op, Plus | Minus | Asterisk | Slash | Percent) {
+            let overflow_error = if matches!(
+                op,
+                Plus | Minus
+                    | Asterisk
+                    | Slash
+                    | Percent
+                    | DoubleLessThan
+                    | DoubleGreaterThan
+                    | TripleGreaterThan
+            ) {
                 Some(userfunc.add_error_point(IntegerOverflow.with_span(span)))
             } else {
                 None
@@ -284,18 +293,39 @@ impl BinaryOp {
             }
             // Exponentiation
             DoubleAsterisk => todo!("Exponentiation"),
-            // Bitshift left
-            DoubleLessThan => b
-                .build_left_shift(lhs, rhs, "tmp_shl")
-                .as_basic_value_enum(),
-            // Bitshift right (arithmetic)
-            DoubleGreaterThan => b
-                .build_right_shift(lhs, rhs, true, "tmp_ashr")
-                .as_basic_value_enum(),
-            // Bitshift right (logical)
-            TripleGreaterThan => b
-                .build_right_shift(lhs, rhs, false, "tmp_lshr")
-                .as_basic_value_enum(),
+            // Bitshift
+            DoubleLessThan | DoubleGreaterThan | TripleGreaterThan => {
+                // Check for overflow.
+                match self.result_type() {
+                    Type::Int => compiler.build_bitshift_int_check(
+                        rhs.as_basic_value_enum().into_int_value(),
+                        |c| Ok(self.overflow_error().compile(c)),
+                    )?,
+                    Type::Vector(_) => compiler.build_bitshift_vec_check(
+                        rhs.as_basic_value_enum().into_vector_value(),
+                        |c| Ok(self.overflow_error().compile(c)),
+                    )?,
+                    _ => Err(UNCAUGHT_TYPE_ERROR)?,
+                };
+                match self.op {
+                    // Bitshift left
+                    DoubleLessThan => compiler
+                        .builder()
+                        .build_left_shift(lhs, rhs, "tmp_shl")
+                        .as_basic_value_enum(),
+                    // Bitshift right (arithmetic)
+                    DoubleGreaterThan => compiler
+                        .builder()
+                        .build_right_shift(lhs, rhs, true, "tmp_shra")
+                        .as_basic_value_enum(),
+                    // Bitshift right (logical)
+                    TripleGreaterThan => compiler
+                        .builder()
+                        .build_right_shift(lhs, rhs, false, "tmp_shrl")
+                        .as_basic_value_enum(),
+                    _ => unreachable!(),
+                }
+            }
             // Bitwise AND
             Ampersand => b.build_and(lhs, rhs, "tmp_and").as_basic_value_enum(),
             // Bitwise OR
@@ -340,11 +370,15 @@ impl BinaryOp {
                 }
             }
             // Bitshift left
-            DoubleLessThan => Some(lhs << rhs),
+            DoubleLessThan => rhs.try_into().ok().and_then(|rhs| lhs.checked_shl(rhs)),
             // Bitshift right (arithmetic)
-            DoubleGreaterThan => Some(lhs >> rhs),
+            DoubleGreaterThan => rhs.try_into().ok().and_then(|rhs| lhs.checked_shr(rhs)),
             // Bitshift right (logical)
-            TripleGreaterThan => Some((lhs as u64 >> rhs) as LangInt),
+            TripleGreaterThan => rhs
+                .try_into()
+                .ok()
+                .and_then(|rhs| (lhs as u64).checked_shr(rhs))
+                .map(|i| i as LangInt),
             // Bitwise AND
             Ampersand => Some(lhs & rhs),
             // Bitwise OR

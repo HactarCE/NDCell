@@ -379,10 +379,22 @@ impl<'a> ParseBuilder<'a> {
         // Get an expression at the given precedence level, which may
         // consist of expressions with higher precedence.
         match precedence {
-            OpPrecedence::UnaryPrefix => self.unary_op(
+            OpPrecedence::Comparison => self.comparison_op(precedence),
+            OpPrecedence::BitwiseOr => {
+                self.left_binary_op(&[TokenClass::Operator(OperatorToken::Pipe)], precedence)
+            }
+            OpPrecedence::BitwiseXor => {
+                self.left_binary_op(&[TokenClass::Operator(OperatorToken::Caret)], precedence)
+            }
+            OpPrecedence::BitwiseAnd => self.left_binary_op(
+                &[TokenClass::Operator(OperatorToken::Ampersand)],
+                precedence,
+            ),
+            OpPrecedence::Bitshift => self.left_binary_op(
                 &[
-                    TokenClass::Operator(OperatorToken::Tag),
-                    TokenClass::Operator(OperatorToken::Minus),
+                    TokenClass::Operator(OperatorToken::DoubleLessThan),
+                    TokenClass::Operator(OperatorToken::DoubleGreaterThan),
+                    TokenClass::Operator(OperatorToken::TripleGreaterThan),
                 ],
                 precedence,
             ),
@@ -401,7 +413,13 @@ impl<'a> ParseBuilder<'a> {
                 ],
                 precedence,
             ),
-            OpPrecedence::Comparison => self.comparison_op(precedence),
+            OpPrecedence::UnaryPrefix => self.unary_op(
+                &[
+                    TokenClass::Operator(OperatorToken::Tag),
+                    TokenClass::Operator(OperatorToken::Minus),
+                ],
+                precedence,
+            ),
             // TODO add remaining precedence levels
             OpPrecedence::FunctionCall => {
                 // Function calls include attribute/method access.
@@ -530,6 +548,9 @@ impl<'a> ParseBuilder<'a> {
                 span: Span::merge(&*lhs, &*rhs),
                 inner: match op_token.class {
                     TokenClass::Operator(op) => Expr::BinaryOp { lhs, op, rhs },
+                    TokenClass::Keyword(KeywordToken::Or) => Expr::LogicalOr { lhs, rhs },
+                    TokenClass::Keyword(KeywordToken::Xor) => Expr::LogicalXor { lhs, rhs },
+                    TokenClass::Keyword(KeywordToken::And) => Expr::LogicalAnd { lhs, rhs },
                     other => Err(InternalError(
                         format!("Invalid unary operator: {:?}", other).into(),
                     ))?,

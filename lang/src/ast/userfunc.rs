@@ -307,8 +307,9 @@ impl UserFunction {
                 | OperatorToken::DoubleLessThan
                 | OperatorToken::DoubleGreaterThan
                 | OperatorToken::TripleGreaterThan
-                | OperatorToken::Ampersand
-                | OperatorToken::Pipe => {
+                | OperatorToken::Pipe
+                | OperatorToken::Caret
+                | OperatorToken::Ampersand => {
                     let lhs = self.build_expression_ast(lhs)?;
                     let rhs = self.build_expression_ast(rhs)?;
                     args = Args::from(vec![lhs, rhs]);

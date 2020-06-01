@@ -5,9 +5,9 @@ This is a testing ground for a cellular automaton description language for [NDCe
 ## Short-term to-do list
 
 * [x] Compile helper functions
-* [ ] Function calls (built-in)
-* [ ] Function calls (helper)
-* [ ] Vector operations
+* [x] Calls to built-in functions
+* [x] Calls to built-in methods
+* [x] Vector operations
 * [ ] Unary `+` operator
 * [ ] Maybe refactor parser
 * [ ] More data types

@@ -58,11 +58,11 @@ fn test_vector_access() {
     let mut f = compile_test_fn(
         "@function int test() {
             set v3 = [1, 10, 100]
-            assert v.len == 3
+            assert v3.len == 3
             set v2 = [4, 3]
-            assert v.len == 2
+            assert v2.len == 2
             set v10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-            assert v.len == 10
+            assert v10.len == 10
         }",
     );
     let expected = Ok(ConstValue::Int(0));

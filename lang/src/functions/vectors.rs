@@ -4,7 +4,9 @@ use inkwell::IntPredicate;
 use std::convert::TryInto;
 
 use super::{FuncConstructor, FuncResult};
-use crate::ast::{ArgTypes, ArgValues, ErrorPointRef, Function, FunctionKind, UserFunction};
+use crate::ast::{
+    ArgTypes, ArgValues, AssignableFunction, ErrorPointRef, Function, FunctionKind, UserFunction,
+};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::types::{LangInt, MAX_VECTOR_LEN};
@@ -224,6 +226,70 @@ impl Function for Access {
                 .copied()
                 .unwrap_or(0),
         )))
+    }
+    fn as_assignable(&self, args: &ArgValues) -> Option<&dyn AssignableFunction> {
+        if args.can_assign(0) {
+            Some(self)
+        } else {
+            None
+        }
+    }
+}
+impl AssignableFunction for Access {
+    fn compile_assign(
+        &self,
+        compiler: &mut Compiler,
+        args: ArgValues,
+        value: Value,
+    ) -> LangResult<()> {
+        let zero = compiler.int_type().const_zero();
+
+        // Get the index.
+        let element_idx = match self.component_idx {
+            Some(i) => compiler.int_type().const_int(i as u64, true),
+            None => args.compile(compiler, 1)?.as_int()?,
+        };
+        let arg = args.compile(compiler, 0)?.as_vector()?;
+
+        // Get the length of the vector.
+        let len = arg.get_type().get_size();
+        let len_value = compiler.int_type().const_int(len as u64, false);
+
+        // Make sure that the index is not negative.
+        let is_negative = compiler.builder().build_int_compare(
+            IntPredicate::SLT, // Signed Less-Than
+            element_idx,
+            zero,
+            "idxNegativeCheck",
+        );
+        // Make sure that the index is not too large.
+        let is_too_large = compiler.builder().build_int_compare(
+            IntPredicate::SGE, // Signed Greater-Than
+            element_idx,
+            len_value,
+            "idxUpperBoundCheck",
+        );
+        // If either condition occurs, return an error.
+        let is_out_of_bounds =
+            compiler
+                .builder()
+                .build_or(is_negative, is_too_large, "idxBoundsCheck");
+        compiler.build_conditional(
+            is_out_of_bounds,
+            |c| Ok(self.out_of_bounds_error.compile(c)),
+            |_| Ok(()),
+        )?;
+
+        // Set the element.
+        let ret = compiler.builder().build_insert_element(
+            arg,
+            value.into_basic_value()?,
+            element_idx,
+            "vecAssign",
+        );
+        // Assign it.
+        args.compile_assign(compiler, 0, Value::Vector(ret))?;
+        Ok(())
     }
 }
 

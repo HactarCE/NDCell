@@ -51,7 +51,7 @@ fn test_vector_access() {
             set v.w = 0
         }",
     );
-    let expected = Err(("w", "Index out of bounds"));
+    let expected = Err(("v.w", "Index out of bounds"));
     assert_fn_result(&mut f, &[], expected);
 
     // Test length.
@@ -66,23 +66,6 @@ fn test_vector_access() {
         }",
     );
     let expected = Ok(ConstValue::Int(0));
-    assert_fn_result(&mut f, &[], expected);
-
-    // Test division by zero.
-    let mut f = compile_test_fn(
-        "@function int test() {
-            set b = [4, 5, 6] / [1, 2, 0]
-        }",
-    );
-    let expected = Err(("[4, 5, 6] / [1, 2, 0]", "Divide by zero"));
-    assert_fn_result(&mut f, &[], expected);
-
-    let mut f = compile_test_fn(
-        "@function int test() {
-            set b = [4, 5, 6] % [1, 0, 2]
-        }",
-    );
-    let expected = Err(("[4, 5, 6] % [1, 0, 2]", "Divide by zero"));
     assert_fn_result(&mut f, &[], expected);
 }
 
@@ -139,6 +122,22 @@ fn test_vector_cmp() {
 
 #[test]
 fn test_vector_ops() {
+    // Test division by zero.
+    let mut f = compile_test_fn(
+        "@function int test() {
+            set b = [4, 5, 6] / [1, 2, 0]
+        }",
+    );
+    let expected = Err(("[4, 5, 6] / [1, 2, 0]", "Divide by zero"));
+    assert_fn_result(&mut f, &[], expected);
+    let mut f = compile_test_fn(
+        "@function int test() {
+            set b = [4, 5, 6] % [1, 0, 2]
+        }",
+    );
+    let expected = Err(("[4, 5, 6] % [1, 0, 2]", "Divide by zero"));
+    assert_fn_result(&mut f, &[], expected);
+
     // Test all the stuff that shouldn't fail
     let mut f = compile_test_fn(
         "@function int test() {

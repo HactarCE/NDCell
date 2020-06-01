@@ -412,14 +412,14 @@ impl Compiler {
     /// Builds instructions to perform checked integer arithmetic using an LLVM
     /// intrinsic and returns an error if overflow occurs. Both operands must
     /// either be integers or vectors of the same length.
-    pub fn build_checked_int_arithmetic(
+    pub fn build_checked_int_arithmetic<T: IntMathValue<'static>>(
         &mut self,
-        lhs: BasicValueEnum<'static>,
-        rhs: BasicValueEnum<'static>,
+        lhs: T,
+        rhs: T,
         name: &str,
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<BasicValueEnum<'static>> {
-        let arg_type = lhs.get_type();
+        let arg_type = lhs.as_basic_value_enum().get_type();
 
         // LLVM has intrinsics that perform some math with overflow checks.
         // First, get the name of the intrinsic we want to use (e.g.
@@ -445,7 +445,7 @@ impl Compiler {
         let intrinsic_return_type = get_ctx().struct_type(&[arg_type, bool_type], false);
         let intrinsic_fn_type = intrinsic_return_type.fn_type(&[arg_type; 2], false);
         let intrinsic_fn = self.get_llvm_intrinisic(&intrinsic_name, intrinsic_fn_type)?;
-        let intrinsic_args = &[lhs, rhs];
+        let intrinsic_args = &[lhs.as_basic_value_enum(), rhs.as_basic_value_enum()];
 
         // Build a call to an LLVM intrinsic to do the operation.
         let call_site_value =
@@ -608,6 +608,7 @@ impl Compiler {
             // Make a list of integers
             Value::Int(i) => vec![i; len],
             Value::Vector(v) if v.get_type().get_size() as usize == len => return Ok(v),
+            // TODO: try using 'shufflevector' instruction here instead
             Value::Vector(v) => (0..len)
                 .into_iter()
                 .map(|i| {

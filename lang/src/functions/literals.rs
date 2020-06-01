@@ -10,7 +10,7 @@ use LangErrorMsg::InternalError;
 
 /// Built-in function that returns a fixed integer. This struct can be
 /// constructed directly.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Int(LangInt);
 impl Int {
     /// Returns a constructor for a new Int instance that returns the given

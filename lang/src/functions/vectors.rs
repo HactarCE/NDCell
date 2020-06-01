@@ -9,7 +9,7 @@ use crate::{Span, Type};
 use LangErrorMsg::VectorTooBig;
 
 /// Built-in function that constructs a vector from its arguments.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct BuildVec {
     arg_types: ArgTypes,
 }

@@ -8,7 +8,7 @@ use crate::{Span, Type};
 use LangErrorMsg::{InternalError, Unimplemented};
 
 /// Built-in function that returns a fixed variable.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GetVar {
     /// Name of variable to get.
     var_name: String,
@@ -55,7 +55,7 @@ impl Function for GetVar {
 }
 
 /// Built-in function that calls a user-written helper function.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CallUserFn {
     /// Name of user function to call.
     func_name: String,

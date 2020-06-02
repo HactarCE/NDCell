@@ -45,9 +45,7 @@ impl Function for IntToCellState {
         self.arg_types.clone()
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
-        if self.arg_types.len() != 1 {
-            Err(self.invalid_args_err(span))?;
-        }
+        self.check_args_len(span, 1)?;
         self.arg_types[0].check_eq(Type::Int)?;
         Ok(Type::CellState)
     }
@@ -119,13 +117,9 @@ impl Function for ToBool {
         self.arg_types.clone()
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
-        match self.arg_types.as_slice() {
-            [ty] => {
-                ty.check_can_convert_to_bool()?;
-                Ok(Type::Int)
-            }
-            _ => Err(self.invalid_args_err(span)),
-        }
+        self.check_args_len(span, 1)?;
+        self.arg_types[0].check_can_convert_to_bool()?;
+        Ok(Type::Int)
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {

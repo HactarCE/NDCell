@@ -140,13 +140,9 @@ impl Function for Access {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         if self.component_idx.is_some() {
-            if self.arg_types.len() != 1 {
-                Err(self.invalid_args_err(span))?;
-            }
+            self.check_args_len(span, 1)?;
         } else {
-            if self.arg_types.len() != 2 {
-                Err(self.invalid_args_err(span))?;
-            }
+            self.check_args_len(span, 2)?;
             self.arg_types[1].check_eq(Type::Int)?;
         }
         self.arg_types[0].check_vec()?;

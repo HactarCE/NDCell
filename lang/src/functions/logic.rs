@@ -30,9 +30,7 @@ impl Function for LogicalNot {
         self.arg_types.clone()
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
-        if self.arg_types.len() != 1 {
-            Err(self.invalid_args_err(span))?;
-        }
+        self.check_args_len(span, 1)?;
         self.arg_types[0].check_can_convert_to_bool()?;
         Ok(Type::Int)
     }
@@ -95,9 +93,7 @@ impl Function for LogicalBinaryOp {
     }
 
     fn return_type(&self, span: Span) -> LangResult<Type> {
-        if self.arg_types.len() != 2 {
-            Err(self.invalid_args_err(span))?;
-        }
+        self.check_args_len(span, 2)?;
         self.arg_types[0].check_can_convert_to_bool()?;
         self.arg_types[1].check_can_convert_to_bool()?;
         Ok(Type::Int)

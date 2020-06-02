@@ -132,6 +132,15 @@ pub trait Function: std::fmt::Debug {
     /// InvalidArguments) if the function is passed invalid arguments.
     fn return_type(&self, span: Span) -> LangResult<Type>;
 
+    /// Returns an InvalidArguments error if this set of arguments does not have
+    /// the given length.
+    fn check_args_len(&self, span: Span, len: usize) -> LangResult<()> {
+        if self.arg_types().len() != len {
+            Err(self.invalid_args_err(span))
+        } else {
+            Ok(())
+        }
+    }
     /// Returns an InvalidArguments error for this set of arguments.
     fn invalid_args_err(&self, span: Span) -> LangError {
         // TODO: when #[feature(never_type)] stabalizes, use that here and

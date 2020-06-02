@@ -108,13 +108,9 @@ impl Function for NegOrAbs {
         self.arg_types.clone()
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
-        match self.arg_types.as_slice() {
-            [ty] => {
-                ty.check_int_or_vec()?;
-                Ok(ty.inner)
-            }
-            _ => Err(self.invalid_args_err(span)),
-        }
+        self.check_args_len(span, 1)?;
+        self.arg_types[0].check_int_or_vec()?;
+        Ok(self.arg_types[0].inner)
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
@@ -405,14 +401,10 @@ impl Function for BinaryOp {
         self.arg_types.clone()
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
-        match self.arg_types.as_slice() {
-            [lhs, rhs] => {
-                lhs.check_int_or_vec()?;
-                rhs.check_int_or_vec()?;
-                Ok(self.result_type())
-            }
-            _ => Err(self.invalid_args_err(span)),
-        }
+        self.check_args_len(span, 2)?;
+        self.arg_types[0].check_int_or_vec()?;
+        self.arg_types[1].check_int_or_vec()?;
+        Ok(self.result_type())
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {

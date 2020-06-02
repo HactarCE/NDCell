@@ -8,7 +8,7 @@ This is a testing ground for a cellular automaton description language for [NDCe
 * [x] Calls to built-in functions
 * [x] Calls to built-in methods
 * [x] Vector operations
-* [ ] Unary `+` operator
+* [x] Unary `+` operator
 * [ ] Maybe refactor parser
 * [ ] More data types
 

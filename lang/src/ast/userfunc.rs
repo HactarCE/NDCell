@@ -283,21 +283,20 @@ impl UserFunction {
             // Parenthetical group
             parser::Expr::ParenExpr(expr) => return self.build_expression_ast(expr),
             // Unary operator
-            parser::Expr::UnaryOp { op, operand } => match op {
-                // Negation
-                OperatorToken::Minus => {
-                    let arg = self.build_expression_ast(operand)?;
-                    args = Args::from(vec![arg]);
-                    let mode = functions::math::NegOrAbsMode::Negate;
-                    func = functions::math::NegOrAbs::with_mode(mode);
+            parser::Expr::UnaryOp { op, operand } => {
+                args = Args::from(vec![self.build_expression_ast(operand)?]);
+                func = match op {
+                    // No-op unary plus
+                    OperatorToken::Plus => Box::new(functions::math::UnaryPlus::construct),
+                    // Negation
+                    OperatorToken::Minus => {
+                        functions::math::NegOrAbs::with_mode(functions::math::NegOrAbsMode::Negate)
+                    }
+                    // Get cell state from integer ID
+                    OperatorToken::Tag => Box::new(functions::convert::IntToCellState::construct),
+                    _ => return Err(InternalError("Invalid unary operator".into()).with_span(span)),
                 }
-                // Get cell state from integer ID
-                OperatorToken::Tag => {
-                    args = Args::from(vec![self.build_expression_ast(operand)?]);
-                    func = Box::new(functions::convert::IntToCellState::construct);
-                }
-                _ => return Err(InternalError("Invalid unary operator".into()).with_span(span)),
-            },
+            }
             // Binary mathematical/bitwise operator
             parser::Expr::BinaryOp { lhs, op, rhs } => match op {
                 // Math

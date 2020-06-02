@@ -17,6 +17,8 @@ thread_local! {
         compile_test_fn("@function int test(int x, int y) { return x / y }");
     static MOD_FN: CompiledFunction =
         compile_test_fn("@function int test(int x, int y) { return x % y }");
+    static PLUS_FN: CompiledFunction =
+        compile_test_fn("@function int test(int x, int y) { return +x }");
     static NEG_FN: CompiledFunction =
         compile_test_fn("@function int test(int x, int y) { return -x }");
 
@@ -94,6 +96,9 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
         .map(ConstValue::Int)
         .ok_or(("x % y", div_err_msg));
     assert_threadlocal_fn_result(&MOD_FN, &args, expected);
+    // Unary plus (no-op)
+    let expected = Ok(ConstValue::Int(x));
+    assert_threadlocal_fn_result(&PLUS_FN, &args, expected);
     // Negation
     let expected = x
         .checked_neg()

@@ -426,6 +426,7 @@ impl<'a> ParseBuilder<'a> {
             OpPrecedence::UnaryPrefix => self.unary_op(
                 &[
                     TokenClass::Operator(OperatorToken::Tag),
+                    TokenClass::Operator(OperatorToken::Plus),
                     TokenClass::Operator(OperatorToken::Minus),
                 ],
                 precedence,

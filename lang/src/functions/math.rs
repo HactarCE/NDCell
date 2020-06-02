@@ -4,8 +4,8 @@ use inkwell::values::{BasicValueEnum, IntMathValue};
 use inkwell::IntPredicate;
 use std::convert::TryInto;
 
-use super::FuncConstructor;
-use crate::ast::{ArgTypes, ArgValues, ErrorPointRef, Function, FunctionKind};
+use super::{FuncConstructor, FuncResult};
+use crate::ast::{ArgTypes, ArgValues, ErrorPointRef, Function, FunctionKind, UserFunction};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::lexer::OperatorToken;
@@ -134,6 +134,41 @@ impl Function for NegOrAbs {
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
         .map(Some)
+    }
+}
+
+/// Built-in function that returns a number unchanged.
+#[derive(Debug)]
+pub struct UnaryPlus {
+    /// Type to return unchanged (should have a length of 1).
+    arg_types: ArgTypes,
+}
+impl UnaryPlus {
+    pub fn construct(_userfunc: &mut UserFunction, _span: Span, arg_types: ArgTypes) -> FuncResult {
+        Ok(Box::new(Self { arg_types }))
+    }
+}
+impl Function for UnaryPlus {
+    fn name(&self) -> String {
+        format!("unary {:?} operator", OperatorToken::Plus.to_string())
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Operator
+    }
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        self.check_args_len(span, 1)?;
+        self.arg_types[0].check_int_or_vec()?;
+        Ok(self.arg_types[0].inner)
+    }
+
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        args.compile(compiler, 0)
+    }
+    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+        args.const_eval(0).map(Some)
     }
 }
 

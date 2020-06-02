@@ -27,11 +27,11 @@ impl ConstValue {
         }
     }
     /// Constructs a default value of the given type.
-    pub fn default(ty: Type) -> Option<Self> {
+    pub fn default(ty: &Type) -> Option<Self> {
         match ty {
             Type::Int => Some(Self::Int(0)),
             Type::CellState => Some(Self::CellState(0)),
-            Type::Vector(len) => Some(Self::Vector(vec![0; len])),
+            Type::Vector(len) => Some(Self::Vector(vec![0; *len])),
         }
     }
     /// Returns the integer value inside if this is a ConstValue::Int; otherwise
@@ -88,7 +88,7 @@ impl ConstValue {
     }
     /// Constructs a value of the given type from raw bytes. Panics if given an
     /// invalid value or invalid type.
-    pub fn from_bytes(ty: Type, bytes: &[u8]) -> Self {
+    pub fn from_bytes(ty: &Type, bytes: &[u8]) -> Self {
         // TODO: fuzz/test this method
         // assert!(
         //     ty.has_runtime_representation(),

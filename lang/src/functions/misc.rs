@@ -25,7 +25,7 @@ impl GetVar {
                     "Arguments passed to variable access function".into(),
                 ))?;
             }
-            let var_type = userfunc.try_get_var(span, &var_name)?;
+            let var_type = userfunc.try_get_var(span, &var_name)?.clone();
             Ok(Box::new(Self { var_name, var_type }))
         })
     }
@@ -44,13 +44,13 @@ impl Function for GetVar {
     fn return_type(&self, _span: Span) -> LangResult<Type> {
         // We checked argument types in the constructor, so we don't need to
         // worry about doing that here.
-        Ok(self.var_type)
+        Ok(self.var_type.clone())
     }
 
     fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
         let var_ptr = compiler.vars()[&self.var_name].ptr;
         let value = compiler.builder().build_load(var_ptr, &self.var_name);
-        Ok(Value::from_basic_value(self.var_type, value))
+        Ok(Value::from_basic_value(&self.var_type, value))
     }
     fn as_assignable<'a>(&self, _args: &'a ArgValues) -> Option<&dyn AssignableFunction> {
         Some(self)
@@ -116,7 +116,7 @@ impl Function for CallUserFn {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         if self.signature.matches(&self.arg_types) {
-            Ok(self.signature.ret)
+            Ok(self.signature.ret.clone())
         } else {
             Err(self.invalid_args_err(span))
         }

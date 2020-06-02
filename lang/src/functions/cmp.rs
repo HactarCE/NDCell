@@ -31,7 +31,7 @@ impl Cmp {
             let type_pair_iter = args.windows(2);
             let comparators = comparisons_iter
                 .zip(type_pair_iter)
-                .map(|(&cmp, types)| Comparator::try_new(types[0], cmp, types[1]))
+                .map(|(&cmp, types)| Comparator::try_new(&types[0], cmp, &types[1]))
                 .collect::<LangResult<Vec<_>>>()?;
             Ok(Box::new(Self { args, comparators }))
         })
@@ -145,16 +145,17 @@ impl fmt::Debug for Comparator {
 impl Comparator {
     /// Constructs a new comparator that compares the given types using
     /// the given comparison token (if possible).
-    fn try_new(lhs: Spanned<Type>, cmp: ComparisonToken, rhs: Spanned<Type>) -> LangResult<Self> {
+    fn try_new(lhs: &Spanned<Type>, cmp: ComparisonToken, rhs: &Spanned<Type>) -> LangResult<Self> {
         // TODO: convert integers to vectors for comparison
         let span = Span::merge(lhs, rhs);
-        let lhs = lhs.inner;
-        let rhs = rhs.inner;
-        let ty = lhs;
+        let lhs = lhs.inner.clone();
+        let rhs = rhs.inner.clone();
         let eq_only = cmp == ComparisonToken::Eql || cmp == ComparisonToken::Neq;
         match (lhs, rhs) {
-            (Type::Int, Type::Int) => Ok(Self::int_cmp(ty, cmp, true)),
-            (Type::CellState, Type::CellState) if eq_only => Ok(Self::int_cmp(ty, cmp, false)),
+            (Type::Int, Type::Int) => Ok(Self::int_cmp(Type::Int, cmp, true)),
+            (Type::CellState, Type::CellState) if eq_only => {
+                Ok(Self::int_cmp(Type::CellState, cmp, false))
+            }
             (Type::Vector(len), Type::Int) | (Type::Int, Type::Vector(len)) => {
                 // Coerce the integer to a vector of the same length.
                 Ok(Self::vec_cmp(len, cmp))
@@ -164,7 +165,7 @@ impl Comparator {
                 let len = std::cmp::max(len1, len2);
                 Ok(Self::vec_cmp(len, cmp))
             }
-            _ => Err(CmpError { lhs, cmp, rhs }.with_span(span)),
+            (lhs, rhs) => Err(CmpError { lhs, cmp, rhs }.with_span(span)),
         }
     }
 

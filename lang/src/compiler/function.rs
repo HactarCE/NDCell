@@ -54,7 +54,7 @@ impl CompiledFunction {
                 }
                 inout_values.push(ParamValue {
                     name: name.clone(),
-                    ty: var.ty,
+                    ty: var.ty.clone(),
                     byte_offset,
                 });
             }
@@ -71,7 +71,7 @@ impl CompiledFunction {
         ];
 
         // Allocate space for the return value.
-        let out_type = compiler.function().return_type;
+        let out_type = compiler.function().return_type.clone();
         let out_bytes = vec![0u8; out_type.size_of().unwrap()];
 
         Ok(Self {
@@ -107,7 +107,7 @@ impl CompiledFunction {
         };
         if ret == u32::MAX {
             // No error occurred; get the return value from self.out_bytes.
-            Ok(ConstValue::from_bytes(self.meta.out_type, &self.out_bytes))
+            Ok(ConstValue::from_bytes(&self.meta.out_type, &self.out_bytes))
         } else {
             // An error occurred, and the return value holds the error index.
             Err(self
@@ -151,7 +151,7 @@ impl CompiledFunction {
         let end = start + value.ty.size_of().unwrap();
         ParamValueMut {
             name: &value.name,
-            ty: value.ty,
+            ty: &value.ty,
             bytes: &mut self.param_bytes[start..end],
         }
     }
@@ -203,7 +203,7 @@ pub struct ParamValueMut<'a> {
     /// debugger).
     name: &'a str,
     /// Type of this value.
-    ty: Type,
+    ty: &'a Type,
     /// Raw bytes that hold this value.
     bytes: &'a mut [u8],
 }
@@ -213,19 +213,19 @@ impl<'a> ParamValueMut<'a> {
         self.name
     }
     /// Returns the type of this value.
-    pub fn ty(&self) -> Type {
+    pub fn ty(&self) -> &'a Type {
         self.ty
     }
     /// Returns the value.
     pub fn get(&self) -> ConstValue {
-        ConstValue::from_bytes(self.ty, self.bytes)
+        ConstValue::from_bytes(&self.ty, self.bytes)
     }
     /// Sets the value.
     ///
     /// Panics if given a value of the wrong type.
     pub fn set(&mut self, value: &ConstValue) {
         assert_eq!(
-            value.ty(),
+            &value.ty(),
             self.ty,
             "Wrong type for shared value in JIT function"
         );

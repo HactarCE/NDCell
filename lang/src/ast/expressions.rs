@@ -27,7 +27,7 @@ impl Expr {
     }
     /// Returns the type that this expression evaluates to.
     pub fn return_type(&self) -> Type {
-        self.return_type
+        self.return_type.clone()
     }
     /// Returns the type that this expression evaluates to along with its span
     /// in the original source code.
@@ -269,9 +269,9 @@ impl FnSignature {
         let llvm_param_types = self
             .args
             .iter()
-            .map(|&t| compiler.get_llvm_type(t))
+            .map(|t| compiler.get_llvm_type(t))
             .collect::<LangResult<Vec<_>>>()?;
-        let llvm_ret_type = compiler.get_llvm_type(self.ret)?;
+        let llvm_ret_type = compiler.get_llvm_type(&self.ret)?;
         Ok(llvm_ret_type.fn_type(&llvm_param_types, false))
     }
 }

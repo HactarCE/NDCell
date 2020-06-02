@@ -120,10 +120,10 @@ impl Compiler {
         var_types: &HashMap<String, Type>,
     ) -> LangResult<()> {
         // Determine the LLVM function type (signature).
-        let llvm_return_type = self.get_llvm_type(return_type)?;
+        let llvm_return_type = self.get_llvm_type(&return_type)?;
         let llvm_arg_types = arg_names
             .iter()
-            .map(|name| self.get_llvm_type(var_types[name]))
+            .map(|name| self.get_llvm_type(&var_types[name]))
             .collect::<LangResult<Vec<_>>>()?;
         let fn_type = llvm_return_type.fn_type(&llvm_arg_types, false);
         // Construct the FunctionInProgress.
@@ -139,8 +139,8 @@ impl Compiler {
         });
         // Allocate and initialize variables and add them to the HashMap of all
         // variables.
-        for (name, &ty) in var_types {
-            let var = self.alloca_and_init_var(name.clone(), ty)?;
+        for (name, ty) in var_types {
+            let var = self.alloca_and_init_var(name.clone(), ty.clone())?;
             self.function_mut().vars_by_name.insert(name.clone(), var);
         }
 
@@ -175,7 +175,7 @@ impl Compiler {
         // inout parameters.
         let inout_var_types = inout_var_names
             .iter()
-            .map(|&name| var_types[name])
+            .map(|&name| &var_types[name])
             .map(|ty| self.get_llvm_type(ty))
             .collect::<LangResult<Vec<_>>>()?;
         let inout_struct_type = get_ctx().struct_type(&inout_var_types, false);
@@ -184,7 +184,7 @@ impl Compiler {
             .as_basic_type_enum();
         // The second parameter is a pointer to hold the return value.
         let return_ptr_type = self
-            .get_llvm_type(return_type)?
+            .get_llvm_type(&return_type)?
             .ptr_type(AddressSpace::Generic)
             .as_basic_type_enum();
         // The actual LLVM return value just signals whether there was an error.
@@ -238,7 +238,7 @@ impl Compiler {
                 name.clone(),
                 Variable {
                     name: name.clone(),
-                    ty: var_types[name],
+                    ty: var_types[name].clone(),
                     is_arg: arg_names.contains(name),
                     ptr,
                     inout_byte_offset: Some(byte_offset),
@@ -248,7 +248,7 @@ impl Compiler {
         // Allocate and initialize alloca'd variables and add them to the
         // HashMap of all variables.
         for name in alloca_var_names {
-            let ty = var_types[name];
+            let ty = var_types[name].clone();
             let var = self.alloca_and_init_var(name.clone(), ty)?;
             self.function_mut().vars_by_name.insert(name.clone(), var);
         }
@@ -257,11 +257,14 @@ impl Compiler {
     }
     /// Allocate space on the stack for the given variable and initialize it to a default value.
     fn alloca_and_init_var(&mut self, name: String, ty: Type) -> LangResult<Variable> {
-        let llvm_type = self.get_llvm_type(ty)?;
+        let llvm_type = self.get_llvm_type(&ty)?;
         // Allocate space.
         let ptr = self.builder().build_alloca(llvm_type, &name);
         // Initialize to a default value.
-        let default_value = self.get_default_var_value(ty).unwrap().into_basic_value()?;
+        let default_value = self
+            .get_default_var_value(&ty)
+            .unwrap()
+            .into_basic_value()?;
         self.builder().build_store(ptr, default_value);
         Ok(Variable {
             name,
@@ -772,16 +775,16 @@ impl Compiler {
         }
     }
     /// Returns the default value for variables of the given type.
-    pub fn get_default_var_value(&self, ty: Type) -> Option<Value> {
+    pub fn get_default_var_value(&self, ty: &Type) -> Option<Value> {
         Some(self.value_from_const(ConstValue::default(ty)?))
     }
 
     /// Returns the LLVM type corresponding to the given type in NDCA.
-    pub fn get_llvm_type(&self, ty: Type) -> LangResult<BasicTypeEnum<'static>> {
+    pub fn get_llvm_type(&self, ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
         match ty {
             Type::Int => Ok(self.int_type().into()),
             Type::CellState => Ok(self.cell_state_type().into()),
-            Type::Vector(len) => Ok(self.int_type().vec_type(len as u32).into()),
+            Type::Vector(len) => Ok(self.int_type().vec_type(*len as u32).into()),
             // Type::Pattern => Err(InternalError(
             //     "Attempt to get LLVM representation of type that has none".into(),
             // )

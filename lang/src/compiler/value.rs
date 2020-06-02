@@ -25,13 +25,13 @@ impl Value {
         }
     }
     /// Constructs a value of the given type from an LLVM basic value.
-    pub fn from_basic_value(ty: Type, basic_value: BasicValueEnum<'static>) -> Self {
+    pub fn from_basic_value(ty: &Type, basic_value: BasicValueEnum<'static>) -> Self {
         match ty {
             Type::Int => Self::Int(basic_value.into_int_value()),
             Type::CellState => Self::CellState(basic_value.into_int_value()),
             Type::Vector(len) => {
                 let ret = Self::Vector(basic_value.into_vector_value());
-                assert_eq!(Type::Vector(len), ret.ty(), "Vector length does not match");
+                assert_eq!(Type::Vector(*len), ret.ty(), "Vector length does not match");
                 ret
             }
         }

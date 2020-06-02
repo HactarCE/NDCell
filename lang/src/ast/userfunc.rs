@@ -112,24 +112,23 @@ impl UserFunction {
     }
     /// Returns the return type of this function.
     pub fn return_type(&self) -> Type {
-        self.return_type
+        self.return_type.clone()
     }
 
     /// Returns the type of an existing variable with the given name, or an
     /// Err(UseOfUninitializedVariable) if it does not exist.
-    pub fn try_get_var(&self, span: Span, var_name: &str) -> LangResult<Type> {
+    pub fn try_get_var(&self, span: Span, var_name: &str) -> LangResult<&Type> {
         self.variables
             .get(var_name)
-            .copied()
             .ok_or_else(|| UseOfUninitializedVariable.with_span(span))
     }
     /// Returns the type of the variable with the given name, creating it with
     /// the given type if it does not already exist.
     pub fn get_or_create_var(&mut self, var_name: &str, new_ty: Type) -> Type {
         if let Some(existing_type) = self.variables.get(var_name) {
-            *existing_type
+            existing_type.clone()
         } else {
-            self.variables.insert(var_name.to_owned(), new_ty);
+            self.variables.insert(var_name.to_owned(), new_ty.clone());
             new_ty
         }
     }
@@ -293,9 +292,9 @@ impl UserFunction {
                 let rhs = self.build_expression_ast(rhs)?;
                 args = Args::from(vec![lhs, rhs]);
                 func = functions::lookup_binary_operator(
-                    self[lhs].return_type(),
+                    &self[lhs].return_type(),
                     *op,
-                    self[rhs].return_type(),
+                    &self[rhs].return_type(),
                     span,
                 )?;
             }
@@ -420,7 +419,7 @@ impl UserFunction {
             // If necessary, add an implicit `return #0` at the end of the
             // transition function. TODO: change this to `remain` once that's
             // implemented, and handle other types as well.
-            let default_return_value = compiler.get_default_var_value(self.return_type()).unwrap();
+            let default_return_value = compiler.get_default_var_value(&self.return_type()).unwrap();
             compiler.build_return_ok(default_return_value)?;
         }
         CompiledFunction::try_new(

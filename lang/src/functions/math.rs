@@ -77,7 +77,7 @@ impl NegOrAbs {
                 )
             }
         };
-        Ok(Value::from_basic_value(self.arg_types[0].inner, result))
+        Ok(Value::from_basic_value(&self.arg_types[0].inner, result))
     }
     /// Evaluates this operation for an integer.
     pub fn eval_op_int(&self, arg: LangInt) -> LangResult<LangInt> {
@@ -110,7 +110,7 @@ impl Function for NegOrAbs {
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
         self.arg_types[0].check_int_or_vec()?;
-        Ok(self.arg_types[0].inner)
+        Ok(self.arg_types[0].inner.clone())
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
@@ -161,7 +161,7 @@ impl Function for UnaryPlus {
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
         self.arg_types[0].check_int_or_vec()?;
-        Ok(self.arg_types[0].inner)
+        Ok(self.arg_types[0].inner.clone())
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
@@ -253,19 +253,19 @@ impl BinaryOp {
     /// performing any other operation, the shorter vector is extended with
     /// zeros.
     fn result_type(&self) -> Type {
-        let lhs = self.arg_types[0].inner;
-        let rhs = self.arg_types[1].inner;
+        let lhs = &self.arg_types[0].inner;
+        let rhs = &self.arg_types[1].inner;
         match (lhs, rhs) {
-            (Type::Int, other) | (other, Type::Int) => other,
+            (Type::Int, other) | (other, Type::Int) => other.clone(),
             (Type::Vector(len1), Type::Vector(len2)) => {
                 use OperatorToken::*;
                 match self.op {
                     // Extend the shorter vector with zeros.
                     Plus | Minus | DoubleLessThan | DoubleGreaterThan | TripleGreaterThan
-                    | Pipe | Caret => Type::Vector(std::cmp::max(len1, len2)),
+                    | Pipe | Caret => Type::Vector(std::cmp::max(*len1, *len2)),
                     // Truncate the longer vector.
                     Asterisk | Slash | Percent | DoubleAsterisk | Ampersand => {
-                        Type::Vector(std::cmp::min(len1, len2))
+                        Type::Vector(std::cmp::min(*len1, *len2))
                     }
                     DotDot | Tag => panic!("Uncaught invalid operator for binary op"),
                 }
@@ -456,7 +456,7 @@ impl Function for BinaryOp {
             (Value::Vector(lhs), Value::Vector(rhs)) => self.compile_op(compiler, lhs, rhs)?,
             _ => unreachable!(),
         };
-        Ok(Value::from_basic_value(self.result_type(), result))
+        Ok(Value::from_basic_value(&self.result_type(), result))
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
         let lhs = args.const_eval(0)?;

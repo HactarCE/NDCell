@@ -95,9 +95,9 @@ pub fn lookup_unary_operator(
 }
 
 pub fn lookup_binary_operator(
-    lhs: Type,
+    lhs: &Type,
     op: OperatorToken,
-    rhs: Type,
+    rhs: &Type,
     span: Span,
 ) -> LangResult<FuncConstructor> {
     use OperatorToken::*;
@@ -118,7 +118,7 @@ pub fn lookup_binary_operator(
         InvalidArguments {
             name: format!("binary {:?} operator", op.to_string()),
             is_method: false,
-            arg_types: vec![lhs, rhs],
+            arg_types: vec![lhs.clone(), rhs.clone()],
         }
         .with_span(span)
     })

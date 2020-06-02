@@ -42,7 +42,7 @@ impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Int => write!(f, "int"),
-            Self::CellState => write!(f, "cellstate"),
+            Self::CellState => write!(f, "cell"),
             Self::Vector(len) => write!(f, "vec{}", len),
         }
     }

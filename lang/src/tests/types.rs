@@ -48,11 +48,11 @@ fn test_return_type_error() {
     let source_code = "@function cellstate test(int x) { return x }";
     let expected = ("x", "Type error: expected cellstate but got integer");
     assert_compile_error(source_code, expected);
-    let source_code = "@function cellstate test() { return 0 }";
+    let source_code = "@function cell test() { return 0 }";
     let expected = ("0", "Type error: expected cellstate but got integer");
     assert_compile_error(source_code, expected);
 
-    let source_code = "@function int test(cellstate x) { return x }";
+    let source_code = "@function integer test(cell x) { return x }";
     let expected = ("x", "Type error: expected integer but got cellstate");
     assert_compile_error(source_code, expected);
     let source_code = "@function int test() { return #0 }";

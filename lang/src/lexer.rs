@@ -451,7 +451,7 @@ impl FromStr for TypeToken {
         }
         match s {
             "int" | "integer" => Ok(Self::Int),
-            "cellstate" => Ok(Self::CellState),
+            "cell" | "cellstate" => Ok(Self::CellState),
             "vec" | "vector" => Ok(Self::Vector(None)),
             _ => Err(()),
         }

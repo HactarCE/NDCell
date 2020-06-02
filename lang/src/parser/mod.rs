@@ -678,7 +678,7 @@ impl<'a> ParseBuilder<'a> {
     fn type_name(&mut self) -> LangResult<TypeToken> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Type(ty)) => Ok(ty),
-            _ => self.err(Expected("type name; e.g. int, cellstate, vec, vec1..256")),
+            _ => self.err(Expected("type name; e.g. int, cell, vec, vec1..256")),
         }
     }
     /// Consumes an identifier.

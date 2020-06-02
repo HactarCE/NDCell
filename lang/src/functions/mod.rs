@@ -10,7 +10,9 @@ pub mod vectors;
 
 use crate::ast;
 use crate::errors::*;
+use crate::lexer::OperatorToken;
 use crate::{Span, Type};
+use LangErrorMsg::InvalidArguments;
 
 /// FnOnce that constructs a Box<dyn ast::Function>, given some standard
 /// arguments.
@@ -55,4 +57,69 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             _ => None,
         },
     }
+}
+
+pub fn lookup_unary_operator(
+    op: OperatorToken,
+    arg: Type,
+    span: Span,
+) -> LangResult<FuncConstructor> {
+    use OperatorToken::*;
+    use Type::*;
+    let ret: Option<FuncConstructor> = match op {
+        // Unary plus
+        Plus => match arg {
+            Int | Vector(_) => Some(Box::new(math::UnaryPlus::construct)),
+            _ => None,
+        },
+        // Unary minus
+        Minus => match arg {
+            Int | Vector(_) => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::Negate)),
+            _ => None,
+        },
+        // Tag
+        Tag => match arg {
+            Int => Some(Box::new(convert::IntToCellState::construct)),
+            _ => None,
+        },
+        _ => None,
+    };
+    ret.ok_or_else(|| {
+        InvalidArguments {
+            name: format!("unary {:?} operator", op.to_string()),
+            is_method: false,
+            arg_types: vec![arg],
+        }
+        .with_span(span)
+    })
+}
+
+pub fn lookup_binary_operator(
+    lhs: Type,
+    op: OperatorToken,
+    rhs: Type,
+    span: Span,
+) -> LangResult<FuncConstructor> {
+    use OperatorToken::*;
+    use Type::*;
+    let ret: Option<FuncConstructor> = match (lhs, op, rhs) {
+        // Range
+        (_, DotDot, _) => match (lhs, rhs) {
+            (Int, Int) => todo!("Integer range"),
+            _ => None,
+        },
+        // Basic math
+        (Int, _, Int) | (Int, _, Vector(_)) | (Vector(_), _, Int) | (Vector(_), _, Vector(_)) => {
+            Some(math::BinaryOp::with_op(op))
+        }
+        _ => None,
+    };
+    ret.ok_or_else(|| {
+        InvalidArguments {
+            name: format!("binary {:?} operator", op.to_string()),
+            is_method: false,
+            arg_types: vec![lhs, rhs],
+        }
+        .with_span(span)
+    })
 }

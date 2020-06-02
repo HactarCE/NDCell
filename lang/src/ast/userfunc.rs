@@ -6,11 +6,10 @@ use super::{statements, Args, Expr, RuleMeta, Statement, StatementBlock};
 use crate::compiler::{CompiledFunction, Compiler, Value};
 use crate::errors::*;
 use crate::functions;
-use crate::lexer::OperatorToken;
 use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{
-    BecomeInHelperFunction, CannotIndexType, Expected, FunctionLookupError, InternalError,
+    BecomeInHelperFunction, CannotIndexType, Expected, FunctionLookupError,
     ReturnInTransitionFunction, Unimplemented, UseOfUninitializedVariable,
 };
 
@@ -284,43 +283,22 @@ impl UserFunction {
             parser::Expr::ParenExpr(expr) => return self.build_expression_ast(expr),
             // Unary operator
             parser::Expr::UnaryOp { op, operand } => {
-                args = Args::from(vec![self.build_expression_ast(operand)?]);
-                func = match op {
-                    // No-op unary plus
-                    OperatorToken::Plus => Box::new(functions::math::UnaryPlus::construct),
-                    // Negation
-                    OperatorToken::Minus => {
-                        functions::math::NegOrAbs::with_mode(functions::math::NegOrAbsMode::Negate)
-                    }
-                    // Get cell state from integer ID
-                    OperatorToken::Tag => Box::new(functions::convert::IntToCellState::construct),
-                    _ => return Err(InternalError("Invalid unary operator".into()).with_span(span)),
-                }
+                let arg = self.build_expression_ast(operand)?;
+                args = Args::from(vec![arg]);
+                func = functions::lookup_unary_operator(*op, self[arg].return_type(), span)?;
             }
             // Binary mathematical/bitwise operator
-            parser::Expr::BinaryOp { lhs, op, rhs } => match op {
-                // Math
-                OperatorToken::Plus
-                | OperatorToken::Minus
-                | OperatorToken::Asterisk
-                | OperatorToken::Slash
-                | OperatorToken::Percent
-                | OperatorToken::DoubleAsterisk
-                | OperatorToken::DoubleLessThan
-                | OperatorToken::DoubleGreaterThan
-                | OperatorToken::TripleGreaterThan
-                | OperatorToken::Pipe
-                | OperatorToken::Caret
-                | OperatorToken::Ampersand => {
-                    let lhs = self.build_expression_ast(lhs)?;
-                    let rhs = self.build_expression_ast(rhs)?;
-                    args = Args::from(vec![lhs, rhs]);
-                    func = functions::math::BinaryOp::with_op(*op);
-                }
-                // Range
-                OperatorToken::DotDot => todo!("Range"),
-                _ => return Err(InternalError("Invalid binary operator".into()).with_span(span)),
-            },
+            parser::Expr::BinaryOp { lhs, op, rhs } => {
+                let lhs = self.build_expression_ast(lhs)?;
+                let rhs = self.build_expression_ast(rhs)?;
+                args = Args::from(vec![lhs, rhs]);
+                func = functions::lookup_binary_operator(
+                    self[lhs].return_type(),
+                    *op,
+                    self[rhs].return_type(),
+                    span,
+                )?;
+            }
             // Logical NOT
             parser::Expr::LogicalNot(expr) => {
                 args = Args::from(vec![self.build_expression_ast(expr)?]);

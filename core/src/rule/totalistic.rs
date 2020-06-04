@@ -59,3 +59,17 @@ pub const LIFE: MooreTotalistic2D = MooreTotalistic2D {
     birth: [0, 0, 0, 1, 0, 0, 0, 0, 0],
     survival: [0, 0, 1, 1, 0, 0, 0, 0, 0],
 };
+
+/// Seeds (B2/S)
+pub const SEEDS: MooreTotalistic2D = MooreTotalistic2D {
+    birth: [0, 0, 1, 0, 0, 0, 0, 0, 0],
+    survival: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+};
+
+/// HighLife (B36/S23)
+pub const HIGHLIFE: MooreTotalistic2D = MooreTotalistic2D {
+    birth: [0, 0, 0, 1, 0, 0, 1, 0, 0],
+    survival: [0, 0, 1, 1, 0, 0, 0, 0, 0],
+};
+
+

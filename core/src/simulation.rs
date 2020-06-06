@@ -167,42 +167,81 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
             // Let `L` be the layer of the current node, and let `t` be the
             // number of generations to simulate. Colors refer to Figure 4 in
             // this article: https://www.drdobbs.com/jvm/_/184406478.
-            ret = cache.get_node_from_fn(|final_branch_idx| {
-                // TODO: parallelize using rayon or something similar
-                let node_halfway = cache.get_node_from_fn(|inner_branch_idx| {
-                    let node_intial = cache.get_node_from_fn(|outer_branch_idx| {
-                        // 1. Grab sub-branches at layer `L-2` of the original
-                        //    node at time `0`.
-                        node.get_sub_branch(
-                            final_branch_idx.clone() + inner_branch_idx.clone() + outer_branch_idx,
-                        )
-                        .clone()
-                        // 2. Use these branches to make a node at layer `L-1` and
-                        //    time `0`.
-                    });
-                    // 3. Simulate that node to get a new node at layer `L-2`
-                    //    and time `t/2` (red squares).
+
+            // TODO: recomment this
+            let unsimmed_nodes: Vec<_> = NdRect::span(ByteVec::origin(), ByteVec::repeat(3))
+                .iter()
+                .map(|pos| node.get_sub_branch(pos))
+                .collect();
+
+            // TODO: recomment this
+            let half_simmed_nodes: Vec<_> = NdRect::span(ByteVec::origin(), ByteVec::repeat(2))
+                .iter()
+                .map(|pos| {
                     NdTreeBranch::Node(self.advance_inner_node(
                         cache,
-                        &node_intial,
+                        &cache.get_node_from_fn(|branch_idx| {
+                            // TODO 2D HACK
+                            let sum = &pos + branch_idx;
+                            let idx = sum[Axis::Y] * 4 + sum[Axis::X];
+                            unsimmed_nodes[idx as usize].clone()
+                        }),
                         &t_outer,
                         transition_function,
                     ))
-                    // 4. Using branches from step #3, create a node at layer
-                    //    `L-1` and time `t/2`.
-                });
-                // 5. Simulate that node to get a new node at layer `L-2` and
-                //    time `t` (green squares).
+                })
+                .collect();
+
+            ret = cache.get_node_from_fn(|branch_idx| {
                 NdTreeBranch::Node(self.advance_inner_node(
                     cache,
-                    &node_halfway,
+                    &cache.get_node_from_fn(|sub_branch_idx| {
+                        // TODO 2D HACK
+                        let sum = &branch_idx + sub_branch_idx;
+                        let idx = sum[Axis::Y] * 3 + sum[Axis::X];
+                        half_simmed_nodes[idx as usize].clone()
+                    }),
                     &t_inner,
                     transition_function,
                 ))
-                // 6. Using branches from step #5, create a new node at layer
-                //    `L-1` and time `t` (blue square). This is the final
-                //    result.
             });
+
+            // ret = cache.get_node_from_fn(|final_branch_idx| {
+            //     // TODO: parallelize using rayon or something similar
+            //     let node_halfway = cache.get_node_from_fn(|inner_branch_idx| {
+            //         let node_intial = cache.get_node_from_fn(|outer_branch_idx| {
+            //             // 1. Grab sub-branches at layer `L-2` of the original
+            //             //    node at time `0`.
+            //             node.get_sub_branch(
+            //                 final_branch_idx.clone() + inner_branch_idx.clone() + outer_branch_idx,
+            //             )
+            //             .clone()
+            //             // 2. Use these branches to make a node at layer `L-1` and
+            //             //    time `0`.
+            //         });
+            //         // 3. Simulate that node to get a new node at layer `L-2`
+            //         //    and time `t/2` (red squares).
+            //         NdTreeBranch::Node(self.advance_inner_node(
+            //             cache,
+            //             &node_intial,
+            //             &t_outer,
+            //             transition_function,
+            //         ))
+            //         // 4. Using branches from step #3, create a node at layer
+            //         //    `L-1` and time `t/2`.
+            //     });
+            //     // 5. Simulate that node to get a new node at layer `L-2` and
+            //     //    time `t` (green squares).
+            //     NdTreeBranch::Node(self.advance_inner_node(
+            //         cache,
+            //         &node_halfway,
+            //         &t_inner,
+            //         transition_function,
+            //     ))
+            //     // 6. Using branches from step #5, create a new node at layer
+            //     //    `L-1` and time `t` (blue square). This is the final
+            //     //    result.
+            // });
         }
 
         // Add the result to the cache so we don't have to do all that work next

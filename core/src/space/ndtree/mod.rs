@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
 
@@ -104,7 +105,12 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
             // on all axes).
             let opposite_branch_idx = branch_idx.opposite();
             // All branches of this node will be empty ...
-            let mut inner_branches = vec![empty_sub_branch.clone(); D::TREE_BRANCHES];
+            let mut inner_branches = [
+                empty_sub_branch.clone(),
+                empty_sub_branch.clone(),
+                empty_sub_branch.clone(),
+                empty_sub_branch.clone(),
+            ];
             // ... except for the opposite branch, which is closest to the center.
             inner_branches[opposite_branch_idx.to_array_idx()] = old_branch.clone();
             // And return a branch with that node.

@@ -2,6 +2,7 @@ use num::{BigInt, One, ToPrimitive, Zero};
 use seahash::SeaHasher;
 use std::borrow::Borrow;
 use std::convert::From;
+use std::convert::TryInto;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, Index};
@@ -24,7 +25,7 @@ pub struct NdBaseTreeNode<C: CellType, D: Dim> {
     /// D::NDIM as the array size. It might be worth implementing a custom
     /// unsafe type for this, but at the time of writing such an optimization
     /// would be entirely premature.
-    pub branches: Vec<NdTreeBranch<C, D>>,
+    pub branches: [NdTreeBranch<C, D>; 4],
 
     /// This node's hash, based solely on the hashes of its branches.
     pub hash_code: u64,
@@ -33,9 +34,26 @@ pub struct NdBaseTreeNode<C: CellType, D: Dim> {
     /// still definitely need to know it.
     phantom: PhantomData<D>,
 }
+impl<C: CellType, D: Dim> From<[NdTreeBranch<C, D>; 4]> for NdBaseTreeNode<C, D> {
+    fn from(branches: [NdTreeBranch<C, D>; 4]) -> Self {
+        let mut hasher = SeaHasher::new();
+        branches.hash(&mut hasher);
+        Self {
+            branches,
+            hash_code: hasher.finish(),
+            phantom: PhantomData,
+        }
+    }
+}
 impl<C: CellType, D: Dim> From<Vec<NdTreeBranch<C, D>>> for NdBaseTreeNode<C, D> {
     fn from(branches: Vec<NdTreeBranch<C, D>>) -> Self {
         let mut hasher = SeaHasher::new();
+        let branches = [
+            branches[0].clone(),
+            branches[1].clone(),
+            branches[2].clone(),
+            branches[3].clone(),
+        ];
         branches.hash(&mut hasher);
         Self {
             branches,
@@ -229,15 +247,19 @@ impl<C: CellType, D: Dim> NdTreeNode<C, D> {
     /// node (layer 3) centered on it.
     pub fn get_inner_node(&self, cache: &NdTreeCache<C, D>) -> NdCachedNode<C, D> {
         assert_ne!(1, self.layer, "Cannot take inner node of node at layer 1");
-        let new_branches = self
+        let mut iter = self
             .branches
             .iter()
             .enumerate()
             .map(|(branch_idx, branch)| {
                 branch.node().unwrap()[ByteVec::from_array_idx(branch_idx).opposite()].clone()
-            })
-            .collect();
-        cache.get_node(new_branches)
+            });
+        cache.get_node([
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+        ])
     }
 
     /// Returns the NdTreeBranchIndex of the branch of this node containing the

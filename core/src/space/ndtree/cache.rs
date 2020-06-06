@@ -1,6 +1,7 @@
 use dashmap::DashMap;
 use seahash::SeaHasher;
 use std::hash::BuildHasherDefault;
+use std::mem::MaybeUninit;
 use std::sync::{Arc, RwLock};
 
 use crate::*;
@@ -33,7 +34,7 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
 
     /// Returns the cached node with the given branches, creating it if it does
     /// not exist.
-    pub fn get_node(&self, branches: Vec<NdTreeBranch<C, D>>) -> NdCachedNode<C, D> {
+    pub fn get_node(&self, branches: [NdTreeBranch<C, D>; 4]) -> NdCachedNode<C, D> {
         // Create an NdBaseTreeNode (cheaper than a full NdTreeNode) for HashSet
         // lookup.
         let base_node = NdBaseTreeNode::from(branches);
@@ -57,7 +58,12 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
         } else {
             drop(empty_nodes);
             // Cache miss
-            let branches = vec![self.get_empty_branch(layer - 1); D::TREE_BRANCHES];
+            let branches = [
+                self.get_empty_branch(layer - 1),
+                self.get_empty_branch(layer - 1),
+                self.get_empty_branch(layer - 1),
+                self.get_empty_branch(layer - 1),
+            ];
             let ret = self.get_node(branches);
             // All lower entries in the cache have been filled by the recursive
             // call. Check again here to make sure that another thread hasn't
@@ -80,13 +86,15 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
     /// Returns a cached node, using a function to generate each branch.
     pub fn get_node_from_fn(
         &self,
-        generator: impl FnMut(ByteVec<D>) -> NdTreeBranch<C, D>,
+        mut generator: impl FnMut(ByteVec<D>) -> NdTreeBranch<C, D>,
     ) -> NdCachedNode<C, D> {
-        let branches = (0..D::TREE_BRANCHES)
-            .map(ByteVec::from_array_idx)
-            .map(generator)
-            .collect();
-        self.get_node(branches)
+        // TODO 2D HACK
+        self.get_node([
+            generator(ByteVec::from_array_idx(0)),
+            generator(ByteVec::from_array_idx(1)),
+            generator(ByteVec::from_array_idx(2)),
+            generator(ByteVec::from_array_idx(3)),
+        ])
     }
     /// Returns a cached node, using a function of the cell position to generate
     /// each cell state. This can only be used for relatively small nodes, since

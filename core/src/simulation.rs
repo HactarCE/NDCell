@@ -167,42 +167,83 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
             // Let `L` be the layer of the current node, and let `t` be the
             // number of generations to simulate. Colors refer to Figure 4 in
             // this article: https://www.drdobbs.com/jvm/_/184406478.
-            ret = cache.get_node_from_fn(|final_branch_idx| {
-                // TODO: parallelize using rayon or something similar
-                let node_halfway = cache.get_node_from_fn(|inner_branch_idx| {
-                    let node_intial = cache.get_node_from_fn(|outer_branch_idx| {
-                        // 1. Grab sub-branches at layer `L-2` of the original
-                        //    node at time `0`.
-                        node.get_sub_branch(
-                            final_branch_idx.clone() + inner_branch_idx.clone() + outer_branch_idx,
+
+            // TODO: Note that the use of NdArray here assumes that NdRect
+            // iterates in the same order as NdArray; this probably shouldn't be
+            // relied upon.
+
+            // 1. Make a 4^D array of nodes at layer `L-2` of the original node
+            //    at time `0`.
+            let unsimmed_nodes: NdArray<NdTreeBranch<C, D>, D> = NdArray::from_flat_data(
+                UVec::repeat(4usize),
+                NdRect::span(ByteVec::origin(), ByteVec::repeat(3))
+                    .iter()
+                    .map(|pos| node.get_sub_branch(pos).clone())
+                    .collect(),
+            );
+
+            // 2. Combine adjacent nodes at layer `L-2` to make a 3^D array of
+            //    nodes at layer `L-1` and time `0`.
+            let combined_unsimmed_nodes: NdArray<NdCachedNode<C, D>, D> = NdArray::from_flat_data(
+                UVec::repeat(3usize),
+                NdRect::span(IVec::origin(), IVec::repeat(2isize))
+                    .iter()
+                    .map(|pos| {
+                        cache.get_node(
+                            NdRect::span(pos.clone(), pos + 1)
+                                .iter()
+                                .map(|pos| unsimmed_nodes[&pos].clone())
+                                .collect(),
                         )
-                        .clone()
-                        // 2. Use these branches to make a node at layer `L-1` and
-                        //    time `0`.
-                    });
-                    // 3. Simulate that node to get a new node at layer `L-2`
-                    //    and time `t/2` (red squares).
+                    })
+                    .collect(),
+            );
+
+            // 3. Simulate each of those nodes to get a new node at layer `L-2`
+            //    and time `t/2` (red squares).
+            let half_simmed_nodes: NdArray<NdTreeBranch<C, D>, D> =
+                combined_unsimmed_nodes.map(|node| {
                     NdTreeBranch::Node(self.advance_inner_node(
                         cache,
-                        &node_intial,
+                        &node,
+                        &t_inner,
+                        transition_function,
+                    ))
+                });
+
+            // 4. Combine adjacent nodes from step #3 to make a 2^D array of
+            //    nodes at layer `L-1` and time `t/2`.
+            let combined_half_simmed_nodes: NdArray<NdCachedNode<C, D>, D> =
+                NdArray::from_flat_data(
+                    UVec::repeat(2usize),
+                    NdRect::span(IVec::origin(), IVec::repeat(1isize))
+                        .iter()
+                        .map(|pos| {
+                            cache.get_node(
+                                NdRect::span(pos.clone(), pos + 1)
+                                    .iter()
+                                    .map(|pos| half_simmed_nodes[&pos].clone())
+                                    .collect(),
+                            )
+                        })
+                        .collect(),
+                );
+
+            // 5. Simulate each of those nodes to get a new node at layer `L-2`
+            //    and time `t` (green squares).
+            let full_simmed_nodes: NdArray<NdTreeBranch<C, D>, D> =
+                combined_half_simmed_nodes.map(|node| {
+                    NdTreeBranch::Node(self.advance_inner_node(
+                        cache,
+                        &node,
                         &t_outer,
                         transition_function,
                     ))
-                    // 4. Using branches from step #3, create a node at layer
-                    //    `L-1` and time `t/2`.
                 });
-                // 5. Simulate that node to get a new node at layer `L-2` and
-                //    time `t` (green squares).
-                NdTreeBranch::Node(self.advance_inner_node(
-                    cache,
-                    &node_halfway,
-                    &t_inner,
-                    transition_function,
-                ))
-                // 6. Using branches from step #5, create a new node at layer
-                //    `L-1` and time `t` (blue square). This is the final
-                //    result.
-            });
+
+            // 6. Combine the nodes from step #5 to make a new node at layer
+            //    `L-1` and time `t` (blue square). This is the final result.
+            ret = cache.get_node(full_simmed_nodes.into_flat_data());
         }
 
         // Add the result to the cache so we don't have to do all that work next

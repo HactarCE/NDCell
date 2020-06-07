@@ -54,9 +54,17 @@ impl<T, D: Dim> IndexMut<&IVec<D>> for NdArray<T, D> {
 }
 
 impl<T, D: Dim> NdArray<T, D> {
-    fn flatten_idx(&self, pos: &IVec<D>) -> usize {
-        flatten_idx(&self.size, pos)
+    /// Creates an NdArray from a flat vector. Panics if the vector is not the
+    /// right length.,
+    pub fn from_flat_data(size: UVec<D>, data: Vec<T>) -> Self {
+        assert_eq!(size.product(), data.len(), "Wrong size for NdArray");
+        Self { size, data }
     }
+    /// Returns the flat data behind this array.
+    pub fn into_flat_data(self) -> Vec<T> {
+        self.data
+    }
+
     /// Returns an NdArrayView of this NdArray with no offset.
     pub fn slice(self: Rc<Self>) -> NdArrayView<T, D> {
         self.into()
@@ -81,6 +89,15 @@ impl<T, D: Dim> NdArray<T, D> {
             .iter()
             .enumerate()
             .map(move |(idx, item)| (unflatten_idx(&self.size, idx), item))
+    }
+    /// Applies a function to every element in the array, returning a new array
+    /// of the same size and shape.
+    pub fn map<U>(self, f: impl FnMut(T) -> U) -> NdArray<U, D> {
+        NdArray::from_flat_data(self.size, self.data.into_iter().map(f).collect())
+    }
+
+    fn flatten_idx(&self, pos: &IVec<D>) -> usize {
+        flatten_idx(&self.size, pos)
     }
 }
 

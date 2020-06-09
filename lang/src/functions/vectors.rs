@@ -1,6 +1,7 @@
 //! Vector functions.
 
 use inkwell::IntPredicate;
+use itertools::Itertools;
 use std::convert::TryInto;
 
 use super::{FuncConstructor, FuncResult};
@@ -358,14 +359,14 @@ impl Function for Reduce {
         // Extract all the elements.
         let int_type = compiler.int_type();
         let arg = args.compile(compiler, 0)?.as_vector()?;
-        let components: Vec<_> = (0..arg.get_type().get_size())
+        let components = (0..arg.get_type().get_size())
             .map(|i| {
                 compiler
                     .builder()
                     .build_extract_element(arg, int_type.const_int(i as u64, false), "")
                     .into_int_value()
             })
-            .collect();
+            .collect_vec();
         // Compute the sum/product.
         let mut components = components.into_iter();
         let initial = components.next().unwrap();

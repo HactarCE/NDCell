@@ -17,6 +17,7 @@
 //! function we can pass variable values as "in/out" values, and read the value
 //! after executing part of the function.
 
+use itertools::Itertools;
 use std::collections::HashMap;
 use thread_local::ThreadLocal;
 
@@ -770,7 +771,7 @@ impl Compiler {
                             .into_basic_value()
                             .expect("Failed to convert ConstValue to Value")
                     })
-                    .collect::<Vec<_>>(),
+                    .collect_vec(),
             )),
         }
     }

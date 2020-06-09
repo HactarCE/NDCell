@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use super::{assert_fn_result, compile_test_fn, ConstValue};
 
 #[test]
@@ -72,12 +74,12 @@ fn test_vector_access() {
 #[test]
 fn test_vector_cmp() {
     let test_ints = [-10, 0, 10];
-    let test_vec2s: Vec<_> = iproduct!(&test_ints, &test_ints)
+    let test_vec2s = iproduct!(&test_ints, &test_ints)
         .map(|(&a, &b)| ConstValue::Vector(vec![a, b]))
-        .collect();
-    let test_vec3s: Vec<_> = iproduct!(&test_ints, &test_ints, &test_ints)
+        .collect_vec();
+    let test_vec3s = iproduct!(&test_ints, &test_ints, &test_ints)
         .map(|(&a, &b, &c)| ConstValue::Vector(vec![a, b, c]))
-        .collect();
+        .collect_vec();
 
     let mut cmp_same_fn = compile_test_fn(
         "@function int test(vec3 a, vec3 b) {

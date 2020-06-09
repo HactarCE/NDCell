@@ -1,5 +1,6 @@
 //! Functions for tokenization.
 
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::convert::TryFrom;
@@ -206,7 +207,7 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
         } else if let Some(captures) = STRING_PATTERN.captures(s) {
             if let Some(contents_capture) = captures.get(3) {
                 let prefix = captures.get(1).unwrap().as_str().chars().next();
-                let quote = captures.get(2).unwrap().as_str().chars().next().unwrap();
+                let quote = captures.get(2).unwrap().as_str().chars().exactly_one().unwrap();
                 let contents = contents_capture.as_str();
                 Ok(Self::String {
                     prefix,

@@ -130,6 +130,8 @@ impl<T> Spanned<T> {
 
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
+
     use super::*;
 
     #[test]
@@ -153,9 +155,9 @@ mod tests {
             TextPoint(4, 2),
             TextPoint(4, 3),
         ];
-        let actual_textpoints: Vec<_> = (0..s.len())
+        let actual_textpoints = (0..s.len())
             .map(|idx| TextPoint::from_idx(&s, idx))
-            .collect();
+            .collect_vec();
         assert_eq!(expected_textpoints, actual_textpoints);
     }
 }

@@ -1,5 +1,7 @@
 //! High-level representations of expressions in the AST.
 
+use itertools::Itertools;
+
 use super::{ArgTypes, ArgValues, Args, UserFunction};
 use crate::compiler::*;
 use crate::errors::*;
@@ -251,7 +253,7 @@ impl FnSignature {
                 .args
                 .iter()
                 .map(|arg| arg.inner.0.inner.resolve(ndim))
-                .collect::<Vec<_>>(),
+                .collect_vec(),
             helper_func.return_type.inner.resolve(ndim),
         )
     }

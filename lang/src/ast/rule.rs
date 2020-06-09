@@ -7,7 +7,8 @@ use std::rc::Rc;
 use super::{FnSignature, UserFunction};
 use crate::errors::*;
 use crate::parser::{Directive, DirectiveContents, HelperFunc, ParseTree};
-use crate::{ConstValue, Type, MAX_NDIM, MAX_STATES};
+use crate::types::LangInt;
+use crate::{ConstValue, Type};
 use LangErrorMsg::{
     Expected, FunctionNameConflict, InternalError, InvalidDimensionCount, InvalidStateCount,
     TypeError,
@@ -48,6 +49,7 @@ impl TryFrom<ParseTree> for Rule {
             Some((_span, DirectiveContents::Expr(expr))) => {
                 let ndim_expr = temp_func.build_expression_ast(&expr)?;
                 let ndim_value = temp_func.const_eval_expr(ndim_expr)?;
+                const MAX_NDIM: LangInt = crate::MAX_NDIM as LangInt;
                 match ndim_value {
                     // The user specified a valid dimension count.
                     ConstValue::Int(i @ 1..=MAX_NDIM) => i as u8,
@@ -74,6 +76,7 @@ impl TryFrom<ParseTree> for Rule {
             Some((_span, DirectiveContents::Expr(expr))) => {
                 let states_expr = temp_func.build_expression_ast(&expr)?;
                 let states_value = temp_func.const_eval_expr(states_expr)?;
+                const MAX_STATES: LangInt = crate::MAX_STATES as LangInt;
                 match states_value {
                     // The user specified a valid state count.
                     ConstValue::Int(i @ 1..=MAX_STATES) => make_default_states(Some(i as usize)),

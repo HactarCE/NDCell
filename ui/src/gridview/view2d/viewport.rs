@@ -26,7 +26,7 @@ impl Viewport2D {
         let int_delta = self.offset.floor();
         self.offset -= int_delta;
         // Add the integral part that we removed onto self.pos.
-        self.pos += int_delta.as_ivec();
+        self.pos += int_delta.as_bigvec();
     }
     /// Snap to the nearest integer cell position.
     pub fn snap_pos(&mut self) {

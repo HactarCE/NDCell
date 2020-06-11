@@ -94,8 +94,8 @@ pub struct RenderInProgress<'a> {
     target: &'a mut glium::Frame,
     /// The node layer of a render cell.
     render_cell_layer: usize,
-    /// The width in pixels of a render cell.
-    render_cell_pixels: f64,
+    /// The zoom level to draw render cells at.
+    render_cell_zoom: Zoom2D,
     /// A slice of the quadtree that encompasses all visible cells.
     quadtree_slice: NdTreeSlice<u8, Dim2D>,
     /// The render cell position within quadtree_slice that is centered on the
@@ -118,27 +118,24 @@ impl<'a> RenderInProgress<'a> {
         let (target_w, target_h) = target.get_dimensions();
         let target_pixels_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let viewport = g.interpolating_viewport.clone();
-        let mut zoom = viewport.zoom;
 
         // Compute the width of pixels for each individual cell.
-        let cell_pixels: f64 = zoom.pixels_per_cell();
+        let cell_pixels: f64 = viewport.zoom.pixels_per_cell();
 
         // Compute the lowest layer that must be visited, which is the layer of
         // a "render cell," a node that is rendered as one unit (one pixel in
         // step #1).
-        let render_cell_layer: usize = std::cmp::max(0, -zoom.round().power() as isize) as usize;
+        let render_cell_layer: usize =
+            std::cmp::max(0, -viewport.zoom.round().power() as isize) as usize;
         // Compute the width of cells represented by each render cell.
         let render_cell_len: BigInt = BigInt::from(1) << render_cell_layer;
         // The render cell layer is also the power of two we should subtract from
         // the zoom level.
-        zoom = Zoom2D::from_power(zoom.power() + render_cell_layer as f64);
+        let render_cell_zoom = Zoom2D::from_power(viewport.zoom.power() + render_cell_layer as f64);
         // Now the zoom power should be greater than -1.0 (since -1.0 or
         // anything lower should be handled by having a higher render cell
         // layer).
-        assert!(zoom.power() > -1.0);
-
-        // Compute the width of pixels for each render cell.
-        let render_cell_pixels: f64 = zoom.pixels_per_cell();
+        assert!(render_cell_zoom.power() > -1.0);
 
         // Get an NdCachedNode that covers the entire visible area, a rectangle
         // of visible cells relative to that node, and a floating-point render
@@ -197,7 +194,7 @@ impl<'a> RenderInProgress<'a> {
         // Compute the render cell view matrix.
         let view_matrix: [[f32; 4]; 4];
         {
-            let pixels_per_cell = r64(zoom.pixels_per_cell());
+            let pixels_per_cell = r64(render_cell_zoom.pixels_per_cell());
             // Multiply by 2 because the OpenGL screen space ranges from -1 to +1.
             let scale = FVec2D::repeat(pixels_per_cell) / target_pixels_size * r64(2.0);
             // Convert pos from render-cell-space to screen-space.
@@ -219,7 +216,7 @@ impl<'a> RenderInProgress<'a> {
             viewport,
             target,
             render_cell_layer,
-            render_cell_pixels,
+            render_cell_zoom,
             quadtree_slice,
             pos,
             visible_rect,
@@ -259,7 +256,9 @@ impl<'a> RenderInProgress<'a> {
             .expect("Failed to draw cells");
 
         // Step #3: resize that texture by an integer factor.
-        let integer_scale_factor = self.render_cell_pixels.ceil();
+        // Compute the width of pixels for each render cell.
+        let pixels_per_render_cell = self.render_cell_zoom.pixels_per_cell();
+        let integer_scale_factor = pixels_per_render_cell.round();
         let visible_cells_w = self.visible_rect.len(X) as u32;
         let visible_cells_h = self.visible_rect.len(Y) as u32;
         let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
@@ -277,7 +276,7 @@ impl<'a> RenderInProgress<'a> {
         // Step #4: render that onto the screen.
         let (target_w, target_h) = self.target.get_dimensions();
         let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
-        let render_cells_size = target_size / r64(self.render_cell_pixels);
+        let render_cells_size = target_size / r64(self.render_cell_zoom.pixels_per_cell());
         let render_cells_center = self.pos - self.visible_rect.min().as_fvec();
         let mut render_cells_frect =
             FRect2D::centered(render_cells_center, render_cells_size / 2.0);

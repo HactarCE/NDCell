@@ -62,7 +62,7 @@ pub const GRIDLINE_SPACING_BASE: usize = 16;
 /// Minimum number of pixels between gridlines.
 pub const MIN_GRIDLINE_SPACING: usize = 4;
 /// Minimum number of pixels between gridlines with full opacity.
-pub const MAX_GRIDLINE_SPACING: usize = 64;
+pub const MAX_GRIDLINE_SPACING: usize = 256;
 // Maximum opacity of gridlines when zoomed out beyond one cell per pixel.
 pub const ZOOMED_OUT_MAX_GRID_ALPHA: f64 = 0.75;
 

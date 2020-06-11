@@ -19,18 +19,18 @@ implement_vertex!(QuadtreePosVertex, cell_coords, dest_coords);
 /// A vertex containing a 2D floating-point position and an RGBA color.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct RgbaVertex {
-    pub pos: [f32; 2],
+    pub pos: [f32; 3],
     pub color: [f32; 4],
 }
 implement_vertex!(RgbaVertex, pos, color);
-impl From<([isize; 2], [f32; 4])> for RgbaVertex {
-    fn from(pos_and_color: ([isize; 2], [f32; 4])) -> Self {
-        let (pos, color) = pos_and_color;
-        Self::from(([pos[0] as f32, pos[1] as f32], color))
+impl From<([isize; 2], f32, [f32; 4])> for RgbaVertex {
+    fn from(pos_and_color: ([isize; 2], f32, [f32; 4])) -> Self {
+        let ([x, y], z, color) = pos_and_color;
+        Self::from(([x as f32, y as f32, z], color))
     }
 }
-impl From<([f32; 2], [f32; 4])> for RgbaVertex {
-    fn from(pos_and_color: ([f32; 2], [f32; 4])) -> Self {
+impl From<([f32; 3], [f32; 4])> for RgbaVertex {
+    fn from(pos_and_color: ([f32; 3], [f32; 4])) -> Self {
         let (pos, color) = pos_and_color;
         Self { pos, color }
     }

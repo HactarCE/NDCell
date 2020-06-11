@@ -40,6 +40,7 @@
 
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
+use itertools::Itertools;
 use noisy_float::prelude::r64;
 use num::{BigInt, ToPrimitive, Zero};
 
@@ -60,18 +61,26 @@ pub const MIN_GRIDLINE_ZOOM_POWER: f64 = 2.0;
 /// Number of zoom levels over which to fade gridlines in. 3.0 = three zoom levels
 pub const GRIDLINE_FADE_RANGE: f64 = 3.0;
 
-/// The color of the grid. This will be configurable in the future.
+/// Color of the grid. This will be configurable in the future.
 const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
-/// The color given to the highlighted cell. This will be configurable in the
+/// Color given to the highlighted cell. This will be configurable in the
 /// future.
 const GRID_HIGHLIGHT_COLOR: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
-/// The color for dead cells. This will be configurable in the future.
+/// Color for dead cells. This will be configurable in the future.
 const DEAD_COLOR: (u8, u8, u8) = (0, 0, 0);
-/// The color for live cells. This will be configurable in the future.
+/// Color for live cells. This will be configurable in the future.
 const LIVE_COLOR: (u8, u8, u8) = (255, 255, 255);
 
-/// The number of gridlines in each render batch.
+/// Number of gridlines in each render batch.
 const GRIDLINE_BATCH_SIZE: usize = 256;
+
+/// Depth at which to render gridlines.
+const GRIDLINE_DEPTH: f32 = 0.1;
+/// Depth at which to render highlight/crosshairs.
+const CROSSHAIR_DEPTH: f32 = 0.2;
+
+/// A small offset to apply to depth values to force correct Z order.
+const TINY_DEPTH_OFFSET: f32 = 0.001;
 
 #[derive(Default)]
 pub struct RenderCache {
@@ -104,6 +113,8 @@ pub struct RenderInProgress<'a> {
 impl<'a> RenderInProgress<'a> {
     /// Performs preliminary computations and returns a RenderInProgress.
     pub fn new(g: &GridView2D, cache: &'a mut RenderCache, target: &'a mut glium::Frame) -> Self {
+        target.clear_depth(0.0);
+
         let (target_w, target_h) = target.get_dimensions();
         let target_pixels_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let viewport = g.interpolating_viewport.clone();
@@ -319,62 +330,6 @@ impl<'a> RenderInProgress<'a> {
         [r as u8, g as u8, b as u8, 255]
     }
 
-    /// Draw the gridlines that appear in the viewport.
-    pub fn draw_gridlines(&mut self, alpha: f32) {
-        let mut grid_color = GRID_COLOR;
-        grid_color[3] *= alpha;
-        // Generate a pair of vertices for each gridline.
-        let gridline_indices = glium::index::NoIndices(PrimitiveType::LinesList);
-        let mut gridline_vertices: Vec<RgbaVertex>;
-        {
-            let w = self.visible_rect.len(X);
-            let h = self.visible_rect.len(Y);
-
-            gridline_vertices = Vec::with_capacity((w + h) as usize * 2);
-            let min = self.visible_rect.min();
-            let max = self.visible_rect.max() + 1;
-            let min_x = min[X];
-            let min_y = min[Y];
-            let max_x = max[X];
-            let max_y = max[Y];
-            // Generate vertical gridlines.
-            for x in self.visible_rect.axis_range(X) {
-                gridline_vertices.push(([x, min_y], grid_color).into());
-                gridline_vertices.push(([x, max_y], grid_color).into());
-            }
-            // Generate horizontal gridlines.
-            for y in self.visible_rect.axis_range(Y) {
-                gridline_vertices.push(([min_x, y], grid_color).into());
-                gridline_vertices.push(([max_x, y], grid_color).into());
-            }
-        }
-
-        // Draw the gridlines in batches, because the VBO might not be able to
-        // hold all the points at once.
-        for batch in gridline_vertices.chunks(GRIDLINE_BATCH_SIZE) {
-            // Put the data in a slice of the VBO.
-            let gridlines_vbo = vbos::gridlines();
-            let vbo_slice = gridlines_vbo.slice(0..batch.len()).unwrap();
-            vbo_slice.write(batch);
-            // Draw gridlines.
-            self.target
-                .draw(
-                    vbo_slice,
-                    &gridline_indices,
-                    &shaders::POINTS,
-                    &uniform! {
-                        matrix: self.view_matrix,
-                    },
-                    &glium::DrawParameters {
-                        line_width: Some(1.0),
-                        blend: glium::Blend::alpha_blending(),
-                        ..Default::default()
-                    },
-                )
-                .expect("Failed to draw gridlines");
-        }
-    }
-
     /// Returns the coordinates of the cell at the given pixel, or None if the
     /// viewport is zoomed out beyond 1:1.
     pub fn pixel_pos_to_cell_pos(&self, cursor_position: IVec2D) -> Option<BigVec2D> {
@@ -405,119 +360,177 @@ impl<'a> RenderInProgress<'a> {
         Some(global_pos)
     }
 
+    /// Draw the gridlines that appear in the viewport.
+    pub fn draw_gridlines(&mut self, alpha: f32, width: f32) {
+        let mut grid_color = GRID_COLOR;
+        grid_color[3] *= alpha;
+        self.draw_cell_borders(
+            &self.visible_rect.axis_range(X).collect_vec(),
+            &self.visible_rect.axis_range(Y).collect_vec(),
+            grid_color,
+            width,
+            None,
+            None,
+            GRIDLINE_DEPTH,
+        );
+    }
+
     /// Draws a highlight around the given cell.
-    pub fn draw_blue_crosshairs_highlight(&mut self, cell_position: &BigVec2D) {
-        let min = self.visible_rect.min();
-        let max = self.visible_rect.max() + 1;
-        let min_x = min[X] as f32;
-        let min_y = min[Y] as f32;
-        let max_x = max[X] as f32;
-        let max_y = max[Y] as f32;
-        let mut half_highlight_color = GRID_HIGHLIGHT_COLOR;
-        half_highlight_color[3] *= 0.5;
-        let mut dark_highlight_color = GRID_HIGHLIGHT_COLOR;
-        dark_highlight_color[0] *= 0.5;
-        dark_highlight_color[1] *= 0.5;
-        dark_highlight_color[2] *= 0.5;
-        dark_highlight_color[3] *= 0.75;
+    pub fn draw_blue_crosshairs_highlight(
+        &mut self,
+        cell_position: &BigVec2D,
+        width: f32,
+        draw_gridline_backing: bool,
+    ) {
         let local_pos: IVec2D = (cell_position - &self.quadtree_slice.offset).as_ivec();
-        let mut cell_x = local_pos[X] as f32;
-        let mut cell_y = local_pos[Y] as f32;
-        if self.viewport.zoom.power() < 1.0 {
-            cell_x += 0.5;
-            cell_y += 0.5;
+        let mut fill_color = GRID_HIGHLIGHT_COLOR;
+        fill_color[0] *= 0.5;
+        fill_color[1] *= 0.5;
+        fill_color[2] *= 0.5;
+        fill_color[3] *= 0.75;
+        let x = local_pos[X];
+        let y = local_pos[Y];
+        let highlight_rect = IRect2D::single_cell(local_pos);
+        if draw_gridline_backing {
+            // Redraw normal gridlines to ensure they are the same width as the crosshairs.
+            self.draw_cell_borders(
+                &[x, x + 1],
+                &[y, y + 1],
+                GRID_COLOR,
+                width,
+                None,
+                None,
+                GRIDLINE_DEPTH,
+            );
         }
-        // Draw transparent fill.
+        // Now draw the crosshairs and highlight.
+        self.draw_cell_borders(
+            &[x, x + 1],
+            &[y, y + 1],
+            GRID_HIGHLIGHT_COLOR,
+            width,
+            Some(highlight_rect),
+            Some(fill_color),
+            CROSSHAIR_DEPTH,
+        );
+    }
+
+    fn draw_cell_borders(
+        &mut self,
+        columns: &[isize],
+        rows: &[isize],
+        color: [f32; 4],
+        line_width: f32,
+        highlight_range: Option<IRect2D>,
+        highlight_fill_color: Option<[f32; 4]>,
+        z: f32,
+    ) {
+        let mut base_color = color;
+        if highlight_range.is_some() {
+            base_color[3] *= 0.25;
+        }
+
+        // Generate a pair of vertices for each gridline.
+        let gridline_indices = glium::index::NoIndices(PrimitiveType::LinesList);
+        let mut gridline_vertices: Vec<RgbaVertex>;
         {
+            gridline_vertices = Vec::with_capacity((columns.len() + rows.len()) as usize * 2);
+            let min = self.visible_rect.min();
+            let max = self.visible_rect.max() + 1;
+            let min_x = min[X];
+            let min_y = min[Y];
+            let max_x = max[X];
+            let max_y = max[Y];
+            let z2 = z + TINY_DEPTH_OFFSET;
+            // Generate vertical gridlines.
+            for &x in columns {
+                gridline_vertices.push(([x, min_y], z, base_color).into());
+                if let Some(rect) = highlight_range {
+                    let y1 = rect.min()[Y];
+                    gridline_vertices.push(([x, y1 - 1], z, base_color).into());
+                    gridline_vertices.push(([x, y1 - 1], z, base_color).into());
+                    gridline_vertices.push(([x, y1], z, color).into());
+                    gridline_vertices.push(([x, y1], z2, color).into());
+                    let y2 = rect.max()[Y];
+                    gridline_vertices.push(([x, y2 + 1], z2, color).into());
+                    gridline_vertices.push(([x, y2 + 1], z, color).into());
+                    gridline_vertices.push(([x, y2 + 2], z, base_color).into());
+                    gridline_vertices.push(([x, y2 + 2], z, base_color).into());
+                }
+                gridline_vertices.push(([x, max_y], z, base_color).into());
+            }
+            // Generate horizontal gridlines.
+            for &y in rows {
+                gridline_vertices.push(([min_x, y], z, base_color).into());
+                if let Some(rect) = highlight_range {
+                    let x1 = rect.min()[X];
+                    gridline_vertices.push(([x1 - 1, y], z, base_color).into());
+                    gridline_vertices.push(([x1 - 1, y], z, base_color).into());
+                    gridline_vertices.push(([x1, y], z, color).into());
+                    gridline_vertices.push(([x1, y], z2, color).into());
+                    let x2 = rect.max()[X];
+                    gridline_vertices.push(([x2 + 1, y], z2, color).into());
+                    gridline_vertices.push(([x2 + 1, y], z, color).into());
+                    gridline_vertices.push(([x2 + 2, y], z, base_color).into());
+                    gridline_vertices.push(([x2 + 2, y], z, base_color).into());
+                }
+                gridline_vertices.push(([max_x, y], z, base_color).into());
+            }
+        }
+
+        let uniform = uniform! { matrix: self.view_matrix };
+        let draw_params = glium::DrawParameters {
+            line_width: Some(line_width),
+            blend: glium::Blend::alpha_blending(),
+            depth: glium::Depth {
+                test: glium::DepthTest::IfMore,
+                write: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        // Draw the gridlines in batches, because the VBO might not be able to
+        // hold all the points at once.
+        for batch in gridline_vertices.chunks(GRIDLINE_BATCH_SIZE) {
+            // Put the data in a slice of the VBO.
+            let gridlines_vbo = vbos::gridlines();
+            let vbo_slice = gridlines_vbo.slice(0..batch.len()).unwrap();
+            vbo_slice.write(batch);
+            // Draw gridlines.
+            self.target
+                .draw(
+                    vbo_slice,
+                    &gridline_indices,
+                    &shaders::POINTS,
+                    &uniform,
+                    &draw_params,
+                )
+                .expect("Failed to draw cell borders");
+        }
+
+        // Draw the highlight fill.
+        if let (Some(rect), Some(fill_color)) = (highlight_range, highlight_fill_color) {
             // Generate vertices.
-            let highlight_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
+            let fill_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
             let highlight_vertices: Vec<RgbaVertex> = vec![
-                ([cell_x, cell_y], dark_highlight_color).into(),
-                ([cell_x + 1.0, cell_y], dark_highlight_color).into(),
-                ([cell_x, cell_y + 1.0], dark_highlight_color).into(),
-                ([cell_x + 1.0, cell_y + 1.0], dark_highlight_color).into(),
+                ([rect.min()[X], rect.min()[Y]], z, fill_color).into(),
+                ([rect.max()[X] + 1, rect.min()[Y]], z, fill_color).into(),
+                ([rect.min()[X], rect.max()[Y] + 1], z, fill_color).into(),
+                ([rect.max()[X] + 1, rect.max()[Y] + 1], z, fill_color).into(),
             ];
             // Put the data in a slice of the VBO.
             let gridlines_vbo = vbos::gridlines();
             let vbo_slice = gridlines_vbo.slice(0..highlight_vertices.len()).unwrap();
             vbo_slice.write(&highlight_vertices);
-            // Draw.
+            // Draw highlight fill.
             self.target
                 .draw(
                     vbo_slice,
-                    &highlight_indices,
+                    &fill_indices,
                     &shaders::POINTS,
-                    &uniform! {
-                        matrix: self.view_matrix,
-                    },
-                    &glium::DrawParameters {
-                        blend: glium::Blend::alpha_blending(),
-                        ..Default::default()
-                    },
-                )
-                .expect("Failed to draw cursor crosshairs");
-        }
-
-        // Draw crosshairs.
-        {
-            // Generate vertices.
-            let highlight_indices = glium::index::NoIndices(PrimitiveType::LinesList);
-            let mut highlight_vertices: Vec<RgbaVertex> = vec![];
-            for &y in if self.viewport.zoom.power() >= 1.0 {
-                vec![cell_y, cell_y + 1.0]
-            } else {
-                vec![cell_y]
-            }
-            .iter()
-            {
-                highlight_vertices.push(([min_x, y], half_highlight_color).into());
-                highlight_vertices.push(([cell_x - 1.0, y], half_highlight_color).into());
-                highlight_vertices.push(([cell_x - 1.0, y], half_highlight_color).into());
-                highlight_vertices.push(([cell_x, y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([cell_x, y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([cell_x + 1.0, y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([cell_x + 1.0, y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([cell_x + 2.0, y], half_highlight_color).into());
-                highlight_vertices.push(([cell_x + 2.0, y], half_highlight_color).into());
-                highlight_vertices.push(([max_x, y], half_highlight_color).into());
-            }
-            for &x in if self.viewport.zoom.power() >= 1.0 {
-                vec![cell_x, cell_x + 1.0]
-            } else {
-                vec![cell_x]
-            }
-            .iter()
-            {
-                highlight_vertices.push(([x, min_y], half_highlight_color).into());
-                highlight_vertices.push(([x, cell_y - 1.0], half_highlight_color).into());
-                highlight_vertices.push(([x, cell_y - 1.0], half_highlight_color).into());
-                highlight_vertices.push(([x, cell_y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([x, cell_y], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([x, cell_y + 1.0], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([x, cell_y + 1.0], GRID_HIGHLIGHT_COLOR).into());
-                highlight_vertices.push(([x, cell_y + 2.0], half_highlight_color).into());
-                highlight_vertices.push(([x, cell_y + 2.0], half_highlight_color).into());
-                highlight_vertices.push(([x, max_y], half_highlight_color).into());
-            }
-
-            // Put the data in a slice of the VBO.
-            let gridlines_vbo = vbos::gridlines();
-            let vbo_slice = gridlines_vbo.slice(0..highlight_vertices.len()).unwrap();
-            vbo_slice.write(&highlight_vertices);
-            // Draw.
-            self.target
-                .draw(
-                    vbo_slice,
-                    &highlight_indices,
-                    &shaders::POINTS,
-                    &uniform! {
-                        matrix: self.view_matrix,
-                    },
-                    &glium::DrawParameters {
-                        line_width: Some(1.0),
-                        blend: glium::Blend::alpha_blending(),
-                        ..Default::default()
-                    },
+                    &uniform,
+                    &draw_params,
                 )
                 .expect("Failed to draw cursor crosshairs");
         }

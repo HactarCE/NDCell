@@ -2,24 +2,25 @@ use crate::DISPLAY;
 use glium::Program;
 use send_wrapper::SendWrapper;
 
-macro_rules! load_shader {
-    ($name:expr, $version:expr, srgb = $srgb:expr) => {
-        {
-            SendWrapper::new(glium::program!(
+/// Uses lazy_static!() to define a shader that is lazily loaded from the given
+/// filename.
+macro_rules! static_shader {
+    ($name:ident = { $filename:expr, $glsl_version:expr, srgb: $srgb:expr }) => {
+        lazy_static! {
+            pub static ref $name: SendWrapper<Program> = SendWrapper::new(
+                glium::program!(
                     &**DISPLAY,
-                    $version => {
-                        vertex: include_str!(concat!(stringify!($name), ".vert")),
-                        fragment: include_str!(concat!(stringify!($name), ".frag")),
+                    $glsl_version => {
+                        vertex: include_str!(concat!($filename, ".vert")),
+                        fragment: include_str!(concat!($filename, ".frag")),
                         outputs_srgb: $srgb,
                     },
-                ).expect(&format!("Failed to compile '{}' shader in {}", stringify!($name), std::module_path!()))
-            )
+                ).expect(&format!("Failed to compile '{}' shader in {}", $filename, std::module_path!()))
+            );
         }
     };
 }
 
-lazy_static! {
-    pub static ref BLIT: SendWrapper<Program> = load_shader!(blit, 140, srgb = false);
-    pub static ref LINES: SendWrapper<Program> = load_shader!(lines, 140, srgb = true);
-    pub static ref QUADTREE: SendWrapper<Program> = load_shader!(quadtree, 140, srgb = true);
-}
+static_shader!(BLIT     = { "blit",     140, srgb: false });
+static_shader!(LINES    = { "lines",    140, srgb: true  });
+static_shader!(QUADTREE = { "quadtree", 140, srgb: true  });

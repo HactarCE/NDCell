@@ -1,41 +1,10 @@
-[package]
-name = "ndcell"
-version = "0.0.1"
-authors = ["HactarCE <6060305+HactarCE@users.noreply.github.com>"]
-edition = "2018"
+[workspace]
+members = [ "core", "ui" ]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# [lib]
+# name = "ndcell_lib"
+# path = "core/src/lib.rs"
 
-[profile.release]
-# debug = true
-
-[lib]
-name = "ndcell_lib"
-path = "src/lib.rs"
-
-[[bin]]
-name = "ndcell"
-path = "src/main.rs"
-
-[dependencies]
-clipboard = "0.5"
-dashmap = "3.4"
-enum_dispatch = "0.2"
-glium = "0.25"
-imgui = "0.2"
-imgui-glium-renderer = "0.2"
-imgui-winit-support = "0.2"
-lazy_static = "1.4"
-log = "0.4"
-noisy_float = "0.1"
-num = "0.2"
-pest = "2.1"
-pest_derive = "2.1"
-# preferences = "1.1"
-regex = "1"
-seahash = "3.0"
-send_wrapper = "0.4"
-simple_logger = "1.0"
-
-[dev-dependencies]
-proptest = "0.9.4"
+# [[bin]]
+# name = "ndcell"
+# path = "ui/src/main.rs"

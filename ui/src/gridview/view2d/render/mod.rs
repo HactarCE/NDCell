@@ -197,7 +197,7 @@ impl<'a> RenderInProgress<'a> {
         // Compute the render cell view matrix.
         let view_matrix: [[f32; 4]; 4];
         {
-            let pixels_per_cell = r64(viewport.zoom.pixels_per_cell());
+            let pixels_per_cell = r64(zoom.pixels_per_cell());
             // Multiply by 2 because the OpenGL screen space ranges from -1 to +1.
             let scale = FVec2D::repeat(pixels_per_cell) / target_pixels_size * r64(2.0);
             // Convert pos from render-cell-space to screen-space.

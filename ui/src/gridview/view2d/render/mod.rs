@@ -56,10 +56,15 @@ use super::*;
 use gl_quadtree::CachedGlQuadtree;
 use vertices::*;
 
-/// Minimum zoom power to draw gridlines. 2.0 = 4 pixels per cell.
-pub const MIN_GRIDLINE_ZOOM_POWER: f64 = 2.0;
-/// Number of zoom levels over which to fade gridlines in. 3.0 = three zoom levels
-pub const GRIDLINE_FADE_RANGE: f64 = 3.0;
+/// Exponential base to use when fading out gridlines. 16 = 16 small gridlines
+/// between each large gridline.
+pub const GRIDLINE_SPACING_BASE: usize = 16;
+/// Minimum number of pixels between gridlines.
+pub const MIN_GRIDLINE_SPACING: usize = 4;
+/// Minimum number of pixels between gridlines with full opacity.
+pub const MAX_GRIDLINE_SPACING: usize = 64;
+// Maximum opacity of gridlines when zoomed out beyond one cell per pixel.
+pub const ZOOMED_OUT_MAX_GRID_ALPHA: f64 = 0.75;
 
 /// Color of the grid. This will be configurable in the future.
 const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
@@ -181,9 +186,9 @@ impl<'a> RenderInProgress<'a> {
             // the lower corner of the slice.
             let integer_pos = (&viewport.pos - &quadtree_slice.offset).div_floor(&render_cell_len);
             pos = integer_pos.as_fvec();
-            // Add a half-pixel offset if the viewport dimensions are odd, so
+            // Offset by half a pixel if the viewport dimensions are odd, so
             // that cells boundaries always line up with pixel boundaries.
-            pos += target_pixels_size % 2.0 / 2.0;
+            pos += (target_pixels_size % 2.0) / 2.0;
             // viewport.offset is a sub-cell offset, so it only matters when
             // zoomed in more than 1:1.
             if viewport.zoom.pixels_per_cell() > 1.0 {
@@ -191,14 +196,22 @@ impl<'a> RenderInProgress<'a> {
             }
         }
 
-        // Compute the render cell view matrix.
+        // Compute the render cell view matrix, used for rendering gridlines.
         let view_matrix: [[f32; 4]; 4];
         {
             let pixels_per_cell = r64(render_cell_zoom.pixels_per_cell());
             // Multiply by 2 because the OpenGL screen space ranges from -1 to +1.
             let scale = FVec2D::repeat(pixels_per_cell) / target_pixels_size * r64(2.0);
+            // Offset by half a pixel the zoom power is less than 0.5 (somewhere
+            // between 1:1 and 1:2), so that gridlines are lined up perfectly
+            // with the cells themselves instead of their boundaries.
+            let subpixel_offset = if viewport.zoom.power() < 0.5 {
+                -render_cell_zoom.cells_per_pixel() / 2.0
+            } else {
+                0.0
+            };
             // Convert pos from render-cell-space to screen-space.
-            let offset = pos * scale;
+            let offset = (pos + r64(subpixel_offset)) * scale;
             let x_offset = offset[X].raw() as f32;
             let y_offset = offset[Y].raw() as f32;
             let x_scale = scale[X].raw() as f32;
@@ -360,18 +373,53 @@ impl<'a> RenderInProgress<'a> {
     }
 
     /// Draw the gridlines that appear in the viewport.
-    pub fn draw_gridlines(&mut self, alpha: f32, width: f32) {
-        let mut grid_color = GRID_COLOR;
-        grid_color[3] *= alpha;
-        self.draw_cell_borders(
-            &self.visible_rect.axis_range(X).collect_vec(),
-            &self.visible_rect.axis_range(Y).collect_vec(),
-            grid_color,
-            width,
-            None,
-            None,
-            GRIDLINE_DEPTH,
-        );
+    pub fn draw_gridlines(&mut self, width: f32) {
+        // Compute the minimum pixel spacing between maximum-opacity gridlines.
+        let pixel_spacing = MAX_GRIDLINE_SPACING as f64;
+        // Compute the cell spacing between the gridlines that will be drawn
+        // with the maximum opacity.
+        let cell_spacing = pixel_spacing / self.viewport.zoom.factor();
+        // Round up to the nearest power of GRIDLINE_SPACING_BASE.
+        let spacing_base_log2 = (GRIDLINE_SPACING_BASE as f64).log2();
+        let cell_spacing =
+            2.0f64.powf((cell_spacing.log2() / spacing_base_log2).ceil() * spacing_base_log2);
+        // Convert from cells to render cells.
+        let render_cell_spacing = cell_spacing / 2.0f64.powf(self.render_cell_layer as f64);
+        let mut spacing = render_cell_spacing as usize;
+        // Convert from render cells to pixels.
+        let mut pixel_spacing =
+            render_cell_spacing as f64 * self.render_cell_zoom.pixels_per_cell();
+
+        while spacing > 0 && pixel_spacing > MIN_GRIDLINE_SPACING as f64 {
+            // Compute grid color, including alpha.
+            let mut color = GRID_COLOR;
+            let alpha = gridline_alpha(pixel_spacing, self.viewport.zoom) as f32;
+            color[3] *= alpha;
+            // Draw gridlines with the given spacing.
+            let offset = (-self.visible_rect.min()).mod_floor(&(spacing as isize));
+            self.draw_cell_borders(
+                &self
+                    .visible_rect
+                    .axis_range(X)
+                    .skip(offset[X] as usize)
+                    .step_by(spacing)
+                    .collect_vec(),
+                &self
+                    .visible_rect
+                    .axis_range(Y)
+                    .skip(offset[Y] as usize)
+                    .step_by(spacing)
+                    .collect_vec(),
+                color,
+                width,
+                None,
+                None,
+                GRIDLINE_DEPTH,
+            );
+            // Decrease the spacing.
+            spacing /= GRIDLINE_SPACING_BASE;
+            pixel_spacing /= GRIDLINE_SPACING_BASE as f64;
+        }
     }
 
     /// Draws a highlight around the given cell.
@@ -390,22 +438,33 @@ impl<'a> RenderInProgress<'a> {
         let x = local_pos[X];
         let y = local_pos[Y];
         let highlight_rect = IRect2D::single_cell(local_pos);
+
+        // Only draw two crosshairs (vertical & horizontal) if we are zoomed out
+        // past 1:1.5 scale.
+        let mut xs = vec![x];
+        let mut ys = vec![y];
+        if self.viewport.zoom.factor() > 1.5 {
+            xs.push(x + 1);
+            ys.push(y + 1);
+        }
+
         if draw_gridline_backing {
-            // Redraw normal gridlines to ensure they are the same width as the crosshairs.
+            // Redraw normal gridlines to ensure they are full opacity and the
+            // same width as the crosshairs.
             self.draw_cell_borders(
-                &[x, x + 1],
-                &[y, y + 1],
+                &xs,
+                &ys,
                 GRID_COLOR,
                 width,
                 None,
                 None,
-                GRIDLINE_DEPTH,
+                GRIDLINE_DEPTH + TINY_DEPTH_OFFSET,
             );
         }
         // Now draw the crosshairs and highlight.
         self.draw_cell_borders(
-            &[x, x + 1],
-            &[y, y + 1],
+            &xs,
+            &ys,
             GRID_HIGHLIGHT_COLOR,
             width,
             Some(highlight_rect),
@@ -554,4 +613,33 @@ fn entire_blit_target<S: glium::Surface>(surface: &S) -> glium::BlitTarget {
         width: width as i32,
         height: height as i32,
     }
+}
+
+fn gridline_alpha(pixel_spacing: f64, zoom: Zoom2D) -> f64 {
+    // Fade maximum grid alpha as zooming out beyond 1 cell per pixel.
+    let max_alpha = clamped_interpolate(zoom.power(), 0.0, 1.0, ZOOMED_OUT_MAX_GRID_ALPHA, 1.0);
+    let alpha = clamped_interpolate(
+        pixel_spacing.log2(),
+        (MIN_GRIDLINE_SPACING as f64).log2(),
+        (MAX_GRIDLINE_SPACING as f64).log2(),
+        0.0,
+        1.0,
+    );
+    // Clamp to max alpha.
+    if alpha > max_alpha {
+        max_alpha
+    } else {
+        alpha
+    }
+}
+
+fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: f64) -> f64 {
+    if x < min {
+        return min_result;
+    }
+    if x > max {
+        return max_result;
+    }
+    let progress = (x - min) / (max - min);
+    min_result + (max_result - min_result) * progress
 }

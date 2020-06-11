@@ -15,7 +15,7 @@ use super::{GridViewTrait, RenderGridView};
 use crate::clipboard_compat::{clipboard_get, clipboard_set};
 use crate::config::Config;
 use crate::history::{History, HistoryManager};
-use render::{RenderCache, RenderInProgress, GRIDLINE_FADE_RANGE, MIN_GRIDLINE_ZOOM_POWER};
+use render::{RenderCache, RenderInProgress};
 pub use viewport::Viewport2D;
 pub use zoom::Zoom2D;
 
@@ -289,24 +289,14 @@ impl RenderGridView for GridView2D {
         let mut rip = RenderInProgress::new(self, &mut render_cache, target);
         rip.draw_cells();
 
+        // Draw gridlines.
         let gridlines_width = self.interpolating_viewport.zoom.factor() as f32 / 32.0;
-        // Only draw gridlines if we're zoomed in far enough.
-        let zoom_power = self.interpolating_viewport.zoom.power();
-        let draw_gridlines = zoom_power > MIN_GRIDLINE_ZOOM_POWER;
-        if draw_gridlines {
-            let mut alpha = 1.0;
-            // Fade in between MIN_GRIDLINE_ZOOM_POWER and MIN_GRIDLINE_ZOOM_POWER + 4.
-            if zoom_power < MIN_GRIDLINE_ZOOM_POWER + GRIDLINE_FADE_RANGE {
-                alpha = (zoom_power - MIN_GRIDLINE_ZOOM_POWER) / GRIDLINE_FADE_RANGE;
-            }
-            assert!(0.0 <= alpha && alpha <= 1.0);
-            rip.draw_gridlines(alpha as f32, gridlines_width);
-        }
+        rip.draw_gridlines(gridlines_width);
         // Draw crosshairs.
         if let Some(cursor_pos) = params.cursor_pos {
             hover_pos = rip.pixel_pos_to_cell_pos(cursor_pos);
             if let Some(pos) = &hover_pos {
-                rip.draw_blue_crosshairs_highlight(pos, gridlines_width * 2.0, draw_gridlines);
+                rip.draw_blue_crosshairs_highlight(pos, gridlines_width * 2.0, true);
             }
         }
 

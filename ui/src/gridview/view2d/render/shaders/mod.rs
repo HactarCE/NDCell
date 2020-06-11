@@ -22,5 +22,5 @@ macro_rules! static_shader {
 }
 
 static_shader!(BLIT     = { "blit",     140, srgb: false });
-static_shader!(LINES    = { "lines",    140, srgb: true  });
+static_shader!(POINTS   = { "points",   140, srgb: true  });
 static_shader!(QUADTREE = { "quadtree", 140, srgb: true  });

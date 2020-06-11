@@ -1,9 +1,9 @@
 #version 140
 
-in vec4 line_color;
+in vec4 vColor;
 
 out vec4 color;
 
 void main() {
-    color = line_color;
+    color = vColor;
 }

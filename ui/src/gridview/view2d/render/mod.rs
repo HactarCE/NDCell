@@ -361,7 +361,7 @@ impl<'a> RenderInProgress<'a> {
                 .draw(
                     vbo_slice,
                     &gridline_indices,
-                    &shaders::LINES,
+                    &shaders::POINTS,
                     &uniform! {
                         matrix: self.view_matrix,
                     },
@@ -446,7 +446,7 @@ impl<'a> RenderInProgress<'a> {
                 .draw(
                     vbo_slice,
                     &highlight_indices,
-                    &shaders::LINES,
+                    &shaders::POINTS,
                     &uniform! {
                         matrix: self.view_matrix,
                     },
@@ -509,7 +509,7 @@ impl<'a> RenderInProgress<'a> {
                 .draw(
                     vbo_slice,
                     &highlight_indices,
-                    &shaders::LINES,
+                    &shaders::POINTS,
                     &uniform! {
                         matrix: self.view_matrix,
                     },

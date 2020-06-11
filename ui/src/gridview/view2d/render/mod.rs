@@ -126,7 +126,7 @@ impl<'a> RenderInProgress<'a> {
         // Compute the lowest layer that must be visited, which is the layer of
         // a "render cell," a node that is rendered as one unit (one pixel in
         // step #1).
-        let render_cell_layer: usize = std::cmp::max(0, -zoom.ceil().power() as isize) as usize;
+        let render_cell_layer: usize = std::cmp::max(0, -zoom.round().power() as isize) as usize;
         // Compute the width of cells represented by each render cell.
         let render_cell_len: BigInt = BigInt::from(1) << render_cell_layer;
         // The render cell layer is also the power of two we should subtract from
@@ -146,7 +146,7 @@ impl<'a> RenderInProgress<'a> {
         // screen.
         let quadtree_slice: NdTreeSlice<u8, Dim2D>;
         let visible_rect: IRect2D;
-        let pos: FVec2D;
+        let mut pos: FVec2D;
         {
             // Before computing the rectangles relative to the slice, get the
             // rectangles in global space.
@@ -183,23 +183,23 @@ impl<'a> RenderInProgress<'a> {
             // by the size of a render cell to get the render cell offset from
             // the lower corner of the slice.
             let integer_pos = (&viewport.pos - &quadtree_slice.offset).div_floor(&render_cell_len);
+            pos = integer_pos.as_fvec();
+            // Add a half-pixel offset if the viewport dimensions are odd, so
+            // that cells boundaries always line up with pixel boundaries.
+            pos += target_pixels_size % 2.0 / 2.0;
             // viewport.offset is a sub-cell offset, so it only matters when
             // zoomed in more than 1:1.
             if viewport.zoom.pixels_per_cell() > 1.0 {
-                pos = integer_pos.as_fvec() + viewport.offset;
-            } else {
-                pos = integer_pos.as_fvec();
+                pos += viewport.offset;
             }
         }
 
         // Compute the render cell view matrix.
         let view_matrix: [[f32; 4]; 4];
         {
-            let (target_w, target_h) = target.get_dimensions();
-            let target_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
             let pixels_per_cell = r64(viewport.zoom.pixels_per_cell());
             // Multiply by 2 because the OpenGL screen space ranges from -1 to +1.
-            let scale = FVec2D::repeat(pixels_per_cell) / target_size * r64(2.0);
+            let scale = FVec2D::repeat(pixels_per_cell) / target_pixels_size * r64(2.0);
             // Convert pos from render-cell-space to screen-space.
             let offset = pos * scale;
             let x_offset = offset[X].raw() as f32;

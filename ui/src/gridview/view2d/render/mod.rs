@@ -251,16 +251,14 @@ impl<'a> RenderInProgress<'a> {
         // inside self.visible_rect.
         let unscaled_cells_w = self.visible_rect.len(X) as u32;
         let unscaled_cells_h = self.visible_rect.len(Y) as u32;
-        let (width_fract, height_fract) = textures
+        let (_tex, mut unscaled_cells_fbo, unscaled_cells_texture_fract) = textures
             .unscaled_cells
-            .set_min_size(unscaled_cells_w, unscaled_cells_h);
-        let mut unscaled_cells_fbo = textures.unscaled_cells.make_fbo();
+            .at_min_size(unscaled_cells_w, unscaled_cells_h);
         unscaled_cells_fbo
             .draw(
                 &*vbos::quadtree_quad_with_quadtree_coords(
                     self.visible_rect,
-                    width_fract,
-                    height_fract,
+                    unscaled_cells_texture_fract,
                 ),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::QUADTREE,
@@ -281,9 +279,9 @@ impl<'a> RenderInProgress<'a> {
         let visible_cells_h = self.visible_rect.len(Y) as u32;
         let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
         let scaled_cells_h = visible_cells_h * integer_scale_factor as u32;
-        let (scaled_cells_texture, scaled_cells_fbo) = textures
+        let (scaled_cells_texture, scaled_cells_fbo, scaled_cells_texture_fract) = textures
             .scaled_cells
-            .at_size(scaled_cells_w, scaled_cells_h);
+            .at_min_size(scaled_cells_w, scaled_cells_h);
         scaled_cells_fbo.blit_from_simple_framebuffer(
             &unscaled_cells_fbo,
             &glium::Rect {
@@ -292,7 +290,12 @@ impl<'a> RenderInProgress<'a> {
                 width: unscaled_cells_w,
                 height: unscaled_cells_h,
             },
-            &entire_blit_target(&scaled_cells_fbo),
+            &glium::BlitTarget {
+                left: 0,
+                bottom: 0,
+                width: scaled_cells_w as i32,
+                height: scaled_cells_h as i32,
+            },
             glium::uniforms::MagnifySamplerFilter::Nearest,
         );
 
@@ -304,6 +307,7 @@ impl<'a> RenderInProgress<'a> {
         let mut render_cells_frect =
             FRect2D::centered(render_cells_center, render_cells_size / 2.0);
         render_cells_frect /= self.visible_rect.size().as_fvec();
+        render_cells_frect *= scaled_cells_texture_fract;
 
         self.target
             .draw(
@@ -602,26 +606,6 @@ impl<'a> RenderInProgress<'a> {
                 )
                 .expect("Failed to draw cursor crosshairs");
         }
-    }
-}
-
-fn entire_rect<S: glium::Surface>(surface: &S) -> glium::Rect {
-    let (width, height) = surface.get_dimensions();
-    glium::Rect {
-        left: 0,
-        bottom: 0,
-        width,
-        height,
-    }
-}
-
-fn entire_blit_target<S: glium::Surface>(surface: &S) -> glium::BlitTarget {
-    let (width, height) = surface.get_dimensions();
-    glium::BlitTarget {
-        left: 0,
-        bottom: 0,
-        width: width as i32,
-        height: height as i32,
     }
 }
 

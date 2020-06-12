@@ -1,8 +1,9 @@
 use glium::VertexBuffer;
+use noisy_float::prelude::r64;
 use send_wrapper::SendWrapper;
 use std::cell::{RefCell, RefMut};
 
-use ndcell_core::{FRect2D, IRect2D, X, Y};
+use ndcell_core::{FRect2D, FVec2D, IRect2D, X, Y};
 
 use super::vertices::*;
 use super::GRIDLINE_BATCH_SIZE;
@@ -27,14 +28,16 @@ pub fn quadtree_quad<'a>() -> RefMut<'a, VertexBuffer<QuadtreePosVertex>> {
 }
 pub fn quadtree_quad_with_quadtree_coords<'a>(
     rect: IRect2D,
-    width_fract: f32,
-    height_fract: f32,
+    texture_fraction: FVec2D,
 ) -> RefMut<'a, VertexBuffer<QuadtreePosVertex>> {
     let ret = quadtree_quad();
     let left = rect.min()[X] as i32;
     let right = rect.max()[X] as i32;
     let bottom = rect.min()[Y] as i32;
     let top = rect.max()[Y] as i32;
+    let dest_top_right = texture_fraction * r64(2.0) - r64(1.0);
+    let dest_right = dest_top_right[X].raw() as f32;
+    let dest_top = dest_top_right[Y].raw() as f32;
     ret.write(&[
         QuadtreePosVertex {
             cell_coords: [left, bottom],
@@ -42,15 +45,15 @@ pub fn quadtree_quad_with_quadtree_coords<'a>(
         },
         QuadtreePosVertex {
             cell_coords: [right, bottom],
-            dest_coords: [width_fract * 2.0 - 1.0, -1.0],
+            dest_coords: [dest_right, -1.0],
         },
         QuadtreePosVertex {
             cell_coords: [left, top],
-            dest_coords: [-1.0, height_fract * 2.0 - 1.0],
+            dest_coords: [-1.0, dest_top],
         },
         QuadtreePosVertex {
             cell_coords: [right, top],
-            dest_coords: [width_fract * 2.0 - 1.0, height_fract * 2.0 - 1.0],
+            dest_coords: [dest_right, dest_top],
         },
     ]);
     ret

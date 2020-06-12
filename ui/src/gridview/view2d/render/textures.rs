@@ -1,9 +1,11 @@
 use glium::framebuffer::SimpleFrameBuffer;
 use glium::texture::srgb_texture2d::SrgbTexture2d;
+use noisy_float::prelude::r64;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 
 use crate::DISPLAY;
+use ndcell_core::{FVec2D, NdVec};
 
 #[derive(Default)]
 pub struct CachedSrgbTexture2d {
@@ -11,25 +13,25 @@ pub struct CachedSrgbTexture2d {
     current_size: Option<(u32, u32)>,
 }
 impl CachedSrgbTexture2d {
-    pub fn set_min_size(&mut self, w: u32, h: u32) -> (f32, f32) {
+    pub fn at_min_size(&mut self, w: u32, h: u32) -> (&SrgbTexture2d, SimpleFrameBuffer, FVec2D) {
+        let mut real_w = w.next_power_of_two();
+        let mut real_h = h.next_power_of_two();
         if let Some((current_w, current_h)) = self.current_size {
             if current_w >= w && current_h >= h {
-                return (w as f32 / current_w as f32, h as f32 / current_h as f32);
+                real_w = current_w;
+                real_h = current_h;
             }
         }
-        self.set_size(w, h);
-        (1.0, 1.0)
+        self.set_size(real_w, real_h);
+        let fract = NdVec([r64(w as f64 / real_w as f64), r64(h as f64 / real_h as f64)]);
+        (self.unwrap(), self.make_fbo(), fract)
     }
-    pub fn set_size(&mut self, w: u32, h: u32) {
+    fn set_size(&mut self, w: u32, h: u32) {
         if self.current_size != Some((w, h)) {
             self.cached =
                 Some(SrgbTexture2d::empty(&**DISPLAY, w, h).expect("Failed to create texture"));
             self.current_size = Some((w, h));
         }
-    }
-    pub fn at_size(&mut self, w: u32, h: u32) -> (&SrgbTexture2d, SimpleFrameBuffer) {
-        self.set_size(w, h);
-        (self.unwrap(), self.make_fbo())
     }
     pub fn reset(&mut self) {
         *self = Self::default();

@@ -251,12 +251,17 @@ impl<'a> RenderInProgress<'a> {
         // inside self.visible_rect.
         let unscaled_cells_w = self.visible_rect.len(X) as u32;
         let unscaled_cells_h = self.visible_rect.len(Y) as u32;
-        let (_, mut unscaled_cells_fbo) = textures
+        let (width_fract, height_fract) = textures
             .unscaled_cells
-            .at_size(unscaled_cells_w, unscaled_cells_h);
+            .set_min_size(unscaled_cells_w, unscaled_cells_h);
+        let mut unscaled_cells_fbo = textures.unscaled_cells.make_fbo();
         unscaled_cells_fbo
             .draw(
-                &*vbos::quadtree_quad_with_quadtree_coords(self.visible_rect),
+                &*vbos::quadtree_quad_with_quadtree_coords(
+                    self.visible_rect,
+                    width_fract,
+                    height_fract,
+                ),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::QUADTREE,
                 &uniform! {
@@ -281,7 +286,12 @@ impl<'a> RenderInProgress<'a> {
             .at_size(scaled_cells_w, scaled_cells_h);
         scaled_cells_fbo.blit_from_simple_framebuffer(
             &unscaled_cells_fbo,
-            &entire_rect(&unscaled_cells_fbo),
+            &glium::Rect {
+                left: 0,
+                bottom: 0,
+                width: unscaled_cells_w,
+                height: unscaled_cells_h,
+            },
             &entire_blit_target(&scaled_cells_fbo),
             glium::uniforms::MagnifySamplerFilter::Nearest,
         );

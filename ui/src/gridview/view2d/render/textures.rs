@@ -11,10 +11,10 @@ pub struct CachedSrgbTexture2d {
     current_size: Option<(u32, u32)>,
 }
 impl CachedSrgbTexture2d {
-    pub fn set_min_size(&mut self, w: u32, h: u32) -> (f64, f64) {
+    pub fn set_min_size(&mut self, w: u32, h: u32) -> (f32, f32) {
         if let Some((current_w, current_h)) = self.current_size {
             if current_w >= w && current_h >= h {
-                return (w as f64 / current_w as f64, h as f64 / current_h as f64);
+                return (w as f32 / current_w as f32, h as f32 / current_h as f32);
             }
         }
         self.set_size(w, h);
@@ -46,7 +46,6 @@ impl CachedSrgbTexture2d {
 pub struct TextureCache {
     pub unscaled_cells: CachedSrgbTexture2d,
     pub scaled_cells: CachedSrgbTexture2d,
-    pub gridlines: CachedSrgbTexture2d,
 }
 
 lazy_static! {

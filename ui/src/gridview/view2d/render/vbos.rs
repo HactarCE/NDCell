@@ -27,6 +27,8 @@ pub fn quadtree_quad<'a>() -> RefMut<'a, VertexBuffer<QuadtreePosVertex>> {
 }
 pub fn quadtree_quad_with_quadtree_coords<'a>(
     rect: IRect2D,
+    width_fract: f32,
+    height_fract: f32,
 ) -> RefMut<'a, VertexBuffer<QuadtreePosVertex>> {
     let ret = quadtree_quad();
     let left = rect.min()[X] as i32;
@@ -40,15 +42,15 @@ pub fn quadtree_quad_with_quadtree_coords<'a>(
         },
         QuadtreePosVertex {
             cell_coords: [right, bottom],
-            dest_coords: [1.0, -1.0],
+            dest_coords: [width_fract * 2.0 - 1.0, -1.0],
         },
         QuadtreePosVertex {
             cell_coords: [left, top],
-            dest_coords: [-1.0, 1.0],
+            dest_coords: [-1.0, height_fract * 2.0 - 1.0],
         },
         QuadtreePosVertex {
             cell_coords: [right, top],
-            dest_coords: [1.0, 1.0],
+            dest_coords: [width_fract * 2.0 - 1.0, height_fract * 2.0 - 1.0],
         },
     ]);
     ret

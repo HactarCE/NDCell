@@ -24,7 +24,7 @@ On Linux and macOS, the file might not be executable by default -- to fix this, 
 ## Short-term to-do list
 
 - [x] Begin work on custom rules
-    + See [`dev/lang/README.md`](https://github.com/HactarCE/NDCell/blob/dev/lang/README.md#short-term-to-do-list)
+    + See [`lang/README.md`](https://github.com/HactarCE/NDCell/blob/lang/lang/README.md#short-term-to-do-list)
 - [ ] Refactor imports to use preludes (maybe?)
 
 ## Long-term to-do list

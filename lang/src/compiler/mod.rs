@@ -300,6 +300,10 @@ impl Compiler {
     pub fn cell_state_type(&self) -> IntType<'static> {
         get_ctx().custom_width_int_type(CELL_STATE_BITS)
     }
+    /// Returns the LLVM type used to represent a vector with the given length.
+    pub fn vec_type(&self, ndim: usize) -> VectorType<'static> {
+        self.int_type().vec_type(ndim as u32)
+    }
 
     /// Returns the function currently being built, panicking if there is none.
     fn function(&self) -> &FunctionInProgress {
@@ -697,7 +701,7 @@ impl Compiler {
                 format!("Cannot convert {} to vector", value.ty()).into(),
             ))?,
         };
-        let mut ret = self.int_type().vec_type(len as u32).get_undef();
+        let mut ret = self.vec_type(len).get_undef();
         for i in 0..len {
             let idx = self.int_type().const_int(i as u64, false);
             ret = self.builder().build_insert_element(
@@ -785,7 +789,7 @@ impl Compiler {
         match ty {
             Type::Int => Ok(self.int_type().into()),
             Type::CellState => Ok(self.cell_state_type().into()),
-            Type::Vector(len) => Ok(self.int_type().vec_type(*len as u32).into()),
+            Type::Vector(len) => Ok(self.vec_type(*len).into()),
             // Type::Pattern => Err(InternalError(
             //     "Attempt to get LLVM representation of type that has none".into(),
             // )

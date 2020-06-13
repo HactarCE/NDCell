@@ -76,10 +76,7 @@ impl Function for Build {
                 _ => unreachable!(),
             }
         }
-        let mut ret = compiler
-            .int_type()
-            .vec_type(components.len() as u32)
-            .get_undef();
+        let mut ret = compiler.vec_type(components.len()).get_undef();
         for (i, component) in components.into_iter().enumerate() {
             let idx = compiler.int_type().const_int(i as u64, false);
             ret = compiler

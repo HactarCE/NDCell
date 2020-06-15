@@ -84,8 +84,9 @@ const GRIDLINE_DEPTH: f32 = 0.1;
 /// Depth at which to render highlight/crosshairs.
 const CROSSHAIR_DEPTH: f32 = 0.2;
 
-/// A small offset to apply to depth values to force correct Z order.
-const TINY_DEPTH_OFFSET: f32 = 0.001;
+/// A small offset used to force correct Z order or align things at the
+/// sub-pixel scale.
+const TINY_OFFSET: f32 = 1.0 / 16.0;
 
 #[derive(Default)]
 pub struct RenderCache {
@@ -188,7 +189,7 @@ impl<'a> RenderInProgress<'a> {
             pos = integer_pos.as_fvec();
             // Offset by half a pixel if the viewport dimensions are odd, so
             // that cells boundaries always line up with pixel boundaries.
-            pos += (target_pixels_size % 2.0) / 2.0;
+            pos += (target_pixels_size % 2.0) * r64(render_cell_zoom.cells_per_pixel() / 2.0);
             // viewport.offset is a sub-cell offset, so it only matters when
             // zoomed in more than 1:1.
             if viewport.zoom.pixels_per_cell() > 1.0 {
@@ -199,24 +200,24 @@ impl<'a> RenderInProgress<'a> {
         // Compute the render cell view matrix, used for rendering gridlines.
         let view_matrix: [[f32; 4]; 4];
         {
+            // Determine the scale factor. (Multiply by 2 at the end because the
+            // OpenGL screen space ranges from -1 to +1.)
             let pixels_per_cell = r64(render_cell_zoom.pixels_per_cell());
-            // Multiply by 2 because the OpenGL screen space ranges from -1 to +1.
             let scale = FVec2D::repeat(pixels_per_cell) / target_pixels_size * r64(2.0);
-            // Offset by half a pixel the zoom power is less than 0.5 (somewhere
-            // between 1:1 and 1:2), so that gridlines are lined up perfectly
-            // with the cells themselves instead of their boundaries.
-            let subpixel_offset = if viewport.zoom.power() < 0.5 {
-                -render_cell_zoom.cells_per_pixel() / 2.0
-            } else {
-                0.0
-            };
-            // Convert pos from render-cell-space to screen-space.
-            let offset = (pos + r64(subpixel_offset)) * scale;
-            let x_offset = offset[X].raw() as f32;
-            let y_offset = offset[Y].raw() as f32;
+
+            // Determine the offset.
+            let mut offset = pos;
+            // Offset by a *tiny* amount so that gridlines round towards the
+            // cell to their top-left instead of rounding whichever way OpenGL
+            // picks.
+            offset -= r64(TINY_OFFSET as f64 * render_cell_zoom.cells_per_pixel() / 2.0);
+            // Convert offset from render-cell-space to screen-space.
+            offset *= scale;
+
             let x_scale = scale[X].raw() as f32;
             let y_scale = scale[Y].raw() as f32;
-
+            let x_offset = offset[X].raw() as f32;
+            let y_offset = offset[Y].raw() as f32;
             view_matrix = [
                 [x_scale, 0.0, 0.0, 0.0],
                 [0.0, y_scale, 0.0, 0.0],
@@ -472,7 +473,7 @@ impl<'a> RenderInProgress<'a> {
                 width,
                 None,
                 None,
-                GRIDLINE_DEPTH + TINY_DEPTH_OFFSET,
+                GRIDLINE_DEPTH + TINY_OFFSET,
             );
         }
         // Now draw the crosshairs and highlight.
@@ -513,7 +514,7 @@ impl<'a> RenderInProgress<'a> {
             let min_y = min[Y];
             let max_x = max[X];
             let max_y = max[Y];
-            let z2 = z + TINY_DEPTH_OFFSET;
+            let z2 = z + TINY_OFFSET;
             // Generate vertical gridlines.
             for &x in columns {
                 gridline_vertices.push(([x, min_y], z, base_color).into());

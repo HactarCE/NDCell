@@ -38,7 +38,7 @@ impl Function for LogicalNot {
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let arg = args.compile(compiler, 0)?;
         let arg = compiler.build_convert_to_bool(arg)?;
-        let one = compiler.int_type().const_int(1, false);
+        let one = compiler.const_uint(1);
         // Flip the lowest bit.
         Ok(Value::Int(compiler.builder().build_xor(one, arg, "not")))
     }

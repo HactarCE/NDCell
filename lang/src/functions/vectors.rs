@@ -64,7 +64,7 @@ impl Function for Build {
                 Value::Int(i) => components.push(i),
                 Value::Vector(v) => {
                     for i in 0..v.get_type().get_size() {
-                        let idx = compiler.int_type().const_int(i as u64, false);
+                        let idx = compiler.const_uint(i as u64);
                         components.push(
                             compiler
                                 .builder()
@@ -78,7 +78,7 @@ impl Function for Build {
         }
         let mut ret = compiler.vec_type(components.len()).get_undef();
         for (i, component) in components.into_iter().enumerate() {
-            let idx = compiler.int_type().const_int(i as u64, false);
+            let idx = compiler.const_uint(i as u64);
             ret = compiler
                 .builder()
                 .build_insert_element(ret, component, idx, "");
@@ -148,18 +148,18 @@ impl Function for Access {
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
-        let zero = compiler.int_type().const_zero();
+        let zero = compiler.const_int(0);
 
         // Get the index.
         let element_idx = match self.component_idx {
-            Some(i) => compiler.int_type().const_int(i as u64, true),
+            Some(i) => compiler.const_uint(i as u64),
             None => args.compile(compiler, 1)?.as_int()?,
         };
         let arg = args.compile(compiler, 0)?.as_vector()?;
 
         // Get the length of the vector.
         let len = arg.get_type().get_size();
-        let len_value = compiler.int_type().const_int(len as u64, false);
+        let len_value = compiler.const_uint(len as u64);
 
         // Make sure that the index is not negative.
         let is_negative = compiler.builder().build_int_compare(
@@ -236,18 +236,18 @@ impl AssignableFunction for Access {
         args: ArgValues,
         value: Value,
     ) -> LangResult<()> {
-        let zero = compiler.int_type().const_zero();
+        let zero = compiler.const_int(0);
 
         // Get the index.
         let element_idx = match self.component_idx {
-            Some(i) => compiler.int_type().const_int(i as u64, true),
+            Some(i) => compiler.const_uint(i as u64),
             None => args.compile(compiler, 1)?.as_int()?,
         };
         let arg = args.compile(compiler, 0)?.as_vector()?;
 
         // Get the length of the vector.
         let len = arg.get_type().get_size();
-        let len_value = compiler.int_type().const_int(len as u64, false);
+        let len_value = compiler.const_uint(len as u64);
 
         // Make sure that the index is not negative.
         let is_negative = compiler.builder().build_int_compare(
@@ -354,13 +354,13 @@ impl Function for Reduce {
     }
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         // Extract all the elements.
-        let int_type = compiler.int_type();
         let arg = args.compile(compiler, 0)?.as_vector()?;
         let components = (0..arg.get_type().get_size())
             .map(|i| {
+                let idx = compiler.const_uint(i as u64);
                 compiler
                     .builder()
-                    .build_extract_element(arg, int_type.const_int(i as u64, false), "")
+                    .build_extract_element(arg, idx, "")
                     .into_int_value()
             })
             .collect_vec();
@@ -504,7 +504,7 @@ impl Function for GetLen {
             .as_vector()?
             .get_type()
             .get_size();
-        Ok(Value::Int(compiler.int_type().const_int(ret as u64, false)))
+        Ok(Value::Int(compiler.const_uint(ret as u64)))
     }
 
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {

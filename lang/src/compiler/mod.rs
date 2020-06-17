@@ -507,9 +507,9 @@ impl Compiler {
         on_div_by_zero: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<()> {
         // Generate the required constants.
-        let zero = self.int_type().const_zero();
+        let zero = self.const_int(0);
         let min_value = self.get_min_int_value();
-        let negative_one = self.int_type().const_int(-1i64 as u64, true);
+        let negative_one = self.const_int(-1);
         // Call the generic function.
         self.build_generic_div_check(
             dividend,
@@ -532,9 +532,9 @@ impl Compiler {
     ) -> LangResult<()> {
         let len = dividend.get_type().get_size() as usize;
         // Generate the required constants.
-        let zero = self.int_type().const_zero();
+        let zero = self.const_int(0);
         let min_value = self.get_min_int_value();
-        let negative_one = self.int_type().const_int(-1i64 as u64, true);
+        let negative_one = self.const_int(-1);
         // Convert them to vectors of the proper length.
         let zero = self.build_vector_cast(Value::Int(zero), len)?;
         let min_value = self.build_vector_cast(Value::Int(min_value), len)?;
@@ -613,9 +613,11 @@ impl Compiler {
         shift_amt: IntValue<'static>,
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<()> {
+        // TODO: test boundaries on this method
+
         // Generate the required constants.
         let bit_width = self.int_type().get_bit_width();
-        let max_shift = self.int_type().const_int(bit_width as u64, false);
+        let max_shift = self.const_uint(bit_width as u64);
         // Call the generic function.
         self.build_generic_bitshift_check(shift_amt, max_shift, on_overflow)
     }
@@ -629,7 +631,7 @@ impl Compiler {
         let len = shift_amt.get_type().get_size() as usize;
         // Generate the required constants.
         let bit_width = self.int_type().get_bit_width();
-        let max_shift = self.int_type().const_int(bit_width as u64, false);
+        let max_shift = self.const_uint(bit_width as u64);
         // Convert them to vectors of the proper length.
         let max_shift = self.build_vector_cast(Value::Int(max_shift), len)?;
         // Call the generic function.
@@ -693,12 +695,12 @@ impl Compiler {
                 .into_iter()
                 .map(|i| {
                     if i < v.get_type().get_size() as usize {
-                        let idx = self.int_type().const_int(i as u64, false);
+                        let idx = self.const_uint(i as u64);
                         self.builder()
                             .build_extract_element(v, idx, &format!("vec_extract_{}", i))
                             .into_int_value()
                     } else {
-                        self.int_type().const_zero()
+                        self.const_int(0)
                     }
                 })
                 .collect(),
@@ -708,7 +710,7 @@ impl Compiler {
         };
         let mut ret = self.vec_type(len).get_undef();
         for i in 0..len {
-            let idx = self.int_type().const_int(i as u64, false);
+            let idx = self.const_uint(i as u64);
             ret = self.builder().build_insert_element(
                 ret,
                 values[i],
@@ -759,12 +761,18 @@ impl Compiler {
     /// Returns the minimum value representable by signed integers of NDCA's
     /// signed integer type.
     fn get_min_int_value(&self) -> IntValue<'static> {
-        self.int_type().const_int(1, false).const_shl(
-            self.int_type()
-                .const_int(self.int_type().get_bit_width() as u64 - 1, false),
-        )
+        self.const_uint(1)
+            .const_shl(self.const_uint(self.int_type().get_bit_width() as u64 - 1))
     }
 
+    /// Returns a constant sign-extended IntValue from the given integer.
+    pub fn const_int(&self, value: i64) -> IntValue<'static> {
+        self.int_type().const_int(value as u64, true)
+    }
+    /// Returns a constant zero-extended IntValue from the given integer.
+    pub fn const_uint(&self, value: u64) -> IntValue<'static> {
+        self.int_type().const_int(value, false)
+    }
     /// Constructs a Value from a ConstValue.
     pub fn value_from_const(&self, const_value: ConstValue) -> Value {
         match const_value {

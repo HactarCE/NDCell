@@ -43,9 +43,7 @@ impl Function for Int {
     }
 
     fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
-        Ok(Value::Int(
-            compiler.int_type().const_int(self.0 as u64, true),
-        ))
+        Ok(Value::Int(compiler.const_int(self.0)))
     }
     fn const_eval(&self, _args: ArgValues) -> LangResult<Option<ConstValue>> {
         Ok(Some(ConstValue::Int(self.0)))

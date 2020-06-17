@@ -416,6 +416,11 @@ impl Compiler {
             .const_int(error_index as u64, false);
         self.builder().build_return(Some(&llvm_return_value));
     }
+    /// Builds instructions to return an internal error.
+    pub fn build_return_internal_err(&mut self) {
+        // Error index 0 is reserved for internal errors.
+        self.build_return_err(0);
+    }
 
     /// Builds instructions to perform checked integer arithmetic using an LLVM
     /// intrinsic and returns an error if overflow occurs. Both operands must

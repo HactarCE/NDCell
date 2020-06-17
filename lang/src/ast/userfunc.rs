@@ -9,7 +9,7 @@ use crate::functions;
 use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{
-    BecomeInHelperFunction, CannotIndexType, Expected, FunctionLookupError,
+    BecomeInHelperFunction, CannotIndexType, Expected, FunctionLookupError, InternalError,
     ReturnInTransitionFunction, Unimplemented, UseOfUninitializedVariable,
 };
 
@@ -71,7 +71,11 @@ impl UserFunction {
             top_level_statements: vec![],
             statements: vec![],
             expressions: vec![],
-            error_points: vec![],
+            error_points: vec![
+                // Error index 0 is reserved for internal errors.
+                InternalError("Something went wrong at runtime, which is really bad".into())
+                    .without_span(),
+            ],
 
             arg_names,
             variables,

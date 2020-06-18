@@ -3,6 +3,37 @@ use itertools::Itertools;
 use super::{assert_fn_result, compile_test_fn, ConstValue};
 
 #[test]
+fn test_vector_convert() {
+    // Test with length and value specified.
+    let mut f = compile_test_fn("@function vec10 test() { return vec10(-3) }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![-3; 10])));
+
+    // Test with length specified.
+    let mut f = compile_test_fn("@function vector4 test() { return vec4() }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![0; 4])));
+
+    // Test with value specified.
+    let mut f = compile_test_fn("@ndim 3 @function vec test() { return vec(999) }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![999; 3])));
+
+    // Test with length and value both inferred.
+    let mut f = compile_test_fn("@ndim 2 @function vector test() { return vec() }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![0; 2])));
+
+    // Test conversion from an existing vector of the same length.
+    let mut f = compile_test_fn("@function vec4 test() { return vector4([10, 20, 30, 40]) }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![10, 20, 30, 40])));
+
+    // Test conversion from an existing shorter vector.
+    let mut f = compile_test_fn("@ndim 4 @function vec test() { return vector([10, 20]) }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![10, 20, 0, 0])));
+
+    // Test conversion from an existing longer vector.
+    let mut f = compile_test_fn("@function vec4 test() { return vec4([10, 20, 30, 40, 50, 60]) }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![10, 20, 30, 40])));
+}
+
+#[test]
 fn test_vector_access() {
     // Test in-bounds access.
     let mut f = compile_test_fn(

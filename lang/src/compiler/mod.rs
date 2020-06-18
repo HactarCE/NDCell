@@ -57,6 +57,12 @@ lazy_static! {
 fn get_ctx() -> &'static Context {
     &CTX.get_or(Context::create)
 }
+fn llvm_false() -> IntValue<'static> {
+    get_ctx().bool_type().const_zero()
+}
+fn llvm_true() -> IntValue<'static> {
+    get_ctx().bool_type().const_all_ones()
+}
 
 /// Returns the name of an LLVM type used in names of intrinsics (e.g. "i32" for
 /// a 32-bit integer, or "v3i64" for a vector of three 64-bit integers).

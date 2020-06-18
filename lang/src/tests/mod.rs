@@ -9,6 +9,7 @@ mod cmp;
 mod debug;
 mod funcs;
 mod math;
+mod ranges;
 mod types;
 mod values;
 mod vars;

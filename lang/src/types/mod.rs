@@ -150,6 +150,17 @@ impl Spanned<Type> {
                 .with_span(self.span)),
         }
     }
+    /// Returns a CustomTypeError if this type is not an integer, vector, or
+    /// range of integers.
+    pub fn check_int_or_vec_or_range(&self) -> LangResult<()> {
+        match self.inner {
+            Type::Int | Type::Vector(_) | Type::IntRange => Ok(()),
+            _ => Err(self
+                .inner
+                .custom_type_error("integer, vector, or range")
+                .with_span(self.span)),
+        }
+    }
     /// Returns a CustomTypeError if this type cannot be converted to a boolean.
     pub fn check_can_convert_to_bool(&self) -> LangResult<()> {
         if self.inner.can_convert_to_bool() {

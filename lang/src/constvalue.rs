@@ -41,7 +41,11 @@ impl ConstValue {
             Type::CellState => Some(Self::CellState(0)),
             Type::Vector(len) => Some(Self::Vector(vec![0; *len])),
             Type::Pattern(_) => None, // TODO: default pattern (all #0)
-            Type::IntRange => None,   // TODO: default integer range (MIN to MAX)
+            Type::IntRange => Some(Self::IntRange {
+                start: LangInt::MIN,
+                end: LangInt::MAX,
+                step: 1,
+            }),
         }
     }
     /// Returns the integer value inside if this is a ConstValue::Int; otherwise

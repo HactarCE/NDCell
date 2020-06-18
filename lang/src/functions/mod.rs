@@ -6,6 +6,7 @@ pub mod literals;
 pub mod logic;
 pub mod math;
 pub mod misc;
+pub mod ranges;
 pub mod vectors;
 
 use crate::ast;
@@ -71,13 +72,10 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             _ => None,
         },
         Type::IntRange => match name {
-            "start" => todo!("return start of range"),
-            "end" => todo!("return end of range"),
-            "low" => todo!("return low end of range"),
-            "high" => todo!("return high end of range"),
-            "count" => todo!("return length of range"),
-            "step" => todo!("return range step"),
-            "by" => todo!("return new range with different step"),
+            "by" => Some(Box::new(ranges::StepBy::construct)),
+            "start" => Some(ranges::Access::with_prop(ranges::RangeProperty::Start)),
+            "end" => Some(ranges::Access::with_prop(ranges::RangeProperty::End)),
+            "step" => Some(ranges::Access::with_prop(ranges::RangeProperty::Step)),
             _ => None,
         },
     }
@@ -134,9 +132,11 @@ pub fn lookup_binary_operator(
             _ => None,
         },
         // Basic math
-        (Int, _, Int) | (Int, _, Vector(_)) | (Vector(_), _, Int) | (Vector(_), _, Vector(_)) => {
-            Some(math::BinaryOp::with_op(op))
-        }
+        (Int, _, Int)
+        | (Int, _, Vector(_))
+        | (Vector(_), _, Int)
+        | (Vector(_), _, Vector(_))
+        | (IntRange, _, Int) => Some(math::BinaryOp::with_op(op)),
         _ => None,
     };
     ret.ok_or_else(|| {

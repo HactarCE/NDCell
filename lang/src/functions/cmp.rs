@@ -147,7 +147,6 @@ impl Comparator {
     /// Constructs a new comparator that compares the given types using
     /// the given comparison token (if possible).
     fn try_new(lhs: &Spanned<Type>, cmp: ComparisonToken, rhs: &Spanned<Type>) -> LangResult<Self> {
-        // TODO: convert integers to vectors for comparison
         let span = Span::merge(lhs, rhs);
         let lhs = lhs.inner.clone();
         let rhs = rhs.inner.clone();
@@ -166,6 +165,7 @@ impl Comparator {
                 let len = std::cmp::max(len1, len2);
                 Ok(Self::vec_cmp(len, cmp))
             }
+            (Type::IntRange, Type::IntRange) if eq_only => Ok(Self::vec_cmp(3, cmp)),
             (lhs, rhs) => Err(CmpError { lhs, cmp, rhs }.with_span(span)),
         }
     }
@@ -201,8 +201,14 @@ impl Comparator {
         Self {
             compile: Box::new(move |compiler, lhs, rhs| {
                 // Get vectors of integers.
-                let lhs = compiler.build_vector_cast(lhs, len)?;
-                let rhs = compiler.build_vector_cast(rhs, len)?;
+                let lhs = match lhs {
+                    Value::IntRange(v) => v,
+                    _ => compiler.build_vector_cast(lhs, len)?,
+                };
+                let rhs = match rhs {
+                    Value::IntRange(v) => v,
+                    _ => compiler.build_vector_cast(rhs, len)?,
+                };
                 // Get a vector of booleans (result of comparison for each
                 // component).
                 let bool_vec =

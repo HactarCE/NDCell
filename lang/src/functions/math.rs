@@ -110,7 +110,10 @@ impl Function for NegOrAbs {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
-        self.arg_types[0].check_int_or_vec()?;
+        match self.mode {
+            NegOrAbsMode::Negate => self.arg_types[0].check_int_or_vec_or_range()?,
+            _ => self.arg_types[0].check_int_or_vec()?,
+        };
         Ok(self.arg_types[0].inner.clone())
     }
 
@@ -119,7 +122,9 @@ impl Function for NegOrAbs {
         // vector.
         match args.compile(compiler, 0)? {
             Value::Int(arg) => self.compile_op(compiler, arg, arg.get_type().const_zero()),
-            Value::Vector(arg) => self.compile_op(compiler, arg, arg.get_type().const_zero()),
+            Value::Vector(arg) | Value::IntRange(arg) => {
+                self.compile_op(compiler, arg, arg.get_type().const_zero())
+            }
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
@@ -132,6 +137,15 @@ impl Function for NegOrAbs {
                 .map(|i| self.eval_op_int(i))
                 .collect::<LangResult<Vec<LangInt>>>()
                 .map(ConstValue::Vector),
+            ConstValue::IntRange { start, end, step } => [start, end, step]
+                .iter()
+                .map(|&i| self.eval_op_int(i))
+                .collect::<LangResult<Vec<LangInt>>>()
+                .map(|v| ConstValue::IntRange {
+                    start: v[0],
+                    end: v[1],
+                    step: v[2],
+                }),
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
         .map(Some)
@@ -162,7 +176,7 @@ impl Function for UnaryPlus {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
-        self.arg_types[0].check_int_or_vec()?;
+        self.arg_types[0].check_int_or_vec_or_range()?;
         Ok(self.arg_types[0].inner.clone())
     }
 
@@ -440,8 +454,19 @@ impl Function for BinaryOp {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 2)?;
-        self.arg_types[0].check_int_or_vec()?;
-        self.arg_types[1].check_int_or_vec()?;
+        if self.arg_types[0].inner == Type::IntRange {
+            // Ranges only support addition, subtraction, and multiplication by
+            // an integer.
+            use OperatorToken::*;
+            if !matches!(self.op, Plus | Minus | Asterisk) {
+                Err(self.invalid_args_err(span))?;
+            }
+            self.arg_types[1].check_eq(Type::Int)?;
+        } else {
+            // Otherwise, we expect an integer or vector.
+            self.arg_types[0].check_int_or_vec()?;
+            self.arg_types[1].check_int_or_vec()?;
+        }
         Ok(self.result_type())
     }
 
@@ -449,9 +474,27 @@ impl Function for BinaryOp {
         let mut lhs = args.compile(compiler, 0)?;
         let mut rhs = args.compile(compiler, 1)?;
         // Cast to vectors of the proper length, if necessary.
-        if let Type::Vector(len) = self.result_type() {
-            lhs = Value::Vector(compiler.build_vector_cast(lhs, len)?);
-            rhs = Value::Vector(compiler.build_vector_cast(rhs, len)?);
+        match self.result_type() {
+            Type::Vector(len) => {
+                lhs = Value::Vector(compiler.build_vector_cast(lhs, len)?);
+                rhs = Value::Vector(compiler.build_vector_cast(rhs, len)?);
+            }
+            Type::IntRange => {
+                lhs = Value::Vector(lhs.as_int_range()?);
+                rhs = Value::Vector(compiler.build_vector_cast(rhs, 3)?);
+                // Preserve step during addition/subtraction.
+                if matches!(self.op, OperatorToken::Plus | OperatorToken::Minus) {
+                    let zero = compiler.const_int(0);
+                    let idx = compiler.const_uint(super::ranges::RangeProperty::Step as u64);
+                    rhs = Value::Vector(compiler.builder().build_insert_element(
+                        rhs.as_vector()?,
+                        zero,
+                        idx,
+                        "offsetWithoutStep",
+                    ));
+                }
+            }
+            _ => (),
         }
         // Perform the operation.
         let result = match (lhs, rhs) {

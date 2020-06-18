@@ -509,6 +509,9 @@ impl<'a> ParseBuilder<'a> {
                 Ok(ret)
             }
             OpPrecedence::Atom => match self.peek_next().map(|t| t.class) {
+                Some(TokenClass::Type(_)) => self
+                    .expect(Self::type_name)
+                    .map(|spanned| spanned.map(Expr::TypeName)),
                 Some(TokenClass::Punctuation(PunctuationToken::LBracket)) => self
                     .expect_spanned(Self::vector)
                     .map(|s| s.map(Expr::Vector)),

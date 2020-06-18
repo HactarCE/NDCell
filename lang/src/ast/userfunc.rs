@@ -10,7 +10,7 @@ use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{
     BecomeInHelperFunction, CannotIndexType, Expected, FunctionLookupError, InternalError,
-    ReturnInTransitionFunction, Unimplemented, UseOfUninitializedVariable,
+    ReservedWord, ReturnInTransitionFunction, Unimplemented, UseOfUninitializedVariable,
 };
 
 /// A user-defined function node in the AST.
@@ -261,6 +261,11 @@ impl UserFunction {
             parser::Expr::Int(i) => {
                 args = Args::none();
                 func = functions::literals::Int::with_value(*i);
+            }
+            // Type name
+            parser::Expr::TypeName(_) => {
+                args = Args::none();
+                func = Err(ReservedWord.with_span(span))?;
             }
             // Identifier (variable)
             parser::Expr::Ident(s) => {

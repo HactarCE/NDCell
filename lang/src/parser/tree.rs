@@ -172,6 +172,8 @@ pub enum Expr {
     Int(i64),
     /// Identifier.
     Ident(String),
+    /// Type name.
+    TypeName(TypeToken),
     /// String literal.
     String(StringLiteral),
     /// Vector literal.

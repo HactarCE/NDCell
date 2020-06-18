@@ -1,6 +1,7 @@
 //! Types used by NDCA.
 
 use std::fmt;
+use std::rc::Rc;
 
 /// Rust type used for NDCA integers.
 pub type LangInt = i64;
@@ -15,6 +16,10 @@ pub const CELL_STATE_BITS: u32 = 8;
 /// Maximum length for a vector.
 pub const MAX_VECTOR_LEN: usize = 256;
 
+mod patterns;
+
+pub use patterns::PatternShape;
+
 use crate::errors::*;
 use crate::Spanned;
 use LangErrorMsg::{CustomTypeError, TypeError};
@@ -24,7 +29,7 @@ use LangErrorMsg::{CustomTypeError, TypeError};
 /// When adding new types, make sure that check lexer::TypeToken and add a
 /// corresponding variant there if needed. Also update the list in the error
 /// message in parser::ParseBuilder::type_name().
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     /// Integer.
     Int,
@@ -32,6 +37,8 @@ pub enum Type {
     CellState,
     /// Vector of a specific length (from 1 to 256).
     Vector(usize),
+    /// Configuration of cells of a specific size and shape.
+    Pattern(Rc<PatternShape>),
 }
 impl Default for Type {
     fn default() -> Self {
@@ -44,6 +51,7 @@ impl fmt::Debug for Type {
             Self::Int => write!(f, "int"),
             Self::CellState => write!(f, "cell"),
             Self::Vector(len) => write!(f, "vec{}", len),
+            Self::Pattern(shape) => write!(f, "{}", shape),
         }
     }
 }
@@ -53,6 +61,7 @@ impl fmt::Display for Type {
             Self::Int => write!(f, "integer"),
             Self::CellState => write!(f, "cellstate"),
             Self::Vector(len) => write!(f, "vector{}", len),
+            Self::Pattern(shape) => write!(f, "{}", shape),
         }
     }
 }
@@ -62,7 +71,7 @@ impl Type {
     /// type.
     pub fn has_runtime_representation(&self) -> bool {
         match self {
-            Self::Int | Self::CellState | Self::Vector(_) => true,
+            Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
         }
     }
     /// Returns the number of bytes used to represent this type in compiled
@@ -73,6 +82,7 @@ impl Type {
             Self::Int => Some(std::mem::size_of::<LangInt>()),
             Self::CellState => Some(std::mem::size_of::<LangCellState>()),
             Self::Vector(len) => Some(len * Self::Int.size_of().unwrap()),
+            Self::Pattern(_) => todo!("how big is a pattern?"),
         }
     }
 
@@ -83,7 +93,7 @@ impl Type {
     /// Compiler::build_convert_to_bool()
     pub fn can_convert_to_bool(&self) -> bool {
         match self {
-            Self::Int | Self::CellState | Self::Vector(_) => true,
+            Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
         }
     }
 

@@ -36,7 +36,7 @@ mod function;
 mod value;
 
 pub use function::CompiledFunction;
-pub use value::Value;
+pub use value::{PatternValue, Value};
 
 use crate::errors::*;
 use crate::types::{CELL_STATE_BITS, INT_BITS};
@@ -309,6 +309,22 @@ impl Compiler {
     /// Returns the LLVM type used to represent a vector with the given length.
     pub fn vec_type(&self, ndim: usize) -> VectorType<'static> {
         self.int_type().vec_type(ndim as u32)
+    }
+    /// Returns the LLVM type used to represent a pattern with the given number
+    /// of dimensions.
+    pub fn pattern_type(&self, ndim: usize) -> StructType<'static> {
+        get_ctx().struct_type(
+            &[
+                // Pointer to the origin (0 along all axes) in an array of
+                // cell states.
+                self.cell_state_type()
+                    .ptr_type(AddressSpace::Generic)
+                    .into(),
+                // Strides to increment the given axis by 1.
+                self.vec_type(ndim).into(),
+            ],
+            false,
+        )
     }
 
     /// Returns the function currently being built, panicking if there is none.
@@ -677,8 +693,10 @@ impl Compiler {
     /// Builds a cast from any type to a boolean, represented using the normal
     /// integer type (either 0 or 1).
     pub fn build_convert_to_bool(&mut self, value: Value) -> LangResult<IntValue<'static>> {
-        match value {
-            Value::Int(_) | Value::CellState(_) | Value::Vector(_) => Ok({
+        let is_truthy = match value {
+            // Integers and cell states are truthy if nonzero. Vectors are
+            // truthy if any component is nonzero.
+            Value::Int(_) | Value::CellState(_) | Value::Vector(_) => {
                 // Reduce using bitwise OR if it is a vector.
                 let value = self.build_reduce("or", value.into_basic_value()?)?;
                 // Compare to zero.
@@ -686,12 +704,51 @@ impl Compiler {
                 let is_nonzero =
                     self.builder()
                         .build_int_compare(IntPredicate::NE, value, zero, "isTrue");
-                // Cast to integer.
-                let ret_type = self.int_type();
-                self.builder()
-                    .build_int_z_extend(is_nonzero, ret_type, "toBool")
-            }),
-        }
+                is_nonzero
+            }
+            // Patterns are truthy if any cell within their mask is nonzero.
+            Value::Pattern(pattern) => {
+                // If there is any nonzero cell, then return a truthy value.
+                let end_bb = self.append_basic_block("endOfPatternTruthinessCheck");
+                // This phi node should be true if any cell is nonzero and false
+                // if all cells are zero.
+                let end_phi = self
+                    .builder()
+                    .build_phi(get_ctx().bool_type(), "isPatternTruthy");
+
+                // Check every single cell.
+                self.build_pattern_iter(&pattern, |c, _pos, state| {
+                    // Jump straight to the end if it's nonzero; otherwise keep
+                    // searching for a nonzero cell.
+                    let next_bb = c.append_basic_block("continuePatternTruthinessCheck");
+                    c.builder().build_switch(
+                        state,
+                        // Jump straight to the end if nonzero.
+                        end_bb,
+                        // Keep checking cells if zero.
+                        &[(state.get_type().const_zero(), next_bb)],
+                    );
+                    // If this cell is nonzero, then send true to the phi node.
+                    end_phi.add_incoming(&[(&llvm_true(), c.current_block())]);
+                    c.builder().position_at_end(next_bb);
+                    Ok(())
+                })?;
+                // If all cells were zero, then send false to the phi node.
+                self.builder().build_unconditional_branch(end_bb);
+                end_phi.add_incoming(&[(&llvm_false(), self.current_block())]);
+                self.builder().position_at_end(end_bb);
+
+                // Finally, return the value of the phi node.
+                end_phi.as_basic_value().into_int_value()
+            }
+        };
+
+        // Cast to integer.
+        let int_type = self.int_type();
+        let ret = self
+            .builder()
+            .build_int_z_extend(is_truthy, int_type, "toBool");
+        Ok(ret)
     }
     /// Builds a cast of an integer to a vector (by using that integer value for
     /// each vector component) or from a vector of one length to another (by
@@ -773,6 +830,189 @@ impl Compiler {
         }
     }
 
+    pub fn build_get_pattern_cell_state(
+        &mut self,
+        pattern: &PatternValue,
+        pos: VectorValue<'static>,
+        on_ok: impl FnOnce(&mut Self, IntValue<'static>) -> LangResult<()>,
+        on_err: impl FnOnce(&mut Self) -> LangResult<()>,
+    ) -> LangResult<()> {
+        let ndim = pattern.shape.ndim();
+        let bounds = pattern.shape.bounds();
+        let mask = pattern.shape.flat_mask();
+
+        // Check the number of dimensions.
+        if pos.get_type().get_size() != ndim as u32 {
+            Err(InternalError(
+                "Dimension mismatch for pattern coordinates".into(),
+            ))?;
+        }
+
+        // Check that the position is in bounds.
+        let is_out_of_bounds: IntValue<'static>;
+        {
+            // The position cannot be less than the minimum.
+            let min = VectorType::const_vector(
+                &bounds
+                    .min()
+                    .into_iter()
+                    .map(|x| self.const_int(x as i64))
+                    .collect_vec(),
+            );
+            let too_low_vec =
+                self.builder()
+                    .build_int_compare(IntPredicate::SLT, pos, min, "tooLow");
+            let is_too_low = self.build_reduce("or", too_low_vec.into())?;
+            // The position cannot be greater than the maximum.
+            let max = VectorType::const_vector(
+                &bounds
+                    .max()
+                    .into_iter()
+                    .map(|x| self.const_int(x as i64))
+                    .collect_vec(),
+            );
+            let too_high_vec =
+                self.builder()
+                    .build_int_compare(IntPredicate::SLT, pos, max, "tooHigh");
+            let is_too_high = self.build_reduce("or", too_high_vec.into())?;
+            // Combine with OR.
+            is_out_of_bounds = self
+                .builder()
+                .build_or(is_too_low, is_too_high, "outOfBounds");
+        }
+
+        // Check that the position is inside the mask.
+        let is_excluded_by_mask: IntValue<'static>;
+        if pattern.shape.is_rect() {
+            // This position can't be excluded by the mask if the mask includes
+            // everything.
+            is_excluded_by_mask = llvm_true();
+        } else {
+            // Make a flat array for the mask and store it on the stack. NOTE:
+            // we invert each element here, so that FALSE indicates that a cell
+            // is INCLUDED, while TRUE indicates a cell is EXCLUDED. This is to
+            // avoid inverting at the end.
+            let mask_array = get_ctx().bool_type().const_array(
+                &mask
+                    .iter()
+                    .map(|&x| get_ctx().bool_type().const_int(!x as u64, false))
+                    .collect_vec(),
+            );
+            let mask_array_ptr = self
+                .builder()
+                .build_alloca(mask_array.get_type(), "maskArray");
+            self.builder().build_store(mask_array_ptr, mask_array);
+            // Determine the strides of this flat array by producing cumulative products based on the sizes.
+            let strides: Vec<u64> = bounds
+                .size()
+                .into_iter()
+                .scan(1, |cumulative_product, len_along_axis| {
+                    let this_stride = *cumulative_product;
+                    *cumulative_product *= len_along_axis;
+                    Some(this_stride as u64)
+                })
+                .collect();
+            let strides_vector_value = VectorType::const_vector(
+                &strides.iter().map(|&x| self.const_uint(x)).collect_vec(),
+            );
+            // Compute the index of the origin in this flat array.
+            let origin_idx = self.const_int(
+                strides
+                    .iter()
+                    .zip(bounds.min())
+                    .map(|(&stride, lower_bound)| stride as isize * -lower_bound)
+                    .product::<isize>() as i64,
+            );
+            // Now we can write some LLVM instructions. Multiply the strides by
+            // the position to get the array index offset from the origin.
+            let array_offset_from_origin_vec =
+                self.builder()
+                    .build_int_nuw_mul(pos, strides_vector_value, "maskOffsetFromOrigin");
+            let array_offset_from_origin =
+                self.build_reduce("add", array_offset_from_origin_vec.into())?;
+            // Now add the index of the origin to get the final array index.
+            let array_idx =
+                self.builder()
+                    .build_int_nsw_add(origin_idx, array_offset_from_origin, "maskIndex");
+            // Finally, index into the array.
+            let mask_element_ptr = unsafe {
+                self.builder()
+                    .build_gep(mask_array_ptr, &[array_idx], "maskElementPtr")
+            };
+            // See note above for why this tells whether the cells is EXCLUDED
+            // rather than INCLUDED.
+            is_excluded_by_mask = self
+                .builder()
+                .build_load(mask_element_ptr, "excludedByMask")
+                .into_int_value();
+        }
+
+        let is_err =
+            self.builder()
+                .build_or(is_out_of_bounds, is_excluded_by_mask, "outOfBoundsOrMask");
+        // Branch based on whether the position is in bounds.
+        self.build_conditional(is_err, on_err, |c| {
+            let cell_state_value = c.build_get_pattern_cell_state_unchecked(pattern, pos)?;
+            on_ok(c, cell_state_value)
+        })
+    }
+    pub fn build_get_pattern_cell_state_unchecked(
+        &mut self,
+        pattern: &PatternValue,
+        pos: VectorValue<'static>,
+    ) -> LangResult<IntValue<'static>> {
+        let cells_ptr = self
+            .builder()
+            .build_extract_value(pattern.value, 0, "cellArrayPtr")
+            .ok_or(InternalError(
+                "Error extracting cell array from pattern struct".into(),
+            ))?
+            .into_pointer_value();
+        let strides = self
+            .builder()
+            .build_extract_value(pattern.value, 1, "patternStrides")
+            .ok_or(InternalError(
+                "Error extracting strides from pattern struct".into(),
+            ))?
+            .into_vector_value();
+        // Multiply strides by position to get pointer offset.
+        let ptr_offset_vec = self
+            .builder()
+            .build_int_nsw_mul(pos, strides, "cellPtrOffset");
+        let ptr_offset = self.build_reduce("add", ptr_offset_vec.into())?;
+        // Use the result of that as a pointer offset.
+        let cell_ptr = unsafe {
+            self.builder()
+                .build_gep(cells_ptr, &[ptr_offset], "cellPtr")
+        };
+        // And finally load from that pointer.
+        Ok(self
+            .builder()
+            .build_load(cell_ptr, "cellState")
+            .into_int_value())
+    }
+    pub fn build_pattern_iter(
+        &mut self,
+        pattern: &PatternValue,
+        mut for_each_cell: impl FnMut(&mut Self, &[isize], IntValue<'static>) -> LangResult<()>,
+    ) -> LangResult<()> {
+        for pos in pattern.shape.positions() {
+            let pos_vector_value = VectorType::const_vector(
+                &pos.iter().map(|&x| self.const_int(x as i64)).collect_vec(),
+            );
+            self.build_get_pattern_cell_state(
+                pattern,
+                pos_vector_value,
+                // self.value_from_const(ConstValue::Vector(pos)),
+                // Cell state is in bounds, as it should be.
+                |c, cell_state| for_each_cell(c, &pos, cell_state),
+                // Cell state is out of bounds (which should NOT happen here).
+                |c| Ok(c.build_return_internal_err()),
+            )?;
+        }
+        Ok(())
+    }
+
     /// Returns the minimum value representable by signed integers of NDCA's
     /// signed integer type.
     fn get_min_int_value(&self) -> IntValue<'static> {
@@ -791,7 +1031,7 @@ impl Compiler {
     /// Constructs a Value from a ConstValue.
     pub fn value_from_const(&self, const_value: ConstValue) -> Value {
         match const_value {
-            ConstValue::Int(i) => Value::Int(self.int_type().const_int(i as u64, true)),
+            ConstValue::Int(i) => Value::Int(self.const_int(i)),
             ConstValue::CellState(i) => {
                 Value::CellState(self.cell_state_type().const_int(i as u64, false))
             }
@@ -818,7 +1058,8 @@ impl Compiler {
             Type::Int => Ok(self.int_type().into()),
             Type::CellState => Ok(self.cell_state_type().into()),
             Type::Vector(len) => Ok(self.vec_type(*len).into()),
-            // Type::Pattern => Err(InternalError(
+            Type::Pattern(shape) => Ok(self.pattern_type(shape.ndim()).into()),
+            // _ => Err(InternalError(
             //     "Attempt to get LLVM representation of type that has none".into(),
             // )
             // .without_span()),

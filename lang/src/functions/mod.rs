@@ -60,6 +60,16 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "len" => Some(Box::new(vectors::GetLen::construct)),
             _ => None,
         },
+        Type::Pattern(_) => match name {
+            "count" => todo!("count cells in pattern"),
+            "find" => todo!("find cell in pattern"),
+            "outer" => todo!("exclude center cell from pattern"),
+            "shape" => todo!("get pattern mask"),
+            "size" => todo!("get pattern size"),
+            "min" => todo!("get pattern lower corner"),
+            "max" => todo!("get pattern upper corner"),
+            _ => None,
+        },
     }
 }
 

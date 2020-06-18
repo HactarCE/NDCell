@@ -14,7 +14,6 @@ pub enum ConstValue {
     CellState(LangCellState),
     /// Vector of a specific length from 1 to 256 (extra components are zero).
     Vector(Vec<LangInt>),
-    // Pattern(crate::automaton::ArrayView2D<u8>),
 }
 impl ConstValue {
     /// Returns the type of this value.
@@ -23,7 +22,6 @@ impl ConstValue {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
             Self::Vector(values) => Type::Vector(values.len()),
-            // Self::Pattern(_) => Type::Pattern,
         }
     }
     /// Constructs a default value of the given type.
@@ -32,6 +30,7 @@ impl ConstValue {
             Type::Int => Some(Self::Int(0)),
             Type::CellState => Some(Self::CellState(0)),
             Type::Vector(len) => Some(Self::Vector(vec![0; *len])),
+            Type::Pattern(_) => None,
         }
     }
     /// Returns the integer value inside if this is a ConstValue::Int; otherwise
@@ -117,6 +116,7 @@ impl ConstValue {
                     .map(LangInt::from_ne_bytes)
                     .collect(),
             ),
+            Type::Pattern(_) => todo!("construct pattern from bytes"),
         }
     }
     /// Returns raw bytes representing this value. Panics if this type has no

@@ -1,12 +1,14 @@
 //! Values used by the JIT compiler.
 
-use inkwell::values::{BasicValueEnum, IntValue, VectorValue};
+use inkwell::values::{BasicValueEnum, IntValue, StructValue, VectorValue};
+use std::rc::Rc;
 
 use crate::errors::*;
+use crate::types::PatternShape;
 use crate::Type;
 
 /// A value of any type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Value {
     /// Integer.
     Int(IntValue<'static>),
@@ -14,6 +16,8 @@ pub enum Value {
     CellState(IntValue<'static>),
     /// Vector of a specific length (from 1 to 6).
     Vector(VectorValue<'static>),
+    /// Pattern of cells with an arbitrary shape.
+    Pattern(PatternValue),
 }
 impl Value {
     /// Returns the type of this value.
@@ -22,6 +26,7 @@ impl Value {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
             Self::Vector(v) => Type::Vector(v.get_type().get_size() as usize),
+            Self::Pattern(p) => Type::Pattern(p.shape.clone()),
         }
     }
     /// Constructs a value of the given type from an LLVM basic value.
@@ -34,10 +39,14 @@ impl Value {
                 assert_eq!(Type::Vector(*len), ret.ty(), "Vector length does not match");
                 ret
             }
+            Type::Pattern(shape) => Self::Pattern(PatternValue {
+                value: basic_value.into_struct_value(),
+                shape: shape.clone(),
+            }),
         }
     }
-    /// Returns the LLVM integer value inside if this is Value::Int; otherwise a
-    /// TypeError.
+    /// Returns the LLVM integer value inside if this is Value::Int; otherwise
+    /// an InternalError.
     pub fn as_int(self) -> LangResult<IntValue<'static>> {
         match self {
             Value::Int(i) => Ok(i),
@@ -45,7 +54,7 @@ impl Value {
         }
     }
     /// Returns the LLVM integer value inside if this is Value::CellState;
-    /// otherwise a TypeError.
+    /// otherwise an InternalError.
     pub fn as_cell_state(self) -> LangResult<IntValue<'static>> {
         match self {
             Value::CellState(i) => Ok(i),
@@ -53,10 +62,18 @@ impl Value {
         }
     }
     /// Returns the LLVM vector value inside if this is Value::Vector; otherwise
-    /// a TypeError.
+    /// an InternalError.
     pub fn as_vector(self) -> LangResult<VectorValue<'static>> {
         match self {
             Value::Vector(v) => Ok(v),
+            _ => Err(UNCAUGHT_TYPE_ERROR),
+        }
+    }
+    /// Returns the PatternValue inside if this is Value::Pattern; otherwise an
+    /// InternalError.
+    pub fn as_pattern(self) -> LangResult<PatternValue> {
+        match self {
+            Value::Pattern(p) => Ok(p),
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
@@ -67,7 +84,20 @@ impl Value {
             Value::Int(i) => Ok(i.into()),
             Value::CellState(i) => Ok(i.into()),
             Value::Vector(v) => Ok(v.into()),
-            // Value::Pattern => Err(InternalError(format!("{} has no BasicValue representation", self).into())),
+            Value::Pattern(p) => Ok(p.value.into()),
+            // _ => Err(InternalError(format!("{} has no BasicValue representation", self).into())),
         }
     }
+}
+
+/// Pattern of cells with an arbitrary shape.
+#[derive(Debug, Clone)]
+pub struct PatternValue {
+    /// Struct containing two values:
+    /// 1. Pointer to the origin (0 along all axes) in an array of cell states.
+    /// 2. Pointer offset to increment the given axis by 1. (Length of this
+    ///    array is the number of dimensions in the pattern.)
+    pub value: StructValue<'static>,
+    /// The shape of the pattern, which includes the pattern bounds and mask.
+    pub shape: Rc<PatternShape>,
 }

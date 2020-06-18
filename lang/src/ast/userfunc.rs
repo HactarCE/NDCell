@@ -280,7 +280,7 @@ impl UserFunction {
                         .map(|expr| self.build_expression_ast(expr))
                         .collect::<LangResult<Vec<_>>>()?,
                 );
-                func = Box::new(functions::vectors::Build::construct);
+                func = Box::new(functions::literals::Vector::construct);
             }
             // Parenthetical group
             parser::Expr::ParenExpr(expr) => return self.build_expression_ast(expr),

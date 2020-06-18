@@ -10,93 +10,9 @@ use crate::ast::{
 };
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
-use crate::types::{LangInt, MAX_VECTOR_LEN};
+use crate::types::LangInt;
 use crate::{ConstValue, Span, Type};
-use LangErrorMsg::{IndexOutOfBounds, IntegerOverflow, VectorTooBig};
-
-/// Built-in function that constructs a vector from its arguments.
-#[derive(Debug)]
-pub struct Build {
-    /// Argument types (should be empty).
-    arg_types: ArgTypes,
-}
-impl Build {
-    /// Constructs a new Build instance.
-    pub fn construct(_userfunc: &mut UserFunction, _span: Span, arg_types: ArgTypes) -> FuncResult {
-        Ok(Box::new(Self { arg_types }))
-    }
-}
-impl Function for Build {
-    fn name(&self) -> String {
-        "vector literal".to_owned()
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Atom
-    }
-
-    fn arg_types(&self) -> crate::ast::ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
-        let len = self
-            .arg_types
-            .iter()
-            .map(|ty| {
-                ty.check_int_or_vec()?;
-                Ok(match ty.inner {
-                    Type::Int => 1,
-                    Type::Vector(len) => len,
-                    _ => unreachable!(),
-                })
-            })
-            .sum::<LangResult<usize>>()?;
-        if len > MAX_VECTOR_LEN {
-            Err(VectorTooBig.with_span(span))
-        } else {
-            Ok(Type::Vector(len))
-        }
-    }
-
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
-        let mut components = vec![];
-        for arg in args.compile_all(compiler)? {
-            match arg {
-                Value::Int(i) => components.push(i),
-                Value::Vector(v) => {
-                    for i in 0..v.get_type().get_size() {
-                        let idx = compiler.const_uint(i as u64);
-                        components.push(
-                            compiler
-                                .builder()
-                                .build_extract_element(v, idx, "")
-                                .into_int_value(),
-                        );
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
-        let mut ret = compiler.vec_type(components.len()).get_undef();
-        for (i, component) in components.into_iter().enumerate() {
-            let idx = compiler.const_uint(i as u64);
-            ret = compiler
-                .builder()
-                .build_insert_element(ret, component, idx, "");
-        }
-        Ok(Value::Vector(ret))
-    }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        let mut components = vec![];
-        for arg in args.const_eval_all()? {
-            match arg {
-                ConstValue::Int(i) => components.push(i),
-                ConstValue::Vector(v) => components.extend_from_slice(&v),
-                _ => unreachable!(),
-            }
-        }
-        Ok(Some(ConstValue::Vector(components)))
-    }
-}
+use LangErrorMsg::{IndexOutOfBounds, IntegerOverflow};
 
 /// Built-in function that returns a single component of a vector.
 #[derive(Debug)]
@@ -296,6 +212,7 @@ enum SumOrProduct {
     Product,
 }
 
+/// Built-in function that returns either the sum or product of a vector.
 #[derive(Debug)]
 pub struct Reduce {
     /// Vector to reduce (should be vec![Type::Vector(_)]).
@@ -405,6 +322,7 @@ enum_with_str_repr! {
     }
 }
 
+/// Built-in function that returns the minimum or maximum of a vector.
 #[derive(Debug)]
 pub struct MinMax {
     /// Vector to get the minimum or maximum of (should be
@@ -469,6 +387,7 @@ impl Function for MinMax {
     }
 }
 
+/// Built-in function that returns the length of a vector.
 #[derive(Debug)]
 pub struct GetLen {
     /// Vector to return the length of (should be vec![Type::Vector(_)]).

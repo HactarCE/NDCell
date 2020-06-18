@@ -89,12 +89,13 @@ impl ConstValue {
     /// Constructs a value of the given type from raw bytes. Panics if given an
     /// invalid value or invalid type.
     pub fn from_bytes(ty: &Type, bytes: &[u8]) -> Self {
-        // TODO: fuzz/test this method
-        // assert!(
-        //     ty.has_runtime_representation(),
-        //     "Cannot construct {:?} from bytes",
-        //     ty
-        // );
+        // Check that this type can be represented in raw bytes.
+        assert!(
+            ty.has_runtime_representation(),
+            "Cannot construct {:?} from bytes",
+            ty
+        );
+        // Check the number of bytes.
         assert_eq!(
             ty.size_of(),
             Some(bytes.len()),
@@ -121,7 +122,6 @@ impl ConstValue {
     /// Returns raw bytes representing this value. Panics if this type has no
     /// runtime representation.
     pub fn to_bytes(&self) -> Vec<u8> {
-        // TODO: fuzz/test this method
         let mut ret = vec![0; self.ty().size_of().unwrap()];
         let mut ret_slice = ret.as_mut_slice();
         self.set_bytes(&mut ret_slice);
@@ -131,8 +131,6 @@ impl ConstValue {
     /// this type has no runtime representation, or if the array slice is the
     /// wrong length.
     pub fn set_bytes(&self, bytes: &mut [u8]) {
-        // TODO: fuzz/test this method
-
         // Check that this type can be represented in raw bytes.
         assert!(
             self.ty().has_runtime_representation(),
@@ -164,6 +162,38 @@ impl ConstValue {
                     Self::Int(i).set_bytes(chunk);
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_constvalue_int_bytes() {
+        let int_iter = vec![-10, -5, -1, 0, 1, 5, 10]
+            .into_iter()
+            .map(ConstValue::Int);
+        let cell_state_iter = vec![0, 1, 5, 10, 254, 255]
+            .into_iter()
+            .map(ConstValue::CellState);
+        let vector_iter = vec![
+            vec![],
+            vec![10],
+            vec![10, -20],
+            vec![-10, 20, -30],
+            vec![10, -20, 30, -40],
+            vec![-10, 20, -30, 40, -50, 60, -70, 80, -90, 100, -110],
+        ]
+        .into_iter()
+        .map(ConstValue::Vector);
+        for const_value in int_iter.chain(cell_state_iter).chain(vector_iter) {
+            let bytes = const_value.to_bytes();
+            assert_eq!(
+                const_value,
+                ConstValue::from_bytes(&const_value.ty(), &bytes)
+            );
         }
     }
 }

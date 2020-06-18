@@ -82,6 +82,14 @@ impl Value {
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
+    /// Returns the LLVM vector value inside if this is Value::IntRange;
+    /// otherwise an InternalError.
+    pub fn as_int_range(self) -> LangResult<VectorValue<'static>> {
+        match self {
+            Value::IntRange(r) => Ok(r),
+            _ => Err(UNCAUGHT_TYPE_ERROR),
+        }
+    }
     /// Returns this value as an LLVM basic value if it is representable as one;
     /// otherwise a TypeError.
     pub fn into_basic_value(self) -> LangResult<BasicValueEnum<'static>> {

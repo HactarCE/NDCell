@@ -89,7 +89,7 @@ impl Type {
             Self::CellState => Some(std::mem::size_of::<LangCellState>()),
             Self::Vector(len) => Some(len * Self::Int.size_of().unwrap()),
             Self::Pattern(_) => todo!("how big is a pattern?"),
-            Self::IntRange => Some(2 * Self::Int.size_of().unwrap()),
+            Self::IntRange => Some(Self::Vector(3).size_of().unwrap()),
         }
     }
 

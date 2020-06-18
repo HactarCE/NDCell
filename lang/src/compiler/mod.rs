@@ -328,6 +328,10 @@ impl Compiler {
             false,
         )
     }
+    /// Returns the LLVM type used to represent an integer range.
+    pub fn int_range_type(&self) -> VectorType<'static> {
+        self.vec_type(3)
+    }
 
     /// Returns the function currently being built, panicking if there is none.
     fn function(&self) -> &FunctionInProgress {
@@ -1066,7 +1070,7 @@ impl Compiler {
             Type::CellState => Ok(self.cell_state_type().into()),
             Type::Vector(len) => Ok(self.vec_type(*len).into()),
             Type::Pattern(shape) => Ok(self.pattern_type(shape.ndim()).into()),
-            Type::IntRange => Ok(self.vec_type(2).into())
+            Type::IntRange => Ok(self.int_range_type().into())
             // _ => Err(InternalError(
             //     "Attempt to get LLVM representation of type that has none".into(),
             // )

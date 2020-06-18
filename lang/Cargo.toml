@@ -9,7 +9,10 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "llvm10-0" }
 itertools = "0.9"
 lazy_static = "1.4"
 regex = "1"
+seahash = "4.0"
 thread_local = "1.0"
+
+ndcell_core = { path = "../core" }
 
 [dev-dependencies]
 proptest = "0.10"

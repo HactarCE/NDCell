@@ -328,6 +328,13 @@ impl Compiler {
     pub fn builder(&mut self) -> &Builder<'static> {
         &self.function().builder
     }
+    /// Returns the Inkwell basic block currently being appended to, panicking
+    /// if there is none.
+    pub fn current_block(&mut self) -> BasicBlock<'static> {
+        self.builder()
+            .get_insert_block()
+            .expect("Tried to access current insert block, but there is none")
+    }
     /// Returns a HashMap of variables, indexed by name.
     pub fn vars(&self) -> &HashMap<String, Variable> {
         &self.function().vars_by_name

@@ -1,18 +1,11 @@
 //! Range functions.
 
+pub use super::enums::RangeProperty;
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, AssignableFunction, Function, FunctionKind, UserFunction};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::{ConstValue, Span, Type};
-
-/// Property of an integer range.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum RangeProperty {
-    Start = 0,
-    End = 1,
-    Step = 2,
-}
 
 /// Built-in function that changes the step of an integer range and returns it.
 #[derive(Debug)]

@@ -4,6 +4,7 @@ use inkwell::IntPredicate;
 use itertools::Itertools;
 use std::convert::TryInto;
 
+pub use super::enums::{MinMaxMode, SumOrProduct};
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{
     ArgTypes, ArgValues, AssignableFunction, ErrorPointRef, Function, FunctionKind, UserFunction,
@@ -204,15 +205,6 @@ impl AssignableFunction for Access {
     }
 }
 
-/// Whether to take a sum or product of a vector.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum SumOrProduct {
-    /// Add up all the components.
-    Sum,
-    /// Multply all the components.
-    Product,
-}
-
 /// Built-in function that returns either the sum or product of a vector.
 #[derive(Debug)]
 pub struct Reduce {
@@ -248,13 +240,7 @@ impl Reduce {
 }
 impl Function for Reduce {
     fn name(&self) -> String {
-        format!(
-            "vector.{}",
-            match self.mode {
-                SumOrProduct::Sum => "sum",
-                SumOrProduct::Product => "product",
-            }
-        )
+        format!("vector.{}", self.mode)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
@@ -310,17 +296,6 @@ impl Function for Reduce {
             .try_fold(initial, fold_fn)
             .ok_or(self.overflow_error.error())?;
         Ok(Some(ConstValue::Int(result)))
-    }
-}
-
-enum_with_str_repr! {
-    /// Whether to get the minimum or maximum component of a vector.
-    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    enum MinMaxMode {
-        /// Get the maximum component. ("smax")
-        Max = "max",
-        /// Get the minimum component. ("smin")
-        Min = "min",
     }
 }
 

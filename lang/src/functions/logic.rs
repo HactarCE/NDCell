@@ -1,5 +1,6 @@
 //! Boolean logic functions.
 
+pub use super::enums::LogicalBinOpType;
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind, UserFunction};
 use crate::compiler::{Compiler, Value};
@@ -48,17 +49,6 @@ impl Function for LogicalNot {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-/// Which boolean operation to perform.
-pub enum LogicalBinOpType {
-    /// Logical OR.
-    Or,
-    /// Logical XOR.
-    Xor,
-    /// Logicial AND.
-    And,
-}
-
 /// Built-in function that performs a fixed two-input boolean logic operation.
 #[derive(Debug)]
 pub struct LogicalBinaryOp {
@@ -74,15 +64,7 @@ impl LogicalBinaryOp {
 }
 impl Function for LogicalBinaryOp {
     fn name(&self) -> String {
-        use LogicalBinOpType::*;
-        format!(
-            "binary '{}' operator",
-            match self.op {
-                Or => "or",
-                Xor => "xor",
-                And => "and",
-            }
-        )
+        format!("binary '{}' operator", self.op)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator

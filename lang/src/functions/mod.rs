@@ -2,6 +2,7 @@
 
 pub mod cmp;
 pub mod convert;
+pub mod enums;
 pub mod literals;
 pub mod logic;
 pub mod math;

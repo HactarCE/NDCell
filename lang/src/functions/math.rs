@@ -4,6 +4,7 @@ use inkwell::values::{BasicValueEnum, IntMathValue};
 use inkwell::IntPredicate;
 use std::convert::TryInto;
 
+pub use super::enums::NegOrAbsMode;
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, ErrorPointRef, Function, FunctionKind, UserFunction};
 use crate::compiler::{Compiler, Value};
@@ -12,17 +13,6 @@ use crate::lexer::OperatorToken;
 use crate::types::LangInt;
 use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{DivideByZero, IntegerOverflow, InternalError, NegativeExponent};
-
-/// Whether to perform negation or absolute value.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum NegOrAbsMode {
-    /// Unconditionally negate the input.
-    Negate,
-    /// Return the absolute value of the input (used as a function).
-    AbsFunc,
-    /// Return the absolute value of the input (used as a method).
-    AbsMethod,
-}
 
 /// Built-in function that negates an integer or vector or takes its absolute value.
 #[derive(Debug)]

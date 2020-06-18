@@ -315,6 +315,8 @@ impl Compiler {
     fn function(&self) -> &FunctionInProgress {
         self.function.as_ref().expect("Tried to access function being built, but there is none; call Compiler::begin_function() first")
     }
+    /// Returns a mutable reference to the function currently being built,
+    /// panicking if there is none.
     fn function_mut(&mut self) -> &mut FunctionInProgress {
         self.function.as_mut().expect("Tried to access function being built, but there is none; call Compiler::begin_function() first")
     }

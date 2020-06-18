@@ -151,7 +151,7 @@ pub enum LangErrorMsg {
         expected: &'static str,
         got: &'static str,
     },
-    ReservedWord(Cow<'static, str>),
+    ReservedWord,
     ElseWithoutIf,
     MissingSetKeyword,
     TopLevelNonDirective,
@@ -230,8 +230,8 @@ impl fmt::Display for LangErrorMsg {
             Self::ExpectedGot { expected, got } => {
                 write!(f, "Expected {}; got {}", expected, got)?;
             }
-            Self::ReservedWord(s) => {
-                write!(f, "'{}' is a reserved word", s)?;
+            Self::ReservedWord => {
+                write!(f, "This is a reserved word")?;
             }
             Self::ElseWithoutIf => {
                 write!(f, "This 'else' has no matching 'if'")?;

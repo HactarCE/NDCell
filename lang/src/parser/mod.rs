@@ -685,8 +685,7 @@ impl<'a> ParseBuilder<'a> {
     fn ident(&mut self) -> LangResult<String> {
         match self.next().map(|t| t.class) {
             Some(TokenClass::Ident(s)) => Ok(s.to_owned()),
-            Some(TokenClass::Keyword(kw)) => self.err(ReservedWord(kw.to_string().into())),
-            Some(TokenClass::Type(ty)) => self.err(ReservedWord(ty.to_string().into())),
+            Some(TokenClass::Keyword(_)) | Some(TokenClass::Type(_)) => self.err(ReservedWord),
             _ => self.err(Expected("identifier, i.e. variable or function name")),
         }
     }

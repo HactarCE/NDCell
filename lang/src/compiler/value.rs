@@ -14,10 +14,13 @@ pub enum Value {
     Int(IntValue<'static>),
     /// Cell state.
     CellState(IntValue<'static>),
-    /// Vector of a specific length (from 1 to 6).
+    /// Vector of a specific length from 1 to 256.
     Vector(VectorValue<'static>),
     /// Pattern of cells with an arbitrary shape.
     Pattern(PatternValue),
+    /// Inclusive integer range, represented by an LLVM vector type with three
+    /// integers: start, end, and step.
+    IntRange(VectorValue<'static>),
 }
 impl Value {
     /// Returns the type of this value.
@@ -27,6 +30,7 @@ impl Value {
             Self::CellState(_) => Type::CellState,
             Self::Vector(v) => Type::Vector(v.get_type().get_size() as usize),
             Self::Pattern(p) => Type::Pattern(p.shape.clone()),
+            Self::IntRange(_) => Type::IntRange,
         }
     }
     /// Constructs a value of the given type from an LLVM basic value.
@@ -43,6 +47,7 @@ impl Value {
                 value: basic_value.into_struct_value(),
                 shape: shape.clone(),
             }),
+            Type::IntRange => Self::IntRange(basic_value.into_vector_value()),
         }
     }
     /// Returns the LLVM integer value inside if this is Value::Int; otherwise
@@ -85,6 +90,7 @@ impl Value {
             Value::CellState(i) => Ok(i.into()),
             Value::Vector(v) => Ok(v.into()),
             Value::Pattern(p) => Ok(p.value.into()),
+            Value::IntRange(r) => Ok(r.into()),
             // _ => Err(InternalError(format!("{} has no BasicValue representation", self).into())),
         }
     }

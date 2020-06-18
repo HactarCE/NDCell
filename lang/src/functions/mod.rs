@@ -70,6 +70,16 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "max" => todo!("get pattern upper corner"),
             _ => None,
         },
+        Type::IntRange => match name {
+            "start" => todo!("return start of range"),
+            "end" => todo!("return end of range"),
+            "low" => todo!("return low end of range"),
+            "high" => todo!("return high end of range"),
+            "count" => todo!("return length of range"),
+            "step" => todo!("return range step"),
+            "by" => todo!("return new range with different step"),
+            _ => None,
+        },
     }
 }
 

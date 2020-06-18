@@ -270,7 +270,9 @@ impl Compiler {
         // Initialize to a default value.
         let default_value = self
             .get_default_var_value(&ty)
-            .unwrap()
+            .ok_or_else(|| {
+                InternalError("get_default_var_value() returned None".into()).without_span()
+            })?
             .into_basic_value()?;
         self.builder().build_store(ptr, default_value);
         Ok(Variable {
@@ -691,7 +693,8 @@ impl Compiler {
     }
 
     /// Builds a cast from any type to a boolean, represented using the normal
-    /// integer type (either 0 or 1).
+    /// integer type (either 0 or 1). Returns an InternalError if the given
+    /// value cannot be converted to a boolean.
     pub fn build_convert_to_bool(&mut self, value: Value) -> LangResult<IntValue<'static>> {
         let is_truthy = match value {
             // Integers and cell states are truthy if nonzero. Vectors are
@@ -741,6 +744,8 @@ impl Compiler {
                 // Finally, return the value of the phi node.
                 end_phi.as_basic_value().into_int_value()
             }
+            // Other types have no truthiness.
+            Value::IntRange(_) => Err(UNCAUGHT_TYPE_ERROR)?,
         };
 
         // Cast to integer.
@@ -1036,19 +1041,21 @@ impl Compiler {
                 Value::CellState(self.cell_state_type().const_int(i as u64, false))
             }
             ConstValue::Vector(values) => Value::Vector(VectorType::const_vector(
-                &values
-                    .iter()
-                    .map(|&i| {
-                        self.value_from_const(ConstValue::Int(i))
-                            .into_basic_value()
-                            .expect("Failed to convert ConstValue to Value")
-                    })
-                    .collect_vec(),
+                &values.iter().map(|&i| self.const_int(i)).collect_vec(),
             )),
+            ConstValue::IntRange { start, end, step } => {
+                Value::IntRange(VectorType::const_vector(&[
+                    self.const_int(start),
+                    self.const_int(end),
+                    self.const_int(step),
+                ]))
+            }
         }
     }
-    /// Returns the default value for variables of the given type.
+    /// Returns the default value for variables of the given type, or None if
+    /// there is no reasonable default value for the given type.
     pub fn get_default_var_value(&self, ty: &Type) -> Option<Value> {
+        // TODO: default value for Pattern and IntRange?
         Some(self.value_from_const(ConstValue::default(ty)?))
     }
 
@@ -1059,6 +1066,7 @@ impl Compiler {
             Type::CellState => Ok(self.cell_state_type().into()),
             Type::Vector(len) => Ok(self.vec_type(*len).into()),
             Type::Pattern(shape) => Ok(self.pattern_type(shape.ndim()).into()),
+            Type::IntRange => Ok(self.vec_type(2).into())
             // _ => Err(InternalError(
             //     "Attempt to get LLVM representation of type that has none".into(),
             // )

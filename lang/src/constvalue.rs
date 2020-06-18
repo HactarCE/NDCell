@@ -8,12 +8,21 @@ use crate::types::{LangCellState, LangInt, Type};
 /// Constant value of any type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConstValue {
-    /// Integer
+    /// Integer.
     Int(LangInt),
-    /// Cell state
+    /// Cell state.
     CellState(LangCellState),
-    /// Vector of a specific length from 1 to 256 (extra components are zero).
+    /// Vector of a specific length from 1 to 256.
     Vector(Vec<LangInt>),
+    /// Inclusive integer range.
+    IntRange {
+        /// First number in the range.
+        start: LangInt,
+        /// Number to end at or before (inclusive).
+        end: LangInt,
+        /// Step (may be negative).
+        step: LangInt,
+    },
 }
 impl ConstValue {
     /// Returns the type of this value.
@@ -22,6 +31,7 @@ impl ConstValue {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
             Self::Vector(values) => Type::Vector(values.len()),
+            Self::IntRange { .. } => Type::IntRange,
         }
     }
     /// Constructs a default value of the given type.
@@ -30,7 +40,8 @@ impl ConstValue {
             Type::Int => Some(Self::Int(0)),
             Type::CellState => Some(Self::CellState(0)),
             Type::Vector(len) => Some(Self::Vector(vec![0; *len])),
-            Type::Pattern(_) => None,
+            Type::Pattern(_) => None, // TODO: default pattern (all #0)
+            Type::IntRange => None,   // TODO: default integer range (MIN to MAX)
         }
     }
     /// Returns the integer value inside if this is a ConstValue::Int; otherwise
@@ -57,6 +68,14 @@ impl ConstValue {
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
+    /// Returns the start, end, and step inside if this is a
+    /// ConstValue::IntRange; otherwise returns an InternalError.
+    pub fn as_int_range(self) -> LangResult<(LangInt, LangInt, LangInt)> {
+        match self {
+            Self::IntRange { start, end, step } => Ok((start, end, step)),
+            _ => Err(UNCAUGHT_TYPE_ERROR),
+        }
+    }
     /// Converts this value to a boolean if it can be converted; otherwise
     /// returns an InternalError.
     pub fn to_bool(self) -> LangResult<bool> {
@@ -64,6 +83,7 @@ impl ConstValue {
             Self::Int(i) => Ok(i != 0),
             Self::CellState(i) => Ok(i != 0),
             Self::Vector(v) => Ok(v.into_iter().any(|i| i != 0)),
+            Self::IntRange { .. } => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
     /// Converts this value to a vector of the specified length if this is a
@@ -117,6 +137,16 @@ impl ConstValue {
                     .collect(),
             ),
             Type::Pattern(_) => todo!("construct pattern from bytes"),
+            Type::IntRange => {
+                let values = Self::from_bytes(&Type::Vector(3), bytes)
+                    .as_vector()
+                    .unwrap();
+                Self::IntRange {
+                    start: values[0],
+                    end: values[1],
+                    step: values[2],
+                }
+            }
         }
     }
     /// Returns raw bytes representing this value. Panics if this type has no
@@ -162,6 +192,9 @@ impl ConstValue {
                     Self::Int(i).set_bytes(chunk);
                 }
             }
+            Self::IntRange { start, end, step } => {
+                ConstValue::Vector(vec![*start, *end, *step]).set_bytes(bytes);
+            }
         }
     }
 }
@@ -172,13 +205,15 @@ mod tests {
 
     #[test]
     fn test_constvalue_int_bytes() {
-        let int_iter = vec![-10, -5, -1, 0, 1, 5, 10]
+        let ints = vec![-10, -5, -1, 0, 1, 5, 10]
             .into_iter()
             .map(ConstValue::Int);
-        let cell_state_iter = vec![0, 1, 5, 10, 254, 255]
+
+        let cell_states = vec![0, 1, 5, 10, 254, 255]
             .into_iter()
             .map(ConstValue::CellState);
-        let vector_iter = vec![
+
+        let vecs = vec![
             vec![],
             vec![10],
             vec![10, -20],
@@ -188,7 +223,15 @@ mod tests {
         ]
         .into_iter()
         .map(ConstValue::Vector);
-        for const_value in int_iter.chain(cell_state_iter).chain(vector_iter) {
+
+        let ranges = vec![ConstValue::IntRange {
+            start: -25,
+            end: -10,
+            step: 3,
+        }]
+        .into_iter();
+
+        for const_value in ints.chain(cell_states).chain(vecs).chain(ranges) {
             let bytes = const_value.to_bytes();
             assert_eq!(
                 const_value,

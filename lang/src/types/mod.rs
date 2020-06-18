@@ -39,6 +39,8 @@ pub enum Type {
     Vector(usize),
     /// Configuration of cells of a specific size and shape.
     Pattern(Rc<PatternShape>),
+    /// Contiguous range of integers.
+    IntRange,
 }
 impl Default for Type {
     fn default() -> Self {
@@ -52,6 +54,7 @@ impl fmt::Debug for Type {
             Self::CellState => write!(f, "cell"),
             Self::Vector(len) => write!(f, "vec{}", len),
             Self::Pattern(shape) => write!(f, "{}", shape),
+            Self::IntRange => write!(f, "range"),
         }
     }
 }
@@ -62,6 +65,7 @@ impl fmt::Display for Type {
             Self::CellState => write!(f, "cellstate"),
             Self::Vector(len) => write!(f, "vector{}", len),
             Self::Pattern(shape) => write!(f, "{}", shape),
+            Self::IntRange => write!(f, "range"),
         }
     }
 }
@@ -71,7 +75,9 @@ impl Type {
     /// type.
     pub fn has_runtime_representation(&self) -> bool {
         match self {
-            Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
+            Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) | Self::IntRange => {
+                true
+            }
         }
     }
     /// Returns the number of bytes used to represent this type in compiled
@@ -83,6 +89,7 @@ impl Type {
             Self::CellState => Some(std::mem::size_of::<LangCellState>()),
             Self::Vector(len) => Some(len * Self::Int.size_of().unwrap()),
             Self::Pattern(_) => todo!("how big is a pattern?"),
+            Self::IntRange => Some(2 * Self::Int.size_of().unwrap()),
         }
     }
 
@@ -94,6 +101,7 @@ impl Type {
     pub fn can_convert_to_bool(&self) -> bool {
         match self {
             Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
+            Self::IntRange => false,
         }
     }
 

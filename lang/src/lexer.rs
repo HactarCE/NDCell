@@ -207,7 +207,13 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
         } else if let Some(captures) = STRING_PATTERN.captures(s) {
             if let Some(contents_capture) = captures.get(3) {
                 let prefix = captures.get(1).unwrap().as_str().chars().next();
-                let quote = captures.get(2).unwrap().as_str().chars().exactly_one().unwrap();
+                let quote = captures
+                    .get(2)
+                    .unwrap()
+                    .as_str()
+                    .chars()
+                    .exactly_one()
+                    .unwrap();
                 let contents = contents_capture.as_str();
                 Ok(Self::String {
                     prefix,
@@ -425,6 +431,7 @@ pub enum TypeToken {
     Int,
     CellState,
     Vector(Option<usize>),
+    IntRange,
 }
 impl fmt::Display for TypeToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -433,6 +440,7 @@ impl fmt::Display for TypeToken {
             Self::CellState => write!(f, "cellstate"),
             Self::Vector(None) => write!(f, "vec"),
             Self::Vector(Some(len)) => write!(f, "vec{}", len),
+            Self::IntRange => write!(f, "range"),
         }
     }
 }
@@ -454,6 +462,7 @@ impl FromStr for TypeToken {
             "int" | "integer" => Ok(Self::Int),
             "cell" | "cellstate" => Ok(Self::CellState),
             "vec" | "vector" => Ok(Self::Vector(None)),
+            "range" => Ok(Self::IntRange),
             _ => Err(()),
         }
     }
@@ -467,6 +476,7 @@ impl TypeToken {
             Self::CellState => Type::CellState,
             Self::Vector(None) => Type::Vector(ndim as usize),
             Self::Vector(Some(len)) => Type::Vector(len),
+            Self::IntRange => Type::IntRange,
         }
     }
 }

@@ -44,6 +44,7 @@ impl Function for Cmp {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
+
     fn arg_types(&self) -> ArgTypes {
         self.args.clone()
     }

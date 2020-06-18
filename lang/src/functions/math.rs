@@ -104,6 +104,7 @@ impl Function for NegOrAbs {
             NegOrAbsMode::AbsMethod => FunctionKind::Method,
         }
     }
+
     fn arg_types(&self) -> ArgTypes {
         self.arg_types.clone()
     }
@@ -155,6 +156,7 @@ impl Function for UnaryPlus {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
+
     fn arg_types(&self) -> ArgTypes {
         self.arg_types.clone()
     }
@@ -432,6 +434,7 @@ impl Function for BinaryOp {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Operator
     }
+
     fn arg_types(&self) -> ArgTypes {
         self.arg_types.clone()
     }

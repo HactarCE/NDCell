@@ -49,6 +49,7 @@ impl Function for Access {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
     }
+
     fn arg_types(&self) -> ArgTypes {
         self.arg_types.clone()
     }
@@ -258,10 +259,10 @@ impl Function for Reduce {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
     }
+
     fn arg_types(&self) -> ArgTypes {
         self.arg_types.clone()
     }
-
     fn return_type(&self, span: Span) -> LangResult<Type> {
         if self.arg_types.len() != 1 {
             Err(self.invalid_args_err(span))?;
@@ -269,6 +270,7 @@ impl Function for Reduce {
         self.arg_types[0].check_vec()?;
         Ok(Type::Int)
     }
+
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         // Extract all the elements.
         let arg = args.compile(compiler, 0)?.as_vector()?;
@@ -361,10 +363,10 @@ impl Function for MinMax {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
     }
+
     fn arg_types(&self) -> ArgTypes {
         self.arg_types.clone()
     }
-
     fn return_type(&self, span: Span) -> LangResult<Type> {
         if self.arg_types.len() != 1 {
             Err(self.invalid_args_err(span))?;
@@ -372,6 +374,7 @@ impl Function for MinMax {
         self.arg_types[0].check_vec()?;
         Ok(Type::Int)
     }
+
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let arg = args.compile(compiler, 0)?.into_basic_value()?;
         compiler
@@ -406,6 +409,7 @@ impl Function for GetLen {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
     }
+
     fn arg_types(&self) -> ArgTypes {
         self.arg_types.clone()
     }
@@ -425,7 +429,6 @@ impl Function for GetLen {
             .get_size();
         Ok(Value::Int(compiler.const_uint(ret as u64)))
     }
-
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
         Ok(Some(ConstValue::Int(
             args.const_eval(0)?.as_vector()?.len() as LangInt,

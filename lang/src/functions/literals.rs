@@ -35,6 +35,7 @@ impl Function for Int {
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom
     }
+
     fn arg_types(&self) -> ArgTypes {
         vec![]
     }

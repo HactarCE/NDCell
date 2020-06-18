@@ -91,13 +91,13 @@ impl Function for LogicalBinaryOp {
     fn arg_types(&self) -> ArgTypes {
         self.arg_types.clone()
     }
-
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 2)?;
         self.arg_types[0].check_can_convert_to_bool()?;
         self.arg_types[1].check_can_convert_to_bool()?;
         Ok(Type::Int)
     }
+
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let lhs = args.compile(compiler, 0)?;
         let rhs = args.compile(compiler, 1)?;

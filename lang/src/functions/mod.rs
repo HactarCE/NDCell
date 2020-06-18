@@ -100,23 +100,10 @@ pub fn lookup_unary_operator(
     span: Span,
 ) -> LangResult<FuncConstructor> {
     use OperatorToken::*;
-    use Type::*;
     let ret: Option<FuncConstructor> = match op {
-        // Unary plus
-        Plus => match arg {
-            Int | Vector(_) => Some(Box::new(math::UnaryPlus::construct)),
-            _ => None,
-        },
-        // Unary minus
-        Minus => match arg {
-            Int | Vector(_) => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::Negate)),
-            _ => None,
-        },
-        // Tag
-        Tag => match arg {
-            Int => Some(Box::new(convert::IntToCellState::construct)),
-            _ => None,
-        },
+        Plus => Some(Box::new(math::UnaryPlus::construct)),
+        Minus => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::Negate)),
+        Tag => Some(Box::new(convert::IntToCellState::construct)),
         _ => None,
     };
     ret.ok_or_else(|| {

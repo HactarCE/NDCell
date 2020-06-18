@@ -1,5 +1,7 @@
 //! Functions that return literals.
 
+use inkwell::IntPredicate;
+
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind, UserFunction};
 use crate::compiler::{Compiler, Value};
@@ -120,6 +122,89 @@ impl Function for Vector {
                 .build_insert_element(ret, component, idx, "");
         }
         Ok(Value::Vector(ret))
+    }
+    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+        let mut components = vec![];
+        for arg in args.const_eval_all()? {
+            match arg {
+                ConstValue::Int(i) => components.push(i),
+                ConstValue::Vector(v) => components.extend_from_slice(&v),
+                _ => unreachable!(),
+            }
+        }
+        Ok(Some(ConstValue::Vector(components)))
+    }
+}
+
+/// Built-in function that constructs a range from its arguments that steps by 1
+/// or -1 (depending on arguments).
+#[derive(Debug)]
+pub struct Range {
+    /// Argument types (should have a length of 2).
+    arg_types: ArgTypes,
+}
+impl Range {
+    /// Constructs a new Range instance.
+    pub fn construct(_userfunc: &mut UserFunction, _span: Span, arg_types: ArgTypes) -> FuncResult {
+        Ok(Box::new(Self { arg_types }))
+    }
+}
+impl Function for Range {
+    fn name(&self) -> String {
+        "range literal".to_owned()
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Operator
+    }
+
+    fn arg_types(&self) -> crate::ast::ArgTypes {
+        self.arg_types.clone()
+    }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        self.check_args_len(span, 2)?;
+        self.arg_types[0].check_eq(Type::Int)?;
+        self.arg_types[1].check_eq(Type::Int)?;
+        Ok(Type::IntRange)
+    }
+
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        // Compile the arguments.
+        let start = args.compile(compiler, 0)?.as_int()?;
+        let end = args.compile(compiler, 1)?.as_int()?;
+        // Determine the step. If start <= end, then the default step is +1; if start >
+        // end, then the default step is -1.
+        let use_positive_step = compiler.builder().build_int_compare(
+            IntPredicate::SLE, // Signed Less-Than or Equal
+            start,
+            end,
+            "rangeStepTest",
+        );
+        let positive_one = compiler.const_int(1);
+        let negative_one = compiler.const_int(-1);
+        let step = compiler.builder().build_select(
+            use_positive_step,
+            positive_one,
+            negative_one,
+            "rangeStep",
+        );
+        // Combine
+        let mut ret = compiler.int_range_type().get_undef();
+        // Insert start.
+        let idx = compiler.const_uint(0);
+        ret = compiler
+            .builder()
+            .build_insert_element(ret, start, idx, "rangeTmp1");
+        // Insert end.
+        let idx = compiler.const_uint(1);
+        ret = compiler
+            .builder()
+            .build_insert_element(ret, end, idx, "rangeTmp2");
+        // Insert step.
+        let idx = compiler.const_uint(2);
+        ret = compiler
+            .builder()
+            .build_insert_element(ret, step, idx, "range");
+        Ok(Value::IntRange(ret))
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
         let mut components = vec![];

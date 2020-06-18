@@ -42,6 +42,7 @@ enum OpPrecedence {
     Bitshift,
     AddSub,
     MulDiv,
+    Range,
     UnaryPrefix,
     Exp,
     Postfix,
@@ -70,7 +71,8 @@ impl OpPrecedence {
             Self::BitwiseAnd => Self::Bitshift,
             Self::Bitshift => Self::AddSub,
             Self::AddSub => Self::MulDiv,
-            Self::MulDiv => Self::UnaryPrefix,
+            Self::MulDiv => Self::Range,
+            Self::Range => Self::UnaryPrefix,
             Self::UnaryPrefix => Self::Exp,
             Self::Exp => Self::Postfix,
             Self::Postfix => Self::Atom,
@@ -423,6 +425,9 @@ impl<'a> ParseBuilder<'a> {
                 ],
                 precedence,
             ),
+            OpPrecedence::Range => {
+                self.left_binary_op(&[TokenClass::Operator(OperatorToken::DotDot)], precedence)
+            }
             OpPrecedence::UnaryPrefix => self.unary_op(
                 &[
                     TokenClass::Operator(OperatorToken::Tag),

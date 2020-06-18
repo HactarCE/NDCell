@@ -344,6 +344,11 @@ impl UserFunction {
             } => {
                 let mut args_list = self.build_expression_list_ast(arg_exprs)?;
                 func = match &func_expr.inner {
+                    parser::Expr::TypeName(type_token) => {
+                        // Built-in function
+                        functions::lookup_type_function(*type_token)
+                            .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
+                    }
                     parser::Expr::Ident(func_name) => {
                         if self
                             .rule_meta()

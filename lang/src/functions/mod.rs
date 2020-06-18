@@ -10,7 +10,7 @@ pub mod vectors;
 
 use crate::ast;
 use crate::errors::*;
-use crate::lexer::OperatorToken;
+use crate::lexer::{OperatorToken, TypeToken};
 use crate::{Span, Type};
 use LangErrorMsg::InvalidArguments;
 
@@ -22,16 +22,20 @@ pub type FuncConstructor =
 /// FuncConstructor.
 pub type FuncResult = LangResult<Box<dyn ast::Function>>;
 
-/// Returns a constructor for the function with the given name.
+/// Returns a constructor for the function with the given name, if one exists.
+/// See lookup_type_function() for functions like vec2() that coincide with a
+/// type name.
 pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
     match name {
         "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsFunc)),
         "bool" => Some(Box::new(convert::ToBool::construct)),
+        "vec" => Some(convert::ToVector::with_len(None)),
         _ => None,
     }
 }
 
-/// Returns a constructor for the method on the given type with the given name.
+/// Returns a constructor for the method on the given type with the given name,
+/// if one exists.
 pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
     match ty {
         Type::Int => match name {
@@ -59,6 +63,17 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
     }
 }
 
+/// Returns a constructor for the function with the same name as the given type.
+pub fn lookup_type_function(ty: TypeToken) -> Option<FuncConstructor> {
+    match ty {
+        TypeToken::Vector(maybe_len) => Some(convert::ToVector::with_len(maybe_len)),
+        _ => None,
+    }
+}
+
+/// Returns a constructor for the function that applies the given unary operator
+/// to the given type, or returns an appropriate error if the operator cannot be
+/// applied to the given type.
 pub fn lookup_unary_operator(
     op: OperatorToken,
     arg: Type,
@@ -94,6 +109,9 @@ pub fn lookup_unary_operator(
     })
 }
 
+/// Returns a constructor for the function that applies the given binary
+/// operator to the given types, or returns an appropriate error if the operator
+/// cannot be applied to the given types.
 pub fn lookup_binary_operator(
     lhs: &Type,
     op: OperatorToken,

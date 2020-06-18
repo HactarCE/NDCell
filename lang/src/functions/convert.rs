@@ -3,7 +3,7 @@
 use inkwell::IntPredicate;
 use std::rc::Rc;
 
-use super::FuncResult;
+use super::{FuncConstructor, FuncResult};
 use crate::ast::{
     ArgTypes, ArgValues, ErrorPointRef, Function, FunctionKind, RuleMeta, UserFunction,
 };
@@ -129,6 +129,81 @@ impl Function for ToBool {
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
         Ok(Some(ConstValue::Int(
             args.const_eval(0)?.to_bool()? as LangInt
+        )))
+    }
+}
+
+/// Built-in function that converts an integer or vector of one length into a
+/// vector of another length. Assumes 0 if no argument is supplied.
+#[derive(Debug)]
+pub struct ToVector {
+    /// Argument types.
+    arg_types: ArgTypes,
+    /// Length of resultant vector.
+    result_len: usize,
+    /// Whether the length was inferred from the number of the dimensions in the
+    /// automaton.
+    is_len_inferred: bool,
+}
+impl ToVector {
+    /// Returns a constructor for a new ToVector instance that
+    /// constructs a vector with the given length.
+    pub fn with_len(vector_len: Option<usize>) -> FuncConstructor {
+        Box::new(move |userfunc, _span, arg_types| {
+            let result_len = vector_len.unwrap_or_else(|| userfunc.rule_meta().ndim as usize);
+            Ok(Box::new(Self {
+                arg_types,
+                result_len,
+                is_len_inferred: vector_len.is_none(),
+            }))
+        })
+    }
+}
+impl Function for ToVector {
+    fn name(&self) -> String {
+        if self.is_len_inferred {
+            "vec".to_owned()
+        } else {
+            format!("vec{}", self.result_len)
+        }
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Function
+    }
+
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        if self.arg_types.len() > 1 {
+            Err(self.invalid_args_err(span))?;
+        }
+        if let Some(arg) = self.arg_types.get(0) {
+            arg.check_int_or_vec()?;
+        }
+        Ok(Type::Vector(self.result_len))
+    }
+
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        let arg = if args.len() == 0 {
+            Value::Int(compiler.const_int(0))
+        } else {
+            args.compile(compiler, 0)?
+        };
+
+        compiler
+            .build_vector_cast(arg, self.result_len)
+            .map(Value::Vector)
+    }
+    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+        let arg = if args.len() == 0 {
+            ConstValue::Int(0)
+        } else {
+            args.const_eval(0)?
+        };
+
+        Ok(Some(ConstValue::Vector(
+            arg.coerce_to_vector(self.result_len)?,
         )))
     }
 }

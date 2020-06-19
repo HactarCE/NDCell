@@ -212,13 +212,14 @@ fn test_min_and_max() {
             return [max(a, b, c), min(a, b, c)]
         }",
     );
+    let test_values = [-10, -5, 0, 5, 10];
     for (&ax, &ay, &b, &cx, &cy, &cz) in iproduct!(
-        test_values(),
-        test_values(),
-        test_values(),
-        test_values(),
-        test_values(),
-        test_values()
+        &test_values,
+        &test_values,
+        &test_values,
+        &test_values,
+        &test_values,
+        &test_values
     ) {
         use std::cmp::{max, min};
         let max_x = max(max(ax, b), cx);

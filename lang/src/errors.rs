@@ -275,17 +275,9 @@ impl fmt::Display for LangErrorMsg {
                 }
             }
             Self::InvalidArguments {
-                name,
-                is_method,
-                arg_types,
+                name, arg_types, ..
             } => {
-                // Omit first argument if used as a method.
-                let arg_slice = if *is_method && !arg_types.is_empty() {
-                    &arg_types[1..]
-                } else {
-                    &arg_types
-                };
-                write!(f, "Invalid arguments {:?} for {}", arg_slice, name,)?;
+                write!(f, "Invalid arguments {:?} for {}", arg_types, name,)?;
             }
             Self::CannotIndexType(ty) => {
                 write!(f, "Cannot index {}", ty)?;

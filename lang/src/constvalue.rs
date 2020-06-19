@@ -45,10 +45,10 @@ impl ConstValue {
             Type::Vector(len) => Some(Self::Vector(vec![0; *len])),
             // TODO: default pattern (all #0)
             Type::Pattern(_) => None,
-            // Default integer range encompasses all integers.
+            // Default integer range includes only zero.
             Type::IntRange => Some(Self::IntRange {
-                start: LangInt::MIN,
-                end: LangInt::MAX,
+                start: 0,
+                end: 0,
                 step: 1,
             }),
             // Default rectangle includes only the origin.

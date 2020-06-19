@@ -299,7 +299,7 @@ impl Function for Reduce {
     }
 }
 
-/// Built-in function that returns the minimum or maximum of a vector.
+/// Built-in function that returns the minimum or maximum component of a vector.
 #[derive(Debug)]
 pub struct MinMax {
     /// Vector to get the minimum or maximum of (should be
@@ -309,12 +309,12 @@ pub struct MinMax {
     mode: MinMaxMode,
 }
 impl MinMax {
-    /// Returns a constructor for a new MinMax instance that finds the maximum
+    /// Returns a constructor for a new MinMax instance that returns the maximum
     /// of a vector's components.
     pub fn max() -> FuncConstructor {
         Self::with_mode(MinMaxMode::Max)
     }
-    /// Returns a constructor for a new MinMax instance that finds the minimum
+    /// Returns a constructor for a new MinMax instance that returns the minimum
     /// of a vector's components.
     pub fn min() -> FuncConstructor {
         Self::with_mode(MinMaxMode::Min)

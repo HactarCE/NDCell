@@ -696,6 +696,54 @@ impl Compiler {
         Ok(())
     }
 
+    /// Selects between two numbers or shuffles two vectors.
+    pub fn build_generic_select(
+        &mut self,
+        condition: BasicValueEnum<'static>,
+        if_true: BasicValueEnum<'static>,
+        if_false: BasicValueEnum<'static>,
+        name: &str,
+    ) -> BasicValueEnum<'static> {
+        match condition {
+            BasicValueEnum::IntValue(condition) => self
+                .builder()
+                .build_select(condition, if_true, if_false, name),
+            BasicValueEnum::VectorValue(mask) => {
+                // Instead of trying to use shufflevector, it's simpler to just
+                // do bit manipulation: (mask & if_true) | (~mask & if_false).
+                let vec_len = mask.get_type().get_size() as usize;
+                let extended_mask_type = self.vec_type(vec_len);
+                // Sign-extend so that the entire value is either 0 or 1.
+                let sext_mask_lhs =
+                    self.builder()
+                        .build_int_s_extend(mask, extended_mask_type, "extendedMaskLhs");
+                let all_ones = self.int_type().const_all_ones();
+                let sext_mask_rhs = self.builder().build_xor(
+                    sext_mask_lhs,
+                    VectorType::const_vector(&vec![all_ones; vec_len]),
+                    "extendedMaskRhs",
+                );
+                // Compute mask & if_true.
+                let masked_if_true = self.builder().build_and(
+                    sext_mask_lhs,
+                    if_true.into_vector_value(),
+                    "maskedLhs",
+                );
+                // Compute mask & ~if_true.
+                let masked_if_false = self.builder().build_and(
+                    sext_mask_rhs,
+                    if_false.into_vector_value(),
+                    "maskedRhs",
+                );
+                // OR those to get the final result.
+                self.builder()
+                    .build_or(masked_if_true, masked_if_false, name)
+                    .into()
+            }
+            _ => unimplemented!("Invalid type of 'generic select' operation"),
+        }
+    }
+
     /// Builds a cast from any type to a boolean, represented using the normal
     /// integer type (either 0 or 1). Returns an InternalError if the given
     /// value cannot be converted to a boolean.

@@ -32,6 +32,8 @@ pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
         "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsFunc)),
         "bool" => Some(Box::new(convert::ToBool::construct)),
         "vec" => Some(convert::ToVector::with_len(None)),
+        "max" => Some(math::MinMax::max()),
+        "min" => Some(math::MinMax::min()),
         _ => None,
     }
 }

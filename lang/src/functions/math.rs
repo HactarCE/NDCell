@@ -2,9 +2,10 @@
 
 use inkwell::values::{BasicValueEnum, IntMathValue};
 use inkwell::IntPredicate;
+use itertools::Itertools;
 use std::convert::TryInto;
 
-pub use super::enums::NegOrAbsMode;
+pub use super::enums::{MinMaxMode, NegOrAbsMode};
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, ErrorPointRef, Function, FunctionKind, UserFunction};
 use crate::compiler::{Compiler, Value};
@@ -17,10 +18,10 @@ use LangErrorMsg::{DivideByZero, IntegerOverflow, InternalError, NegativeExponen
 /// Built-in function that negates an integer or vector or takes its absolute value.
 #[derive(Debug)]
 pub struct NegOrAbs {
-    /// Whether to perform absolute value or negation.
-    mode: NegOrAbsMode,
     /// Type to negate (should have a length of 1).
     arg_types: ArgTypes,
+    /// Whether to perform absolute value or negation.
+    mode: NegOrAbsMode,
     /// Error returned if overflow occurs.
     overflow_error: ErrorPointRef,
 }
@@ -29,9 +30,9 @@ impl NegOrAbs {
     pub fn with_mode(mode: NegOrAbsMode) -> FuncConstructor {
         Box::new(move |userfunc, span, arg_types| {
             Ok(Box::new(Self {
-                overflow_error: userfunc.add_error_point(IntegerOverflow.with_span(span)),
                 arg_types,
                 mode,
+                overflow_error: userfunc.add_error_point(IntegerOverflow.with_span(span)),
             }))
         })
     }
@@ -142,6 +143,151 @@ impl Function for NegOrAbs {
     }
 }
 
+/// Built-in function that returns the minimum or maximum of several integers or
+/// vectors (componentwise).
+#[derive(Debug)]
+pub struct MinMax {
+    /// Type to take the minimum or maximum of.
+    arg_types: ArgTypes,
+    /// Whether to return the minimum or maximum.
+    mode: MinMaxMode,
+}
+impl MinMax {
+    /// Returns a constructor for a new MinMax instance that returns the maximum
+    /// of its arguments.
+    pub fn max() -> FuncConstructor {
+        Self::with_mode(MinMaxMode::Max)
+    }
+    /// Returns a constructor for a new MinMax instance that returns the minimum
+    /// of its arguments.
+    pub fn min() -> FuncConstructor {
+        Self::with_mode(MinMaxMode::Min)
+    }
+    /// Returns a constructor for a new MinMax instance with the given mode.
+    fn with_mode(mode: MinMaxMode) -> FuncConstructor {
+        Box::new(move |_userfunc, _span, arg_types| Ok(Box::new(Self { arg_types, mode })))
+    }
+
+    /// Returns the type of the result of this operation, based on the types of
+    /// the arguments. Assumes arguments are valid.
+    fn result_type(&self) -> Type {
+        // All arguments must be integers or vectors. The return type is the
+        // length of the longest argument.
+        let mut ret_type = Type::Int;
+        for arg in &self.arg_types {
+            if let Type::Vector(arg_len) = arg.inner {
+                if let Type::Vector(ref mut ret_len) = &mut ret_type {
+                    *ret_len = std::cmp::max(*ret_len, arg_len);
+                } else {
+                    ret_type = Type::Vector(arg_len);
+                }
+            }
+        }
+        ret_type
+    }
+
+    /// Compiles this operation for two values of the same type.
+    fn compile_op(&self, compiler: &mut Compiler, arg1: Value, arg2: Value) -> LangResult<Value> {
+        let ty = arg1.ty();
+        let b = compiler.builder();
+        let op = match self.mode {
+            MinMaxMode::Max => IntPredicate::SGT,
+            MinMaxMode::Min => IntPredicate::SLT,
+        };
+        use Value::{Int, Vector};
+        let select_arg1: BasicValueEnum<'_> = match (&arg1, &arg2) {
+            (Int(lhs), Int(rhs)) => b.build_int_compare(op, *lhs, *rhs, "selector").into(),
+            (Vector(lhs), Vector(rhs)) => b.build_int_compare(op, *lhs, *rhs, "selector").into(),
+            _ => Err(InternalError(
+                "Invalid arguments to MinMax::compile_op()".into(),
+            ))?,
+        };
+        let ret = compiler.build_generic_select(
+            select_arg1,
+            arg1.into_basic_value()?,
+            arg2.into_basic_value()?,
+            &self.name(),
+        );
+        Ok(Value::from_basic_value(&ty, ret))
+    }
+    /// Evaluates this operation for two values of the same type.
+    pub fn eval_op(&self, arg1: ConstValue, arg2: ConstValue) -> LangResult<ConstValue> {
+        let f = match self.mode {
+            MinMaxMode::Max => std::cmp::max,
+            MinMaxMode::Min => std::cmp::min,
+        };
+        use ConstValue::{Int, Vector};
+        let ret = match (arg1, arg2) {
+            (Int(lhs), Int(rhs)) => ConstValue::Int(f(lhs, rhs)),
+            (Vector(lhs), Vector(rhs)) => {
+                ConstValue::Vector(lhs.into_iter().zip(rhs).map(|(a, b)| f(a, b)).collect())
+            }
+            _ => Err(InternalError(
+                "Invalid arguments to MinMax::eval_op()".into(),
+            ))?,
+        };
+        Ok(ret)
+    }
+}
+impl Function for MinMax {
+    fn name(&self) -> String {
+        self.mode.to_string()
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Function
+    }
+
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        // At least two arguments are required.
+        if self.arg_types.len() < 2 {
+            Err(self.invalid_args_err(span))?;
+        }
+        // All arguments must be integers or vectors.
+        for arg in &self.arg_types {
+            arg.check_int_or_vec()?;
+        }
+        Ok(self.result_type())
+    }
+
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        // Cast all arguments to the return type.
+        let ret_type = self.result_type();
+        let mut args = args.compile_all(compiler)?.into_iter().map(|arg| {
+            if let Type::Vector(len) = ret_type {
+                compiler.build_vector_cast(arg, len).map(Value::Vector)
+            } else {
+                Ok(arg)
+            }
+        });
+        // Reduce the list, one at a time. This .unwrap() is safe because
+        // return_type() checked that we have at least one argument.
+        let initial = args.next().unwrap();
+        // Collect the iterator to free compiler from the closure.
+        let args = args.collect_vec();
+        args.into_iter().fold(initial, |arg1, arg2| {
+            self.compile_op(compiler, arg1?, arg2?)
+        })
+    }
+    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+        // Cast all arguments to the return type.
+        let ret_type = self.result_type();
+        let mut args = args.const_eval_all()?.into_iter().map(|arg| {
+            if let Type::Vector(len) = ret_type {
+                arg.coerce_to_vector(len).map(ConstValue::Vector)
+            } else {
+                Ok(arg)
+            }
+        });
+        // Reduce the list, one at a time.
+        let initial = args.next().unwrap(); // return_type() checked that we have at least one argument.
+        args.fold(initial, |arg1, arg2| self.eval_op(arg1?, arg2?))
+            .map(Some)
+    }
+}
+
 /// Built-in function that returns a number unchanged.
 #[derive(Debug)]
 pub struct UnaryPlus {
@@ -181,10 +327,10 @@ impl Function for UnaryPlus {
 /// Built-in function that performs a fixed two-input integer math operation.
 #[derive(Debug)]
 pub struct BinaryOp {
-    /// Token signifying what operation to perform.
-    op: OperatorToken,
     /// Types to apply the operation to (should have a length of 2).
     arg_types: ArgTypes,
+    /// Token signifying what operation to perform.
+    op: OperatorToken,
     /// Error returned if overflow occurs.
     overflow_error: Option<ErrorPointRef>,
     /// Error returned if the divisor of an operation is negative.

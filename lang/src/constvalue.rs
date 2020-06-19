@@ -23,6 +23,8 @@ pub enum ConstValue {
         /// Step (may be negative).
         step: LangInt,
     },
+    /// Inclusive hyperrectangle, represented by the coordinates of two opposite corners.
+    Rectangle(Vec<LangInt>, Vec<LangInt>),
 }
 impl ConstValue {
     /// Returns the type of this value.
@@ -32,6 +34,7 @@ impl ConstValue {
             Self::CellState(_) => Type::CellState,
             Self::Vector(values) => Type::Vector(values.len()),
             Self::IntRange { .. } => Type::IntRange,
+            Self::Rectangle(start, _) => Type::Rectangle(start.len()),
         }
     }
     /// Constructs a default value of the given type.
@@ -40,12 +43,16 @@ impl ConstValue {
             Type::Int => Some(Self::Int(0)),
             Type::CellState => Some(Self::CellState(0)),
             Type::Vector(len) => Some(Self::Vector(vec![0; *len])),
-            Type::Pattern(_) => None, // TODO: default pattern (all #0)
+            // TODO: default pattern (all #0)
+            Type::Pattern(_) => None,
+            // Default integer range encompasses all integers.
             Type::IntRange => Some(Self::IntRange {
                 start: LangInt::MIN,
                 end: LangInt::MAX,
                 step: 1,
             }),
+            // Default rectangle includes only the origin.
+            Type::Rectangle(ndim) => Some(Self::Rectangle(vec![0; *ndim], vec![0; *ndim])),
         }
     }
     /// Returns the integer value inside if this is a ConstValue::Int; otherwise
@@ -87,7 +94,7 @@ impl ConstValue {
             Self::Int(i) => Ok(i != 0),
             Self::CellState(i) => Ok(i != 0),
             Self::Vector(v) => Ok(v.into_iter().any(|i| i != 0)),
-            Self::IntRange { .. } => Err(UNCAUGHT_TYPE_ERROR),
+            Self::IntRange { .. } | Self::Rectangle { .. } => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
     /// Converts this value to a vector of the specified length if this is a
@@ -151,6 +158,14 @@ impl ConstValue {
                     step: values[2],
                 }
             }
+            Type::Rectangle(ndim) => {
+                let vec_type = Type::Vector(*ndim);
+                let (chunk1, chunk2) = bytes.split_at(bytes.len() / 2);
+                Self::Rectangle(
+                    Self::from_bytes(&vec_type, chunk1).as_vector().unwrap(),
+                    Self::from_bytes(&vec_type, chunk2).as_vector().unwrap(),
+                )
+            }
         }
     }
     /// Returns raw bytes representing this value. Panics if this type has no
@@ -199,6 +214,11 @@ impl ConstValue {
             Self::IntRange { start, end, step } => {
                 ConstValue::Vector(vec![*start, *end, *step]).set_bytes(bytes);
             }
+            Self::Rectangle(start, end) => {
+                let (chunk1, chunk2) = bytes.split_at_mut(bytes.len() / 2);
+                Self::Vector(start.clone()).set_bytes(chunk1);
+                Self::Vector(end.clone()).set_bytes(chunk2);
+            }
         }
     }
 }
@@ -235,7 +255,18 @@ mod tests {
         }]
         .into_iter();
 
-        for const_value in ints.chain(cell_states).chain(vecs).chain(ranges) {
+        let rectangles = vec![
+            ConstValue::Rectangle(vec![10, -20, 30], vec![-40, 50, -60]),
+            ConstValue::Rectangle(vec![0, 1, 2, 3], vec![-10, -2, 8, 99]),
+        ]
+        .into_iter();
+
+        for const_value in ints
+            .chain(cell_states)
+            .chain(vecs)
+            .chain(ranges)
+            .chain(rectangles)
+        {
             let bytes = const_value.to_bytes();
             assert_eq!(
                 const_value,

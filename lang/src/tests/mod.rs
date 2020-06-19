@@ -5,6 +5,7 @@ use std::thread::LocalKey;
 
 mod bools;
 mod branch;
+mod byterepr;
 mod cmp;
 mod debug;
 mod funcs;

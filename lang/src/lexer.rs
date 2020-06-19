@@ -71,6 +71,8 @@ lazy_static! {
 
     /// A regex that matches a vector type name.
     static ref VEC_TYPE_PATTERN: Regex = Regex::new(r#"vec(?:tor)?(\d+)"#).unwrap();
+    /// A regex that matches a rectangle type name.
+    static ref RECT_TYPE_PATTERN: Regex = Regex::new(r#"rect(?:angle)?(\d+)"#).unwrap();
 }
 
 /// Splits a string into tokens and returns them as a Vec, with all comments
@@ -432,6 +434,7 @@ pub enum TypeToken {
     CellState,
     Vector(Option<usize>),
     IntRange,
+    Rectangle(Option<usize>),
 }
 impl fmt::Display for TypeToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -441,6 +444,8 @@ impl fmt::Display for TypeToken {
             Self::Vector(None) => write!(f, "vec"),
             Self::Vector(Some(len)) => write!(f, "vec{}", len),
             Self::IntRange => write!(f, "range"),
+            Self::Rectangle(None) => write!(f, "rect"),
+            Self::Rectangle(Some(ndim)) => write!(f, "rect{}", ndim),
         }
     }
 }
@@ -448,6 +453,8 @@ impl FromStr for TypeToken {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, ()> {
         // TODO: test this method
+
+        // Handle "vecN"
         if let Some(len_str) = VEC_TYPE_PATTERN
             .captures(s)
             .and_then(|captures| captures.get(1))
@@ -458,11 +465,25 @@ impl FromStr for TypeToken {
                 return Ok(Self::Vector(Some(len)));
             }
         }
+
+        // Handle "rectN"
+        if let Some(len_str) = RECT_TYPE_PATTERN
+            .captures(s)
+            .and_then(|captures| captures.get(1))
+            .as_ref()
+            .map(regex::Match::as_str)
+        {
+            if let Ok(len @ 1..=MAX_VECTOR_LEN) = len_str.parse() {
+                return Ok(Self::Rectangle(Some(len)));
+            }
+        }
+
         match s {
             "int" | "integer" => Ok(Self::Int),
             "cell" | "cellstate" => Ok(Self::CellState),
             "vec" | "vector" => Ok(Self::Vector(None)),
             "range" => Ok(Self::IntRange),
+            "rect" | "rectangle" => Ok(Self::Rectangle(None)),
             _ => Err(()),
         }
     }
@@ -477,6 +498,8 @@ impl TypeToken {
             Self::Vector(None) => Type::Vector(ndim as usize),
             Self::Vector(Some(len)) => Type::Vector(len),
             Self::IntRange => Type::IntRange,
+            Self::Rectangle(None) => Type::Rectangle(ndim as usize),
+            Self::Rectangle(Some(rect_ndim)) => Type::Rectangle(rect_ndim),
         }
     }
 }

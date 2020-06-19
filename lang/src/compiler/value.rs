@@ -18,9 +18,12 @@ pub enum Value {
     Vector(VectorValue<'static>),
     /// Pattern of cells with an arbitrary shape.
     Pattern(PatternValue),
-    /// Inclusive integer range, represented by an LLVM vector type with three
+    /// Inclusive integer range, represented by an LLVM vector value with three
     /// integers: start, end, and step.
     IntRange(VectorValue<'static>),
+    /// Inclusive hyperrectangle, represented by a struct containing two vectors
+    /// of the same length.
+    Rectangle(StructValue<'static>),
 }
 impl Value {
     /// Returns the type of this value.
@@ -31,6 +34,12 @@ impl Value {
             Self::Vector(v) => Type::Vector(v.get_type().get_size() as usize),
             Self::Pattern(p) => Type::Pattern(p.shape.clone()),
             Self::IntRange(_) => Type::IntRange,
+            Self::Rectangle(r) => Type::Rectangle({
+                let field1 = r.get_type().get_field_type_at_index(0).unwrap();
+                let field2 = r.get_type().get_field_type_at_index(1).unwrap();
+                assert_eq!(field1, field2, "LLVM rect fields mismatch");
+                field1.into_vector_type().get_size() as usize
+            }),
         }
     }
     /// Constructs a value of the given type from an LLVM basic value.
@@ -40,7 +49,7 @@ impl Value {
             Type::CellState => Self::CellState(basic_value.into_int_value()),
             Type::Vector(len) => {
                 let ret = Self::Vector(basic_value.into_vector_value());
-                assert_eq!(Type::Vector(*len), ret.ty(), "Vector length does not match");
+                assert_eq!(Type::Vector(*len), ret.ty(), "LLVM vector length mismatch");
                 ret
             }
             Type::Pattern(shape) => Self::Pattern(PatternValue {
@@ -48,6 +57,11 @@ impl Value {
                 shape: shape.clone(),
             }),
             Type::IntRange => Self::IntRange(basic_value.into_vector_value()),
+            Type::Rectangle(ndim) => {
+                let ret = Self::Rectangle(basic_value.into_struct_value());
+                assert_eq!(Type::Rectangle(*ndim), ret.ty(), "LLVM rect ndim mismatch");
+                ret
+            }
         }
     }
     /// Returns the LLVM integer value inside if this is Value::Int; otherwise
@@ -90,6 +104,14 @@ impl Value {
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
+    /// Returns the LLVM vector value inside if this is Value::IntRange;
+    /// otherwise an InternalError.
+    pub fn as_rectangle(self) -> LangResult<StructValue<'static>> {
+        match self {
+            Value::Rectangle(r) => Ok(r),
+            _ => Err(UNCAUGHT_TYPE_ERROR),
+        }
+    }
     /// Returns this value as an LLVM basic value if it is representable as one;
     /// otherwise a TypeError.
     pub fn into_basic_value(self) -> LangResult<BasicValueEnum<'static>> {
@@ -99,6 +121,7 @@ impl Value {
             Value::Vector(v) => Ok(v.into()),
             Value::Pattern(p) => Ok(p.value.into()),
             Value::IntRange(r) => Ok(r.into()),
+            Value::Rectangle(r) => Ok(r.into()),
             // _ => Err(InternalError(format!("{} has no BasicValue representation", self).into())),
         }
     }

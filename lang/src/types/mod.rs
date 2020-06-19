@@ -41,6 +41,8 @@ pub enum Type {
     Pattern(Rc<PatternShape>),
     /// Contiguous range of integers.
     IntRange,
+    /// Hyperrectangle of a specific dimensionality (from 1 to 256).
+    Rectangle(usize),
 }
 impl Default for Type {
     fn default() -> Self {
@@ -53,8 +55,9 @@ impl fmt::Debug for Type {
             Self::Int => write!(f, "int"),
             Self::CellState => write!(f, "cell"),
             Self::Vector(len) => write!(f, "vec{}", len),
-            Self::Pattern(shape) => write!(f, "{}", shape),
+            Self::Pattern(shape) => write!(f, "pat{}", shape),
             Self::IntRange => write!(f, "range"),
+            Self::Rectangle(ndim) => write!(f, "rect{}", ndim),
         }
     }
 }
@@ -64,8 +67,9 @@ impl fmt::Display for Type {
             Self::Int => write!(f, "integer"),
             Self::CellState => write!(f, "cellstate"),
             Self::Vector(len) => write!(f, "vector{}", len),
-            Self::Pattern(shape) => write!(f, "{}", shape),
+            Self::Pattern(shape) => write!(f, "pattern{}", shape),
             Self::IntRange => write!(f, "range"),
+            Self::Rectangle(ndim) => write!(f, "rectangle{}", ndim),
         }
     }
 }
@@ -75,9 +79,12 @@ impl Type {
     /// type.
     pub fn has_runtime_representation(&self) -> bool {
         match self {
-            Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) | Self::IntRange => {
-                true
-            }
+            Self::Int
+            | Self::CellState
+            | Self::Vector(_)
+            | Self::Pattern(_)
+            | Self::IntRange
+            | Self::Rectangle(_) => true,
         }
     }
     /// Returns the number of bytes used to represent this type in compiled
@@ -90,6 +97,7 @@ impl Type {
             Self::Vector(len) => Some(len * Self::Int.size_of().unwrap()),
             Self::Pattern(_) => todo!("how big is a pattern?"),
             Self::IntRange => Some(Self::Vector(3).size_of().unwrap()),
+            Self::Rectangle(ndim) => Some(2 * Self::Vector(*ndim).size_of().unwrap()),
         }
     }
 
@@ -101,7 +109,7 @@ impl Type {
     pub fn can_convert_to_bool(&self) -> bool {
         match self {
             Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
-            Self::IntRange => false,
+            Self::IntRange | Self::Rectangle(_) => false,
         }
     }
 

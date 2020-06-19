@@ -206,7 +206,7 @@ impl PatternShape {
 impl fmt::Display for PatternShape {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let size_strs: Vec<String> = self.bounds().size().iter().map(|x| x.to_string()).collect();
-        write!(f, "pattern{}", size_strs.join("x"))?;
+        write!(f, "{}", size_strs.join("x"))?;
         if !self.is_rect() {
             write!(f, "~{:08x}", self.hashcode() as u32)?;
         }

@@ -81,6 +81,7 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "step" => Some(ranges::Access::with_prop(ranges::RangeProperty::Step)),
             _ => None,
         },
+        Type::Rectangle(_) => todo!("rectangle methods"),
     }
 }
 

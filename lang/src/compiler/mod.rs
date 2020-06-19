@@ -332,6 +332,11 @@ impl Compiler {
     pub fn int_range_type(&self) -> VectorType<'static> {
         self.vec_type(3)
     }
+    /// Returns the LLVM type used to represent a hyperrectangle.
+    pub fn rectangle_type(&self, ndim: usize) -> StructType<'static> {
+        let vec_type = self.vec_type(ndim).into();
+        get_ctx().struct_type(&[vec_type, vec_type], false)
+    }
 
     /// Returns the function currently being built, panicking if there is none.
     fn function(&self) -> &FunctionInProgress {
@@ -797,7 +802,7 @@ impl Compiler {
                 end_phi.as_basic_value().into_int_value()
             }
             // Other types have no truthiness.
-            Value::IntRange(_) => Err(UNCAUGHT_TYPE_ERROR)?,
+            Value::IntRange(_) | Value::Rectangle(_) => Err(UNCAUGHT_TYPE_ERROR)?,
         };
 
         // Cast to integer.
@@ -1102,6 +1107,19 @@ impl Compiler {
                     self.const_int(step),
                 ]))
             }
+            ConstValue::Rectangle(start, end) => {
+                assert_eq!(start.len(), end.len(), "Rect dimension mismatch");
+                let ndim = start.len();
+                let start = self
+                    .value_from_const(ConstValue::Vector(start))
+                    .into_basic_value()
+                    .unwrap();
+                let end = self
+                    .value_from_const(ConstValue::Vector(end))
+                    .into_basic_value()
+                    .unwrap();
+                Value::Rectangle(self.rectangle_type(ndim).const_named_struct(&[start, end]))
+            }
         }
     }
     /// Returns the default value for variables of the given type, or None if
@@ -1118,7 +1136,8 @@ impl Compiler {
             Type::CellState => Ok(self.cell_state_type().into()),
             Type::Vector(len) => Ok(self.vec_type(*len).into()),
             Type::Pattern(shape) => Ok(self.pattern_type(shape.ndim()).into()),
-            Type::IntRange => Ok(self.int_range_type().into())
+            Type::IntRange => Ok(self.int_range_type().into()),
+            Type::Rectangle(ndim) => Ok(self.rectangle_type(*ndim).into()),
             // _ => Err(InternalError(
             //     "Attempt to get LLVM representation of type that has none".into(),
             // )

@@ -227,7 +227,7 @@ impl<'a> ParamValueMut<'a> {
         assert_eq!(
             &value.ty(),
             self.ty,
-            "Wrong type for shared value in JIT function"
+            "Wrong type for parameter value in JIT function"
         );
         value.set_bytes(self.bytes);
     }

@@ -333,8 +333,16 @@ impl UserFunction {
             }
             // Attribute access
             parser::Expr::GetAttr { object, attribute } => {
-                args = Args::from(vec![self.build_expression_ast(object)?]);
-                func = functions::lookup_method(self[args[0]].return_type(), &attribute.inner)
+                let ty: Type;
+                if let parser::Expr::TypeName(type_token) = object.inner {
+                    ty = type_token.resolve(self.rule_meta().ndim);
+                    args = Args::none();
+                } else {
+                    let receiver = self.build_expression_ast(object)?;
+                    ty = self[receiver].return_type();
+                    args = Args::from(vec![receiver]);
+                }
+                func = functions::lookup_method(ty, &attribute.inner)
                     .ok_or_else(|| FunctionLookupError.with_span(attribute.span))?;
             }
             // Function call
@@ -367,9 +375,15 @@ impl UserFunction {
                         object,
                         attribute: method_name,
                     } => {
-                        args_list.insert(0, self.build_expression_ast(object)?);
                         // Built-in method
-                        let ty = self[args_list[0]].return_type();
+                        let ty: Type;
+                        if let parser::Expr::TypeName(type_token) = object.inner {
+                            ty = type_token.resolve(self.rule_meta().ndim);
+                        } else {
+                            let receiver = self.build_expression_ast(object)?;
+                            ty = self[receiver].return_type();
+                            args_list.insert(0, receiver);
+                        }
                         functions::lookup_method(ty, &method_name.inner)
                             .ok_or_else(|| FunctionLookupError.with_span(method_name.span))?
                     }

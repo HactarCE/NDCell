@@ -3,6 +3,12 @@ use itertools::Itertools;
 use super::{assert_fn_result, compile_test_fn, ConstValue};
 
 #[test]
+fn test_vector_new() {
+    let mut f = compile_test_fn("@function vec10 test() { return vec10.new }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![0; 10])));
+}
+
+#[test]
 fn test_vector_convert() {
     // Test with length and value specified.
     let mut f = compile_test_fn("@function vec10 test() { return vec10(-3) }");

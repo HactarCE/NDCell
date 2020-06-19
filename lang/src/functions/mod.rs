@@ -41,6 +41,11 @@ pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
 /// Returns a constructor for the method on the given type with the given name,
 /// if one exists.
 pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
+    if ty.has_runtime_representation() {
+        if name == "new" {
+            return Some(misc::New::with_type(ty));
+        }
+    }
     match ty {
         Type::Int => match name {
             "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsMethod)),

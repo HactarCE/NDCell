@@ -6,6 +6,12 @@ use super::{
     ConstValue, LangInt,
 };
 
+#[test]
+fn test_integer_new() {
+    let mut f = compile_test_fn("@function int test() { return integer.new() }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+}
+
 thread_local! {
     static ADD_FN: CompiledFunction =
         compile_test_fn("@function int test(int x, int y) { return x + y }");

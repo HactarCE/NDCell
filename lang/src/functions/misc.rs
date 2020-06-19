@@ -4,7 +4,7 @@ use super::FuncConstructor;
 use crate::ast::{ArgTypes, ArgValues, AssignableFunction, FnSignature, Function, FunctionKind};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
-use crate::{Span, Type};
+use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{InternalError, Unimplemented};
 
 /// Built-in function that returns a fixed variable.
@@ -124,5 +124,53 @@ impl Function for CallUserFn {
 
     fn compile(&self, _compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
         Err(self.unimplemented_error.clone())
+    }
+}
+
+/// Built-in function that returns a default value for any type.
+#[derive(Debug)]
+pub struct New {
+    /// Argument types (should be empty).
+    arg_types: ArgTypes,
+    /// Type to return.
+    ty: Type,
+}
+impl New {
+    pub fn with_type(ty: Type) -> FuncConstructor {
+        Box::new(|_userfunc, _span, arg_types| {
+            if !ty.has_runtime_representation() {
+                Err(InternalError(
+                    "Cannot call .new() on type without runtime representation".into(),
+                ))?;
+            }
+            Ok(Box::new(Self { arg_types, ty }))
+        })
+    }
+}
+impl Function for New {
+    fn name(&self) -> String {
+        format!("{}.new", self.ty)
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Function
+    }
+
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        self.check_args_len(span, 0)?;
+        Ok(self.ty.clone())
+    }
+
+    fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
+        compiler
+            .get_default_var_value(&self.ty)
+            .ok_or(InternalError("get_default_var_value() returned None".into()).without_span())
+    }
+    fn const_eval(&self, _args: ArgValues) -> LangResult<Option<ConstValue>> {
+        ConstValue::default(&self.ty)
+            .ok_or(InternalError("ConstValue::default() returned None".into()).without_span())
+            .map(Some)
     }
 }

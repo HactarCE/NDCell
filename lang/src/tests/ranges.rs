@@ -8,6 +8,18 @@ fn ok_range<T>(start: LangInt, end: LangInt, step: LangInt) -> Result<ConstValue
 }
 
 #[test]
+fn test_range_new() {
+    // Test default value.
+    let mut f = compile_test_fn(
+        "@ndim 3
+        @function range test() {
+            return range.new
+        }",
+    );
+    assert_fn_result(&mut f, &[], ok_range(0, 0, 1));
+}
+
+#[test]
 fn test_range_construct() {
     let mut f = compile_test_fn("@function range test(int a, int b) { return a..b }");
     // Test with start < end.
@@ -20,18 +32,6 @@ fn test_range_construct() {
     assert_fn_result(&mut f, &int_args(&[2, 2]), ok_range(2, 2, 1));
     assert_fn_result(&mut f, &int_args(&[-1, -1]), ok_range(-1, -1, 1));
     assert_fn_result(&mut f, &int_args(&[0, 0]), ok_range(0, 0, 1));
-}
-
-#[test]
-fn test_range_default_value() {
-    // Test default value.
-    let mut f = compile_test_fn(
-        "@function range test() {
-            if false { set ret = -5..+5 }
-            return ret
-        }",
-    );
-    assert_fn_result(&mut f, &[], ok_range(0, 0, 1));
 }
 
 #[test]

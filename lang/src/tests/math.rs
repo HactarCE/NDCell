@@ -35,6 +35,11 @@ thread_local! {
         compile_test_fn("@function int test(int x, int y) { return x >> y }");
     static RSH_LOGIC_FN: CompiledFunction =
         compile_test_fn("@function int test(int x, int y) { return x >>> y }");
+
+    static MIN_FN: CompiledFunction =
+        compile_test_fn("@function int test(int x, int y) { return min(x, y) }");
+    static MAX_FN: CompiledFunction =
+        compile_test_fn("@function int test(int x, int y) { return max(x, y) }");
 }
 
 // Test with random inputs.
@@ -141,6 +146,13 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
         .map(ConstValue::Int)
         .ok_or(("x >>> y", div_err_msg));
     assert_threadlocal_fn_result(&RSH_LOGIC_FN, &args, expected);
+
+    // Maximum
+    let expected = Ok(ConstValue::Int(std::cmp::max(x, y)));
+    assert_threadlocal_fn_result(&MAX_FN, &args, expected);
+    // Minimum
+    let expected = Ok(ConstValue::Int(std::cmp::min(x, y)));
+    assert_threadlocal_fn_result(&MIN_FN, &args, expected);
 }
 
 #[test]
@@ -162,5 +174,62 @@ fn test_abs() {
             expected = Ok(ConstValue::Int(0));
         }
         assert_fn_result(&mut f, &[ConstValue::Int(x)], expected);
+    }
+}
+
+#[test]
+fn test_min_and_max() {
+    // Test with four arguments.
+    let mut f = compile_test_fn(
+        "@function vec2 test(vec4 values) {
+            set x = values.x
+            set y = values.y
+            set z = values.z
+            set w = values.w
+            return [max(x, y, z, w), min(x, y, z, w)]
+        }",
+    );
+    for (&w, &x, &y, &z) in iproduct!(test_values(), test_values(), test_values(), test_values()) {
+        use std::cmp::{max, min};
+        let max = max(max(x, y), max(z, w));
+        let min = min(min(x, y), min(z, w));
+        assert_fn_result(
+            &mut f,
+            &[ConstValue::Vector(vec![x, y, z, w])],
+            Ok(ConstValue::Vector(vec![max, min])),
+        )
+    }
+
+    // Test with vector/mixed arguments.
+    let mut f = compile_test_fn(
+        "@function vec6 test(vec2 a, int b, vec3 c) {
+            return [max(a, b, c), min(a, b, c)]
+        }",
+    );
+    for (&ax, &ay, &b, &cx, &cy, &cz) in iproduct!(
+        test_values(),
+        test_values(),
+        test_values(),
+        test_values(),
+        test_values(),
+        test_values()
+    ) {
+        use std::cmp::{max, min};
+        let max_x = max(max(ax, b), cx);
+        let max_y = max(max(ay, b), cy);
+        let max_z = max(max(0, b), cz);
+        let min_x = min(min(ax, b), cx);
+        let min_y = min(min(ay, b), cy);
+        let min_z = min(min(0, b), cz);
+        let a = ConstValue::Vector(vec![ax, ay]);
+        let b = ConstValue::Int(b);
+        let c = ConstValue::Vector(vec![cx, cy, cz]);
+        assert_fn_result(
+            &mut f,
+            &[a, b, c],
+            Ok(ConstValue::Vector(vec![
+                max_x, max_y, max_z, min_x, min_y, min_z,
+            ])),
+        )
     }
 }

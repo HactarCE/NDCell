@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::lexer::ComparisonToken;
-use crate::types::MAX_VECTOR_LEN;
+use crate::types::{VagueType, MAX_VECTOR_LEN};
 use crate::{Span, Type, MAX_NDIM, MAX_STATES};
 
 /// InternalError returned when an argument index is out of range (which should
@@ -161,11 +161,11 @@ pub enum LangErrorMsg {
     InvalidDimensionCount,
     InvalidStateCount,
     TypeError {
-        expected: Type,
+        expected: VagueType,
         got: Type,
     },
     CustomTypeError {
-        expected: &'static str,
+        expected: String,
         got: Type,
     },
     CmpError {
@@ -268,7 +268,7 @@ impl fmt::Display for LangErrorMsg {
                 write!(
                     f,
                     "Type error: cannot compare {} to {} using '{}'",
-                    lhs, rhs, cmp
+                    lhs, rhs, cmp,
                 )?;
                 if *lhs == Type::CellState && *rhs == Type::CellState {
                     write!(f, "; convert them to integers first using the '#id' tag")?;
@@ -294,13 +294,13 @@ impl fmt::Display for LangErrorMsg {
             Self::BecomeInHelperFunction => {
                 write!(
                     f,
-                    "Use 'return' instead of 'become' outside of transition functions"
+                    "Use 'return' instead of 'become' outside of transition functions",
                 )?;
             }
             Self::ReturnInTransitionFunction => {
                 write!(
                     f,
-                    "Use 'become' instead of 'return' in transition functions"
+                    "Use 'become' instead of 'return' in transition functions",
                 )?;
             }
             Self::CannotEvalAsConst => {
@@ -309,8 +309,9 @@ impl fmt::Display for LangErrorMsg {
             Self::VectorTooBig => {
                 write!(
                     f,
-                    "Too many elements in vector; maximum is {}",
-                    MAX_VECTOR_LEN
+                    "Too many elements in {}; maximum is {}",
+                    VagueType::Vector,
+                    MAX_VECTOR_LEN,
                 )?;
             }
             Self::FunctionLookupError => {

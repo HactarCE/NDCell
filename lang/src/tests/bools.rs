@@ -3,7 +3,7 @@ use super::{assert_fn_result, compile_test_fn, test_values, ConstValue, LangInt}
 #[test]
 fn test_bool_convert() {
     let mut f = compile_test_fn(
-        "@function int test(int x) {
+        "@function Int test(Int x) {
             return bool(x)
         }",
     );
@@ -17,7 +17,7 @@ fn test_bool_convert() {
 #[test]
 fn test_bool_ops() {
     let mut f = compile_test_fn(
-        "@function vec8 test(int x, int y) {
+        "@function Vec8 test(Int x, Int y) {
             return [
                 not x,
                 not not x,

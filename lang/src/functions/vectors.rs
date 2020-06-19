@@ -11,7 +11,7 @@ use crate::ast::{
 };
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
-use crate::types::LangInt;
+use crate::types::{LangInt, VagueType};
 use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{IndexOutOfBounds, IntegerOverflow};
 
@@ -24,7 +24,7 @@ pub struct Access {
     /// Index of the component of the vector to return. If this is None, then a
     /// second argument is used as the index.
     component_idx: Option<LangInt>,
-    ///
+    /// TODO TODO TODO
     out_of_bounds_error: ErrorPointRef,
 }
 impl Access {
@@ -45,6 +45,7 @@ impl Access {
 }
 impl Function for Access {
     fn name(&self) -> String {
+        // TODO TODO TODO
         "vector access".to_owned()
     }
     fn kind(&self) -> FunctionKind {
@@ -240,7 +241,7 @@ impl Reduce {
 }
 impl Function for Reduce {
     fn name(&self) -> String {
-        format!("vector.{}", self.mode)
+        format!("{}.{}", VagueType::Vector, self.mode)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
@@ -379,7 +380,7 @@ impl GetLen {
 }
 impl Function for GetLen {
     fn name(&self) -> String {
-        "vector.len".to_owned()
+        format!("{}.len", VagueType::Vector)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property

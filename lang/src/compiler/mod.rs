@@ -701,7 +701,7 @@ impl Compiler {
         Ok(())
     }
 
-    /// Selects between two numbers or shuffles two vectors.
+    /// Selects between two basic values or shuffles two vectors.
     pub fn build_generic_select(
         &mut self,
         condition: BasicValueEnum<'static>,

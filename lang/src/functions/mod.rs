@@ -1,5 +1,7 @@
 //! Built-in functions, methods/properties, and operators.
 
+use regex::Regex;
+
 pub mod cmp;
 pub mod convert;
 pub mod enums;
@@ -13,8 +15,13 @@ pub mod vectors;
 use crate::ast;
 use crate::errors::*;
 use crate::lexer::{OperatorToken, TypeToken};
+use crate::types::MAX_VECTOR_LEN;
 use crate::{Span, Type};
 use LangErrorMsg::InvalidArguments;
+
+lazy_static! {
+    static ref VEC_FN_PATTERN: Regex = Regex::new(r#"vec(tor?)([1-9]\d*)"#).unwrap();
+}
 
 /// FnOnce that constructs a Box<dyn ast::Function>, given some standard
 /// arguments.
@@ -25,9 +32,13 @@ pub type FuncConstructor =
 pub type FuncResult = LangResult<Box<dyn ast::Function>>;
 
 /// Returns a constructor for the function with the given name, if one exists.
-/// See lookup_type_function() for functions like vec2() that coincide with a
-/// type name.
 pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
+    if let Some(captures) = VEC_FN_PATTERN.captures(name) {
+        match captures.get(1).unwrap().as_str().parse() {
+            Ok(len @ 1..=MAX_VECTOR_LEN) => return Some(convert::ToVector::with_len(Some(len))),
+            _ => (),
+        }
+    }
     match name {
         "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsFunc)),
         "bool" => Some(Box::new(convert::ToBool::construct)),

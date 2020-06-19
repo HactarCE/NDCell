@@ -12,8 +12,8 @@ fn test_range_new() {
     // Test default value.
     let mut f = compile_test_fn(
         "@ndim 3
-        @function range test() {
-            return range.new
+        @function Range test() {
+            return Range.new
         }",
     );
     assert_fn_result(&mut f, &[], ok_range(0, 0, 1));
@@ -21,7 +21,7 @@ fn test_range_new() {
 
 #[test]
 fn test_range_construct() {
-    let mut f = compile_test_fn("@function range test(int a, int b) { return a..b }");
+    let mut f = compile_test_fn("@function Range test(Int a, Int b) { return a..b }");
     // Test with start < end.
     assert_fn_result(&mut f, &int_args(&[1, 10]), ok_range(1, 10, 1));
     assert_fn_result(&mut f, &int_args(&[-5, 10]), ok_range(-5, 10, 1));
@@ -37,22 +37,22 @@ fn test_range_construct() {
 #[test]
 fn test_range_construct_parsing() {
     // Test that expressions in parentheses are parsed correctly.
-    let mut f = compile_test_fn("@function range test(int a, int b) { return (a)..(b) }");
+    let mut f = compile_test_fn("@function Range test(Int a, Int b) { return (a)..(b) }");
     assert_fn_result(&mut f, &int_args(&[-3, 5]), ok_range(-3, 5, 1));
 
     // Test that negative numbers are parsed correctly.
-    let mut f = compile_test_fn("@function range test() { return -5..-10 }");
+    let mut f = compile_test_fn("@function Range test() { return -5..-10 }");
     assert_fn_result(&mut f, &[], ok_range(-5, -10, -1));
 
     // Test that negated expressions are parsed correctly.
-    let mut f = compile_test_fn("@function range test(int a, int b) { return -a..-b }");
+    let mut f = compile_test_fn("@function Range test(Int a, Int b) { return -a..-b }");
     assert_fn_result(&mut f, &int_args(&[-3, 5]), ok_range(3, -5, -1));
 }
 
 #[test]
 fn test_range_step_by() {
     let mut f =
-        compile_test_fn("@function range test(int a, int b, int c) { return (a..b).by(c) }");
+        compile_test_fn("@function Range test(Int a, Int b, Int c) { return (a..b).by(c) }");
     assert_fn_result(&mut f, &int_args(&[1, 10, 2]), ok_range(1, 10, 2));
     assert_fn_result(&mut f, &int_args(&[-1, -10, 2]), ok_range(-1, -10, 2));
     assert_fn_result(&mut f, &int_args(&[1, 10, -2]), ok_range(1, 10, -2));
@@ -63,7 +63,7 @@ fn test_range_step_by() {
 fn test_range_properties() {
     // Test start, end, and step.
     let mut f = compile_test_fn(
-        "@function vec3 test(int a, int b, int c) {
+        "@function Vec3 test(Int a, Int b, Int c) {
             set r = (a..b).by(c)
             set r.start += 5
             set r.end += 10
@@ -82,7 +82,7 @@ fn test_range_properties() {
 #[test]
 fn test_range_ops() {
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             set r = (-5..10).by(3)
             assert r == +r != -5..10
             set r += 5

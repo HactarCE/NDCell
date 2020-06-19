@@ -4,7 +4,7 @@ use super::{assert_fn_result, compile_test_fn, test_values, ConstValue, LangInt}
 fn test_condition_values() {
     for &cond in test_values() {
         let mut f = compile_test_fn(
-            "@function int test(int cond) {
+            "@function Int test(Int cond) {
                 if cond { return 10 }
                 else { return 20 }
             }",
@@ -29,7 +29,7 @@ fn test_branching() {
         let mut expected_ret = None;
         let mut skip_to_end = false;
         let mut source_code = String::new();
-        source_code.push_str("@function int test() {");
+        source_code.push_str("@function Int test() {");
         if let Some(cond1) = cond1 {
             source_code.push_str(" if ");
             source_code.push_str(&cond1.to_string());

@@ -70,9 +70,9 @@ lazy_static! {
     static ref ASSIGN_PATTERN: Regex = Regex::new(r#"^(.?.?)=$"#).unwrap();
 
     /// A regex that matches a vector type name.
-    static ref VEC_TYPE_PATTERN: Regex = Regex::new(r#"vec(?:tor)?(\d+)"#).unwrap();
+    static ref VEC_TYPE_PATTERN: Regex = Regex::new(r#"Vec(?:tor)?(\d+)"#).unwrap();
     /// A regex that matches a rectangle type name.
-    static ref RECT_TYPE_PATTERN: Regex = Regex::new(r#"rect(?:angle)?(\d+)"#).unwrap();
+    static ref RECT_TYPE_PATTERN: Regex = Regex::new(r#"Rect(?:angle)?(\d+)"#).unwrap();
 }
 
 /// Splits a string into tokens and returns them as a Vec, with all comments
@@ -439,22 +439,20 @@ pub enum TypeToken {
 impl fmt::Display for TypeToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Int => write!(f, "int"),
-            Self::CellState => write!(f, "cellstate"),
-            Self::Vector(None) => write!(f, "vec"),
-            Self::Vector(Some(len)) => write!(f, "vec{}", len),
-            Self::IntRange => write!(f, "range"),
-            Self::Rectangle(None) => write!(f, "rect"),
-            Self::Rectangle(Some(ndim)) => write!(f, "rect{}", ndim),
+            Self::Int => write!(f, "Integer"),
+            Self::CellState => write!(f, "CellState"),
+            Self::Vector(None) => write!(f, "Vector"),
+            Self::Vector(Some(len)) => write!(f, "Vector{}", len),
+            Self::IntRange => write!(f, "Range"),
+            Self::Rectangle(None) => write!(f, "Rectangle"),
+            Self::Rectangle(Some(ndim)) => write!(f, "Rectangle{}", ndim),
         }
     }
 }
 impl FromStr for TypeToken {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, ()> {
-        // TODO: test this method
-
-        // Handle "vecN"
+        // Handle "VecN"
         if let Some(len_str) = VEC_TYPE_PATTERN
             .captures(s)
             .and_then(|captures| captures.get(1))
@@ -466,7 +464,7 @@ impl FromStr for TypeToken {
             }
         }
 
-        // Handle "rectN"
+        // Handle "RectN"
         if let Some(len_str) = RECT_TYPE_PATTERN
             .captures(s)
             .and_then(|captures| captures.get(1))
@@ -479,11 +477,11 @@ impl FromStr for TypeToken {
         }
 
         match s {
-            "int" | "integer" => Ok(Self::Int),
-            "cell" | "cellstate" => Ok(Self::CellState),
-            "vec" | "vector" => Ok(Self::Vector(None)),
-            "range" => Ok(Self::IntRange),
-            "rect" | "rectangle" => Ok(Self::Rectangle(None)),
+            "Int" | "Integer" => Ok(Self::Int),
+            "Cell" | "CellState" => Ok(Self::CellState),
+            "Vec" | "Vector" => Ok(Self::Vector(None)),
+            "Range" => Ok(Self::IntRange),
+            "Rect" | "Rectangle" => Ok(Self::Rectangle(None)),
             _ => Err(()),
         }
     }

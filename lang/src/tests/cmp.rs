@@ -7,21 +7,21 @@ use super::{
 
 thread_local! {
     static EQL_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x == y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x == y }");
     static NEQ_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x != y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x != y }");
     static LT_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x < y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x < y }");
     static GT_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x > y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x > y }");
     static LTE_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x <= y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x <= y }");
     static GTE_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x >= y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x >= y }");
     static MULTI_EQ_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y, int z) { return x == y == z }");
+        compile_test_fn("@function Int test(Int x, Int y, Int z) { return x == y == z }");
     static RANGE_TEST_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y, int z) { return x < y <= z }");
+        compile_test_fn("@function Int test(Int x, Int y, Int z) { return x < y <= z }");
 }
 
 // Test with random inputs.

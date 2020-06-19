@@ -8,44 +8,44 @@ use super::{
 
 #[test]
 fn test_integer_new() {
-    let mut f = compile_test_fn("@function int test() { return integer.new() }");
+    let mut f = compile_test_fn("@function Int test() { return Integer.new() }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
 }
 
 thread_local! {
     static ADD_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x + y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x + y }");
     static SUB_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x - y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x - y }");
     static MUL_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x * y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x * y }");
     static DIV_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x / y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x / y }");
     static MOD_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x % y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x % y }");
     static PLUS_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return +x }");
+        compile_test_fn("@function Int test(Int x, Int y) { return +x }");
     static NEG_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return -x }");
+        compile_test_fn("@function Int test(Int x, Int y) { return -x }");
 
     static BIT_OR_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x | y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x | y }");
     static BIT_XOR_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x ^ y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x ^ y }");
     static BIT_AND_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x & y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x & y }");
 
     static LSH_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x << y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x << y }");
     static RSH_ARITH_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x >> y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x >> y }");
     static RSH_LOGIC_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return x >>> y }");
+        compile_test_fn("@function Int test(Int x, Int y) { return x >>> y }");
 
     static MIN_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return min(x, y) }");
+        compile_test_fn("@function Int test(Int x, Int y) { return min(x, y) }");
     static MAX_FN: CompiledFunction =
-        compile_test_fn("@function int test(int x, int y) { return max(x, y) }");
+        compile_test_fn("@function Int test(Int x, Int y) { return max(x, y) }");
 }
 
 // Test with random inputs.
@@ -164,7 +164,7 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
 #[test]
 fn test_abs() {
     let mut f = compile_test_fn(
-        "@function int test(int x) {
+        "@function Int test(Int x) {
             if x < 0 {
                 assert abs(x) == x.abs == -x
             } else {
@@ -187,7 +187,7 @@ fn test_abs() {
 fn test_min_and_max() {
     // Test with four arguments.
     let mut f = compile_test_fn(
-        "@function vec2 test(vec4 values) {
+        "@function Vec2 test(Vec4 values) {
             set x = values.x
             set y = values.y
             set z = values.z
@@ -208,7 +208,7 @@ fn test_min_and_max() {
 
     // Test with vector/mixed arguments.
     let mut f = compile_test_fn(
-        "@function vec6 test(vec2 a, int b, vec3 c) {
+        "@function Vec6 test(Vec2 a, Int b, Vec3 c) {
             return [max(a, b, c), min(a, b, c)]
         }",
     );

@@ -5,7 +5,7 @@ use super::{assert_fn_result, compile_test_fn, ConstValue};
 #[test]
 fn test_ints_to_bytes() {
     let mut f = compile_test_fn(
-        "@function int test(int a, int b, int c) {
+        "@function Int test(Int a, Int b, Int c) {
             assert a == 10
             assert b == -20
             assert c == 30
@@ -26,7 +26,7 @@ fn test_ints_to_bytes() {
 fn test_mixed_to_bytes() {
     let mut f = compile_test_fn(
         "@states 100
-        @function int test(int a, cell b, vec7 c, range d, rect3 e) {
+        @function Int test(Int a, Cell b, Vec7 c, Range d, Rect3 e) {
             assert a == 10
             assert b == #20
             assert c == [-7, -6, -5, -4, -3, -2, -1]

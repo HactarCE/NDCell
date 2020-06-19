@@ -4,7 +4,7 @@ use super::{assert_fn_result, compile_test_fn, ConstValue};
 #[test]
 fn test_errors() {
     let mut f = compile_test_fn(
-        "@function int test(int x) {
+        "@function Int test(Int x) {
             if x < 0 {
                 error 'x is negative! very scary'
             } else if x {
@@ -31,7 +31,7 @@ fn test_errors() {
 fn test_assertions() {
     // Test assert without message.
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             assert 3 == 3
             assert 3 == 2
         }",
@@ -41,7 +41,7 @@ fn test_assertions() {
 
     // Test assert with message.
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             assert 3 == 3, 'broken'
             assert 3 == 2, 'ok'
         }",

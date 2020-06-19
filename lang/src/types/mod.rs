@@ -52,24 +52,24 @@ impl Default for Type {
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Int => write!(f, "int"),
-            Self::CellState => write!(f, "cell"),
-            Self::Vector(len) => write!(f, "vec{}", len),
-            Self::Pattern(shape) => write!(f, "pat{}", shape),
-            Self::IntRange => write!(f, "range"),
-            Self::Rectangle(ndim) => write!(f, "rect{}", ndim),
+            Self::Int => write!(f, "Int"),
+            Self::CellState => write!(f, "Cell"),
+            Self::Vector(len) => write!(f, "{:?}{}", VagueType::Vector, len),
+            Self::Pattern(shape) => write!(f, "{:?}{}", VagueType::Pattern, shape),
+            Self::IntRange => write!(f, "Range"),
+            Self::Rectangle(ndim) => write!(f, "{:?}{}", VagueType::Rectangle, ndim),
         }
     }
 }
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Int => write!(f, "integer"),
-            Self::CellState => write!(f, "cellstate"),
-            Self::Vector(len) => write!(f, "vector{}", len),
-            Self::Pattern(shape) => write!(f, "pattern{}", shape),
-            Self::IntRange => write!(f, "range"),
-            Self::Rectangle(ndim) => write!(f, "rectangle{}", ndim),
+            Self::Int => write!(f, "Integer"),
+            Self::CellState => write!(f, "CellState"),
+            Self::Vector(len) => write!(f, "{}{}", VagueType::Vector, len),
+            Self::Pattern(shape) => write!(f, "{}{}", VagueType::Pattern, shape),
+            Self::IntRange => write!(f, "Range"),
+            Self::Rectangle(ndim) => write!(f, "{}{}", VagueType::Rectangle, ndim),
         }
     }
 }
@@ -115,19 +115,24 @@ impl Type {
 
     /// Returns a TypeError where this type is the "got" type, given an
     /// "expected" type.
-    pub fn type_error(&self, expected: Type) -> LangErrorMsg {
+    pub fn type_error(&self, expected: impl Into<VagueType>) -> LangErrorMsg {
         TypeError {
-            expected,
+            expected: expected.into(),
             got: self.clone(),
         }
     }
     /// Returns a CustomTypeError where this type is the "got" type, given an
     /// "expected" message.
-    pub fn custom_type_error(&self, expected: &'static str) -> LangErrorMsg {
+    pub fn custom_type_error(&self, expected: String) -> LangErrorMsg {
         CustomTypeError {
             expected,
             got: self.clone(),
         }
+    }
+    /// Returns a CustomTypeError where this type is the "got" type, given a
+    /// list of "expected" types.
+    pub fn multi_type_error(&self, expected: &[impl fmt::Display]) -> LangErrorMsg {
+        self.custom_type_error(crate::utils::join_with_conjunction("or", expected))
     }
 }
 
@@ -145,7 +150,10 @@ impl Spanned<Type> {
     pub fn check_vec(&self) -> LangResult<usize> {
         match self.inner {
             Type::Vector(len) => Ok(len),
-            _ => Err(self.inner.custom_type_error("vector").with_span(self.span)),
+            _ => Err(self
+                .inner
+                .type_error(VagueType::Vector)
+                .with_span(self.span)),
         }
     }
     /// Returns a CustomTypeError if this type is not an integer or vector.
@@ -154,7 +162,7 @@ impl Spanned<Type> {
             Type::Int | Type::Vector(_) => Ok(()),
             _ => Err(self
                 .inner
-                .custom_type_error("integer or vector")
+                .multi_type_error(&[Type::Int.into(), VagueType::Vector])
                 .with_span(self.span)),
         }
     }
@@ -165,7 +173,7 @@ impl Spanned<Type> {
             Type::Int | Type::Vector(_) | Type::IntRange => Ok(()),
             _ => Err(self
                 .inner
-                .custom_type_error("integer, vector, or range")
+                .multi_type_error(&[Type::Int.into(), VagueType::Vector, Type::IntRange.into()])
                 .with_span(self.span)),
         }
     }
@@ -176,8 +184,46 @@ impl Spanned<Type> {
         } else {
             Err(self
                 .inner
-                .custom_type_error("type that can be converted to boolean")
+                .custom_type_error("type that can be converted to boolean".to_owned())
                 .with_span(self.span))
+        }
+    }
+}
+
+/// More vague type (e.g. vector with unspecified length).
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum VagueType {
+    /// A specific type.
+    Specific(Type),
+    /// Vector of any length.
+    Vector,
+    /// Configuration of cells of any size and shape.
+    Pattern,
+    /// Hyperrectangle of any dimensionality.
+    Rectangle,
+}
+impl From<Type> for VagueType {
+    fn from(ty: Type) -> Self {
+        Self::Specific(ty)
+    }
+}
+impl fmt::Debug for VagueType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Specific(ty) => write!(f, "{}", ty),
+            Self::Vector => write!(f, "Vec"),
+            Self::Pattern => write!(f, "Pat"),
+            Self::Rectangle => write!(f, "Rect"),
+        }
+    }
+}
+impl fmt::Display for VagueType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Specific(ty) => write!(f, "{}", ty),
+            Self::Vector => write!(f, "Vector"),
+            Self::Pattern => write!(f, "Pattern"),
+            Self::Rectangle => write!(f, "Rectangle"),
         }
     }
 }

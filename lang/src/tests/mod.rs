@@ -11,6 +11,7 @@ mod debug;
 mod funcs;
 mod math;
 mod ranges;
+mod rects;
 mod types;
 mod values;
 mod vars;

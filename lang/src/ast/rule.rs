@@ -58,7 +58,7 @@ impl TryFrom<ParseTree> for Rule {
                     ConstValue::Int(_) => Err(InvalidDimensionCount.with_span(expr))?,
                     // The user specified some other value.
                     _ => Err(TypeError {
-                        expected: Type::Int,
+                        expected: Type::Int.into(),
                         got: ndim_value.ty(),
                     }
                     .with_span(expr.span))?,
@@ -85,7 +85,7 @@ impl TryFrom<ParseTree> for Rule {
                     ConstValue::Int(_) => Err(InvalidStateCount.with_span(expr))?,
                     // The user specified some other value.
                     _ => Err(TypeError {
-                        expected: Type::Int,
+                        expected: Type::Int.into(),
                         got: states_value.ty(),
                     }
                     .with_span(expr.span))?,

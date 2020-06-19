@@ -4,38 +4,38 @@ use super::{assert_fn_result, compile_test_fn, ConstValue};
 
 #[test]
 fn test_vector_new() {
-    let mut f = compile_test_fn("@function vec10 test() { return vec10.new }");
+    let mut f = compile_test_fn("@function Vec10 test() { return Vec10.new }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![0; 10])));
 }
 
 #[test]
 fn test_vector_convert() {
     // Test with length and value specified.
-    let mut f = compile_test_fn("@function vec10 test() { return vec10(-3) }");
+    let mut f = compile_test_fn("@function Vec10 test() { return Vec10(-3) }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![-3; 10])));
 
     // Test with length specified.
-    let mut f = compile_test_fn("@function vector4 test() { return vec4() }");
+    let mut f = compile_test_fn("@function Vector4 test() { return Vec4() }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![0; 4])));
 
     // Test with value specified.
-    let mut f = compile_test_fn("@ndim 3 @function vec test() { return vec(999) }");
+    let mut f = compile_test_fn("@ndim 3 @function Vec test() { return Vec(999) }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![999; 3])));
 
     // Test with length and value both inferred.
-    let mut f = compile_test_fn("@ndim 2 @function vector test() { return vec() }");
+    let mut f = compile_test_fn("@ndim 2 @function Vector test() { return Vec() }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![0; 2])));
 
     // Test conversion from an existing vector of the same length.
-    let mut f = compile_test_fn("@function vec4 test() { return vector4([10, 20, 30, 40]) }");
+    let mut f = compile_test_fn("@function Vec4 test() { return Vector4([10, 20, 30, 40]) }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![10, 20, 30, 40])));
 
     // Test conversion from an existing shorter vector.
-    let mut f = compile_test_fn("@ndim 4 @function vec test() { return vector([10, 20]) }");
+    let mut f = compile_test_fn("@ndim 4 @function Vec test() { return Vector([10, 20]) }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![10, 20, 0, 0])));
 
     // Test conversion from an existing longer vector.
-    let mut f = compile_test_fn("@function vec4 test() { return vec4([10, 20, 30, 40, 50, 60]) }");
+    let mut f = compile_test_fn("@function Vec4 test() { return Vec4([10, 20, 30, 40, 50, 60]) }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![10, 20, 30, 40])));
 }
 
@@ -43,7 +43,7 @@ fn test_vector_convert() {
 fn test_vector_access() {
     // Test in-bounds access.
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             set v = [1, 10, 100]
             return v.y - v.x
         }",
@@ -53,7 +53,7 @@ fn test_vector_access() {
 
     // Test out of bounds access (positive).
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             set v = [1, 10, 100]
             return v.w + v[9999]
         }",
@@ -63,7 +63,7 @@ fn test_vector_access() {
 
     // Test out of bounds access (negative).
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             set v = [1, 10, 100]
             return v[-1]
         }",
@@ -73,7 +73,7 @@ fn test_vector_access() {
 
     // Test in-bounds modification.
     let mut f = compile_test_fn(
-        "@function vec3 test() {
+        "@function Vec3 test() {
             set v = [1, 10, 100]
             set v.x -= 4
             set v[2] = 88
@@ -85,7 +85,7 @@ fn test_vector_access() {
 
     // Test out of bounds modification.
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             set v = [1, 10, 100]
             set v.w = 0
         }",
@@ -95,7 +95,7 @@ fn test_vector_access() {
 
     // Test length.
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             set v3 = [1, 10, 100]
             assert v3.len == 3
             set v2 = [4, 3]
@@ -119,7 +119,7 @@ fn test_vector_cmp() {
         .collect_vec();
 
     let mut cmp_same_fn = compile_test_fn(
-        "@function int test(vec3 a, vec3 b) {
+        "@function Int test(Vec3 a, Vec3 b) {
                 assert (a == b) == (a.x == b.x and a.y == b.y and a.z == b.z)
                 assert (a != b) == (a.x != b.x or  a.y != b.y or  a.z != b.z)
                 assert (a >  b) == (a.x >  b.x and a.y >  b.y and a.z >  b.z)
@@ -139,7 +139,7 @@ fn test_vector_cmp() {
     }
 
     let mut cmp_mixed_fn = compile_test_fn(
-        "@function int test(vec2 a, vec3 b) {
+        "@function Int test(Vec2 a, Vec3 b) {
             assert (a == b) == (b == a) == (a.x == b.x and a.y == b.y and 0 == b.z)
             assert (a != b) == (b != a) == (a.x != b.x or  a.y != b.y or  0 != b.z)
             assert (a >  b) == (b <  a) == (a.x >  b.x and a.y >  b.y and 0 >  b.z)
@@ -163,14 +163,14 @@ fn test_vector_cmp() {
 fn test_vector_ops() {
     // Test division by zero.
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             set b = [4, 5, 6] / [1, 2, 0]
         }",
     );
     let expected = Err(("[4, 5, 6] / [1, 2, 0]", "Divide by zero"));
     assert_fn_result(&mut f, &[], expected);
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             set b = [4, 5, 6] % [1, 0, 2]
         }",
     );
@@ -179,7 +179,7 @@ fn test_vector_ops() {
 
     // Test all the stuff that shouldn't fail
     let mut f = compile_test_fn(
-        "@function int test() {
+        "@function Int test() {
             // Test vector equality
             assert [-1, 2] == [-1, 2]
             assert [-1, 2] != [4, 2]

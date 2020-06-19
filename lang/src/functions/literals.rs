@@ -6,7 +6,7 @@ use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind, UserFunction};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
-use crate::types::{LangInt, MAX_VECTOR_LEN};
+use crate::types::{LangInt, VagueType, MAX_VECTOR_LEN};
 use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{InternalError, VectorTooBig};
 
@@ -30,7 +30,7 @@ impl Int {
 }
 impl Function for Int {
     fn name(&self) -> String {
-        "constant integer".to_owned()
+        format!("constant {}", Type::Int)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom
@@ -67,7 +67,7 @@ impl Vector {
 }
 impl Function for Vector {
     fn name(&self) -> String {
-        "vector literal".to_owned()
+        format!("{} literal", VagueType::Vector)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom

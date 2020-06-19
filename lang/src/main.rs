@@ -21,6 +21,7 @@ mod lexer;
 mod parser;
 mod span;
 mod types;
+mod utils;
 
 pub use constvalue::ConstValue;
 pub use errors::CompleteLangResult;

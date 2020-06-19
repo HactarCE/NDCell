@@ -5,10 +5,10 @@ use super::{assert_compile_error, assert_fn_compile_error};
 fn test_function_errors() {
     // Function lookup error
     let source_code = "
-        @function int test(int y) {
+        @function Int test(Int y) {
             return func_doesnt_exist(3, y)
         }
-        @function int other_func(int x, int y) {
+        @function Int other_func(Int x, Int y) {
             return x + y
         }
     ";
@@ -17,16 +17,16 @@ fn test_function_errors() {
 
     // Bad arguments
     let source_code = "
-        @function int test(int y) {
+        @function Int test(Int y) {
             return other_func([1, 2], y)
         }
-        @function int other_func(int x, int y) {
+        @function Int other_func(Int x, Int y) {
             return x + y
         }
     ";
     let expected = (
         "other_func([1, 2], y)",
-        r#"Invalid arguments [vec2, int] for helper function "other_func""#,
+        r#"Invalid arguments [Vec2, Int] for helper function "other_func""#,
     );
     assert_compile_error(source_code, expected);
 }
@@ -36,10 +36,10 @@ fn test_function_errors() {
 #[test]
 fn test_userfunc() {
     let source_code = "
-        @function int test(int y) {
+        @function Int test(Int y) {
             return other_func(3, y)
         }
-        @function int other_func(int x, int y) {
+        @function Int other_func(Int x, Int y) {
             return x + y
         }
     ";

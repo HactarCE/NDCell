@@ -130,7 +130,7 @@ impl PatternShape {
         assert_eq!(
             self.bounds.len(),
             pos.len(),
-            "Dimension mismatch between pattern shape and cell coordinates"
+            "Dimension mismatch between pattern shape and cell coordinates",
         );
         if self.bounds.contains(pos) {
             let size = self.bounds().size();

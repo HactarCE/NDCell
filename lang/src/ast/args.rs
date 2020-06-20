@@ -3,7 +3,7 @@
 use std::ops::Index;
 
 use super::{Expr, ExprRef, UserFunction};
-use crate::compiler::*;
+use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::{ConstValue, Spanned, Type};
 

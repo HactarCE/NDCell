@@ -1,5 +1,5 @@
 use super::{ErrorPointRef, ExprRef, StatementRef, UserFunction};
-use crate::compiler::*;
+use crate::compiler::Compiler;
 use crate::errors::*;
 use crate::{Span, Type};
 use LangErrorMsg::{AssertionFailed, CannotAssignTypeToVariable, UserError};

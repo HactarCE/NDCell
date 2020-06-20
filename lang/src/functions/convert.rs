@@ -7,7 +7,7 @@ use super::{FuncConstructor, FuncResult};
 use crate::ast::{
     ArgTypes, ArgValues, ErrorPointRef, Function, FunctionKind, RuleMeta, UserFunction,
 };
-use crate::compiler::{Compiler, Value};
+use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
 use crate::lexer::OperatorToken;
 use crate::types::{LangCellState, LangInt};
@@ -78,10 +78,9 @@ impl Function for IntToCellState {
             |c| Ok(self.out_of_range_error.compile(c)),
         )?;
         // Now that we know the cell state is in range, perform an integer cast.
-        let cell_state_type = compiler.cell_state_type();
         Ok(Value::CellState(compiler.builder().build_int_cast(
             cell_state_value,
-            cell_state_type,
+            compiler::types::cell_state(),
             "tmp_cellStateFromInt",
         )))
     }

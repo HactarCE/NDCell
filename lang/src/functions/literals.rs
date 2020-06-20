@@ -4,7 +4,7 @@ use inkwell::IntPredicate;
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind, UserFunction};
-use crate::compiler::{Compiler, Value};
+use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
 use crate::types::{LangInt, VagueType, MAX_VECTOR_LEN};
 use crate::{ConstValue, Span, Type};
@@ -115,7 +115,7 @@ impl Function for Vector {
                 _ => unreachable!(),
             }
         }
-        let mut ret = compiler.vec_type(components.len()).get_undef();
+        let mut ret = compiler::types::vec(components.len()).get_undef();
         for (i, component) in components.into_iter().enumerate() {
             let idx = compiler.const_uint(i as u64);
             ret = compiler
@@ -199,7 +199,7 @@ impl Function for Range {
                     negative_one,
                     "rangeStep",
                 );
-                let mut ret = compiler.int_range_type().get_undef();
+                let mut ret = compiler::types::int_range().get_undef();
                 // Insert start.
                 let idx = compiler.const_uint(0);
                 ret = compiler

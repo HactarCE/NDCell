@@ -1,9 +1,10 @@
 //! High-level representations of expressions in the AST.
 
+use inkwell::types::BasicType;
 use itertools::Itertools;
 
 use super::{ArgTypes, ArgValues, Args, UserFunction};
-use crate::compiler::*;
+use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
 use crate::functions;
 use crate::parser;
@@ -269,18 +270,13 @@ impl FnSignature {
         arg_types.iter().map(|s| &s.inner).eq(&self.args)
     }
     /// Returns the LLVM function type that is equivalent to this function signature.
-    pub fn llvm_fn_type(
-        &self,
-        compiler: &Compiler,
-    ) -> LangResult<inkwell::types::FunctionType<'static>> {
-        use inkwell::types::BasicType;
-        // TODO: validate user function args and return value at some point.
+    pub fn llvm_fn_type(&self) -> LangResult<inkwell::types::FunctionType<'static>> {
         let llvm_param_types = self
             .args
             .iter()
-            .map(|t| compiler.get_llvm_type(t))
+            .map(compiler::types::get)
             .collect::<LangResult<Vec<_>>>()?;
-        let llvm_ret_type = compiler.get_llvm_type(&self.ret)?;
+        let llvm_ret_type = compiler::types::get(&self.ret)?;
         Ok(llvm_ret_type.fn_type(&llvm_param_types, false))
     }
 }

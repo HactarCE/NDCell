@@ -33,13 +33,14 @@ use inkwell::values::{
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 
 mod function;
+pub mod types;
 mod value;
 
 pub use function::CompiledFunction;
 pub use value::{PatternValue, Value};
 
 use crate::errors::*;
-use crate::types::{VagueType, CELL_STATE_BITS, INT_BITS};
+use crate::types::{VagueType, INT_BITS};
 use crate::{ConstValue, Type};
 use LangErrorMsg::InternalError;
 
@@ -127,10 +128,11 @@ impl Compiler {
         var_types: &HashMap<String, Type>,
     ) -> LangResult<()> {
         // Determine the LLVM function type (signature).
-        let llvm_return_type = self.get_llvm_type(&return_type)?;
+        let llvm_return_type = types::get(&return_type)?;
         let llvm_arg_types = arg_names
             .iter()
-            .map(|name| self.get_llvm_type(&var_types[name]))
+            .map(|name| &var_types[name])
+            .map(types::get)
             .collect::<LangResult<Vec<_>>>()?;
         let fn_type = llvm_return_type.fn_type(&llvm_arg_types, false);
         // Construct the FunctionInProgress.
@@ -183,15 +185,14 @@ impl Compiler {
         let inout_var_types = inout_var_names
             .iter()
             .map(|&name| &var_types[name])
-            .map(|ty| self.get_llvm_type(ty))
+            .map(types::get)
             .collect::<LangResult<Vec<_>>>()?;
         let inout_struct_type = get_ctx().struct_type(&inout_var_types, false);
         let inout_struct_ptr_type = inout_struct_type
             .ptr_type(AddressSpace::Generic)
             .as_basic_type_enum();
         // The second parameter is a pointer to hold the return value.
-        let return_ptr_type = self
-            .get_llvm_type(&return_type)?
+        let return_ptr_type = types::get(&return_type)?
             .ptr_type(AddressSpace::Generic)
             .as_basic_type_enum();
         // The actual LLVM return value just signals whether there was an error.
@@ -264,9 +265,8 @@ impl Compiler {
     }
     /// Allocate space on the stack for the given variable and initialize it to a default value.
     fn alloca_and_init_var(&mut self, name: String, ty: Type) -> LangResult<Variable> {
-        let llvm_type = self.get_llvm_type(&ty)?;
         // Allocate space.
-        let ptr = self.builder().build_alloca(llvm_type, &name);
+        let ptr = self.builder().build_alloca(types::get(&ty)?, &name);
         // Initialize to a default value.
         let default_value = self
             .get_default_var_value(&ty)
@@ -298,44 +298,6 @@ impl Compiler {
             InternalError(format!("Failed to find JIT-compiled function {:?}", fn_name).into())
                 .without_span()
         })
-    }
-
-    /// Returns the LLVM type used to represent an integer.
-    pub fn int_type(&self) -> IntType<'static> {
-        get_ctx().custom_width_int_type(INT_BITS)
-    }
-    /// Returns the LLVM type used to represent a cell state.
-    pub fn cell_state_type(&self) -> IntType<'static> {
-        get_ctx().custom_width_int_type(CELL_STATE_BITS)
-    }
-    /// Returns the LLVM type used to represent a vector with the given length.
-    pub fn vec_type(&self, ndim: usize) -> VectorType<'static> {
-        self.int_type().vec_type(ndim as u32)
-    }
-    /// Returns the LLVM type used to represent a pattern with the given number
-    /// of dimensions.
-    pub fn pattern_type(&self, ndim: usize) -> StructType<'static> {
-        get_ctx().struct_type(
-            &[
-                // Pointer to the origin (0 along all axes) in an array of
-                // cell states.
-                self.cell_state_type()
-                    .ptr_type(AddressSpace::Generic)
-                    .into(),
-                // Strides to increment the given axis by 1.
-                self.vec_type(ndim).into(),
-            ],
-            false,
-        )
-    }
-    /// Returns the LLVM type used to represent an integer range.
-    pub fn int_range_type(&self) -> VectorType<'static> {
-        self.vec_type(3)
-    }
-    /// Returns the LLVM type used to represent a hyperrectangle.
-    pub fn rectangle_type(&self, ndim: usize) -> StructType<'static> {
-        let vec_type = self.vec_type(ndim).into();
-        get_ctx().struct_type(&[vec_type, vec_type], false)
     }
 
     /// Returns the function currently being built, panicking if there is none.
@@ -658,8 +620,7 @@ impl Compiler {
         // TODO: test boundaries on this method
 
         // Generate the required constants.
-        let bit_width = self.int_type().get_bit_width();
-        let max_shift = self.const_uint(bit_width as u64);
+        let max_shift = self.const_uint(INT_BITS as u64);
         // Call the generic function.
         self.build_generic_bitshift_check(shift_amt, max_shift, on_overflow)
     }
@@ -672,8 +633,7 @@ impl Compiler {
     ) -> LangResult<()> {
         let len = shift_amt.get_type().get_size() as usize;
         // Generate the required constants.
-        let bit_width = self.int_type().get_bit_width();
-        let max_shift = self.const_uint(bit_width as u64);
+        let max_shift = self.const_uint(INT_BITS as u64);
         // Convert them to vectors of the proper length.
         let max_shift = self.build_vector_cast(Value::Int(max_shift), len)?;
         // Call the generic function.
@@ -717,15 +677,15 @@ impl Compiler {
                 // Instead of trying to use shufflevector, it's simpler to just
                 // do bit manipulation: (mask & if_true) | (~mask & if_false).
                 let vec_len = mask.get_type().get_size() as usize;
-                let extended_mask_type = self.vec_type(vec_len);
+                let sext_mask_type = types::vec(vec_len);
                 // Sign-extend so that the entire value is either 0 or 1.
                 let sext_mask_lhs =
                     self.builder()
-                        .build_int_s_extend(mask, extended_mask_type, "extendedMaskLhs");
-                let all_ones = self.int_type().const_all_ones();
+                        .build_int_s_extend(mask, sext_mask_type, "extendedMaskLhs");
+                // Bitwise-invert the value for the other argument.
                 let sext_mask_rhs = self.builder().build_xor(
                     sext_mask_lhs,
-                    VectorType::const_vector(&vec![all_ones; vec_len]),
+                    VectorType::const_vector(&vec![types::int().const_all_ones(); vec_len]),
                     "extendedMaskRhs",
                 );
                 // Compute mask & if_true.
@@ -806,10 +766,9 @@ impl Compiler {
         };
 
         // Cast to integer.
-        let int_type = self.int_type();
         let ret = self
             .builder()
-            .build_int_z_extend(is_truthy, int_type, "toBool");
+            .build_int_z_extend(is_truthy, types::int(), "toBool");
         Ok(ret)
     }
     /// Builds a cast of an integer to a vector (by using that integer value for
@@ -842,7 +801,7 @@ impl Compiler {
                 format!("Cannot convert {} to {}", value.ty(), VagueType::Vector).into(),
             ))?,
         };
-        let mut ret = self.vec_type(len).get_undef();
+        let mut ret = types::vec(len).get_undef();
         for i in 0..len {
             let idx = self.const_uint(i as u64);
             ret = self.builder().build_insert_element(
@@ -938,7 +897,7 @@ impl Compiler {
             ndim1, ndim2,
             "Cannot construct rectangle from differently-sized vectors"
         );
-        let mut ret = self.rectangle_type(ndim1 as usize).get_undef();
+        let mut ret = types::rectangle(ndim1 as usize).get_undef();
         ret = self
             .builder()
             .build_insert_value(ret, start, 0, "rectTmp")
@@ -1139,23 +1098,23 @@ impl Compiler {
     /// signed integer type.
     fn get_min_int_value(&self) -> IntValue<'static> {
         self.const_uint(1)
-            .const_shl(self.const_uint(self.int_type().get_bit_width() as u64 - 1))
+            .const_shl(self.const_uint(INT_BITS as u64 - 1))
     }
 
     /// Returns a constant sign-extended IntValue from the given integer.
     pub fn const_int(&self, value: i64) -> IntValue<'static> {
-        self.int_type().const_int(value as u64, true)
+        types::int().const_int(value as u64, true)
     }
     /// Returns a constant zero-extended IntValue from the given integer.
     pub fn const_uint(&self, value: u64) -> IntValue<'static> {
-        self.int_type().const_int(value, false)
+        types::int().const_int(value, false)
     }
     /// Constructs a Value from a ConstValue.
     pub fn value_from_const(&self, const_value: ConstValue) -> Value {
         match const_value {
             ConstValue::Int(i) => Value::Int(self.const_int(i)),
             ConstValue::CellState(i) => {
-                Value::CellState(self.cell_state_type().const_int(i as u64, false))
+                Value::CellState(types::cell_state().const_int(i as u64, false))
             }
             ConstValue::Vector(values) => Value::Vector(VectorType::const_vector(
                 &values.iter().map(|&i| self.const_int(i)).collect_vec(),
@@ -1178,7 +1137,7 @@ impl Compiler {
                     .value_from_const(ConstValue::Vector(end))
                     .into_basic_value()
                     .unwrap();
-                Value::Rectangle(self.rectangle_type(ndim).const_named_struct(&[start, end]))
+                Value::Rectangle(types::rectangle(ndim).const_named_struct(&[start, end]))
             }
         }
     }
@@ -1189,21 +1148,6 @@ impl Compiler {
         Some(self.value_from_const(ConstValue::default(ty)?))
     }
 
-    /// Returns the LLVM type corresponding to the given type in NDCA.
-    pub fn get_llvm_type(&self, ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
-        match ty {
-            Type::Int => Ok(self.int_type().into()),
-            Type::CellState => Ok(self.cell_state_type().into()),
-            Type::Vector(len) => Ok(self.vec_type(*len).into()),
-            Type::Pattern(shape) => Ok(self.pattern_type(shape.ndim()).into()),
-            Type::IntRange => Ok(self.int_range_type().into()),
-            Type::Rectangle(ndim) => Ok(self.rectangle_type(*ndim).into()),
-            // _ => Err(InternalError(
-            //     "Attempt to get LLVM representation of type that has none".into(),
-            // )
-            // .without_span()),
-        }
-    }
     /// Returns the LLVM type actually returned from this function (as opposed
     /// to the type semantically returned).
     pub fn get_llvm_return_type(&self) -> IntType<'static> {

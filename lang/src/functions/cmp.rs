@@ -5,7 +5,7 @@ use std::fmt;
 
 use super::FuncConstructor;
 use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind};
-use crate::compiler::{Compiler, Value};
+use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
 use crate::lexer::ComparisonToken;
 use crate::{ConstValue, Span, Spanned, Type};
@@ -63,8 +63,9 @@ impl Function for Cmp {
         compiler.builder().position_at_end(merge_bb);
 
         // Create a phi node for the final result.
-        let int_type = compiler.int_type();
-        let phi = compiler.builder().build_phi(int_type, "multiCompareMerge");
+        let phi = compiler
+            .builder()
+            .build_phi(compiler::types::int(), "multiCompareMerge");
 
         compiler.builder().position_at_end(old_bb);
         // Compile the first argument.
@@ -83,7 +84,7 @@ impl Function for Cmp {
                 .builder()
                 .build_conditional_branch(compare_result, next_bb, merge_bb);
             phi.add_incoming(&[(
-                &int_type.const_zero(),
+                &compiler.const_uint(0),
                 compiler.builder().get_insert_block().unwrap(),
             )]);
             compiler.builder().position_at_end(next_bb);
@@ -96,7 +97,7 @@ impl Function for Cmp {
         // true.
         compiler.builder().build_unconditional_branch(merge_bb);
         phi.add_incoming(&[(
-            &int_type.const_int(1, false),
+            &compiler.const_uint(1),
             compiler.builder().get_insert_block().unwrap(),
         )]);
 

@@ -12,7 +12,7 @@ fn ok_rect<T>(start: &[LangInt], end: &[LangInt]) -> Result<ConstValue, T> {
 
 #[test]
 fn test_rectangle_new() {
-    let mut f = compile_test_fn("@function Rect3 test() { return rect3.new }");
+    let mut f = compile_test_fn("@function Rect3 test() { return Rect3.new }");
     assert_fn_result(&mut f, &[], ok_rect(&[0; 3], &[0; 3]));
 }
 

@@ -55,6 +55,7 @@ impl ConstValue {
             Type::Rectangle(ndim) => Some(Self::Rectangle(vec![0; *ndim], vec![0; *ndim])),
         }
     }
+
     /// Returns the integer value inside if this is a ConstValue::Int; otherwise
     /// returns an InternalError.
     pub fn as_int(self) -> LangResult<LangInt> {
@@ -87,6 +88,7 @@ impl ConstValue {
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
+
     /// Converts this value to a boolean if it can be converted; otherwise
     /// returns an InternalError.
     pub fn to_bool(self) -> LangResult<bool> {
@@ -116,6 +118,7 @@ impl ConstValue {
             _ => Err(UNCAUGHT_TYPE_ERROR),
         }
     }
+
     /// Constructs a value of the given type from raw bytes. Panics if given an
     /// invalid value or invalid type.
     pub fn from_bytes(ty: &Type, bytes: &[u8]) -> Self {

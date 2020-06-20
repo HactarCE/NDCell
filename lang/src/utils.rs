@@ -1,14 +1,7 @@
 use itertools::Itertools;
 
 /// Returns a human-friendly list of things, joined at the end by the given
-///
-/// ```
-/// assert_eq!(join_with_conjunction("and", &[]), "(none)");
-/// assert_eq!(join_with_conjunction("and", &["X"]), "X");
-/// assert_eq!(join_with_conjunction("and", &["X", "Y"]), "X and Y");
-/// // Oxford comma included
-/// assert_eq!(join_with_conjunction("and", &["X", "Y", "Z"]), "X, Y, and Z");
-/// ```
+/// conjuction.
 pub fn join_with_conjunction(conjunction: &str, items: &[impl std::fmt::Display]) -> String {
     match items {
         [] => format!("(none)"),
@@ -21,4 +14,14 @@ pub fn join_with_conjunction(conjunction: &str, items: &[impl std::fmt::Display]
             ret
         }
     }
+}
+
+#[test]
+fn test_join_with_conjunction() {
+    let strs = &["X", "Y", "Z"];
+    assert_eq!(join_with_conjunction("and", &strs[..0]), "(none)");
+    assert_eq!(join_with_conjunction("and", &strs[..1]), "X");
+    assert_eq!(join_with_conjunction("and", &strs[..2]), "X and Y");
+    // Oxford comma!
+    assert_eq!(join_with_conjunction("and", &strs[..3]), "X, Y, and Z");
 }

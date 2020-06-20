@@ -584,7 +584,7 @@ if this is {
         // Check span of "this" token on line 3.
         assert_eq!(
             (TextPoint(3, 4), TextPoint(3, 8)),
-            tokens[7].span.textpoints(source_code)
+            tokens[7].span.textpoints(source_code),
         );
     }
 }

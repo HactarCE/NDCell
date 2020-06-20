@@ -249,7 +249,7 @@ impl Comparator {
     fn rect_cmp(ndim: usize, cmp: ComparisonToken) -> Self {
         assert!(
             matches!(cmp, ComparisonToken::Eql | ComparisonToken::Neq),
-            "Cannot compare rectangles using ordered comparison operators"
+            "Cannot compare rectangles using ordered comparison operators",
         );
         let vec_cmp = Self::vec_cmp(ndim, cmp);
         Self {

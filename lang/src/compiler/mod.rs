@@ -895,7 +895,7 @@ impl Compiler {
         let ndim2 = end.get_type().get_size();
         assert_eq!(
             ndim1, ndim2,
-            "Cannot construct rectangle from differently-sized vectors"
+            "Cannot construct rectangle from differently-sized vectors",
         );
         let mut ret = types::rectangle(ndim1 as usize).get_undef();
         ret = self

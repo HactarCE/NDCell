@@ -84,7 +84,7 @@ fn assert_fn_result(
         expected_result,
         actual_result.map_err(|e| e.pair()),
         "<-- actual\n\nRule source code:\n{}\n\n",
-        function.source_code()
+        function.source_code(),
     );
 }
 

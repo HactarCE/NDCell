@@ -106,7 +106,7 @@ impl PatternShape {
         assert_eq!(
             rect_cells,
             mask.len(),
-            "Pattern mask is wrong length for bounds"
+            "Pattern mask is wrong length for bounds",
         );
         assert!(rect_cells <= MAX_PATTERN_SIZE, "Pattern bounds too big");
         Self { bounds, mask }.shrink()

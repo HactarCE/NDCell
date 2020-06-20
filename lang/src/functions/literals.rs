@@ -163,49 +163,82 @@ impl Function for Range {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 2)?;
-        self.arg_types[0].check_eq(Type::Int)?;
-        self.arg_types[1].check_eq(Type::Int)?;
-        Ok(Type::IntRange)
+        self.arg_types[0].check_int_or_vec()?;
+        self.arg_types[1].check_int_or_vec()?;
+        use Type::{Int, IntRange, Rectangle, Vector};
+        match (&self.arg_types[0].inner, &self.arg_types[1].inner) {
+            (Int, Int) => Ok(IntRange),
+            (Vector(len), Int) | (Int, Vector(len)) => Ok(Rectangle(*len)),
+            // Extend the shorter vector.
+            (Vector(len1), Vector(len2)) => Ok(Rectangle(std::cmp::max(*len1, *len2))),
+            _ => unreachable!(),
+        }
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         // Compile the arguments.
-        let start = args.compile(compiler, 0)?.as_int()?;
-        let end = args.compile(compiler, 1)?.as_int()?;
-        // Determine the step. If start <= end, then the default step is +1; if start >
-        // end, then the default step is -1.
-        let use_positive_step = compiler.builder().build_int_compare(
-            IntPredicate::SLE, // Signed Less-Than or Equal
-            start,
-            end,
-            "rangeStepTest",
-        );
-        let positive_one = compiler.const_int(1);
-        let negative_one = compiler.const_int(-1);
-        let step = compiler.builder().build_select(
-            use_positive_step,
-            positive_one,
-            negative_one,
-            "rangeStep",
-        );
-        // Combine
-        let mut ret = compiler.int_range_type().get_undef();
-        // Insert start.
-        let idx = compiler.const_uint(0);
-        ret = compiler
-            .builder()
-            .build_insert_element(ret, start, idx, "rangeTmp1");
-        // Insert end.
-        let idx = compiler.const_uint(1);
-        ret = compiler
-            .builder()
-            .build_insert_element(ret, end, idx, "rangeTmp2");
-        // Insert step.
-        let idx = compiler.const_uint(2);
-        ret = compiler
-            .builder()
-            .build_insert_element(ret, step, idx, "range");
-        Ok(Value::IntRange(ret))
+        let arg1 = args.compile(compiler, 0)?;
+        let arg2 = args.compile(compiler, 1)?;
+        match self.unwrap_return_type() {
+            Type::IntRange => {
+                let start = arg1.as_int()?;
+                let end = arg2.as_int()?;
+                // Determine the step. If start <= end, then the default step is +1; if start >
+                // end, then the default step is -1.
+                let use_positive_step = compiler.builder().build_int_compare(
+                    IntPredicate::SLE, // Signed Less-Than or Equal
+                    start,
+                    end,
+                    "rangeStepTest",
+                );
+                let positive_one = compiler.const_int(1);
+                let negative_one = compiler.const_int(-1);
+                let step = compiler.builder().build_select(
+                    use_positive_step,
+                    positive_one,
+                    negative_one,
+                    "rangeStep",
+                );
+                let mut ret = compiler.int_range_type().get_undef();
+                // Insert start.
+                let idx = compiler.const_uint(0);
+                ret = compiler
+                    .builder()
+                    .build_insert_element(ret, start, idx, "rangeTmp1");
+                // Insert end.
+                let idx = compiler.const_uint(1);
+                ret = compiler
+                    .builder()
+                    .build_insert_element(ret, end, idx, "rangeTmp2");
+                // Insert step.
+                let idx = compiler.const_uint(2);
+                ret = compiler
+                    .builder()
+                    .build_insert_element(ret, step, idx, "range");
+                // Return the value.
+                Ok(Value::IntRange(ret))
+            }
+            Type::Rectangle(ndim) => {
+                let start = compiler.build_vector_cast(arg1, ndim)?;
+                let end = compiler.build_vector_cast(arg2, ndim)?;
+                let mut ret = compiler.rectangle_type(ndim).get_undef();
+                // Insert start.
+                ret = compiler
+                    .builder()
+                    .build_insert_value(ret, start, 0, "rectTmp")
+                    .unwrap()
+                    .into_struct_value();
+                // Insert end.
+                ret = compiler
+                    .builder()
+                    .build_insert_value(ret, end, 1, "rect")
+                    .unwrap()
+                    .into_struct_value();
+                // Return the value.
+                Ok(Value::Rectangle(ret))
+            }
+            _ => unreachable!(),
+        }
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
         let mut components = vec![];

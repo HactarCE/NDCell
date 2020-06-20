@@ -147,10 +147,7 @@ pub fn lookup_binary_operator(
     use Type::*;
     let ret: Option<FuncConstructor> = match (lhs, op, rhs) {
         // Range
-        (_, DotDot, _) => match (lhs, rhs) {
-            (Int, Int) => Some(Box::new(literals::Range::construct)),
-            _ => None,
-        },
+        (_, DotDot, _) => Some(Box::new(literals::Range::construct)),
         // Basic math
         (Int, _, Int)
         | (Int, _, Vector(_))

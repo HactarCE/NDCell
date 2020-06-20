@@ -5,8 +5,8 @@
 #[macro_use]
 extern crate lazy_static;
 
-use std::fs::File;
-use std::io::Read;
+// use std::fs::File;
+// use std::io::Read;
 use std::rc::Rc;
 
 #[macro_use]
@@ -37,38 +37,38 @@ pub const MAX_STATES: usize = 256;
 /// Maximum pattern size.
 pub const MAX_PATTERN_SIZE: usize = 4096;
 
-fn main() -> Result<(), ()> {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() != 2 {
-        eprintln!(
-            "\
-Please specify a file to run. E.g.
+// fn main() -> Result<(), ()> {
+//     let args: Vec<String> = std::env::args().collect();
+//     if args.len() != 2 {
+//         eprintln!(
+//             "\
+// Please specify a file to run. E.g.
 
-{} examples{}life.ndca",
-            args[0],
-            std::path::MAIN_SEPARATOR,
-        );
-        Err(())?;
-    }
+// {} examples{}life.ndca",
+//             args[0],
+//             std::path::MAIN_SEPARATOR,
+//         );
+//         Err(())?;
+//     }
 
-    let filename = &args[1];
-    let mut file = File::open(filename).expect("Error opening file");
-    let mut source_code = String::new();
-    file.read_to_string(&mut source_code)
-        .expect("Error reading file");
-    let source_code = Rc::new(source_code);
+//     let filename = &args[1];
+//     let mut file = File::open(filename).expect("Error opening file");
+//     let mut source_code = String::new();
+//     file.read_to_string(&mut source_code)
+//         .expect("Error reading file");
+//     let source_code = Rc::new(source_code);
 
-    let result = compile_and_run(source_code.clone());
-    match result {
-        Ok(ret) => println!("JIT-compiled transition function output: {:?}", ret),
-        Err(err) => {
-            eprintln!("{}", err.with_source(&source_code));
-            Err(())?
-        }
-    }
+//     let result = compile_and_run(source_code.clone());
+//     match result {
+//         Ok(ret) => println!("JIT-compiled transition function output: {:?}", ret),
+//         Err(err) => {
+//             eprintln!("{}", err.with_source(&source_code));
+//             Err(())?
+//         }
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 /// Runs the given rule's transition function using the compiler and returns the
 /// result.

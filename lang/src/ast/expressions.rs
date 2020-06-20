@@ -133,6 +133,13 @@ pub trait Function: std::fmt::Debug {
     /// Returns the return type of this function, or an error (e.g.
     /// InvalidArguments) if the function is passed invalid arguments.
     fn return_type(&self, span: Span) -> LangResult<Type>;
+    /// Returns the return type of this function, panicking or returning garbage
+    /// if the function is passed invalid arguments. The default implementation
+    /// of this method calls return_type().
+    fn unwrap_return_type(&self) -> Type {
+        self.return_type(Span::empty(0))
+            .expect("Err given by return_type()")
+    }
 
     /// Returns an InvalidArguments error if this set of arguments does not have
     /// the given length.

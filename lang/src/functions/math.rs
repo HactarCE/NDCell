@@ -168,24 +168,6 @@ impl MinMax {
         Box::new(move |_userfunc, _span, arg_types| Ok(Box::new(Self { arg_types, mode })))
     }
 
-    /// Returns the type of the result of this operation, based on the types of
-    /// the arguments. Assumes arguments are valid.
-    fn result_type(&self) -> Type {
-        // All arguments must be integers or vectors. The return type is the
-        // length of the longest argument.
-        let mut ret_type = Type::Int;
-        for arg in &self.arg_types {
-            if let Type::Vector(arg_len) = arg.inner {
-                if let Type::Vector(ref mut ret_len) = &mut ret_type {
-                    *ret_len = std::cmp::max(*ret_len, arg_len);
-                } else {
-                    ret_type = Type::Vector(arg_len);
-                }
-            }
-        }
-        ret_type
-    }
-
     /// Compiles this operation for two values of the same type.
     fn compile_op(&self, compiler: &mut Compiler, arg1: Value, arg2: Value) -> LangResult<Value> {
         let ty = arg1.ty();
@@ -249,12 +231,23 @@ impl Function for MinMax {
         for arg in &self.arg_types {
             arg.check_int_or_vec()?;
         }
-        Ok(self.result_type())
+        // The return type is the length of the longest argument.
+        let mut ret_type = Type::Int;
+        for arg in &self.arg_types {
+            if let Type::Vector(arg_len) = arg.inner {
+                if let Type::Vector(ref mut ret_len) = &mut ret_type {
+                    *ret_len = std::cmp::max(*ret_len, arg_len);
+                } else {
+                    ret_type = Type::Vector(arg_len);
+                }
+            }
+        }
+        Ok(ret_type)
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         // Cast all arguments to the return type.
-        let ret_type = self.result_type();
+        let ret_type = self.unwrap_return_type();
         let mut args = args.compile_all(compiler)?.into_iter().map(|arg| {
             if let Type::Vector(len) = ret_type {
                 compiler.build_vector_cast(arg, len).map(Value::Vector)
@@ -273,7 +266,7 @@ impl Function for MinMax {
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
         // Cast all arguments to the return type.
-        let ret_type = self.result_type();
+        let ret_type = self.unwrap_return_type();
         let mut args = args.const_eval_all()?.into_iter().map(|arg| {
             if let Type::Vector(len) = ret_type {
                 arg.coerce_to_vector(len).map(ConstValue::Vector)
@@ -396,36 +389,6 @@ impl BinaryOp {
         self.negative_exponent_error.as_ref().unwrap()
     }
 
-    /// Returns the type of the result of this operation, based on the types of
-    /// the arguments. Assumes arguments are valid.
-    ///
-    /// When performing an operation where one argument being zero causes an
-    /// error (e.g. division) or always causes the result to be zero (e.g.
-    /// multiplication, bitwise AND), the longer vector is truncated. When
-    /// performing any other operation, the shorter vector is extended with
-    /// zeros.
-    fn result_type(&self) -> Type {
-        let lhs = &self.arg_types[0].inner;
-        let rhs = &self.arg_types[1].inner;
-        match (lhs, rhs) {
-            (Type::Int, other) | (other, Type::Int) => other.clone(),
-            (Type::Vector(len1), Type::Vector(len2)) => {
-                use OperatorToken::*;
-                match self.op {
-                    // Extend the shorter vector with zeros.
-                    Plus | Minus | DoubleLessThan | DoubleGreaterThan | TripleGreaterThan
-                    | Pipe | Caret => Type::Vector(std::cmp::max(*len1, *len2)),
-                    // Truncate the longer vector.
-                    Asterisk | Slash | Percent | DoubleAsterisk | Ampersand => {
-                        Type::Vector(std::cmp::min(*len1, *len2))
-                    }
-                    DotDot | Tag => panic!("Uncaught invalid operator for binary op"),
-                }
-            }
-            (_, _) => panic!("Uncaught invalid types for binary op"),
-        }
-    }
-
     /// Compiles this operation for two statically typed (integer vs. vector)
     /// LLVM values.
     fn compile_op<T: IntMathValue<'static>>(
@@ -452,7 +415,7 @@ impl BinaryOp {
             // Division and remainder (TODO: use euclidean div and modulo)
             Slash | Percent => {
                 // Check for overflow and division by zero.
-                match self.result_type() {
+                match self.unwrap_return_type() {
                     Type::Int => compiler.build_int_div_check(
                         lhs.as_basic_value_enum().into_int_value(),
                         rhs.as_basic_value_enum().into_int_value(),
@@ -481,7 +444,7 @@ impl BinaryOp {
             // Bitshift
             DoubleLessThan | DoubleGreaterThan | TripleGreaterThan => {
                 // Check for overflow.
-                match self.result_type() {
+                match self.unwrap_return_type() {
                     Type::Int => compiler.build_bitshift_int_check(
                         rhs.as_basic_value_enum().into_int_value(),
                         |c| Ok(self.overflow_error().compile(c)),
@@ -603,17 +566,41 @@ impl Function for BinaryOp {
             self.arg_types[0].check_int_or_vec()?;
             self.arg_types[1].check_int_or_vec()?;
         }
-        Ok(self.result_type())
+        // When performing an operation where one argument being zero causes an
+        // error (e.g. division) or always causes the result to be zero (e.g.
+        // multiplication, bitwise AND), the longer vector is truncated. When
+        // performing any other operation, the shorter vector is extended with
+        // zeros.
+        let lhs = &self.arg_types[0].inner;
+        let rhs = &self.arg_types[1].inner;
+        match (lhs, rhs) {
+            (Type::Int, other) | (other, Type::Int) => Ok(other.clone()),
+            (Type::Vector(len1), Type::Vector(len2)) => {
+                use OperatorToken::*;
+                match self.op {
+                    // Extend the shorter vector with zeros.
+                    Plus | Minus | DoubleLessThan | DoubleGreaterThan | TripleGreaterThan
+                    | Pipe | Caret => Ok(Type::Vector(std::cmp::max(*len1, *len2))),
+                    // Truncate the longer vector.
+                    Asterisk | Slash | Percent | DoubleAsterisk | Ampersand => {
+                        Ok(Type::Vector(std::cmp::min(*len1, *len2)))
+                    }
+                    DotDot | Tag => panic!("Uncaught invalid operator for binary op"),
+                }
+            }
+            (_, _) => Err(self.invalid_args_err(span)),
+        }
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        let ret_type = self.unwrap_return_type();
         let mut lhs = args.compile(compiler, 0)?;
         let mut rhs = args.compile(compiler, 1)?;
         // Cast to vectors of the proper length, if necessary.
-        match self.result_type() {
+        match &ret_type {
             Type::Vector(len) => {
-                lhs = Value::Vector(compiler.build_vector_cast(lhs, len)?);
-                rhs = Value::Vector(compiler.build_vector_cast(rhs, len)?);
+                lhs = Value::Vector(compiler.build_vector_cast(lhs, *len)?);
+                rhs = Value::Vector(compiler.build_vector_cast(rhs, *len)?);
             }
             Type::IntRange => {
                 lhs = Value::Vector(lhs.as_int_range()?);
@@ -638,12 +625,12 @@ impl Function for BinaryOp {
             (Value::Vector(lhs), Value::Vector(rhs)) => self.compile_op(compiler, lhs, rhs)?,
             _ => unreachable!(),
         };
-        Ok(Value::from_basic_value(&self.result_type(), result))
+        Ok(Value::from_basic_value(&ret_type, result))
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
         let lhs = args.const_eval(0)?;
         let rhs = args.const_eval(1)?;
-        if let Type::Vector(len) = self.result_type() {
+        if let Type::Vector(len) = self.unwrap_return_type() {
             // Cast to vectors of the proper length, if necessary.
             let lhs = lhs.coerce_to_vector(len)?;
             let rhs = rhs.coerce_to_vector(len)?;

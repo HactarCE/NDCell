@@ -28,7 +28,7 @@ use inkwell::execution_engine::{ExecutionEngine, JitFunction, UnsafeFunctionPoin
 use inkwell::module::Module;
 use inkwell::types::{BasicType, BasicTypeEnum, FunctionType, IntType, StructType, VectorType};
 use inkwell::values::{
-    BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue, VectorValue,
+    BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue, StructValue, VectorValue,
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 
@@ -39,7 +39,7 @@ pub use function::CompiledFunction;
 pub use value::{PatternValue, Value};
 
 use crate::errors::*;
-use crate::types::{CELL_STATE_BITS, INT_BITS};
+use crate::types::{VagueType, CELL_STATE_BITS, INT_BITS};
 use crate::{ConstValue, Type};
 use LangErrorMsg::InternalError;
 
@@ -839,7 +839,7 @@ impl Compiler {
                 })
                 .collect(),
             _ => Err(InternalError(
-                format!("Cannot convert {} to vector", value.ty()).into(),
+                format!("Cannot convert {} to {}", value.ty(), VagueType::Vector).into(),
             ))?,
         };
         let mut ret = self.vec_type(len).get_undef();
@@ -853,6 +853,26 @@ impl Compiler {
             );
         }
         Ok(ret)
+    }
+    /// Builds a cast from a rectangle of one dimensionality to another (by
+    /// trimming excess values or by extending with the value `0..0`).
+    pub fn build_rectangle_cast(
+        &mut self,
+        value: Value,
+        ndim: usize,
+    ) -> LangResult<StructValue<'static>> {
+        let (old_start, old_end) = match value {
+            Value::Rectangle(r) => {
+                let (old_start, old_end) = self.build_split_rectangle(r);
+                (Value::Vector(old_start), Value::Vector(old_end))
+            }
+            _ => Err(InternalError(
+                format!("Cannot convert {} to {}", value.ty(), VagueType::Rectangle).into(),
+            ))?,
+        };
+        let new_start = self.build_vector_cast(old_start, ndim)?;
+        let new_end = self.build_vector_cast(old_end, ndim)?;
+        Ok(self.build_construct_rectangle(new_start, new_end))
     }
     /// Builds a reduction of a vector to an integer using the given operation.
     /// If the argument is already an integer, returns the integer.
@@ -890,6 +910,46 @@ impl Compiler {
                     .into_int_value())
             }
         }
+    }
+
+    pub fn build_split_rectangle(
+        &mut self,
+        rect_value: StructValue<'static>,
+    ) -> (VectorValue<'static>, VectorValue<'static>) {
+        (
+            self.builder()
+                .build_extract_value(rect_value, 0, "rectStart")
+                .unwrap()
+                .into_vector_value(),
+            self.builder()
+                .build_extract_value(rect_value, 1, "rectEnd")
+                .unwrap()
+                .into_vector_value(),
+        )
+    }
+    pub fn build_construct_rectangle(
+        &mut self,
+        start: VectorValue<'static>,
+        end: VectorValue<'static>,
+    ) -> StructValue<'static> {
+        let ndim1 = start.get_type().get_size();
+        let ndim2 = end.get_type().get_size();
+        assert_eq!(
+            ndim1, ndim2,
+            "Cannot construct rectangle from differently-sized vectors"
+        );
+        let mut ret = self.rectangle_type(ndim1 as usize).get_undef();
+        ret = self
+            .builder()
+            .build_insert_value(ret, start, 0, "rectTmp")
+            .unwrap()
+            .into_struct_value();
+        ret = self
+            .builder()
+            .build_insert_value(ret, end, 1, "rect")
+            .unwrap()
+            .into_struct_value();
+        ret
     }
 
     pub fn build_get_pattern_cell_state(

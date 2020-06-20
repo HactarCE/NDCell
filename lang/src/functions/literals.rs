@@ -221,20 +221,7 @@ impl Function for Range {
             Type::Rectangle(ndim) => {
                 let start = compiler.build_vector_cast(arg1, ndim)?;
                 let end = compiler.build_vector_cast(arg2, ndim)?;
-                let mut ret = compiler.rectangle_type(ndim).get_undef();
-                // Insert start.
-                ret = compiler
-                    .builder()
-                    .build_insert_value(ret, start, 0, "rectTmp")
-                    .unwrap()
-                    .into_struct_value();
-                // Insert end.
-                ret = compiler
-                    .builder()
-                    .build_insert_value(ret, end, 1, "rect")
-                    .unwrap()
-                    .into_struct_value();
-                // Return the value.
+                let ret = compiler.build_construct_rectangle(start, end);
                 Ok(Value::Rectangle(ret))
             }
             _ => unreachable!(),

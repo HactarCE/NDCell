@@ -166,6 +166,11 @@ impl Comparator {
                 Ok(Self::vec_cmp(len, cmp))
             }
             (Type::IntRange, Type::IntRange) if eq_only => Ok(Self::vec_cmp(3, cmp)),
+            (Type::Rectangle(ndim1), Type::Rectangle(ndim2)) if eq_only => {
+                // Add dimensions so that both rectangles have the same number of dimensions.
+                let ndim = std::cmp::max(ndim1, ndim2);
+                Ok(Self::rect_cmp(ndim, cmp))
+            }
             (lhs, rhs) => Err(CmpError { lhs, cmp, rhs }.with_span(span)),
         }
     }
@@ -173,7 +178,7 @@ impl Comparator {
     /// Constructs a new comparator that compares two values of the same type
     /// represented internally by integers, signed or unsigned.
     fn int_cmp(ty: Type, cmp: ComparisonToken, signed: bool) -> Self {
-        // Convert from ast::Cmp to inkwell::IntPredicate.
+        // Convert from ComparisonToken to inkwell::IntPredicate.
         let inkwell_predicate = cmp.inkwell_predicate(signed);
         Self {
             compile: Box::new(move |compiler, lhs, rhs| {
@@ -196,7 +201,7 @@ impl Comparator {
     /// Constructs a new comparator that compares two signed integer or vector
     /// values by coercing both to vectors of the given length.
     fn vec_cmp(len: usize, cmp: ComparisonToken) -> Self {
-        // Convert from ast::Cmp to inkwell::IntPredicate.
+        // Convert from ComparisonToken to inkwell::IntPredicate.
         let inkwell_predicate = cmp.inkwell_predicate(true);
         Self {
             compile: Box::new(move |compiler, lhs, rhs| {
@@ -214,7 +219,7 @@ impl Comparator {
                 let bool_vec =
                     compiler
                         .builder()
-                        .build_int_compare(inkwell_predicate, lhs, rhs, "vecCmp");
+                        .build_int_compare(inkwell_predicate, lhs, rhs, "vectorCmp");
                 // Collapse that down to a single boolean.
                 let result = compiler.build_reduce(
                     match cmp {
@@ -235,6 +240,55 @@ impl Comparator {
                 // are true.
                 let result = lhs.into_iter().zip(rhs).all(|(l, r)| cmp.eval(l, r));
                 Ok(result)
+            })),
+        }
+    }
+    /// Constructs a new comparator that compares two rectangles of the same length.
+    /// Only Eql and Neq are allowed.
+    fn rect_cmp(ndim: usize, cmp: ComparisonToken) -> Self {
+        assert!(
+            matches!(cmp, ComparisonToken::Eql | ComparisonToken::Neq),
+            "Cannot compare rectangles using ordered comparison operators"
+        );
+        let vec_cmp = Self::vec_cmp(ndim, cmp);
+        Self {
+            compile: Box::new(move |compiler, lhs, rhs| {
+                // Cast to rectangles of the same dimensionality.
+                let lhs = compiler.build_rectangle_cast(lhs, ndim)?;
+                let rhs = compiler.build_rectangle_cast(rhs, ndim)?;
+                // Separate the start and end corners of the rectangle.
+                let (lhs_start, lhs_end) = compiler.build_split_rectangle(lhs);
+                let (rhs_start, rhs_end) = compiler.build_split_rectangle(rhs);
+                // Wrap those corners in Value::Vector().
+                let lhs_start = Value::Vector(lhs_start);
+                let lhs_end = Value::Vector(lhs_end);
+                let rhs_start = Value::Vector(rhs_start);
+                let rhs_end = Value::Vector(rhs_end);
+                // Delegate to Self::vec_cmp().
+                let start_cmp_result = (vec_cmp.compile)(compiler, lhs_start, rhs_start)?;
+                let end_cmp_result = (vec_cmp.compile)(compiler, lhs_end, rhs_end)?;
+                // Combine results.
+                match cmp {
+                    // Both pairs of corners must be equal.
+                    ComparisonToken::Eql => Ok(compiler.builder().build_and(
+                        start_cmp_result,
+                        end_cmp_result,
+                        "rectangleCmp",
+                    )),
+                    // One pair of corners must be unequal.
+                    ComparisonToken::Neq => Ok(compiler.builder().build_or(
+                        start_cmp_result,
+                        end_cmp_result,
+                        "rectangleCmp",
+                    )),
+                    _ => unreachable!(),
+                }
+            }),
+            const_eval: Some(Box::new(move |lhs, rhs| match cmp {
+                // Rust can do this for us. :)
+                ComparisonToken::Eql => Ok(lhs == rhs),
+                ComparisonToken::Neq => Ok(lhs != rhs),
+                _ => unreachable!(),
             })),
         }
     }

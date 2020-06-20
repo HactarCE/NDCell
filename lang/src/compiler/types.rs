@@ -1,3 +1,4 @@
+use inkwell::targets::TargetData;
 use inkwell::types::{BasicTypeEnum, IntType, StructType, VectorType};
 use inkwell::AddressSpace;
 
@@ -5,8 +6,8 @@ use super::get_ctx;
 use crate::types::{CELL_STATE_BITS, INT_BITS};
 use crate::{LangResult, Type};
 
-/// Returns the LLVM type used to represent vales of this type, or an
-/// InternalError if this type has no runtime representation.
+/// Returns the LLVM type used to represent vales of the given type, or an
+/// InternalError if the given type has no runtime representation.
 pub fn get(ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
     match ty {
         Type::Int => Ok(int().into()),
@@ -20,6 +21,14 @@ pub fn get(ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
         // )
         // .without_span()),
     }
+}
+
+/// Returns the size in bytes of the LLVM type used to represent the given type,
+/// panicking if the given type has no runtime representation.
+pub fn size_of(ty: &Type, target_data: &TargetData) -> usize {
+    target_data
+        .get_store_size(&get(ty).expect("Cannot get size of type without runtime representation"))
+        as usize
 }
 
 /// Returns the LLVM type used to represent an integer.

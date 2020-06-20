@@ -1,6 +1,7 @@
 //! Compiled user function.
 
-use inkwell::execution_engine::JitFunction;
+use inkwell::execution_engine::{ExecutionEngine, JitFunction};
+use inkwell::targets::TargetData;
 use std::rc::Rc;
 
 use super::Compiler;
@@ -26,10 +27,13 @@ pub struct CompiledFunction {
 }
 impl CompiledFunction {
     /// Completes the compilation process and returns a compiled function.
+    ///
+    /// The only reason the compiler is owned rather than mutably borrowed is to
+    /// get a long-lasting reference to the TargetData.
     pub fn try_new(
         source_code: Rc<String>,
         error_points: Vec<LangError>,
-        compiler: &mut Compiler,
+        compiler: Compiler,
     ) -> LangResult<Self> {
         // Make sure that the LLVM code is valid.
         if !compiler.llvm_fn().verify(true) {
@@ -42,7 +46,9 @@ impl CompiledFunction {
             ))?;
         }
         // JIT-compile the function.
-        let jit_fn = unsafe { compiler.get_jit_function() }?;
+        let jit_fn = unsafe { compiler.finish_jit_function() }?;
+
+        let target_data = compiler.target_data();
 
         // Make a list of all the inout values.
         let mut inout_values: Vec<ParamValue> = vec![];
@@ -63,16 +69,13 @@ impl CompiledFunction {
         // Allocate space for all the inout values.
         let param_bytes = vec![
             0u8;
-            compiler
-                .execution_engine
-                .get_target_data()
-                .get_store_size(&compiler.function().inout_struct_type.unwrap())
+            target_data.get_store_size(&compiler.function().inout_struct_type.unwrap())
                 as usize
         ];
 
         // Allocate space for the return value.
         let out_type = compiler.function().return_type.clone();
-        let out_bytes = vec![0u8; out_type.size_of().unwrap()];
+        let out_bytes = vec![0u8; super::types::size_of(&out_type, target_data)];
 
         Ok(Self {
             meta: Rc::new(CompiledFunctionMeta {
@@ -83,6 +86,8 @@ impl CompiledFunction {
 
                 param_values: inout_values,
                 arg_count,
+
+                execution_engine: compiler.execution_engine,
             }),
             jit_fn,
             param_bytes,
@@ -107,7 +112,11 @@ impl CompiledFunction {
         };
         if ret == u32::MAX {
             // No error occurred; get the return value from self.out_bytes.
-            Ok(ConstValue::from_bytes(&self.meta.out_type, &self.out_bytes))
+            Ok(super::convert::bytes_to_value(
+                self.meta.out_type.clone(),
+                &self.out_bytes,
+                self.meta.target_data(),
+            ))
         } else {
             // An error occurred, and the return value holds the error index.
             Err(self
@@ -148,11 +157,12 @@ impl CompiledFunction {
             .get(idx)
             .expect("Invalid argument index for JIT function");
         let start = value.byte_offset;
-        let end = start + value.ty.size_of().unwrap();
+        let end = start + super::types::size_of(&value.ty, self.meta.target_data());
         ParamValueMut {
             name: &value.name,
             ty: &value.ty,
             bytes: &mut self.param_bytes[start..end],
+            target_data: self.meta.target_data(),
         }
     }
 
@@ -177,10 +187,18 @@ struct CompiledFunctionMeta {
     param_values: Vec<ParamValue>,
     /// The number of arguments.
     arg_count: usize,
+
+    /// Execution engine used to execute this function. If there were a way to
+    /// get owned or refcounted access to the JIT TargetData, then this wouldn't
+    /// be necesssary.
+    execution_engine: ExecutionEngine<'static>,
 }
 impl CompiledFunctionMeta {
     fn arg_values(&self) -> &[ParamValue] {
         &self.param_values[..self.arg_count]
+    }
+    fn target_data(&self) -> &TargetData {
+        self.execution_engine.get_target_data()
     }
 }
 
@@ -206,6 +224,8 @@ pub struct ParamValueMut<'a> {
     ty: &'a Type,
     /// Raw bytes that hold this value.
     bytes: &'a mut [u8],
+    /// LLVM TargetData.
+    target_data: &'a TargetData,
 }
 impl<'a> ParamValueMut<'a> {
     /// Returns the name of the variable that holds this value.
@@ -218,7 +238,7 @@ impl<'a> ParamValueMut<'a> {
     }
     /// Returns the value.
     pub fn get(&self) -> ConstValue {
-        ConstValue::from_bytes(&self.ty, self.bytes)
+        super::convert::bytes_to_value(self.ty.clone(), self.bytes, self.target_data)
     }
     /// Sets the value.
     ///
@@ -227,8 +247,8 @@ impl<'a> ParamValueMut<'a> {
         assert_eq!(
             &value.ty(),
             self.ty,
-            "Wrong type for parameter value in JIT function"
+            "Wrong type for parameter value in JIT function",
         );
-        value.set_bytes(self.bytes);
+        super::convert::value_to_bytes(value, self.bytes, self.target_data);
     }
 }

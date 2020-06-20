@@ -87,19 +87,6 @@ impl Type {
             | Self::Rectangle(_) => true,
         }
     }
-    /// Returns the number of bytes used to represent this type in compiled
-    /// code, or None if this type has no runtime representation.
-    pub fn size_of(&self) -> Option<usize> {
-        // TODO: test this method along with Value::from_bytes() and to_bytes()
-        match self {
-            Self::Int => Some(std::mem::size_of::<LangInt>()),
-            Self::CellState => Some(std::mem::size_of::<LangCellState>()),
-            Self::Vector(len) => Some(len * Self::Int.size_of().unwrap()),
-            Self::Pattern(_) => todo!("how big is a pattern?"),
-            Self::IntRange => Some(Self::Vector(3).size_of().unwrap()),
-            Self::Rectangle(ndim) => Some(2 * Self::Vector(*ndim).size_of().unwrap()),
-        }
-    }
 
     /// Returns true if this type can bde converted to a boolean, or false
     /// otherwise.

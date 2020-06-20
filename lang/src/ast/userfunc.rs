@@ -432,7 +432,7 @@ impl UserFunction {
     }
 
     /// JIT compiles this function and returns an executable function.
-    pub fn compile(&self, compiler: &mut Compiler) -> LangResult<CompiledFunction> {
+    pub fn compile(&self, mut compiler: Compiler) -> LangResult<CompiledFunction> {
         compiler.begin_extern_function(
             &self.name,
             self.return_type(),
@@ -441,7 +441,7 @@ impl UserFunction {
         )?;
 
         // Compile the statements.
-        self.compile_statement_block(compiler, &self.top_level_statements)?;
+        self.compile_statement_block(&mut compiler, &self.top_level_statements)?;
 
         if compiler.needs_terminator() {
             // If necessary, add an implicit `return #0` at the end of the

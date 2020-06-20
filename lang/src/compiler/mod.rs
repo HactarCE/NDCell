@@ -26,12 +26,14 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction, UnsafeFunctionPointer};
 use inkwell::module::Module;
+use inkwell::targets::TargetData;
 use inkwell::types::{BasicType, BasicTypeEnum, FunctionType, IntType, StructType, VectorType};
 use inkwell::values::{
     BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue, StructValue, VectorValue,
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 
+pub mod convert;
 mod function;
 pub mod types;
 mod value;
@@ -58,9 +60,12 @@ lazy_static! {
 fn get_ctx() -> &'static Context {
     &CTX.get_or(Context::create)
 }
+
+/// Returns LLVM boolean (i1) IntValue of 0.
 fn llvm_false() -> IntValue<'static> {
     get_ctx().bool_type().const_zero()
 }
+/// Returns LLVM boolean (i1) IntValue of 1.
 fn llvm_true() -> IntValue<'static> {
     get_ctx().bool_type().const_all_ones()
 }
@@ -263,7 +268,8 @@ impl Compiler {
 
         Ok(())
     }
-    /// Allocate space on the stack for the given variable and initialize it to a default value.
+    /// Allocate space on the stack for the given variable and initialize it to
+    /// a default value.
     fn alloca_and_init_var(&mut self, name: String, ty: Type) -> LangResult<Variable> {
         // Allocate space.
         let ptr = self.builder().build_alloca(types::get(&ty)?, &name);
@@ -284,9 +290,14 @@ impl Compiler {
         })
     }
 
+    /// Returns the LLVM TargetData that this compiler uses when JIT compiling
+    /// code.
+    pub fn target_data(&self) -> &TargetData {
+        self.execution_engine.get_target_data()
+    }
     /// Finishes JIT compiling a function and returns a function pointer to
     /// executable assembly.
-    pub unsafe fn get_jit_function<F: UnsafeFunctionPointer>(
+    pub unsafe fn finish_jit_function<F: UnsafeFunctionPointer>(
         &self,
     ) -> LangResult<JitFunction<'static, F>> {
         let llvm_fn = self.llvm_fn();

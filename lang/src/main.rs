@@ -74,8 +74,8 @@ Please specify a file to run. E.g.
 /// result.
 fn compile_and_run(source_code: Rc<String>) -> LangResult<ConstValue> {
     let rule = ast::make_rule(source_code.clone())?;
-    let mut compiler = compiler::Compiler::new()?;
-    let mut transition_function = rule.transition_function().compile(&mut compiler)?;
+    let compiler = compiler::Compiler::new()?;
+    let mut transition_function = rule.transition_function().compile(compiler)?;
     transition_function.call(&[])
 }
 

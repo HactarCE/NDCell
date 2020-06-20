@@ -103,7 +103,7 @@ fn compile_fn(fn_name: Option<&str>, source_code: &str) -> CompleteLangResult<Co
         rule.transition_function()
     };
     user_fn
-        .compile(&mut Compiler::new().unwrap())
+        .compile(Compiler::new().unwrap())
         .map_err(|e| e.with_source(source_code))
 }
 

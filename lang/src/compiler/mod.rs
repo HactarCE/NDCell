@@ -867,6 +867,44 @@ impl Compiler {
         }
     }
 
+    pub fn build_construct_range(
+        &mut self,
+        start: IntValue<'static>,
+        end: IntValue<'static>,
+        step: Option<IntValue<'static>>,
+    ) -> VectorValue<'static> {
+        let step = step.map(Into::into).unwrap_or_else(|| {
+            // Determine the step. If start <= end, then the default step is +1;
+            // if start > end, then the default step is -1.
+            let use_positive_step = self.builder().build_int_compare(
+                IntPredicate::SLE, // Signed Less-Than or Equal
+                start,
+                end,
+                "rangeStepTest",
+            );
+            let positive_one = self.const_int(1);
+            let negative_one = self.const_int(-1);
+            self.builder()
+                .build_select(use_positive_step, positive_one, negative_one, "rangeStep")
+        });
+        let mut ret = self::types::int_range().get_undef();
+        // Insert start.
+        let idx = self.const_uint(0);
+        ret = self
+            .builder()
+            .build_insert_element(ret, start, idx, "rangeTmp1");
+        // Insert end.
+        let idx = self.const_uint(1);
+        ret = self
+            .builder()
+            .build_insert_element(ret, end, idx, "rangeTmp2");
+        // Insert step.
+        let idx = self.const_uint(2);
+        ret = self.builder().build_insert_element(ret, step, idx, "range");
+        // Return the value.
+        ret
+    }
+
     pub fn build_split_rectangle(
         &mut self,
         rect_value: StructValue<'static>,

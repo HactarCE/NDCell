@@ -1,7 +1,5 @@
 //! Functions that return literals.
 
-use inkwell::IntPredicate;
-
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind, UserFunction};
 use crate::compiler::{self, Compiler, Value};
@@ -181,40 +179,10 @@ impl Function for Range {
             Type::IntRange => {
                 let start = arg1.as_int()?;
                 let end = arg2.as_int()?;
-                // Determine the step. If start <= end, then the default step is +1; if start >
-                // end, then the default step is -1.
-                let use_positive_step = compiler.builder().build_int_compare(
-                    IntPredicate::SLE, // Signed Less-Than or Equal
-                    start,
-                    end,
-                    "rangeStepTest",
-                );
-                let positive_one = compiler.const_int(1);
-                let negative_one = compiler.const_int(-1);
-                let step = compiler.builder().build_select(
-                    use_positive_step,
-                    positive_one,
-                    negative_one,
-                    "rangeStep",
-                );
-                let mut ret = compiler::types::int_range().get_undef();
-                // Insert start.
-                let idx = compiler.const_uint(0);
-                ret = compiler
-                    .builder()
-                    .build_insert_element(ret, start, idx, "rangeTmp1");
-                // Insert end.
-                let idx = compiler.const_uint(1);
-                ret = compiler
-                    .builder()
-                    .build_insert_element(ret, end, idx, "rangeTmp2");
-                // Insert step.
-                let idx = compiler.const_uint(2);
-                ret = compiler
-                    .builder()
-                    .build_insert_element(ret, step, idx, "range");
-                // Return the value.
-                Ok(Value::IntRange(ret))
+                let step = None; // Infer from start and end.
+                Ok(Value::IntRange(
+                    compiler.build_construct_range(start, end, step),
+                ))
             }
             Type::Rectangle(ndim) => {
                 let start = compiler.build_vector_cast(arg1, ndim)?;
@@ -226,14 +194,22 @@ impl Function for Range {
         }
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        let mut components = vec![];
-        for arg in args.const_eval_all()? {
-            match arg {
-                ConstValue::Int(i) => components.push(i),
-                ConstValue::Vector(v) => components.extend_from_slice(&v),
-                _ => unreachable!(),
+        let arg1 = args.const_eval(0)?;
+        let arg2 = args.const_eval(1)?;
+        let ret = match self.unwrap_return_type() {
+            Type::IntRange => {
+                let start = arg1.as_int()?;
+                let end = arg2.as_int()?;
+                let step = ConstValue::infer_range_step(start, end);
+                ConstValue::IntRange { start, end, step }
             }
-        }
-        Ok(Some(ConstValue::Vector(components)))
+            Type::Rectangle(ndim) => {
+                let start = arg1.coerce_to_vector(ndim)?;
+                let end = arg2.coerce_to_vector(ndim)?;
+                ConstValue::Rectangle(start, end)
+            }
+            _ => unreachable!(),
+        };
+        Ok(Some(ret))
     }
 }

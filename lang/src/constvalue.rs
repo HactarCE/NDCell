@@ -116,4 +116,14 @@ impl ConstValue {
             _ => uncaught_type_error!(),
         }
     }
+
+    /// Returns the range step to use by default given start and end integers.
+    /// +1 if start <= end; -1 if start > end.
+    pub fn infer_range_step(start: LangInt, end: LangInt) -> LangInt {
+        if start <= end {
+            1
+        } else {
+            -1
+        }
+    }
 }

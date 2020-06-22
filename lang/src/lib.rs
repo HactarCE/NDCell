@@ -10,8 +10,9 @@ extern crate lazy_static;
 use std::rc::Rc;
 
 #[macro_use]
-mod macros;
-
+mod utils;
+#[macro_use]
+mod types;
 mod ast;
 mod compiler;
 mod constvalue;
@@ -20,8 +21,6 @@ mod functions;
 mod lexer;
 mod parser;
 mod span;
-mod types;
-mod utils;
 
 pub use constvalue::ConstValue;
 pub use errors::CompleteLangResult;

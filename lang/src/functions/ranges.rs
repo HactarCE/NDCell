@@ -86,27 +86,52 @@ impl Function for Access {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
-        typecheck!(self.arg_types[0], IntRange)?;
+        match self.prop {
+            RangeProperty::Start | RangeProperty::End => {
+                typecheck!(self.arg_types[0], [IntRange, Rectangle])?
+            }
+            RangeProperty::Step => typecheck!(self.arg_types[0], IntRange)?,
+        }
         Ok(Type::Int)
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
-        let range = args.compile(compiler, 0)?.as_int_range()?;
-        let idx = compiler.const_uint(self.prop as u64);
-        let ret = compiler
-            .builder()
-            .build_extract_element(range, idx, &self.name())
-            .into_int_value();
-        Ok(Value::Int(ret))
+        let arg = args.compile(compiler, 0)?;
+        let ret = match arg {
+            Value::IntRange(range_value) => Value::Int({
+                let idx = compiler.const_uint(self.prop as u64);
+                compiler
+                    .builder()
+                    .build_extract_element(range_value, idx, &self.name())
+                    .into_int_value()
+            }),
+            Value::Rectangle(rect_arg) => Value::Vector({
+                let (start, end) = compiler.build_split_rectangle(rect_arg);
+                match self.prop {
+                    RangeProperty::Start => start,
+                    RangeProperty::End => end,
+                    RangeProperty::Step => uncaught_type_error!(),
+                }
+            }),
+            _ => uncaught_type_error!(),
+        };
+        Ok(ret)
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        let (start, end, step) = args.const_eval(0)?.as_int_range()?;
-        let ret = match self.prop {
-            RangeProperty::Start => start,
-            RangeProperty::End => end,
-            RangeProperty::Step => step,
+        let ret = match args.const_eval(0)? {
+            ConstValue::IntRange { start, end, step } => ConstValue::Int(match self.prop {
+                RangeProperty::Start => start,
+                RangeProperty::End => end,
+                RangeProperty::Step => step,
+            }),
+            ConstValue::Rectangle(start, end) => ConstValue::Vector(match self.prop {
+                RangeProperty::Start => start,
+                RangeProperty::End => end,
+                RangeProperty::Step => uncaught_type_error!(),
+            }),
+            _ => uncaught_type_error!(),
         };
-        Ok(Some(ConstValue::Int(ret)))
+        Ok(Some(ret))
     }
     fn as_assignable(&self, args: &ArgValues) -> Option<&dyn AssignableFunction> {
         if args.can_assign(0) {
@@ -123,15 +148,32 @@ impl AssignableFunction for Access {
         args: ArgValues,
         value: Value,
     ) -> LangResult<()> {
-        let arg = args.compile(compiler, 0)?.as_int_range()?;
-        let idx = compiler.const_uint(self.prop as u64);
-        let ret = compiler.builder().build_insert_element(
-            arg,
-            value.as_int()?,
-            idx,
-            &format!("rangeAssign_{}", self.name()),
-        );
-        args.compile_assign(compiler, 0, Value::IntRange(ret))?;
+        let arg = args.compile(compiler, 0)?;
+        let ret = match arg {
+            Value::IntRange(range_arg) => Value::IntRange({
+                let idx = compiler.const_uint(self.prop as u64);
+                compiler.builder().build_insert_element(
+                    range_arg,
+                    value.as_int()?,
+                    idx,
+                    &format!("rangeAssign_{}", self.name()),
+                )
+            }),
+            Value::Rectangle(rect_arg) => Value::Rectangle(
+                compiler
+                    .builder()
+                    .build_insert_value(
+                        rect_arg,
+                        value.as_vector()?,
+                        self.prop as u32,
+                        "rectSetProp",
+                    )
+                    .unwrap()
+                    .into_struct_value(),
+            ),
+            _ => uncaught_type_error!(),
+        };
+        args.compile_assign(compiler, 0, ret)?;
         Ok(())
     }
 }

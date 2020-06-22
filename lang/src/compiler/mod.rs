@@ -898,15 +898,26 @@ impl Compiler {
         value: Value,
         len: usize,
     ) -> LangResult<VectorValue<'static>> {
-        let components: Vec<IntValue<'static>> = match value {
-            // Make a list of integers
-            Value::Int(i) => vec![i; len],
-            Value::Vector(v) if v.get_type().get_size() as usize == len => return Ok(v),
-            // TODO: try using 'shufflevector' instruction here instead
-            Value::Vector(v) => self.build_split_vector(v),
+        match value {
+            Value::Int(i) => Ok(self.build_construct_vector(&vec![i; len])),
+            Value::Vector(v) if v.get_type().get_size() as usize == len => Ok(v),
+            Value::Vector(v) => {
+                let original_len = v.get_type().get_size();
+                let zeros = vec![self.const_uint(0); original_len as usize];
+                let left = v;
+                let right = VectorType::const_vector(&zeros);
+                let mask_values = (0..original_len)
+                    .chain(std::iter::repeat(original_len))
+                    .map(|i| get_ctx().i32_type().const_int(i as u64, false))
+                    .take(len)
+                    .collect_vec();
+                let mask = VectorType::const_vector(&mask_values);
+                Ok(self
+                    .builder()
+                    .build_shuffle_vector(left, right, mask, "vectorCast"))
+            }
             _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeDesc::Vector),
-        };
-        Ok(self.build_construct_vector(&components))
+        }
     }
     /// Builds a cast from a rectangle of one dimensionality to another (by
     /// trimming excess values or by extending with the value `0..0`).

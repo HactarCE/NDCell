@@ -426,6 +426,8 @@ impl Compiler {
         self.build_return_err(0);
     }
 
+    /* MATH */
+
     /// Builds instructions to perform checked integer arithmetic using an LLVM
     /// intrinsic and returns an error if overflow occurs. Both operands must
     /// either be integers or vectors of the same length.
@@ -709,6 +711,123 @@ impl Compiler {
         }
     }
 
+    /* CONSTRUCT / SPLIT */
+
+    /// Builds construction of a vector from the given components.
+    pub fn build_construct_vector(
+        &mut self,
+        components: &[IntValue<'static>],
+    ) -> VectorValue<'static> {
+        let mut ret = types::vec(components.len()).get_undef();
+        for (i, component) in components.iter().enumerate() {
+            let idx = self.const_uint(i as u64);
+            ret = self.builder().build_insert_element(
+                ret,
+                BasicValueEnum::from(*component),
+                idx,
+                &format!("vec_build_{}", i),
+            );
+        }
+        ret
+    }
+    /// Splits a vector of integers into its components.
+    pub fn build_split_vector(
+        &mut self,
+        vector_value: VectorValue<'static>,
+    ) -> Vec<IntValue<'static>> {
+        (0..vector_value.get_type().get_size())
+            .map(|i| {
+                let idx = self.const_uint(i as u64);
+                self.builder()
+                    .build_extract_element(vector_value, idx, "")
+                    .into_int_value()
+            })
+            .collect()
+    }
+
+    /// Builds construction of an integer range. If no step is given, then it is
+    /// inferred at runtime based on the values of the start and end.
+    pub fn build_construct_range(
+        &mut self,
+        start: IntValue<'static>,
+        end: IntValue<'static>,
+        step: Option<IntValue<'static>>,
+    ) -> VectorValue<'static> {
+        let step = step.unwrap_or_else(|| {
+            // Determine the step. If start <= end, then the default step is +1;
+            // if start > end, then the default step is -1.
+            let use_positive_step = self.builder().build_int_compare(
+                IntPredicate::SLE, // Signed Less-Than or Equal
+                start,
+                end,
+                "rangeStepTest",
+            );
+            let positive_one = self.const_int(1);
+            let negative_one = self.const_int(-1);
+            self.builder()
+                .build_select(use_positive_step, positive_one, negative_one, "rangeStep")
+                .into_int_value()
+        });
+        self.build_construct_vector(&[start, end, step])
+    }
+    /// Splits an integer range into a start, end, and step.
+    pub fn build_split_range(
+        &mut self,
+        range_value: VectorValue<'static>,
+    ) -> (IntValue<'static>, IntValue<'static>, IntValue<'static>) {
+        assert_eq!(
+            3,
+            range_value.get_type().get_size(),
+            "Invalid vector length for range"
+        );
+        let values = self.build_split_vector(range_value);
+        (values[0], values[1], values[2])
+    }
+
+    /// Builds construction of an N-dimensional rectangle.
+    pub fn build_construct_rectangle(
+        &mut self,
+        start: VectorValue<'static>,
+        end: VectorValue<'static>,
+    ) -> StructValue<'static> {
+        let ndim1 = start.get_type().get_size();
+        let ndim2 = end.get_type().get_size();
+        assert_eq!(
+            ndim1, ndim2,
+            "Cannot construct rectangle from differently-sized vectors",
+        );
+        let mut ret = types::rectangle(ndim1 as usize).get_undef();
+        ret = self
+            .builder()
+            .build_insert_value(ret, start, 0, "rectTmp")
+            .unwrap()
+            .into_struct_value();
+        ret = self
+            .builder()
+            .build_insert_value(ret, end, 1, "rect")
+            .unwrap()
+            .into_struct_value();
+        ret
+    }
+    /// Splits a rectangle into a start vector and an end vector.
+    pub fn build_split_rectangle(
+        &mut self,
+        rect_value: StructValue<'static>,
+    ) -> (VectorValue<'static>, VectorValue<'static>) {
+        (
+            self.builder()
+                .build_extract_value(rect_value, 0, "rectStart")
+                .unwrap()
+                .into_vector_value(),
+            self.builder()
+                .build_extract_value(rect_value, 1, "rectEnd")
+                .unwrap()
+                .into_vector_value(),
+        )
+    }
+
+    /* CASTS */
+
     /// Builds a cast from any type to a boolean, represented using the normal
     /// integer type (either 0 or 1). Returns an InternalError if the given
     /// value cannot be converted to a boolean.
@@ -779,37 +898,15 @@ impl Compiler {
         value: Value,
         len: usize,
     ) -> LangResult<VectorValue<'static>> {
-        let values: Vec<IntValue<'static>> = match value {
+        let components: Vec<IntValue<'static>> = match value {
             // Make a list of integers
             Value::Int(i) => vec![i; len],
             Value::Vector(v) if v.get_type().get_size() as usize == len => return Ok(v),
             // TODO: try using 'shufflevector' instruction here instead
-            Value::Vector(v) => (0..len)
-                .into_iter()
-                .map(|i| {
-                    if i < v.get_type().get_size() as usize {
-                        let idx = self.const_uint(i as u64);
-                        self.builder()
-                            .build_extract_element(v, idx, &format!("vec_extract_{}", i))
-                            .into_int_value()
-                    } else {
-                        self.const_int(0)
-                    }
-                })
-                .collect(),
+            Value::Vector(v) => self.build_split_vector(v),
             _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeDesc::Vector),
         };
-        let mut ret = types::vec(len).get_undef();
-        for i in 0..len {
-            let idx = self.const_uint(i as u64);
-            ret = self.builder().build_insert_element(
-                ret,
-                values[i],
-                idx,
-                &format!("vec_build_{}", i),
-            );
-        }
-        Ok(ret)
+        Ok(self.build_construct_vector(&components))
     }
     /// Builds a cast from a rectangle of one dimensionality to another (by
     /// trimming excess values or by extending with the value `0..0`).
@@ -867,87 +964,7 @@ impl Compiler {
         }
     }
 
-    /// Builds construction of an integer range. If no step is given, then it is
-    /// inferred at runtime based on the values of the start and end.
-    pub fn build_construct_range(
-        &mut self,
-        start: IntValue<'static>,
-        end: IntValue<'static>,
-        step: Option<IntValue<'static>>,
-    ) -> VectorValue<'static> {
-        let step = step.map(Into::into).unwrap_or_else(|| {
-            // Determine the step. If start <= end, then the default step is +1;
-            // if start > end, then the default step is -1.
-            let use_positive_step = self.builder().build_int_compare(
-                IntPredicate::SLE, // Signed Less-Than or Equal
-                start,
-                end,
-                "rangeStepTest",
-            );
-            let positive_one = self.const_int(1);
-            let negative_one = self.const_int(-1);
-            self.builder()
-                .build_select(use_positive_step, positive_one, negative_one, "rangeStep")
-        });
-        let mut ret = self::types::int_range().get_undef();
-        // Insert start.
-        let idx = self.const_uint(0);
-        ret = self
-            .builder()
-            .build_insert_element(ret, start, idx, "rangeTmp1");
-        // Insert end.
-        let idx = self.const_uint(1);
-        ret = self
-            .builder()
-            .build_insert_element(ret, end, idx, "rangeTmp2");
-        // Insert step.
-        let idx = self.const_uint(2);
-        ret = self.builder().build_insert_element(ret, step, idx, "range");
-        // Return the value.
-        ret
-    }
-
-    /// Splits a rectangle into a start vector and an end vector.
-    pub fn build_split_rectangle(
-        &mut self,
-        rect_value: StructValue<'static>,
-    ) -> (VectorValue<'static>, VectorValue<'static>) {
-        (
-            self.builder()
-                .build_extract_value(rect_value, 0, "rectStart")
-                .unwrap()
-                .into_vector_value(),
-            self.builder()
-                .build_extract_value(rect_value, 1, "rectEnd")
-                .unwrap()
-                .into_vector_value(),
-        )
-    }
-    /// Builds construction of an N-dimensional rectangle.
-    pub fn build_construct_rectangle(
-        &mut self,
-        start: VectorValue<'static>,
-        end: VectorValue<'static>,
-    ) -> StructValue<'static> {
-        let ndim1 = start.get_type().get_size();
-        let ndim2 = end.get_type().get_size();
-        assert_eq!(
-            ndim1, ndim2,
-            "Cannot construct rectangle from differently-sized vectors",
-        );
-        let mut ret = types::rectangle(ndim1 as usize).get_undef();
-        ret = self
-            .builder()
-            .build_insert_value(ret, start, 0, "rectTmp")
-            .unwrap()
-            .into_struct_value();
-        ret = self
-            .builder()
-            .build_insert_value(ret, end, 1, "rect")
-            .unwrap()
-            .into_struct_value();
-        ret
-    }
+    /* PATTERNS */
 
     /// Builds a read of a cell state pattern and executes instructions built by
     /// one of the given closures.
@@ -1139,6 +1156,8 @@ impl Compiler {
         self.const_uint(1)
             .const_shl(self.const_uint(INT_BITS as u64 - 1))
     }
+
+    /* MISCELLANY */
 
     /// Returns a constant sign-extended IntValue from the given integer.
     pub fn const_int(&self, value: i64) -> IntValue<'static> {

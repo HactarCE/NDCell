@@ -2,7 +2,6 @@
 
 /// Automatically implements std::fmt::Display and std::str::FromStr on an enum
 /// using custom-specified string representations.
-#[macro_export]
 macro_rules! enum_with_str_repr {
     (
         // For each enum ...

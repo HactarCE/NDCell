@@ -9,7 +9,7 @@ fn test_vector_new() {
 }
 
 #[test]
-fn test_vector_convert() {
+fn test_vector_construct() {
     // Test with length and value specified.
     let mut f = compile_test_fn("@function Vec10 test() { return Vec10(-3) }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![-3; 10])));
@@ -37,6 +37,33 @@ fn test_vector_convert() {
     // Test conversion from an existing longer vector.
     let mut f = compile_test_fn("@function Vec4 test() { return Vec4([10, 20, 30, 40, 50, 60]) }");
     assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(vec![10, 20, 30, 40])));
+}
+
+#[test]
+fn test_vector_len_cast() {
+    // Test conversion from an existing vector of the same length.
+    let mut f = compile_test_fn("@function Vec4 test(Vec4 rhs) { return Vec4(0) + rhs }");
+    assert_fn_result(
+        &mut f,
+        &[ConstValue::Vector(vec![10, 20, 30, 40])],
+        Ok(ConstValue::Vector(vec![10, 20, 30, 40])),
+    );
+
+    // Test conversion from an existing shorter vector.
+    let mut f = compile_test_fn("@function Vec4 test(Vec2 rhs) { return Vec4(0) + rhs }");
+    assert_fn_result(
+        &mut f,
+        &[ConstValue::Vector(vec![10, 20])],
+        Ok(ConstValue::Vector(vec![10, 20, 0, 0])),
+    );
+
+    // Test conversion from an existing longer vector.
+    let mut f = compile_test_fn("@function Vec4 test(Vec6 rhs) { return Vec4(1) * rhs }");
+    assert_fn_result(
+        &mut f,
+        &[ConstValue::Vector(vec![10, 20, 30, 40, 50, 60])],
+        Ok(ConstValue::Vector(vec![10, 20, 30, 40])),
+    );
 }
 
 #[test]

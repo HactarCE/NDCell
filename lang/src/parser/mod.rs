@@ -12,7 +12,7 @@ use crate::lexer::*;
 use crate::types::LangInt;
 use crate::{Span, Spanned};
 use LangErrorMsg::{
-    ElseWithoutIf, Expected, InternalError, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
+    ElseWithoutIf, Expected, InvalidDirectiveName, MissingSetKeyword, ReservedWord,
     TopLevelNonDirective, Unimplemented, Unmatched,
 };
 
@@ -562,9 +562,7 @@ impl<'a> ParseBuilder<'a> {
                 inner: match op_token.class {
                     TokenClass::Operator(op) => Expr::UnaryOp { op, operand },
                     TokenClass::Keyword(KeywordToken::Not) => Expr::LogicalNot(operand),
-                    other => Err(InternalError(
-                        format!("Invalid unary operator: {:?}", other).into(),
-                    ))?,
+                    other => internal_error!("Invalid unary operator: {:?}", other),
                 },
             };
         }
@@ -601,9 +599,9 @@ impl<'a> ParseBuilder<'a> {
                     TokenClass::Keyword(KeywordToken::Or) => Expr::LogicalOr { lhs, rhs },
                     TokenClass::Keyword(KeywordToken::Xor) => Expr::LogicalXor { lhs, rhs },
                     TokenClass::Keyword(KeywordToken::And) => Expr::LogicalAnd { lhs, rhs },
-                    other => Err(InternalError(
-                        format!("Invalid left-associative binary operator: {:?}", other).into(),
-                    ))?,
+                    other => {
+                        internal_error!("Invalid left-associative binary operator: {:?}", other)
+                    }
                 },
             };
         }
@@ -637,9 +635,9 @@ impl<'a> ParseBuilder<'a> {
                 span: Span::merge(&*lhs, &*rhs),
                 inner: match op_token.class {
                     TokenClass::Operator(op) => Expr::BinaryOp { lhs, op, rhs },
-                    other => Err(InternalError(
-                        format!("Invalid right-associative binary operator: {:?}", other).into(),
-                    ))?,
+                    other => {
+                        internal_error!("Invalid right-associative binary operator: {:?}", other)
+                    }
                 },
             };
         }

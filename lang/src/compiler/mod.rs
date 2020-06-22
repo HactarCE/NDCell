@@ -44,7 +44,6 @@ pub use value::{PatternValue, Value};
 use crate::errors::*;
 use crate::types::{TypeDesc, INT_BITS};
 use crate::{ConstValue, Type};
-use LangErrorMsg::InternalError;
 
 /// Name of the LLVM module.
 const MODULE_NAME: &'static str = "ndca";
@@ -111,10 +110,7 @@ impl Compiler {
         let module = get_ctx().create_module(MODULE_NAME);
         let execution_engine = module
             .create_jit_execution_engine(OptimizationLevel::None)
-            .map_err(|e| {
-                InternalError(format!("Error creating JIT execution engine: {:?}", e).into())
-                    .without_span()
-            })?;
+            .map_err(|e| internal_error_value!("Error creating JIT execution engine: {:?}", e))?;
         Ok(Self {
             module,
             execution_engine,
@@ -276,9 +272,7 @@ impl Compiler {
         // Initialize to a default value.
         let default_value = self
             .get_default_var_value(&ty)
-            .ok_or_else(|| {
-                InternalError("get_default_var_value() returned None".into()).without_span()
-            })?
+            .ok_or_else(|| internal_error_value!("get_default_var_value() returned None"))?
             .into_basic_value()?;
         self.builder().build_store(ptr, default_value);
         Ok(Variable {
@@ -306,8 +300,7 @@ impl Compiler {
             .to_str()
             .expect("Invalid UTF-8 in LLVM function name (seriously, wtf?)");
         self.execution_engine.get_function(fn_name).map_err(|_| {
-            InternalError(format!("Failed to find JIT-compiled function {:?}", fn_name).into())
-                .without_span()
+            internal_error_value!("Failed to find JIT-compiled function {:?}", fn_name)
         })
     }
 
@@ -351,11 +344,7 @@ impl Compiler {
                 if fn_value.get_type() == fn_type {
                     Ok(fn_value)
                 } else {
-                    Err(InternalError(
-                        "Requested multiple LLVM intrinsics with same name but different type signatures"
-                            .into(),
-                    )
-                    .without_span())
+                    internal_error!("Requested multiple LLVM intrinsics with same name but different type signatures")
                 }
             }
             None => Ok(self.module.add_function(name, fn_type, None)),
@@ -773,7 +762,7 @@ impl Compiler {
                 end_phi.as_basic_value().into_int_value()
             }
             // Other types have no truthiness.
-            Value::IntRange(_) | Value::Rectangle(_) => Err(UNCAUGHT_TYPE_ERROR)?,
+            Value::IntRange(_) | Value::Rectangle(_) => uncaught_type_error!(),
         };
 
         // Cast to integer.
@@ -808,9 +797,7 @@ impl Compiler {
                     }
                 })
                 .collect(),
-            _ => Err(InternalError(
-                format!("Cannot convert {} to {}", value.ty(), TypeDesc::Vector).into(),
-            ))?,
+            _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeDesc::Vector),
         };
         let mut ret = types::vec(len).get_undef();
         for i in 0..len {
@@ -836,9 +823,7 @@ impl Compiler {
                 let (old_start, old_end) = self.build_split_rectangle(r);
                 (Value::Vector(old_start), Value::Vector(old_end))
             }
-            _ => Err(InternalError(
-                format!("Cannot convert {} to {}", value.ty(), TypeDesc::Rectangle).into(),
-            ))?,
+            _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeDesc::Rectangle),
         };
         let new_start = self.build_vector_cast(old_start, ndim)?;
         let new_end = self.build_vector_cast(old_end, ndim)?;
@@ -935,9 +920,7 @@ impl Compiler {
 
         // Check the number of dimensions.
         if pos.get_type().get_size() != ndim as u32 {
-            Err(InternalError(
-                "Dimension mismatch for pattern coordinates".into(),
-            ))?;
+            internal_error!("Dimension mismatch for pattern coordinates");
         }
 
         // Check that the position is in bounds.
@@ -1056,16 +1039,12 @@ impl Compiler {
         let cells_ptr = self
             .builder()
             .build_extract_value(pattern.value, 0, "cellArrayPtr")
-            .ok_or(InternalError(
-                "Error extracting cell array from pattern struct".into(),
-            ))?
+            .unwrap()
             .into_pointer_value();
         let strides = self
             .builder()
             .build_extract_value(pattern.value, 1, "patternStrides")
-            .ok_or(InternalError(
-                "Error extracting strides from pattern struct".into(),
-            ))?
+            .unwrap()
             .into_vector_value();
         // Multiply strides by position to get pointer offset.
         let ptr_offset_vec = self

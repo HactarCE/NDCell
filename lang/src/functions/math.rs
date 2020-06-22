@@ -13,7 +13,7 @@ use crate::errors::*;
 use crate::lexer::OperatorToken;
 use crate::types::LangInt;
 use crate::{ConstValue, Span, Type};
-use LangErrorMsg::{DivideByZero, IntegerOverflow, InternalError, NegativeExponent};
+use LangErrorMsg::{DivideByZero, IntegerOverflow, NegativeExponent};
 
 /// Built-in function that negates an integer or vector or takes its absolute value.
 #[derive(Debug)]
@@ -116,7 +116,7 @@ impl Function for NegOrAbs {
             Value::Vector(arg) | Value::IntRange(arg) => {
                 self.compile_op(compiler, arg, arg.get_type().const_zero())
             }
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
@@ -137,7 +137,7 @@ impl Function for NegOrAbs {
                     end: v[1],
                     step: v[2],
                 }),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
         .map(Some)
     }
@@ -180,9 +180,7 @@ impl MinMax {
         let select_arg1: BasicValueEnum<'_> = match (&arg1, &arg2) {
             (Int(lhs), Int(rhs)) => b.build_int_compare(op, *lhs, *rhs, "selector").into(),
             (Vector(lhs), Vector(rhs)) => b.build_int_compare(op, *lhs, *rhs, "selector").into(),
-            _ => Err(InternalError(
-                "Invalid arguments to MinMax::compile_op()".into(),
-            ))?,
+            _ => internal_error!("Invalid arguments to MinMax::compile_op()"),
         };
         let ret = compiler.build_generic_select(
             select_arg1,
@@ -204,9 +202,7 @@ impl MinMax {
             (Vector(lhs), Vector(rhs)) => {
                 ConstValue::Vector(lhs.into_iter().zip(rhs).map(|(a, b)| f(a, b)).collect())
             }
-            _ => Err(InternalError(
-                "Invalid arguments to MinMax::eval_op()".into(),
-            ))?,
+            _ => internal_error!("Invalid arguments to MinMax::eval_op()"),
         };
         Ok(ret)
     }
@@ -428,7 +424,7 @@ impl BinaryOp {
                         |c| Ok(self.overflow_error().compile(c)),
                         |c| Ok(self.div_by_zero_error().compile(c)),
                     )?,
-                    _ => Err(UNCAUGHT_TYPE_ERROR)?,
+                    _ => uncaught_type_error!(),
                 };
                 match self.op {
                     // Division
@@ -453,7 +449,7 @@ impl BinaryOp {
                         rhs.as_basic_value_enum().into_vector_value(),
                         |c| Ok(self.overflow_error().compile(c)),
                     )?,
-                    _ => Err(UNCAUGHT_TYPE_ERROR)?,
+                    _ => uncaught_type_error!(),
                 };
                 match self.op {
                     // Bitshift left
@@ -481,9 +477,7 @@ impl BinaryOp {
             // Bitwise XOR
             Caret => b.build_xor(lhs, rhs, "tmp_xor").as_basic_value_enum(),
             // Anything else
-            DotDot | Tag => {
-                Err(InternalError("Uncaught invalid operator for binary op".into()).without_span())?
-            }
+            DotDot | Tag => internal_error!("Uncaught invalid operator for binary op"),
         })
     }
     /// Evaluates this operation for two integers.
@@ -534,7 +528,7 @@ impl BinaryOp {
             // Bitwise XOR
             Caret => Some(lhs ^ rhs),
             // Anything else
-            _ => Err(InternalError("Uncaught invalid operator".into()).without_span())?,
+            _ => internal_error!("Uncaught invalid operator"),
         }
         // If the operation returned None, assume an IntegerOverflow error.
         .ok_or_else(|| self.overflow_error().error())

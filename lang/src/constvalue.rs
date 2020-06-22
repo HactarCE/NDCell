@@ -59,7 +59,7 @@ impl ConstValue {
     pub fn as_int(self) -> LangResult<LangInt> {
         match self {
             Self::Int(i) => Ok(i),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     /// Returns the integer value inside if this is a ConstValue::CellState;
@@ -67,7 +67,7 @@ impl ConstValue {
     pub fn as_cell_state(self) -> LangResult<LangCellState> {
         match self {
             Self::CellState(i) => Ok(i),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     /// Returns the vector value inside if this is a ConstValue::Vector;
@@ -75,7 +75,7 @@ impl ConstValue {
     pub fn as_vector(self) -> LangResult<Vec<LangInt>> {
         match self {
             Self::Vector(v) => Ok(v),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     /// Returns the start, end, and step inside if this is a
@@ -83,7 +83,7 @@ impl ConstValue {
     pub fn as_int_range(self) -> LangResult<(LangInt, LangInt, LangInt)> {
         match self {
             Self::IntRange { start, end, step } => Ok((start, end, step)),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
 
@@ -94,7 +94,7 @@ impl ConstValue {
             Self::Int(i) => Ok(i != 0),
             Self::CellState(i) => Ok(i != 0),
             Self::Vector(v) => Ok(v.into_iter().any(|i| i != 0)),
-            Self::IntRange { .. } | Self::Rectangle { .. } => Err(UNCAUGHT_TYPE_ERROR),
+            Self::IntRange { .. } | Self::Rectangle { .. } => uncaught_type_error!(),
         }
     }
     /// Converts this value to a vector of the specified length if this is a
@@ -113,7 +113,7 @@ impl ConstValue {
                 }
                 Ok(v)
             }
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
 }

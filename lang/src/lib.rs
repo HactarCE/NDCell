@@ -12,11 +12,12 @@ use std::rc::Rc;
 #[macro_use]
 mod utils;
 #[macro_use]
+mod errors;
+#[macro_use]
 mod types;
 mod ast;
 mod compiler;
 mod constvalue;
-mod errors;
 mod functions;
 mod lexer;
 mod parser;

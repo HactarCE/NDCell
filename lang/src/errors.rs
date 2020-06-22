@@ -8,23 +8,6 @@ use crate::lexer::ComparisonToken;
 use crate::types::{TypeDesc, MAX_VECTOR_LEN};
 use crate::{Span, Type, MAX_NDIM, MAX_STATES};
 
-/// InternalError returned when an argument index is out of range (which should
-/// never happen).
-pub const ARG_OUT_OF_RANGE: LangError =
-    LangErrorMsg::InternalError(Cow::Borrowed("Argument index out of range")).without_span();
-
-/// InternalError returned when a variable is used improperly and it was not
-/// caught by the type checker.
-const INVALID_VARIABLE_USE: LangError = LangErrorMsg::InternalError(std::borrow::Cow::Borrowed(
-    "Invalid variable use not caught by type checker",
-))
-.without_span();
-
-/// InternalError returned when a TypeError occurs in a place where it should
-/// have already been caught.
-pub const UNCAUGHT_TYPE_ERROR: LangError =
-    LangErrorMsg::InternalError(Cow::Borrowed("Uncaught type error")).without_span();
-
 /// Result of a LangError with an accompanying line of source code.
 pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
 /// Result of a LangError.
@@ -197,11 +180,6 @@ pub enum LangErrorMsg {
     AssertionFailed(Option<String>),
     UserError(Option<String>),
 }
-impl<T: 'static + std::error::Error> From<T> for LangErrorMsg {
-    fn from(error: T) -> Self {
-        Self::InternalError(error.to_string().into())
-    }
-}
 impl fmt::Display for LangErrorMsg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -212,7 +190,7 @@ impl fmt::Display for LangErrorMsg {
                 write!(f, "(unknown error)")?;
             }
             Self::InternalError(s) => {
-                write!(f, "Internal error: {}\nThis is a bug in NDCell, not your code. Please report this to the developer!", s)?;
+                write!(f, "Internal error: {}\nThis is a bug in NDCell, not your cellular automaton. Please report this to the developer!", s)?;
             }
 
             Self::UnknownSymbol => {
@@ -370,4 +348,71 @@ impl<T: Into<LangErrorMsg>> From<T> for LangError {
     fn from(msg: T) -> Self {
         msg.into().without_span()
     }
+}
+
+/// Handles internal errors in the NDCA compiler. Panics in debug mode, but
+/// returns a nice error message in release mode (so that the program doesn't
+/// immediately crash on the user).
+///
+/// Prefer internal_error!(); be careful not to call this and then throw away
+/// the error it returns, because in debug mode it will still panic.
+macro_rules! internal_error_value {
+    // Don't allocate a new String for &'static str literals.
+    ( $msg:expr ) => {{
+        // Panic in a debug build (for stack trace).
+        #[cfg(debug_assertions)]
+        #[allow(unused)]
+        let ret: crate::errors::LangError = panic!("{}", $msg);
+        // Give nice error message for user in release build.
+        #[cfg(not(debug_assertions))]
+        #[allow(unused)]
+        let ret: crate::errors::LangError = crate::errors::LangErrorMsg::InternalError(
+            std::borrow::Cow::Borrowed($msg),
+        )
+        .without_span();
+        #[allow(unreachable_code)]
+        ret
+    }};
+    // Automatically format!() arguments.
+    ( $( $args:expr ),+ $(,)? ) => {{
+
+        // Panic in a debug build (for stack trace).
+        #[cfg(debug_assertions)]
+        #[allow(unused)]
+        let ret: crate::errors::LangError = panic!($( $args ),+);
+        // Give nice error message for user in release build.
+        #[cfg(not(debug_assertions))]
+        #[allow(unused)]
+        let ret: crate::errors::LangError =
+            crate::errors::LangErrorMsg::InternalError(format!($( $args ),+).into()).without_span();
+        #[allow(unreachable_code)]
+        ret
+    }};
+}
+
+/// Handles internal errors in the NDCA compiler. Panics in debug mode, but
+/// returns a nice error message in release mode (so that the program doesn't
+/// immediately crash on the user).
+///
+/// Note that this macro actually returns the error from the caller; it does not just provide the value.
+macro_rules! internal_error {
+    ( $( $args:expr ),+ $(,)? ) => {
+        return Err(internal_error_value!($( $args ),+))
+    };
+}
+
+// Emits an error for when an argument index is out of range (which should never
+// happen).
+macro_rules! arg_out_of_range {
+    () => {
+        internal_error!("Argument index out of range")
+    };
+}
+
+// Emits an error for when a TypeError occurs in a place where it should have
+// already been caught.
+macro_rules! uncaught_type_error {
+    () => {
+        internal_error!("Uncaught type error")
+    };
 }

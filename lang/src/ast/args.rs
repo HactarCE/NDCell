@@ -75,7 +75,7 @@ impl<'a> ArgValues<'a> {
     pub fn get_expr(&self, idx: usize) -> LangResult<&Expr> {
         match self.arg_asts.0.get(idx) {
             Some(arg) => Ok(&self.userfunc[*arg]),
-            None => Err(ARG_OUT_OF_RANGE),
+            None => arg_out_of_range!(),
         }
     }
 
@@ -119,7 +119,7 @@ impl<'a> ArgValues<'a> {
     ) -> LangResult<()> {
         match self.arg_asts.0.get(idx) {
             Some(arg) => self.userfunc[*arg].compile_assign(compiler, self.userfunc, value),
-            None => Err(ARG_OUT_OF_RANGE),
+            None => arg_out_of_range!(),
         }
     }
 }

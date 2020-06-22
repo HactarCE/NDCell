@@ -7,7 +7,6 @@ use std::rc::Rc;
 use super::Compiler;
 use crate::errors::*;
 use crate::{ConstValue, Type};
-use LangErrorMsg::InternalError;
 
 /// Compiled user function with allocated space for arguments, return value, and
 /// optionally debug values to it.
@@ -41,9 +40,7 @@ impl CompiledFunction {
                 "Error encountered during function compilation; dumping LLVM function to sttderr"
             );
             compiler.llvm_fn().print_to_stderr();
-            Err(InternalError(
-                "LLVM function is invalid! This is a big problem".into(),
-            ))?;
+            internal_error!("LLVM function is invalid! This is a big problem");
         }
         // JIT-compile the function.
         let jit_fn = unsafe { compiler.finish_jit_function() }?;
@@ -124,8 +121,7 @@ impl CompiledFunction {
                 .error_points
                 .get(ret as usize)
                 .ok_or_else(|| {
-                    InternalError("Invalid error index returned from JIT function".into())
-                        .without_span()
+                    internal_error_value!("Invalid error index returned from JIT function")
                 })?
                 .clone())
         }

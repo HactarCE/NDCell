@@ -8,7 +8,7 @@ use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
 use crate::types::{LangInt, TypeDesc, MAX_VECTOR_LEN};
 use crate::{ConstValue, Span, Type};
-use LangErrorMsg::{InternalError, VectorTooBig};
+use LangErrorMsg::VectorTooBig;
 
 /// Built-in function that returns a fixed integer. This struct can be
 /// constructed directly.
@@ -20,9 +20,7 @@ impl Int {
     pub fn with_value(i: LangInt) -> FuncConstructor {
         Box::new(move |_userfunc, _span, arg_types| {
             if !arg_types.is_empty() {
-                Err(InternalError(
-                    "Arguments passed to int literal function".into(),
-                ))?;
+                internal_error!("Arguments passed to int literal function");
             }
             Ok(Box::new(Self(i)))
         })

@@ -5,7 +5,7 @@ use crate::ast::{ArgTypes, ArgValues, AssignableFunction, FnSignature, Function,
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::{ConstValue, Span, Type};
-use LangErrorMsg::{InternalError, Unimplemented};
+use LangErrorMsg::Unimplemented;
 
 /// Built-in function that returns a fixed variable.
 #[derive(Debug)]
@@ -21,9 +21,7 @@ impl GetVar {
     pub fn with_name(var_name: String) -> FuncConstructor {
         Box::new(|userfunc, span, arg_types| {
             if !arg_types.is_empty() {
-                Err(InternalError(
-                    "Arguments passed to variable access function".into(),
-                ))?;
+                internal_error!("Arguments passed to variable access function");
             }
             let var_type = userfunc.try_get_var(span, &var_name)?.clone();
             Ok(Box::new(Self { var_name, var_type }))
@@ -92,7 +90,7 @@ impl CallUserFn {
                 .rule_meta()
                 .helper_function_signatures
                 .get(&func_name)
-                .ok_or_else(|| InternalError("Cannot find user function".into()).without_span())?
+                .ok_or_else(|| internal_error_value!("Cannot find user function"))?
                 .clone();
             Ok(Box::new(Self {
                 func_name,
@@ -139,9 +137,7 @@ impl New {
     pub fn with_type(ty: Type) -> FuncConstructor {
         Box::new(|_userfunc, _span, arg_types| {
             if !ty.has_runtime_representation() {
-                Err(InternalError(
-                    "Cannot call .new() on type without runtime representation".into(),
-                ))?;
+                internal_error!("Cannot call .new() on type without runtime representation");
             }
             Ok(Box::new(Self { arg_types, ty }))
         })
@@ -166,11 +162,11 @@ impl Function for New {
     fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
         compiler
             .get_default_var_value(&self.ty)
-            .ok_or(InternalError("get_default_var_value() returned None".into()).without_span())
+            .ok_or_else(|| internal_error_value!("get_default_var_value() returned None"))
     }
     fn const_eval(&self, _args: ArgValues) -> LangResult<Option<ConstValue>> {
         ConstValue::default(&self.ty)
-            .ok_or(InternalError("ConstValue::default() returned None".into()).without_span())
+            .ok_or_else(|| internal_error_value!("ConstValue::default() returned None"))
             .map(Some)
     }
 }

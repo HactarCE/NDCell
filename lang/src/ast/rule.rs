@@ -10,8 +10,7 @@ use crate::parser::{Directive, DirectiveContents, HelperFunc, ParseTree};
 use crate::types::LangInt;
 use crate::{ConstValue, Type};
 use LangErrorMsg::{
-    Expected, FunctionNameConflict, InternalError, InvalidDimensionCount, InvalidStateCount,
-    TypeError,
+    Expected, FunctionNameConflict, InvalidDimensionCount, InvalidStateCount, TypeError,
 };
 
 /// Number of dimensions to use when the user doesn't specify.
@@ -103,9 +102,7 @@ impl TryFrom<ParseTree> for Rule {
             .into_iter()
             .map(|contents| match contents.inner {
                 DirectiveContents::Func(f) => Ok(f),
-                _ => Err(
-                    InternalError("Invalid parse tree on helper function".into()).without_span(),
-                ),
+                _ => internal_error!("Invalid parse tree on helper function"),
             })
             .collect::<LangResult<Vec<_>>>()?;
         let mut helper_function_signatures = HashMap::new();
@@ -160,7 +157,7 @@ impl TryFrom<ParseTree> for Rule {
             .filter(|(_, v)| !v.is_empty())
             .next()
         {
-            Err(InternalError(format!("Unused directive {:?}", dir).into()))?;
+            internal_error!("Unused directive {:?}", dir);
         }
 
         // Construct the rule.

@@ -69,7 +69,7 @@ impl Value {
     pub fn as_int(self) -> LangResult<IntValue<'static>> {
         match self {
             Value::Int(i) => Ok(i),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     /// Returns the LLVM integer value inside if this is Value::CellState;
@@ -77,7 +77,7 @@ impl Value {
     pub fn as_cell_state(self) -> LangResult<IntValue<'static>> {
         match self {
             Value::CellState(i) => Ok(i),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     /// Returns the LLVM vector value inside if this is Value::Vector; otherwise
@@ -85,7 +85,7 @@ impl Value {
     pub fn as_vector(self) -> LangResult<VectorValue<'static>> {
         match self {
             Value::Vector(v) => Ok(v),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     /// Returns the PatternValue inside if this is Value::Pattern; otherwise an
@@ -93,7 +93,7 @@ impl Value {
     pub fn as_pattern(self) -> LangResult<PatternValue> {
         match self {
             Value::Pattern(p) => Ok(p),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     /// Returns the LLVM vector value inside if this is Value::IntRange;
@@ -101,7 +101,7 @@ impl Value {
     pub fn as_int_range(self) -> LangResult<VectorValue<'static>> {
         match self {
             Value::IntRange(r) => Ok(r),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     /// Returns the LLVM vector value inside if this is Value::IntRange;
@@ -109,7 +109,7 @@ impl Value {
     pub fn as_rectangle(self) -> LangResult<StructValue<'static>> {
         match self {
             Value::Rectangle(r) => Ok(r),
-            _ => Err(UNCAUGHT_TYPE_ERROR),
+            _ => uncaught_type_error!(),
         }
     }
     /// Returns this value as an LLVM basic value if it is representable as one;
@@ -122,7 +122,7 @@ impl Value {
             Value::Pattern(p) => Ok(p.value.into()),
             Value::IntRange(r) => Ok(r.into()),
             Value::Rectangle(r) => Ok(r.into()),
-            // _ => Err(InternalError(format!("{} has no BasicValue representation", self).into())),
+            // _ => internal_error!("{} has no BasicValue representation", self),
         }
     }
 }

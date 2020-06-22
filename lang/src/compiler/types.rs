@@ -16,10 +16,9 @@ pub fn get(ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
         Type::Pattern(shape) => Ok(pattern(shape.ndim()).into()),
         Type::IntRange => Ok(int_range().into()),
         Type::Rectangle(ndim) => Ok(rectangle(*ndim).into()),
-        // _ => Err(InternalError(
+        // _ => internal_error!(
         //     "Attempt to get LLVM representation of type that has none".into(),
-        // )
-        // .without_span()),
+        // ),
     }
 }
 

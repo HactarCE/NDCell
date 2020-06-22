@@ -1,5 +1,6 @@
 //! Types used by NDCA.
 
+use itertools::Itertools;
 use std::fmt;
 use std::rc::Rc;
 
@@ -54,10 +55,10 @@ impl fmt::Debug for Type {
         match self {
             Self::Int => write!(f, "Int"),
             Self::CellState => write!(f, "Cell"),
-            Self::Vector(len) => write!(f, "{:?}{}", VagueType::Vector, len),
-            Self::Pattern(shape) => write!(f, "{:?}{}", VagueType::Pattern, shape),
+            Self::Vector(len) => write!(f, "{:?}{}", TypeDesc::Vector, len),
+            Self::Pattern(shape) => write!(f, "{:?}{}", TypeDesc::Pattern, shape),
             Self::IntRange => write!(f, "Range"),
-            Self::Rectangle(ndim) => write!(f, "{:?}{}", VagueType::Rectangle, ndim),
+            Self::Rectangle(ndim) => write!(f, "{:?}{}", TypeDesc::Rectangle, ndim),
         }
     }
 }
@@ -66,10 +67,10 @@ impl fmt::Display for Type {
         match self {
             Self::Int => write!(f, "Integer"),
             Self::CellState => write!(f, "CellState"),
-            Self::Vector(len) => write!(f, "{}{}", VagueType::Vector, len),
-            Self::Pattern(shape) => write!(f, "{}{}", VagueType::Pattern, shape),
+            Self::Vector(len) => write!(f, "{}{}", TypeDesc::Vector, len),
+            Self::Pattern(shape) => write!(f, "{}{}", TypeDesc::Pattern, shape),
             Self::IntRange => write!(f, "Range"),
-            Self::Rectangle(ndim) => write!(f, "{}{}", VagueType::Rectangle, ndim),
+            Self::Rectangle(ndim) => write!(f, "{}{}", TypeDesc::Rectangle, ndim),
         }
     }
 }
@@ -102,7 +103,7 @@ impl Type {
 
     /// Returns a TypeError where this type is the "got" type, given an
     /// "expected" type.
-    pub fn type_error(&self, expected: impl Into<VagueType>) -> LangErrorMsg {
+    pub fn type_error(&self, expected: impl Into<TypeDesc>) -> LangErrorMsg {
         TypeError {
             expected: expected.into(),
             got: self.clone(),
@@ -124,48 +125,18 @@ impl Type {
 }
 
 impl Spanned<Type> {
-    /// Returns a TypeError if this type does not match the given expected type.
-    pub fn check_eq(&self, expected: Type) -> LangResult<()> {
-        if self.inner == expected {
+    /// Returns a type error if this type does not match the given expected
+    /// type(s).
+    pub fn typecheck(&self, expected: impl TypeChecker) -> LangResult<()> {
+        if expected.matches(&self.inner) {
             Ok(())
         } else {
-            Err(self.inner.type_error(expected).with_span(self.span))
+            Err(expected.type_error(self.inner.clone()).with_span(self.span))
         }
     }
-    /// Returns a TypeError if this type is not a vector; otherwise returns the
-    /// length of the vector.
-    pub fn check_vec(&self) -> LangResult<usize> {
-        match self.inner {
-            Type::Vector(len) => Ok(len),
-            _ => Err(self
-                .inner
-                .type_error(VagueType::Vector)
-                .with_span(self.span)),
-        }
-    }
-    /// Returns a CustomTypeError if this type is not an integer or vector.
-    pub fn check_int_or_vec(&self) -> LangResult<()> {
-        match self.inner {
-            Type::Int | Type::Vector(_) => Ok(()),
-            _ => Err(self
-                .inner
-                .multi_type_error(&[Type::Int.into(), VagueType::Vector])
-                .with_span(self.span)),
-        }
-    }
-    /// Returns a CustomTypeError if this type is not an integer, vector, or
-    /// range of integers.
-    pub fn check_int_or_vec_or_range(&self) -> LangResult<()> {
-        match self.inner {
-            Type::Int | Type::Vector(_) | Type::IntRange => Ok(()),
-            _ => Err(self
-                .inner
-                .multi_type_error(&[Type::Int.into(), VagueType::Vector, Type::IntRange.into()])
-                .with_span(self.span)),
-        }
-    }
+
     /// Returns a CustomTypeError if this type cannot be converted to a boolean.
-    pub fn check_can_convert_to_bool(&self) -> LangResult<()> {
+    pub fn typecheck_can_convert_to_bool(&self) -> LangResult<()> {
         if self.inner.can_convert_to_bool() {
             Ok(())
         } else {
@@ -177,9 +148,9 @@ impl Spanned<Type> {
     }
 }
 
-/// More vague type (e.g. vector with unspecified length).
+/// Vague type description (e.g. vector with unspecified length).
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub enum VagueType {
+pub enum TypeDesc {
     /// A specific type.
     Specific(Type),
     /// Vector of any length.
@@ -189,12 +160,12 @@ pub enum VagueType {
     /// Hyperrectangle of any dimensionality.
     Rectangle,
 }
-impl From<Type> for VagueType {
+impl From<Type> for TypeDesc {
     fn from(ty: Type) -> Self {
         Self::Specific(ty)
     }
 }
-impl fmt::Debug for VagueType {
+impl fmt::Debug for TypeDesc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Specific(ty) => write!(f, "{}", ty),
@@ -204,7 +175,7 @@ impl fmt::Debug for VagueType {
         }
     }
 }
-impl fmt::Display for VagueType {
+impl fmt::Display for TypeDesc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Specific(ty) => write!(f, "{}", ty),
@@ -212,5 +183,57 @@ impl fmt::Display for VagueType {
             Self::Pattern => write!(f, "Pattern"),
             Self::Rectangle => write!(f, "Rectangle"),
         }
+    }
+}
+
+/// Rust types that can be used to check NDCA types.
+pub trait TypeChecker {
+    /// Returns true if the given type matches this type checker, or false
+    /// if it does not.
+    fn matches(&self, ty: &Type) -> bool;
+    /// Returns a type error using the given "got" type.
+    fn type_error(&self, got: Type) -> LangErrorMsg;
+}
+impl TypeChecker for Type {
+    fn matches(&self, ty: &Type) -> bool {
+        self == ty
+    }
+    fn type_error(&self, got: Type) -> LangErrorMsg {
+        let expected = TypeDesc::from(self.clone());
+        TypeError { expected, got }
+    }
+}
+impl TypeChecker for TypeDesc {
+    fn matches(&self, ty: &Type) -> bool {
+        match self {
+            TypeDesc::Specific(this) => this.matches(ty),
+            TypeDesc::Vector => matches!(ty, Type::Vector(_)),
+            TypeDesc::Pattern => matches!(ty, Type::Pattern(_)),
+            TypeDesc::Rectangle => matches!(ty, Type::Rectangle(_)),
+        }
+    }
+    fn type_error(&self, got: Type) -> LangErrorMsg {
+        let expected = self.clone();
+        TypeError { expected, got }
+    }
+}
+impl<T: TypeChecker + ToString> TypeChecker for &[T] {
+    fn matches(&self, ty: &Type) -> bool {
+        self.iter().any(|expected| expected.matches(ty))
+    }
+    fn type_error(&self, got: Type) -> LangErrorMsg {
+        let expected = crate::utils::join_with_conjunction(
+            "or",
+            &self.iter().map(ToString::to_string).collect_vec(),
+        );
+        CustomTypeError { expected, got }
+    }
+}
+impl<T: TypeChecker> TypeChecker for &T {
+    fn matches(&self, ty: &Type) -> bool {
+        (*self).matches(ty)
+    }
+    fn type_error(&self, got: Type) -> LangErrorMsg {
+        (*self).type_error(got)
     }
 }

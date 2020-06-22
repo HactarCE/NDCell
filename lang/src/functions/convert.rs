@@ -48,7 +48,7 @@ impl Function for IntToCellState {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
-        self.arg_types[0].check_eq(Type::Int)?;
+        typecheck!(self.arg_types[0], Int)?;
         Ok(Type::CellState)
     }
 
@@ -119,7 +119,7 @@ impl Function for ToBool {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
-        self.arg_types[0].check_can_convert_to_bool()?;
+        self.arg_types[0].typecheck_can_convert_to_bool()?;
         Ok(Type::Int)
     }
 
@@ -180,7 +180,7 @@ impl Function for ToVector {
             Err(self.invalid_args_err(span))?;
         }
         if let Some(arg) = self.arg_types.get(0) {
-            arg.check_int_or_vec()?;
+            typecheck!(arg, [Int, Vector])?;
         }
         Ok(Type::Vector(self.result_len))
     }

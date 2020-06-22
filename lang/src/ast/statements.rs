@@ -1,7 +1,7 @@
 use super::{ErrorPointRef, ExprRef, StatementRef, UserFunction};
 use crate::compiler::Compiler;
 use crate::errors::*;
-use crate::{Span, Type};
+use crate::Span;
 use LangErrorMsg::{AssertionFailed, CannotAssignTypeToVariable, UserError};
 
 /// List of statements, executed one after another.
@@ -36,7 +36,7 @@ impl Assert {
         assert_expr: ExprRef,
         msg: Option<String>,
     ) -> LangResult<Self> {
-        userfunc[assert_expr].spanned_type().check_eq(Type::Int)?;
+        typecheck!(userfunc[assert_expr].spanned_type(), Int)?;
         let error =
             userfunc.add_error_point(AssertionFailed(msg).with_span(userfunc[assert_expr].span()));
         Ok(Self {
@@ -119,7 +119,7 @@ impl SetVar {
         }
         // Check the types of the source and destinations.
         let expected = userfunc[destination_expr].assign_type(userfunc)?;
-        userfunc[source_expr].spanned_type().check_eq(expected)?;
+        userfunc[source_expr].spanned_type().typecheck(expected)?;
         Ok(Self {
             span,
             destination_expr,
@@ -163,7 +163,7 @@ impl If {
         if_true: StatementBlock,
         if_false: StatementBlock,
     ) -> LangResult<Self> {
-        userfunc[cond_expr].spanned_type().check_eq(Type::Int)?;
+        typecheck!(userfunc[cond_expr].spanned_type(), Int)?;
         Ok(Self {
             span,
             cond_expr,
@@ -206,7 +206,7 @@ impl Return {
         // Check that the expression matches the expected return type.
         userfunc[ret_expr]
             .spanned_type()
-            .check_eq(userfunc.return_type())?;
+            .typecheck(userfunc.return_type())?;
         Ok(Self { span, ret_expr })
     }
 }

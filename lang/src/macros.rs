@@ -53,3 +53,31 @@ macro_rules! enum_with_str_repr {
         )*
     }
 }
+
+/// Check that the given value matches any one of the given types, returning
+/// Ok(()) if it does match and a type error if it does not match.
+macro_rules! typecheck {
+    ($got:expr, [ $( $expected:tt ),+ $(,)? ]) => {
+        $got.typecheck([ $( get_type_desc!($expected) ),+ ].as_ref())
+    };
+    ($got:expr, $expected:tt) => {
+        $got.typecheck(get_type_desc!($expected))
+    };
+}
+
+/// Convert type names (such as "Int") or type description name (such as
+/// "Vector" or "Pattern") into a TypeDesc.
+macro_rules! get_type_desc {
+    (Vector) => {
+        crate::types::TypeDesc::Vector
+    };
+    (Pattern) => {
+        crate::types::TypeDesc::Pattern
+    };
+    (Rectangle) => {
+        crate::types::TypeDesc::Rectangle
+    };
+    ($other:tt) => {
+        crate::types::TypeDesc::Specific(crate::types::Type::$other)
+    };
+}

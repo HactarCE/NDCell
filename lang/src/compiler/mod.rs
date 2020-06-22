@@ -42,7 +42,7 @@ pub use function::CompiledFunction;
 pub use value::{PatternValue, Value};
 
 use crate::errors::*;
-use crate::types::{VagueType, INT_BITS};
+use crate::types::{TypeDesc, INT_BITS};
 use crate::{ConstValue, Type};
 use LangErrorMsg::InternalError;
 
@@ -809,7 +809,7 @@ impl Compiler {
                 })
                 .collect(),
             _ => Err(InternalError(
-                format!("Cannot convert {} to {}", value.ty(), VagueType::Vector).into(),
+                format!("Cannot convert {} to {}", value.ty(), TypeDesc::Vector).into(),
             ))?,
         };
         let mut ret = types::vec(len).get_undef();
@@ -837,7 +837,7 @@ impl Compiler {
                 (Value::Vector(old_start), Value::Vector(old_end))
             }
             _ => Err(InternalError(
-                format!("Cannot convert {} to {}", value.ty(), VagueType::Rectangle).into(),
+                format!("Cannot convert {} to {}", value.ty(), TypeDesc::Rectangle).into(),
             ))?,
         };
         let new_start = self.build_vector_cast(old_start, ndim)?;

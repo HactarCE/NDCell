@@ -11,7 +11,7 @@ use crate::ast::{
 };
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
-use crate::types::{LangInt, VagueType};
+use crate::types::{LangInt, TypeDesc};
 use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{IndexOutOfBounds, IntegerOverflow};
 
@@ -60,9 +60,9 @@ impl Function for Access {
             self.check_args_len(span, 1)?;
         } else {
             self.check_args_len(span, 2)?;
-            self.arg_types[1].check_eq(Type::Int)?;
+            typecheck!(self.arg_types[1], Int)?;
         }
-        self.arg_types[0].check_vec()?;
+        typecheck!(self.arg_types[0], Vector)?;
         Ok(Type::Int)
     }
 
@@ -241,7 +241,7 @@ impl Reduce {
 }
 impl Function for Reduce {
     fn name(&self) -> String {
-        format!("{}.{}", VagueType::Vector, self.mode)
+        format!("{}.{}", TypeDesc::Vector, self.mode)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
@@ -254,7 +254,7 @@ impl Function for Reduce {
         if self.arg_types.len() != 1 {
             Err(self.invalid_args_err(span))?;
         }
-        self.arg_types[0].check_vec()?;
+        typecheck!(self.arg_types[0], Vector)?;
         Ok(Type::Int)
     }
 
@@ -347,7 +347,7 @@ impl Function for MinMax {
         if self.arg_types.len() != 1 {
             Err(self.invalid_args_err(span))?;
         }
-        self.arg_types[0].check_vec()?;
+        typecheck!(self.arg_types[0], Vector)?;
         Ok(Type::Int)
     }
 
@@ -380,7 +380,7 @@ impl GetLen {
 }
 impl Function for GetLen {
     fn name(&self) -> String {
-        format!("{}.len", VagueType::Vector)
+        format!("{}.len", TypeDesc::Vector)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
@@ -393,7 +393,7 @@ impl Function for GetLen {
         if self.arg_types.len() != 1 {
             Err(self.invalid_args_err(span))?;
         }
-        self.arg_types[0].check_vec()?;
+        typecheck!(self.arg_types[0], Vector)?;
         Ok(Type::Int)
     }
 

@@ -6,7 +6,7 @@ use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind, UserFunction};
 use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
-use crate::types::{LangInt, VagueType, MAX_VECTOR_LEN};
+use crate::types::{LangInt, TypeDesc, MAX_VECTOR_LEN};
 use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{InternalError, VectorTooBig};
 
@@ -67,7 +67,7 @@ impl Vector {
 }
 impl Function for Vector {
     fn name(&self) -> String {
-        format!("{} literal", VagueType::Vector)
+        format!("{} literal", TypeDesc::Vector)
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Atom
@@ -81,7 +81,7 @@ impl Function for Vector {
             .arg_types
             .iter()
             .map(|ty| {
-                ty.check_int_or_vec()?;
+                typecheck!(ty, [Int, Vector])?;
                 Ok(match ty.inner {
                     Type::Int => 1,
                     Type::Vector(len) => len,
@@ -163,8 +163,8 @@ impl Function for Range {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 2)?;
-        self.arg_types[0].check_int_or_vec()?;
-        self.arg_types[1].check_int_or_vec()?;
+        typecheck!(self.arg_types[0], [Int, Vector])?;
+        typecheck!(self.arg_types[1], [Int, Vector])?;
         use Type::{Int, IntRange, Rectangle, Vector};
         match (&self.arg_types[0].inner, &self.arg_types[1].inner) {
             (Int, Int) => Ok(IntRange),

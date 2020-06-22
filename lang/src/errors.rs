@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::lexer::ComparisonToken;
-use crate::types::{VagueType, MAX_VECTOR_LEN};
+use crate::types::{TypeDesc, MAX_VECTOR_LEN};
 use crate::{Span, Type, MAX_NDIM, MAX_STATES};
 
 /// InternalError returned when an argument index is out of range (which should
@@ -161,7 +161,7 @@ pub enum LangErrorMsg {
     InvalidDimensionCount,
     InvalidStateCount,
     TypeError {
-        expected: VagueType,
+        expected: TypeDesc,
         got: Type,
     },
     CustomTypeError {
@@ -310,7 +310,7 @@ impl fmt::Display for LangErrorMsg {
                 write!(
                     f,
                     "Too many elements in {}; maximum is {}",
-                    VagueType::Vector,
+                    TypeDesc::Vector,
                     MAX_VECTOR_LEN,
                 )?;
             }

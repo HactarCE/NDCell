@@ -102,8 +102,8 @@ impl Function for NegOrAbs {
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
         match self.mode {
-            NegOrAbsMode::Negate => self.arg_types[0].check_int_or_vec_or_range()?,
-            _ => self.arg_types[0].check_int_or_vec()?,
+            NegOrAbsMode::Negate => typecheck!(self.arg_types[0], [Int, Vector, IntRange])?,
+            _ => typecheck!(self.arg_types[0], [Int, Vector])?,
         };
         Ok(self.arg_types[0].inner.clone())
     }
@@ -229,7 +229,7 @@ impl Function for MinMax {
         }
         // All arguments must be integers or vectors.
         for arg in &self.arg_types {
-            arg.check_int_or_vec()?;
+            typecheck!(arg, [Int, Vector])?;
         }
         // The return type is the length of the longest argument.
         let mut ret_type = Type::Int;
@@ -305,7 +305,7 @@ impl Function for UnaryPlus {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
-        self.arg_types[0].check_int_or_vec_or_range()?;
+        typecheck!(self.arg_types[0], [Int, Vector, IntRange])?;
         Ok(self.arg_types[0].inner.clone())
     }
 
@@ -560,11 +560,11 @@ impl Function for BinaryOp {
             if !matches!(self.op, Plus | Minus | Asterisk) {
                 Err(self.invalid_args_err(span))?;
             }
-            self.arg_types[1].check_eq(Type::Int)?;
+            typecheck!(self.arg_types[1], Int)?;
         } else {
             // Otherwise, we expect an integer or vector.
-            self.arg_types[0].check_int_or_vec()?;
-            self.arg_types[1].check_int_or_vec()?;
+            typecheck!(self.arg_types[0], [Int, Vector])?;
+            typecheck!(self.arg_types[1], [Int, Vector])?;
         }
         // When performing an operation where one argument being zero causes an
         // error (e.g. division) or always causes the result to be zero (e.g.

@@ -33,8 +33,8 @@ impl Function for StepBy {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 2)?;
-        self.arg_types[0].check_eq(Type::IntRange)?;
-        self.arg_types[1].check_eq(Type::Int)?;
+        typecheck!(self.arg_types[0], IntRange)?;
+        typecheck!(self.arg_types[1], Int)?;
         Ok(Type::IntRange)
     }
 
@@ -86,7 +86,7 @@ impl Function for Access {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
-        self.arg_types[0].check_eq(Type::IntRange)?;
+        typecheck!(self.arg_types[0], IntRange)?;
         Ok(Type::Int)
     }
 

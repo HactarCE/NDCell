@@ -1,8 +1,10 @@
 //! Functions that return literals.
 
+use itertools::Itertools;
+
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind, UserFunction};
-use crate::compiler::{self, Compiler, Value};
+use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::types::{LangInt, TypeDesc, MAX_VECTOR_LEN};
 use crate::{ConstValue, Span, Type};
@@ -73,14 +75,18 @@ impl Function for Vector {
         self.arg_types.clone()
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
+        let mut is_rect = false;
         let len = self
             .arg_types
             .iter()
             .map(|ty| {
-                typecheck!(ty, [Int, Vector])?;
+                typecheck!(ty, [Int, Vector, IntRange, Rectangle])?;
+                if matches!(ty.inner, Type::IntRange | Type::Rectangle(_)) {
+                    is_rect = true;
+                }
                 Ok(match ty.inner {
-                    Type::Int => 1,
-                    Type::Vector(len) => len,
+                    Type::Int | Type::IntRange => 1,
+                    Type::Vector(len) | Type::Rectangle(len) => len,
                     _ => unreachable!(),
                 })
             })
@@ -88,48 +94,90 @@ impl Function for Vector {
         if len > MAX_VECTOR_LEN {
             Err(VectorTooBig.with_span(span))
         } else {
-            Ok(Type::Vector(len))
+            Ok(if is_rect {
+                Type::Rectangle(len)
+            } else {
+                Type::Vector(len)
+            })
         }
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
-        let mut components = vec![];
+        // Store both the 'start' and 'end' coordinates -- if we are
+        // constructing a vector and not a rectangle, we'll just ignore one.
+        let mut components: Vec<(_, _)> = vec![];
+
+        // Collect components.
         for arg in args.compile_all(compiler)? {
             match arg {
-                Value::Int(i) => components.push(i),
+                Value::Int(i) => components.push((i, i)),
                 Value::Vector(v) => {
-                    for i in 0..v.get_type().get_size() {
-                        let idx = compiler.const_uint(i as u64);
-                        components.push(
-                            compiler
-                                .builder()
-                                .build_extract_element(v, idx, "")
-                                .into_int_value(),
-                        );
-                    }
+                    components.extend(compiler.build_split_vector(v).into_iter().map(|i| (i, i)))
+                }
+                Value::IntRange(r) => {
+                    let (start, end, _step) = compiler.build_split_range(r);
+                    components.push((start, end));
+                }
+                Value::Rectangle(r) => {
+                    let (start, end) = compiler.build_split_rectangle(r);
+                    let start = compiler.build_split_vector(start);
+                    let end = compiler.build_split_vector(end);
+                    components.extend(start.into_iter().zip(end));
                 }
                 _ => unreachable!(),
             }
         }
-        let mut ret = compiler::types::vec(components.len()).get_undef();
-        for (i, component) in components.into_iter().enumerate() {
-            let idx = compiler.const_uint(i as u64);
-            ret = compiler
-                .builder()
-                .build_insert_element(ret, component, idx, "");
-        }
-        Ok(Value::Vector(ret))
+
+        // Construct return value.
+        let start_components = components.iter().map(|&(start, _end)| start).collect_vec();
+        let end_components = components.iter().map(|&(_start, end)| end).collect_vec();
+        let ret = match self.unwrap_return_type() {
+            Type::Vector(_) => Value::Vector(compiler.build_construct_vector(&start_components)),
+            Type::Rectangle(_) => {
+                let start = compiler.build_construct_vector(&start_components);
+                let end = compiler.build_construct_vector(&end_components);
+                Value::Rectangle(compiler.build_construct_rectangle(start, end))
+            }
+            _ => unreachable!(),
+        };
+        Ok(ret)
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        let mut components = vec![];
+        // Store both the 'start' and 'end' coordinates -- if we are
+        // constructing a vector and not a rectangle, we'll just ignore one.
+        let mut start_components: Vec<LangInt> = vec![];
+        let mut end_components: Vec<LangInt> = vec![];
+
+        // Collect components.
         for arg in args.const_eval_all()? {
             match arg {
-                ConstValue::Int(i) => components.push(i),
-                ConstValue::Vector(v) => components.extend_from_slice(&v),
+                ConstValue::Int(i) => {
+                    start_components.push(i);
+                    end_components.push(i);
+                }
+                ConstValue::Vector(v) => {
+                    start_components.extend_from_slice(&v);
+                    end_components.extend_from_slice(&v);
+                }
+                ConstValue::IntRange { start, end, .. } => {
+                    start_components.push(start);
+                    end_components.push(end);
+                }
+                ConstValue::Rectangle(start, end) => {
+                    start_components.extend(start);
+                    end_components.extend(end)
+                }
                 _ => unreachable!(),
             }
         }
-        Ok(Some(ConstValue::Vector(components)))
+
+        // Construct return value.
+        let ret = match self.unwrap_return_type() {
+            Type::Vector(_) => ConstValue::Vector(start_components),
+            Type::Rectangle(_) => ConstValue::Rectangle(start_components, end_components),
+            _ => unreachable!(),
+        };
+        Ok(Some(ret))
     }
 }
 

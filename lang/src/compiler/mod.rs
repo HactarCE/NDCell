@@ -867,6 +867,8 @@ impl Compiler {
         }
     }
 
+    /// Builds construction of an integer range. If no step is given, then it is
+    /// inferred at runtime based on the values of the start and end.
     pub fn build_construct_range(
         &mut self,
         start: IntValue<'static>,
@@ -905,6 +907,7 @@ impl Compiler {
         ret
     }
 
+    /// Splits a rectangle into a start vector and an end vector.
     pub fn build_split_rectangle(
         &mut self,
         rect_value: StructValue<'static>,
@@ -920,6 +923,7 @@ impl Compiler {
                 .into_vector_value(),
         )
     }
+    /// Builds construction of an N-dimensional rectangle.
     pub fn build_construct_rectangle(
         &mut self,
         start: VectorValue<'static>,
@@ -945,6 +949,8 @@ impl Compiler {
         ret
     }
 
+    /// Builds a read of a cell state pattern and executes instructions built by
+    /// one of the given closures.
     pub fn build_get_pattern_cell_state(
         &mut self,
         pattern: &PatternValue,
@@ -1069,6 +1075,9 @@ impl Compiler {
             on_ok(c, cell_state_value)
         })
     }
+    /// Builds an unchecked read of a cell state patternand returns the value.
+    /// Do not use this unless you are absolutely sure that the given position
+    /// is within the cell state pattern.
     pub fn build_get_pattern_cell_state_unchecked(
         &mut self,
         pattern: &PatternValue,
@@ -1100,6 +1109,8 @@ impl Compiler {
             .build_load(cell_ptr, "cellState")
             .into_int_value())
     }
+    /// Builds instructions using the given closure for each cell in a cell
+    /// state pattern.
     pub fn build_pattern_iter(
         &mut self,
         pattern: &PatternValue,

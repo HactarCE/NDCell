@@ -4,7 +4,7 @@ use inkwell::IntPredicate;
 use itertools::Itertools;
 use std::convert::TryInto;
 
-pub use super::enums::{MinMaxMode, SumOrProduct};
+pub use super::enums::{MinMaxMode, RangeProperty, SumOrProduct};
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{
     ArgTypes, ArgValues, AssignableFunction, ErrorPointRef, Function, FunctionKind, UserFunction,
@@ -19,7 +19,7 @@ use LangErrorMsg::{IndexOutOfBounds, IntegerOverflow};
 #[derive(Debug)]
 pub struct Access {
     /// Vector from which to extract a component (should be
-    /// vec![Type::Vector(_)]).
+    /// vec![Type::Vector(_)] or vec![Type::Rectangle(_)]).
     arg_types: ArgTypes,
     /// Index of the component of the vector to return. If this is None, then a
     /// second argument is used as the index.
@@ -62,23 +62,31 @@ impl Function for Access {
             self.check_args_len(span, 2)?;
             typecheck!(self.arg_types[1], Int)?;
         }
-        typecheck!(self.arg_types[0], Vector)?;
-        Ok(Type::Int)
+        typecheck!(self.arg_types[0], [Vector, Rectangle])?;
+        match self.arg_types[0].inner {
+            Type::Vector(_) => Ok(Type::Int),
+            Type::Rectangle(_) => Ok(Type::IntRange),
+            _ => unreachable!(),
+        }
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let zero = compiler.const_int(0);
+        let arg = args.compile(compiler, 0)?;
+
+        // Get the length of the vector.
+        let vector_len = match arg.ty() {
+            Type::Vector(len) => len,
+            Type::Rectangle(ndim) => ndim,
+            _ => uncaught_type_error!(),
+        };
+        let vector_len_value = compiler.const_uint(vector_len as u64);
 
         // Get the index.
         let element_idx = match self.component_idx {
             Some(i) => compiler.const_uint(i as u64),
             None => args.compile(compiler, 1)?.as_int()?,
         };
-        let arg = args.compile(compiler, 0)?.as_vector()?;
-
-        // Get the length of the vector.
-        let len = arg.get_type().get_size();
-        let len_value = compiler.const_uint(len as u64);
 
         // Make sure that the index is not negative.
         let is_negative = compiler.builder().build_int_compare(
@@ -93,25 +101,62 @@ impl Function for Access {
             |_| Ok(()),
         )?;
 
-        // Get the component of the vector (poison if index is out of range).
-        let component_value = compiler
-            .builder()
-            .build_extract_element(arg, element_idx, "tryVecAccess")
-            .into_int_value();
-
         // Check whether that the index less than the length of the vector.
         let in_range = compiler.builder().build_int_compare(
             IntPredicate::SLT, // Signed Less-Than
             element_idx,
-            len_value,
+            vector_len_value,
             "idxUpperBoundCheck",
         );
+
+        // Here's where we diverge depending on argument type.
+        let component_value;
+        let zero;
+        match arg {
+            Value::Vector(vector_arg) => {
+                // Get the component of the vector (poison if index is out of range).
+                component_value = compiler.builder().build_extract_element(
+                    vector_arg,
+                    element_idx,
+                    "tryVecAccess",
+                );
+
+                // Return zero if the index is out of range.
+                zero = component_value
+                    .into_int_value()
+                    .get_type()
+                    .const_zero()
+                    .into();
+            }
+            Value::Rectangle(rect_arg) => {
+                // Get the start and end vectors.
+                let (start_vec, end_vec) = compiler.build_split_rectangle(rect_arg);
+                // Get the start component (poison if index is out of range).
+                let start = compiler
+                    .builder()
+                    .build_extract_element(start_vec, element_idx, "tryRectStartAccess")
+                    .into_int_value();
+                // Get the end component (poison if index is out of range).
+                let end = compiler
+                    .builder()
+                    .build_extract_element(end_vec, element_idx, "tryRectEndAccess")
+                    .into_int_value();
+                // Construct an integer range (poison if index is out of range).
+                component_value = compiler.build_construct_range(start, end, None).into();
+
+                // Return an integer range of 0 if the index is out of range.
+                let int_zero = compiler.const_int(0);
+                zero = compiler
+                    .build_construct_range(int_zero, int_zero, None)
+                    .into();
+            }
+            _ => uncaught_type_error!(),
+        }
 
         // Return zero if the index is out of range.
         let ret = compiler
             .builder()
-            .build_select(in_range, component_value, zero, "vecAccess")
-            .into_int_value();
+            .build_select(in_range, component_value, zero, "vecAccess");
 
         // Note that result of an LLVM 'select' instruction is only poisoned if
         // its condition is poisoned (obviously not the case here) or its
@@ -119,7 +164,7 @@ impl Function for Access {
         // without poisoning the result of 'select.'
         // https://llvm.org/docs/LangRef.html#poisonvalues
 
-        Ok(Value::Int(ret))
+        Ok(Value::from_basic_value(&self.unwrap_return_type(), ret))
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
         // Get the index.
@@ -131,14 +176,20 @@ impl Function for Access {
         let idx: usize = idx
             .try_into()
             .map_err(|_| self.out_of_bounds_error.error())?;
+
         // Get the component or return zero if the index is too large.
-        Ok(Some(ConstValue::Int(
-            args.const_eval(0)?
-                .as_vector()?
-                .get(idx)
-                .copied()
-                .unwrap_or(0),
-        )))
+        let ret = match args.const_eval(0)? {
+            ConstValue::Vector(values) => ConstValue::Int(values.get(idx).copied().unwrap_or(0)),
+            ConstValue::Rectangle(start, end) => {
+                let start = start.get(idx).copied().unwrap_or(0);
+                let end = end.get(idx).copied().unwrap_or(0);
+                let step = ConstValue::infer_range_step(start, end);
+                ConstValue::IntRange { start, end, step }
+            }
+            _ => uncaught_type_error!(),
+        };
+
+        Ok(Some(ret))
     }
     fn as_assignable(&self, args: &ArgValues) -> Option<&dyn AssignableFunction> {
         if args.can_assign(0) {
@@ -156,17 +207,21 @@ impl AssignableFunction for Access {
         value: Value,
     ) -> LangResult<()> {
         let zero = compiler.const_int(0);
+        let arg = args.compile(compiler, 0)?;
+
+        // Get the length of the vector.
+        let vector_len = match arg.ty() {
+            Type::Vector(len) => len,
+            Type::Rectangle(ndim) => ndim,
+            _ => uncaught_type_error!(),
+        };
+        let vector_len_value = compiler.const_uint(vector_len as u64);
 
         // Get the index.
         let element_idx = match self.component_idx {
             Some(i) => compiler.const_uint(i as u64),
             None => args.compile(compiler, 1)?.as_int()?,
         };
-        let arg = args.compile(compiler, 0)?.as_vector()?;
-
-        // Get the length of the vector.
-        let len = arg.get_type().get_size();
-        let len_value = compiler.const_uint(len as u64);
 
         // Make sure that the index is not negative.
         let is_negative = compiler.builder().build_int_compare(
@@ -175,11 +230,16 @@ impl AssignableFunction for Access {
             zero,
             "idxNegativeCheck",
         );
+        compiler.build_conditional(
+            is_negative,
+            |c| Ok(self.out_of_bounds_error.compile(c)),
+            |_| Ok(()),
+        )?;
         // Make sure that the index is not too large.
         let is_too_large = compiler.builder().build_int_compare(
             IntPredicate::SGE, // Signed Greater-Than
             element_idx,
-            len_value,
+            vector_len_value,
             "idxUpperBoundCheck",
         );
         // If either condition occurs, return an error.
@@ -193,15 +253,55 @@ impl AssignableFunction for Access {
             |_| Ok(()),
         )?;
 
-        // Set the element.
-        let ret = compiler.builder().build_insert_element(
-            arg,
-            value.into_basic_value()?,
-            element_idx,
-            "vecAssign",
-        );
+        // Here's where we diverge depending on argument type.
+        let ret = match arg {
+            Value::Vector(vector_arg) => {
+                // Set the element.
+                Value::Vector(compiler.builder().build_insert_element(
+                    vector_arg,
+                    value.into_basic_value()?,
+                    element_idx,
+                    "vecAssign",
+                ))
+            }
+            Value::Rectangle(rect_arg) => {
+                let range_value = value.as_int_range()?;
+                // Split the start and end vectors.
+                let (start_vec, end_vec) = compiler.build_split_rectangle(rect_arg);
+                // Extract the new start component.
+                let idx = compiler.const_uint(RangeProperty::Start as u64);
+                let new_start =
+                    compiler
+                        .builder()
+                        .build_extract_element(range_value, idx, "rangeStart");
+                // Extract the new end component.
+                let idx = compiler.const_uint(RangeProperty::End as u64);
+                let new_end =
+                    compiler
+                        .builder()
+                        .build_extract_element(range_value, idx, "rangeEnd");
+                // Set the start component.
+                let new_start_vec = compiler.builder().build_insert_element(
+                    start_vec,
+                    new_start,
+                    element_idx,
+                    "rectSetStart",
+                );
+                // Set the end component.
+                let new_end_vec = compiler.builder().build_insert_element(
+                    end_vec,
+                    new_end,
+                    element_idx,
+                    "rectSetEnd",
+                );
+                // Construct a rectangle.
+                Value::Rectangle(compiler.build_construct_rectangle(new_start_vec, new_end_vec))
+            }
+            _ => uncaught_type_error!(),
+        };
+
         // Assign it.
-        args.compile_assign(compiler, 0, Value::Vector(ret))?;
+        args.compile_assign(compiler, 0, ret)?;
         Ok(())
     }
 }

@@ -169,7 +169,7 @@ fn test_rectangle_ops() {
             assert r == -20..10
 
             // Extend vector with zeros
-            set r += [10, 20, 50];
+            set r += [10, 20, 50]
             assert r == [-10..20, 0..30, 30..60, -20..10, -20..10]
 
             // Truncate vector

@@ -147,8 +147,8 @@ pub struct ToVector {
     is_len_inferred: bool,
 }
 impl ToVector {
-    /// Returns a constructor for a new ToVector instance that
-    /// constructs a vector with the given length.
+    /// Returns a constructor for a new ToVector instance that constructs a
+    /// vector with the given length.
     pub fn with_len(vector_len: Option<usize>) -> FuncConstructor {
         Box::new(move |userfunc, _span, arg_types| {
             let result_len = vector_len.unwrap_or_else(|| userfunc.rule_meta().ndim as usize);

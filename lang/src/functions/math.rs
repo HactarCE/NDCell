@@ -44,7 +44,7 @@ impl NegOrAbs {
         compiler: &mut Compiler,
         arg: T,
         zero: T,
-    ) -> LangResult<Value> {
+    ) -> LangResult<BasicValueEnum<'static>> {
         // To negate a number, subtract it from zero.
         let negated = compiler.build_checked_int_arithmetic(zero, arg, "ssub", |c| {
             Ok(self.overflow_error.compile(c))
@@ -68,7 +68,7 @@ impl NegOrAbs {
                 )
             }
         };
-        Ok(Value::from_basic_value(&self.arg_types[0].inner, result))
+        Ok(result)
     }
     /// Evaluates this operation for an integer.
     pub fn eval_op_int(&self, arg: LangInt) -> LangResult<LangInt> {
@@ -102,7 +102,9 @@ impl Function for NegOrAbs {
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
         match self.mode {
-            NegOrAbsMode::Negate => typecheck!(self.arg_types[0], [Int, Vector, IntRange])?,
+            NegOrAbsMode::Negate => {
+                typecheck!(self.arg_types[0], [Int, Vector, IntRange, Rectangle])?
+            }
             _ => typecheck!(self.arg_types[0], [Int, Vector])?,
         };
         Ok(self.arg_types[0].inner.clone())
@@ -112,9 +114,24 @@ impl Function for NegOrAbs {
         // Call Self::compile_op() with a different generic type for integer vs.
         // vector.
         match args.compile(compiler, 0)? {
-            Value::Int(arg) => self.compile_op(compiler, arg, arg.get_type().const_zero()),
-            Value::Vector(arg) | Value::IntRange(arg) => {
-                self.compile_op(compiler, arg, arg.get_type().const_zero())
+            Value::Int(arg) => Ok(Value::Int(
+                self.compile_op(compiler, arg, arg.get_type().const_zero())?
+                    .into_int_value(),
+            )),
+            Value::Vector(arg) | Value::IntRange(arg) => Ok(Value::from_basic_value(
+                &self.arg_types[0].inner,
+                self.compile_op(compiler, arg, arg.get_type().const_zero())?,
+            )),
+            Value::Rectangle(arg) => {
+                let (start, end) = compiler.build_split_rectangle(arg);
+                let new_start = self
+                    .compile_op(compiler, start, start.get_type().const_zero())?
+                    .into_vector_value();
+                let new_end = self
+                    .compile_op(compiler, end, end.get_type().const_zero())?
+                    .into_vector_value();
+                let ret = compiler.build_construct_rectangle(new_start, new_end);
+                Ok(Value::Rectangle(ret))
             }
             _ => uncaught_type_error!(),
         }
@@ -137,6 +154,15 @@ impl Function for NegOrAbs {
                     end: v[1],
                     step: v[2],
                 }),
+            ConstValue::Rectangle(start, end) => Ok(ConstValue::Rectangle(
+                start
+                    .into_iter()
+                    .map(|i| self.eval_op_int(i))
+                    .collect::<LangResult<Vec<LangInt>>>()?,
+                end.into_iter()
+                    .map(|i| self.eval_op_int(i))
+                    .collect::<LangResult<Vec<LangInt>>>()?,
+            )),
             _ => uncaught_type_error!(),
         }
         .map(Some)
@@ -301,7 +327,7 @@ impl Function for UnaryPlus {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 1)?;
-        typecheck!(self.arg_types[0], [Int, Vector, IntRange])?;
+        typecheck!(self.arg_types[0], [Int, Vector, IntRange, Rectangle])?;
         Ok(self.arg_types[0].inner.clone())
     }
 

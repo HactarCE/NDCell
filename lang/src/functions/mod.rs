@@ -70,12 +70,9 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "sum" => Some(vectors::Reduce::sum()),
             "product" => Some(vectors::Reduce::product()),
             // Component access
-            "x" => Some(vectors::Access::with_component_idx(Some(0))),
-            "y" => Some(vectors::Access::with_component_idx(Some(1))),
-            "z" => Some(vectors::Access::with_component_idx(Some(2))),
-            "w" => Some(vectors::Access::with_component_idx(Some(3))),
-            "u" => Some(vectors::Access::with_component_idx(Some(4))),
-            "v" => Some(vectors::Access::with_component_idx(Some(5))),
+            "x" | "y" | "z" | "w" | "u" | "v" => Some(vectors::Access::with_component_idx(Some(
+                AXES.find(&name).unwrap() as LangInt,
+            ))),
             // Miscellaneous
             "len" => Some(Box::new(vectors::GetLen::construct)),
             _ => None,

@@ -4,6 +4,14 @@ use itertools::Itertools;
 use std::fmt;
 use std::rc::Rc;
 
+mod patterns;
+
+pub use patterns::PatternShape;
+
+use crate::errors::*;
+use crate::Spanned;
+use LangErrorMsg::{CustomTypeError, TypeError};
+
 /// Rust type used for NDCA integers.
 pub type LangInt = i64;
 /// Number of bits in an NDCA integer.
@@ -17,13 +25,8 @@ pub const CELL_STATE_BITS: u32 = 8;
 /// Maximum length for a vector.
 pub const MAX_VECTOR_LEN: usize = 256;
 
-mod patterns;
-
-pub use patterns::PatternShape;
-
-use crate::errors::*;
-use crate::Spanned;
-use LangErrorMsg::{CustomTypeError, TypeError};
+/// Axis names.
+pub const AXES: &'static str = "xyzwuv";
 
 /// Any data type.
 ///

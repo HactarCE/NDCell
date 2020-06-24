@@ -11,7 +11,7 @@ use crate::ast::{
 };
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
-use crate::types::{LangInt, TypeDesc};
+use crate::types::{LangInt, TypeDesc, AXES};
 use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{IndexOutOfBounds, IntegerOverflow};
 
@@ -45,8 +45,15 @@ impl Access {
 }
 impl Function for Access {
     fn name(&self) -> String {
-        // TODO TODO TODO
-        "vector access".to_owned()
+        if let Some(axis) = self.component_idx {
+            format!(
+                "{}.{}",
+                self.arg_types[0].inner,
+                AXES.chars().nth(axis as usize).unwrap(),
+            )
+        } else {
+            "vector access".to_owned()
+        }
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property

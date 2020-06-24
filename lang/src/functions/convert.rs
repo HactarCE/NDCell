@@ -208,3 +208,78 @@ impl Function for ToVector {
         )))
     }
 }
+
+/// Built-in function that converts an integer, vector, range, or rectangle of
+/// one dimensionality into a rectangle of another dimensionality. Assumes 0 if
+/// no argument is supplied.
+#[derive(Debug)]
+pub struct ToRectangle {
+    /// Argument types.
+    arg_types: ArgTypes,
+    /// Number of dimensions of resultant rectangle.
+    result_ndim: usize,
+    /// Whether the number of dimensions was inferred from the number of the
+    /// dimensions in the automaton.
+    is_len_inferred: bool,
+}
+impl ToRectangle {
+    /// Returns a constructor for a new ToRectangle instance that constructs a
+    /// rectangle with the given number of dimensions.
+    pub fn with_ndim(rect_ndim: Option<usize>) -> FuncConstructor {
+        Box::new(move |userfunc, _span, arg_types| {
+            let result_ndim = rect_ndim.unwrap_or_else(|| userfunc.rule_meta().ndim as usize);
+            Ok(Box::new(Self {
+                arg_types,
+                result_ndim,
+                is_len_inferred: rect_ndim.is_none(),
+            }))
+        })
+    }
+}
+impl Function for ToRectangle {
+    fn name(&self) -> String {
+        if self.is_len_inferred {
+            "rect".to_owned()
+        } else {
+            format!("rect{}", self.result_ndim)
+        }
+    }
+    fn kind(&self) -> FunctionKind {
+        FunctionKind::Function
+    }
+
+    fn arg_types(&self) -> ArgTypes {
+        self.arg_types.clone()
+    }
+    fn return_type(&self, span: Span) -> LangResult<Type> {
+        if self.arg_types.len() > 1 {
+            Err(self.invalid_args_err(span))?;
+        }
+        if let Some(arg) = self.arg_types.get(0) {
+            typecheck!(arg, [Int, Vector, IntRange, Rectangle])?;
+        }
+        Ok(Type::Rectangle(self.result_ndim))
+    }
+
+    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+        let arg = if args.len() == 0 {
+            Value::Int(compiler.const_int(0))
+        } else {
+            args.compile(compiler, 0)?
+        };
+
+        compiler
+            .build_rectangle_cast(arg, self.result_ndim)
+            .map(Value::Rectangle)
+    }
+    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+        let arg = if args.len() == 0 {
+            ConstValue::Int(0)
+        } else {
+            args.const_eval(0)?
+        };
+
+        let (start, end) = arg.coerce_to_rectangle(self.result_ndim)?;
+        Ok(Some(ConstValue::Rectangle(start, end)))
+    }
+}

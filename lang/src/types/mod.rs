@@ -168,7 +168,7 @@ impl From<Type> for TypeDesc {
 impl fmt::Debug for TypeDesc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Specific(ty) => write!(f, "{}", ty),
+            Self::Specific(ty) => write!(f, "{:?}", ty),
             Self::Vector => write!(f, "Vec"),
             Self::Pattern => write!(f, "Pat"),
             Self::Rectangle => write!(f, "Rect"),

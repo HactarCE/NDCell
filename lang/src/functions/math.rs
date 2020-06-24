@@ -573,14 +573,18 @@ impl Function for BinaryOp {
     }
     fn return_type(&self, span: Span) -> LangResult<Type> {
         self.check_args_len(span, 2)?;
-        if self.arg_types[0].inner == Type::IntRange {
-            // Ranges only support addition, subtraction, and multiplication by
-            // an integer.
+        if matches!(self.arg_types[0].inner, Type::IntRange | Type::Rectangle(_)) {
+            // Ranges and rectangles only support addition, subtraction, and
+            // multiplication by an integer (or vector, for rectangles).
             use OperatorToken::*;
             if !matches!(self.op, Plus | Minus | Asterisk) {
                 Err(self.invalid_args_err(span))?;
             }
-            typecheck!(self.arg_types[1], Int)?;
+            if self.arg_types[0].inner == Type::IntRange {
+                typecheck!(self.arg_types[1], Int)?;
+            } else {
+                typecheck!(self.arg_types[1], [Int, Vector])?;
+            }
         } else {
             // Otherwise, we expect an integer or vector.
             typecheck!(self.arg_types[0], [Int, Vector])?;
@@ -605,7 +609,17 @@ impl Function for BinaryOp {
                     Asterisk | Slash | Percent | DoubleAsterisk | Ampersand => {
                         Ok(Type::Vector(std::cmp::min(*len1, *len2)))
                     }
-                    DotDot | Tag => panic!("Uncaught invalid operator for binary op"),
+                    DotDot | Tag => Err(self.invalid_args_err(span)),
+                }
+            }
+            (Type::Rectangle(ndim1), Type::Vector(ndim2)) => {
+                use OperatorToken::*;
+                match self.op {
+                    // Extend the shorter vector with zeros.
+                    Plus | Minus => Ok(Type::Rectangle(std::cmp::max(*ndim1, *ndim2))),
+                    // Truncate the longer vector.
+                    Asterisk => Ok(Type::Rectangle(std::cmp::min(*ndim1, *ndim2))),
+                    _ => Err(self.invalid_args_err(span)),
                 }
             }
             (_, _) => Err(self.invalid_args_err(span)),
@@ -616,6 +630,17 @@ impl Function for BinaryOp {
         let ret_type = self.unwrap_return_type();
         let mut lhs = args.compile(compiler, 0)?;
         let mut rhs = args.compile(compiler, 1)?;
+        // Handle rectangle operations separately.
+        if let Type::Rectangle(ndim) = ret_type {
+            let (start, end) = compiler.build_split_rectangle(lhs.as_rectangle()?);
+            let rhs = compiler.build_vector_cast(rhs, ndim)?;
+            let start = compiler.build_vector_cast(Value::Vector(start), ndim)?;
+            let end = compiler.build_vector_cast(Value::Vector(end), ndim)?;
+            let start = self.compile_op(compiler, start, rhs)?.into_vector_value();
+            let end = self.compile_op(compiler, end, rhs)?.into_vector_value();
+            let ret = compiler.build_construct_rectangle(start, end);
+            return Ok(Value::Rectangle(ret));
+        }
         // Cast to vectors of the proper length, if necessary.
         match &ret_type {
             Type::Vector(len) => {
@@ -650,22 +675,46 @@ impl Function for BinaryOp {
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
         let lhs = args.const_eval(0)?;
         let rhs = args.const_eval(1)?;
-        if let Type::Vector(len) = self.unwrap_return_type() {
-            // Cast to vectors of the proper length, if necessary.
-            let lhs = lhs.coerce_to_vector(len)?;
-            let rhs = rhs.coerce_to_vector(len)?;
-            // And perform the operation componentwise.
-            let ret = lhs
-                .into_iter()
-                .zip(rhs)
-                .map(|(l, r)| self.eval_op_int(l, r))
-                .collect::<LangResult<Vec<LangInt>>>()?;
-            Ok(Some(ConstValue::Vector(ret)))
-        } else {
-            // Otherwise use integers.
-            self.eval_op_int(lhs.as_int()?, rhs.as_int()?)
-                .map(ConstValue::Int)
-                .map(Some)
+        match self.unwrap_return_type() {
+            Type::Rectangle(ndim) => {
+                let (start, end) = lhs.as_rectangle()?;
+                // Cast to vectors of the proper length.
+                let start = ConstValue::Vector(start).coerce_to_vector(ndim)?;
+                let end = ConstValue::Vector(end).coerce_to_vector(ndim)?;
+                let rhs = rhs.coerce_to_vector(ndim)?;
+                // And perform the operation componentwise.
+                let start = start
+                    .into_iter()
+                    .zip(&rhs)
+                    .map(|(l, &r)| self.eval_op_int(l, r))
+                    .collect::<LangResult<Vec<LangInt>>>()?;
+                let end = end
+                    .into_iter()
+                    .zip(&rhs)
+                    .map(|(l, &r)| self.eval_op_int(l, r))
+                    .collect::<LangResult<Vec<LangInt>>>()?;
+                Ok(Some(ConstValue::Rectangle(start, end)))
+            }
+            Type::Vector(len) => {
+                // Cast to vectors of the proper length.
+                let lhs = lhs.coerce_to_vector(len)?;
+                let rhs = rhs.coerce_to_vector(len)?;
+                // And perform the operation componentwise.
+                let ret = lhs
+                    .into_iter()
+                    .zip(rhs)
+                    .map(|(l, r)| self.eval_op_int(l, r))
+                    .collect::<LangResult<Vec<LangInt>>>()?;
+                Ok(Some(ConstValue::Vector(ret)))
+            }
+            Type::IntRange => todo!("add int range to int"),
+            Type::Int => {
+                // Otherwise use integers.
+                self.eval_op_int(lhs.as_int()?, rhs.as_int()?)
+                    .map(ConstValue::Int)
+                    .map(Some)
+            }
+            _ => unreachable!(),
         }
     }
 }

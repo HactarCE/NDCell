@@ -120,7 +120,7 @@ fn test_rectangle_properties() {
             set r.y.start *= 5
             set r.y.end *= 6
             set r.x.step = 10 // should have no effect
-            return [r.x, r.y]
+            return [r.start, r.end]
         }",
     );
     let (mut ax, mut ay, mut bx, mut by) = (10, 11, 12, 13);
@@ -133,7 +133,7 @@ fn test_rectangle_properties() {
     by -= 20;
     ay *= 5;
     by *= 6;
-    assert_fn_result(&mut f, &args, Ok(ConstValue::Vector(vec![ax, bx, ay, by])));
+    assert_fn_result(&mut f, &args, Ok(ConstValue::Vector(vec![ax, ay, bx, by])));
 
     // Test direct assignment.
     let mut f = compile_test_fn(
@@ -158,27 +158,41 @@ fn test_rectangle_properties() {
 fn test_rectangle_ops() {
     let mut f = compile_test_fn(
         "@function Int test() {
-            set tmp = (-5..10).by(3)
-            set r = rect5(tmp)
-            assert r == +r == rect5(-5..10)
-            assert -5..10 == r.x != tmp
+            set tmp = (-10..5).by(3)
+            set a = rect5(tmp)
+            assert a.ndim == 5
+            assert a == +a == rect5(-10..5)
+            assert -10..5 == a.x != tmp
 
-            set r = -r
-            assert r == 10..-5
-            set r *= -2
-            assert r == -20..10
+            set a = -a
+            assert a == 10..-5
+            set a *= -2
+            assert a == -20..10
 
             // Extend vector with zeros
-            set r += [10, 20, 50]
-            assert r == [-10..20, 0..30, 30..60, -20..10, -20..10]
+            set a += [10, 20, 50]
+            assert a.ndim == 5
+            assert a == [-10..20, 0..30, 30..60, -20..10, -20..10]
 
-            // Truncate vector
-            set r -= vec6(30)
-            assert r == [-40..-10, -30..0, 0..30, -50..-20, -50..-20]
+            // Extend rectangle with zeros
+            set b = a - vec6(30)
+            assert b.ndim == 6
+            assert b == [-40..-10, -30..0, 0..30, -50..-20, -50..-20, -30..-30]
 
             // Truncate rectangle
-            set r *= vec2(1)
-            assert r == [-40..-10, -30..0]
+            set c = b * vec2(1)
+            assert c.ndim == 2
+            assert c == [-40..-10, -30..0]
+
+            // Truncate vector
+            set c *= -vec5(10)
+            assert c.ndim == 2
+            assert c == [400..100, 300..0]
+
+            // Use integers
+            set c -= 200
+            assert c.ndim == 2
+            assert c == [200..-100, 100..-200]
         }",
     );
     assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));

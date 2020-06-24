@@ -473,7 +473,8 @@ impl Function for MinMax {
     }
 }
 
-/// Built-in function that returns the length of a vector.
+/// Built-in function that returns the length of a vector or the number of
+/// dimensions of a rectangle.
 #[derive(Debug)]
 pub struct GetLen {
     /// Vector to return the length of (should be vec![Type::Vector(_)]).
@@ -487,7 +488,11 @@ impl GetLen {
 }
 impl Function for GetLen {
     fn name(&self) -> String {
-        format!("{}.len", TypeDesc::Vector)
+        match self.arg_types[0].inner {
+            Type::Vector(_) => format!("{}.len", TypeDesc::Vector),
+            Type::Rectangle(_) => format!("{}.ndim", TypeDesc::Rectangle),
+            _ => todo!(),
+        }
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
@@ -500,21 +505,23 @@ impl Function for GetLen {
         if self.arg_types.len() != 1 {
             Err(self.invalid_args_err(span))?;
         }
-        typecheck!(self.arg_types[0], Vector)?;
+        typecheck!(self.arg_types[0], [Vector, Rectangle])?;
         Ok(Type::Int)
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
-        let ret = args
-            .compile(compiler, 0)?
-            .as_vector()?
-            .get_type()
-            .get_size();
+        let ret = match args.compile(compiler, 0)?.ty() {
+            Type::Vector(len) => len,
+            Type::Rectangle(ndim) => ndim,
+            _ => uncaught_type_error!(),
+        };
         Ok(Value::Int(compiler.const_uint(ret as u64)))
     }
     fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        Ok(Some(ConstValue::Int(
-            args.const_eval(0)?.as_vector()?.len() as LangInt,
-        )))
+        Ok(Some(ConstValue::Int(match args.const_eval(0)?.ty() {
+            Type::Vector(len) => len as LangInt,
+            Type::Rectangle(ndim) => ndim as LangInt,
+            _ => uncaught_type_error!(),
+        })))
     }
 }

@@ -71,11 +71,15 @@ impl Access {
 }
 impl Function for Access {
     fn name(&self) -> String {
-        match self.prop {
-            RangeProperty::Start => "start".to_owned(),
-            RangeProperty::End => "end".to_owned(),
-            RangeProperty::Step => "step".to_owned(),
-        }
+        format!(
+            "{}.{}",
+            self.arg_types[0].inner,
+            match self.prop {
+                RangeProperty::Start => "start",
+                RangeProperty::End => "end",
+                RangeProperty::Step => "step",
+            }
+        )
     }
     fn kind(&self) -> FunctionKind {
         FunctionKind::Property
@@ -92,7 +96,11 @@ impl Function for Access {
             }
             RangeProperty::Step => typecheck!(self.arg_types[0], IntRange)?,
         }
-        Ok(Type::Int)
+        match self.arg_types[0].inner {
+            Type::IntRange => Ok(Type::Int),
+            Type::Rectangle(ndim) => Ok(Type::Vector(ndim)),
+            _ => unreachable!(),
+        }
     }
 
     fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {

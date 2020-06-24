@@ -15,12 +15,13 @@ pub mod vectors;
 use crate::ast;
 use crate::errors::*;
 use crate::lexer::{OperatorToken, TypeToken};
-use crate::types::MAX_VECTOR_LEN;
+use crate::types::{LangInt, AXES, MAX_VECTOR_LEN};
 use crate::{Span, Type};
 use LangErrorMsg::InvalidArguments;
 
 lazy_static! {
-    static ref VEC_FN_PATTERN: Regex = Regex::new(r#"vec(tor?)([1-9]\d*)"#).unwrap();
+    static ref VEC_FN_PATTERN: Regex = Regex::new(r#"vec(?:tor)?([1-9]\d*)"#).unwrap();
+    static ref RECT_FN_PATTERN: Regex = Regex::new(r#"rect(?:angle)?([1-9]\d*)"#).unwrap();
 }
 
 /// FnOnce that constructs a Box<dyn ast::Function>, given some standard
@@ -33,18 +34,30 @@ pub type FuncResult = LangResult<Box<dyn ast::Function>>;
 
 /// Returns a constructor for the function with the given name, if one exists.
 pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
+    // vecN()
     if let Some(captures) = VEC_FN_PATTERN.captures(name) {
         match captures.get(1).unwrap().as_str().parse() {
             Ok(len @ 1..=MAX_VECTOR_LEN) => return Some(convert::ToVector::with_len(Some(len))),
             _ => (),
         }
     }
+    // rectN()
+    if let Some(captures) = RECT_FN_PATTERN.captures(name) {
+        match captures.get(1).unwrap().as_str().parse() {
+            Ok(ndim @ 1..=MAX_VECTOR_LEN) => {
+                return Some(convert::ToRectangle::with_ndim(Some(ndim)))
+            }
+            _ => (),
+        }
+    }
+    // Other functions
     match name {
         "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsFunc)),
         "bool" => Some(Box::new(convert::ToBool::construct)),
-        "vec" => Some(convert::ToVector::with_len(None)),
         "max" => Some(math::MinMax::max()),
         "min" => Some(math::MinMax::min()),
+        "rect" => Some(convert::ToRectangle::with_ndim(None)),
+        "vec" => Some(convert::ToVector::with_len(None)),
         _ => None,
     }
 }
@@ -94,7 +107,17 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "step" => Some(ranges::Access::with_prop(ranges::RangeProperty::Step)),
             _ => None,
         },
-        Type::Rectangle(_) => todo!("rectangle methods"),
+        Type::Rectangle(_) => match name {
+            "start" => Some(ranges::Access::with_prop(ranges::RangeProperty::Start)),
+            "end" => Some(ranges::Access::with_prop(ranges::RangeProperty::End)),
+            // Component access
+            "x" | "y" | "z" | "w" | "u" | "v" => Some(vectors::Access::with_component_idx(Some(
+                AXES.find(&name).unwrap() as LangInt,
+            ))),
+            // Miscellaneous
+            "ndim" => Some(Box::new(vectors::GetLen::construct)),
+            _ => None,
+        },
     }
 }
 
@@ -135,30 +158,15 @@ pub fn lookup_unary_operator(
 /// operator to the given types, or returns an appropriate error if the operator
 /// cannot be applied to the given types.
 pub fn lookup_binary_operator(
-    lhs: &Type,
+    _lhs: &Type,
     op: OperatorToken,
-    rhs: &Type,
-    span: Span,
+    _rhs: &Type,
+    _span: Span,
 ) -> LangResult<FuncConstructor> {
-    use OperatorToken::*;
-    use Type::*;
-    let ret: Option<FuncConstructor> = match (lhs, op, rhs) {
+    match op {
         // Range
-        (_, DotDot, _) => Some(Box::new(literals::Range::construct)),
+        OperatorToken::DotDot => Ok(Box::new(literals::Range::construct)),
         // Basic math
-        (Int, _, Int)
-        | (Int, _, Vector(_))
-        | (Vector(_), _, Int)
-        | (Vector(_), _, Vector(_))
-        | (IntRange, _, Int) => Some(math::BinaryOp::with_op(op)),
-        _ => None,
-    };
-    ret.ok_or_else(|| {
-        InvalidArguments {
-            name: format!("binary {:?} operator", op.to_string()),
-            is_method: false,
-            arg_types: vec![lhs.clone(), rhs.clone()],
-        }
-        .with_span(span)
-    })
+        _ => Ok(math::BinaryOp::with_op(op)),
+    }
 }

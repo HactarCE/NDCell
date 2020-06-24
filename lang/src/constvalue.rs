@@ -86,6 +86,14 @@ impl ConstValue {
             _ => uncaught_type_error!(),
         }
     }
+    /// Returns the start and end inside if this is a ConstValue::Rectangle;
+    /// otherwise returns an InternalError.
+    pub fn as_rectangle(self) -> LangResult<(Vec<LangInt>, Vec<LangInt>)> {
+        match self {
+            Self::Rectangle(start, end) => Ok((start, end)),
+            _ => uncaught_type_error!(),
+        }
+    }
 
     /// Converts this value to a boolean if it can be converted; otherwise
     /// returns an InternalError.
@@ -113,6 +121,22 @@ impl ConstValue {
                 }
                 Ok(v)
             }
+            _ => uncaught_type_error!(),
+        }
+    }
+    /// Converts this value to a rectnagle of the specified number of dimensions if this is a ConstValue::Int, ConstValue::Vector, ConstValue::IntRange, or ConstValue::
+    pub fn coerce_to_rectangle(self, ndim: usize) -> LangResult<(Vec<LangInt>, Vec<LangInt>)> {
+        match self {
+            Self::Int(i) => Ok((vec![i; ndim], vec![i; ndim])),
+            Self::Vector(v) => {
+                let pos = Self::Vector(v).coerce_to_vector(ndim)?;
+                Ok((pos.clone(), pos))
+            }
+            Self::IntRange { start, end, .. } => Ok((vec![start; ndim], vec![end; ndim])),
+            Self::Rectangle(start, end) => Ok((
+                Self::Vector(start).coerce_to_vector(ndim)?,
+                Self::Vector(end).coerce_to_vector(ndim)?,
+            )),
             _ => uncaught_type_error!(),
         }
     }

@@ -919,17 +919,24 @@ impl Compiler {
             _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeDesc::Vector),
         }
     }
-    /// Builds a cast from a rectangle of one dimensionality to another (by
-    /// trimming excess values or by extending with the value `0..0`).
+    /// Builds a cast from an integer, vector, integer range, or rectangle of
+    /// one dimensionality to another (by trimming excess values or by extending
+    /// with the value `0..0`).
     pub fn build_rectangle_cast(
         &mut self,
         value: Value,
         ndim: usize,
     ) -> LangResult<StructValue<'static>> {
         let (old_start, old_end) = match value {
+            Value::Int(i) => (Value::Int(i), Value::Int(i)),
+            Value::Vector(v) => (Value::Vector(v), Value::Vector(v)),
+            Value::IntRange(r) => {
+                let (start, end, _step) = self.build_split_range(r);
+                (Value::Int(start), Value::Int(end))
+            }
             Value::Rectangle(r) => {
-                let (old_start, old_end) = self.build_split_rectangle(r);
-                (Value::Vector(old_start), Value::Vector(old_end))
+                let (start, end) = self.build_split_rectangle(r);
+                (Value::Vector(start), Value::Vector(end))
             }
             _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeDesc::Rectangle),
         };

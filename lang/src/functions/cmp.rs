@@ -167,6 +167,11 @@ impl Comparator {
                 Ok(Self::vec_cmp(len, cmp))
             }
             (Type::IntRange, Type::IntRange) if eq_only => Ok(Self::vec_cmp(3, cmp)),
+            (Type::Rectangle(ndim), Type::IntRange) | (Type::IntRange, Type::Rectangle(ndim))
+                if eq_only =>
+            {
+                Ok(Self::rect_cmp(ndim, cmp))
+            }
             (Type::Rectangle(ndim1), Type::Rectangle(ndim2)) if eq_only => {
                 // Add dimensions so that both rectangles have the same number of dimensions.
                 let ndim = std::cmp::max(ndim1, ndim2);

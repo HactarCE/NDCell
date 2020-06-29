@@ -1,40 +1,15 @@
+use inkwell::types::BasicType;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::ops::Index;
 use std::rc::Rc;
 
-use super::{expressions, statements, Expr, RuleMeta, Statement, StatementBlock};
-use crate::compiler::{CompiledFunction, Compiler, Value};
+use super::{expressions, statements, ArgTypes, Expr, RuleMeta, Statement, StatementBlock};
+use crate::compiler::{self, CompiledFunction, Compiler, Value};
 use crate::errors::*;
 use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{InternalError, UseOfUninitializedVariable};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// Kind of user function (including return type, if there is one).
-pub enum UserFunctionKind {
-    /// Helper function returning a specific type.
-    ///
-    /// `return` statements are only allowed in helper functions.
-    Helper(Type),
-    /// Transition function, which returns a cell state.
-    ///
-    /// `become` and `remain` statements are only allowed in transition functions.
-    Transition,
-}
-impl Default for UserFunctionKind {
-    fn default() -> Self {
-        Self::Helper(Type::default())
-    }
-}
-impl UserFunctionKind {
-    /// Returns the type that this user function returns.
-    pub fn return_type(&self) -> Type {
-        match self {
-            Self::Helper(ty) => ty.clone(),
-            Self::Transition => Type::CellState,
-        }
-    }
-}
 
 /// A user-defined function node in the AST.
 #[derive(Debug, Default)]
@@ -280,6 +255,82 @@ impl UserFunction {
     /// time.
     pub fn const_eval_expr(&self, expr: ExprRef) -> LangResult<ConstValue> {
         self[expr].const_eval(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Kind of user function (including return type, if there is one).
+pub enum UserFunctionKind {
+    /// Helper function returning a specific type.
+    ///
+    /// `return` statements are only allowed in helper functions.
+    Helper(Type),
+    /// Transition function, which returns a cell state.
+    ///
+    /// `become` and `remain` statements are only allowed in transition functions.
+    Transition,
+}
+impl Default for UserFunctionKind {
+    fn default() -> Self {
+        Self::Helper(Type::default())
+    }
+}
+impl UserFunctionKind {
+    /// Returns the type that this user function returns.
+    pub fn return_type(&self) -> Type {
+        match self {
+            Self::Helper(ty) => ty.clone(),
+            Self::Transition => Type::CellState,
+        }
+    }
+}
+
+/// Function signature, consisting of types for the arguments and a return
+/// type.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct FnSignature {
+    pub args: Vec<Type>,
+    pub ret: Type,
+}
+impl FnSignature {
+    /// Constructs the signature for a function that takes no arguments.
+    pub fn atom(ret: Type) -> Self {
+        Self::new(vec![], ret)
+    }
+    /// Constructs the signature for a function that takes one argument and
+    /// returns a property of that argument.
+    pub fn property(self_type: Type, ret: Type) -> Self {
+        Self::new(vec![self_type], ret)
+    }
+    /// Constructs any arbitrary function signature.
+    pub fn new(args: Vec<Type>, ret: Type) -> Self {
+        let args = args.into();
+        Self { args, ret }
+    }
+    /// Constructs a function signature from a helper function parse tree node.
+    pub fn from_helper_function_parse_tree(helper_func: &parser::HelperFunc, ndim: u8) -> Self {
+        Self::new(
+            helper_func
+                .args
+                .iter()
+                .map(|arg| arg.inner.0.inner.resolve(ndim))
+                .collect_vec(),
+            helper_func.return_type.inner.resolve(ndim),
+        )
+    }
+    /// Returns true if the given argument types match the arguments of this function signature.
+    pub fn matches(&self, arg_types: &ArgTypes) -> bool {
+        arg_types.iter().map(|s| &s.inner).eq(&self.args)
+    }
+    /// Returns the LLVM function type that is equivalent to this function signature.
+    pub fn llvm_fn_type(&self) -> LangResult<inkwell::types::FunctionType<'static>> {
+        let llvm_param_types = self
+            .args
+            .iter()
+            .map(compiler::types::get)
+            .collect::<LangResult<Vec<_>>>()?;
+        let llvm_ret_type = compiler::types::get(&self.ret)?;
+        Ok(llvm_ret_type.fn_type(&llvm_param_types, false))
     }
 }
 

@@ -1,10 +1,7 @@
 //! High-level representations of expressions in the AST.
 
-use inkwell::types::BasicType;
-use itertools::Itertools;
-
 use super::{ArgTypes, ArgValues, Args, UserFunction};
-use crate::compiler::{self, Compiler, Value};
+use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::functions;
 use crate::parser;
@@ -393,53 +390,4 @@ pub enum FunctionKind {
     Property,
     /// Single value that takes no parameters, such as a literal or variable.
     Atom,
-}
-
-/// Function signature, consisting of types for the arguments and a return
-/// type.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct FnSignature {
-    pub args: Vec<Type>,
-    pub ret: Type,
-}
-impl FnSignature {
-    /// Constructs the signature for a function that takes no arguments.
-    pub fn atom(ret: Type) -> Self {
-        Self::new(vec![], ret)
-    }
-    /// Constructs the signature for a function that takes one argument and
-    /// returns a property of that argument.
-    pub fn property(self_type: Type, ret: Type) -> Self {
-        Self::new(vec![self_type], ret)
-    }
-    /// Constructs any arbitrary function signature.
-    pub fn new(args: Vec<Type>, ret: Type) -> Self {
-        let args = args.into();
-        Self { args, ret }
-    }
-    /// Constructs a function signature from a helper function parse tree node.
-    pub fn from_helper_function_parse_tree(helper_func: &parser::HelperFunc, ndim: u8) -> Self {
-        Self::new(
-            helper_func
-                .args
-                .iter()
-                .map(|arg| arg.inner.0.inner.resolve(ndim))
-                .collect_vec(),
-            helper_func.return_type.inner.resolve(ndim),
-        )
-    }
-    /// Returns true if the given argument types match the arguments of this function signature.
-    pub fn matches(&self, arg_types: &ArgTypes) -> bool {
-        arg_types.iter().map(|s| &s.inner).eq(&self.args)
-    }
-    /// Returns the LLVM function type that is equivalent to this function signature.
-    pub fn llvm_fn_type(&self) -> LangResult<inkwell::types::FunctionType<'static>> {
-        let llvm_param_types = self
-            .args
-            .iter()
-            .map(compiler::types::get)
-            .collect::<LangResult<Vec<_>>>()?;
-        let llvm_ret_type = compiler::types::get(&self.ret)?;
-        Ok(llvm_ret_type.fn_type(&llvm_param_types, false))
-    }
 }

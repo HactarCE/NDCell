@@ -1,11 +1,96 @@
-use super::{ErrorPointRef, ExprRef, StatementRef, UserFunction};
+use super::{ErrorPointRef, ExprRef, StatementRef, UserFunction, UserFunctionKind};
 use crate::compiler::Compiler;
 use crate::errors::*;
-use crate::Span;
-use LangErrorMsg::{AssertionFailed, CannotAssignTypeToVariable, UserError};
+use crate::parser;
+use crate::{Span, Spanned};
+use LangErrorMsg::{
+    AssertionFailed, BecomeInHelperFunction, CannotAssignTypeToVariable,
+    ReturnInTransitionFunction, UserError,
+};
 
 /// List of statements, executed one after another.
 pub type StatementBlock = Vec<StatementRef>;
+
+pub fn from_parse_tree(
+    userfunc: &mut UserFunction,
+    parse_tree: &Spanned<parser::Statement>,
+) -> LangResult<Box<dyn Statement>> {
+    let span = parse_tree.span;
+    match &parse_tree.inner {
+        // Assertion
+        parser::Statement::Assert { expr, msg } => {
+            let expr = userfunc.build_expression_ast(&expr)?;
+            let msg = msg
+                .as_ref()
+                .map(|string_lit| string_lit.inner.contents.to_owned());
+            Ok(Box::new(Assert::try_new(span, userfunc, expr, msg)?))
+        }
+        // Error
+        parser::Statement::Error { msg } => {
+            let msg = msg
+                .as_ref()
+                .map(|string_lit| string_lit.inner.contents.to_owned());
+            Ok(Box::new(Error::try_new(span, userfunc, msg)?))
+        }
+        // Variable assignment statement
+        parser::Statement::SetVar {
+            var_expr,
+            assign_op,
+            value_expr,
+        } => {
+            // Handle assignments with operators (e.g. `x += 3`).
+            let value_expr = match assign_op.op() {
+                Some(op) => userfunc.build_expression_ast(&Spanned {
+                    span,
+                    inner: parser::Expr::BinaryOp {
+                        lhs: Box::new(var_expr.clone()),
+                        op,
+                        rhs: Box::new(value_expr.clone()),
+                    },
+                })?,
+                None => userfunc.build_expression_ast(&value_expr)?,
+            };
+            // Register a new variable if necessary.
+            if let parser::Expr::Ident(var_name) = &var_expr.inner {
+                userfunc.get_or_create_var(var_name, userfunc[value_expr].return_type());
+            }
+            // Construct the statement.
+            let var_expr = userfunc.build_expression_ast(var_expr)?;
+            Ok(Box::new(SetVar::try_new(
+                span, userfunc, var_expr, value_expr,
+            )?))
+        }
+        // If statement
+        parser::Statement::If {
+            cond_expr,
+            if_true,
+            if_false,
+        } => {
+            let cond_expr = userfunc.build_expression_ast(cond_expr)?;
+            let if_true = userfunc.build_statement_block_ast(if_true)?;
+            let if_false = userfunc.build_statement_block_ast(if_false)?;
+            Ok(Box::new(If::try_new(
+                span, userfunc, cond_expr, if_true, if_false,
+            )?))
+        }
+        // Become statement (In a transition function, `become` should be used, not `return`.)
+        parser::Statement::Become(ret_expr) => match userfunc.kind() {
+            UserFunctionKind::Helper(_) => Err(BecomeInHelperFunction.with_span(span)),
+            UserFunctionKind::Transition => {
+                let ret_expr = userfunc.build_expression_ast(ret_expr)?;
+                Ok(Box::new(Return::try_new(span, userfunc, ret_expr)?))
+            }
+        },
+        // Return statement (In a helper function, `return` should be used, not `become`.)
+        parser::Statement::Return(ret_expr) => match userfunc.kind() {
+            UserFunctionKind::Helper(_) => {
+                let ret_expr = userfunc.build_expression_ast(ret_expr)?;
+                Ok(Box::new(Return::try_new(span, userfunc, ret_expr)?))
+            }
+            UserFunctionKind::Transition => Err(ReturnInTransitionFunction.with_span(span))?,
+        },
+    }
+}
 
 /// Statement node in the AST.
 pub trait Statement: std::fmt::Debug {
@@ -206,7 +291,7 @@ impl Return {
         // Check that the expression matches the expected return type.
         userfunc[ret_expr]
             .spanned_type()
-            .typecheck(userfunc.return_type())?;
+            .typecheck(userfunc.kind().return_type())?;
         Ok(Self { span, ret_expr })
     }
 }

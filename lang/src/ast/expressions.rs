@@ -9,7 +9,170 @@ use crate::errors::*;
 use crate::functions;
 use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
-use LangErrorMsg::{CannotAssignToExpr, CannotEvalAsConst, InternalError, InvalidArguments};
+use LangErrorMsg::{
+    CannotAssignToExpr, CannotEvalAsConst, CannotIndexType, Expected, FunctionLookupError,
+    InternalError, InvalidArguments, ReservedWord, Unimplemented,
+};
+
+pub fn from_parse_tree(
+    userfunc: &mut UserFunction,
+    parse_tree: &Spanned<parser::Expr>,
+) -> LangResult<Expr> {
+    let span = parse_tree.span;
+    let args: Args;
+    let func: functions::FuncConstructor;
+
+    match &parse_tree.inner {
+        // Integer literal
+        parser::Expr::Int(i) => {
+            args = Args::none();
+            func = functions::literals::Int::with_value(*i);
+        }
+        // Type name
+        parser::Expr::TypeName(_) => {
+            args = Args::none();
+            func = Err(ReservedWord.with_span(span))?;
+        }
+        // Identifier (variable)
+        parser::Expr::Ident(s) => {
+            args = Args::none();
+            func = Box::new(functions::misc::GetVar::with_name(s.to_owned()));
+        }
+        // String literal
+        parser::Expr::String(_) => {
+            args = Args::none();
+            func = Err(Unimplemented)?;
+        }
+        // Vector literal
+        parser::Expr::Vector(exprs) => {
+            args = Args::from(
+                exprs
+                    .iter()
+                    .map(|expr| userfunc.build_expression_ast(expr))
+                    .collect::<LangResult<Vec<_>>>()?,
+            );
+            func = Box::new(functions::literals::Vector::construct);
+        }
+        // Parenthetical group
+        parser::Expr::ParenExpr(inner) => return from_parse_tree(userfunc, inner),
+        // Unary operator
+        parser::Expr::UnaryOp { op, operand } => {
+            let arg = userfunc.build_expression_ast(operand)?;
+            args = Args::from(vec![arg]);
+            func = functions::lookup_unary_operator(*op, userfunc[arg].return_type(), span)?;
+        }
+        // Binary mathematical/bitwise operator
+        parser::Expr::BinaryOp { lhs, op, rhs } => {
+            let lhs = userfunc.build_expression_ast(lhs)?;
+            let rhs = userfunc.build_expression_ast(rhs)?;
+            args = Args::from(vec![lhs, rhs]);
+            func = functions::lookup_binary_operator(
+                &userfunc[lhs].return_type(),
+                *op,
+                &userfunc[rhs].return_type(),
+                span,
+            )?;
+        }
+        // Logical NOT
+        parser::Expr::LogicalNot(expr) => {
+            args = Args::from(vec![userfunc.build_expression_ast(expr)?]);
+            func = Box::new(functions::logic::LogicalNot::construct);
+        }
+        // Binary logical operator
+        parser::Expr::LogicalOr { lhs, rhs }
+        | parser::Expr::LogicalXor { lhs, rhs }
+        | parser::Expr::LogicalAnd { lhs, rhs } => {
+            let lhs = userfunc.build_expression_ast(lhs)?;
+            let rhs = userfunc.build_expression_ast(rhs)?;
+            args = Args::from(vec![lhs, rhs]);
+            func = functions::logic::LogicalBinaryOp::with_op(match &parse_tree.inner {
+                parser::Expr::LogicalOr { .. } => functions::logic::LogicalBinOpType::Or,
+                parser::Expr::LogicalXor { .. } => functions::logic::LogicalBinOpType::Xor,
+                parser::Expr::LogicalAnd { .. } => functions::logic::LogicalBinOpType::And,
+                _ => unreachable!(),
+            })
+        }
+        // Comparison
+        parser::Expr::Cmp { exprs, cmps } => {
+            args = Args::from(userfunc.build_expression_list_ast(exprs)?);
+            func = functions::cmp::Cmp::with_comparisons(cmps.clone());
+        }
+        // Attribute access
+        parser::Expr::GetAttr { object, attribute } => {
+            let ty: Type;
+            if let parser::Expr::TypeName(type_token) = object.inner {
+                ty = type_token.resolve(userfunc.rule_meta().ndim);
+                args = Args::none();
+            } else {
+                let receiver = userfunc.build_expression_ast(object)?;
+                ty = userfunc[receiver].return_type();
+                args = Args::from(vec![receiver]);
+            }
+            func = functions::lookup_method(ty, &attribute.inner)
+                .ok_or_else(|| FunctionLookupError.with_span(attribute.span))?;
+        }
+        // Function call
+        parser::Expr::FnCall {
+            func: func_expr,
+            args: arg_exprs,
+        } => {
+            let mut args_list = userfunc.build_expression_list_ast(arg_exprs)?;
+            func = match &func_expr.inner {
+                parser::Expr::TypeName(type_token) => {
+                    // Built-in function
+                    functions::lookup_type_function(*type_token)
+                        .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
+                }
+                parser::Expr::Ident(func_name) => {
+                    if userfunc
+                        .rule_meta()
+                        .helper_function_signatures
+                        .contains_key(func_name)
+                    {
+                        // User-defined function
+                        functions::misc::CallUserFn::with_name(func_name.to_owned())
+                    } else {
+                        // Built-in function
+                        functions::lookup_function(func_name)
+                            .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
+                    }
+                }
+                parser::Expr::GetAttr {
+                    object,
+                    attribute: method_name,
+                } => {
+                    // Built-in method
+                    let ty: Type;
+                    if let parser::Expr::TypeName(type_token) = object.inner {
+                        ty = type_token.resolve(userfunc.rule_meta().ndim);
+                    } else {
+                        let receiver = userfunc.build_expression_ast(object)?;
+                        ty = userfunc[receiver].return_type();
+                        args_list.insert(0, receiver);
+                    }
+                    functions::lookup_method(ty, &method_name.inner)
+                        .ok_or_else(|| FunctionLookupError.with_span(method_name.span))?
+                }
+                _ => Err(Expected("function name").with_span(func_expr.span))?,
+            };
+            args = Args::from(args_list);
+        }
+        parser::Expr::Index {
+            object,
+            args: index_args,
+        } => {
+            let mut args_list = vec![userfunc.build_expression_ast(object)?];
+            args_list.extend(userfunc.build_expression_list_ast(index_args)?);
+            args = Args::from(args_list);
+            func = match userfunc[args[0]].return_type() {
+                Type::Vector(_) => functions::vectors::Access::with_component_idx(None),
+                ty => Err(CannotIndexType(ty))?,
+            }
+        }
+    };
+
+    Expr::try_new(userfunc, span, args, func)
+}
 
 /// Expression node in the AST.
 #[derive(Debug)]

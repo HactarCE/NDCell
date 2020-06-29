@@ -2,16 +2,39 @@ use std::collections::HashMap;
 use std::ops::Index;
 use std::rc::Rc;
 
-use super::{statements, Args, Expr, RuleMeta, Statement, StatementBlock};
+use super::{expressions, statements, Expr, RuleMeta, Statement, StatementBlock};
 use crate::compiler::{CompiledFunction, Compiler, Value};
 use crate::errors::*;
-use crate::functions;
 use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
-use LangErrorMsg::{
-    BecomeInHelperFunction, CannotIndexType, Expected, FunctionLookupError, InternalError,
-    ReservedWord, ReturnInTransitionFunction, Unimplemented, UseOfUninitializedVariable,
-};
+use LangErrorMsg::{InternalError, UseOfUninitializedVariable};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Kind of user function (including return type, if there is one).
+pub enum UserFunctionKind {
+    /// Helper function returning a specific type.
+    ///
+    /// `return` statements are only allowed in helper functions.
+    Helper(Type),
+    /// Transition function, which returns a cell state.
+    ///
+    /// `become` and `remain` statements are only allowed in transition functions.
+    Transition,
+}
+impl Default for UserFunctionKind {
+    fn default() -> Self {
+        Self::Helper(Type::default())
+    }
+}
+impl UserFunctionKind {
+    /// Returns the type that this user function returns.
+    pub fn return_type(&self) -> Type {
+        match self {
+            Self::Helper(ty) => ty.clone(),
+            Self::Transition => Type::CellState,
+        }
+    }
+}
 
 /// A user-defined function node in the AST.
 #[derive(Debug, Default)]
@@ -20,9 +43,13 @@ pub struct UserFunction {
     rule_meta: Rc<RuleMeta>,
     /// Name of this function.
     name: String,
-    /// Whether this is the transition function, as opposed to a helper function
-    /// (determines whether `become`/`remain` or `return` is accepted).
-    is_transition_function: bool,
+    /// Kind of this function (including return type).
+    kind: UserFunctionKind,
+
+    /// HashMap of variable types (including arguments), indexed by name.
+    variables: HashMap<String, Type>,
+    /// List of variable names for arguments.
+    arg_names: Vec<String>,
 
     /// Top-level statement block, consisting of StatementRefs to self.statements.
     top_level_statements: StatementBlock,
@@ -32,19 +59,12 @@ pub struct UserFunction {
     expressions: Vec<Expr>,
     /// List of every possible runtime error.
     error_points: Vec<LangError>,
-
-    /// HashMap of variable types (including arguments), indexed by name.
-    variables: HashMap<String, Type>,
-    /// List of variable names for arguments.
-    arg_names: Vec<String>,
-    /// Return type of this function.
-    return_type: Type,
 }
 impl UserFunction {
     /// Constructs a new transition function.
     pub fn new_transition_function(rule_meta: Rc<RuleMeta>) -> Self {
         Self {
-            is_transition_function: true,
+            kind: UserFunctionKind::Transition,
             // TODO: take arguments in the transition function
             // TODO: reserved word for transition function?
             ..Self::new_helper_function(rule_meta, "transition".to_owned(), vec![], Type::CellState)
@@ -66,7 +86,10 @@ impl UserFunction {
         Self {
             rule_meta,
             name,
-            is_transition_function: false,
+            kind: UserFunctionKind::Helper(return_type),
+
+            arg_names,
+            variables,
 
             top_level_statements: vec![],
             statements: vec![],
@@ -76,10 +99,6 @@ impl UserFunction {
                 InternalError("Something went wrong at runtime, which is really bad".into())
                     .without_span(),
             ],
-
-            arg_names,
-            variables,
-            return_type,
         }
     }
     pub fn build_helper_function(
@@ -114,9 +133,9 @@ impl UserFunction {
     pub fn arg_names(&self) -> &[String] {
         &self.arg_names
     }
-    /// Returns the return type of this function.
-    pub fn return_type(&self) -> Type {
-        self.return_type.clone()
+    /// Returns the kind of this function.
+    pub fn kind(&self) -> &UserFunctionKind {
+        &self.kind
     }
 
     /// Returns the type of an existing variable with the given name, or an
@@ -152,90 +171,13 @@ impl UserFunction {
         &mut self,
         parser_statements: &parser::StatementBlock,
     ) -> LangResult<StatementBlock> {
-        let mut block = vec![];
-        for parser_statement in parser_statements {
-            let span = parser_statement.span;
-
-            let new_statement: Box<dyn Statement> = match &parser_statement.inner {
-                // Assertion
-                parser::Statement::Assert { expr, msg } => {
-                    let expr = self.build_expression_ast(&expr)?;
-                    let msg = msg
-                        .as_ref()
-                        .map(|string_lit| string_lit.inner.contents.to_owned());
-                    Box::new(statements::Assert::try_new(span, self, expr, msg)?)
-                }
-                // Error
-                parser::Statement::Error { msg } => {
-                    let msg = msg
-                        .as_ref()
-                        .map(|string_lit| string_lit.inner.contents.to_owned());
-                    Box::new(statements::Error::try_new(span, self, msg)?)
-                }
-                // Variable assignment statement
-                parser::Statement::SetVar {
-                    var_expr,
-                    assign_op,
-                    value_expr,
-                } => {
-                    // Handle assignments with operators (e.g. `x += 3`).
-                    let value_expr = match assign_op.op() {
-                        Some(op) => self.build_expression_ast(&Spanned {
-                            span,
-                            inner: parser::Expr::BinaryOp {
-                                lhs: Box::new(var_expr.clone()),
-                                op,
-                                rhs: Box::new(value_expr.clone()),
-                            },
-                        })?,
-                        None => self.build_expression_ast(&value_expr)?,
-                    };
-                    // Register a new variable if necessary.
-                    if let parser::Expr::Ident(var_name) = &var_expr.inner {
-                        self.get_or_create_var(var_name, self[value_expr].return_type());
-                    }
-                    // Construct the statement.
-                    let var_expr = self.build_expression_ast(var_expr)?;
-                    Box::new(statements::SetVar::try_new(
-                        span, self, var_expr, value_expr,
-                    )?)
-                }
-                // If statement
-                parser::Statement::If {
-                    cond_expr,
-                    if_true,
-                    if_false,
-                } => {
-                    let cond_expr = self.build_expression_ast(cond_expr)?;
-                    let if_true = self.build_statement_block_ast(if_true)?;
-                    let if_false = self.build_statement_block_ast(if_false)?;
-                    Box::new(statements::If::try_new(
-                        span, self, cond_expr, if_true, if_false,
-                    )?)
-                }
-                // Become statement (In a transition function, `become` should be used, not `return`.)
-                parser::Statement::Become(ret_expr) => {
-                    if self.is_transition_function {
-                        let ret_expr = self.build_expression_ast(ret_expr)?;
-                        Box::new(statements::Return::try_new(span, self, ret_expr)?)
-                    } else {
-                        Err(BecomeInHelperFunction.with_span(span))?
-                    }
-                }
-                // Return statement (In a helper function, `return` should be used, not `become`.)
-                parser::Statement::Return(ret_expr) => {
-                    if self.is_transition_function {
-                        Err(ReturnInTransitionFunction.with_span(span))?
-                    } else {
-                        let ret_expr = self.build_expression_ast(ret_expr)?;
-                        Box::new(statements::Return::try_new(span, self, ret_expr)?)
-                    }
-                }
-            };
-
-            block.push(self.add_statement(new_statement));
-        }
-        Ok(block)
+        parser_statements
+            .iter()
+            .map(|parser_statement| {
+                statements::from_parse_tree(self, parser_statement)
+                    .map(|statement| self.add_statement(statement))
+            })
+            .collect()
     }
     /// Constructs the AST nodes for a list of expressions.
     pub fn build_expression_list_ast(
@@ -252,161 +194,7 @@ impl UserFunction {
         &mut self,
         parser_expr: &Spanned<parser::Expr>,
     ) -> LangResult<ExprRef> {
-        let span = parser_expr.span;
-        let args: Args;
-        let func: functions::FuncConstructor;
-
-        match &parser_expr.inner {
-            // Integer literal
-            parser::Expr::Int(i) => {
-                args = Args::none();
-                func = functions::literals::Int::with_value(*i);
-            }
-            // Type name
-            parser::Expr::TypeName(_) => {
-                args = Args::none();
-                func = Err(ReservedWord.with_span(span))?;
-            }
-            // Identifier (variable)
-            parser::Expr::Ident(s) => {
-                args = Args::none();
-                func = Box::new(functions::misc::GetVar::with_name(s.to_owned()));
-            }
-            // String literal
-            parser::Expr::String(_) => {
-                args = Args::none();
-                func = Err(Unimplemented)?;
-            }
-            // Vector literal
-            parser::Expr::Vector(exprs) => {
-                args = Args::from(
-                    exprs
-                        .iter()
-                        .map(|expr| self.build_expression_ast(expr))
-                        .collect::<LangResult<Vec<_>>>()?,
-                );
-                func = Box::new(functions::literals::Vector::construct);
-            }
-            // Parenthetical group
-            parser::Expr::ParenExpr(expr) => return self.build_expression_ast(expr),
-            // Unary operator
-            parser::Expr::UnaryOp { op, operand } => {
-                let arg = self.build_expression_ast(operand)?;
-                args = Args::from(vec![arg]);
-                func = functions::lookup_unary_operator(*op, self[arg].return_type(), span)?;
-            }
-            // Binary mathematical/bitwise operator
-            parser::Expr::BinaryOp { lhs, op, rhs } => {
-                let lhs = self.build_expression_ast(lhs)?;
-                let rhs = self.build_expression_ast(rhs)?;
-                args = Args::from(vec![lhs, rhs]);
-                func = functions::lookup_binary_operator(
-                    &self[lhs].return_type(),
-                    *op,
-                    &self[rhs].return_type(),
-                    span,
-                )?;
-            }
-            // Logical NOT
-            parser::Expr::LogicalNot(expr) => {
-                args = Args::from(vec![self.build_expression_ast(expr)?]);
-                func = Box::new(functions::logic::LogicalNot::construct);
-            }
-            // Binary logical operator
-            parser::Expr::LogicalOr { lhs, rhs }
-            | parser::Expr::LogicalXor { lhs, rhs }
-            | parser::Expr::LogicalAnd { lhs, rhs } => {
-                let lhs = self.build_expression_ast(lhs)?;
-                let rhs = self.build_expression_ast(rhs)?;
-                args = Args::from(vec![lhs, rhs]);
-                func = functions::logic::LogicalBinaryOp::with_op(match &parser_expr.inner {
-                    parser::Expr::LogicalOr { .. } => functions::logic::LogicalBinOpType::Or,
-                    parser::Expr::LogicalXor { .. } => functions::logic::LogicalBinOpType::Xor,
-                    parser::Expr::LogicalAnd { .. } => functions::logic::LogicalBinOpType::And,
-                    _ => unreachable!(),
-                })
-            }
-            // Comparison
-            parser::Expr::Cmp { exprs, cmps } => {
-                args = Args::from(self.build_expression_list_ast(exprs)?);
-                func = functions::cmp::Cmp::with_comparisons(cmps.clone());
-            }
-            // Attribute access
-            parser::Expr::GetAttr { object, attribute } => {
-                let ty: Type;
-                if let parser::Expr::TypeName(type_token) = object.inner {
-                    ty = type_token.resolve(self.rule_meta().ndim);
-                    args = Args::none();
-                } else {
-                    let receiver = self.build_expression_ast(object)?;
-                    ty = self[receiver].return_type();
-                    args = Args::from(vec![receiver]);
-                }
-                func = functions::lookup_method(ty, &attribute.inner)
-                    .ok_or_else(|| FunctionLookupError.with_span(attribute.span))?;
-            }
-            // Function call
-            parser::Expr::FnCall {
-                func: func_expr,
-                args: arg_exprs,
-            } => {
-                let mut args_list = self.build_expression_list_ast(arg_exprs)?;
-                func = match &func_expr.inner {
-                    parser::Expr::TypeName(type_token) => {
-                        // Built-in function
-                        functions::lookup_type_function(*type_token)
-                            .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
-                    }
-                    parser::Expr::Ident(func_name) => {
-                        if self
-                            .rule_meta()
-                            .helper_function_signatures
-                            .contains_key(func_name)
-                        {
-                            // User-defined function
-                            functions::misc::CallUserFn::with_name(func_name.to_owned())
-                        } else {
-                            // Built-in function
-                            functions::lookup_function(func_name)
-                                .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
-                        }
-                    }
-                    parser::Expr::GetAttr {
-                        object,
-                        attribute: method_name,
-                    } => {
-                        // Built-in method
-                        let ty: Type;
-                        if let parser::Expr::TypeName(type_token) = object.inner {
-                            ty = type_token.resolve(self.rule_meta().ndim);
-                        } else {
-                            let receiver = self.build_expression_ast(object)?;
-                            ty = self[receiver].return_type();
-                            args_list.insert(0, receiver);
-                        }
-                        functions::lookup_method(ty, &method_name.inner)
-                            .ok_or_else(|| FunctionLookupError.with_span(method_name.span))?
-                    }
-                    _ => Err(Expected("function name").with_span(func_expr.span))?,
-                };
-                args = Args::from(args_list);
-            }
-            parser::Expr::Index {
-                object,
-                args: index_args,
-            } => {
-                let mut args_list = vec![self.build_expression_ast(object)?];
-                args_list.extend(self.build_expression_list_ast(index_args)?);
-                args = Args::from(args_list);
-                func = match self[args[0]].return_type() {
-                    Type::Vector(_) => functions::vectors::Access::with_component_idx(None),
-                    ty => Err(CannotIndexType(ty))?,
-                }
-            }
-        };
-
-        let expr = Expr::try_new(self, span, args, func)?;
-        Ok(self.add_expr(expr))
+        expressions::from_parse_tree(self, parser_expr).map(|expr| self.add_expr(expr))
     }
 
     /// Adds a statement AST node to this user function, and returns a
@@ -435,7 +223,7 @@ impl UserFunction {
     pub fn compile(&self, mut compiler: Compiler) -> LangResult<CompiledFunction> {
         compiler.begin_extern_function(
             &self.name,
-            self.return_type(),
+            self.kind().return_type(),
             &self.arg_names,
             &self.variables,
         )?;
@@ -447,7 +235,9 @@ impl UserFunction {
             // If necessary, add an implicit `return #0` at the end of the
             // transition function. TODO: change this to `remain` once that's
             // implemented, and handle other types as well.
-            let default_return_value = compiler.get_default_var_value(&self.return_type()).unwrap();
+            let default_return_value = compiler
+                .get_default_var_value(&self.kind().return_type())
+                .unwrap();
             compiler.build_return_ok(default_return_value)?;
         }
         CompiledFunction::try_new(

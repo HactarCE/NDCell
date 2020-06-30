@@ -19,7 +19,7 @@ pub struct Access {
     /// Index of the component of the vector to return. If this is None, then a
     /// second argument is used as the index.
     component_idx: Option<LangInt>,
-    /// TODO TODO TODO
+    /// Error returned if the given component index is out of bounds.
     out_of_bounds_error: ErrorPointRef,
 }
 impl Access {

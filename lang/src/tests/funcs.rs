@@ -26,7 +26,7 @@ fn test_function_errors() {
     ";
     let expected = (
         "other_func([1, 2], y)",
-        r#"Invalid arguments [Vec2, Int] for helper function "other_func""#,
+        r#"Invalid arguments [Vec2, Int] for user-defined function other_func"#,
     );
     assert_compile_error(source_code, expected);
 }

@@ -15,6 +15,7 @@ pub fn from_parse_tree(
     userfunc: &mut UserFunction,
     parse_tree: &Spanned<parser::Expr>,
 ) -> LangResult<Expr> {
+    let name: String;
     let span = parse_tree.span;
     let args: Args;
     let func: functions::FuncConstructor;
@@ -22,26 +23,31 @@ pub fn from_parse_tree(
     match &parse_tree.inner {
         // Integer literal
         parser::Expr::Int(i) => {
+            name = "integer literal".to_string();
             args = Args::none();
             func = functions::literals::Int::with_value(*i);
         }
         // Type name
-        parser::Expr::TypeName(_) => {
+        parser::Expr::TypeName(type_token) => {
+            name = type_token.to_string();
             args = Args::none();
             func = Err(ReservedWord.with_span(span))?;
         }
         // Identifier (variable)
         parser::Expr::Ident(s) => {
+            name = s.clone();
             args = Args::none();
             func = Box::new(functions::misc::GetVar::with_name(s.to_owned()));
         }
         // String literal
         parser::Expr::String(_) => {
+            name = "string literal".to_owned();
             args = Args::none();
             func = Err(Unimplemented)?;
         }
         // Vector literal
         parser::Expr::Vector(exprs) => {
+            name = "vector literal".to_owned();
             args = Args::from(
                 exprs
                     .iter()
@@ -54,12 +60,14 @@ pub fn from_parse_tree(
         parser::Expr::ParenExpr(inner) => return from_parse_tree(userfunc, inner),
         // Unary operator
         parser::Expr::UnaryOp { op, operand } => {
+            name = format!("unary '{}' operator", op);
             let arg = userfunc.build_expression_ast(operand)?;
             args = Args::from(vec![arg]);
             func = functions::lookup_unary_operator(*op, userfunc[arg].return_type(), span)?;
         }
         // Binary mathematical/bitwise operator
         parser::Expr::BinaryOp { lhs, op, rhs } => {
+            name = format!("binary '{}' operator", op);
             let lhs = userfunc.build_expression_ast(lhs)?;
             let rhs = userfunc.build_expression_ast(rhs)?;
             args = Args::from(vec![lhs, rhs]);
@@ -72,6 +80,7 @@ pub fn from_parse_tree(
         }
         // Logical NOT
         parser::Expr::LogicalNot(expr) => {
+            name = "unary 'not' operator".to_owned();
             args = Args::from(vec![userfunc.build_expression_ast(expr)?]);
             func = Box::new(functions::logic::LogicalNot::construct);
         }
@@ -79,18 +88,21 @@ pub fn from_parse_tree(
         parser::Expr::LogicalOr { lhs, rhs }
         | parser::Expr::LogicalXor { lhs, rhs }
         | parser::Expr::LogicalAnd { lhs, rhs } => {
-            let lhs = userfunc.build_expression_ast(lhs)?;
-            let rhs = userfunc.build_expression_ast(rhs)?;
-            args = Args::from(vec![lhs, rhs]);
-            func = functions::logic::LogicalBinaryOp::with_op(match &parse_tree.inner {
+            let op = match &parse_tree.inner {
                 parser::Expr::LogicalOr { .. } => functions::logic::LogicalBinOpType::Or,
                 parser::Expr::LogicalXor { .. } => functions::logic::LogicalBinOpType::Xor,
                 parser::Expr::LogicalAnd { .. } => functions::logic::LogicalBinOpType::And,
                 _ => unreachable!(),
-            })
+            };
+            name = format!("binary '{}' operator", op);
+            let lhs = userfunc.build_expression_ast(lhs)?;
+            let rhs = userfunc.build_expression_ast(rhs)?;
+            args = Args::from(vec![lhs, rhs]);
+            func = functions::logic::LogicalBinaryOp::with_op(op)
         }
         // Comparison
         parser::Expr::Cmp { exprs, cmps } => {
+            name = "comparison operator".to_owned();
             args = Args::from(userfunc.build_expression_list_ast(exprs)?);
             func = functions::cmp::Cmp::with_comparisons(cmps.clone());
         }
@@ -105,6 +117,7 @@ pub fn from_parse_tree(
                 ty = userfunc[receiver].return_type();
                 args = Args::from(vec![receiver]);
             }
+            name = format!("method {}.{}", ty, attribute.inner);
             func = functions::lookup_method(ty, &attribute.inner)
                 .ok_or_else(|| FunctionLookupError.with_span(attribute.span))?;
         }
@@ -114,11 +127,12 @@ pub fn from_parse_tree(
             args: arg_exprs,
         } => {
             let mut args_list = userfunc.build_expression_list_ast(arg_exprs)?;
-            func = match &func_expr.inner {
+            match &func_expr.inner {
                 parser::Expr::TypeName(type_token) => {
-                    // Built-in function
-                    functions::lookup_type_function(*type_token)
-                        .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
+                    // Type constructor
+                    name = format!("constructor {}", type_token);
+                    func = functions::lookup_type_function(*type_token)
+                        .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?;
                 }
                 parser::Expr::Ident(func_name) => {
                     if userfunc
@@ -127,11 +141,13 @@ pub fn from_parse_tree(
                         .contains_key(func_name)
                     {
                         // User-defined function
-                        functions::misc::CallUserFn::with_name(func_name.to_owned())
+                        name = format!("user-defined function {}", func_name);
+                        func = functions::misc::CallUserFn::with_name(func_name.to_owned());
                     } else {
                         // Built-in function
-                        functions::lookup_function(func_name)
-                            .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?
+                        name = format!("function {}", func_name);
+                        func = functions::lookup_function(func_name)
+                            .ok_or_else(|| FunctionLookupError.with_span(func_expr.span))?;
                     }
                 }
                 parser::Expr::GetAttr {
@@ -147,28 +163,33 @@ pub fn from_parse_tree(
                         ty = userfunc[receiver].return_type();
                         args_list.insert(0, receiver);
                     }
-                    functions::lookup_method(ty, &method_name.inner)
-                        .ok_or_else(|| FunctionLookupError.with_span(method_name.span))?
+                    name = format!("method {}.{}", ty, method_name.inner);
+                    func = functions::lookup_method(ty, &method_name.inner)
+                        .ok_or_else(|| FunctionLookupError.with_span(method_name.span))?;
                 }
-                _ => Err(Expected("function name").with_span(func_expr.span))?,
-            };
+                _ => return Err(Expected("function name").with_span(func_expr.span))?,
+            }
             args = Args::from(args_list);
         }
         parser::Expr::Index {
             object,
             args: index_args,
         } => {
-            let mut args_list = vec![userfunc.build_expression_ast(object)?];
+            let object_expr = userfunc.build_expression_ast(object)?;
+            let object_type = userfunc[object_expr].return_type();
+            name = format!("{} indexing", object_type);
+            let mut args_list = vec![object_expr];
             args_list.extend(userfunc.build_expression_list_ast(index_args)?);
             args = Args::from(args_list);
-            func = match userfunc[args[0]].return_type() {
+            func = match object_type {
                 Type::Vector(_) => functions::vectors::Access::with_component_idx(None),
-                ty => Err(CannotIndexType(ty))?,
+                other_type => Err(CannotIndexType(other_type))?,
             }
         }
     };
 
-    Expr::try_new(userfunc, span, args, func)
+    let func_constructor = func;
+    Expr::try_new(name, span, args, userfunc, func_constructor)
 }
 
 /// Expression node in the AST.
@@ -192,12 +213,12 @@ impl Expr {
     /// Constructs a new expression by applying the given Args to the given
     /// Function.
     pub fn try_new(
-        userfunc: &mut UserFunction,
+        mut name: String,
         span: Span,
         mut args: Args,
+        userfunc: &mut UserFunction,
         func_constructor: functions::FuncConstructor,
     ) -> LangResult<Self> {
-        let mut name = "TODO FUNCTION NAME".to_owned();
         let mut call_info = FuncCallInfoMut {
             name: &mut name,
             span,

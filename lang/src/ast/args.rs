@@ -43,15 +43,14 @@ impl Args {
         self.iter_refs().map(move |&e| &userfunc[e])
     }
     /// Returns the types of this Args.
-    ///
-    /// TODO: make spanned_types() separate from types()
-    pub fn types(&self, userfunc: &UserFunction) -> ArgTypes {
-        self.iter(userfunc).map(Expr::spanned_type).collect()
+    pub fn types(&self, userfunc: &UserFunction) -> Vec<Type> {
+        self.iter(userfunc).map(Expr::ret_type).collect()
+    }
+    /// Returns the types of this Args along with associated spans.
+    pub fn spanned_types(&self, userfunc: &UserFunction) -> Vec<Spanned<Type>> {
+        self.iter(userfunc).map(Expr::spanned_ret_type).collect()
     }
 }
-
-/// Collection of argument types with associated spans.
-pub type ArgTypes = Vec<Spanned<Type>>;
 
 /// Wrapper over Args that allows the arguments to be compiled or evaluated.
 #[derive(Debug, Copy, Clone)]

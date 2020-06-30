@@ -52,7 +52,7 @@ pub fn from_parse_tree(
             };
             // Register a new variable if necessary.
             if let parser::Expr::Ident(var_name) = &var_expr.inner {
-                userfunc.get_or_create_var(var_name, userfunc[value_expr].return_type().clone());
+                userfunc.get_or_create_var(var_name, userfunc[value_expr].ret_type().clone());
             }
             // Construct the statement.
             let var_expr = userfunc.build_expression_ast(var_expr)?;
@@ -121,7 +121,7 @@ impl Assert {
         assert_expr: ExprRef,
         msg: Option<String>,
     ) -> LangResult<Self> {
-        typecheck!(userfunc[assert_expr].spanned_type(), Int)?;
+        typecheck!(userfunc[assert_expr].spanned_ret_type(), Int)?;
         let error =
             userfunc.add_error_point(AssertionFailed(msg).with_span(userfunc[assert_expr].span()));
         Ok(Self {
@@ -197,14 +197,16 @@ impl SetVar {
     ) -> LangResult<Self> {
         // Check that the result of the source expression can be stored in a
         // variable at all.
-        let source_expr_type = userfunc[source_expr].return_type().clone();
+        let source_expr_type = userfunc[source_expr].ret_type().clone();
         if !source_expr_type.has_runtime_representation() {
             Err(CannotAssignTypeToVariable(source_expr_type)
                 .with_span(userfunc[source_expr].span()))?;
         }
         // Check the types of the source and destinations.
         let expected = userfunc[destination_expr].assign_type(userfunc)?;
-        userfunc[source_expr].spanned_type().typecheck(expected)?;
+        userfunc[source_expr]
+            .spanned_ret_type()
+            .typecheck(expected)?;
         Ok(Self {
             span,
             destination_expr,
@@ -248,7 +250,7 @@ impl If {
         if_true: StatementBlock,
         if_false: StatementBlock,
     ) -> LangResult<Self> {
-        typecheck!(userfunc[cond_expr].spanned_type(), Int)?;
+        typecheck!(userfunc[cond_expr].spanned_ret_type(), Int)?;
         Ok(Self {
             span,
             cond_expr,
@@ -290,7 +292,7 @@ impl Return {
     pub fn try_new(span: Span, userfunc: &mut UserFunction, ret_expr: ExprRef) -> LangResult<Self> {
         // Check that the expression matches the expected return type.
         userfunc[ret_expr]
-            .spanned_type()
+            .spanned_ret_type()
             .typecheck(userfunc.kind().return_type())?;
         Ok(Self { span, ret_expr })
     }

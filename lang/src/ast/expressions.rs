@@ -1,6 +1,6 @@
 //! High-level representations of expressions in the AST.
 
-use super::{ArgTypes, ArgValues, Args, ErrorPointRef, UserFunction};
+use super::{ArgValues, Args, ErrorPointRef, UserFunction};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::functions;
@@ -63,7 +63,7 @@ pub fn from_parse_tree(
             name = format!("unary '{}' operator", op);
             let arg = userfunc.build_expression_ast(operand)?;
             args = Args::from(vec![arg]);
-            func = functions::lookup_unary_operator(*op, userfunc[arg].return_type(), span)?;
+            func = functions::lookup_unary_operator(*op, userfunc[arg].ret_type(), span)?;
         }
         // Binary mathematical/bitwise operator
         parser::Expr::BinaryOp { lhs, op, rhs } => {
@@ -72,9 +72,9 @@ pub fn from_parse_tree(
             let rhs = userfunc.build_expression_ast(rhs)?;
             args = Args::from(vec![lhs, rhs]);
             func = functions::lookup_binary_operator(
-                &userfunc[lhs].return_type(),
+                &userfunc[lhs].ret_type(),
                 *op,
-                &userfunc[rhs].return_type(),
+                &userfunc[rhs].ret_type(),
                 span,
             )?;
         }
@@ -114,7 +114,7 @@ pub fn from_parse_tree(
                 args = Args::none();
             } else {
                 let receiver = userfunc.build_expression_ast(object)?;
-                ty = userfunc[receiver].return_type();
+                ty = userfunc[receiver].ret_type();
                 args = Args::from(vec![receiver]);
             }
             name = format!("method {}.{}", ty, attribute.inner);
@@ -160,7 +160,7 @@ pub fn from_parse_tree(
                         ty = type_token.resolve(userfunc.rule_meta().ndim);
                     } else {
                         let receiver = userfunc.build_expression_ast(object)?;
-                        ty = userfunc[receiver].return_type();
+                        ty = userfunc[receiver].ret_type();
                         args_list.insert(0, receiver);
                     }
                     name = format!("method {}.{}", ty, method_name.inner);
@@ -176,7 +176,7 @@ pub fn from_parse_tree(
             args: index_args,
         } => {
             let object_expr = userfunc.build_expression_ast(object)?;
-            let object_type = userfunc[object_expr].return_type();
+            let object_type = userfunc[object_expr].ret_type();
             name = format!("{} indexing", object_type);
             let mut args_list = vec![object_expr];
             args_list.extend(userfunc.build_expression_list_ast(index_args)?);
@@ -266,12 +266,12 @@ impl Expr {
         self.span
     }
     /// Returns the type that this expression evaluates to.
-    pub fn return_type(&self) -> Type {
+    pub fn ret_type(&self) -> Type {
         self.ret_type.clone()
     }
     /// Returns the type that this expression evaluates to along with its span
     /// in the original source code.
-    pub fn spanned_type(&self) -> Spanned<Type> {
+    pub fn spanned_ret_type(&self) -> Spanned<Type> {
         Spanned {
             span: self.span(),
             inner: self.ret_type.clone(),
@@ -401,9 +401,10 @@ pub struct FuncCallInfo<'a> {
     pub userfunc: &'a UserFunction,
 }
 impl FuncCallInfo<'_> {
-    /// Returns the types of the arguments passed to the function.
-    pub fn arg_types(&self) -> ArgTypes {
-        self.args.types(self.userfunc)
+    /// Returns the types of the arguments passed to the function, along with
+    /// associated spans.
+    pub fn arg_types(&self) -> Vec<Spanned<Type>> {
+        self.args.spanned_types(self.userfunc)
     }
     /// Returns ArgValues for this function call.
     pub fn arg_values(&self) -> ArgValues {
@@ -444,9 +445,10 @@ impl<'a, 'b: 'a> From<&'a FuncCallInfoMut<'b>> for FuncCallInfo<'a> {
     }
 }
 impl FuncCallInfoMut<'_> {
-    /// Returns the types of the arguments passed to the function.
-    pub fn arg_types(&self) -> ArgTypes {
-        self.args.types(self.userfunc)
+    /// Returns the types of the arguments passed to the function, along with
+    /// associated spans.
+    pub fn arg_types(&self) -> Vec<Spanned<Type>> {
+        self.args.spanned_types(self.userfunc)
     }
 
     /// Returns an InvalidArguments error if this set of arguments does not have

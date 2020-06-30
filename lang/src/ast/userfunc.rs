@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::ops::Index;
 use std::rc::Rc;
 
-use super::{expressions, statements, ArgTypes, Expr, RuleMeta, Statement, StatementBlock};
+use super::{expressions, statements, Expr, RuleMeta, Statement, StatementBlock};
 use crate::compiler::{self, CompiledFunction, Compiler, Value};
 use crate::errors::*;
 use crate::parser;
@@ -318,11 +318,13 @@ impl FnSignature {
             helper_func.return_type.inner.resolve(ndim),
         )
     }
-    /// Returns true if the given argument types match the arguments of this function signature.
-    pub fn matches(&self, arg_types: &ArgTypes) -> bool {
+    /// Returns true if the given argument types match the arguments of this
+    /// function signature.
+    pub fn matches(&self, arg_types: &[Spanned<Type>]) -> bool {
         arg_types.iter().map(|s| &s.inner).eq(&self.args)
     }
-    /// Returns the LLVM function type that is equivalent to this function signature.
+    /// Returns the LLVM function type that is equivalent to this function
+    /// signature.
     pub fn llvm_fn_type(&self) -> LangResult<inkwell::types::FunctionType<'static>> {
         let llvm_param_types = self
             .args

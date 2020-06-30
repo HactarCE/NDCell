@@ -6,21 +6,16 @@ use std::convert::TryInto;
 
 pub use super::enums::{MinMaxMode, RangeProperty, SumOrProduct};
 use super::{FuncConstructor, FuncResult};
-use crate::ast::{
-    ArgTypes, ArgValues, AssignableFunction, ErrorPointRef, Function, FunctionKind, UserFunction,
-};
+use crate::ast::{AssignableFunction, ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
-use crate::types::{LangInt, TypeDesc, AXES};
-use crate::{ConstValue, Span, Type};
+use crate::types::LangInt;
+use crate::{ConstValue, Type};
 use LangErrorMsg::{IndexOutOfBounds, IntegerOverflow};
 
 /// Built-in function that returns a single component of a vector.
 #[derive(Debug)]
 pub struct Access {
-    /// Vector from which to extract a component (should be
-    /// vec![Type::Vector(_)] or vec![Type::Rectangle(_)]).
-    arg_types: ArgTypes,
     /// Index of the component of the vector to return. If this is None, then a
     /// second argument is used as the index.
     component_idx: Option<LangInt>,
@@ -31,12 +26,16 @@ impl Access {
     /// Returns a constructor for a new Access instance that returns the
     /// component at the given index.
     pub fn with_component_idx(component_idx: Option<LangInt>) -> FuncConstructor {
-        Box::new(move |userfunc, span, arg_types| {
-            let arg_span = arg_types.get(1).map(|sp| sp.span).unwrap_or(span);
-            let out_of_bounds_error =
-                userfunc.add_error_point(IndexOutOfBounds.with_span(arg_span));
+        Box::new(move |info| {
+            let arg_span = info
+                .arg_types()
+                .get(1)
+                .map(|sp| sp.span)
+                .unwrap_or(info.span);
+            let out_of_bounds_error = info
+                .userfunc
+                .add_error_point(IndexOutOfBounds.with_span(arg_span));
             Ok(Box::new(Self {
-                arg_types,
                 component_idx,
                 out_of_bounds_error,
             }))
@@ -44,42 +43,24 @@ impl Access {
     }
 }
 impl Function for Access {
-    fn name(&self) -> String {
-        if let Some(axis) = self.component_idx {
-            format!(
-                "{}.{}",
-                self.arg_types[0].inner,
-                AXES.chars().nth(axis as usize).unwrap(),
-            )
-        } else {
-            "vector access".to_owned()
-        }
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Property
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
         if self.component_idx.is_some() {
-            self.check_args_len(span, 1)?;
+            info.check_args_len(1)?;
         } else {
-            self.check_args_len(span, 2)?;
-            typecheck!(self.arg_types[1], Int)?;
+            info.check_args_len(2)?;
+            typecheck!(info.arg_types()[1], Int)?;
         }
-        typecheck!(self.arg_types[0], [Vector, Rectangle])?;
-        match self.arg_types[0].inner {
+        typecheck!(info.arg_types()[0], [Vector, Rectangle])?;
+        match info.arg_types()[0].inner {
             Type::Vector(_) => Ok(Type::Int),
             Type::Rectangle(_) => Ok(Type::IntRange),
             _ => unreachable!(),
         }
     }
-
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
-        let zero = compiler.const_int(0);
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
         let arg = args.compile(compiler, 0)?;
+        let zero = compiler.const_int(0);
 
         // Get the length of the vector.
         let vector_len = match arg.ty() {
@@ -171,9 +152,10 @@ impl Function for Access {
         // without poisoning the result of 'select.'
         // https://llvm.org/docs/LangRef.html#poisonvalues
 
-        Ok(Value::from_basic_value(&self.unwrap_return_type(), ret))
+        Ok(Value::from_basic_value(&info.ret_type(), ret))
     }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
         // Get the index.
         let idx: LangInt = match self.component_idx {
             Some(i) => i,
@@ -196,10 +178,10 @@ impl Function for Access {
             _ => uncaught_type_error!(),
         };
 
-        Ok(Some(ret))
+        Ok(ret)
     }
-    fn as_assignable(&self, args: &ArgValues) -> Option<&dyn AssignableFunction> {
-        if args.can_assign(0) {
+    fn as_assignable(&self, info: FuncCallInfo) -> Option<&dyn AssignableFunction> {
+        if info.arg_values().can_assign(0) {
             Some(self)
         } else {
             None
@@ -210,11 +192,12 @@ impl AssignableFunction for Access {
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
-        args: ArgValues,
         value: Value,
+        info: FuncCallInfo,
     ) -> LangResult<()> {
-        let zero = compiler.const_int(0);
+        let args = info.arg_values();
         let arg = args.compile(compiler, 0)?;
+        let zero = compiler.const_int(0);
 
         // Get the length of the vector.
         let vector_len = match arg.ty() {
@@ -316,8 +299,6 @@ impl AssignableFunction for Access {
 /// Built-in function that returns either the sum or product of a vector.
 #[derive(Debug)]
 pub struct Reduce {
-    /// Vector to reduce (should be vec![Type::Vector(_)]).
-    arg_types: ArgTypes,
     /// How to reduce the vector.
     mode: SumOrProduct,
     /// Error returned if overflow occurs.
@@ -336,10 +317,9 @@ impl Reduce {
     }
     /// Returns a constructor for a new Reduce instance with the given mode.
     fn with_mode(mode: SumOrProduct) -> FuncConstructor {
-        Box::new(move |userfunc, span, arg_types| {
-            let overflow_error = userfunc.add_error_point(IntegerOverflow.with_span(span));
+        Box::new(move |info| {
+            let overflow_error = info.add_error_point(IntegerOverflow);
             Ok(Box::new(Self {
-                arg_types,
                 mode,
                 overflow_error,
             }))
@@ -347,26 +327,16 @@ impl Reduce {
     }
 }
 impl Function for Reduce {
-    fn name(&self) -> String {
-        format!("{}.{}", TypeDesc::Vector, self.mode)
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Property
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
-        if self.arg_types.len() != 1 {
-            Err(self.invalid_args_err(span))?;
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        if info.arg_types().len() != 1 {
+            Err(info.invalid_args_err())?;
         }
-        typecheck!(self.arg_types[0], Vector)?;
+        typecheck!(info.arg_types()[0], Vector)?;
         Ok(Type::Int)
     }
-
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
         // Extract all the elements.
+        let args = info.arg_values();
         let arg = args.compile(compiler, 0)?.as_vector()?;
         let components = (0..arg.get_type().get_size())
             .map(|i| {
@@ -393,7 +363,8 @@ impl Function for Reduce {
         })?;
         Ok(Value::Int(result))
     }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
         let mut components = args.const_eval(0)?.as_vector()?.into_iter();
         let initial = components.next().unwrap();
         let fold_fn = match self.mode {
@@ -403,16 +374,13 @@ impl Function for Reduce {
         let result = components
             .try_fold(initial, fold_fn)
             .ok_or(self.overflow_error.error())?;
-        Ok(Some(ConstValue::Int(result)))
+        Ok(ConstValue::Int(result))
     }
 }
 
 /// Built-in function that returns the minimum or maximum component of a vector.
 #[derive(Debug)]
 pub struct MinMax {
-    /// Vector to get the minimum or maximum of (should be
-    /// vec![Type::Vector(_)]).
-    arg_types: ArgTypes,
     /// Whether to take the minimum or the maximum of the vector.
     mode: MinMaxMode,
 }
@@ -429,87 +397,54 @@ impl MinMax {
     }
     /// Returns a constructor for a new MinMax instance with the given mode.
     fn with_mode(mode: MinMaxMode) -> FuncConstructor {
-        Box::new(move |_userfunc, _span, arg_types| Ok(Box::new(Self { arg_types, mode })))
+        Box::new(move |_info| Ok(Box::new(Self { mode })))
     }
 }
 impl Function for MinMax {
-    fn name(&self) -> String {
-        format!(
-            "{}.{}",
-            self.arg_types[0].inner,
-            match self.mode {
-                MinMaxMode::Max => "max",
-                MinMaxMode::Min => "min",
-            }
-        )
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Property
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
-        if self.arg_types.len() != 1 {
-            Err(self.invalid_args_err(span))?;
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        if info.arg_types().len() != 1 {
+            Err(info.invalid_args_err())?;
         }
-        typecheck!(self.arg_types[0], Vector)?;
+        typecheck!(info.arg_types()[0], Vector)?;
         Ok(Type::Int)
     }
-
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
         let arg = args.compile(compiler, 0)?.into_basic_value()?;
         compiler
             .build_reduce(&self.mode.to_string(), arg)
             .map(Value::Int)
     }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
         let iter = args.const_eval(0)?.as_vector()?.into_iter();
-        Ok(Some(ConstValue::Int(match self.mode {
+        Ok(ConstValue::Int(match self.mode {
             MinMaxMode::Max => iter.max().unwrap(),
             MinMaxMode::Min => iter.min().unwrap(),
-        })))
+        }))
     }
 }
 
 /// Built-in function that returns the length of a vector or the number of
 /// dimensions of a rectangle.
 #[derive(Debug)]
-pub struct GetLen {
-    /// Vector to return the length of (should be vec![Type::Vector(_)]).
-    arg_types: ArgTypes,
-}
+pub struct GetLen;
 impl GetLen {
     /// Constructs a new GetLen instance.
-    pub fn construct(_userfunc: &mut UserFunction, _span: Span, arg_types: ArgTypes) -> FuncResult {
-        Ok(Box::new(Self { arg_types }))
+    pub fn construct(_info: &mut FuncCallInfoMut) -> FuncResult {
+        Ok(Box::new(Self))
     }
 }
 impl Function for GetLen {
-    fn name(&self) -> String {
-        match self.arg_types[0].inner {
-            Type::Vector(_) => format!("{}.len", TypeDesc::Vector),
-            Type::Rectangle(_) => format!("{}.ndim", TypeDesc::Rectangle),
-            _ => todo!(),
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        if info.arg_types().len() != 1 {
+            Err(info.invalid_args_err())?;
         }
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Property
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
-        if self.arg_types.len() != 1 {
-            Err(self.invalid_args_err(span))?;
-        }
-        typecheck!(self.arg_types[0], [Vector, Rectangle])?;
+        typecheck!(info.arg_types()[0], [Vector, Rectangle])?;
         Ok(Type::Int)
     }
-
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
         let ret = match args.compile(compiler, 0)?.ty() {
             Type::Vector(len) => len,
             Type::Rectangle(ndim) => ndim,
@@ -517,11 +452,12 @@ impl Function for GetLen {
         };
         Ok(Value::Int(compiler.const_uint(ret as u64)))
     }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        Ok(Some(ConstValue::Int(match args.const_eval(0)?.ty() {
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
+        Ok(ConstValue::Int(match args.const_eval(0)?.ty() {
             Type::Vector(len) => len as LangInt,
             Type::Rectangle(ndim) => ndim as LangInt,
             _ => uncaught_type_error!(),
-        })))
+        }))
     }
 }

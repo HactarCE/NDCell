@@ -26,8 +26,7 @@ lazy_static! {
 
 /// FnOnce that constructs a Box<dyn ast::Function>, given some standard
 /// arguments.
-pub type FuncConstructor =
-    Box<dyn FnOnce(&mut ast::UserFunction, Span, ast::ArgTypes) -> FuncResult>;
+pub type FuncConstructor = Box<dyn FnOnce(&mut ast::FuncCallInfoMut) -> FuncResult>;
 /// Shorthand for LangResult<Box<dyn ast::Function>>, which is returned from a
 /// FuncConstructor.
 pub type FuncResult = LangResult<Box<dyn ast::Function>>;
@@ -147,7 +146,6 @@ pub fn lookup_unary_operator(
     ret.ok_or_else(|| {
         InvalidArguments {
             name: format!("unary {:?} operator", op.to_string()),
-            is_method: false,
             arg_types: vec![arg],
         }
         .with_span(span)

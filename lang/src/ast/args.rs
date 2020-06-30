@@ -43,6 +43,8 @@ impl Args {
         self.iter_refs().map(move |&e| &userfunc[e])
     }
     /// Returns the types of this Args.
+    ///
+    /// TODO: make spanned_types() separate from types()
     pub fn types(&self, userfunc: &UserFunction) -> ArgTypes {
         self.iter(userfunc).map(Expr::spanned_type).collect()
     }
@@ -118,7 +120,7 @@ impl<'a> ArgValues<'a> {
         value: Value,
     ) -> LangResult<()> {
         match self.arg_asts.0.get(idx) {
-            Some(arg) => self.userfunc[*arg].compile_assign(compiler, self.userfunc, value),
+            Some(arg) => self.userfunc[*arg].compile_assign(compiler, value, self.userfunc),
             None => arg_out_of_range!(),
         }
     }

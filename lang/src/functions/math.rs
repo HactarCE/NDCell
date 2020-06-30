@@ -7,19 +7,17 @@ use std::convert::TryInto;
 
 pub use super::enums::{MinMaxMode, NegOrAbsMode};
 use super::{FuncConstructor, FuncResult};
-use crate::ast::{ArgTypes, ArgValues, ErrorPointRef, Function, FunctionKind, UserFunction};
+use crate::ast::{ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::lexer::OperatorToken;
 use crate::types::LangInt;
-use crate::{ConstValue, Span, Type};
+use crate::{ConstValue, Type};
 use LangErrorMsg::{DivideByZero, IntegerOverflow, NegativeExponent};
 
 /// Built-in function that negates an integer or vector or takes its absolute value.
 #[derive(Debug)]
 pub struct NegOrAbs {
-    /// Type to negate (should have a length of 1).
-    arg_types: ArgTypes,
     /// Whether to perform absolute value or negation.
     mode: NegOrAbsMode,
     /// Error returned if overflow occurs.
@@ -28,11 +26,10 @@ pub struct NegOrAbs {
 impl NegOrAbs {
     /// Returns a constructor for a new NegOrAbs instance with the given mode.
     pub fn with_mode(mode: NegOrAbsMode) -> FuncConstructor {
-        Box::new(move |userfunc, span, arg_types| {
+        Box::new(move |info| {
             Ok(Box::new(Self {
-                arg_types,
                 mode,
-                overflow_error: userfunc.add_error_point(IntegerOverflow.with_span(span)),
+                overflow_error: info.add_error_point(IntegerOverflow),
             }))
         })
     }
@@ -80,37 +77,18 @@ impl NegOrAbs {
     }
 }
 impl Function for NegOrAbs {
-    fn name(&self) -> String {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        info.check_args_len(1)?;
         match self.mode {
             NegOrAbsMode::Negate => {
-                format!("unary {:?} operator", OperatorToken::Minus.to_string())
+                typecheck!(info.arg_types()[0], [Int, Vector, IntRange, Rectangle])?
             }
-            NegOrAbsMode::AbsFunc | NegOrAbsMode::AbsMethod => "abs".to_string(),
-        }
-    }
-    fn kind(&self) -> FunctionKind {
-        match self.mode {
-            NegOrAbsMode::Negate => FunctionKind::Operator,
-            NegOrAbsMode::AbsFunc => FunctionKind::Function,
-            NegOrAbsMode::AbsMethod => FunctionKind::Method,
-        }
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
-        self.check_args_len(span, 1)?;
-        match self.mode {
-            NegOrAbsMode::Negate => {
-                typecheck!(self.arg_types[0], [Int, Vector, IntRange, Rectangle])?
-            }
-            _ => typecheck!(self.arg_types[0], [Int, Vector])?,
+            _ => typecheck!(info.arg_types()[0], [Int, Vector])?,
         };
-        Ok(self.arg_types[0].inner.clone())
+        Ok(info.arg_types()[0].inner.clone())
     }
-
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
         // Call Self::compile_op() with a different generic type for integer vs.
         // vector.
         match args.compile(compiler, 0)? {
@@ -119,7 +97,7 @@ impl Function for NegOrAbs {
                     .into_int_value(),
             )),
             Value::Vector(arg) | Value::IntRange(arg) => Ok(Value::from_basic_value(
-                &self.arg_types[0].inner,
+                &info.arg_types()[0].inner,
                 self.compile_op(compiler, arg, arg.get_type().const_zero())?,
             )),
             Value::Rectangle(arg) => {
@@ -136,7 +114,8 @@ impl Function for NegOrAbs {
             _ => uncaught_type_error!(),
         }
     }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
         let arg = args.const_eval(0)?;
         match arg {
             ConstValue::Int(i) => self.eval_op_int(i).map(ConstValue::Int),
@@ -165,7 +144,6 @@ impl Function for NegOrAbs {
             )),
             _ => uncaught_type_error!(),
         }
-        .map(Some)
     }
 }
 
@@ -173,8 +151,6 @@ impl Function for NegOrAbs {
 /// vectors (componentwise).
 #[derive(Debug)]
 pub struct MinMax {
-    /// Type to take the minimum or maximum of.
-    arg_types: ArgTypes,
     /// Whether to return the minimum or maximum.
     mode: MinMaxMode,
 }
@@ -191,7 +167,7 @@ impl MinMax {
     }
     /// Returns a constructor for a new MinMax instance with the given mode.
     fn with_mode(mode: MinMaxMode) -> FuncConstructor {
-        Box::new(move |_userfunc, _span, arg_types| Ok(Box::new(Self { arg_types, mode })))
+        Box::new(move |_info| Ok(Box::new(Self { mode })))
     }
 
     /// Compiles this operation for two values of the same type.
@@ -212,7 +188,7 @@ impl MinMax {
             select_arg1,
             arg1.into_basic_value()?,
             arg2.into_basic_value()?,
-            &self.name(),
+            "selectMinMax",
         );
         Ok(Value::from_basic_value(&ty, ret))
     }
@@ -234,28 +210,18 @@ impl MinMax {
     }
 }
 impl Function for MinMax {
-    fn name(&self) -> String {
-        self.mode.to_string()
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Function
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
         // At least two arguments are required.
-        if self.arg_types.len() < 2 {
-            Err(self.invalid_args_err(span))?;
+        if info.arg_types().len() < 2 {
+            Err(info.invalid_args_err())?;
         }
         // All arguments must be integers or vectors.
-        for arg in &self.arg_types {
+        for arg in &info.arg_types() {
             typecheck!(arg, [Int, Vector])?;
         }
         // The return type is the length of the longest argument.
         let mut ret_type = Type::Int;
-        for arg in &self.arg_types {
+        for arg in &info.arg_types() {
             if let Type::Vector(arg_len) = arg.inner {
                 if let Type::Vector(ref mut ret_len) = &mut ret_type {
                     *ret_len = std::cmp::max(*ret_len, arg_len);
@@ -266,17 +232,20 @@ impl Function for MinMax {
         }
         Ok(ret_type)
     }
-
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
         // Cast all arguments to the return type.
-        let ret_type = self.unwrap_return_type();
-        let mut args = args.compile_all(compiler)?.into_iter().map(|arg| {
-            if let Type::Vector(len) = ret_type {
-                compiler.build_vector_cast(arg, len).map(Value::Vector)
-            } else {
-                Ok(arg)
-            }
-        });
+        let ret_type = info.ret_type();
+        let mut args = info
+            .arg_values()
+            .compile_all(compiler)?
+            .into_iter()
+            .map(|arg| {
+                if let Type::Vector(len) = ret_type {
+                    compiler.build_vector_cast(arg, *len).map(Value::Vector)
+                } else {
+                    Ok(arg)
+                }
+            });
         // Reduce the list, one at a time. This .unwrap() is safe because
         // return_type() checked that we have at least one argument.
         let initial = args.next().unwrap();
@@ -286,12 +255,12 @@ impl Function for MinMax {
             self.compile_op(compiler, arg1?, arg2?)
         })
     }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
         // Cast all arguments to the return type.
-        let ret_type = self.unwrap_return_type();
-        let mut args = args.const_eval_all()?.into_iter().map(|arg| {
+        let ret_type = info.ret_type();
+        let mut args = info.arg_values().const_eval_all()?.into_iter().map(|arg| {
             if let Type::Vector(len) = ret_type {
-                arg.coerce_to_vector(len).map(ConstValue::Vector)
+                arg.coerce_to_vector(*len).map(ConstValue::Vector)
             } else {
                 Ok(arg)
             }
@@ -299,51 +268,36 @@ impl Function for MinMax {
         // Reduce the list, one at a time.
         let initial = args.next().unwrap(); // return_type() checked that we have at least one argument.
         args.fold(initial, |arg1, arg2| self.eval_op(arg1?, arg2?))
-            .map(Some)
     }
 }
 
 /// Built-in function that returns a number unchanged.
 #[derive(Debug)]
-pub struct UnaryPlus {
-    /// Type to return unchanged (should have a length of 1).
-    arg_types: ArgTypes,
-}
+pub struct UnaryPlus;
 impl UnaryPlus {
-    pub fn construct(_userfunc: &mut UserFunction, _span: Span, arg_types: ArgTypes) -> FuncResult {
-        Ok(Box::new(Self { arg_types }))
+    pub fn construct(_info: &mut FuncCallInfoMut) -> FuncResult {
+        Ok(Box::new(Self))
     }
 }
 impl Function for UnaryPlus {
-    fn name(&self) -> String {
-        format!("unary {:?} operator", OperatorToken::Plus.to_string())
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        info.check_args_len(1)?;
+        typecheck!(info.arg_types()[0], [Int, Vector, IntRange, Rectangle])?;
+        Ok(info.arg_types()[0].inner.clone())
     }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Operator
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
-        self.check_args_len(span, 1)?;
-        typecheck!(self.arg_types[0], [Int, Vector, IntRange, Rectangle])?;
-        Ok(self.arg_types[0].inner.clone())
-    }
-
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
         args.compile(compiler, 0)
     }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
-        args.const_eval(0).map(Some)
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
+        args.const_eval(0)
     }
 }
 
 /// Built-in function that performs a fixed two-input integer math operation.
 #[derive(Debug)]
 pub struct BinaryOp {
-    /// Types to apply the operation to (should have a length of 2).
-    arg_types: ArgTypes,
     /// Token signifying what operation to perform.
     op: OperatorToken,
     /// Error returned if overflow occurs.
@@ -357,7 +311,7 @@ impl BinaryOp {
     /// Returns a constructor for a BinaryIntOp instance that performs the given
     /// operation.
     pub fn with_op(op: OperatorToken) -> FuncConstructor {
-        Box::new(move |userfunc, span, arg_types| {
+        Box::new(move |info| {
             // Construct errors.
             use OperatorToken::*;
             let overflow_error = if matches!(
@@ -370,24 +324,23 @@ impl BinaryOp {
                     | DoubleGreaterThan
                     | TripleGreaterThan
             ) {
-                Some(userfunc.add_error_point(IntegerOverflow.with_span(span)))
+                Some(info.add_error_point(IntegerOverflow))
             } else {
                 None
             };
             let div_by_zero_error = if matches!(op, Slash | Percent) {
-                Some(userfunc.add_error_point(DivideByZero.with_span(span)))
+                Some(info.add_error_point(DivideByZero))
             } else {
                 None
             };
             let negative_exponent_error = if matches!(op, DoubleAsterisk) {
-                Some(userfunc.add_error_point(NegativeExponent.with_span(span)))
+                Some(info.add_error_point(NegativeExponent))
             } else {
                 None
             };
             // Construct return value.
             Ok(Box::new(Self {
                 op,
-                arg_types,
                 overflow_error,
                 div_by_zero_error,
                 negative_exponent_error,
@@ -418,6 +371,7 @@ impl BinaryOp {
         compiler: &mut Compiler,
         lhs: T,
         rhs: T,
+        ret_type: &Type,
     ) -> LangResult<BasicValueEnum<'static>> {
         let b = compiler.builder();
         use OperatorToken::*;
@@ -437,7 +391,7 @@ impl BinaryOp {
             // Division and remainder (TODO: use euclidean div and modulo)
             Slash | Percent => {
                 // Check for overflow and division by zero.
-                match self.unwrap_return_type() {
+                match ret_type {
                     Type::Int => compiler.build_int_div_check(
                         lhs.as_basic_value_enum().into_int_value(),
                         rhs.as_basic_value_enum().into_int_value(),
@@ -466,7 +420,7 @@ impl BinaryOp {
             // Bitshift
             DoubleLessThan | DoubleGreaterThan | TripleGreaterThan => {
                 // Check for overflow.
-                match self.unwrap_return_type() {
+                match ret_type {
                     Type::Int => compiler.build_bitshift_int_check(
                         rhs.as_basic_value_enum().into_int_value(),
                         |c| Ok(self.overflow_error().compile(c)),
@@ -561,42 +515,32 @@ impl BinaryOp {
     }
 }
 impl Function for BinaryOp {
-    fn name(&self) -> String {
-        format!("binary {:?} operator", self.op.to_string())
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Operator
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
-        self.check_args_len(span, 2)?;
-        if matches!(self.arg_types[0].inner, Type::IntRange | Type::Rectangle(_)) {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        info.check_args_len(2)?;
+        if matches!(info.arg_types()[0].inner, Type::IntRange | Type::Rectangle(_)) {
             // Ranges and rectangles only support addition, subtraction, and
             // multiplication by an integer (or vector, for rectangles).
             use OperatorToken::*;
             if !matches!(self.op, Plus | Minus | Asterisk) {
-                Err(self.invalid_args_err(span))?;
+                Err(info.invalid_args_err())?;
             }
-            if self.arg_types[0].inner == Type::IntRange {
-                typecheck!(self.arg_types[1], Int)?;
+            if info.arg_types()[0].inner == Type::IntRange {
+                typecheck!(info.arg_types()[1], Int)?;
             } else {
-                typecheck!(self.arg_types[1], [Int, Vector])?;
+                typecheck!(info.arg_types()[1], [Int, Vector])?;
             }
         } else {
             // Otherwise, we expect an integer or vector.
-            typecheck!(self.arg_types[0], [Int, Vector])?;
-            typecheck!(self.arg_types[1], [Int, Vector])?;
+            typecheck!(info.arg_types()[0], [Int, Vector])?;
+            typecheck!(info.arg_types()[1], [Int, Vector])?;
         }
         // When performing an operation where one argument being zero causes an
         // error (e.g. division) or always causes the result to be zero (e.g.
         // multiplication, bitwise AND), the longer vector is truncated. When
         // performing any other operation, the shorter vector is extended with
         // zeros.
-        let lhs = &self.arg_types[0].inner;
-        let rhs = &self.arg_types[1].inner;
+        let lhs = &info.arg_types()[0].inner;
+        let rhs = &info.arg_types()[1].inner;
         match (lhs, rhs) {
             (Type::Int, other) | (other, Type::Int) => Ok(other.clone()),
             (Type::Vector(len1), Type::Vector(len2)) => {
@@ -609,7 +553,7 @@ impl Function for BinaryOp {
                     Asterisk | Slash | Percent | DoubleAsterisk | Ampersand => {
                         Ok(Type::Vector(std::cmp::min(*len1, *len2)))
                     }
-                    DotDot | Tag => Err(self.invalid_args_err(span)),
+                    DotDot | Tag => Err(info.invalid_args_err()),
                 }
             }
             (Type::Rectangle(ndim1), Type::Vector(ndim2)) => {
@@ -619,25 +563,30 @@ impl Function for BinaryOp {
                     Plus | Minus => Ok(Type::Rectangle(std::cmp::max(*ndim1, *ndim2))),
                     // Truncate the longer vector.
                     Asterisk => Ok(Type::Rectangle(std::cmp::min(*ndim1, *ndim2))),
-                    _ => Err(self.invalid_args_err(span)),
+                    _ => Err(info.invalid_args_err()),
                 }
             }
-            (_, _) => Err(self.invalid_args_err(span)),
+            (_, _) => Err(info.invalid_args_err()),
         }
     }
-
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
-        let ret_type = self.unwrap_return_type();
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
         let mut lhs = args.compile(compiler, 0)?;
         let mut rhs = args.compile(compiler, 1)?;
+        let ret_type = info.ret_type();
+
         // Handle rectangle operations separately.
         if let Type::Rectangle(ndim) = ret_type {
             let (start, end) = compiler.build_split_rectangle(lhs.as_rectangle()?);
-            let rhs = compiler.build_vector_cast(rhs, ndim)?;
-            let start = compiler.build_vector_cast(Value::Vector(start), ndim)?;
-            let end = compiler.build_vector_cast(Value::Vector(end), ndim)?;
-            let start = self.compile_op(compiler, start, rhs)?.into_vector_value();
-            let end = self.compile_op(compiler, end, rhs)?.into_vector_value();
+            let rhs = compiler.build_vector_cast(rhs, *ndim)?;
+            let start = compiler.build_vector_cast(Value::Vector(start), *ndim)?;
+            let end = compiler.build_vector_cast(Value::Vector(end), *ndim)?;
+            let start = self
+                .compile_op(compiler, start, rhs, ret_type)?
+                .into_vector_value();
+            let end = self
+                .compile_op(compiler, end, rhs, ret_type)?
+                .into_vector_value();
             let ret = compiler.build_construct_rectangle(start, end);
             return Ok(Value::Rectangle(ret));
         }
@@ -666,22 +615,26 @@ impl Function for BinaryOp {
         }
         // Perform the operation.
         let result = match (lhs, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => self.compile_op(compiler, lhs, rhs)?,
-            (Value::Vector(lhs), Value::Vector(rhs)) => self.compile_op(compiler, lhs, rhs)?,
+            (Value::Int(lhs), Value::Int(rhs)) => self.compile_op(compiler, lhs, rhs, ret_type)?,
+            (Value::Vector(lhs), Value::Vector(rhs)) => {
+                self.compile_op(compiler, lhs, rhs, ret_type)?
+            }
             _ => unreachable!(),
         };
         Ok(Value::from_basic_value(&ret_type, result))
     }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
         let lhs = args.const_eval(0)?;
         let rhs = args.const_eval(1)?;
-        match self.unwrap_return_type() {
+
+        match info.ret_type() {
             Type::Rectangle(ndim) => {
                 let (start, end) = lhs.as_rectangle()?;
                 // Cast to vectors of the proper length.
-                let start = ConstValue::Vector(start).coerce_to_vector(ndim)?;
-                let end = ConstValue::Vector(end).coerce_to_vector(ndim)?;
-                let rhs = rhs.coerce_to_vector(ndim)?;
+                let start = ConstValue::Vector(start).coerce_to_vector(*ndim)?;
+                let end = ConstValue::Vector(end).coerce_to_vector(*ndim)?;
+                let rhs = rhs.coerce_to_vector(*ndim)?;
                 // And perform the operation componentwise.
                 let start = start
                     .into_iter()
@@ -693,26 +646,25 @@ impl Function for BinaryOp {
                     .zip(&rhs)
                     .map(|(l, &r)| self.eval_op_int(l, r))
                     .collect::<LangResult<Vec<LangInt>>>()?;
-                Ok(Some(ConstValue::Rectangle(start, end)))
+                Ok(ConstValue::Rectangle(start, end))
             }
             Type::Vector(len) => {
                 // Cast to vectors of the proper length.
-                let lhs = lhs.coerce_to_vector(len)?;
-                let rhs = rhs.coerce_to_vector(len)?;
+                let lhs = lhs.coerce_to_vector(*len)?;
+                let rhs = rhs.coerce_to_vector(*len)?;
                 // And perform the operation componentwise.
                 let ret = lhs
                     .into_iter()
                     .zip(rhs)
                     .map(|(l, r)| self.eval_op_int(l, r))
                     .collect::<LangResult<Vec<LangInt>>>()?;
-                Ok(Some(ConstValue::Vector(ret)))
+                Ok(ConstValue::Vector(ret))
             }
             Type::IntRange => todo!("add int range to int"),
             Type::Int => {
                 // Otherwise use integers.
                 self.eval_op_int(lhs.as_int()?, rhs.as_int()?)
                     .map(ConstValue::Int)
-                    .map(Some)
             }
             _ => unreachable!(),
         }

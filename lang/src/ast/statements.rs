@@ -52,7 +52,7 @@ pub fn from_parse_tree(
             };
             // Register a new variable if necessary.
             if let parser::Expr::Ident(var_name) = &var_expr.inner {
-                userfunc.get_or_create_var(var_name, userfunc[value_expr].return_type());
+                userfunc.get_or_create_var(var_name, userfunc[value_expr].return_type().clone());
             }
             // Construct the statement.
             let var_expr = userfunc.build_expression_ast(var_expr)?;
@@ -197,7 +197,7 @@ impl SetVar {
     ) -> LangResult<Self> {
         // Check that the result of the source expression can be stored in a
         // variable at all.
-        let source_expr_type = userfunc[source_expr].return_type();
+        let source_expr_type = userfunc[source_expr].return_type().clone();
         if !source_expr_type.has_runtime_representation() {
             Err(CannotAssignTypeToVariable(source_expr_type)
                 .with_span(userfunc[source_expr].span()))?;
@@ -218,7 +218,7 @@ impl Statement for SetVar {
     }
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
         let value = userfunc.compile_expr(compiler, self.source_expr)?;
-        userfunc[self.destination_expr].compile_assign(compiler, userfunc, value)?;
+        userfunc[self.destination_expr].compile_assign(compiler, value, userfunc)?;
         Ok(())
     }
 }

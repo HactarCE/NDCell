@@ -158,7 +158,6 @@ pub enum LangErrorMsg {
     },
     InvalidArguments {
         name: String,
-        is_method: bool,
         arg_types: Vec<Type>,
     },
     CannotIndexType(Type),
@@ -252,9 +251,7 @@ impl fmt::Display for LangErrorMsg {
                     write!(f, "; convert them to integers first using the '#id' tag")?;
                 }
             }
-            Self::InvalidArguments {
-                name, arg_types, ..
-            } => {
+            Self::InvalidArguments { name, arg_types } => {
                 write!(f, "Invalid arguments {:?} for {}", arg_types, name,)?;
             }
             Self::CannotIndexType(ty) => {

@@ -1,10 +1,10 @@
 //! Miscellaneous functions.
 
 use super::FuncConstructor;
-use crate::ast::{ArgTypes, ArgValues, AssignableFunction, FnSignature, Function, FunctionKind};
+use crate::ast::{AssignableFunction, FnSignature, FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
-use crate::{ConstValue, Span, Type};
+use crate::{ConstValue, Type};
 use LangErrorMsg::Unimplemented;
 
 /// Built-in function that returns a fixed variable.
@@ -19,38 +19,27 @@ impl GetVar {
     /// Returns a constructor for a new GetVar instance with the given variable
     /// name.
     pub fn with_name(var_name: String) -> FuncConstructor {
-        Box::new(|userfunc, span, arg_types| {
-            if !arg_types.is_empty() {
-                internal_error!("Arguments passed to variable access function");
-            }
-            let var_type = userfunc.try_get_var(span, &var_name)?.clone();
+        Box::new(|info| {
+            let var_type = info.userfunc.try_get_var(info.span, &var_name)?.clone();
             Ok(Box::new(Self { var_name, var_type }))
         })
     }
 }
 impl Function for GetVar {
-    fn name(&self) -> String {
-        format!("variable {:?}", self.var_name)
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Atom
-    }
-
-    fn arg_types(&self) -> crate::ast::ArgTypes {
-        vec![]
-    }
-    fn return_type(&self, _span: Span) -> LangResult<Type> {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        if info.arg_types().len() != 0 {
+            internal_error!("Arguments passed to variable access function");
+        }
         // We checked argument types in the constructor, so we don't need to
         // worry about doing that here.
         Ok(self.var_type.clone())
     }
-
-    fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, _info: FuncCallInfo) -> LangResult<Value> {
         let var_ptr = compiler.vars()[&self.var_name].ptr;
         let value = compiler.builder().build_load(var_ptr, &self.var_name);
         Ok(Value::from_basic_value(&self.var_type, value))
     }
-    fn as_assignable<'a>(&self, _args: &'a ArgValues) -> Option<&dyn AssignableFunction> {
+    fn as_assignable<'a>(&self, _info: FuncCallInfo) -> Option<&dyn AssignableFunction> {
         Some(self)
     }
 }
@@ -58,8 +47,8 @@ impl AssignableFunction for GetVar {
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
-        _args: ArgValues,
         value: Value,
+        _info: FuncCallInfo,
     ) -> LangResult<()> {
         let var_ptr = compiler.vars()[&self.var_name].ptr;
         compiler
@@ -74,19 +63,16 @@ impl AssignableFunction for GetVar {
 pub struct CallUserFn {
     /// Name of user function to call.
     func_name: String,
-    /// Types of arguments passed to the function.
-    arg_types: ArgTypes,
     /// Signature of the function.
     signature: FnSignature,
-    /// Error to give when the user tries to actually compile this.
-    unimplemented_error: LangError,
 }
 impl CallUserFn {
     /// Returns a constructor for a new CallUserFn instance that calls the
     /// function with the given name.
     pub fn with_name(func_name: String) -> FuncConstructor {
-        Box::new(|userfunc, span, arg_types| {
-            let signature = userfunc
+        Box::new(|info| {
+            let signature = info
+                .userfunc
                 .rule_meta()
                 .helper_function_signatures
                 .get(&func_name)
@@ -94,79 +80,52 @@ impl CallUserFn {
                 .clone();
             Ok(Box::new(Self {
                 func_name,
-                arg_types,
                 signature,
-                unimplemented_error: Unimplemented.with_span(span),
             }))
         })
     }
 }
 impl Function for CallUserFn {
-    fn name(&self) -> String {
-        format!("helper function {:?}", self.func_name)
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Function
-    }
-
-    fn arg_types(&self) -> crate::ast::ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
-        if self.signature.matches(&self.arg_types) {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        if self.signature.matches(&info.arg_types()) {
             Ok(self.signature.ret.clone())
         } else {
-            Err(self.invalid_args_err(span))
+            Err(info.invalid_args_err())
         }
     }
-
-    fn compile(&self, _compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
-        Err(self.unimplemented_error.clone())
+    fn compile(&self, _compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        Err(Unimplemented.with_span(info.span))
     }
 }
 
 /// Built-in function that returns a default value for any type.
 #[derive(Debug)]
 pub struct New {
-    /// Argument types (should be empty).
-    arg_types: ArgTypes,
     /// Type to return.
     ty: Type,
 }
 impl New {
     pub fn with_type(ty: Type) -> FuncConstructor {
-        Box::new(|_userfunc, _span, arg_types| {
+        Box::new(|_info| {
             if !ty.has_runtime_representation() {
                 internal_error!("Cannot call .new() on type without runtime representation");
             }
-            Ok(Box::new(Self { arg_types, ty }))
+            Ok(Box::new(Self { ty }))
         })
     }
 }
 impl Function for New {
-    fn name(&self) -> String {
-        format!("{}.new", self.ty)
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Function
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.arg_types.clone()
-    }
-    fn return_type(&self, span: Span) -> LangResult<Type> {
-        self.check_args_len(span, 0)?;
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        info.check_args_len(0)?;
         Ok(self.ty.clone())
     }
-
-    fn compile(&self, compiler: &mut Compiler, _args: ArgValues) -> LangResult<Value> {
+    fn compile(&self, compiler: &mut Compiler, _info: FuncCallInfo) -> LangResult<Value> {
         compiler
             .get_default_var_value(&self.ty)
             .ok_or_else(|| internal_error_value!("get_default_var_value() returned None"))
     }
-    fn const_eval(&self, _args: ArgValues) -> LangResult<Option<ConstValue>> {
+    fn const_eval(&self, _info: FuncCallInfo) -> LangResult<ConstValue> {
         ConstValue::default(&self.ty)
             .ok_or_else(|| internal_error_value!("ConstValue::default() returned None"))
-            .map(Some)
     }
 }

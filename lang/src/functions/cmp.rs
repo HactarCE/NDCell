@@ -4,18 +4,16 @@ use inkwell::values::IntValue;
 use std::fmt;
 
 use super::FuncConstructor;
-use crate::ast::{ArgTypes, ArgValues, Function, FunctionKind};
+use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
 use crate::lexer::ComparisonToken;
 use crate::{ConstValue, Span, Spanned, Type};
-use LangErrorMsg::CmpError;
+use LangErrorMsg::{CannotEvalAsConst, CmpError};
 
 /// Built-in function that performs some fixed number of comparisons.
 #[derive(Debug)]
 pub struct Cmp {
-    /// Types to compare (at least two).
-    args: ArgTypes,
     /// Individual 2-input comparison functions (one less than the number of
     /// types).
     comparators: Vec<Comparator>,
@@ -25,36 +23,28 @@ impl Cmp {
     /// pair of the given arguments using the corresponding one of the given
     /// comparisons.
     pub fn with_comparisons(comparisons: Vec<ComparisonToken>) -> FuncConstructor {
-        Box::new(move |_userfunc, _span, args| {
+        Box::new(move |info| {
             let comparisons_iter = comparisons.iter();
-            // Iterate over adjacent pairs.
-            let type_pair_iter = args.windows(2);
+            // Iterate over adjacent pairs of arguments.
+            let arg_types = info.arg_types();
+            let type_pair_iter = arg_types.windows(2);
             let comparators = comparisons_iter
                 .zip(type_pair_iter)
                 .map(|(&cmp, types)| Comparator::try_new(&types[0], cmp, &types[1]))
                 .collect::<LangResult<Vec<_>>>()?;
-            Ok(Box::new(Self { args, comparators }))
+            Ok(Box::new(Self { comparators }))
         })
     }
 }
 impl Function for Cmp {
-    fn name(&self) -> String {
-        format!("{:?} to {:?} comparison", self.args, self.comparators)
-    }
-    fn kind(&self) -> FunctionKind {
-        FunctionKind::Operator
-    }
-
-    fn arg_types(&self) -> ArgTypes {
-        self.args.clone()
-    }
-    fn return_type(&self, _span: Span) -> LangResult<Type> {
+    fn return_type(&self, _info: &mut FuncCallInfoMut) -> LangResult<Type> {
         // We checked argument types in the constructor, so we don't need to
         // worry about doing that here.
         Ok(Type::Int)
     }
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
 
-    fn compile(&self, compiler: &mut Compiler, args: ArgValues) -> LangResult<Value> {
         let old_bb = compiler.builder().get_insert_block().unwrap();
 
         // Build a basic block to skip to if the condition is false. The last
@@ -109,7 +99,8 @@ impl Function for Cmp {
         // conditions were false.
         Ok(Value::Int(phi.as_basic_value().into_int_value()))
     }
-    fn const_eval(&self, args: ArgValues) -> LangResult<Option<ConstValue>> {
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
         let mut lhs = args.const_eval(0)?;
         for (rhs_arg_index, comparator) in (1_usize..).zip(&self.comparators) {
             let rhs = args.const_eval(rhs_arg_index)?;
@@ -117,18 +108,18 @@ impl Function for Cmp {
                 // It is possible to evaluate this comparison at compile time.
                 if !(const_eval_fn)(lhs, rhs.clone())? {
                     // Short-circuit if any comparison returns false.
-                    return Ok(Some(ConstValue::Int(0)));
+                    return Ok(ConstValue::Int(0));
                 }
             } else {
                 // It is not possible to evaluate this comparison at compile
                 // time.
-                return Ok(None);
+                return Err(CannotEvalAsConst.with_span(info.span));
             }
             // The current right-hand side becomes the next left-hand side.
             lhs = rhs;
         }
         // If all comparisons returned true, then return true.
-        Ok(Some(ConstValue::Int(1)))
+        Ok(ConstValue::Int(1))
     }
 }
 

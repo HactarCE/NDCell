@@ -210,9 +210,7 @@ impl UserFunction {
             // If necessary, add an implicit `return #0` at the end of the
             // transition function. TODO: change this to `remain` once that's
             // implemented, and handle other types as well.
-            let default_return_value = compiler
-                .get_default_var_value(&self.kind().return_type())
-                .unwrap();
+            let default_return_value = compiler.get_default_var_value(&self.kind().return_type());
             compiler.build_return_ok(default_return_value)?;
         }
         CompiledFunction::try_new(

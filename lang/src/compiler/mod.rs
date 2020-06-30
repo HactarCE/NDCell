@@ -270,10 +270,7 @@ impl Compiler {
         // Allocate space.
         let ptr = self.builder().build_alloca(types::get(&ty)?, &name);
         // Initialize to a default value.
-        let default_value = self
-            .get_default_var_value(&ty)
-            .ok_or_else(|| internal_error_value!("get_default_var_value() returned None"))?
-            .into_basic_value()?;
+        let default_value = self.get_default_var_value(&ty).into_basic_value()?;
         self.builder().build_store(ptr, default_value);
         Ok(Variable {
             name,
@@ -1217,11 +1214,10 @@ impl Compiler {
             }
         }
     }
-    /// Returns the default value for variables of the given type, or None if
-    /// there is no reasonable default value for the given type.
-    pub fn get_default_var_value(&self, ty: &Type) -> Option<Value> {
-        // TODO: default value for Pattern and IntRange?
-        Some(self.value_from_const(ConstValue::default(ty)?))
+    /// Returns the default value for variables of the given type, panicking if
+    /// the given type has no LLVM representation.
+    pub fn get_default_var_value(&self, ty: &Type) -> Value {
+        self.value_from_const(ConstValue::default(ty))
     }
 
     /// Returns the LLVM type actually returned from this function (as opposed

@@ -120,12 +120,9 @@ impl Function for New {
         Ok(self.ty.clone())
     }
     fn compile(&self, compiler: &mut Compiler, _info: FuncCallInfo) -> LangResult<Value> {
-        compiler
-            .get_default_var_value(&self.ty)
-            .ok_or_else(|| internal_error_value!("get_default_var_value() returned None"))
+        Ok(compiler.get_default_var_value(&self.ty))
     }
     fn const_eval(&self, _info: FuncCallInfo) -> LangResult<ConstValue> {
-        ConstValue::default(&self.ty)
-            .ok_or_else(|| internal_error_value!("ConstValue::default() returned None"))
+        Ok(ConstValue::default(&self.ty))
     }
 }

@@ -36,21 +36,20 @@ impl ConstValue {
         }
     }
     /// Constructs a default value of the given type.
-    pub fn default(ty: &Type) -> Option<Self> {
+    pub fn default(ty: &Type) -> Self {
         match ty {
-            Type::Int => Some(Self::Int(0)),
-            Type::CellState => Some(Self::CellState(0)),
-            Type::Vector(len) => Some(Self::Vector(vec![0; *len])),
-            // TODO: default pattern (all #0)
-            Type::Pattern(_) => None,
+            Type::Int => Self::Int(0),
+            Type::CellState => Self::CellState(0),
+            Type::Vector(len) => Self::Vector(vec![0; *len]),
+            Type::Pattern(_) => todo!("default pattern (all #0)"),
             // Default integer range includes only zero.
-            Type::IntRange => Some(Self::IntRange {
+            Type::IntRange => Self::IntRange {
                 start: 0,
                 end: 0,
                 step: 1,
-            }),
+            },
             // Default rectangle includes only the origin.
-            Type::Rectangle(ndim) => Some(Self::Rectangle(vec![0; *ndim], vec![0; *ndim])),
+            Type::Rectangle(ndim) => Self::Rectangle(vec![0; *ndim], vec![0; *ndim]),
         }
     }
 

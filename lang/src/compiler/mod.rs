@@ -33,11 +33,13 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 
+mod config;
 pub mod convert;
 mod function;
 pub mod types;
 mod value;
 
+pub use config::CompilerConfig;
 pub use function::CompiledFunction;
 pub use value::{PatternValue, Value};
 
@@ -47,9 +49,6 @@ use crate::{ConstValue, Type};
 
 /// Name of the LLVM module.
 const MODULE_NAME: &'static str = "ndca";
-
-/// Whether to enable debug mode. TODO: move this to CompilerConfig
-const DEBUG_MODE: bool = false;
 
 lazy_static! {
     /// Per-thread LLVM context.
@@ -100,6 +99,8 @@ pub struct Compiler {
     execution_engine: ExecutionEngine<'static>,
     /// Function currently being built.
     function: Option<FunctionInProgress>,
+    /// Compiler configuration.
+    config: CompilerConfig,
 }
 impl Compiler {
     /// Constructs a new compiler with a blank module and "main" function.
@@ -115,7 +116,13 @@ impl Compiler {
             module,
             execution_engine,
             function: None,
+            config: CompilerConfig::default(),
         })
+    }
+    /// Sets the configuration for this compiler.
+    pub fn with_config(mut self, config: CompilerConfig) -> Self {
+        self.config = config;
+        self
     }
 
     /// Begins building a new LLVM function that can be called only from LLVM,
@@ -172,7 +179,7 @@ impl Compiler {
         let mut alloca_var_names: Vec<&String> = vec![];
         for (name, _ty) in var_types {
             if !arg_names.contains(name) {
-                if DEBUG_MODE {
+                if self.config.enable_debug_mode {
                     inout_var_names.push(name);
                 } else {
                     alloca_var_names.push(name);

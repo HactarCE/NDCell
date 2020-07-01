@@ -623,8 +623,6 @@ impl Compiler {
         shift_amt: IntValue<'static>,
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<()> {
-        // TODO: test boundaries on this method
-
         // Generate the required constants.
         let max_shift = self.const_uint(INT_BITS as u64);
         // Call the generic function.
@@ -653,17 +651,18 @@ impl Compiler {
         max_shift: T,
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<()> {
-        // If we are shifting a negative number of bits, or more bits than there
-        // are in the integer type, that's an IntegerOverflow error.
+        // If we are shifting a negative number of bits, or at least as many
+        // bits as there are in the integer type, that's an IntegerOverflow
+        // error.
         let is_overflow = self.builder().build_int_compare(
-            IntPredicate::ULT, // Unsigned Less-Than
+            IntPredicate::UGE, // Unsigned Greater-Than or Equal
             shift_amt,
             max_shift,
             "bitshiftOverflowCheck",
         );
         let is_overflow = self.build_reduce("or", is_overflow.as_basic_value_enum())?;
         // Branch based on whether the shift amount is out of range.
-        self.build_conditional(is_overflow, |_| Ok(()), on_overflow)?;
+        self.build_conditional(is_overflow, on_overflow, |_| Ok(()))?;
         Ok(())
     }
 

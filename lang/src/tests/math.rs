@@ -61,13 +61,22 @@ proptest! {
 fn test_arithmetic_corner_cases() {
     for &x in test_values() {
         for &y in test_values() {
-            println!("Testing arithmetic with inputs {:?}", (x, y));
+            test_arithmetic(x, y);
+        }
+    }
+}
+
+#[test]
+fn test_bitshift_corner_cases() {
+    for &x in test_values() {
+        for &y in &[-65, -64, -63, -62, 62, 63, 64, 65] {
             test_arithmetic(x, y);
         }
     }
 }
 
 fn test_arithmetic(x: LangInt, y: LangInt) {
+    println!("Testing arithmetic with inputs {:?}", (x, y));
     let args = [ConstValue::Int(x), ConstValue::Int(y)];
 
     let overflow_err_msg = "Integer overflow";

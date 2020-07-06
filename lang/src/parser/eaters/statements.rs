@@ -78,7 +78,11 @@ impl TokenEater for Statement {
                     tf.prev();
                     tf.feed(IfStatement)
                 }
-                Unless => tf.err(Unimplemented),
+                Unless => Ok(tree::Statement::If {
+                    cond_expr: tf.feed(Expr)?,
+                    if_true: vec![],
+                    if_false: tf.feed(StatementBlock)?,
+                }),
 
                 // Debugging
                 Assert => {

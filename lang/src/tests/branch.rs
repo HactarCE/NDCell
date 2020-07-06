@@ -16,7 +16,7 @@ fn test_condition_values() {
 }
 
 #[test]
-fn test_branching() {
+fn test_if_statement() {
     for (&cond1, &cond2, &add_else, &ret_val1, &ret_val2, &ret_val3, &ret_val4) in iproduct!(
         &[None, Some(0), Some(1)], // cond1
         &[None, Some(0), Some(1)], // cond2
@@ -69,6 +69,19 @@ fn test_branching() {
 
         let mut function = compile_test_fn(&source_code);
         assert_fn_result(&mut function, &[], Ok(expected_ret));
+    }
+}
+
+#[test]
+fn test_unless_statement() {
+    let mut f =
+        compile_test_fn("@function Int test(Int x) { unless x == 0 { return 10 } return 5 }");
+    for &x in test_values() {
+        assert_fn_result(
+            &mut f,
+            &[ConstValue::Int(x)],
+            Ok(ConstValue::Int(if x != 0 { 10 } else { 5 })),
+        )
     }
 }
 

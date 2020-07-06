@@ -3,7 +3,7 @@
 use inkwell::values::{IntValue, VectorValue};
 use std::fmt;
 
-use super::FuncConstructor;
+use super::{FuncConstructor, FuncResult};
 use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
@@ -289,6 +289,134 @@ impl Comparator {
                 ComparisonToken::Neq => Ok(lhs != rhs),
                 _ => unreachable!(),
             })),
+        }
+    }
+
+    /// Compiles a vector comparison but returns the result for each vector
+    /// element separately rather than reducing them to a single boolean.
+    fn compile_vec_cmp(
+        compiler: &mut Compiler,
+        len: usize,
+        inkwell_predicate: inkwell::IntPredicate,
+        lhs: Value,
+        rhs: Value,
+    ) -> LangResult<VectorValue<'static>> {
+        // Get vectors of integers.
+        let lhs = match lhs {
+            Value::IntRange(v) => v,
+            _ => compiler.build_vector_cast(lhs, len)?,
+        };
+        let rhs = match rhs {
+            Value::IntRange(v) => v,
+            _ => compiler.build_vector_cast(rhs, len)?,
+        };
+        // Return a vector of booleans (result of comparison for each
+        // component).
+        let bool_vec =
+            compiler
+                .builder()
+                .build_int_compare(inkwell_predicate, lhs, rhs, "vectorCmp");
+        Ok(bool_vec)
+    }
+}
+
+/// Built-in function that checks for membership/matching.
+#[derive(Debug, Copy, Clone)]
+pub struct Is;
+impl Is {
+    /// Constructs a new Is instance.
+    pub fn construct(_info: &mut FuncCallInfoMut) -> FuncResult {
+        Ok(Box::new(Self))
+    }
+}
+impl Function for Is {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        let lhs = &info.arg_types()[0];
+        let rhs = &info.arg_types()[1];
+        // Check right-hand side first, then left-hand side.
+        typecheck!(rhs, [IntRange, Rectangle])?;
+        match rhs.inner {
+            Type::IntRange => typecheck!(lhs, [Int, Vector])?,
+            Type::Rectangle(_) => typecheck!(lhs, [Int, Vector])?,
+            _ => unreachable!(),
+        }
+        // Always return a boolean.
+        Ok(Type::Int)
+    }
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
+        let lhs = args.compile(compiler, 0)?;
+        let rhs = args.compile(compiler, 1)?;
+        match rhs {
+            Value::IntRange(_) | Value::Rectangle(_) => {
+                // Extract the start (a) and end (b) from the RHS
+                // range/rectangle.
+                let (a, b) = match rhs {
+                    Value::IntRange(range_value) => {
+                        let (start, end, _step) = compiler.build_split_range(range_value);
+                        (Value::Int(start), Value::Int(end))
+                    }
+                    Value::Rectangle(rect_value) => {
+                        let (start, end) = compiler.build_split_rectangle(rect_value);
+                        (Value::Vector(start), Value::Vector(end))
+                    }
+                    _ => unreachable!(),
+                };
+
+                // Determine the type to cast to before comparing. Instead of
+                // handling integers and vectors separately, just turn integers
+                // into vectors of length 1.
+                let target_len = match (lhs.ty(), rhs.ty()) {
+                    (Type::Int, Type::IntRange) => 1,
+                    (Type::Int, Type::Rectangle(ndim)) => ndim,
+                    (Type::Vector(len), Type::IntRange) => len,
+                    (Type::Vector(len), Type::Rectangle(ndim)) => std::cmp::max(len, ndim),
+                    _ => uncaught_type_error!(),
+                };
+                let predicate = inkwell::IntPredicate::SLE; // Signed Less-Than or Equal
+
+                // "Function alias" for convenience.
+                let compile_vec_cmp = move |compiler: &'_ mut Compiler, l: &Value, r: &Value| {
+                    // compile_vec_cmp() will handle any casting to vectors.
+                    Comparator::compile_vec_cmp(
+                        compiler,
+                        target_len,
+                        predicate,
+                        l.clone(),
+                        r.clone(),
+                    )
+                };
+
+                // If `a <= lhs <= b` OR `b <= lhs <= a`, then return true.
+
+                let a_lte_lhs = compile_vec_cmp(compiler, &a, &lhs)?;
+                let lhs_lte_b = compile_vec_cmp(compiler, &lhs, &b)?;
+                // a <= lhs <= b
+                let cond1 = compiler
+                    .builder()
+                    .build_and(a_lte_lhs, lhs_lte_b, "rangeTestNormal");
+
+                let b_lte_lhs = compile_vec_cmp(compiler, &b, &lhs)?;
+                let lhs_lte_a = compile_vec_cmp(compiler, &lhs, &a)?;
+                // b <= lhs <= a
+                let cond2 = compiler
+                    .builder()
+                    .build_and(b_lte_lhs, lhs_lte_a, "rangeTestInverted");
+
+                // a <= lhs <= b || b <= lhs <= a
+                let cond3 = compiler.builder().build_or(cond1, cond2, "rangeTestResult");
+                // Reduce to a single boolean.
+                let reduced = compiler.build_reduce("and", cond3.into())?;
+
+                // Cast boolean to integer.
+                let ret = compiler.builder().build_int_z_extend(
+                    reduced,
+                    compiler::types::int(),
+                    "rangeTestResultAsInt",
+                );
+                Ok(Value::Int(ret))
+            }
+            _ => uncaught_type_error!(),
         }
     }
 }

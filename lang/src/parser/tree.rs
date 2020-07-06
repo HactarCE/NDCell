@@ -223,6 +223,8 @@ pub enum Expr {
         /// Comparison operations (one less than the number of expressions).
         cmps: Vec<ComparisonToken>,
     },
+    /// Membership/matching test.
+    Is(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
 
     /// Attribute/method access.
     GetAttr {

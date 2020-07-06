@@ -106,6 +106,14 @@ pub fn from_parse_tree(
             args = Args::from(userfunc.build_expression_list_ast(exprs)?);
             func = functions::cmp::Cmp::with_comparisons(cmps.clone());
         }
+        // Membership/matching
+        parser::Expr::Is(lhs, rhs) => {
+            name = format!("binary 'is' operator");
+            let lhs = userfunc.build_expression_ast(lhs)?;
+            let rhs = userfunc.build_expression_ast(rhs)?;
+            args = Args::from(vec![lhs, rhs]);
+            func = Box::new(functions::cmp::Is::construct);
+        }
         // Attribute access
         parser::Expr::GetAttr { object, attribute } => {
             let ty: Type;

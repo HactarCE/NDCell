@@ -141,7 +141,7 @@ impl TokenEater for ExprWithPrecedence {
             }),
             OpPrecedence::Comparison => ComparisonChain.eat(tf),
             OpPrecedence::Is => eat_binary_op(tf, self.0, Associativity::Left, |t| match t {
-                TokenClass::Keyword(KeywordToken::Is) => todo!("'is' expressions"),
+                TokenClass::Keyword(KeywordToken::Is) => Some(Box::new(tree::Expr::Is)),
                 _ => None,
             }),
             OpPrecedence::BitwiseOr => eat_left_binary_op(tf, self.0, &[Pipe]),

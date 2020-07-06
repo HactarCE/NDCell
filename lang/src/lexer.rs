@@ -268,9 +268,6 @@ enum_with_str_repr! {
         If = "if",
         Unless = "unless",
 
-        // Variables
-        Set = "set",
-
         // Debugging
         Assert = "assert",
         Error = "error",
@@ -372,7 +369,6 @@ impl KeywordToken {
         Self::Else,
         Self::If,
         Self::Unless,
-        Self::Set,
         Self::Assert,
         Self::Error,
     ];

@@ -197,10 +197,10 @@ fn test_min_and_max() {
     // Test with four arguments.
     let mut f = compile_test_fn(
         "@function Vec2 test(Vec4 values) {
-            set x = values.x
-            set y = values.y
-            set z = values.z
-            set w = values.w
+            x = values.x
+            y = values.y
+            z = values.z
+            w = values.w
             return [max(x, y, z, w), min(x, y, z, w)]
         }",
     );

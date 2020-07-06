@@ -52,6 +52,7 @@ impl TokenEater for Statement {
     type Output = tree::Statement;
     fn might_match(&self, tf: TokenFeeder<'_>) -> bool {
         next_token_matches!(tf, TokenClass::Keyword(kw) if kw.starts_statement())
+            || VarAssignStatement.might_match(tf)
     }
     fn eat(&self, tf: &mut TokenFeeder<'_>) -> LangResult<Self::Output> {
         use KeywordToken::*;
@@ -79,13 +80,6 @@ impl TokenEater for Statement {
                 }
                 Unless => tf.err(Unimplemented),
 
-                // Variables
-                Set => Ok(tree::Statement::SetVar {
-                    var_expr: tf.feed(Expr)?,
-                    assign_op: tf.feed(AssignOp)?,
-                    value_expr: tf.feed(Expr)?,
-                }),
-
                 // Debugging
                 Assert => {
                     tf.prev();
@@ -102,7 +96,8 @@ impl TokenEater for Statement {
             },
             _ => {
                 tf.prev();
-                tf.expected(self)
+                tf.try_feed(VarAssignStatement)
+                    .unwrap_or_else(|| tf.expected(self))
             }
         }
     }
@@ -162,6 +157,24 @@ impl TokenEater for AssertStatement {
                     None
                 }
             },
+        })
+    }
+}
+
+/// Consumes a variable assignment statement.
+#[derive(Debug, Copy, Clone)]
+struct VarAssignStatement;
+impl_display!(VarAssignStatement, "variable assignment");
+impl TokenEater for VarAssignStatement {
+    type Output = tree::Statement;
+    fn might_match(&self, mut tf: TokenFeeder<'_>) -> bool {
+        tf.feed(Expr).is_ok() && AssignOp.might_match(tf)
+    }
+    fn eat(&self, tf: &mut TokenFeeder<'_>) -> LangResult<Self::Output> {
+        Ok(tree::Statement::SetVar {
+            var_expr: tf.feed(Expr)?,
+            assign_op: tf.feed(AssignOp)?,
+            value_expr: tf.feed(Expr)?,
         })
     }
 }

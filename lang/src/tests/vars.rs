@@ -1,18 +1,5 @@
 use super::{assert_compile_error, assert_fn_result, compile_test_fn, ConstValue};
 
-/// Tests that the AST generator gives a nicer error when the user forgets the
-/// 'set' keyword.
-#[test]
-fn test_missing_set_error() {
-    let expected = ("x", "Variable assignment requires the 'set' keyword");
-
-    let source_code = "@function Int test() { x = 3 }";
-    assert_compile_error(source_code, expected);
-
-    let source_code = "@function Int test() { x *= 3 }";
-    assert_compile_error(source_code, expected);
-}
-
 /// Tests that undeclared variables produce an error when generating the AST.
 #[test]
 fn test_undeclared_variable_error() {
@@ -21,10 +8,10 @@ fn test_undeclared_variable_error() {
     let source_code = "@function Int test() { return x }";
     assert_compile_error(source_code, expected);
 
-    let source_code = "@function Int test() { set x += 1 }";
+    let source_code = "@function Int test() { x += 1 }";
     assert_compile_error(source_code, expected);
 
-    let source_code = "@function Int test() { set y = x }";
+    let source_code = "@function Int test() { y = x }";
     assert_compile_error(source_code, expected);
 }
 
@@ -33,7 +20,7 @@ fn test_undeclared_variable_error() {
 fn test_var_init() {
     let mut f = compile_test_fn(
         "@function Int test() {
-            if 0 { set x = 5 } // never executed, but declares x as an integer
+            if 0 { x = 5 } // never executed, but declares x as an integer
             return x
         }",
     );
@@ -45,9 +32,9 @@ fn test_var_init() {
 fn test_variables() {
     let mut f = compile_test_fn(
         "@function Int test() {
-            set x = 3
-            set another_variable = 9
-            set x = another_variable - 2
+            x = 3
+            another_variable = 9
+            x = another_variable - 2
             if 1 {
                 return x + 3
             }

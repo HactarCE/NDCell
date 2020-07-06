@@ -5,16 +5,16 @@ use super::{assert_compile_error, compile_test_fn};
 fn test_variable_types() {
     // CellState -> Integer
     let source_code = "@function Int test() {
-        set s = #2
-        set s = 3
+        s = #2
+        s = 3
     }";
     let expected = ("3", "Type error: expected CellState but got Integer");
     assert_compile_error(source_code, expected);
 
     // Integer -> CellState
     let source_code = "@function Int test() {
-        set s = 3
-        set s = #2
+        s = 3
+        s = #2
     }";
     let expected = ("#2", "Type error: expected Integer but got CellState");
     assert_compile_error(source_code, expected);
@@ -72,23 +72,23 @@ fn test_condition_type_error() {
 #[test]
 fn test_vector_types() {
     let source_code = "@function Int test() {
-        set x = [1, 2, 3]
-        set y = [4, 5, 6]
-        set x = y
+        x = [1, 2, 3]
+        y = [4, 5, 6]
+        x = y
     }";
     compile_test_fn(source_code); // no error
 
     let source_code = "@function Int test() {
-        set x = [1, 2, 3]
-        set y = [1]
-        set x = y
+        x = [1, 2, 3]
+        y = [1]
+        x = y
     }";
     let expected = ("y", "Type error: expected Vector3 but got Vector1");
     assert_compile_error(source_code, expected);
 
     let source_code = "@function Int test() {
-        set x = [1, 2, 3]
-        set x = [1, 2, 3, 4]
+        x = [1, 2, 3]
+        x = [1, 2, 3, 4]
     }";
     let expected = (
         "[1, 2, 3, 4]",
@@ -97,8 +97,8 @@ fn test_vector_types() {
     assert_compile_error(source_code, expected);
 
     let source_code = "@function Int test() {
-        set x = [1]
-        set x = 12
+        x = [1]
+        x = 12
     }";
     let expected = ("12", "Type error: expected Vector1 but got Integer");
     assert_compile_error(source_code, expected);

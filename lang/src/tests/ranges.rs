@@ -64,10 +64,10 @@ fn test_range_properties() {
     // Test start, end, and step.
     let mut f = compile_test_fn(
         "@function Vec3 test(Int a, Int b, Int c) {
-            set r = (a..b).by(c)
-            set r.start += 5
-            set r.end += 10
-            set r.step += 2
+            r = (a..b).by(c)
+            r.start += 5
+            r.end += 10
+            r.step += 2
             return [r.start, r.end, r.step]
         }",
     );
@@ -83,15 +83,15 @@ fn test_range_properties() {
 fn test_range_ops() {
     let mut f = compile_test_fn(
         "@function Int test() {
-            set r = (-5..10).by(3)
+            r = (-5..10).by(3)
             assert r == +r != -5..10
-            set r += 5
+            r += 5
             assert r == (0..15).by(3)
-            set r -= 2
+            r -= 2
             assert r == (-2..13).by(3)
-            set r *= 6
+            r *= 6
             assert r == ((-2 * 6)..(13 * 6)).by(3 * 6)
-            set r = -r
+            r = -r
             assert r == ((2 * 6)..(-13 * 6)).by(-3 * 6)
         }",
     );

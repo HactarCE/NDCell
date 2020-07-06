@@ -71,7 +71,7 @@ fn test_vector_access() {
     // Test in-bounds access.
     let mut f = compile_test_fn(
         "@function Int test() {
-            set v = [1, 10, 100]
+            v = [1, 10, 100]
             return v.y - v.x
         }",
     );
@@ -81,7 +81,7 @@ fn test_vector_access() {
     // Test out of bounds access (positive).
     let mut f = compile_test_fn(
         "@function Int test() {
-            set v = [1, 10, 100]
+            v = [1, 10, 100]
             return v.w + v[9999]
         }",
     );
@@ -91,7 +91,7 @@ fn test_vector_access() {
     // Test out of bounds access (negative).
     let mut f = compile_test_fn(
         "@function Int test() {
-            set v = [1, 10, 100]
+            v = [1, 10, 100]
             return v[-1]
         }",
     );
@@ -101,9 +101,9 @@ fn test_vector_access() {
     // Test in-bounds modification.
     let mut f = compile_test_fn(
         "@function Vec3 test() {
-            set v = [1, 10, 100]
-            set v.x -= 4
-            set v[2] = 88
+            v = [1, 10, 100]
+            v.x -= 4
+            v[2] = 88
             return v
         }",
     );
@@ -113,8 +113,8 @@ fn test_vector_access() {
     // Test out of bounds modification.
     let mut f = compile_test_fn(
         "@function Int test() {
-            set v = [1, 10, 100]
-            set v.w = 0
+            v = [1, 10, 100]
+            v.w = 0
         }",
     );
     let expected = Err(("v.w", "Index out of bounds"));
@@ -123,11 +123,11 @@ fn test_vector_access() {
     // Test length.
     let mut f = compile_test_fn(
         "@function Int test() {
-            set v3 = [1, 10, 100]
+            v3 = [1, 10, 100]
             assert v3.len == 3
-            set v2 = [4, 3]
+            v2 = [4, 3]
             assert v2.len == 2
-            set v10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            v10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
             assert v10.len == 10
         }",
     );
@@ -191,14 +191,14 @@ fn test_vector_ops() {
     // Test division by zero.
     let mut f = compile_test_fn(
         "@function Int test() {
-            set b = [4, 5, 6] / [1, 2, 0]
+            b = [4, 5, 6] / [1, 2, 0]
         }",
     );
     let expected = Err(("[4, 5, 6] / [1, 2, 0]", "Divide by zero"));
     assert_fn_result(&mut f, &[], expected);
     let mut f = compile_test_fn(
         "@function Int test() {
-            set b = [4, 5, 6] % [1, 0, 2]
+            b = [4, 5, 6] % [1, 0, 2]
         }",
     );
     let expected = Err(("[4, 5, 6] % [1, 0, 2]", "Divide by zero"));
@@ -218,20 +218,20 @@ fn test_vector_ops() {
             assert [-1, 2] != [-1, 2, 1]
 
             // Test product and sum.
-            set v = [-4, 5, 95]
+            v = [-4, 5, 95]
             assert v.product == -4 * 5 * 95
             assert v.sum == -4 + 5 + 95
 
             // Test arithmetic operations between vector and integer
-            set v += 7
+            v += 7
             assert v == [3, 12, 102]
-            set v /= 3
+            v /= 3
             assert v == [1, 4, 34]
-            set v *= 2
+            v *= 2
             assert v == [2, 8, 68]
-            set v %= 10
+            v %= 10
             assert v == [2, 8, 8]
-            set v -= 10
+            v -= 10
             assert v == [-8, -2, -2]
             assert -v == [8, 2, 2]
 
@@ -241,27 +241,27 @@ fn test_vector_ops() {
             // Test operations between vectors of different lengths
 
             // Addition
-            set a = [1, 2] + [4, 5, 6]
-            set b = [4, 5, 6] + [1, 2]
+            a = [1, 2] + [4, 5, 6]
+            b = [4, 5, 6] + [1, 2]
             assert a.len == b.len == 3
             assert a == b == [5, 7, 6]
 
             // Subtraction
-            set a = [1, 2] - [4, 5, 6]
-            set b = [4, 5, 6] - [1, 2]
+            a = [1, 2] - [4, 5, 6]
+            b = [4, 5, 6] - [1, 2]
             assert a.len == b.len == 3
             assert a == -b == [-3, -3, -6]
 
             // Multiplication
-            set c = [1, 2] * [4, 5, 6]
-            set d = [4, 5, 6] * [1, 2]
+            c = [1, 2] * [4, 5, 6]
+            d = [4, 5, 6] * [1, 2]
             assert c.len == d.len == 2
             assert c == d == [4, 10]
             assert c.product == d.product == 40
 
             // Division
-            set c = [10, 20] / [4, 5, 6]
-            set d = [40, 50, 60] / [1, 2]
+            c = [10, 20] / [4, 5, 6]
+            d = [40, 50, 60] / [1, 2]
             assert c.len == d.len == 2
             assert c == [2, 4]
             assert d == [40, 25]
@@ -269,8 +269,8 @@ fn test_vector_ops() {
             assert d.product == 40 * 25
 
             // Modulo
-            set c = [10, 20] % [4, 5, 6]
-            set d = [42, 50, 61] % [10, 20]
+            c = [10, 20] % [4, 5, 6]
+            d = [42, 50, 61] % [10, 20]
             assert c.len == d.len == 2
             assert c == [2, 0]
             assert d == [2, 10]

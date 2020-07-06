@@ -87,13 +87,13 @@ fn test_rectangle_properties() {
     // Test start and end.
     let mut f = compile_test_fn(
         "@function Vec4 test(Vec2 a, Vec2 b) {
-            set r = a..b
-            set r.start += 5
-            set r.start.x *= 2
-            set r.start.y *= 3
-            set r.end -= 20
-            set r.end.x *= 5
-            set r.end.y *= 6
+            r = a..b
+            r.start += 5
+            r.start.x *= 2
+            r.start.y *= 3
+            r.end -= 20
+            r.end.x *= 5
+            r.end.y *= 6
             return [r.start, r.end]
         }",
     );
@@ -112,14 +112,14 @@ fn test_rectangle_properties() {
     // Test axes.
     let mut f = compile_test_fn(
         "@function Vec4 test(Vec2 a, Vec2 b) {
-            set r = a..b
-            set r.x += 5
-            set r.x.start *= 2
-            set r.x.end *= 3
-            set r.y -= 20
-            set r.y.start *= 5
-            set r.y.end *= 6
-            set r.x.step = 10 // should have no effect
+            r = a..b
+            r.x += 5
+            r.x.start *= 2
+            r.x.end *= 3
+            r.y -= 20
+            r.y.start *= 5
+            r.y.end *= 6
+            r.x.step = 10 // should have no effect
             return [r.start, r.end]
         }",
     );
@@ -138,9 +138,9 @@ fn test_rectangle_properties() {
     // Test direct assignment.
     let mut f = compile_test_fn(
         "@function Rect2 test(Vec2 a, Vec2 b) {
-            set r = a..b
-            set r.x = (100..120).by(5) // step should have no effect
-            set r.end = vec2(-8)
+            r = a..b
+            r.x = (100..120).by(5) // step should have no effect
+            r.end = vec2(-8)
             return r
         }",
     );
@@ -158,39 +158,39 @@ fn test_rectangle_properties() {
 fn test_rectangle_ops() {
     let mut f = compile_test_fn(
         "@function Int test() {
-            set tmp = (-10..5).by(3)
-            set a = rect5(tmp)
+            tmp = (-10..5).by(3)
+            a = rect5(tmp)
             assert a.ndim == 5
             assert a == +a == rect5(-10..5)
             assert -10..5 == a.x != tmp
 
-            set a = -a
+            a = -a
             assert a == 10..-5
-            set a *= -2
+            a *= -2
             assert a == -20..10
 
             // Extend vector with zeros
-            set a += [10, 20, 50]
+            a += [10, 20, 50]
             assert a.ndim == 5
             assert a == [-10..20, 0..30, 30..60, -20..10, -20..10]
 
             // Extend rectangle with zeros
-            set b = a - vec6(30)
+            b = a - vec6(30)
             assert b.ndim == 6
             assert b == [-40..-10, -30..0, 0..30, -50..-20, -50..-20, -30..-30]
 
             // Truncate rectangle
-            set c = b * vec2(1)
+            c = b * vec2(1)
             assert c.ndim == 2
             assert c == [-40..-10, -30..0]
 
             // Truncate vector
-            set c *= -vec5(10)
+            c *= -vec5(10)
             assert c.ndim == 2
             assert c == [400..100, 300..0]
 
             // Use integers
-            set c -= 200
+            c -= 200
             assert c.ndim == 2
             assert c == [200..-100, 100..-200]
         }",

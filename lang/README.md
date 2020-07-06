@@ -10,7 +10,7 @@ This is a testing ground for a cellular automaton description language for [NDCe
 * [x] Vector operations
 * [x] Unary `+` operator
 * [x] Refactor parser
-* [ ] `is` expressions
+* [x] `is` expressions
 * [ ] cell state filters
 * [ ] `for` loops
 * [ ] pattern masks

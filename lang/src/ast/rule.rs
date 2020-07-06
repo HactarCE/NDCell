@@ -204,12 +204,6 @@ impl Default for RuleMeta {
         }
     }
 }
-impl RuleMeta {
-    /// Constructs a new RuleMeta with default values.
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
 
 /// A cell state.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

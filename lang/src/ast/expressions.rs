@@ -404,7 +404,7 @@ impl FuncCallInfo<'_> {
     /// Returns the types of the arguments passed to the function, along with
     /// associated spans.
     pub fn arg_types(&self) -> Vec<Spanned<Type>> {
-        self.args.spanned_types(self.userfunc)
+        self.args.types(self.userfunc)
     }
     /// Returns ArgValues for this function call.
     pub fn arg_values(&self) -> ArgValues {
@@ -448,7 +448,7 @@ impl FuncCallInfoMut<'_> {
     /// Returns the types of the arguments passed to the function, along with
     /// associated spans.
     pub fn arg_types(&self) -> Vec<Spanned<Type>> {
-        self.args.spanned_types(self.userfunc)
+        self.args.types(self.userfunc)
     }
 
     /// Returns an InvalidArguments error if this set of arguments does not have
@@ -475,20 +475,4 @@ impl FuncCallInfoMut<'_> {
     pub fn add_error_point(&mut self, error: LangErrorMsg) -> ErrorPointRef {
         self.userfunc.add_error_point(error.with_span(self.span))
     }
-}
-
-/// An enumeration of the kinds of "functions," most of which would not
-/// conventionally be called functions.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum FunctionKind {
-    /// Traditional function, such as `function(arg1, arg2)`.
-    Function,
-    /// Method, such as `value.method(arg1, arg2)`.
-    Method,
-    /// Operator, such as `arg1 + arg2`.
-    Operator,
-    /// Property, such as `value.property`.
-    Property,
-    /// Single value that takes no parameters, such as a literal or variable.
-    Atom,
 }

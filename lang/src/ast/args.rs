@@ -42,12 +42,8 @@ impl Args {
     pub fn iter<'a>(&'a self, userfunc: &'a UserFunction) -> impl Iterator<Item = &'a Expr> {
         self.iter_refs().map(move |&e| &userfunc[e])
     }
-    /// Returns the types of this Args.
-    pub fn types(&self, userfunc: &UserFunction) -> Vec<Type> {
-        self.iter(userfunc).map(Expr::ret_type).collect()
-    }
-    /// Returns the types of this Args along with associated spans.
-    pub fn spanned_types(&self, userfunc: &UserFunction) -> Vec<Spanned<Type>> {
+    /// Returns the types of this Args, along with associated spans.
+    pub fn types(&self, userfunc: &UserFunction) -> Vec<Spanned<Type>> {
         self.iter(userfunc).map(Expr::spanned_ret_type).collect()
     }
 }

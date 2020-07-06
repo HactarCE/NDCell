@@ -85,9 +85,9 @@ pub fn from_parse_tree(
             func = Box::new(functions::logic::LogicalNot::construct);
         }
         // Binary logical operator
-        parser::Expr::LogicalOr { lhs, rhs }
-        | parser::Expr::LogicalXor { lhs, rhs }
-        | parser::Expr::LogicalAnd { lhs, rhs } => {
+        parser::Expr::LogicalOr(lhs, rhs)
+        | parser::Expr::LogicalXor(lhs, rhs)
+        | parser::Expr::LogicalAnd(lhs, rhs) => {
             let op = match &parse_tree.inner {
                 parser::Expr::LogicalOr { .. } => functions::logic::LogicalBinOpType::Or,
                 parser::Expr::LogicalXor { .. } => functions::logic::LogicalBinOpType::Xor,
@@ -167,7 +167,7 @@ pub fn from_parse_tree(
                     func = functions::lookup_method(ty, &method_name.inner)
                         .ok_or_else(|| FunctionLookupError.with_span(method_name.span))?;
                 }
-                _ => return Err(Expected("function name").with_span(func_expr.span))?,
+                _ => return Err(Expected("function name".to_owned()).with_span(func_expr.span))?,
             }
             args = Args::from(args_list);
         }

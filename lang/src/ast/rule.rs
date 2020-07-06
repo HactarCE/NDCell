@@ -64,7 +64,7 @@ impl TryFrom<ParseTree> for Rule {
                 }
             }
             // The user gave something else instead of an expression.
-            Some((span, _contents)) => Err(Expected("expression").with_span(span))?,
+            Some((span, _contents)) => Err(Expected("expression".to_owned()).with_span(span))?,
         };
 
         // Get states.
@@ -91,7 +91,7 @@ impl TryFrom<ParseTree> for Rule {
                 }
             }
             // The user gave something else instead of an expression.
-            Some((span, _contents)) => Err(Expected("expression").with_span(span))?,
+            Some((span, _contents)) => Err(Expected("expression".to_owned()).with_span(span))?,
         };
 
         // Gather a list of helper functions.
@@ -144,7 +144,7 @@ impl TryFrom<ParseTree> for Rule {
             }
             // The user gave something else instead of a code block.
             Some((span, _contents)) => {
-                Err(Expected("code block").with_span(span))?;
+                Err(Expected("code block".to_owned()).with_span(span))?;
             }
             // The user did not provide a transition function.
             None => transition_function.build_top_level_statement_block_ast(&vec![])?,

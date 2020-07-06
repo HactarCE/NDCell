@@ -15,6 +15,9 @@ pub struct ParseTree {
     /// Raw source code.
     pub source_code: Rc<String>,
     /// Directives and their contents.
+    ///
+    /// Note that the span on `DirectiveContents` represents the span of the
+    /// entire directive, including the `@directive_name`.
     pub directives: HashMap<Directive, Vec<Spanned<DirectiveContents>>>,
 }
 impl ParseTree {
@@ -104,6 +107,11 @@ impl From<Spanned<Expr>> for DirectiveContents {
         Self::Expr(expr)
     }
 }
+impl From<HelperFunc> for DirectiveContents {
+    fn from(func: HelperFunc) -> Self {
+        Self::Func(func)
+    }
+}
 
 /// Helper function node in the parse tree.
 #[derive(Debug, Clone)]
@@ -113,7 +121,7 @@ pub struct HelperFunc {
     /// Name of the helper function.
     pub name: Spanned<String>,
     /// Arguments passed to the helper function (name and type).
-    pub args: Vec<Spanned<(Spanned<TypeToken>, Spanned<String>)>>,
+    pub params: Vec<Spanned<(Spanned<TypeToken>, Spanned<String>)>>,
     /// Body of the helper function.
     pub body: Spanned<StatementBlock>,
 }
@@ -202,26 +210,11 @@ pub enum Expr {
     /// Boolean logical NOT.
     LogicalNot(Box<Spanned<Expr>>),
     /// Boolean logical OR.
-    LogicalOr {
-        /// Left-hand-side operand.
-        lhs: Box<Spanned<Expr>>,
-        /// Right-hand-side operand.
-        rhs: Box<Spanned<Expr>>,
-    },
+    LogicalOr(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     /// Boolean logical XOR.
-    LogicalXor {
-        /// Left-hand-side operand.
-        lhs: Box<Spanned<Expr>>,
-        /// Right-hand-side operand.
-        rhs: Box<Spanned<Expr>>,
-    },
+    LogicalXor(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     /// Boolean logical AND.
-    LogicalAnd {
-        /// Left-hand-side operand.
-        lhs: Box<Spanned<Expr>>,
-        /// Right-hand-side operand.
-        rhs: Box<Spanned<Expr>>,
-    },
+    LogicalAnd(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
 
     /// Comparison between two values.
     Cmp {

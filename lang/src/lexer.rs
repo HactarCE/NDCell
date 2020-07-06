@@ -321,6 +321,7 @@ enum_with_str_repr! {
         Tag = "#",
     }
 
+    /// Punctuation.
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub enum PunctuationToken {
         LParen = "(",
@@ -352,38 +353,70 @@ enum_with_str_repr! {
     }
 }
 
+impl From<KeywordToken> for TokenClass<'_> {
+    fn from(kw: KeywordToken) -> Self {
+        Self::Keyword(kw)
+    }
+}
 impl KeywordToken {
+    /// A list of all keywords that signal the beginning of a statement.
+    pub const STATEMENT_STARTERS: &'static [Self] = &[
+        Self::For,
+        Self::While,
+        Self::Break,
+        Self::Continue,
+        Self::Become,
+        Self::Remain,
+        Self::Return,
+        Self::Case,
+        Self::Else,
+        Self::If,
+        Self::Unless,
+        Self::Set,
+        Self::Assert,
+        Self::Error,
+    ];
+    /// Returns true if this keyword signals the beginning of a statement, or
+    /// false otherwise.
     pub fn starts_statement(self) -> bool {
+        Self::STATEMENT_STARTERS.contains(&self)
+    }
+}
+
+impl From<OperatorToken> for TokenClass<'_> {
+    fn from(kw: OperatorToken) -> Self {
+        Self::Operator(kw)
+    }
+}
+
+impl From<PunctuationToken> for TokenClass<'_> {
+    fn from(kw: PunctuationToken) -> Self {
+        Self::Punctuation(kw)
+    }
+}
+impl PunctuationToken {
+    /// Returns an end-user-friendly name for this punctuation symbol, making no
+    /// distinction between left/right pairs.
+    pub fn name(self) -> &'static str {
         match self {
-            Self::For
-            | Self::While
-            | Self::Break
-            | Self::Continue
-            | Self::Become
-            | Self::Remain
-            | Self::Return
-            | Self::Case
-            | Self::Else
-            | Self::If
-            | Self::Unless
-            | Self::Set
-            | Self::Assert
-            | Self::Error => true,
-            Self::Or
-            | Self::Xor
-            | Self::And
-            | Self::Not
-            | Self::In
-            | Self::Is
-            | Self::Bind
-            | Self::Bound
-            | Self::Static
-            | Self::Where
-            | Self::With => false,
+            Self::LParen => "parentheses",
+            Self::RParen => "parentheses",
+            Self::LBracket => "brackets",
+            Self::RBracket => "brackets",
+            Self::LBrace => "curly braces",
+            Self::RBrace => "curly braces",
+            Self::Comma => "comma",
+            Self::Semicolon => "semicolon",
+            Self::Period => "period",
         }
     }
 }
 
+impl From<ComparisonToken> for TokenClass<'_> {
+    fn from(kw: ComparisonToken) -> Self {
+        Self::Comparison(kw)
+    }
+}
 impl ComparisonToken {
     /// Returns true if this comparison is based only on equality, or false if
     /// it also requires an ordering.
@@ -486,6 +519,11 @@ impl FromStr for TypeToken {
         }
     }
 }
+impl From<TypeToken> for TokenClass<'_> {
+    fn from(ty: TypeToken) -> Self {
+        Self::Type(ty)
+    }
+}
 impl TypeToken {
     /// Returns the Type corresponding to the given TypeToken, in an automaton
     /// with the given number of dimensions.
@@ -539,6 +577,11 @@ impl FromStr for AssignmentToken {
         } else {
             Err(())
         }
+    }
+}
+impl From<AssignmentToken> for TokenClass<'_> {
+    fn from(t: AssignmentToken) -> Self {
+        Self::Assignment(t)
     }
 }
 impl AssignmentToken {

@@ -128,16 +128,9 @@ pub enum LangErrorMsg {
     // Compile errors
     UnknownSymbol,
     Unterminated(&'static str),
-    Unmatched(char, char),
-    Expected(&'static str),
-    ExpectedGot {
-        expected: &'static str,
-        got: &'static str,
-    },
+    Expected(String),
     ReservedWord,
     ElseWithoutIf,
-    MissingSetKeyword,
-    TopLevelNonDirective,
     InvalidDirectiveName,
     RepeatDirective(&'static str),
     FunctionNameConflict,
@@ -198,26 +191,14 @@ impl fmt::Display for LangErrorMsg {
             Self::Unterminated(s) => {
                 write!(f, "This {} never ends", s)?;
             }
-            Self::Unmatched(char1, char2) => {
-                write!(f, "This '{}' has no matching '{}'", char1, char2)?;
-            }
             Self::Expected(s) => {
                 write!(f, "Expected {}", s)?;
-            }
-            Self::ExpectedGot { expected, got } => {
-                write!(f, "Expected {}; got {}", expected, got)?;
             }
             Self::ReservedWord => {
                 write!(f, "This is a reserved word")?;
             }
             Self::ElseWithoutIf => {
                 write!(f, "This 'else' has no matching 'if'")?;
-            }
-            Self::MissingSetKeyword => {
-                write!(f, "Variable assignment requires the 'set' keyword")?;
-            }
-            Self::TopLevelNonDirective => {
-                write!(f, "Only directives may appear at the top level of a file")?;
             }
             Self::InvalidDirectiveName => {
                 write!(f, "Invalid directive name")?;

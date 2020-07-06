@@ -9,8 +9,14 @@ This is a testing ground for a cellular automaton description language for [NDCe
 * [x] Calls to built-in methods
 * [x] Vector operations
 * [x] Unary `+` operator
-* [ ] Maybe refactor parser
-* [ ] More data types
+* [x] Refactor parser
+* [ ] `is` expressions
+* [ ] cell state filters
+* [ ] `for` loops
+* [ ] pattern masks
+* [ ] patterns
+* [ ] pattern matchers
+* [ ] merge to `master`!
 
 ## Building on Linux or macOS
 

@@ -40,22 +40,16 @@ proptest! {
 // And make sure to cover several corner cases (e.g. division by zero).
 #[test]
 fn test_comparisons_corner_cases() {
-    for &x in test_values() {
-        for &y in test_values() {
-            println!("Testing comparisons with inputs {:?}", (x, y));
-            test_comparisons(x, y);
-        }
+    for (&x, &y) in iproduct!(test_values(), test_values()) {
+        println!("Testing comparisons with inputs {:?}", (x, y));
+        test_comparisons(x, y);
     }
 }
 #[test]
 fn test_multi_comparisons_corner_cases() {
-    for &x in test_values() {
-        for &y in test_values() {
-            for &z in test_values() {
-                println!("Testing combined comparisons with inputs {:?}", (x, y, z));
-                test_multi_comparisons(x, y, z);
-            }
-        }
+    for (&x, &y, &z) in iproduct!(test_values(), test_values(), test_values()) {
+        println!("Testing combined comparisons with inputs {:?}", (x, y, z));
+        test_multi_comparisons(x, y, z);
     }
 }
 

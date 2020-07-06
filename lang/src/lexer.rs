@@ -266,6 +266,7 @@ enum_with_str_repr! {
         Case = "case",
         Else = "else",
         If = "if",
+        Match = "match",
         Unless = "unless",
 
         // Debugging
@@ -368,6 +369,7 @@ impl KeywordToken {
         Self::Case,
         Self::Else,
         Self::If,
+        Self::Match,
         Self::Unless,
         Self::Assert,
         Self::Error,

@@ -132,12 +132,12 @@ impl Compiler {
         &mut self,
         name: &str,
         return_type: Type,
-        arg_names: &[String],
+        param_names: &[String],
         var_types: &HashMap<String, Type>,
     ) -> LangResult<()> {
         // Determine the LLVM function type (signature).
         let llvm_return_type = types::get(&return_type)?;
-        let llvm_arg_types = arg_names
+        let llvm_arg_types = param_names
             .iter()
             .map(|name| &var_types[name])
             .map(types::get)
@@ -170,15 +170,15 @@ impl Compiler {
         &mut self,
         name: &str,
         return_type: Type,
-        arg_names: &[String],
+        param_names: &[String],
         var_types: &HashMap<String, Type>,
     ) -> LangResult<()> {
         // TODO: maybe sort variables (and arguments?) by alignment to reduce
         // unnecessary padding
-        let mut inout_var_names: Vec<&String> = arg_names.iter().collect();
+        let mut inout_var_names: Vec<&String> = param_names.iter().collect();
         let mut alloca_var_names: Vec<&String> = vec![];
         for (name, _ty) in var_types {
-            if !arg_names.contains(name) {
+            if !param_names.contains(name) {
                 if self.config.enable_debug_mode {
                     inout_var_names.push(name);
                 } else {
@@ -255,7 +255,7 @@ impl Compiler {
                 Variable {
                     name: name.clone(),
                     ty: var_types[name].clone(),
-                    is_arg: arg_names.contains(name),
+                    is_arg: param_names.contains(name),
                     ptr,
                     inout_byte_offset: Some(byte_offset),
                 },

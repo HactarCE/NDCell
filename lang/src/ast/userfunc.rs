@@ -24,7 +24,7 @@ pub struct UserFunction {
     /// HashMap of variable types (including arguments), indexed by name.
     variables: HashMap<String, Type>,
     /// List of variable names for arguments.
-    arg_names: Vec<String>,
+    param_names: Vec<String>,
 
     /// Top-level statement block, consisting of StatementRefs to self.statements.
     top_level_statements: StatementBlock,
@@ -53,17 +53,17 @@ impl UserFunction {
         return_type: Type,
     ) -> Self {
         let mut variables = HashMap::new();
-        let mut arg_names = vec![];
+        let mut param_names = vec![];
         for (name, ty) in args {
             variables.insert(name.clone(), ty);
-            arg_names.push(name);
+            param_names.push(name);
         }
         Self {
             rule_meta,
             name,
             kind: UserFunctionKind::Helper(return_type),
 
-            arg_names,
+            param_names,
             variables,
 
             top_level_statements: vec![],
@@ -84,7 +84,7 @@ impl UserFunction {
             rule_meta.clone(),
             helper_func.name.inner,
             helper_func
-                .args
+                .params
                 .into_iter()
                 .map(|arg| (arg.inner.1.inner, arg.inner.0.inner.resolve(rule_meta.ndim)))
                 .collect(),
@@ -104,9 +104,9 @@ impl UserFunction {
         &self.name
     }
 
-    /// Returns the names of the arguments to this function.
-    pub fn arg_names(&self) -> &[String] {
-        &self.arg_names
+    /// Returns the names of the parameters of this function.
+    pub fn param_names(&self) -> &[String] {
+        &self.param_names
     }
     /// Returns the kind of this function.
     pub fn kind(&self) -> &UserFunctionKind {
@@ -199,7 +199,7 @@ impl UserFunction {
         compiler.begin_extern_function(
             &self.name,
             self.kind().return_type(),
-            &self.arg_names,
+            &self.param_names,
             &self.variables,
         )?;
 
@@ -309,7 +309,7 @@ impl FnSignature {
     pub fn from_helper_function_parse_tree(helper_func: &parser::HelperFunc, ndim: u8) -> Self {
         Self::new(
             helper_func
-                .args
+                .params
                 .iter()
                 .map(|arg| arg.inner.0.inner.resolve(ndim))
                 .collect_vec(),

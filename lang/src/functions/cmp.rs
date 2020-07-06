@@ -1,6 +1,6 @@
 //! Comparison functions.
 
-use inkwell::values::IntValue;
+use inkwell::values::{IntValue, VectorValue};
 use std::fmt;
 
 use super::FuncConstructor;
@@ -8,7 +8,7 @@ use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
 use crate::lexer::ComparisonToken;
-use crate::{ConstValue, Span, Spanned, Type};
+use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{CannotEvalAsConst, CmpError};
 
 /// Built-in function that performs some fixed number of comparisons.
@@ -27,10 +27,22 @@ impl Cmp {
             let comparisons_iter = comparisons.iter();
             // Iterate over adjacent pairs of arguments.
             let arg_types = info.arg_types();
-            let type_pair_iter = arg_types.windows(2);
+            let type_pair_iter = arg_types.windows(2).map(|types| (&types[0], &types[1]));
             let comparators = comparisons_iter
                 .zip(type_pair_iter)
-                .map(|(&cmp, types)| Comparator::try_new(&types[0], cmp, &types[1]))
+                .map(|(&cmp, (lhs, rhs))| {
+                    let span = Span::merge(lhs, rhs);
+                    let lhs = &lhs.inner;
+                    let rhs = &rhs.inner;
+                    Comparator::try_new(lhs, cmp, rhs).ok_or_else(|| {
+                        CmpError {
+                            lhs: lhs.clone(),
+                            cmp,
+                            rhs: rhs.clone(),
+                        }
+                        .with_span(span)
+                    })
+                })
                 .collect::<LangResult<Vec<_>>>()?;
             Ok(Box::new(Self { comparators }))
         })
@@ -138,44 +150,44 @@ impl fmt::Debug for Comparator {
 impl Comparator {
     /// Constructs a new comparator that compares the given types using
     /// the given comparison token (if possible).
-    fn try_new(lhs: &Spanned<Type>, cmp: ComparisonToken, rhs: &Spanned<Type>) -> LangResult<Self> {
-        let span = Span::merge(lhs, rhs);
-        let lhs = lhs.inner.clone();
-        let rhs = rhs.inner.clone();
-        let eq_only = cmp == ComparisonToken::Eql || cmp == ComparisonToken::Neq;
+    fn try_new(lhs: &Type, cmp: ComparisonToken, rhs: &Type) -> Option<Self> {
+        use Type::*;
+        let eq_only = cmp.is_eq_only();
         match (lhs, rhs) {
-            (Type::Int, Type::Int) => Ok(Self::int_cmp(Type::Int, cmp, true)),
-            (Type::CellState, Type::CellState) if eq_only => {
-                Ok(Self::int_cmp(Type::CellState, cmp, false))
-            }
-            (Type::Vector(len), Type::Int) | (Type::Int, Type::Vector(len)) => {
+            (Int, Int) => Some(Self::int_cmp(Int, cmp)),
+            (CellState, CellState) if eq_only => Some(Self::int_cmp(CellState, cmp)),
+            (Vector(len), Int) | (Int, Vector(len)) => {
                 // Coerce the integer to a vector of the same length.
-                Ok(Self::vec_cmp(len, cmp))
+                Some(Self::vec_cmp(*len, cmp))
             }
-            (Type::Vector(len1), Type::Vector(len2)) => {
+            (Vector(len1), Vector(len2)) => {
                 // Extend the shorter vector to the length of the longer one.
                 let len = std::cmp::max(len1, len2);
-                Ok(Self::vec_cmp(len, cmp))
+                Some(Self::vec_cmp(*len, cmp))
             }
-            (Type::IntRange, Type::IntRange) if eq_only => Ok(Self::vec_cmp(3, cmp)),
-            (Type::Rectangle(ndim), Type::IntRange) | (Type::IntRange, Type::Rectangle(ndim))
-                if eq_only =>
-            {
-                Ok(Self::rect_cmp(ndim, cmp))
+            (IntRange, IntRange) if eq_only => Some(Self::vec_cmp(3, cmp)),
+            (Rectangle(ndim), IntRange) | (IntRange, Rectangle(ndim)) if eq_only => {
+                Some(Self::rect_cmp(*ndim, cmp))
             }
-            (Type::Rectangle(ndim1), Type::Rectangle(ndim2)) if eq_only => {
+            (Rectangle(ndim1), Rectangle(ndim2)) if eq_only => {
                 // Add dimensions so that both rectangles have the same number of dimensions.
                 let ndim = std::cmp::max(ndim1, ndim2);
-                Ok(Self::rect_cmp(ndim, cmp))
+                Some(Self::rect_cmp(*ndim, cmp))
             }
-            (lhs, rhs) => Err(CmpError { lhs, cmp, rhs }.with_span(span)),
+            _ => None,
         }
     }
 
     /// Constructs a new comparator that compares two values of the same type
-    /// represented internally by integers, signed or unsigned.
-    fn int_cmp(ty: Type, cmp: ComparisonToken, signed: bool) -> Self {
+    /// (integer or cell state) represented internally by integers, signed or
+    /// unsigned.
+    fn int_cmp(ty: Type, cmp: ComparisonToken) -> Self {
         // Convert from ComparisonToken to inkwell::IntPredicate.
+        let signed = match ty {
+            Type::Int => true,
+            Type::CellState => false,
+            _ => panic!("Invalid type for int_cmp()"),
+        };
         let inkwell_predicate = cmp.inkwell_predicate(signed);
         Self {
             compile: Box::new(move |compiler, lhs, rhs| {
@@ -191,32 +203,22 @@ impl Comparator {
                 Type::CellState => Box::new(move |lhs, rhs| {
                     Ok(cmp.eval(lhs.as_cell_state()?, rhs.as_cell_state()?))
                 }),
-                _ => panic!("Invalid type for int_cmp()"),
+                _ => unreachable!(),
             }),
         }
     }
     /// Constructs a new comparator that compares two signed integer or vector
     /// values by coercing both to vectors of the given length.
+    ///
+    /// Also works on integer ranges by treating them as a vector [start, end,
+    /// step].
     fn vec_cmp(len: usize, cmp: ComparisonToken) -> Self {
         // Convert from ComparisonToken to inkwell::IntPredicate.
         let inkwell_predicate = cmp.inkwell_predicate(true);
         Self {
             compile: Box::new(move |compiler, lhs, rhs| {
-                // Get vectors of integers.
-                let lhs = match lhs {
-                    Value::IntRange(v) => v,
-                    _ => compiler.build_vector_cast(lhs, len)?,
-                };
-                let rhs = match rhs {
-                    Value::IntRange(v) => v,
-                    _ => compiler.build_vector_cast(rhs, len)?,
-                };
-                // Get a vector of booleans (result of comparison for each
-                // component).
-                let bool_vec =
-                    compiler
-                        .builder()
-                        .build_int_compare(inkwell_predicate, lhs, rhs, "vectorCmp");
+                // Get a vector of booleans, one for each component.
+                let bool_vec = Self::compile_vec_cmp(compiler, len, inkwell_predicate, lhs, rhs)?;
                 // Collapse that down to a single boolean.
                 let result = compiler.build_reduce(
                     match cmp {

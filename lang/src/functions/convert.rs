@@ -1,10 +1,9 @@
 //! Conversion functions.
 
 use inkwell::IntPredicate;
-use std::rc::Rc;
 
 use super::{FuncConstructor, FuncResult};
-use crate::ast::{ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function, RuleMeta};
+use crate::ast::{ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
 use crate::types::{LangCellState, LangInt};
@@ -16,8 +15,6 @@ use LangErrorMsg::CellStateOutOfRange;
 /// Built-in function that returns the cell state with the given ID.
 #[derive(Debug)]
 pub struct IntToCellState {
-    /// Rule metadata (used to determine maximum cell state ID).
-    rule_meta: Rc<RuleMeta>,
     /// Error returned if the given cell state ID is out of range.
     out_of_range_error: ErrorPointRef,
 }
@@ -25,7 +22,6 @@ impl IntToCellState {
     /// Constructs a new IntToCellState instance.
     pub fn construct(info: &mut FuncCallInfoMut) -> FuncResult {
         Ok(Box::new(Self {
-            rule_meta: info.userfunc.rule_meta().clone(),
             out_of_range_error: info.add_error_point(CellStateOutOfRange),
         }))
     }
@@ -47,7 +43,7 @@ impl Function for IntToCellState {
         // positive number, which will be too large.)
         let cell_state_count_value = cell_state_value
             .get_type()
-            .const_int(self.rule_meta.states.len() as u64, false);
+            .const_int(info.userfunc.rule_meta().states.len() as u64, false);
         let condition = compiler.builder().build_int_compare(
             IntPredicate::ULT, // Unsigned Less-Than
             cell_state_value,
@@ -73,7 +69,8 @@ impl Function for IntToCellState {
     fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
         let args = info.arg_values();
         let arg = args.const_eval(0)?.as_int()?;
-        if 0 <= arg && arg < self.rule_meta.states.len() as LangInt {
+        let cell_state_count = info.userfunc.rule_meta().states.len() as LangInt;
+        if 0 <= arg && arg < cell_state_count {
             Ok(ConstValue::CellState(arg as LangCellState))
         } else {
             self.out_of_range_error.err()

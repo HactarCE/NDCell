@@ -5,6 +5,7 @@ use itertools::Itertools;
 use std::convert::TryInto;
 
 pub use super::enums::{MinMaxMode, RangeProperty, SumOrProduct};
+
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{AssignableFunction, ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{Compiler, Value};

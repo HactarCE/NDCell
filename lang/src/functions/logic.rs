@@ -1,6 +1,7 @@
 //! Boolean logic functions.
 
 pub use super::enums::LogicalBinOpType;
+
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{Compiler, Value};

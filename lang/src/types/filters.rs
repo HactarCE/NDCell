@@ -22,8 +22,13 @@ impl CellStateFilter {
     }
     /// Returns a new CellStateFilter that matches only the given cell.
     pub fn single_cell_state(cell_state: LangCellState) -> Self {
+        Self::from_cell_states(std::iter::once(&cell_state))
+    }
+    pub fn from_cell_states<'a>(cell_states: impl IntoIterator<Item = &'a LangCellState>) -> Self {
         let mut ret = Self::new();
-        ret.set_bit(cell_state, true);
+        for &cell_state in cell_states {
+            ret.set_bit(cell_state, true);
+        }
         ret
     }
 

@@ -714,6 +714,36 @@ impl Compiler {
         }
     }
 
+    /// Builds computation of the index of a cell state in a cell state filter.
+    pub fn build_compute_cell_state_filter_idx(
+        &mut self,
+        cell_state: IntValue<'static>,
+    ) -> CellStateFilterIndex {
+        let int_bits = types::cell_state().const_int(INT_BITS as u64, false);
+        let one = self.const_uint(1);
+        // vec_idx = cell_state / INT_BITS
+        let vec_idx =
+            self.builder()
+                .build_int_unsigned_div(cell_state, int_bits, "cellStateFilter_vecIdx");
+        // bit_idx = cell_state % INT_BITS
+        let bit_idx =
+            self.builder()
+                .build_int_unsigned_rem(cell_state, int_bits, "cellStateFilter_bitIdx");
+        // Zero-extend that bit_idx from cell state to integer.
+        let bit_idx =
+            self.builder()
+                .build_int_z_extend(bit_idx, types::int(), "cellStateFilter_bitIdx_zext");
+        // bitmask = 1 << bit_idx
+        let bitmask = self
+            .builder()
+            .build_left_shift(one, bit_idx, "cellStateFilter_bitmask");
+        CellStateFilterIndex {
+            vec_idx,
+            bit_idx,
+            bitmask,
+        }
+    }
+
     /* CONSTRUCT / SPLIT */
 
     /// Builds construction of a vector from the given components.
@@ -948,6 +978,26 @@ impl Compiler {
         let new_start = self.build_vector_cast(old_start, ndim)?;
         let new_end = self.build_vector_cast(old_end, ndim)?;
         Ok(self.build_construct_rectangle(new_start, new_end))
+    }
+    /// Builds a cast from a cell state or cell state filter to a cell state filter.
+    pub fn build_cell_state_filter_casts(
+        &mut self,
+        value: Value,
+    ) -> LangResult<VectorValue<'static>> {
+        match value {
+            Value::CellState(i) => {
+                let ret = types::cell_state_filter().const_zero();
+                let idx = self.build_compute_cell_state_filter_idx(i);
+                Ok(self.builder().build_insert_element(
+                    ret,
+                    idx.bitmask,
+                    idx.vec_idx,
+                    "singleCellStateFilter",
+                ))
+            }
+            Value::CellStateFilter(f) => Ok(f),
+            _ => internal_error!("Cannot convert {} to {}", value.ty(), Type::CellStateFilter),
+        }
     }
     /// Builds a reduction of a vector to an integer using the given operation.
     /// If the argument is already an integer, returns the integer.
@@ -1239,6 +1289,15 @@ impl Compiler {
     pub fn get_llvm_return_type(&self) -> IntType<'static> {
         get_ctx().i32_type()
     }
+}
+
+/// Byte and bit indices indicating the location of a single bit in the vector
+/// value of a cell state filter.
+#[derive(Debug, Copy, Clone)]
+pub struct CellStateFilterIndex {
+    pub vec_idx: IntValue<'static>,
+    pub bit_idx: IntValue<'static>,
+    pub bitmask: IntValue<'static>,
 }
 
 /// A function in the process of being compiled to LLVM.

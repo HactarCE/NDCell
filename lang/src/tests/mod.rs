@@ -21,7 +21,7 @@ mod vecs;
 use crate::ast;
 use crate::compiler::{CompiledFunction, Compiler};
 use crate::errors::CompleteLangResult;
-use crate::types::LangInt;
+use crate::types::{CellStateFilter, LangInt};
 use crate::ConstValue;
 use values::*;
 

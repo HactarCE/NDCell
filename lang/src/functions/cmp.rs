@@ -8,6 +8,7 @@ use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{self, Compiler, Value};
 use crate::errors::*;
 use crate::lexer::ComparisonToken;
+use crate::types::{LangInt, CELL_STATE_FILTER_ARRAY_LEN};
 use crate::{ConstValue, Span, Type};
 use LangErrorMsg::{CannotEvalAsConst, CmpError};
 
@@ -174,6 +175,9 @@ impl Comparator {
                 let ndim = std::cmp::max(ndim1, ndim2);
                 Some(Self::rect_cmp(*ndim, cmp))
             }
+            (CellStateFilter, CellStateFilter) if eq_only => {
+                Some(Self::vec_cmp(CELL_STATE_FILTER_ARRAY_LEN, cmp))
+            }
             _ => None,
         }
     }
@@ -211,7 +215,7 @@ impl Comparator {
     /// values by coercing both to vectors of the given length.
     ///
     /// Also works on integer ranges by treating them as a vector [start, end,
-    /// step].
+    /// step] and on cell state filters.
     fn vec_cmp(len: usize, cmp: ComparisonToken) -> Self {
         // Convert from ComparisonToken to inkwell::IntPredicate.
         let inkwell_predicate = cmp.inkwell_predicate(true);
@@ -233,8 +237,20 @@ impl Comparator {
             }),
             const_eval: Some(Box::new(move |lhs, rhs| {
                 // Get vectors of integers.
-                let lhs = lhs.coerce_to_vector(len)?;
-                let rhs = rhs.coerce_to_vector(len)?;
+                let lhs = match lhs {
+                    ConstValue::IntRange { start, end, step } => vec![start, end, step],
+                    ConstValue::CellStateFilter(f) => {
+                        f.as_ints().iter().map(|&x| x as LangInt).collect()
+                    }
+                    _ => lhs.coerce_to_vector(len)?,
+                };
+                let rhs = match rhs {
+                    ConstValue::IntRange { start, end, step } => vec![start, end, step],
+                    ConstValue::CellStateFilter(f) => {
+                        f.as_ints().iter().map(|&x| x as LangInt).collect()
+                    }
+                    _ => rhs.coerce_to_vector(len)?,
+                };
                 // Compare them componentwise, checking that all the comparisons
                 // are true.
                 let result = lhs.into_iter().zip(rhs).all(|(l, r)| cmp.eval(l, r));
@@ -304,10 +320,12 @@ impl Comparator {
         // Get vectors of integers.
         let lhs = match lhs {
             Value::IntRange(v) => v,
+            Value::CellStateFilter(f) => f,
             _ => compiler.build_vector_cast(lhs, len)?,
         };
         let rhs = match rhs {
             Value::IntRange(v) => v,
+            Value::CellStateFilter(f) => f,
             _ => compiler.build_vector_cast(rhs, len)?,
         };
         // Return a vector of booleans (result of comparison for each
@@ -334,10 +352,11 @@ impl Function for Is {
         let lhs = &info.arg_types()[0];
         let rhs = &info.arg_types()[1];
         // Check right-hand side first, then left-hand side.
-        typecheck!(rhs, [IntRange, Rectangle])?;
+        typecheck!(rhs, [IntRange, Rectangle, CellStateFilter])?;
         match rhs.inner {
             Type::IntRange => typecheck!(lhs, [Int, Vector])?,
             Type::Rectangle(_) => typecheck!(lhs, [Int, Vector])?,
+            Type::CellStateFilter => typecheck!(lhs, CellState)?,
             _ => unreachable!(),
         }
         // Always return a boolean.
@@ -414,6 +433,29 @@ impl Function for Is {
                     compiler::types::int(),
                     "rangeTestResultAsInt",
                 );
+                Ok(Value::Int(ret))
+            }
+            Value::CellStateFilter(f) => {
+                // Determine which bit to extract.
+                let idx = compiler.build_compute_cell_state_filter_idx(lhs.as_cell_state()?);
+                // Extract the integer containing that bit.
+                let int = compiler
+                    .builder()
+                    .build_extract_element(f, idx.vec_idx, "cellStateFilterExtractMember")
+                    .into_int_value();
+                // Single it out using the bitmask.
+                let bit =
+                    compiler
+                        .builder()
+                        .build_and(int, idx.bitmask, "cellStateFilterExtractBit");
+                // Shift it to the right into the lowest position.
+                let ret = compiler.builder().build_right_shift(
+                    bit,
+                    idx.bit_idx,
+                    false,
+                    "cellStateFilterExtractBitToBool",
+                );
+                // Return it.
                 Ok(Value::Int(ret))
             }
             _ => uncaught_type_error!(),

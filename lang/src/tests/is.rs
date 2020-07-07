@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use super::{assert_fn_result, compile_test_fn, ConstValue, LangInt};
+use super::{assert_fn_result, compile_test_fn, CellStateFilter, ConstValue, LangInt};
 
 #[test]
 fn test_int_is_range() {
@@ -109,7 +109,6 @@ fn test_vec_is_rectangle() {
                 ConstValue::Vector(v.clone()),
                 ConstValue::Rectangle(start.clone(), end.clone()),
             ],
-            // Note that the step doesn't actually matter.
             Ok(ConstValue::Int(
                 (
                     // Check X axis.
@@ -130,7 +129,6 @@ fn test_vec_is_rectangle() {
                 ConstValue::Vector(v.clone()),
                 ConstValue::Rectangle(start.clone(), end.clone()),
             ],
-            // Note that the step doesn't actually matter.
             Ok(ConstValue::Int(
                 (
                     // Check X axis.
@@ -153,7 +151,6 @@ fn test_vec_is_rectangle() {
                 ConstValue::Vector(v.clone()),
                 ConstValue::Rectangle(start.clone(), end.clone()),
             ],
-            // Note that the step doesn't actually matter.
             Ok(ConstValue::Int(
                 (
                     // Check X axis.
@@ -164,6 +161,28 @@ fn test_vec_is_rectangle() {
                     && ((start[2]..=end[2]).contains(&0) || (end[2]..=start[2]).contains(&0))
                 ) as LangInt,
             )),
+        )
+    }
+}
+
+#[test]
+fn test_cell_state_filter_membership() {
+    let test_cell_states = vec![0, 1, 2, 62, 63, 64, 65, 254, 255];
+    let test_cell_state_filters = test_cell_states
+        .iter()
+        .map(|&x| CellStateFilter::single_cell_state(x))
+        .chain(std::iter::once(CellStateFilter::new()))
+        .collect_vec();
+
+    let mut f = compile_test_fn("@function Int test(Cell l, CellFilter r) { return l is r }");
+    for (&cell_state, &filter) in iproduct!(&test_cell_states, &test_cell_state_filters) {
+        assert_fn_result(
+            &mut f,
+            &[
+                ConstValue::CellState(cell_state),
+                ConstValue::CellStateFilter(filter),
+            ],
+            Ok(ConstValue::Int(filter.get_bit(cell_state) as LangInt)),
         )
     }
 }

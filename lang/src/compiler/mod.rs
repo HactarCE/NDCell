@@ -1241,8 +1241,8 @@ impl Compiler {
     }
 }
 
-#[derive(Debug)]
 /// A function in the process of being compiled to LLVM.
+#[derive(Debug)]
 struct FunctionInProgress {
     /// LLVM function currently being built.
     llvm_fn: FunctionValue<'static>,

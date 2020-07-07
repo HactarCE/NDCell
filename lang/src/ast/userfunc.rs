@@ -256,8 +256,8 @@ impl UserFunction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// Kind of user function (including return type, if there is one).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UserFunctionKind {
     /// Helper function returning a specific type.
     ///

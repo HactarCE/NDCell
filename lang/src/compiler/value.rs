@@ -104,7 +104,7 @@ impl Value {
             _ => uncaught_type_error!(),
         }
     }
-    /// Returns the LLVM vector value inside if this is Value::IntRange;
+    /// Returns the LLVM struct value inside if this is Value::Rectangle;
     /// otherwise an InternalError.
     pub fn as_rectangle(self) -> LangResult<StructValue<'static>> {
         match self {

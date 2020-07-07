@@ -123,7 +123,9 @@ impl ConstValue {
             _ => uncaught_type_error!(),
         }
     }
-    /// Converts this value to a rectnagle of the specified number of dimensions if this is a ConstValue::Int, ConstValue::Vector, ConstValue::IntRange, or ConstValue::
+    /// Converts this value to a rectangle of the specified number of dimensions
+    /// if this is a ConstValue::Int, ConstValue::Vector, ConstValue::IntRange,
+    /// or ConstValue::Rectangle; otherwise returns an InternalError.
     pub fn coerce_to_rectangle(self, ndim: usize) -> LangResult<(Vec<LangInt>, Vec<LangInt>)> {
         match self {
             Self::Int(i) => Ok((vec![i; ndim], vec![i; ndim])),

@@ -9,6 +9,7 @@ mod byterepr;
 mod cmp;
 mod debug;
 mod funcs;
+mod is;
 mod math;
 mod ranges;
 mod rects;

@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use super::{assert_fn_result, compile_test_fn};
+use super::{assert_fn_result, compile_test_fn, ConstValue, LangInt};
 
 #[test]
 fn test_int_is_range() {

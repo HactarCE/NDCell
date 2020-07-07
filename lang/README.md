@@ -11,7 +11,7 @@ This is a testing ground for a cellular automaton description language for [NDCe
 * [x] Unary `+` operator
 * [x] Refactor parser
 * [x] `is` expressions
-* [ ] cell state filters
+* [x] cell state filters
 * [ ] `for` loops
 * [ ] pattern masks
 * [ ] patterns

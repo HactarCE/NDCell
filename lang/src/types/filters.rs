@@ -43,20 +43,20 @@ impl CellStateFilter {
 
     /// Returns the given bit of this cell state filter.
     pub fn get_bit(self, cell_state: LangCellState) -> bool {
-        let (byte_idx, bit_idx) = Self::byte_and_bit_idx(cell_state);
-        self.0[byte_idx] & (1 << bit_idx) != 0
+        let (array_idx, bit_idx) = Self::byte_and_bit_idx(cell_state);
+        self.0[array_idx] & (1 << bit_idx) != 0
     }
     /// Sets the given bit of this cell state filter to the given value.
     pub fn set_bit(&mut self, cell_state: LangCellState, value: bool) {
-        let (byte_idx, bit_idx) = Self::byte_and_bit_idx(cell_state);
+        let (array_idx, bit_idx) = Self::byte_and_bit_idx(cell_state);
         if value {
-            self.0[byte_idx] |= 1 << bit_idx;
+            self.0[array_idx] |= 1 << bit_idx;
         } else {
-            self.0[byte_idx] &= !(1 << bit_idx);
+            self.0[array_idx] &= !(1 << bit_idx);
         }
     }
 
-    /// Returns the byte and bit indices of the bit corresponding to the given
+    /// Returns the array and bit indices of the bit corresponding to the given
     /// cell state.
     fn byte_and_bit_idx(cell_state: LangCellState) -> (usize, usize) {
         (

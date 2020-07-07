@@ -3,7 +3,7 @@ use inkwell::types::{BasicTypeEnum, IntType, StructType, VectorType};
 use inkwell::AddressSpace;
 
 use super::get_ctx;
-use crate::types::{CELL_STATE_BITS, INT_BITS};
+use crate::types::{CELL_STATE_BITS, CELL_STATE_FILTER_ARRAY_LEN, INT_BITS};
 use crate::{LangResult, Type};
 
 /// Returns the LLVM type used to represent vales of the given type, or an
@@ -16,6 +16,7 @@ pub fn get(ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
         Type::Pattern(shape) => Ok(pattern(shape.ndim()).into()),
         Type::IntRange => Ok(int_range().into()),
         Type::Rectangle(ndim) => Ok(rectangle(*ndim).into()),
+        Type::CellStateFilter => Ok(cell_state_filter().into()),
         // _ => internal_error!(
         //     "Attempt to get LLVM representation of type that has none".into(),
         // ),
@@ -69,4 +70,15 @@ pub fn int_range() -> VectorType<'static> {
 pub fn rectangle(ndim: usize) -> StructType<'static> {
     let vec_type = vec(ndim).into();
     get_ctx().struct_type(&[vec_type, vec_type], false)
+}
+
+pub fn cell_state_filter() -> VectorType<'static> {
+    // We use a full 256-bit "integer" for a cell state filter (represented as a
+    // vector of 64-bit integers), and hope that LLVM is smart enough to
+    // optimize most of it away after we promise that many of the upper bits
+    // will be zero. For example, a 10-state CA only needs the lowest 10 bits of
+    // this entire vector, which is really just a 16-bit integer.
+    //
+    // Most of the time cell state filters will be optimized away anyway.
+    vec(CELL_STATE_FILTER_ARRAY_LEN)
 }

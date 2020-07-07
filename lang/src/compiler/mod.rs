@@ -884,7 +884,9 @@ impl Compiler {
                 end_phi.as_basic_value().into_int_value()
             }
             // Other types have no truthiness.
-            Value::IntRange(_) | Value::Rectangle(_) => uncaught_type_error!(),
+            Value::IntRange(_) | Value::Rectangle(_) | Value::CellStateFilter(_) => {
+                uncaught_type_error!()
+            }
         };
 
         // Cast to integer.
@@ -1218,6 +1220,12 @@ impl Compiler {
                     .unwrap();
                 Value::Rectangle(types::rectangle(ndim).const_named_struct(&[start, end]))
             }
+            ConstValue::CellStateFilter(f) => Value::CellStateFilter(VectorType::const_vector(
+                &f.as_ints()
+                    .iter()
+                    .map(|&i| self.const_uint(i))
+                    .collect_vec(),
+            )),
         }
     }
     /// Returns the default value for variables of the given type, panicking if

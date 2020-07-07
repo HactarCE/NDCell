@@ -4,8 +4,10 @@ use itertools::Itertools;
 use std::fmt;
 use std::rc::Rc;
 
+mod filters;
 mod patterns;
 
+pub use filters::{CellStateFilter, CELL_STATE_FILTER_ARRAY_LEN};
 pub use patterns::PatternShape;
 
 use crate::errors::*;
@@ -14,6 +16,8 @@ use LangErrorMsg::{CustomTypeError, TypeError};
 
 /// Rust type used for NDCA integers.
 pub type LangInt = i64;
+/// Unsigned rust type used for NDCA integers.
+pub type LangUint = u64;
 /// Number of bits in an NDCA integer.
 pub const INT_BITS: u32 = 64;
 
@@ -47,6 +51,8 @@ pub enum Type {
     IntRange,
     /// Hyperrectangle of a specific dimensionality (from 1 to 256).
     Rectangle(usize),
+    /// Cell state filter
+    CellStateFilter,
 }
 impl Default for Type {
     fn default() -> Self {
@@ -62,6 +68,7 @@ impl fmt::Debug for Type {
             Self::Pattern(shape) => write!(f, "{:?}{}", TypeDesc::Pattern, shape),
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{:?}{}", TypeDesc::Rectangle, ndim),
+            Self::CellStateFilter => write!(f, "CellFilter"),
         }
     }
 }
@@ -74,6 +81,7 @@ impl fmt::Display for Type {
             Self::Pattern(shape) => write!(f, "{}{}", TypeDesc::Pattern, shape),
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{}{}", TypeDesc::Rectangle, ndim),
+            Self::CellStateFilter => write!(f, "CellStateFilter"),
         }
     }
 }
@@ -88,7 +96,8 @@ impl Type {
             | Self::Vector(_)
             | Self::Pattern(_)
             | Self::IntRange
-            | Self::Rectangle(_) => true,
+            | Self::Rectangle(_)
+            | Self::CellStateFilter => true,
         }
     }
 
@@ -100,7 +109,7 @@ impl Type {
     pub fn can_convert_to_bool(&self) -> bool {
         match self {
             Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
-            Self::IntRange | Self::Rectangle(_) => false,
+            Self::IntRange | Self::Rectangle(_) | Self::CellStateFilter => false,
         }
     }
 

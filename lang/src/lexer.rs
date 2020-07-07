@@ -466,6 +466,7 @@ pub enum TypeToken {
     Vector(Option<usize>),
     IntRange,
     Rectangle(Option<usize>),
+    CellStateFilter,
 }
 impl fmt::Display for TypeToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -477,6 +478,7 @@ impl fmt::Display for TypeToken {
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(None) => write!(f, "Rectangle"),
             Self::Rectangle(Some(ndim)) => write!(f, "Rectangle{}", ndim),
+            Self::CellStateFilter => write!(f, "CellStateFilter"),
         }
     }
 }
@@ -513,6 +515,7 @@ impl FromStr for TypeToken {
             "Vec" | "Vector" => Ok(Self::Vector(None)),
             "Range" => Ok(Self::IntRange),
             "Rect" | "Rectangle" => Ok(Self::Rectangle(None)),
+            "CellFilter" | "CellStateFilter" => Ok(Self::CellStateFilter),
             _ => Err(()),
         }
     }
@@ -534,6 +537,7 @@ impl TypeToken {
             Self::IntRange => Type::IntRange,
             Self::Rectangle(None) => Type::Rectangle(ndim as usize),
             Self::Rectangle(Some(rect_ndim)) => Type::Rectangle(rect_ndim),
+            Self::CellStateFilter => Type::CellStateFilter,
         }
     }
 }

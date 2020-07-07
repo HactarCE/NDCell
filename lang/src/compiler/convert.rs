@@ -1,8 +1,11 @@
 use inkwell::targets::TargetData;
+use itertools::Itertools;
 use std::convert::TryInto;
 
 use crate::compiler::types::size_of;
-use crate::types::{LangCellState, LangInt};
+use crate::types::{
+    CellStateFilter, LangCellState, LangInt, LangUint, CELL_STATE_FILTER_ARRAY_LEN,
+};
 use crate::{ConstValue, Type};
 
 /// Constructs a value of the given type from raw bytes. Panics if given an
@@ -79,6 +82,21 @@ pub fn bytes_to_value(ty: Type, bytes: &[u8], target_data: &TargetData) -> Const
 
             ConstValue::Rectangle(start, end)
         }
+        Type::CellStateFilter => ConstValue::CellStateFilter(CellStateFilter::from_ints(
+            bytes_to_value(
+                Type::Vector(CELL_STATE_FILTER_ARRAY_LEN),
+                bytes,
+                target_data,
+            )
+            .as_vector()
+            .unwrap()
+            .iter()
+            .map(|&x| x as LangUint)
+            .collect_vec()
+            .as_slice()
+            .try_into()
+            .unwrap(),
+        )),
     }
 }
 
@@ -149,6 +167,13 @@ pub fn value_to_bytes(value: &ConstValue, bytes: &mut [u8], target_data: &Target
                 target_data,
             );
         }
+        ConstValue::CellStateFilter(f) => {
+            value_to_bytes(
+                &ConstValue::Vector(f.as_ints().iter().map(|&x| x as LangInt).collect()),
+                bytes,
+                target_data,
+            );
+        }
     }
 }
 
@@ -193,6 +218,10 @@ mod tests {
         ]
         .into_iter();
 
+        let cell_state_filters = (0..crate::MAX_STATES).map(|i| {
+            ConstValue::CellStateFilter(CellStateFilter::single_cell_state(i as LangCellState))
+        });
+
         let compiler = crate::compiler::Compiler::new().unwrap();
         let target_data = compiler.target_data();
 
@@ -201,6 +230,7 @@ mod tests {
             .chain(vecs)
             .chain(ranges)
             .chain(rectangles)
+            .chain(cell_state_filters)
         {
             let mut bytes = vec![0; size_of(&value.ty(), target_data)];
             value_to_bytes(&value, &mut bytes, target_data);

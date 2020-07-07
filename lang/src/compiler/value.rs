@@ -24,6 +24,9 @@ pub enum Value {
     /// Inclusive hyperrectangle, represented by a struct containing two vectors
     /// of the same length.
     Rectangle(StructValue<'static>),
+    /// Cell state filter, represented by raw bits stored in an LLVM vector
+    /// value of integers.
+    CellStateFilter(VectorValue<'static>),
 }
 impl Value {
     /// Returns the type of this value.
@@ -40,6 +43,7 @@ impl Value {
                 assert_eq!(field1, field2, "LLVM rect fields mismatch");
                 field1.into_vector_type().get_size() as usize
             }),
+            Self::CellStateFilter(_) => Type::CellStateFilter,
         }
     }
     /// Constructs a value of the given type from an LLVM basic value.
@@ -61,6 +65,14 @@ impl Value {
                 let ret = Self::Rectangle(basic_value.into_struct_value());
                 assert_eq!(Type::Rectangle(*ndim), ret.ty(), "LLVM rect ndim mismatch");
                 ret
+            }
+            Type::CellStateFilter => {
+                assert_eq!(
+                    basic_value.into_vector_value().get_type(),
+                    super::types::cell_state_filter(),
+                    "LLVM cell state filter vector length mismatch",
+                );
+                Value::CellStateFilter(basic_value.into_vector_value())
             }
         }
     }
@@ -112,6 +124,14 @@ impl Value {
             _ => uncaught_type_error!(),
         }
     }
+    /// Returns the LLVM vector value inside if this is Value::CellStateFilter;
+    /// otherwise an InternalError.
+    pub fn as_cell_state_filter(self) -> LangResult<VectorValue<'static>> {
+        match self {
+            Value::CellStateFilter(f) => Ok(f),
+            _ => uncaught_type_error!(),
+        }
+    }
     /// Returns this value as an LLVM basic value if it is representable as one;
     /// otherwise a TypeError.
     pub fn into_basic_value(self) -> LangResult<BasicValueEnum<'static>> {
@@ -122,6 +142,7 @@ impl Value {
             Value::Pattern(p) => Ok(p.value.into()),
             Value::IntRange(r) => Ok(r.into()),
             Value::Rectangle(r) => Ok(r.into()),
+            Value::CellStateFilter(f) => Ok(f.into()),
             // _ => internal_error!("{} has no BasicValue representation", self),
         }
     }

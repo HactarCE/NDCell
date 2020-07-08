@@ -14,7 +14,7 @@ impl_tokeneater_for_tokenclass!(PunctuationToken);
 pub struct TypeName;
 impl_display!(
     TypeName,
-    "type name (e.g. Int, Cell, Vec, Vec1..256 -- capitalization matters)",
+    "type name (e.g. Int, Cell, Vec, Vec1..256, etc. -- capitalization matters)",
 );
 impl TokenEater for TypeName {
     type Output = TypeToken;

@@ -35,8 +35,7 @@ pub const AXES: &'static str = "xyzwuv";
 /// Any data type.
 ///
 /// When adding new types, make sure that check lexer::TypeToken and add a
-/// corresponding variant there if needed. Also update the list in the error
-/// message in parser::ParseBuilder::type_name().
+/// corresponding variant there if needed.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     /// Void.

@@ -57,7 +57,7 @@ pub enum Type {
 }
 impl Default for Type {
     fn default() -> Self {
-        Self::Int
+        Self::Void
     }
 }
 impl fmt::Debug for Type {

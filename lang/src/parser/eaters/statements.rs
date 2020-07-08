@@ -59,12 +59,19 @@ impl TokenEater for Statement {
         match tf.next_class() {
             Some(TokenClass::Keyword(kw)) if kw.starts_statement() => match kw {
                 // Loops
-                For => tf.err(Unimplemented),
+                For => Ok(tree::Statement::ForLoop {
+                    var_expr: tf.feed(Expr)?,
+                    iter_expr: {
+                        tf.feed(KeywordToken::In)?;
+                        tf.feed(Expr)?
+                    },
+                    block: tf.feed(StatementBlock)?,
+                }),
                 While => tf.err(Unimplemented),
 
                 // Loop control
-                Break => tf.err(Unimplemented),
-                Continue => tf.err(Unimplemented),
+                Break => Ok(tree::Statement::Break),
+                Continue => Ok(tree::Statement::Continue),
 
                 // Returning values
                 Become => Ok(tree::Statement::Become(tf.feed(Expr)?)),

@@ -162,6 +162,7 @@ pub enum LangErrorMsg {
     CannotEvalAsConst,
     VectorTooBig,
     FunctionLookupError,
+    NotInLoop,
 
     // Runtime errors
     IntegerOverflow,
@@ -272,6 +273,9 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::FunctionLookupError => {
                 write!(f, "There is no function with this name")?;
+            }
+            Self::NotInLoop => {
+                write!(f, "This is only allowed a loop")?;
             }
 
             Self::IntegerOverflow => {

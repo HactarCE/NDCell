@@ -282,7 +282,7 @@ impl Expr {
     pub fn spanned_ret_type(&self) -> Spanned<Type> {
         Spanned {
             span: self.span(),
-            inner: self.ret_type.clone(),
+            inner: self.ret_type(),
         }
     }
 
@@ -319,6 +319,15 @@ impl Expr {
             .as_assignable(info)
             .ok_or(CannotEvalAsConst.with_span(self.span()))?
             .assign_type(info)
+    }
+    /// Returns the type that can be assigned to this expression along with its
+    /// span in the original source code, or an error if this expression cannot
+    /// be assigned to.
+    pub fn spanned_assign_type(&self, userfunc: &UserFunction) -> LangResult<Spanned<Type>> {
+        Ok(Spanned {
+            span: self.span(),
+            inner: self.assign_type(userfunc)?,
+        })
     }
     /// Returns a pointer value to the assignable value resulting from this
     /// expression.

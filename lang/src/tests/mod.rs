@@ -10,6 +10,7 @@ mod cmp;
 mod debug;
 mod funcs;
 mod is;
+mod loops;
 mod math;
 mod ranges;
 mod rects;

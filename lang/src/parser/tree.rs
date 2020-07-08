@@ -159,11 +159,22 @@ pub enum Statement {
         /// Statements to execute if condition is falsey.
         if_false: StatementBlock,
     },
-    // ForLoop(Spanned<Expr>, Spanned<Expr>, StatementBlock),
+    /// Iterates over a set of values.
+    ForLoop {
+        /// Variable to hold iteration value.
+        var_expr: Spanned<Expr>,
+        /// Value to iterate over.
+        iter_expr: Spanned<Expr>,
+        /// Code to execute for each value.
+        block: StatementBlock,
+    },
+
     // WhileLoop(Spanned<Expr>, StatementBlock),
     // DoWhileLoop(StatementBlock, Spanned<Expr>),
-    // Break,
-    // Continue,
+    /// Breaks out of a loop.
+    Break,
+    /// Continues to the next iteration of a loop.
+    Continue,
 
     // /// Returns the center cell state from the transition function.
     // Remain,

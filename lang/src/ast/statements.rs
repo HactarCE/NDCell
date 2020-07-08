@@ -4,7 +4,7 @@ use crate::errors::*;
 use crate::parser;
 use crate::{Span, Spanned};
 use LangErrorMsg::{
-    AssertionFailed, BecomeInHelperFunction, CannotAssignTypeToVariable,
+    AssertionFailed, BecomeInHelperFunction, CannotAssignTypeToVariable, NotInLoop,
     ReturnInTransitionFunction, UserError,
 };
 
@@ -73,6 +73,32 @@ pub fn from_parse_tree(
                 span, userfunc, cond_expr, if_true, if_false,
             )?))
         }
+        // For loop
+        parser::Statement::ForLoop {
+            var_expr,
+            iter_expr,
+            block,
+        } => {
+            let iter_expr = userfunc.build_expression_ast(iter_expr)?;
+            // Register a new variable if necessary.
+            if let parser::Expr::Ident(var_name) = &var_expr.inner {
+                userfunc.get_or_create_var(
+                    var_name,
+                    userfunc[iter_expr]
+                        .spanned_ret_type()
+                        .typecheck_can_iterate()?,
+                );
+            }
+            let var_expr = userfunc.build_expression_ast(var_expr)?;
+            let block = userfunc.build_statement_block_ast(block)?;
+            Ok(Box::new(ForLoop::try_new(
+                span, userfunc, var_expr, iter_expr, block,
+            )?))
+        }
+        // Break statement
+        parser::Statement::Break => Ok(Box::new(Break::new(span))),
+        // Continue statement
+        parser::Statement::Continue => Ok(Box::new(Continue::new(span))),
         // Become statement (In a transition function, `become` should be used, not `return`.)
         parser::Statement::Become(ret_expr) => match userfunc.kind() {
             UserFunctionKind::Helper(_) => Err(BecomeInHelperFunction.with_span(span)),
@@ -187,8 +213,8 @@ impl SetVar {
     /// Constructs a new variable assignment statement that assigns the result
     /// of the given expression to the variable with the given name.
     ///
-    /// This method also the types of the source and destination expressions to
-    /// ensure that they match.
+    /// This method checks the types of the source and destination expressions
+    /// to ensure that they match.
     pub fn try_new(
         span: Span,
         userfunc: &mut UserFunction,
@@ -232,9 +258,9 @@ pub struct If {
     span: Span,
     /// Expression to branch based on.
     cond_expr: ExprRef,
-    /// Block of statement to evaluate if the condition is truthy.
+    /// Block of statements to execute if the condition is truthy.
     if_true: StatementBlock,
-    /// Block of statements to evaluate if the condition if falsey.
+    /// Block of statements to execute if the condition if falsey.
     if_false: StatementBlock,
 }
 impl If {
@@ -273,6 +299,108 @@ impl Statement for If {
             |c| userfunc.compile_statement_block(c, &self.if_false),
         )?;
         Ok(())
+    }
+}
+
+/// A for loop, such as `for x in 1..10 { ... }`
+#[derive(Debug)]
+pub struct ForLoop {
+    /// Span of this statement in the original source code.
+    span: Span,
+    /// Expression to assign the iteration value to.
+    var_expr: ExprRef,
+    /// Expression to iterate over.
+    iter_expr: ExprRef,
+    /// Block of statements to execute on each iteration.
+    block: StatementBlock,
+}
+impl ForLoop {
+    /// Constructs a new for loop.
+    ///
+    /// This method checks the types of the variable and iteration expressions.
+    pub fn try_new(
+        span: Span,
+        userfunc: &mut UserFunction,
+        var_expr: ExprRef,
+        iter_expr: ExprRef,
+        block: StatementBlock,
+    ) -> LangResult<Self> {
+        // Check types.
+        let var_type = userfunc[var_expr].spanned_assign_type(userfunc)?;
+        let iteration_type = userfunc[iter_expr]
+            .spanned_ret_type()
+            .typecheck_can_iterate()?;
+        var_type.typecheck(iteration_type)?;
+
+        Ok(Self {
+            span,
+            var_expr,
+            iter_expr,
+            block,
+        })
+    }
+}
+impl Statement for ForLoop {
+    fn span(&self) -> Span {
+        self.span
+    }
+    fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
+        let iterator = userfunc.compile_expr(compiler, self.iter_expr)?;
+        compiler.build_value_iter(iterator, |c, iteration_value| {
+            // Assign iteration variable.
+            userfunc[self.var_expr].compile_assign(c, iteration_value, userfunc)?;
+            // Compile statements.
+            userfunc.compile_statement_block(c, &self.block)?;
+            Ok(())
+        })?;
+        Ok(())
+    }
+}
+
+/// A break statement.
+#[derive(Debug)]
+pub struct Break {
+    /// Span of this statement in the original source code.
+    span: Span,
+}
+impl Break {
+    /// Constructs a new statement that breaks out of the innermost loop.
+    pub fn new(span: Span) -> Self {
+        Self { span }
+    }
+}
+impl Statement for Break {
+    fn span(&self) -> Span {
+        self.span
+    }
+    fn compile(&self, compiler: &mut Compiler, _userfunc: &UserFunction) -> LangResult<()> {
+        compiler
+            .build_jump_to_loop_exit()
+            .map_err(|_| NotInLoop.with_span(self.span))
+    }
+}
+
+/// A break statement.
+#[derive(Debug)]
+pub struct Continue {
+    /// Span of this statement in the original source code.
+    span: Span,
+}
+impl Continue {
+    /// Constructs a new statement that continues to the next iteration of the
+    /// innermost loop.
+    pub fn new(span: Span) -> Self {
+        Self { span }
+    }
+}
+impl Statement for Continue {
+    fn span(&self) -> Span {
+        self.span
+    }
+    fn compile(&self, compiler: &mut Compiler, _userfunc: &UserFunction) -> LangResult<()> {
+        compiler
+            .build_jump_to_loop_entry()
+            .map_err(|_| NotInLoop.with_span(self.span))
     }
 }
 

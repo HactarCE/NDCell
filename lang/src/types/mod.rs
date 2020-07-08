@@ -52,7 +52,7 @@ pub enum Type {
     IntRange,
     /// Hyperrectangle of a specific dimensionality (from 1 to 256).
     Rectangle(usize),
-    /// Cell state filter
+    /// Cell state filter.
     CellStateFilter,
 }
 impl Default for Type {
@@ -116,6 +116,18 @@ impl Type {
             Self::Void | Self::IntRange | Self::Rectangle(_) | Self::CellStateFilter => false,
         }
     }
+    /// Returns the type yielded by iteration over this type, or None if this
+    /// type cannot be iterated over.
+    pub fn iteration_type(&self) -> Option<Type> {
+        match self {
+            Self::Vector(_) => Some(Self::Int),
+            Self::Pattern(_) => Some(Self::CellState),
+            Self::IntRange => Some(Self::Int),
+            Self::Rectangle(ndim) => Some(Self::Vector(*ndim)),
+            Self::CellStateFilter => Some(Self::CellState),
+            _ => None,
+        }
+    }
 
     /// Returns a TypeError where this type is the "got" type, given an
     /// "expected" type.
@@ -161,6 +173,16 @@ impl Spanned<Type> {
                 .custom_type_error("type that can be converted to boolean".to_owned())
                 .with_span(self.span))
         }
+    }
+
+    /// Returns the type yielded by iterating over this type, or a
+    /// CustomTypeError if this type cannot be iterated over.
+    pub fn typecheck_can_iterate(&self) -> LangResult<Type> {
+        self.inner.iteration_type().ok_or_else(|| {
+            self.inner
+                .custom_type_error("type that can be iterated over".to_owned())
+                .with_span(self.span)
+        })
     }
 }
 

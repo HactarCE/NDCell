@@ -36,6 +36,7 @@ use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 mod config;
 pub mod convert;
 mod function;
+mod iter;
 pub mod types;
 mod value;
 
@@ -101,6 +102,11 @@ pub struct Compiler {
     function: Option<FunctionInProgress>,
     /// Compiler configuration.
     config: CompilerConfig,
+
+    /// Stack of jump targets for 'continue' statements.
+    loop_entry_points: Vec<BasicBlock<'static>>,
+    /// Stack of jump targets for 'break' statements.
+    loop_exit_points: Vec<BasicBlock<'static>>,
 }
 impl Compiler {
     /// Constructs a new compiler with a blank module and "main" function.
@@ -117,6 +123,9 @@ impl Compiler {
             execution_engine,
             function: None,
             config: CompilerConfig::default(),
+
+            loop_entry_points: vec![],
+            loop_exit_points: vec![],
         })
     }
     /// Sets the configuration for this compiler.
@@ -406,6 +415,49 @@ impl Compiler {
         }
 
         self.builder().position_at_end(merge_bb);
+        Ok(())
+    }
+
+    /// Records the beginning of a loop (jump target for "continue" statements),
+    /// executing instructions built by the given closure before every loop
+    /// iteration EXCEPT the first. For each call to begin_loop(), end_loop()
+    /// must be called once later.
+    pub fn enter_loop(&mut self) {
+        let loop_entry = self.append_basic_block("loopEntry");
+        let loop_exit = self.append_basic_block("loopExit");
+
+        self.loop_entry_points.push(loop_entry);
+        self.loop_exit_points.push(loop_exit);
+
+        if self.needs_terminator() {
+            self.builder().build_unconditional_branch(loop_entry);
+        }
+        self.builder().position_at_end(loop_entry);
+    }
+    /// Records the end of a loop (jump target for "break" statements). For each
+    /// call to begin_loop(), end_loop() must be called once later.
+    pub fn exit_loop(&mut self) {
+        let _loop_entry = self
+            .loop_entry_points
+            .pop()
+            .expect("end_loop() called without corresponding begin_loop()");
+        let loop_exit = self.loop_exit_points.pop().unwrap();
+
+        if self.needs_terminator() {
+            self.builder().build_unconditional_branch(loop_exit);
+        }
+        self.builder().position_at_end(loop_exit);
+    }
+    /// Builds a "continue" statement, returning error if there is no loop.
+    pub fn build_jump_to_loop_entry(&mut self) -> Result<(), ()> {
+        let loop_entry = *self.loop_entry_points.last().ok_or(())?;
+        self.builder().build_unconditional_branch(loop_entry);
+        Ok(())
+    }
+    /// Builds a "break" statement, returning error if there is no loog.
+    pub fn build_jump_to_loop_exit(&mut self) -> Result<(), ()> {
+        let loop_exit = *self.loop_exit_points.last().ok_or(())?;
+        self.builder().build_unconditional_branch(loop_exit);
         Ok(())
     }
 
@@ -1198,29 +1250,6 @@ impl Compiler {
             .builder()
             .build_load(cell_ptr, "cellState")
             .into_int_value())
-    }
-    /// Builds instructions using the given closure for each cell in a cell
-    /// state pattern.
-    pub fn build_pattern_iter(
-        &mut self,
-        pattern: &PatternValue,
-        mut for_each_cell: impl FnMut(&mut Self, &[isize], IntValue<'static>) -> LangResult<()>,
-    ) -> LangResult<()> {
-        for pos in pattern.shape.positions() {
-            let pos_vector_value = VectorType::const_vector(
-                &pos.iter().map(|&x| self.const_int(x as i64)).collect_vec(),
-            );
-            self.build_get_pattern_cell_state(
-                pattern,
-                pos_vector_value,
-                // self.value_from_const(ConstValue::Vector(pos)),
-                // Cell state is in bounds, as it should be.
-                |c, cell_state| for_each_cell(c, &pos, cell_state),
-                // Cell state is out of bounds (which should NOT happen here).
-                |c| Ok(c.build_return_internal_err()),
-            )?;
-        }
-        Ok(())
     }
 
     /// Returns the minimum value representable by signed integers of NDCA's

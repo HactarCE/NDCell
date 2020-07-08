@@ -1,5 +1,12 @@
 use super::{assert_compile_error, assert_fn_result, compile_test_fn, ConstValue};
 
+/// Tests that functions return a default value if there is no return statement.
+#[test]
+fn test_implicit_return_int() {
+    let mut f = compile_test_fn("@function Int test() { }");
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+}
+
 /// Tests that undeclared variables produce an error when generating the AST.
 #[test]
 fn test_undeclared_variable_error() {
@@ -41,4 +48,27 @@ fn test_variables() {
         }",
     );
     assert_fn_result(&mut f, &[], Ok(ConstValue::Int(10)));
+}
+
+/// Tests throwaway variable.
+#[test]
+fn test_throwaway_variable() {
+    // Can assign any type to it
+    let mut f = compile_test_fn(
+        "@function Void test() {
+            _ = 99
+            _ = #0
+            _ = [1, 2, 3]
+        }",
+    );
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+
+    // Value is always void, even after assigning to it
+    let mut f = compile_test_fn(
+        "@function Void test() {
+            _ = 3
+            return _
+        }",
+    );
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
 }

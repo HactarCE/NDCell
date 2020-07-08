@@ -37,6 +37,9 @@ pub const MAX_STATES: usize = 256;
 /// Maximum pattern size.
 pub const MAX_PATTERN_SIZE: usize = 4096;
 
+/// Reserved throwaway variable name.
+const THROWAWAY_VARIABLE: &'static str = "_";
+
 // fn main() -> Result<(), ()> {
 //     let args: Vec<String> = std::env::args().collect();
 //     if args.len() != 2 {

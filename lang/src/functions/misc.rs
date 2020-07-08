@@ -20,7 +20,12 @@ impl GetVar {
     /// name.
     pub fn with_name(var_name: String) -> FuncConstructor {
         Box::new(|info| {
-            let var_type = info.userfunc.try_get_var(info.span, &var_name)?.clone();
+            let var_type;
+            if var_name == crate::THROWAWAY_VARIABLE {
+                var_type = Type::Void
+            } else {
+                var_type = info.userfunc.try_get_var(info.span, &var_name)?.clone()
+            };
             Ok(Box::new(Self { var_name, var_type }))
         })
     }
@@ -35,6 +40,9 @@ impl Function for GetVar {
         Ok(self.var_type.clone())
     }
     fn compile(&self, compiler: &mut Compiler, _info: FuncCallInfo) -> LangResult<Value> {
+        if self.var_name == crate::THROWAWAY_VARIABLE {
+            return Ok(Value::Void);
+        }
         let var_ptr = compiler.vars()[&self.var_name].ptr;
         let value = compiler.builder().build_load(var_ptr, &self.var_name);
         Ok(Value::from_basic_value(&self.var_type, value))
@@ -50,6 +58,9 @@ impl AssignableFunction for GetVar {
         value: Value,
         _info: FuncCallInfo,
     ) -> LangResult<()> {
+        if self.var_name == crate::THROWAWAY_VARIABLE {
+            return Ok(());
+        }
         let var_ptr = compiler.vars()[&self.var_name].ptr;
         compiler
             .builder()

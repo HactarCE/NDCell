@@ -70,6 +70,7 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
         }
     }
     match ty {
+        Type::Void => None,
         Type::Int => match name {
             "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsMethod)),
             _ => None,

@@ -10,6 +10,8 @@ use crate::Type;
 /// A value of any type.
 #[derive(Debug, Clone)]
 pub enum Value {
+    /// Void.
+    Void,
     /// Integer.
     Int(IntValue<'static>),
     /// Cell state.
@@ -32,6 +34,7 @@ impl Value {
     /// Returns the type of this value.
     pub fn ty(&self) -> Type {
         match self {
+            Self::Void => Type::Void,
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
             Self::Vector(v) => Type::Vector(v.get_type().get_size() as usize),
@@ -49,6 +52,7 @@ impl Value {
     /// Constructs a value of the given type from an LLVM basic value.
     pub fn from_basic_value(ty: &Type, basic_value: BasicValueEnum<'static>) -> Self {
         match ty {
+            Type::Void => Self::Void,
             Type::Int => Self::Int(basic_value.into_int_value()),
             Type::CellState => Self::CellState(basic_value.into_int_value()),
             Type::Vector(len) => {
@@ -136,6 +140,7 @@ impl Value {
     /// otherwise a TypeError.
     pub fn into_basic_value(self) -> LangResult<BasicValueEnum<'static>> {
         match self {
+            Value::Void => Ok(super::types::void().get_undef().into()),
             Value::Int(i) => Ok(i.into()),
             Value::CellState(i) => Ok(i.into()),
             Value::Vector(v) => Ok(v.into()),

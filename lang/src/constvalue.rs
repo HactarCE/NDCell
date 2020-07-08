@@ -6,6 +6,8 @@ use crate::types::{CellStateFilter, LangCellState, LangInt, Type};
 /// Constant value of any type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConstValue {
+    /// Void.
+    Void,
     /// Integer.
     Int(LangInt),
     /// Cell state.
@@ -30,6 +32,7 @@ impl ConstValue {
     /// Returns the type of this value.
     pub fn ty(&self) -> Type {
         match self {
+            Self::Void => Type::Void,
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
             Self::Vector(values) => Type::Vector(values.len()),
@@ -41,6 +44,7 @@ impl ConstValue {
     /// Constructs a default value of the given type.
     pub fn default(ty: &Type) -> Self {
         match ty {
+            Type::Void => Self::Void,
             Type::Int => Self::Int(0),
             Type::CellState => Self::CellState(0),
             Type::Vector(len) => Self::Vector(vec![0; *len]),
@@ -114,9 +118,10 @@ impl ConstValue {
             Self::Int(i) => Ok(i != 0),
             Self::CellState(i) => Ok(i != 0),
             Self::Vector(v) => Ok(v.into_iter().any(|i| i != 0)),
-            Self::IntRange { .. } | Self::Rectangle { .. } | Self::CellStateFilter(_) => {
-                uncaught_type_error!()
-            }
+            Self::Void
+            | Self::IntRange { .. }
+            | Self::Rectangle { .. }
+            | Self::CellStateFilter(_) => uncaught_type_error!(),
         }
     }
     /// Converts this value to a vector of the specified length if this is a

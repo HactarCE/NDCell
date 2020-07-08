@@ -10,6 +10,7 @@ use crate::{LangResult, Type};
 /// InternalError if the given type has no runtime representation.
 pub fn get(ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
     match ty {
+        Type::Void => Ok(void().into()),
         Type::Int => Ok(int().into()),
         Type::CellState => Ok(cell_state().into()),
         Type::Vector(len) => Ok(vec(*len).into()),
@@ -29,6 +30,11 @@ pub fn size_of(ty: &Type, target_data: &TargetData) -> usize {
     target_data
         .get_store_size(&get(ty).expect("Cannot get size of type without runtime representation"))
         as usize
+}
+
+/// Returns the LLVM type used to represent void.
+pub fn void() -> StructType<'static> {
+    get_ctx().struct_type(&[], false)
 }
 
 /// Returns the LLVM type used to represent an integer.

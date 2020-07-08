@@ -914,7 +914,7 @@ impl Compiler {
                 end_phi.as_basic_value().into_int_value()
             }
             // Other types have no truthiness.
-            Value::IntRange(_) | Value::Rectangle(_) | Value::CellStateFilter(_) => {
+            Value::Void | Value::IntRange(_) | Value::Rectangle(_) | Value::CellStateFilter(_) => {
                 uncaught_type_error!()
             }
         };
@@ -1243,6 +1243,7 @@ impl Compiler {
     /// Constructs a Value from a ConstValue.
     pub fn value_from_const(&self, const_value: ConstValue) -> Value {
         match const_value {
+            ConstValue::Void => Value::Void,
             ConstValue::Int(i) => Value::Int(self.const_int(i)),
             ConstValue::CellState(i) => {
                 Value::CellState(types::cell_state().const_int(i as u64, false))

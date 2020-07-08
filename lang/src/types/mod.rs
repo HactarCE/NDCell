@@ -39,6 +39,8 @@ pub const AXES: &'static str = "xyzwuv";
 /// message in parser::ParseBuilder::type_name().
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Type {
+    /// Void.
+    Void,
     /// Integer.
     Int,
     /// Cell state.
@@ -62,6 +64,7 @@ impl Default for Type {
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Self::Void => write!(f, "Void"),
             Self::Int => write!(f, "Int"),
             Self::CellState => write!(f, "Cell"),
             Self::Vector(len) => write!(f, "{:?}{}", TypeDesc::Vector, len),
@@ -75,6 +78,7 @@ impl fmt::Debug for Type {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Self::Void => write!(f, "Void"),
             Self::Int => write!(f, "Integer"),
             Self::CellState => write!(f, "CellState"),
             Self::Vector(len) => write!(f, "{}{}", TypeDesc::Vector, len),
@@ -91,7 +95,8 @@ impl Type {
     /// type.
     pub fn has_runtime_representation(&self) -> bool {
         match self {
-            Self::Int
+            Self::Void
+            | Self::Int
             | Self::CellState
             | Self::Vector(_)
             | Self::Pattern(_)
@@ -109,7 +114,7 @@ impl Type {
     pub fn can_convert_to_bool(&self) -> bool {
         match self {
             Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
-            Self::IntRange | Self::Rectangle(_) | Self::CellStateFilter => false,
+            Self::Void | Self::IntRange | Self::Rectangle(_) | Self::CellStateFilter => false,
         }
     }
 

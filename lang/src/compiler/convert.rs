@@ -27,6 +27,7 @@ pub fn bytes_to_value(ty: Type, bytes: &[u8], target_data: &TargetData) -> Const
         bytes.len(),
     );
     match ty {
+        Type::Void => ConstValue::Void,
         Type::Int => ConstValue::Int({
             const SIZE: usize = std::mem::size_of::<LangInt>();
             assert_eq!(SIZE, size_of(&ty, target_data));
@@ -120,6 +121,7 @@ pub fn value_to_bytes(value: &ConstValue, bytes: &mut [u8], target_data: &Target
         bytes.len(),
     );
     match value {
+        ConstValue::Void => (),
         ConstValue::Int(i) => {
             const SIZE: usize = std::mem::size_of::<LangInt>();
             assert_eq!(SIZE, size_of(&Type::Int, target_data));

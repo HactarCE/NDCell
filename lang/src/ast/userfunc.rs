@@ -123,6 +123,9 @@ impl UserFunction {
     /// Returns the type of the variable with the given name, creating it with
     /// the given type if it does not already exist.
     pub fn get_or_create_var(&mut self, var_name: &str, new_ty: Type) -> Type {
+        if var_name == crate::THROWAWAY_VARIABLE {
+            return Type::Void;
+        }
         if let Some(existing_type) = self.variables.get(var_name) {
             existing_type.clone()
         } else {

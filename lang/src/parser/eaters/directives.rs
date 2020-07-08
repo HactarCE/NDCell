@@ -60,13 +60,11 @@ pub struct FunctionDefinition;
 impl_display!(FunctionDefinition, "function definition");
 impl TokenEater for FunctionDefinition {
     type Output = tree::HelperFunc;
-    fn might_match(&self, mut tf: TokenFeeder<'_>) -> bool {
-        use TokenClass::*;
-        let mut ret = true;
-        ret = ret && matches!(tf.next_class(), Some(Type(_)));
-        ret = ret && matches!(tf.next_class(), Some(Ident(_)));
-        ret = ret && matches!(tf.next_class(), Some(Punctuation(PunctuationToken::LParen)));
-        ret
+    fn might_match(&self, _tf: TokenFeeder<'_>) -> bool {
+        // It's better to give an error saying "expected type name" with
+        // examples of valid type names than just "expected function definition"
+        // if the user gives a bad return type.
+        true
     }
     fn eat(&self, tf: &mut TokenFeeder<'_>) -> LangResult<Self::Output> {
         Ok(tree::HelperFunc {

@@ -40,7 +40,7 @@ impl Function for GetVar {
         Ok(self.var_type.clone())
     }
     fn compile(&self, compiler: &mut Compiler, _info: FuncCallInfo) -> LangResult<Value> {
-        if self.var_name == crate::THROWAWAY_VARIABLE {
+        if self.var_type == Type::Void {
             return Ok(Value::Void);
         }
         let var_ptr = compiler.vars()[&self.var_name].ptr;
@@ -58,7 +58,7 @@ impl AssignableFunction for GetVar {
         value: Value,
         _info: FuncCallInfo,
     ) -> LangResult<()> {
-        if self.var_name == crate::THROWAWAY_VARIABLE {
+        if self.var_type == Type::Void {
             return Ok(());
         }
         let var_ptr = compiler.vars()[&self.var_name].ptr;

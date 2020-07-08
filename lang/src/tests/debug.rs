@@ -4,7 +4,7 @@ use super::{assert_fn_result, compile_test_fn, ConstValue};
 #[test]
 fn test_errors() {
     let mut f = compile_test_fn(
-        "@function Int test(Int x) {
+        "@function Void test(Int x) {
             if x < 0 {
                 error 'x is negative! very scary'
             } else if x {
@@ -22,7 +22,7 @@ fn test_errors() {
     ));
     assert_fn_result(&mut f, &[ConstValue::Int(-5)], expected);
 
-    let expected = Ok(ConstValue::Int(0));
+    let expected = Ok(ConstValue::Void);
     assert_fn_result(&mut f, &[ConstValue::Int(0)], expected);
 }
 

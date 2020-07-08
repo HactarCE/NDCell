@@ -122,7 +122,7 @@ fn test_vector_access() {
 
     // Test length.
     let mut f = compile_test_fn(
-        "@function Int test() {
+        "@function Void test() {
             v3 = [1, 10, 100]
             assert v3.len == 3
             v2 = [4, 3]
@@ -131,7 +131,7 @@ fn test_vector_access() {
             assert v10.len == 10
         }",
     );
-    let expected = Ok(ConstValue::Int(0));
+    let expected = Ok(ConstValue::Void);
     assert_fn_result(&mut f, &[], expected);
 }
 
@@ -146,7 +146,7 @@ fn test_vector_cmp() {
         .collect_vec();
 
     let mut cmp_same_fn = compile_test_fn(
-        "@function Int test(Vec3 a, Vec3 b) {
+        "@function Void test(Vec3 a, Vec3 b) {
                 assert (a == b) == (a.x == b.x and a.y == b.y and a.z == b.z)
                 assert (a != b) == (a.x != b.x or  a.y != b.y or  a.z != b.z)
                 assert (a >  b) == (a.x >  b.x and a.y >  b.y and a.z >  b.z)
@@ -160,13 +160,13 @@ fn test_vector_cmp() {
             assert_fn_result(
                 &mut cmp_same_fn,
                 &[a.clone(), b.clone()],
-                Ok(ConstValue::Int(0)),
+                Ok(ConstValue::Void),
             );
         }
     }
 
     let mut cmp_mixed_fn = compile_test_fn(
-        "@function Int test(Vec2 a, Vec3 b) {
+        "@function Void test(Vec2 a, Vec3 b) {
             assert (a == b) == (b == a) == (a.x == b.x and a.y == b.y and 0 == b.z)
             assert (a != b) == (b != a) == (a.x != b.x or  a.y != b.y or  0 != b.z)
             assert (a >  b) == (b <  a) == (a.x >  b.x and a.y >  b.y and 0 >  b.z)
@@ -180,7 +180,7 @@ fn test_vector_cmp() {
             assert_fn_result(
                 &mut cmp_mixed_fn,
                 &[a.clone(), b.clone()],
-                Ok(ConstValue::Int(0)),
+                Ok(ConstValue::Void),
             );
         }
     }
@@ -206,7 +206,7 @@ fn test_vector_ops() {
 
     // Test all the stuff that shouldn't fail
     let mut f = compile_test_fn(
-        "@function Int test() {
+        "@function Void test() {
             // Test vector equality
             assert [-1, 2] == [-1, 2]
             assert [-1, 2] != [4, 2]
@@ -276,5 +276,5 @@ fn test_vector_ops() {
             assert d == [2, 10]
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
 }

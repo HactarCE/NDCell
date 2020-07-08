@@ -5,7 +5,7 @@ use super::{assert_fn_result, compile_test_fn, CellStateFilter, ConstValue};
 #[test]
 fn test_ints_to_bytes() {
     let mut f = compile_test_fn(
-        "@function Int test(Int a, Int b, Int c) {
+        "@function Void test(Int a, Int b, Int c) {
             assert a == 10
             assert b == -20
             assert c == 30
@@ -18,7 +18,7 @@ fn test_ints_to_bytes() {
             ConstValue::Int(-20),
             ConstValue::Int(30),
         ],
-        Ok(ConstValue::Int(0)),
+        Ok(ConstValue::Void),
     );
 }
 
@@ -26,7 +26,7 @@ fn test_ints_to_bytes() {
 fn test_mixed_to_bytes() {
     let mut f = compile_test_fn(
         "@states 100
-        @function Int test(Int a, Cell b, Vec7 c, Range d, Rect3 e, CellFilter f) {
+        @function Void test(Int a, Cell b, Vec7 c, Range d, Rect3 e, CellFilter f) {
             assert a == 10
             assert b == #20
             assert c == [-7, -6, -5, -4, -3, -2, -1]
@@ -49,6 +49,6 @@ fn test_mixed_to_bytes() {
             ConstValue::Rectangle(vec![50, -60, 70], vec![80, -90, 100]),
             ConstValue::CellStateFilter(CellStateFilter::from_cell_states(&[0, 3, 10, 99])),
         ],
-        Ok(ConstValue::Int(0)),
+        Ok(ConstValue::Void),
     );
 }

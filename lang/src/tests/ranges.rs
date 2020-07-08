@@ -82,7 +82,7 @@ fn test_range_properties() {
 #[test]
 fn test_range_ops() {
     let mut f = compile_test_fn(
-        "@function Int test() {
+        "@function Void test() {
             r = (-5..10).by(3)
             assert r == +r != -5..10
             r += 5
@@ -95,5 +95,5 @@ fn test_range_ops() {
             assert r == ((2 * 6)..(-13 * 6)).by(-3 * 6)
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
 }

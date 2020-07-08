@@ -173,7 +173,7 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
 #[test]
 fn test_abs() {
     let mut f = compile_test_fn(
-        "@function Int test(Int x) {
+        "@function Void test(Int x) {
             if x < 0 {
                 assert abs(x) == x.abs == -x
             } else {
@@ -186,7 +186,7 @@ fn test_abs() {
         if x == LangInt::MIN {
             expected = Err(("abs(x)", "Integer overflow"))
         } else {
-            expected = Ok(ConstValue::Int(0));
+            expected = Ok(ConstValue::Void);
         }
         assert_fn_result(&mut f, &[ConstValue::Int(x)], expected);
     }

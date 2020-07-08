@@ -70,7 +70,7 @@ fn test_rectangle_construct_literals() {
 
     // Test mismatched types.
     let mut f = compile_test_fn(
-        "@function Int test() {
+        "@function Void test() {
             // Construct using integer
             assert [40, 40, 40]..[10, 20, 30] == 40..[10, 20, 30]
             assert [10, 20, 30]..[40, 40, 40] == [10, 20, 30]..40
@@ -79,7 +79,7 @@ fn test_rectangle_construct_literals() {
             assert [10, 20]..[30, 40, 50] == [10, 20, 0]..[30, 40, 50]
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn test_rectangle_properties() {
 #[test]
 fn test_rectangle_ops() {
     let mut f = compile_test_fn(
-        "@function Int test() {
+        "@function Void test() {
             tmp = (-10..5).by(3)
             a = rect5(tmp)
             assert a.ndim == 5
@@ -195,5 +195,5 @@ fn test_rectangle_ops() {
             assert c == [200..-100, 100..-200]
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
 }

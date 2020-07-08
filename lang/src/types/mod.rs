@@ -212,7 +212,8 @@ pub trait TypeChecker {
 }
 impl TypeChecker for Type {
     fn matches(&self, ty: &Type) -> bool {
-        self == ty
+        // Anything converts to Void.
+        self == &Self::Void || self == ty
     }
     fn type_error(&self, got: Type) -> LangErrorMsg {
         let expected = TypeDesc::from(self.clone());

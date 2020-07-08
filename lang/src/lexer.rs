@@ -461,6 +461,7 @@ impl ComparisonToken {
 /// Type name.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TypeToken {
+    Void,
     Int,
     CellState,
     Vector(Option<usize>),
@@ -471,6 +472,7 @@ pub enum TypeToken {
 impl fmt::Display for TypeToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Self::Void => write!(f, "Void"),
             Self::Int => write!(f, "Integer"),
             Self::CellState => write!(f, "CellState"),
             Self::Vector(None) => write!(f, "Vector"),
@@ -510,6 +512,7 @@ impl FromStr for TypeToken {
         }
 
         match s {
+            "Void" => Ok(Self::Void),
             "Int" | "Integer" => Ok(Self::Int),
             "Cell" | "CellState" => Ok(Self::CellState),
             "Vec" | "Vector" => Ok(Self::Vector(None)),
@@ -530,6 +533,7 @@ impl TypeToken {
     /// with the given number of dimensions.
     pub fn resolve(self, ndim: u8) -> Type {
         match self {
+            Self::Void => Type::Void,
             Self::Int => Type::Int,
             Self::CellState => Type::CellState,
             Self::Vector(None) => Type::Vector(ndim as usize),

@@ -5,7 +5,7 @@ use inkwell::values::{BasicValueEnum, IntValue, StructValue, VectorValue};
 use inkwell::IntPredicate;
 
 use super::{const_int, const_uint, Compiler, PatternValue, Value};
-use crate::LangResult;
+use crate::{ConstValue, LangResult, MAX_STATES};
 
 impl Compiler {
     /// Compiles a (possibly unrolled) for loop using the given closure to
@@ -30,9 +30,9 @@ impl Compiler {
             Value::Rectangle(r) => {
                 self.build_rectangle_iter(r, |c, pos| compile_for_each(c, Value::Vector(pos)))
             }
-            Value::CellStateFilter(_) => {
-                todo!("loop over cell states matching filter");
-            }
+            Value::CellStateFilter(f) => self.build_cell_state_filter_iter(f, |c, cell_state| {
+                compile_for_each(c, Value::CellState(cell_state))
+            }),
             _ => internal_error!("Don't know how to iterate over type {}", value.ty()),
         }
     }
@@ -263,6 +263,42 @@ impl Compiler {
         )?;
 
         Ok(())
+    }
+
+    /// Builds a loop over all the cell states included by a cell state filter.
+    pub fn build_cell_state_filter_iter(
+        &mut self,
+        filter: VectorValue<'static>,
+        mut for_each_cell_state: impl FnMut(&mut Self, IntValue<'static>) -> LangResult<()>,
+    ) -> LangResult<()> {
+        // Delegate to build_int_range_iter().
+        self.build_int_range_iter(
+            self.value_from_const(ConstValue::IntRange {
+                start: 0,
+                end: MAX_STATES as i64 - 1,
+                step: 1,
+            })
+            .into_basic_value()?
+            .into_vector_value(),
+            |c, i| {
+                // Truncate integer to cell state.
+                let cell_state = c.builder().build_int_truncate(
+                    i,
+                    super::types::cell_state(),
+                    "filterComponentIdx",
+                );
+                // Extract the bit.
+                let idx = c.build_compute_cell_state_filter_idx(cell_state)?;
+                let int = c
+                    .builder()
+                    .build_extract_element(filter, idx.vec_idx, "filterComponent")
+                    .into_int_value();
+                let bit = c.builder().build_and(int, idx.bitmask, "filterBit");
+                // Execute the code in the loop if the bit is 1.
+                c.build_conditional(bit, |c| for_each_cell_state(c, cell_state), |_| Ok(()))?;
+                Ok(())
+            },
+        )
     }
 
     /// Builds a loop using the given closures.

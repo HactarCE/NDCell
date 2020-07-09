@@ -235,6 +235,29 @@ fn test_iter_rectangle() {
 }
 
 #[test]
+fn test_iter_cell_state_filter() {
+    let mut f = compile_test_fn(
+        "@states 200
+        @function Void test() {
+          f = #0 | #1 | #2 | #10 | #100
+          total = 0
+
+          for state in f {
+            total += 1
+            if total == 1 { assert state == #0 }
+            if total == 2 { assert state == #1 }
+            if total == 3 { assert state == #2 }
+            if total == 4 { assert state == #10 }
+            if total == 5 { assert state == #100 }
+          }
+
+          assert total == 5
+        }",
+    );
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+}
+
+#[test]
 fn test_iter_break_and_continue() {
     let mut f = compile_test_fn(
         "@function Vec4 test() {

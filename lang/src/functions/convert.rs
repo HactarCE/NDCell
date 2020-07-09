@@ -4,7 +4,7 @@ use inkwell::IntPredicate;
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function};
-use crate::compiler::{self, Compiler, Value};
+use crate::compiler::{self, const_int, Compiler, Value};
 use crate::errors::*;
 use crate::types::{LangCellState, LangInt};
 use crate::{ConstValue, Type};
@@ -137,7 +137,7 @@ impl Function for ToVector {
         let args = info.arg_values();
 
         let arg = if args.len() == 0 {
-            Value::Int(compiler.const_int(0))
+            Value::Int(const_int(0))
         } else {
             args.compile(compiler, 0)?
         };
@@ -192,7 +192,7 @@ impl Function for ToRectangle {
         let args = info.arg_values();
 
         let arg = if args.len() == 0 {
-            Value::Int(compiler.const_int(0))
+            Value::Int(const_int(0))
         } else {
             args.compile(compiler, 0)?
         };

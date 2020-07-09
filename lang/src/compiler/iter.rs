@@ -4,7 +4,7 @@ use inkwell::types::VectorType;
 use inkwell::values::{BasicValueEnum, IntValue, VectorValue};
 use inkwell::IntPredicate;
 
-use super::{Compiler, PatternValue, Value};
+use super::{const_int, const_uint, Compiler, PatternValue, Value};
 use crate::LangResult;
 
 impl Compiler {
@@ -41,15 +41,13 @@ impl Compiler {
         vector: VectorValue<'static>,
         mut for_each_component: impl FnMut(&mut Self, IntValue<'static>) -> LangResult<()>,
     ) -> LangResult<()> {
-        let zero = self.const_uint(0);
-        let one = self.const_uint(1);
-        let vec_len = self.const_uint(vector.get_type().get_size() as u64);
+        let vec_len = const_uint(vector.get_type().get_size() as u64);
         self.build_iter_loop(
-            zero.into(),
+            const_uint(0).into(),
             |c, prev_idx| {
                 let prev_idx = prev_idx.into_int_value();
                 Ok(c.builder()
-                    .build_int_nuw_add(prev_idx, one, "nextIterIdx")
+                    .build_int_nuw_add(prev_idx, const_uint(1), "nextIterIdx")
                     .into())
             },
             |c, idx| {
@@ -86,9 +84,8 @@ impl Compiler {
         mut for_each_cell: impl FnMut(&mut Self, &[isize], IntValue<'static>) -> LangResult<()>,
     ) -> LangResult<()> {
         for pos in pattern.shape.positions() {
-            let pos_vector_value = VectorType::const_vector(
-                &pos.iter().map(|&x| self.const_int(x as i64)).collect_vec(),
-            );
+            let pos_vector_value =
+                VectorType::const_vector(&pos.iter().map(|&x| const_int(x as i64)).collect_vec());
             self.build_get_pattern_cell_state(
                 pattern,
                 pos_vector_value,
@@ -110,7 +107,7 @@ impl Compiler {
         mut for_each_int: impl FnMut(&mut Self, IntValue<'static>) -> LangResult<()>,
     ) -> LangResult<()> {
         let (start, end, step) = self.build_split_range(range);
-        let zero = self.const_int(0);
+        let zero = const_int(0);
 
         let is_step_zero =
             self.builder()

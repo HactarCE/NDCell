@@ -4,7 +4,7 @@ pub use super::enums::RangeProperty;
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{AssignableFunction, FuncCallInfo, FuncCallInfoMut, Function};
-use crate::compiler::{Compiler, Value};
+use crate::compiler::{const_uint, Compiler, Value};
 use crate::errors::*;
 use crate::{ConstValue, Type};
 
@@ -28,7 +28,7 @@ impl Function for StepBy {
         let args = info.arg_values();
         let range = args.compile(compiler, 0)?.as_int_range()?;
         let new_step = args.compile(compiler, 1)?.as_int()?;
-        let idx = compiler.const_uint(RangeProperty::Step as u64);
+        let idx = const_uint(RangeProperty::Step as u64);
         let ret = compiler
             .builder()
             .build_insert_element(range, new_step, idx, "rangeWithNewStep");
@@ -75,7 +75,7 @@ impl Function for Access {
         let arg = args.compile(compiler, 0)?;
         let ret = match arg {
             Value::IntRange(range_value) => Value::Int({
-                let idx = compiler.const_uint(self.prop as u64);
+                let idx = const_uint(self.prop as u64);
                 compiler
                     .builder()
                     .build_extract_element(range_value, idx, info.name)
@@ -129,7 +129,7 @@ impl AssignableFunction for Access {
         let arg = args.compile(compiler, 0)?;
         let ret = match arg {
             Value::IntRange(range_arg) => Value::IntRange({
-                let idx = compiler.const_uint(self.prop as u64);
+                let idx = const_uint(self.prop as u64);
                 compiler.builder().build_insert_element(
                     range_arg,
                     value.as_int()?,

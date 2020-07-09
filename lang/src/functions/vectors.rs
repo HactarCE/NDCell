@@ -8,7 +8,7 @@ pub use super::enums::{MinMaxMode, RangeProperty, SumOrProduct};
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{AssignableFunction, ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function};
-use crate::compiler::{Compiler, Value};
+use crate::compiler::{const_int, const_uint, Compiler, Value};
 use crate::errors::*;
 use crate::types::LangInt;
 use crate::{ConstValue, Type};
@@ -61,7 +61,6 @@ impl Function for Access {
     fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
         let args = info.arg_values();
         let arg = args.compile(compiler, 0)?;
-        let zero = compiler.const_int(0);
 
         // Get the length of the vector.
         let vector_len = match arg.ty() {
@@ -69,11 +68,10 @@ impl Function for Access {
             Type::Rectangle(ndim) => ndim,
             _ => uncaught_type_error!(),
         };
-        let vector_len_value = compiler.const_uint(vector_len as u64);
 
         // Get the index.
         let element_idx = match self.component_idx {
-            Some(i) => compiler.const_uint(i as u64),
+            Some(i) => const_uint(i as u64),
             None => args.compile(compiler, 1)?.as_int()?,
         };
 
@@ -81,7 +79,7 @@ impl Function for Access {
         let is_negative = compiler.builder().build_int_compare(
             IntPredicate::SLT, // Signed Less-Than
             element_idx,
-            zero,
+            const_int(0),
             "idxNegativeCheck",
         );
         compiler.build_conditional(
@@ -94,7 +92,7 @@ impl Function for Access {
         let in_range = compiler.builder().build_int_compare(
             IntPredicate::SLT, // Signed Less-Than
             element_idx,
-            vector_len_value,
+            const_uint(vector_len as u64),
             "idxUpperBoundCheck",
         );
 
@@ -134,9 +132,8 @@ impl Function for Access {
                 component_value = compiler.build_construct_range(start, end, None).into();
 
                 // Return an integer range of 0 if the index is out of range.
-                let int_zero = compiler.const_int(0);
                 zero = compiler
-                    .build_construct_range(int_zero, int_zero, None)
+                    .build_construct_range(const_int(0), const_int(0), None)
                     .into();
             }
             _ => uncaught_type_error!(),
@@ -198,7 +195,6 @@ impl AssignableFunction for Access {
     ) -> LangResult<()> {
         let args = info.arg_values();
         let arg = args.compile(compiler, 0)?;
-        let zero = compiler.const_int(0);
 
         // Get the length of the vector.
         let vector_len = match arg.ty() {
@@ -206,11 +202,10 @@ impl AssignableFunction for Access {
             Type::Rectangle(ndim) => ndim,
             _ => uncaught_type_error!(),
         };
-        let vector_len_value = compiler.const_uint(vector_len as u64);
 
         // Get the index.
         let element_idx = match self.component_idx {
-            Some(i) => compiler.const_uint(i as u64),
+            Some(i) => const_uint(i as u64),
             None => args.compile(compiler, 1)?.as_int()?,
         };
 
@@ -218,7 +213,7 @@ impl AssignableFunction for Access {
         let is_negative = compiler.builder().build_int_compare(
             IntPredicate::SLT, // Signed Less-Than
             element_idx,
-            zero,
+            const_int(0),
             "idxNegativeCheck",
         );
         compiler.build_conditional(
@@ -230,7 +225,7 @@ impl AssignableFunction for Access {
         let is_too_large = compiler.builder().build_int_compare(
             IntPredicate::SGE, // Signed Greater-Than
             element_idx,
-            vector_len_value,
+            const_uint(vector_len as u64),
             "idxUpperBoundCheck",
         );
         // If either condition occurs, return an error.
@@ -260,13 +255,13 @@ impl AssignableFunction for Access {
                 // Split the start and end vectors.
                 let (start_vec, end_vec) = compiler.build_split_rectangle(rect_arg);
                 // Extract the new start component.
-                let idx = compiler.const_uint(RangeProperty::Start as u64);
+                let idx = const_uint(RangeProperty::Start as u64);
                 let new_start =
                     compiler
                         .builder()
                         .build_extract_element(range_value, idx, "rangeStart");
                 // Extract the new end component.
-                let idx = compiler.const_uint(RangeProperty::End as u64);
+                let idx = const_uint(RangeProperty::End as u64);
                 let new_end =
                     compiler
                         .builder()
@@ -341,7 +336,7 @@ impl Function for Reduce {
         let arg = args.compile(compiler, 0)?.as_vector()?;
         let components = (0..arg.get_type().get_size())
             .map(|i| {
-                let idx = compiler.const_uint(i as u64);
+                let idx = const_uint(i as u64);
                 compiler
                     .builder()
                     .build_extract_element(arg, idx, "")
@@ -451,7 +446,7 @@ impl Function for GetLen {
             Type::Rectangle(ndim) => ndim,
             _ => uncaught_type_error!(),
         };
-        Ok(Value::Int(compiler.const_uint(ret as u64)))
+        Ok(Value::Int(const_uint(ret as u64)))
     }
     fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
         let args = info.arg_values();

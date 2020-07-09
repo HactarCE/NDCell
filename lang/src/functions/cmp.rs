@@ -5,7 +5,7 @@ use std::fmt;
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
-use crate::compiler::{self, Compiler, Value};
+use crate::compiler::{self, const_uint, Compiler, Value};
 use crate::errors::*;
 use crate::lexer::ComparisonToken;
 use crate::types::{LangInt, CELL_STATE_FILTER_ARRAY_LEN};
@@ -87,7 +87,7 @@ impl Function for Cmp {
                 .builder()
                 .build_conditional_branch(compare_result, next_bb, merge_bb);
             phi.add_incoming(&[(
-                &compiler.const_uint(0),
+                &const_uint(0),
                 compiler.builder().get_insert_block().unwrap(),
             )]);
             compiler.builder().position_at_end(next_bb);
@@ -100,7 +100,7 @@ impl Function for Cmp {
         // true.
         compiler.builder().build_unconditional_branch(merge_bb);
         phi.add_incoming(&[(
-            &compiler.const_uint(1),
+            &const_uint(1),
             compiler.builder().get_insert_block().unwrap(),
         )]);
 

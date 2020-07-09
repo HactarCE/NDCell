@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
-use crate::compiler::{Compiler, Value};
+use crate::compiler::{const_int, Compiler, Value};
 use crate::errors::*;
 use crate::types::{LangInt, MAX_VECTOR_LEN};
 use crate::{ConstValue, Type};
@@ -30,8 +30,8 @@ impl Function for Int {
         // worry about doing that here.
         Ok(Type::Int)
     }
-    fn compile(&self, compiler: &mut Compiler, _info: FuncCallInfo) -> LangResult<Value> {
-        Ok(Value::Int(compiler.const_int(self.0)))
+    fn compile(&self, _compiler: &mut Compiler, _info: FuncCallInfo) -> LangResult<Value> {
+        Ok(Value::Int(const_int(self.0)))
     }
     fn const_eval(&self, _info: FuncCallInfo) -> LangResult<ConstValue> {
         Ok(ConstValue::Int(self.0))

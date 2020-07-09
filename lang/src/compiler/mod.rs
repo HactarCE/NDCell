@@ -69,6 +69,20 @@ fn llvm_true() -> IntValue<'static> {
     get_ctx().bool_type().const_all_ones()
 }
 
+/// Returns a constant sign-extended IntValue from the given integer.
+pub fn const_int(value: i64) -> IntValue<'static> {
+    types::int().const_int(value as u64, true)
+}
+/// Returns a constant zero-extended IntValue from the given integer.
+pub fn const_uint(value: u64) -> IntValue<'static> {
+    types::int().const_int(value, false)
+}
+/// Returns the minimum value representable by signed integers of NDCA's
+/// signed integer type.
+fn min_int_value() -> IntValue<'static> {
+    const_uint(1).const_shl(const_uint(INT_BITS as u64 - 1))
+}
+
 /// Returns the name of an LLVM type used in names of intrinsics (e.g. "i32" for
 /// a 32-bit integer, or "v3i64" for a vector of three 64-bit integers).
 fn llvm_intrinsic_type_name(ty: BasicTypeEnum<'static>) -> String {
@@ -569,9 +583,9 @@ impl Compiler {
         on_div_by_zero: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<()> {
         // Generate the required constants.
-        let zero = self.const_int(0);
-        let min_value = self.get_min_int_value();
-        let negative_one = self.const_int(-1);
+        let zero = const_int(0);
+        let min_value = min_int_value();
+        let negative_one = const_int(-1);
         // Call the generic function.
         self.build_generic_div_check(
             dividend,
@@ -594,9 +608,9 @@ impl Compiler {
     ) -> LangResult<()> {
         let len = dividend.get_type().get_size() as usize;
         // Generate the required constants.
-        let zero = self.const_int(0);
-        let min_value = self.get_min_int_value();
-        let negative_one = self.const_int(-1);
+        let zero = const_int(0);
+        let min_value = min_int_value();
+        let negative_one = const_int(-1);
         // Convert them to vectors of the proper length.
         let zero = self.build_vector_cast(Value::Int(zero), len)?;
         let min_value = self.build_vector_cast(Value::Int(min_value), len)?;
@@ -676,7 +690,7 @@ impl Compiler {
         on_overflow: impl FnOnce(&mut Self) -> LangResult<()>,
     ) -> LangResult<()> {
         // Generate the required constants.
-        let max_shift = self.const_uint(INT_BITS as u64);
+        let max_shift = const_uint(INT_BITS as u64);
         // Call the generic function.
         self.build_generic_bitshift_check(shift_amt, max_shift, on_overflow)
     }
@@ -689,7 +703,7 @@ impl Compiler {
     ) -> LangResult<()> {
         let len = shift_amt.get_type().get_size() as usize;
         // Generate the required constants.
-        let max_shift = self.const_uint(INT_BITS as u64);
+        let max_shift = const_uint(INT_BITS as u64);
         // Convert them to vectors of the proper length.
         let max_shift = self.build_vector_cast(Value::Int(max_shift), len)?;
         // Call the generic function.
@@ -772,7 +786,6 @@ impl Compiler {
         cell_state: IntValue<'static>,
     ) -> CellStateFilterIndex {
         let int_bits = types::cell_state().const_int(INT_BITS as u64, false);
-        let one = self.const_uint(1);
         // vec_idx = cell_state / INT_BITS
         let vec_idx =
             self.builder()
@@ -786,9 +799,9 @@ impl Compiler {
             self.builder()
                 .build_int_z_extend(bit_idx, types::int(), "cellStateFilter_bitIdx_zext");
         // bitmask = 1 << bit_idx
-        let bitmask = self
-            .builder()
-            .build_left_shift(one, bit_idx, "cellStateFilter_bitmask");
+        let bitmask =
+            self.builder()
+                .build_left_shift(const_uint(1), bit_idx, "cellStateFilter_bitmask");
         CellStateFilterIndex {
             vec_idx,
             bit_idx,
@@ -805,11 +818,10 @@ impl Compiler {
     ) -> VectorValue<'static> {
         let mut ret = types::vec(components.len()).get_undef();
         for (i, component) in components.iter().enumerate() {
-            let idx = self.const_uint(i as u64);
             ret = self.builder().build_insert_element(
                 ret,
                 BasicValueEnum::from(*component),
-                idx,
+                const_uint(i as u64),
                 &format!("vec_build_{}", i),
             );
         }
@@ -822,9 +834,8 @@ impl Compiler {
     ) -> Vec<IntValue<'static>> {
         (0..vector_value.get_type().get_size())
             .map(|i| {
-                let idx = self.const_uint(i as u64);
                 self.builder()
-                    .build_extract_element(vector_value, idx, "")
+                    .build_extract_element(vector_value, const_uint(i as u64), "")
                     .into_int_value()
             })
             .collect()
@@ -847,10 +858,8 @@ impl Compiler {
                 end,
                 "rangeStepTest",
             );
-            let positive_one = self.const_int(1);
-            let negative_one = self.const_int(-1);
             self.builder()
-                .build_select(use_positive_step, positive_one, negative_one, "rangeStep")
+                .build_select(use_positive_step, const_int(1), const_int(-1), "rangeStep")
                 .into_int_value()
         });
         self.build_construct_vector(&[start, end, step])
@@ -990,7 +999,7 @@ impl Compiler {
             Value::Vector(v) if v.get_type().get_size() as usize == len => Ok(v),
             Value::Vector(v) => {
                 let original_len = v.get_type().get_size();
-                let zeros = vec![self.const_uint(0); original_len as usize];
+                let zeros = vec![const_uint(0); original_len as usize];
                 let left = v;
                 let right = VectorType::const_vector(&zeros);
                 let mask_values = (0..original_len)
@@ -1117,7 +1126,7 @@ impl Compiler {
                 &bounds
                     .min()
                     .into_iter()
-                    .map(|x| self.const_int(x as i64))
+                    .map(|x| const_int(x as i64))
                     .collect_vec(),
             );
             let too_low_vec =
@@ -1129,7 +1138,7 @@ impl Compiler {
                 &bounds
                     .max()
                     .into_iter()
-                    .map(|x| self.const_int(x as i64))
+                    .map(|x| const_int(x as i64))
                     .collect_vec(),
             );
             let too_high_vec =
@@ -1173,11 +1182,10 @@ impl Compiler {
                     Some(this_stride as u64)
                 })
                 .collect();
-            let strides_vector_value = VectorType::const_vector(
-                &strides.iter().map(|&x| self.const_uint(x)).collect_vec(),
-            );
+            let strides_vector_value =
+                VectorType::const_vector(&strides.iter().map(|&x| const_uint(x)).collect_vec());
             // Compute the index of the origin in this flat array.
-            let origin_idx = self.const_int(
+            let origin_idx = const_int(
                 strides
                     .iter()
                     .zip(bounds.min())
@@ -1252,39 +1260,24 @@ impl Compiler {
             .into_int_value())
     }
 
-    /// Returns the minimum value representable by signed integers of NDCA's
-    /// signed integer type.
-    fn get_min_int_value(&self) -> IntValue<'static> {
-        self.const_uint(1)
-            .const_shl(self.const_uint(INT_BITS as u64 - 1))
-    }
-
     /* MISCELLANY */
 
-    /// Returns a constant sign-extended IntValue from the given integer.
-    pub fn const_int(&self, value: i64) -> IntValue<'static> {
-        types::int().const_int(value as u64, true)
-    }
-    /// Returns a constant zero-extended IntValue from the given integer.
-    pub fn const_uint(&self, value: u64) -> IntValue<'static> {
-        types::int().const_int(value, false)
-    }
     /// Constructs a Value from a ConstValue.
     pub fn value_from_const(&self, const_value: ConstValue) -> Value {
         match const_value {
             ConstValue::Void => Value::Void,
-            ConstValue::Int(i) => Value::Int(self.const_int(i)),
+            ConstValue::Int(i) => Value::Int(const_int(i)),
             ConstValue::CellState(i) => {
                 Value::CellState(types::cell_state().const_int(i as u64, false))
             }
             ConstValue::Vector(values) => Value::Vector(VectorType::const_vector(
-                &values.iter().map(|&i| self.const_int(i)).collect_vec(),
+                &values.iter().map(|&i| const_int(i)).collect_vec(),
             )),
             ConstValue::IntRange { start, end, step } => {
                 Value::IntRange(VectorType::const_vector(&[
-                    self.const_int(start),
-                    self.const_int(end),
-                    self.const_int(step),
+                    const_int(start),
+                    const_int(end),
+                    const_int(step),
                 ]))
             }
             ConstValue::Rectangle(start, end) => {
@@ -1301,10 +1294,7 @@ impl Compiler {
                 Value::Rectangle(types::rectangle(ndim).const_named_struct(&[start, end]))
             }
             ConstValue::CellStateFilter(f) => Value::CellStateFilter(VectorType::const_vector(
-                &f.as_ints()
-                    .iter()
-                    .map(|&i| self.const_uint(i))
-                    .collect_vec(),
+                &f.as_ints().iter().copied().map(const_uint).collect_vec(),
             )),
         }
     }

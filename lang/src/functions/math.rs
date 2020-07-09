@@ -9,7 +9,7 @@ pub use super::enums::{MinMaxMode, NegOrAbsMode};
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function};
-use crate::compiler::{Compiler, Value};
+use crate::compiler::{const_int, const_uint, Compiler, Value};
 use crate::errors::*;
 use crate::lexer::OperatorToken;
 use crate::types::LangInt;
@@ -614,11 +614,10 @@ impl Function for BinaryOp {
                 rhs = Value::Vector(compiler.build_vector_cast(rhs, 3)?);
                 // Preserve step during addition/subtraction.
                 if matches!(self.op, OperatorToken::Plus | OperatorToken::Minus) {
-                    let zero = compiler.const_int(0);
-                    let idx = compiler.const_uint(super::ranges::RangeProperty::Step as u64);
+                    let idx = const_uint(super::ranges::RangeProperty::Step as u64);
                     rhs = Value::Vector(compiler.builder().build_insert_element(
                         rhs.as_vector()?,
-                        zero,
+                        const_int(0),
                         idx,
                         "offsetWithoutStep",
                     ));

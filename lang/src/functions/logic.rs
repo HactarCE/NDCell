@@ -4,7 +4,7 @@ pub use super::enums::LogicalBinOpType;
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
-use crate::compiler::{Compiler, Value};
+use crate::compiler::{const_uint, Compiler, Value};
 use crate::errors::*;
 use crate::types::LangInt;
 use crate::{ConstValue, Type};
@@ -27,9 +27,12 @@ impl Function for LogicalNot {
         let args = info.arg_values();
         let arg = args.compile(compiler, 0)?;
         let arg = compiler.build_convert_to_bool(arg)?;
-        let one = compiler.const_uint(1);
         // Flip the lowest bit.
-        Ok(Value::Int(compiler.builder().build_xor(one, arg, "not")))
+        Ok(Value::Int(compiler.builder().build_xor(
+            arg,
+            const_uint(1),
+            "not",
+        )))
     }
     fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
         let args = info.arg_values();

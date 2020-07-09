@@ -45,7 +45,7 @@ pub use function::CompiledFunction;
 pub use value::{PatternValue, Value};
 
 use crate::errors::*;
-use crate::types::{TypeDesc, INT_BITS};
+use crate::types::{TypeDesc, CELL_STATE_BITS, INT_BITS};
 use crate::{ConstValue, Type};
 
 /// Name of the LLVM module.
@@ -784,7 +784,12 @@ impl Compiler {
     pub fn build_compute_cell_state_filter_idx(
         &mut self,
         cell_state: IntValue<'static>,
-    ) -> CellStateFilterIndex {
+    ) -> LangResult<CellStateFilterIndex> {
+        if cell_state.get_type().get_bit_width() != CELL_STATE_BITS {
+            internal_error!(
+                "Argument to build_compute_cell_state_filter_idx() has wrong number of bits!"
+            );
+        }
         let int_bits = types::cell_state().const_int(INT_BITS as u64, false);
         // vec_idx = cell_state / INT_BITS
         let vec_idx =
@@ -802,11 +807,11 @@ impl Compiler {
         let bitmask =
             self.builder()
                 .build_left_shift(const_uint(1), bit_idx, "cellStateFilter_bitmask");
-        CellStateFilterIndex {
+        Ok(CellStateFilterIndex {
             vec_idx,
             bit_idx,
             bitmask,
-        }
+        })
     }
 
     /* CONSTRUCT / SPLIT */
@@ -1053,7 +1058,7 @@ impl Compiler {
         match value {
             Value::CellState(i) => {
                 let ret = types::cell_state_filter().const_zero();
-                let idx = self.build_compute_cell_state_filter_idx(i);
+                let idx = self.build_compute_cell_state_filter_idx(i)?;
                 Ok(self.builder().build_insert_element(
                     ret,
                     idx.bitmask,

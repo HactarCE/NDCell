@@ -437,7 +437,7 @@ impl Function for Is {
             }
             Value::CellStateFilter(f) => {
                 // Determine which bit to extract.
-                let idx = compiler.build_compute_cell_state_filter_idx(lhs.as_cell_state()?);
+                let idx = compiler.build_compute_cell_state_filter_idx(lhs.as_cell_state()?)?;
                 // Extract the integer containing that bit.
                 let int = compiler
                     .builder()

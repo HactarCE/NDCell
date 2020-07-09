@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use inkwell::types::VectorType;
-use inkwell::values::{BasicValueEnum, IntValue, VectorValue};
+use inkwell::values::{BasicValueEnum, IntValue, StructValue, VectorValue};
 use inkwell::IntPredicate;
 
 use super::{const_int, const_uint, Compiler, PatternValue, Value};
@@ -26,8 +26,8 @@ impl Compiler {
             Value::IntRange(r) => {
                 self.build_int_range_iter(r, |c, i| compile_for_each(c, Value::Int(i)))
             }
-            Value::Rectangle(_) => {
-                todo!("loop over positions in rectangle");
+            Value::Rectangle(r) => {
+                self.build_rectangle_iter(r, |c, pos| compile_for_each(c, Value::Vector(pos)))
             }
             Value::CellStateFilter(_) => {
                 todo!("loop over cell states matching filter");
@@ -170,6 +170,100 @@ impl Compiler {
         Ok(())
     }
 
+    /// Builds a loop over the positions in a hyperrectangle.
+    pub fn build_rectangle_iter(
+        &mut self,
+        rect: StructValue<'static>,
+        mut for_each_pos: impl FnMut(&mut Self, VectorValue<'static>) -> LangResult<()>,
+    ) -> LangResult<()> {
+        let (start, end) = self.build_split_rectangle(rect);
+        let start_values = self.build_split_vector(start);
+        let end_values = self.build_split_vector(end);
+        assert_eq!(start_values.len(), end_values.len());
+        let ndim = start_values.len();
+
+        // Compute step (+1 or -1) along each axis.
+        let step_values = start_values
+            .iter()
+            .zip(&end_values)
+            .map(|(&int_start, &int_end)| self.build_infer_range_step(int_start, int_end))
+            .collect_vec();
+
+        self.build_iter_loop(
+            start.into(),
+            |c, old_pos| {
+                // Add a PHI node for the new position.
+                let start_bb = c.current_block();
+                let done_with_increment_bb = c.append_basic_block("doneWithPosIncrement");
+                c.builder().position_at_end(done_with_increment_bb);
+                let phi_node = c.builder().build_phi(start.get_type(), "incrementedPos");
+                c.builder().position_at_end(start_bb);
+
+                let mut pos = old_pos.into_vector_value();
+                for axis in 0..ndim {
+                    // Extract the component.
+                    let old_component = c
+                        .builder()
+                        .build_extract_element(pos, const_uint(axis as u64), "oldPosComponent")
+                        .into_int_value();
+                    // Check if we've reached the end of this axis.
+                    let is_end_of_axis = c.builder().build_int_compare(
+                        IntPredicate::EQ,
+                        old_component,
+                        end_values[axis],
+                        "isEndOfAxis",
+                    );
+                    let mut pos_with_reset_component = pos.clone();
+                    c.build_conditional(
+                        is_end_of_axis,
+                        |c| {
+                            // We have, so reset it to its start value and try to
+                            // increment the next component.
+                            pos_with_reset_component = c.builder().build_insert_element(
+                                pos,
+                                start_values[axis],
+                                const_uint(axis as u64),
+                                "posWithResetComponent",
+                            );
+                            Ok(())
+                        },
+                        |c| {
+                            // We haven't, so increment this component and don't
+                            // increment any more.
+                            let new_component = c.builder().build_int_nsw_add(
+                                old_component,
+                                step_values[axis],
+                                "incrementedComponent",
+                            );
+                            let incremented_pos = c.builder().build_insert_element(
+                                pos,
+                                new_component,
+                                const_uint(axis as u64),
+                                "posWithIncrementedComponent",
+                            );
+                            phi_node.add_incoming(&[(&incremented_pos, c.current_block())]);
+                            c.builder()
+                                .build_unconditional_branch(done_with_increment_bb);
+                            Ok(())
+                        },
+                    )?;
+                    pos = pos_with_reset_component;
+                }
+                // If we made it this far without jumping to
+                // done_with_increment_bb, then every single component has been
+                // reset so now we're done iterating.
+                c.build_jump_to_loop_exit().unwrap();
+
+                // Well, we're done incrementing the position!
+                c.builder().position_at_end(done_with_increment_bb);
+                Ok(phi_node.as_basic_value())
+            },
+            |c, pos| for_each_pos(c, pos.into_vector_value()),
+        )?;
+
+        Ok(())
+    }
+
     /// Builds a loop using the given closures.
     fn build_iter_loop(
         &mut self,
@@ -186,7 +280,9 @@ impl Compiler {
         let main_loop_bb = self.append_basic_block("loopBody");
         self.builder().build_unconditional_branch(main_loop_bb);
         self.builder().position_at_end(main_loop_bb);
-        let iter_value_phi = self.builder().build_phi(super::types::int(), "iterValue");
+        let iter_value_phi = self
+            .builder()
+            .build_phi(first_iter_value.get_type(), "iterValue");
         self.builder().position_at_end(pre_loop_bb);
         let iter_value = iter_value_phi.as_basic_value();
         iter_value_phi.add_incoming(&[(&first_iter_value, self.current_block())]);

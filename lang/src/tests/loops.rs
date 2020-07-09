@@ -206,6 +206,35 @@ fn test_iter_int_range() {
 }
 
 #[test]
+fn test_iter_rectangle() {
+    let mut f = compile_test_fn(
+        "@function Void test() {
+          r = [1, 50, 100]..[5, 10, 500]
+          total = 0
+          expected = r.start
+
+          for pos in r {
+            total += 1
+            assert pos == expected
+
+            if expected.x == r.end.x {
+              expected.x = r.start.x
+              if expected.y == r.end.y {
+                expected.y = r.start.y
+                if expected.z == r.end.z {
+                  expected.z = -42 // should be last iteration
+                } else { expected.z += 1 }
+              } else { expected.y -= 1 }
+            } else { expected.x += 1 }
+          }
+
+          assert total == 5 * 41 * 401
+        }",
+    );
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+}
+
+#[test]
 fn test_iter_break_and_continue() {
     let mut f = compile_test_fn(
         "@function Vec4 test() {

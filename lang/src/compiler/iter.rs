@@ -8,7 +8,8 @@ use super::{const_int, const_uint, Compiler, PatternValue, Value};
 use crate::LangResult;
 
 impl Compiler {
-    /// Compiles a (possibly unrolled) for loop using the given closure to generate code for each iteration.
+    /// Compiles a (possibly unrolled) for loop using the given closure to
+    /// generate code for each iteration.
     ///
     /// The iteration value is passed to the closure.
     pub fn build_value_iter(

@@ -17,8 +17,8 @@ impl Compiler {
         mut compile_for_each: impl FnMut(&mut Self, Value) -> LangResult<()>,
     ) -> LangResult<()> {
         match value {
-            Value::Vector(_) => {
-                todo!("loop over values in vector");
+            Value::Vector(v) => {
+                self.build_vector_iter(v, |c, component| compile_for_each(c, Value::Int(component)))
             }
             Value::Pattern(p) => self.build_pattern_iter(&p, |c, _pos, cell_state_value| {
                 compile_for_each(c, Value::CellState(cell_state_value))
@@ -34,6 +34,48 @@ impl Compiler {
             }
             _ => internal_error!("Don't know how to iterate over type {}", value.ty()),
         }
+    }
+
+    pub fn build_vector_iter(
+        &mut self,
+        vector: VectorValue<'static>,
+        mut for_each_component: impl FnMut(&mut Self, IntValue<'static>) -> LangResult<()>,
+    ) -> LangResult<()> {
+        let zero = self.const_uint(0);
+        let one = self.const_uint(1);
+        let vec_len = self.const_uint(vector.get_type().get_size() as u64);
+        self.build_iter_loop(
+            zero.into(),
+            |c, prev_idx| {
+                let prev_idx = prev_idx.into_int_value();
+                Ok(c.builder()
+                    .build_int_nuw_add(prev_idx, one, "nextIterIdx")
+                    .into())
+            },
+            |c, idx| {
+                let idx = idx.into_int_value();
+
+                // If idx == vector.len, exit the loop.
+                let is_end_of_loop =
+                    c.builder()
+                        .build_int_compare(IntPredicate::EQ, idx, vec_len, "isEndOfLoop");
+                c.build_conditional(
+                    is_end_of_loop,
+                    |c| Ok(c.build_jump_to_loop_exit().unwrap()),
+                    |_| Ok(()),
+                )?;
+
+                // Get the component of the vector.
+                let component = c
+                    .builder()
+                    .build_extract_element(vector, idx, "iterVectorComponent")
+                    .into_int_value();
+                // And pass that to for_each_component().
+                for_each_component(c, component)?;
+
+                Ok(())
+            },
+        )
     }
 
     /// Builds instructions using the given closure for each cell in a cell

@@ -49,6 +49,22 @@ fn test_iter_var_type_mismatch() {
 }
 
 #[test]
+fn test_iter_vec() {
+    let mut f = compile_test_fn(
+        "@function Void test() {
+            count = 0
+            v = [12830, 480914, -4281, 24801, 14918]
+            for value in v {
+                assert v[count] == value
+                count += 1
+            }
+            assert count == v.len
+        }",
+    );
+    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+}
+
+#[test]
 fn test_iter_int_range() {
     // Ascending, step = +1
     let mut f = compile_test_fn(

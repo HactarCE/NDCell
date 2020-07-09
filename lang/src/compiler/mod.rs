@@ -841,6 +841,23 @@ impl Compiler {
             .collect()
     }
 
+    /// Builds instructions to infer the step of a range (+1 if start <= end, or
+    /// -1 if start > end) based on the given start and end.
+    pub fn build_infer_range_step(
+        &mut self,
+        start: IntValue<'static>,
+        end: IntValue<'static>,
+    ) -> IntValue<'static> {
+        let use_positive_step = self.builder().build_int_compare(
+            IntPredicate::SLE, // Signed Less-Than or Equal
+            start,
+            end,
+            "rangeStepTest",
+        );
+        self.builder()
+            .build_select(use_positive_step, const_int(1), const_int(-1), "rangeStep")
+            .into_int_value()
+    }
     /// Builds construction of an integer range. If no step is given, then it is
     /// inferred at runtime based on the values of the start and end.
     pub fn build_construct_range(
@@ -849,19 +866,7 @@ impl Compiler {
         end: IntValue<'static>,
         step: Option<IntValue<'static>>,
     ) -> VectorValue<'static> {
-        let step = step.unwrap_or_else(|| {
-            // Determine the step. If start <= end, then the default step is +1;
-            // if start > end, then the default step is -1.
-            let use_positive_step = self.builder().build_int_compare(
-                IntPredicate::SLE, // Signed Less-Than or Equal
-                start,
-                end,
-                "rangeStepTest",
-            );
-            self.builder()
-                .build_select(use_positive_step, const_int(1), const_int(-1), "rangeStep")
-                .into_int_value()
-        });
+        let step = step.unwrap_or_else(|| self.build_infer_range_step(start, end));
         self.build_construct_vector(&[start, end, step])
     }
     /// Splits an integer range into a start, end, and step.

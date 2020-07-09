@@ -31,7 +31,7 @@ cd NDCA
 cargo build # or cargo run
 ```
 
-## Buliding on Windows
+## Building on Windows
 
 What you'll need:
 

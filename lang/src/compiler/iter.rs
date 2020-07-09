@@ -36,6 +36,7 @@ impl Compiler {
         }
     }
 
+    /// Builds a loop over the elements of a vector.
     pub fn build_vector_iter(
         &mut self,
         vector: VectorValue<'static>,
@@ -76,8 +77,7 @@ impl Compiler {
         )
     }
 
-    /// Builds instructions using the given closure for each cell in a cell
-    /// state pattern.
+    /// Builds a loop over the cells in a cell state pattern.
     pub fn build_pattern_iter(
         &mut self,
         pattern: &PatternValue,
@@ -99,22 +99,23 @@ impl Compiler {
         Ok(())
     }
 
-    /// Builds instructions using the given closure that run for each integer in
-    /// an integer range.
+    /// Builds a loop over the integers in an integer range.
     pub fn build_int_range_iter(
         &mut self,
         range: VectorValue<'static>,
         mut for_each_int: impl FnMut(&mut Self, IntValue<'static>) -> LangResult<()>,
     ) -> LangResult<()> {
         let (start, end, step) = self.build_split_range(range);
-        let zero = const_int(0);
 
         let is_step_zero =
             self.builder()
-                .build_int_compare(IntPredicate::EQ, step, zero, "isStepZero");
-        let is_step_negative =
-            self.builder()
-                .build_int_compare(IntPredicate::SLT, step, zero, "isStepNegative");
+                .build_int_compare(IntPredicate::EQ, step, const_int(0), "isStepZero");
+        let is_step_negative = self.builder().build_int_compare(
+            IntPredicate::SLT,
+            step,
+            const_int(0),
+            "isStepNegative",
+        );
 
         self.build_iter_loop(
             start.into(),

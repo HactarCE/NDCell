@@ -65,14 +65,14 @@ impl CompiledFunction {
         inout_values.sort_by_key(|v| v.byte_offset);
         // Allocate space for all the inout values.
         let param_bytes = vec![
-            0u8;
+            0_u8;
             target_data.get_store_size(&compiler.function().inout_struct_type.unwrap())
                 as usize
         ];
 
         // Allocate space for the return value.
         let out_type = compiler.function().return_type.clone();
-        let out_bytes = vec![0u8; super::types::size_of(&out_type, target_data)];
+        let out_bytes = vec![0_u8; super::types::size_of(&out_type, target_data)];
 
         Ok(Self {
             meta: Rc::new(CompiledFunctionMeta {

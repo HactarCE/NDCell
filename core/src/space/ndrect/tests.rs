@@ -55,7 +55,7 @@ proptest! {
     #[test]
     fn test_rect_region_centered(
         center: IVec3D,
-        radius in 0..2isize,
+        radius in 0..2_isize,
         test_offset in IVec3D::arbitrary_with(Some(3)),
     ) {
         let rect = NdRect::centered(center, radius);

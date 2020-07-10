@@ -121,7 +121,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn test_ceil_log_base_2(n in 0..10000usize) {
+        fn test_ceil_log_base_2(n in 0..10000_usize) {
             let p = ceil_log_base_2(n);
             if n <= 1 {
                 assert_eq!(0, p)

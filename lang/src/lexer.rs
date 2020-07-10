@@ -439,10 +439,10 @@ impl ComparisonToken {
             match self {
                 Self::Eql => EQ,
                 Self::Neq => NE,
-                Self::Lt => SLT,
-                Self::Gt => SGT,
-                Self::Lte => SLE,
-                Self::Gte => SGE,
+                Self::Lt => ULT,
+                Self::Gt => UGT,
+                Self::Lte => ULE,
+                Self::Gte => UGE,
             }
         }
     }

@@ -12,7 +12,7 @@ fn test_cell_state_filter_ops() {
                 if op == 0 {{ return l & r }}
                 if op == 1 {{ return l | r }}
                 if op == 2 {{ return l ^ r }}
-                // if op == 3 {{ return ~l }}
+                if op == 3 {{ return ~l }}
             }}",
             state_count
         ));
@@ -39,11 +39,11 @@ fn test_cell_state_filter_ops() {
                 &[arg1.clone(), arg2.clone(), ConstValue::Int(2)],
                 Ok(ConstValue::CellStateFilter(f1.clone() ^ f2.clone())),
             );
-            // assert_fn_result(
-            //     &mut f,
-            //     &[arg1.clone(), arg2.clone(), ConstValue::Int(3)],
-            //     Ok(ConstValue::CellStateFilter(!f1.clone())),
-            // );
+            assert_fn_result(
+                &mut f,
+                &[arg1.clone(), arg2.clone(), ConstValue::Int(3)],
+                Ok(ConstValue::CellStateFilter(!f1.clone())),
+            );
         }
     }
 }

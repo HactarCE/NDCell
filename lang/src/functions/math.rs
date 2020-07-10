@@ -1,5 +1,6 @@
 //! Math functions.
 
+use inkwell::types::VectorType;
 use inkwell::values::{BasicValueEnum, IntMathValue};
 use inkwell::IntPredicate;
 use itertools::Itertools;
@@ -12,7 +13,7 @@ use crate::ast::{ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{const_int, const_uint, Compiler, Value};
 use crate::errors::*;
 use crate::lexer::OperatorToken;
-use crate::types::LangInt;
+use crate::types::{CellStateFilter, LangInt, LangUint};
 use crate::{ConstValue, Type};
 use LangErrorMsg::{DivideByZero, IntegerOverflow, NegativeExponent};
 
@@ -143,6 +144,81 @@ impl Function for NegOrAbs {
                     .map(|i| self.eval_op_int(i))
                     .collect::<LangResult<Vec<LangInt>>>()?,
             )),
+            _ => uncaught_type_error!(),
+        }
+    }
+}
+
+/// Built-in function that flips all the bits of an integer or vector, or
+/// inverts a cell state filter.
+#[derive(Debug)]
+pub struct BitwiseNot;
+impl BitwiseNot {
+    pub fn construct(_info: &mut FuncCallInfoMut) -> LangResult<Box<dyn Function>> {
+        Ok(Box::new(Self))
+    }
+}
+impl Function for BitwiseNot {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        info.check_args_len(1)?;
+        typecheck!(
+            info.arg_types()[0],
+            [Int, CellState, Vector, CellStateFilter]
+        )?;
+        Ok(info.arg_types()[0].inner.clone())
+    }
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
+        let mut arg = args.compile(compiler, 0)?;
+        // Cast cell state to cell state filter.
+        if arg.ty() == Type::CellState {
+            let state_count = info.userfunc.rule_meta().states.len();
+            let f = compiler.build_cell_state_filter_cast(arg, state_count)?;
+            arg = Value::CellStateFilter(state_count, f);
+        }
+        match arg {
+            Value::Int(i) => {
+                let ret =
+                    compiler
+                        .builder()
+                        .build_xor(i, i.get_type().const_all_ones(), "bitwiseNot");
+                Ok(Value::Int(ret))
+            }
+            Value::CellState(_) => unreachable!(),
+            Value::Vector(v) => {
+                let vec_len = v.get_type().get_size() as usize;
+                let all_ones = VectorType::const_vector(&vec![const_uint(LangUint::MAX); vec_len]);
+                let ret = compiler.builder().build_xor(v, all_ones, "vecBitwiseNot");
+                Ok(Value::Vector(ret))
+            }
+            Value::CellStateFilter(state_count, f) => {
+                let all_ones = compiler
+                    .value_from_const(ConstValue::CellStateFilter(!CellStateFilter::none(
+                        state_count,
+                    )))
+                    .as_cell_state_filter()?;
+                let ret = compiler
+                    .builder()
+                    .build_xor(f, all_ones, "cellStateFilterInvert");
+                Ok(Value::CellStateFilter(state_count, ret))
+            }
+            _ => uncaught_type_error!(),
+        }
+    }
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
+        let mut arg = args.const_eval(0)?;
+        // Cast cell state to cell state filter.
+        if arg.ty() == Type::CellState {
+            let state_count = info.userfunc.rule_meta().states.len();
+            let f = arg.coerce_to_cell_state_filter(state_count)?;
+            arg = ConstValue::CellStateFilter(f);
+        }
+        match arg {
+            ConstValue::Int(i) => Ok(ConstValue::Int(!i)),
+            ConstValue::CellState(_) => unreachable!(),
+            ConstValue::Vector(v) => Ok(ConstValue::Vector(v.iter().map(|&x| !x).collect())),
+            ConstValue::CellStateFilter(f) => Ok(ConstValue::CellStateFilter(!f)),
             _ => uncaught_type_error!(),
         }
     }
@@ -458,7 +534,7 @@ impl BinaryOp {
             // Bitwise XOR
             Caret => b.build_xor(lhs, rhs, "tmp_xor").as_basic_value_enum(),
             // Anything else
-            DotDot | Tag => internal_error!("Uncaught invalid operator for binary op"),
+            Tilde | DotDot | Tag => internal_error!("Uncaught invalid operator for binary op"),
         })
     }
     /// Evaluates this operation for two integers.
@@ -568,7 +644,7 @@ impl Function for BinaryOp {
                     Asterisk | Slash | Percent | DoubleAsterisk | Ampersand => {
                         Ok(Type::Vector(std::cmp::min(*len1, *len2)))
                     }
-                    DotDot | Tag => Err(info.invalid_args_err()),
+                    Tilde | DotDot | Tag => Err(info.invalid_args_err()),
                 }
             }
             (Type::Rectangle(ndim1), Type::Vector(ndim2)) => {

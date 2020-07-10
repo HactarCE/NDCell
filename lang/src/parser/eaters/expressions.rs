@@ -157,7 +157,7 @@ impl TokenEater for ExprWithPrecedence {
             OpPrecedence::Range => eat_left_binary_op(tf, self.0, &[DotDot]),
             OpPrecedence::UnaryPrefix => eat_unary_op(tf, self.0, |t| match t {
                 // Once rust-lang#54883 is resolved, this line can be simplified.
-                TokenClass::Operator(op) if matches!(op, Tag | Plus | Minus) => {
+                TokenClass::Operator(op) if matches!(op, Tag | Plus | Minus | Tilde) => {
                     Some(Box::new(move |operand| tree::Expr::UnaryOp { op, operand }))
                 }
                 _ => None,

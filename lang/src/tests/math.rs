@@ -34,6 +34,8 @@ thread_local! {
         compile_test_fn("@function Int test(Int x, Int y) { return x ^ y }");
     static BIT_AND_FN: CompiledFunction =
         compile_test_fn("@function Int test(Int x, Int y) { return x & y }");
+    static BIT_NOT_FN: CompiledFunction =
+        compile_test_fn("@function Int test(Int x, Int y) { return ~x }");
 
     static LSH_FN: CompiledFunction =
         compile_test_fn("@function Int test(Int x, Int y) { return x << y }");
@@ -135,6 +137,9 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
     // Bitwise AND
     let expected = Ok(ConstValue::Int(x & y));
     assert_threadlocal_fn_result(&BIT_AND_FN, &args, expected);
+    // Bitwise NOT
+    let expected = Ok(ConstValue::Int(!x));
+    assert_threadlocal_fn_result(&BIT_NOT_FN, &args, expected);
 
     // Shift left
     let expected = y

@@ -311,6 +311,7 @@ enum_with_str_repr! {
         Ampersand = "&",
         Pipe = "|",
         Caret = "^",
+        Tilde = "~",
 
         // Boolean operators and boolean tests are in KeywordToken.
 

@@ -63,7 +63,7 @@ pub fn from_parse_tree(
             name = format!("unary '{}' operator", op);
             let arg = userfunc.build_expression_ast(operand)?;
             args = Args::from(vec![arg]);
-            func = functions::lookup_unary_operator(*op, userfunc[arg].ret_type(), span)?;
+            func = functions::lookup_unary_operator(*op)?;
         }
         // Binary mathematical/bitwise operator
         parser::Expr::BinaryOp { lhs, op, rhs } => {
@@ -71,12 +71,7 @@ pub fn from_parse_tree(
             let lhs = userfunc.build_expression_ast(lhs)?;
             let rhs = userfunc.build_expression_ast(rhs)?;
             args = Args::from(vec![lhs, rhs]);
-            func = functions::lookup_binary_operator(
-                &userfunc[lhs].ret_type(),
-                *op,
-                &userfunc[rhs].ret_type(),
-                span,
-            )?;
+            func = functions::lookup_binary_operator(*op)?;
         }
         // Logical NOT
         parser::Expr::LogicalNot(expr) => {

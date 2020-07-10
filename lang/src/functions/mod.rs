@@ -16,8 +16,7 @@ use crate::ast;
 use crate::errors::*;
 use crate::lexer::{OperatorToken, TypeToken};
 use crate::types::{LangInt, AXES, MAX_VECTOR_LEN};
-use crate::{Span, Type};
-use LangErrorMsg::InvalidArguments;
+use crate::Type;
 
 lazy_static! {
     static ref VEC_FN_PATTERN: Regex = Regex::new(r#"vec(?:tor)?([1-9]\d*)"#).unwrap();
@@ -139,40 +138,28 @@ pub fn lookup_type_function(ty: TypeToken) -> Option<FuncConstructor> {
 /// Returns a constructor for the function that applies the given unary operator
 /// to the given type, or returns an appropriate error if the operator cannot be
 /// applied to the given type.
-pub fn lookup_unary_operator(
-    op: OperatorToken,
-    arg: Type,
-    span: Span,
-) -> LangResult<FuncConstructor> {
+pub fn lookup_unary_operator(op: OperatorToken) -> LangResult<FuncConstructor> {
     use OperatorToken::*;
-    let ret: Option<FuncConstructor> = match op {
-        Plus => Some(Box::new(math::UnaryPlus::construct)),
-        Minus => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::Negate)),
-        Tag => Some(Box::new(convert::IntToCellState::construct)),
-        _ => None,
-    };
-    ret.ok_or_else(|| {
-        InvalidArguments {
-            name: format!("unary {:?} operator", op.to_string()),
-            arg_types: vec![arg],
-        }
-        .with_span(span)
-    })
+    match op {
+        Plus => Ok(Box::new(math::UnaryPlus::construct)),
+        Minus => Ok(math::NegOrAbs::with_mode(math::NegOrAbsMode::Negate)),
+        Tilde => Ok(Box::new(math::BitwiseNot::construct)),
+        Tag => Ok(Box::new(convert::IntToCellState::construct)),
+        _ => internal_error!("Invalid unary operator {:?}", op.to_string()),
+    }
 }
 
 /// Returns a constructor for the function that applies the given binary
 /// operator to the given types, or returns an appropriate error if the operator
 /// cannot be applied to the given types.
-pub fn lookup_binary_operator(
-    _lhs: &Type,
-    op: OperatorToken,
-    _rhs: &Type,
-    _span: Span,
-) -> LangResult<FuncConstructor> {
+pub fn lookup_binary_operator(op: OperatorToken) -> LangResult<FuncConstructor> {
+    use OperatorToken::*;
     match op {
-        // Range
-        OperatorToken::DotDot => Ok(Box::new(literals::Range::construct)),
-        // Basic math
-        _ => Ok(math::BinaryOp::with_op(op)),
+        Plus | Minus | Asterisk | Slash | Percent | DoubleAsterisk | DoubleLessThan
+        | DoubleGreaterThan | TripleGreaterThan | Ampersand | Pipe | Caret | Tilde => {
+            Ok(math::BinaryOp::with_op(op))
+        }
+        DotDot => Ok(Box::new(literals::Range::construct)),
+        _ => internal_error!("Invalid binary operator {:?}", op.to_string()),
     }
 }

@@ -127,9 +127,10 @@ impl std::ops::BitXor for CellStateFilter {
 impl std::ops::Not for CellStateFilter {
     type Output = Self;
     fn not(self) -> Self::Output {
-        Self::from_bits(
-            self.state_count(),
-            self.as_bits().iter().map(|&x| !x).collect_vec(),
+        let state_count = self.state_count();
+        self ^ Self::from_cell_states(
+            state_count,
+            &(0..state_count).map(|x| x as u8).collect_vec(),
         )
     }
 }

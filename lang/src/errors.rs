@@ -6,7 +6,7 @@ use std::fmt;
 
 use crate::lexer::ComparisonToken;
 use crate::types::{TypeDesc, MAX_VECTOR_LEN};
-use crate::{Span, Type, MAX_NDIM, MAX_STATES};
+use crate::{Span, Type, MAX_NDIM, MAX_STATE_COUNT};
 
 /// Result of a LangError with an accompanying line of source code.
 pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
@@ -214,7 +214,11 @@ impl fmt::Display for LangErrorMsg {
                 write!(f, "Number of dimensions must range from 1 to {}", MAX_NDIM)?;
             }
             Self::InvalidStateCount => {
-                write!(f, "Number of states must range from 1 to {}", MAX_STATES)?;
+                write!(
+                    f,
+                    "Number of states must range from 1 to {}",
+                    MAX_STATE_COUNT
+                )?;
             }
 
             Self::TypeError { expected, got } => {

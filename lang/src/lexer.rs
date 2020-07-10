@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 use crate::errors::*;
 use crate::types::{LangInt, MAX_VECTOR_LEN};
-use crate::{Span, Type};
+use crate::{RuleMeta, Span, Type};
 use LangErrorMsg::{UnknownSymbol, Unterminated};
 
 /// A list of token patterns, arranged roughly from least to most general.
@@ -531,15 +531,15 @@ impl From<TypeToken> for TokenClass<'_> {
 impl TypeToken {
     /// Returns the Type corresponding to the given TypeToken, in an automaton
     /// with the given number of dimensions.
-    pub fn resolve(self, ndim: u8) -> Type {
+    pub fn resolve(self, rule_meta: &RuleMeta) -> Type {
         match self {
             Self::Void => Type::Void,
             Self::Int => Type::Int,
             Self::CellState => Type::CellState,
-            Self::Vector(None) => Type::Vector(ndim as usize),
+            Self::Vector(None) => Type::Vector(rule_meta.ndim as usize),
             Self::Vector(Some(len)) => Type::Vector(len),
             Self::IntRange => Type::IntRange,
-            Self::Rectangle(None) => Type::Rectangle(ndim as usize),
+            Self::Rectangle(None) => Type::Rectangle(rule_meta.ndim as usize),
             Self::Rectangle(Some(rect_ndim)) => Type::Rectangle(rect_ndim),
             Self::CellStateFilter => Type::CellStateFilter,
         }

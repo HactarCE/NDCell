@@ -1,9 +1,10 @@
 //! Miscellaneous functions.
 
 use super::FuncConstructor;
-use crate::ast::{AssignableFunction, FnSignature, FuncCallInfo, FuncCallInfoMut, Function};
+use crate::ast::{AssignableFunction, FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
+use crate::types::FnSignature;
 use crate::{ConstValue, Type};
 use LangErrorMsg::Unimplemented;
 

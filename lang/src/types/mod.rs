@@ -304,3 +304,33 @@ macro_rules! get_type_desc {
         crate::types::TypeDesc::Specific(crate::types::Type::$other)
     };
 }
+
+/// Function signature, consisting of types for the arguments and a return
+/// type.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct FnSignature {
+    pub args: Vec<Type>,
+    pub ret: Type,
+}
+impl FnSignature {
+    /// Constructs the signature for a function that takes no arguments.
+    pub fn atom(ret: Type) -> Self {
+        Self::new(vec![], ret)
+    }
+    /// Constructs the signature for a function that takes one argument and
+    /// returns a property of that argument.
+    pub fn property(self_type: Type, ret: Type) -> Self {
+        Self::new(vec![self_type], ret)
+    }
+    /// Constructs any arbitrary function signature.
+    pub fn new(args: Vec<Type>, ret: Type) -> Self {
+        let args = args.into();
+        Self { args, ret }
+    }
+
+    /// Returns true if the given argument types match the arguments of this
+    /// function signature.
+    pub fn matches(&self, arg_types: &[Spanned<Type>]) -> bool {
+        arg_types.iter().map(|s| &s.inner).eq(&self.args)
+    }
+}

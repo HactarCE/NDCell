@@ -81,12 +81,12 @@ fn assert_fn_result(
     let expected_result = expected.map_err(|(a, b)| (a.to_owned(), b.to_owned()));
     let actual_result = function
         .call(args)
-        .map_err(|e| e.with_source(function.source_code()));
+        .map_err(|e| e.with_source(&function.rule_meta().source_code));
     assert_eq!(
         expected_result,
         actual_result.map_err(|e| e.pair()),
         "<-- actual\n\nRule source code:\n{}\n\n",
-        function.source_code(),
+        function.rule_meta().source_code,
     );
 }
 

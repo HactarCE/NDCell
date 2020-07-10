@@ -1,14 +1,12 @@
-use inkwell::types::BasicType;
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::ops::Index;
 use std::rc::Rc;
 
-use super::{expressions, statements, Expr, RuleMeta, Statement, StatementBlock};
-use crate::compiler::{self, CompiledFunction, Compiler, Value};
+use super::{expressions, statements, Expr, Statement, StatementBlock};
+use crate::compiler::{CompiledFunction, Compiler, Value};
 use crate::errors::*;
 use crate::parser;
-use crate::{ConstValue, Span, Spanned, Type};
+use crate::{ConstValue, RuleMeta, Span, Spanned, Type};
 use LangErrorMsg::{InternalError, UseOfUninitializedVariable};
 
 /// A user-defined function node in the AST.
@@ -86,9 +84,9 @@ impl UserFunction {
             helper_func
                 .params
                 .into_iter()
-                .map(|arg| (arg.inner.1.inner, arg.inner.0.inner.resolve(rule_meta.ndim)))
+                .map(|arg| (arg.inner.1.inner, arg.inner.0.inner.resolve(rule_meta)))
                 .collect(),
-            helper_func.return_type.inner.resolve(rule_meta.ndim),
+            helper_func.return_type.inner.resolve(rule_meta),
         );
         ret.build_top_level_statement_block_ast(&helper_func.body.inner)?;
         Ok(ret)
@@ -216,11 +214,7 @@ impl UserFunction {
             let default_return_value = compiler.get_default_var_value(&self.kind().return_type());
             compiler.build_return_ok(default_return_value)?;
         }
-        CompiledFunction::try_new(
-            self.rule_meta.source_code.clone(),
-            self.error_points.clone(),
-            compiler,
-        )
+        CompiledFunction::try_new(self.rule_meta.clone(), self.error_points.clone(), compiler)
     }
 
     /// Compiles a block of statements into LLVM IR, stopping if a terminator
@@ -283,57 +277,6 @@ impl UserFunctionKind {
             Self::Helper(ty) => ty.clone(),
             Self::Transition => Type::CellState,
         }
-    }
-}
-
-/// Function signature, consisting of types for the arguments and a return
-/// type.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct FnSignature {
-    pub args: Vec<Type>,
-    pub ret: Type,
-}
-impl FnSignature {
-    /// Constructs the signature for a function that takes no arguments.
-    pub fn atom(ret: Type) -> Self {
-        Self::new(vec![], ret)
-    }
-    /// Constructs the signature for a function that takes one argument and
-    /// returns a property of that argument.
-    pub fn property(self_type: Type, ret: Type) -> Self {
-        Self::new(vec![self_type], ret)
-    }
-    /// Constructs any arbitrary function signature.
-    pub fn new(args: Vec<Type>, ret: Type) -> Self {
-        let args = args.into();
-        Self { args, ret }
-    }
-    /// Constructs a function signature from a helper function parse tree node.
-    pub fn from_helper_function_parse_tree(helper_func: &parser::HelperFunc, ndim: u8) -> Self {
-        Self::new(
-            helper_func
-                .params
-                .iter()
-                .map(|arg| arg.inner.0.inner.resolve(ndim))
-                .collect_vec(),
-            helper_func.return_type.inner.resolve(ndim),
-        )
-    }
-    /// Returns true if the given argument types match the arguments of this
-    /// function signature.
-    pub fn matches(&self, arg_types: &[Spanned<Type>]) -> bool {
-        arg_types.iter().map(|s| &s.inner).eq(&self.args)
-    }
-    /// Returns the LLVM function type that is equivalent to this function
-    /// signature.
-    pub fn llvm_fn_type(&self) -> LangResult<inkwell::types::FunctionType<'static>> {
-        let llvm_param_types = self
-            .args
-            .iter()
-            .map(compiler::types::get)
-            .collect::<LangResult<Vec<_>>>()?;
-        let llvm_ret_type = compiler::types::get(&self.ret)?;
-        Ok(llvm_ret_type.fn_type(&llvm_param_types, false))
     }
 }
 

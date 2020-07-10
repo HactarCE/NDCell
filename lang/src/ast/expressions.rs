@@ -118,7 +118,7 @@ pub fn from_parse_tree(
         parser::Expr::GetAttr { object, attribute } => {
             let ty: Type;
             if let parser::Expr::TypeName(type_token) = object.inner {
-                ty = type_token.resolve(userfunc.rule_meta().ndim);
+                ty = type_token.resolve(userfunc.rule_meta());
                 args = Args::none();
             } else {
                 let receiver = userfunc.build_expression_ast(object)?;
@@ -165,7 +165,7 @@ pub fn from_parse_tree(
                     // Built-in method
                     let ty: Type;
                     if let parser::Expr::TypeName(type_token) = object.inner {
-                        ty = type_token.resolve(userfunc.rule_meta().ndim);
+                        ty = type_token.resolve(userfunc.rule_meta());
                     } else {
                         let receiver = userfunc.build_expression_ast(object)?;
                         ty = userfunc[receiver].ret_type();

@@ -5,7 +5,7 @@ use inkwell::values::{BasicValueEnum, IntValue, StructValue, VectorValue};
 use inkwell::IntPredicate;
 
 use super::{const_int, const_uint, Compiler, PatternValue, Value};
-use crate::{ConstValue, LangResult, MAX_STATES};
+use crate::{ConstValue, LangResult, MAX_STATE_COUNT};
 
 impl Compiler {
     /// Compiles a (possibly unrolled) for loop using the given closure to
@@ -275,7 +275,7 @@ impl Compiler {
         self.build_int_range_iter(
             self.value_from_const(ConstValue::IntRange {
                 start: 0,
-                end: MAX_STATES as i64 - 1,
+                end: MAX_STATE_COUNT as i64 - 1,
                 step: 1,
             })
             .into_basic_value()?

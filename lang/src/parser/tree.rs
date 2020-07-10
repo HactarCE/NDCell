@@ -1,12 +1,14 @@
 //! Parse tree.
 
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
 use crate::errors::*;
 use crate::lexer::{AssignmentToken, ComparisonToken, OperatorToken, TypeToken};
-use crate::{Span, Spanned};
+use crate::types::FnSignature;
+use crate::{RuleMeta, Span, Spanned};
 use LangErrorMsg::RepeatDirective;
 
 /// Parse tree of containing tokens.
@@ -124,6 +126,18 @@ pub struct HelperFunc {
     pub params: Vec<Spanned<(Spanned<TypeToken>, Spanned<String>)>>,
     /// Body of the helper function.
     pub body: Spanned<StatementBlock>,
+}
+impl HelperFunc {
+    /// Constructs the function signature represented by this parse tree node.
+    pub fn fn_signature(&self, rule_meta: &RuleMeta) -> FnSignature {
+        FnSignature::new(
+            self.params
+                .iter()
+                .map(|arg| arg.inner.0.inner.resolve(rule_meta))
+                .collect_vec(),
+            self.return_type.inner.resolve(rule_meta),
+        )
+    }
 }
 
 /// Statement node in the parse tree.

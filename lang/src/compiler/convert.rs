@@ -220,7 +220,7 @@ mod tests {
         ]
         .into_iter();
 
-        let cell_state_filters = (0..crate::MAX_STATES).map(|i| {
+        let cell_state_filters = (0..crate::MAX_STATE_COUNT).map(|i| {
             ConstValue::CellStateFilter(CellStateFilter::single_cell_state(i as LangCellState))
         });
 

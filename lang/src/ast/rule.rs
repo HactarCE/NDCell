@@ -4,25 +4,14 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
-use super::{FnSignature, UserFunction};
+use super::UserFunction;
 use crate::errors::*;
 use crate::parser::{Directive, DirectiveContents, HelperFunc, ParseTree};
 use crate::types::LangInt;
-use crate::{ConstValue, Type};
+use crate::{ConstValue, RuleMeta, Type, DEFAULT_NDIM};
 use LangErrorMsg::{
     Expected, FunctionNameConflict, InvalidDimensionCount, InvalidStateCount, TypeError,
 };
-
-/// Number of dimensions to use when the user doesn't specify.
-const DEFAULT_NDIM: u8 = 2;
-/// Number of states to use when the user doesn't specify.
-const DEFAULT_STATE_COUNT: usize = 2;
-
-/// Returns a list of cell states if the user does not specify, given an
-/// optional number of states (defaults to DEFAULT_STATE_COUNT).
-fn make_default_states(count: Option<usize>) -> Vec<CellState> {
-    return vec![CellState::default(); count.unwrap_or(DEFAULT_STATE_COUNT)];
-}
 
 /// Root node of an abstract syntax tree representing a Rule, along with any
 /// associated metadata (such as cell state information).
@@ -70,15 +59,17 @@ impl TryFrom<ParseTree> for Rule {
         // Get states.
         let states = match parse_tree.take_single_directive(Directive::States)? {
             // There is no `@states` directive; use the default states.
-            None => make_default_states(None),
+            None => crate::meta::make_default_states(None),
             // There is an `@states` directive.
             Some((_span, DirectiveContents::Expr(expr))) => {
                 let states_expr = temp_func.build_expression_ast(&expr)?;
                 let states_value = temp_func.const_eval_expr(states_expr)?;
-                const MAX_STATES: LangInt = crate::MAX_STATES as LangInt;
+                const MAX_STATES: LangInt = crate::MAX_STATE_COUNT as LangInt;
                 match states_value {
                     // The user specified a valid state count.
-                    ConstValue::Int(i @ 1..=MAX_STATES) => make_default_states(Some(i as usize)),
+                    ConstValue::Int(i @ 1..=MAX_STATES) => {
+                        crate::meta::make_default_states(Some(i as usize))
+                    }
                     // The user specified a number, but it's not a valid state
                     // count.
                     ConstValue::Int(_) => Err(InvalidStateCount.with_span(expr))?,
@@ -94,6 +85,13 @@ impl TryFrom<ParseTree> for Rule {
             Some((span, _contents)) => Err(Expected("expression".to_owned()).with_span(span))?,
         };
 
+        let mut meta = RuleMeta {
+            source_code: parse_tree.source_code.clone(),
+            ndim,
+            states,
+            helper_function_signatures: HashMap::new(),
+        };
+
         // Gather a list of helper functions.
         let helper_function_parse_trees: Vec<HelperFunc> = parse_tree
             .directives
@@ -105,24 +103,22 @@ impl TryFrom<ParseTree> for Rule {
                 _ => internal_error!("Invalid parse tree on helper function"),
             })
             .collect::<LangResult<Vec<_>>>()?;
-        let mut helper_function_signatures = HashMap::new();
         for helper_func in &helper_function_parse_trees {
-            if helper_function_signatures.contains_key(&helper_func.name.inner) {
+            if meta
+                .helper_function_signatures
+                .contains_key(&helper_func.name.inner)
+            {
                 Err(FunctionNameConflict.with_span(helper_func.name.span))?;
             } else {
-                helper_function_signatures.insert(
+                meta.helper_function_signatures.insert(
                     helper_func.name.inner.clone(),
-                    FnSignature::from_helper_function_parse_tree(helper_func, ndim),
+                    helper_func.fn_signature(&meta),
                 );
             }
         }
 
-        let meta = Rc::new(RuleMeta {
-            source_code: parse_tree.source_code.clone(),
-            ndim,
-            states,
-            helper_function_signatures,
-        });
+        // The rule metadata is set in stone at this point.
+        let meta = Rc::new(meta);
 
         // Build helper functions.
         let helper_functions = helper_function_parse_trees
@@ -178,33 +174,3 @@ impl Rule {
         &self.helper_functions
     }
 }
-
-/// Metadata about a rule, such as the number of dimensions and a list of
-/// possible cell states.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuleMeta {
-    /// Raw source code.
-    pub source_code: Rc<String>,
-    /// Number of dimensions (from 1 to 6).
-    pub ndim: u8,
-    /// List of cell states.
-    pub states: Vec<CellState>,
-    /// Map of names and signatures of helper functions.
-    pub helper_function_signatures: HashMap<String, FnSignature>,
-    // /// Cell state tags.
-    // tags: HashMap<String, Tag>,
-}
-impl Default for RuleMeta {
-    fn default() -> Self {
-        Self {
-            source_code: Rc::new(String::new()),
-            ndim: DEFAULT_NDIM,
-            states: make_default_states(None),
-            helper_function_signatures: HashMap::new(),
-        }
-    }
-}
-
-/// A cell state.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct CellState;

@@ -20,9 +20,11 @@ mod compiler;
 mod constvalue;
 mod functions;
 mod lexer;
+mod meta;
 mod parser;
 mod span;
 
+pub use crate::meta::{CellState, RuleMeta};
 pub use constvalue::ConstValue;
 pub use errors::CompleteLangResult;
 pub use span::{Span, Spanned};
@@ -33,9 +35,14 @@ use errors::LangResult;
 /// Maximum number of dimensions.
 pub const MAX_NDIM: usize = 6;
 /// Maximum number of states.
-pub const MAX_STATES: usize = 256;
+pub const MAX_STATE_COUNT: usize = 256;
 /// Maximum pattern size.
 pub const MAX_PATTERN_SIZE: usize = 4096;
+
+/// Number of dimensions to use when the user doesn't specify.
+const DEFAULT_NDIM: u8 = 2;
+/// Number of states to use when the user doesn't specify.
+const DEFAULT_STATE_COUNT: usize = 2;
 
 /// Reserved throwaway variable name.
 const THROWAWAY_VARIABLE: &'static str = "_";

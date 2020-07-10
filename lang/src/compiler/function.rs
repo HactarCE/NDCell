@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use super::Compiler;
 use crate::errors::*;
-use crate::{ConstValue, Type};
+use crate::{ConstValue, RuleMeta, Type};
 
 /// Compiled user function with allocated space for arguments, return value, and
 /// optionally debug values to it.
@@ -30,7 +30,7 @@ impl CompiledFunction {
     /// The only reason the compiler is owned rather than mutably borrowed is to
     /// get a long-lasting reference to the TargetData.
     pub fn try_new(
-        source_code: Rc<String>,
+        rule_meta: Rc<RuleMeta>,
         error_points: Vec<LangError>,
         compiler: Compiler,
     ) -> LangResult<Self> {
@@ -76,7 +76,7 @@ impl CompiledFunction {
 
         Ok(Self {
             meta: Rc::new(CompiledFunctionMeta {
-                source_code,
+                rule_meta,
                 error_points,
 
                 out_type,
@@ -162,17 +162,17 @@ impl CompiledFunction {
         }
     }
 
-    /// Returns the source code of the rule that this function is part of.
-    pub fn source_code(&self) -> &Rc<String> {
-        &self.meta.source_code
+    /// Returns the metadata for the rule that this function is a part of.
+    pub fn rule_meta(&self) -> &Rc<RuleMeta> {
+        &self.meta.rule_meta
     }
 }
 
 /// Immutable metadata for a compiled function.
 #[derive(Debug)]
 struct CompiledFunctionMeta {
-    /// Raw source code.
-    source_code: Rc<String>,
+    /// Rule metadata.
+    rule_meta: Rc<RuleMeta>,
     /// List of possible runtime errors.
     error_points: Vec<LangError>,
 

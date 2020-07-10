@@ -2,15 +2,15 @@ use itertools::Itertools;
 use std::convert::TryInto;
 
 use super::{LangCellState, LangUint, INT_BITS};
-use crate::MAX_STATES;
+use crate::MAX_STATE_COUNT;
 
 /// Length of LangInt array used to represent a cell state filter.
-pub const CELL_STATE_FILTER_ARRAY_LEN: usize = MAX_STATES / INT_BITS as usize;
+pub const CELL_STATE_FILTER_ARRAY_LEN: usize = MAX_STATE_COUNT / INT_BITS as usize;
 
 /// Compile-time assertion that MAX_STATES is divisible by INT_BITS, based on
 /// the static_assertions crate:
 /// https://docs.rs/static_assertions/1.1.0/src/static_assertions/const_assert.rs.html#52.
-const _: [(); MAX_STATES % INT_BITS as usize] = [];
+const _: [(); MAX_STATE_COUNT % INT_BITS as usize] = [];
 
 /// Cell state filter value.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]

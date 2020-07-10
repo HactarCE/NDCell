@@ -1,9 +1,9 @@
 use inkwell::targets::TargetData;
-use inkwell::types::{BasicTypeEnum, IntType, StructType, VectorType};
+use inkwell::types::{BasicType, BasicTypeEnum, IntType, StructType, VectorType};
 use inkwell::AddressSpace;
 
 use super::get_ctx;
-use crate::types::{CELL_STATE_BITS, CELL_STATE_FILTER_ARRAY_LEN, INT_BITS};
+use crate::types::{FnSignature, CELL_STATE_BITS, CELL_STATE_FILTER_ARRAY_LEN, INT_BITS};
 use crate::{LangResult, Type};
 
 /// Returns the LLVM type used to represent vales of the given type, or an
@@ -87,4 +87,15 @@ pub fn cell_state_filter() -> VectorType<'static> {
     //
     // Most of the time cell state filters will be optimized away anyway.
     vec(CELL_STATE_FILTER_ARRAY_LEN)
+}
+
+/// Returns the LLVM function type for the given function signature.
+pub fn function(fn_signature: FnSignature) -> LangResult<inkwell::types::FunctionType<'static>> {
+    let llvm_param_types = fn_signature
+        .args
+        .iter()
+        .map(get)
+        .collect::<LangResult<Vec<_>>>()?;
+    let llvm_ret_type = get(&fn_signature.ret)?;
+    Ok(llvm_ret_type.fn_type(&llvm_param_types, false))
 }

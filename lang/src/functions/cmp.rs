@@ -58,19 +58,15 @@ impl Function for Cmp {
     fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
         let args = info.arg_values();
 
-        let old_bb = compiler.builder().get_insert_block().unwrap();
+        // Build a basic block to skip to if the condition is false and create a
+        // PHI node for the final result. The last condition will have an
+        // unconditional jump.
+        let (merge_bb, phi) = compiler.append_basic_block_with_phi(
+            "multiCompareShortCircuit",
+            compiler::types::int(),
+            "multiCompareMerge",
+        );
 
-        // Build a basic block to skip to if the condition is false. The last
-        // condition will have an unconditional jump.
-        let merge_bb = compiler.append_basic_block("multiCompareShortCircuit");
-        compiler.builder().position_at_end(merge_bb);
-
-        // Create a phi node for the final result.
-        let phi = compiler
-            .builder()
-            .build_phi(compiler::types::int(), "multiCompareMerge");
-
-        compiler.builder().position_at_end(old_bb);
         // Compile the first argument.
         let mut lhs = args.compile(compiler, 0)?;
         for (rhs_arg_index, comparator) in (1..).zip(&self.comparators) {

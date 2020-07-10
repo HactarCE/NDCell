@@ -6,7 +6,7 @@ use inkwell::IntPredicate;
 
 use super::{const_int, const_uint, Compiler, PatternValue, Value};
 use crate::types::LangInt;
-use crate::{ConstValue, LangResult};
+use crate::LangResult;
 
 impl Compiler {
     /// Compiles a (possibly unrolled) for loop using the given closure to
@@ -93,7 +93,6 @@ impl Compiler {
             self.build_get_pattern_cell_state(
                 pattern,
                 pos_vector_value,
-                // self.value_from_const(ConstValue::Vector(pos)),
                 // Cell state is in bounds, as it should be.
                 |c, cell_state| for_each_cell(c, &pos, cell_state),
                 // Cell state is out of bounds (which should NOT happen here).
@@ -197,11 +196,11 @@ impl Compiler {
             start.into(),
             |c, old_pos| {
                 // Add a PHI node for the new position.
-                let start_bb = c.current_block();
-                let done_with_increment_bb = c.append_basic_block("doneWithPosIncrement");
-                c.builder().position_at_end(done_with_increment_bb);
-                let phi_node = c.builder().build_phi(start.get_type(), "incrementedPos");
-                c.builder().position_at_end(start_bb);
+                let (done_with_increment_bb, phi) = c.append_basic_block_with_phi(
+                    "doneWithIncrementPos",
+                    start.get_type(),
+                    "incrementedPos",
+                );
 
                 let mut pos = old_pos.into_vector_value();
                 for axis in 0..ndim {
@@ -245,7 +244,7 @@ impl Compiler {
                                 const_uint(axis as u64),
                                 "posWithIncrementedComponent",
                             );
-                            phi_node.add_incoming(&[(&incremented_pos, c.current_block())]);
+                            phi.add_incoming(&[(&incremented_pos, c.current_block())]);
                             c.builder()
                                 .build_unconditional_branch(done_with_increment_bb);
                             Ok(())
@@ -260,7 +259,7 @@ impl Compiler {
 
                 // Well, we're done incrementing the position!
                 c.builder().position_at_end(done_with_increment_bb);
-                Ok(phi_node.as_basic_value())
+                Ok(phi.as_basic_value())
             },
             |c, pos| for_each_pos(c, pos.into_vector_value()),
         )?;
@@ -276,33 +275,25 @@ impl Compiler {
         mut for_each_cell_state: impl FnMut(&mut Self, IntValue<'static>) -> LangResult<()>,
     ) -> LangResult<()> {
         // Delegate to build_int_range_iter().
-        self.build_int_range_iter(
-            self.value_from_const(ConstValue::IntRange {
-                start: 0,
-                end: state_count as LangInt - 1,
-                step: 1,
-            })
-            .into_basic_value()?
-            .into_vector_value(),
-            |c, i| {
-                // Truncate integer to cell state.
-                let cell_state = c.builder().build_int_truncate(
-                    i,
-                    super::types::cell_state(),
-                    "filterComponentIdx",
-                );
-                // Extract the bit.
-                let idx = c.build_compute_cell_state_filter_idx(state_count, cell_state)?;
-                let int = c
-                    .builder()
-                    .build_extract_element(filter, idx.vec_idx, "filterComponent")
-                    .into_int_value();
-                let bit = c.builder().build_and(int, idx.bitmask, "filterBit");
-                // Execute the code in the loop if the bit is 1.
-                c.build_conditional(bit, |c| for_each_cell_state(c, cell_state), |_| Ok(()))?;
-                Ok(())
-            },
-        )
+        let start = const_int(0);
+        let end = const_int(state_count as LangInt - 1);
+        let range = self.build_construct_range(start, end, None);
+        self.build_int_range_iter(range, |c, i| {
+            // Truncate integer to cell state.
+            let cell_state =
+                c.builder()
+                    .build_int_truncate(i, super::types::cell_state(), "filterComponentIdx");
+            // Extract the bit.
+            let idx = c.build_compute_cell_state_filter_idx(state_count, cell_state)?;
+            let int = c
+                .builder()
+                .build_extract_element(filter, idx.vec_idx, "filterComponent")
+                .into_int_value();
+            let bit = c.builder().build_and(int, idx.bitmask, "filterBit");
+            // Execute the code in the loop if the bit is 1.
+            c.build_conditional(bit, |c| for_each_cell_state(c, cell_state), |_| Ok(()))?;
+            Ok(())
+        })
     }
 
     /// Builds a loop using the given closures.
@@ -315,37 +306,28 @@ impl Compiler {
         ) -> LangResult<BasicValueEnum<'static>>,
         mut build_each_iteration: impl FnMut(&mut Self, BasicValueEnum<'static>) -> LangResult<()>,
     ) -> LangResult<()> {
-        // pre_loop (where we are now) jumps straight to main_loop, which starts
-        // with a PHI node for the iteration value.
-        let pre_loop_bb = self.current_block();
-        let main_loop_bb = self.append_basic_block("loopBody");
-        self.builder().build_unconditional_branch(main_loop_bb);
-        self.builder().position_at_end(main_loop_bb);
-        let iter_value_phi = self
-            .builder()
-            .build_phi(first_iter_value.get_type(), "iterValue");
-        self.builder().position_at_end(pre_loop_bb);
-        let iter_value = iter_value_phi.as_basic_value();
+        // The current block jumps straight to main_loop, which starts with a
+        // PHI node for the iteration value.
+        let (loop_body_bb, iter_value_phi) =
+            self.append_basic_block_with_phi("loopBody", first_iter_value.get_type(), "iterValue");
         iter_value_phi.add_incoming(&[(&first_iter_value, self.current_block())]);
+        self.builder().build_unconditional_branch(loop_body_bb);
+        let iter_value = iter_value_phi.as_basic_value();
 
         self.enter_loop();
+        let loop_reentry_bb = self.current_block();
+        self.builder().position_at_end(loop_body_bb);
 
-        // At the beginning of each loop iteration (NOT including the first),
-        // compute the value for the next iteration based on the previous one.
-        let prev_iter_value = iter_value;
-        let next_iter_value = build_compute_next_iter_value(self, prev_iter_value)?;
-        iter_value_phi.add_incoming(&[(&next_iter_value, self.current_block())]);
-        self.builder().build_unconditional_branch(main_loop_bb);
-
-        // Now we're at the part of the loop that's executed for every loop
-        // iteration, including the first.
-        self.builder().position_at_end(main_loop_bb);
-
+        // Build the contents of the loop, and compute the value for the next
+        // iteration.
         build_each_iteration(self, iter_value)?;
-
         if self.needs_terminator() {
             self.build_jump_to_loop_entry().unwrap();
         }
+        self.builder().position_at_end(loop_reentry_bb);
+        let next_iter_value = build_compute_next_iter_value(self, iter_value)?;
+        iter_value_phi.add_incoming(&[(&next_iter_value, self.current_block())]);
+        self.builder().build_unconditional_branch(loop_body_bb);
 
         self.exit_loop();
         Ok(())

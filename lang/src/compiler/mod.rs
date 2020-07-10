@@ -29,7 +29,8 @@ use inkwell::module::Module;
 use inkwell::targets::TargetData;
 use inkwell::types::{BasicType, BasicTypeEnum, FunctionType, IntType, StructType, VectorType};
 use inkwell::values::{
-    BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue, StructValue, VectorValue,
+    BasicValueEnum, FunctionValue, IntMathValue, IntValue, PhiValue, PointerValue, StructValue,
+    VectorValue,
 };
 use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
 
@@ -45,7 +46,7 @@ pub use function::CompiledFunction;
 pub use value::{PatternValue, Value};
 
 use crate::errors::*;
-use crate::types::{TypeDesc, CELL_STATE_BITS, INT_BITS};
+use crate::types::{CellStateFilter, TypeDesc, CELL_STATE_BITS, INT_BITS};
 use crate::{ConstValue, Type};
 
 /// Name of the LLVM module.
@@ -382,6 +383,25 @@ impl Compiler {
     /// returns the new BasicBlock.
     pub fn append_basic_block(&mut self, name: &str) -> BasicBlock<'static> {
         get_ctx().append_basic_block(self.llvm_fn(), name)
+    }
+    /// Appends an LLVM BasicBlock with a PHI node to the end of the current
+    /// LLVM function and returns the new BasicBlock and PhiValue.
+    ///
+    /// The instruction builder is placed at the end of the basic block it was
+    /// on before calling this function (so if it's already at the end of a
+    /// basic block, it will stay there).
+    pub fn append_basic_block_with_phi(
+        &mut self,
+        bb_name: &str,
+        ty: impl BasicType<'static>,
+        phi_name: &str,
+    ) -> (BasicBlock<'static>, PhiValue<'static>) {
+        let old_bb = self.current_block();
+        let new_bb = self.append_basic_block(bb_name);
+        self.builder().position_at_end(new_bb);
+        let phi = self.builder().build_phi(ty, phi_name);
+        self.builder().position_at_end(old_bb);
+        (new_bb, phi)
     }
     /// Returns whether the current LLVM BasicBlock still needs a terminator
     /// instruction (i.e. whether it does NOT yet have one).
@@ -964,12 +984,13 @@ impl Compiler {
             // Patterns are truthy if any cell within their mask is nonzero.
             Value::Pattern(pattern) => {
                 // If there is any nonzero cell, then return a truthy value.
-                let end_bb = self.append_basic_block("endOfPatternTruthinessCheck");
                 // This phi node should be true if any cell is nonzero and false
                 // if all cells are zero.
-                let end_phi = self
-                    .builder()
-                    .build_phi(get_ctx().bool_type(), "isPatternTruthy");
+                let (end_bb, end_phi) = self.append_basic_block_with_phi(
+                    "endOfPatternTruthinessCheck",
+                    get_ctx().bool_type(),
+                    "isPatternTruthy",
+                );
 
                 // Check every single cell.
                 self.build_pattern_iter(&pattern, |c, _pos, state| {

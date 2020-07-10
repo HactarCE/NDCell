@@ -1,11 +1,8 @@
 use inkwell::targets::TargetData;
-use itertools::Itertools;
 use std::convert::TryInto;
 
 use crate::compiler::types::size_of;
-use crate::types::{
-    CellStateFilter, LangCellState, LangInt, LangUint, CELL_STATE_FILTER_ARRAY_LEN,
-};
+use crate::types::{CellStateFilter, LangCellState, LangInt, LangUint};
 use crate::{ConstValue, Type};
 
 /// Constructs a value of the given type from raw bytes. Panics if given an
@@ -83,21 +80,22 @@ pub fn bytes_to_value(ty: Type, bytes: &[u8], target_data: &TargetData) -> Const
 
             ConstValue::Rectangle(start, end)
         }
-        Type::CellStateFilter => ConstValue::CellStateFilter(CellStateFilter::from_ints(
-            bytes_to_value(
-                Type::Vector(CELL_STATE_FILTER_ARRAY_LEN),
-                bytes,
-                target_data,
-            )
-            .as_vector()
-            .unwrap()
-            .iter()
-            .map(|&x| x as LangUint)
-            .collect_vec()
-            .as_slice()
-            .try_into()
-            .unwrap(),
-        )),
+        Type::CellStateFilter(state_count) => {
+            let llvm_ty = super::types::cell_state_filter(state_count);
+            let bits_per_element = llvm_ty.get_element_type().into_int_type().get_bit_width();
+            let bytes_per_element = bits_per_element as usize / 8;
+            let bits: Vec<LangUint> = bytes
+                .chunks(bytes_per_element)
+                .map(|chunk| match chunk.len() {
+                    1 => chunk[0] as LangUint,
+                    2 => u16::from_ne_bytes(chunk.try_into().unwrap()) as LangUint,
+                    4 => u32::from_ne_bytes(chunk.try_into().unwrap()) as LangUint,
+                    8 => u64::from_ne_bytes(chunk.try_into().unwrap()) as LangUint,
+                    _ => panic!("Unknown cell state filter element type"),
+                })
+                .collect();
+            ConstValue::CellStateFilter(CellStateFilter::from_bits(state_count, bits))
+        }
     }
 }
 
@@ -135,12 +133,12 @@ pub fn value_to_bytes(value: &ConstValue, bytes: &mut [u8], target_data: &Target
             *bytes = i.to_ne_bytes();
         }
         ConstValue::Vector(values) => {
-            for (chunk, &i) in bytes
+            bytes
                 .chunks_mut(size_of(&Type::Int, target_data))
                 .zip(values)
-            {
-                value_to_bytes(&ConstValue::Int(i), chunk, target_data);
-            }
+                .for_each(|(chunk, &i)| {
+                    value_to_bytes(&ConstValue::Int(i), chunk, target_data);
+                });
         }
         ConstValue::IntRange { start, end, step } => {
             value_to_bytes(
@@ -170,11 +168,19 @@ pub fn value_to_bytes(value: &ConstValue, bytes: &mut [u8], target_data: &Target
             );
         }
         ConstValue::CellStateFilter(f) => {
-            value_to_bytes(
-                &ConstValue::Vector(f.as_ints().iter().map(|&x| x as LangInt).collect()),
-                bytes,
-                target_data,
-            );
+            let llvm_ty = super::types::cell_state_filter(f.state_count());
+            let bits_per_element = llvm_ty.get_element_type().into_int_type().get_bit_width();
+            let bytes_per_element = bits_per_element as usize / 8;
+            bytes
+                .chunks_mut(bytes_per_element)
+                .zip(f.as_bits())
+                .for_each(|(chunk, &int)| match bytes_per_element {
+                    1 => chunk[0] = int as u8,
+                    2 => chunk.copy_from_slice(&(int as u16).to_ne_bytes()),
+                    4 => chunk.copy_from_slice(&(int as u32).to_ne_bytes()),
+                    8 => chunk.copy_from_slice(&int.to_ne_bytes()),
+                    _ => panic!("Unknown cell state filter element type"),
+                });
         }
     }
 }
@@ -220,9 +226,16 @@ mod tests {
         ]
         .into_iter();
 
-        let cell_state_filters = (0..crate::MAX_STATE_COUNT).map(|i| {
-            ConstValue::CellStateFilter(CellStateFilter::single_cell_state(i as LangCellState))
-        });
+        let cell_state_filters = (0..crate::MAX_STATE_COUNT)
+            .flat_map(|state_count| {
+                std::iter::repeat(state_count).zip(0..state_count as LangCellState)
+            })
+            .map(|(state_count, cell_state)| {
+                ConstValue::CellStateFilter(CellStateFilter::single_cell_state(
+                    state_count,
+                    cell_state,
+                ))
+            });
 
         let compiler = crate::compiler::Compiler::new().unwrap();
         let target_data = compiler.target_data();

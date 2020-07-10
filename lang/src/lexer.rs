@@ -541,7 +541,7 @@ impl TypeToken {
             Self::IntRange => Type::IntRange,
             Self::Rectangle(None) => Type::Rectangle(rule_meta.ndim as usize),
             Self::Rectangle(Some(rect_ndim)) => Type::Rectangle(rect_ndim),
-            Self::CellStateFilter => Type::CellStateFilter,
+            Self::CellStateFilter => Type::CellStateFilter(rule_meta.states.len()),
         }
     }
 }

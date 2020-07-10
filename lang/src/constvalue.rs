@@ -38,7 +38,7 @@ impl ConstValue {
             Self::Vector(values) => Type::Vector(values.len()),
             Self::IntRange { .. } => Type::IntRange,
             Self::Rectangle(start, _) => Type::Rectangle(start.len()),
-            Self::CellStateFilter(_) => Type::CellStateFilter,
+            Self::CellStateFilter(f) => Type::CellStateFilter(f.state_count()),
         }
     }
     /// Constructs a default value of the given type.
@@ -58,7 +58,9 @@ impl ConstValue {
             // Default rectangle includes only the origin.
             Type::Rectangle(ndim) => Self::Rectangle(vec![0; *ndim], vec![0; *ndim]),
             // Default cell state filter includes no cells.
-            Type::CellStateFilter => Self::CellStateFilter(CellStateFilter::default()),
+            Type::CellStateFilter(state_count) => {
+                Self::CellStateFilter(CellStateFilter::none(*state_count))
+            }
         }
     }
 
@@ -164,9 +166,9 @@ impl ConstValue {
     /// Converts this value to a cell state filter if this is a
     /// ConstValue::CellState or ConstValue::CellStateFilter; otherwise returns
     /// an InternalError.
-    pub fn coerce_to_cell_state_filter(self) -> LangResult<CellStateFilter> {
+    pub fn coerce_to_cell_state_filter(self, state_count: usize) -> LangResult<CellStateFilter> {
         match self {
-            Self::CellState(i) => Ok(CellStateFilter::single_cell_state(i)),
+            Self::CellState(i) => Ok(CellStateFilter::single_cell_state(state_count, i)),
             Self::CellStateFilter(f) => Ok(f),
             _ => uncaught_type_error!(),
         }

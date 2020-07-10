@@ -5,7 +5,8 @@ use inkwell::values::{BasicValueEnum, IntValue, StructValue, VectorValue};
 use inkwell::IntPredicate;
 
 use super::{const_int, const_uint, Compiler, PatternValue, Value};
-use crate::{ConstValue, LangResult, MAX_STATE_COUNT};
+use crate::types::LangInt;
+use crate::{ConstValue, LangResult};
 
 impl Compiler {
     /// Compiles a (possibly unrolled) for loop using the given closure to
@@ -30,9 +31,11 @@ impl Compiler {
             Value::Rectangle(r) => {
                 self.build_rectangle_iter(r, |c, pos| compile_for_each(c, Value::Vector(pos)))
             }
-            Value::CellStateFilter(f) => self.build_cell_state_filter_iter(f, |c, cell_state| {
-                compile_for_each(c, Value::CellState(cell_state))
-            }),
+            Value::CellStateFilter(state_count, f) => {
+                self.build_cell_state_filter_iter(state_count, f, |c, cell_state| {
+                    compile_for_each(c, Value::CellState(cell_state))
+                })
+            }
             _ => internal_error!("Don't know how to iterate over type {}", value.ty()),
         }
     }
@@ -268,6 +271,7 @@ impl Compiler {
     /// Builds a loop over all the cell states included by a cell state filter.
     pub fn build_cell_state_filter_iter(
         &mut self,
+        state_count: usize,
         filter: VectorValue<'static>,
         mut for_each_cell_state: impl FnMut(&mut Self, IntValue<'static>) -> LangResult<()>,
     ) -> LangResult<()> {
@@ -275,7 +279,7 @@ impl Compiler {
         self.build_int_range_iter(
             self.value_from_const(ConstValue::IntRange {
                 start: 0,
-                end: MAX_STATE_COUNT as i64 - 1,
+                end: state_count as LangInt - 1,
                 step: 1,
             })
             .into_basic_value()?
@@ -288,7 +292,7 @@ impl Compiler {
                     "filterComponentIdx",
                 );
                 // Extract the bit.
-                let idx = c.build_compute_cell_state_filter_idx(cell_state)?;
+                let idx = c.build_compute_cell_state_filter_idx(state_count, cell_state)?;
                 let int = c
                     .builder()
                     .build_extract_element(filter, idx.vec_idx, "filterComponent")

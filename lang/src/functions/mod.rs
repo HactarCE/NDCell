@@ -118,7 +118,7 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "ndim" => Some(Box::new(vectors::GetLen::construct)),
             _ => None,
         },
-        Type::CellStateFilter => match name {
+        Type::CellStateFilter(_) => match name {
             "any" => todo!("return true if any cell state matches"),
             "count" => todo!("count cell states matching"),
             "first" => todo!("first cell state matching"),

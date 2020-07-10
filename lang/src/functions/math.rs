@@ -532,7 +532,7 @@ impl Function for BinaryOp {
             }
         } else if matches!(
             info.arg_types()[0].inner,
-            Type::CellState | Type::CellStateFilter
+            Type::CellState | Type::CellStateFilter(_)
         ) {
             // Cell states coerce to cell state filters, which support set
             // operations using the bitwise operators AND, OR, and XOR.
@@ -541,7 +541,9 @@ impl Function for BinaryOp {
                 Err(info.invalid_args_err())?;
             }
             typecheck!(info.arg_types()[1], [CellState, CellStateFilter])?;
-            return Ok(Type::CellStateFilter);
+            return Ok(Type::CellStateFilter(
+                info.userfunc.rule_meta().states.len(),
+            ));
         } else {
             // Otherwise, we expect an integer or vector.
             typecheck!(info.arg_types()[0], [Int, Vector])?;
@@ -623,13 +625,13 @@ impl Function for BinaryOp {
                     ));
                 }
             }
-            Type::CellStateFilter => {
+            Type::CellStateFilter(state_count) => {
                 // Cell state filters essentially support bitwise operations, so
                 // we can just treat them like normal vectors. We'll turn them
                 // back into cell state filters with Value::from_basic_value()
                 // at the end.
-                lhs = Value::Vector(compiler.build_cell_state_filter_casts(lhs)?);
-                rhs = Value::Vector(compiler.build_cell_state_filter_casts(rhs)?);
+                lhs = Value::Vector(compiler.build_cell_state_filter_cast(lhs, *state_count)?);
+                rhs = Value::Vector(compiler.build_cell_state_filter_cast(rhs, *state_count)?);
             }
             _ => (),
         }

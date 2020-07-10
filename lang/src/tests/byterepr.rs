@@ -47,7 +47,7 @@ fn test_mixed_to_bytes() {
                 step: 2,
             },
             ConstValue::Rectangle(vec![50, -60, 70], vec![80, -90, 100]),
-            ConstValue::CellStateFilter(CellStateFilter::from_cell_states(&[0, 3, 10, 99])),
+            ConstValue::CellStateFilter(CellStateFilter::from_cell_states(100, &[0, 3, 10, 99])),
         ],
         Ok(ConstValue::Void),
     );

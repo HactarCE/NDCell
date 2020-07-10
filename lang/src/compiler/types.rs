@@ -3,7 +3,7 @@ use inkwell::types::{BasicType, BasicTypeEnum, IntType, StructType, VectorType};
 use inkwell::AddressSpace;
 
 use super::get_ctx;
-use crate::types::{FnSignature, CELL_STATE_BITS, CELL_STATE_FILTER_ARRAY_LEN, INT_BITS};
+use crate::types::{CellStateFilter, FnSignature, CELL_STATE_BITS, INT_BITS};
 use crate::{LangResult, Type};
 
 /// Returns the LLVM type used to represent vales of the given type, or an
@@ -17,7 +17,7 @@ pub fn get(ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
         Type::Pattern(shape) => Ok(pattern(shape.ndim()).into()),
         Type::IntRange => Ok(int_range().into()),
         Type::Rectangle(ndim) => Ok(rectangle(*ndim).into()),
-        Type::CellStateFilter => Ok(cell_state_filter().into()),
+        Type::CellStateFilter(state_count) => Ok(cell_state_filter(*state_count).into()),
         // _ => internal_error!(
         //     "Attempt to get LLVM representation of type that has none".into(),
         // ),
@@ -78,15 +78,19 @@ pub fn rectangle(ndim: usize) -> StructType<'static> {
     get_ctx().struct_type(&[vec_type, vec_type], false)
 }
 
-pub fn cell_state_filter() -> VectorType<'static> {
-    // We use a full 256-bit "integer" for a cell state filter (represented as a
-    // vector of 64-bit integers), and hope that LLVM is smart enough to
-    // optimize most of it away after we promise that many of the upper bits
-    // will be zero. For example, a 10-state CA only needs the lowest 10 bits of
-    // this entire vector, which is really just a 16-bit integer.
-    //
-    // Most of the time cell state filters will be optimized away anyway.
-    vec(CELL_STATE_FILTER_ARRAY_LEN)
+/// Returns the LLVM type used to represent a cell state filter.
+pub fn cell_state_filter(state_count: usize) -> VectorType<'static> {
+    // Each cell state filter is fundamentally a bit vector with length equal to
+    // the number of cell states in the automaton. That bit vector is
+    // represented as an LLVM vector of 64-bit integers. But if we have fewer
+    // than 64 cell states, we might be able to use an even smaller integer, all
+    // the way down to 8 bits.
+    match state_count {
+        (0..=8) => get_ctx().i8_type().vec_type(1),
+        (0..=16) => get_ctx().i16_type().vec_type(1),
+        (0..=32) => get_ctx().i32_type().vec_type(1),
+        _ => vec(CellStateFilter::vec_len_for_state_count(state_count)),
+    }
 }
 
 /// Returns the LLVM function type for the given function signature.

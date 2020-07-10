@@ -783,6 +783,7 @@ impl Compiler {
     /// Builds computation of the index of a cell state in a cell state filter.
     pub fn build_compute_cell_state_filter_idx(
         &mut self,
+        state_count: usize,
         cell_state: IntValue<'static>,
     ) -> LangResult<CellStateFilterIndex> {
         if cell_state.get_type().get_bit_width() != CELL_STATE_BITS {
@@ -790,23 +791,34 @@ impl Compiler {
                 "Argument to build_compute_cell_state_filter_idx() has wrong number of bits!"
             );
         }
-        let int_bits = types::cell_state().const_int(INT_BITS as u64, false);
+        let element_type = types::cell_state_filter(state_count)
+            .get_element_type()
+            .into_int_type();
+        let bits_per_element =
+            types::cell_state().const_int(element_type.get_bit_width() as u64, false);
         // vec_idx = cell_state / INT_BITS
-        let vec_idx =
-            self.builder()
-                .build_int_unsigned_div(cell_state, int_bits, "cellStateFilter_vecIdx");
+        let vec_idx = self.builder().build_int_unsigned_div(
+            cell_state,
+            bits_per_element,
+            "cellStateFilter_vecIdx",
+        );
         // bit_idx = cell_state % INT_BITS
+        let bit_idx = self.builder().build_int_unsigned_rem(
+            cell_state,
+            bits_per_element,
+            "cellStateFilter_bitIdx",
+        );
+        // Zero-extend that bit_idx from cell state to whatever the element type
+        // is for this cell state filter.
         let bit_idx =
             self.builder()
-                .build_int_unsigned_rem(cell_state, int_bits, "cellStateFilter_bitIdx");
-        // Zero-extend that bit_idx from cell state to integer.
-        let bit_idx =
-            self.builder()
-                .build_int_z_extend(bit_idx, types::int(), "cellStateFilter_bitIdx_zext");
+                .build_int_z_extend(bit_idx, element_type, "cellStateFilter_bitIdx_zext");
         // bitmask = 1 << bit_idx
-        let bitmask =
-            self.builder()
-                .build_left_shift(const_uint(1), bit_idx, "cellStateFilter_bitmask");
+        let bitmask = self.builder().build_left_shift(
+            element_type.const_int(1, false),
+            bit_idx,
+            "cellStateFilter_bitmask",
+        );
         Ok(CellStateFilterIndex {
             vec_idx,
             bit_idx,
@@ -985,9 +997,10 @@ impl Compiler {
                 end_phi.as_basic_value().into_int_value()
             }
             // Other types have no truthiness.
-            Value::Void | Value::IntRange(_) | Value::Rectangle(_) | Value::CellStateFilter(_) => {
-                uncaught_type_error!()
-            }
+            Value::Void
+            | Value::IntRange(_)
+            | Value::Rectangle(_)
+            | Value::CellStateFilter(_, _) => uncaught_type_error!(),
         };
 
         // Cast to integer.
@@ -1050,15 +1063,17 @@ impl Compiler {
         let new_end = self.build_vector_cast(old_end, ndim)?;
         Ok(self.build_construct_rectangle(new_start, new_end))
     }
-    /// Builds a cast from a cell state or cell state filter to a cell state filter.
-    pub fn build_cell_state_filter_casts(
+    /// Builds a cast from a cell state or cell state filter to a cell state
+    /// filter.
+    pub fn build_cell_state_filter_cast(
         &mut self,
         value: Value,
+        state_count: usize,
     ) -> LangResult<VectorValue<'static>> {
         match value {
             Value::CellState(i) => {
-                let ret = types::cell_state_filter().const_zero();
-                let idx = self.build_compute_cell_state_filter_idx(i)?;
+                let ret = types::cell_state_filter(state_count).const_zero();
+                let idx = self.build_compute_cell_state_filter_idx(state_count, i)?;
                 Ok(self.builder().build_insert_element(
                     ret,
                     idx.bitmask,
@@ -1066,8 +1081,12 @@ impl Compiler {
                     "singleCellStateFilter",
                 ))
             }
-            Value::CellStateFilter(f) => Ok(f),
-            _ => internal_error!("Cannot convert {} to {}", value.ty(), Type::CellStateFilter),
+            Value::CellStateFilter(_, f) => Ok(f),
+            _ => internal_error!(
+                "Cannot convert {} to {}",
+                value.ty(),
+                TypeDesc::CellStateFilter
+            ),
         }
     }
     /// Builds a reduction of a vector to an integer using the given operation.
@@ -1303,9 +1322,21 @@ impl Compiler {
                     .unwrap();
                 Value::Rectangle(types::rectangle(ndim).const_named_struct(&[start, end]))
             }
-            ConstValue::CellStateFilter(f) => Value::CellStateFilter(VectorType::const_vector(
-                &f.as_ints().iter().copied().map(const_uint).collect_vec(),
-            )),
+            ConstValue::CellStateFilter(f) => Value::CellStateFilter(
+                f.state_count(),
+                VectorType::const_vector(
+                    &f.as_bits()
+                        .iter()
+                        .copied()
+                        .map(|x| {
+                            types::cell_state_filter(f.state_count())
+                                .get_element_type()
+                                .into_int_type()
+                                .const_int(x, false)
+                        })
+                        .collect_vec(),
+                ),
+            ),
         }
     }
     /// Returns the default value for variables of the given type, panicking if

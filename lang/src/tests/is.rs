@@ -167,22 +167,40 @@ fn test_vec_is_rectangle() {
 
 #[test]
 fn test_cell_state_filter_membership() {
-    let test_cell_states = vec![0, 1, 2, 62, 63, 64, 65, 254, 255];
-    let test_cell_state_filters = test_cell_states
-        .iter()
-        .map(|&x| CellStateFilter::single_cell_state(x))
-        .chain(std::iter::once(CellStateFilter::new()))
-        .collect_vec();
-
-    let mut f = compile_test_fn("@function Int test(Cell l, CellFilter r) { return l is r }");
-    for (&cell_state, &filter) in iproduct!(&test_cell_states, &test_cell_state_filters) {
-        assert_fn_result(
-            &mut f,
-            &[
-                ConstValue::CellState(cell_state),
-                ConstValue::CellStateFilter(filter),
-            ],
-            Ok(ConstValue::Int(filter.get_bit(cell_state) as LangInt)),
-        )
+    let numbers_to_test = vec![
+        0_usize, 1, 2, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256,
+    ];
+    for &state_count in &numbers_to_test[1..] {
+        let mut f = compile_test_fn(&format!(
+            "@states {}
+            @function Int test(Cell l, CellFilter r) {{
+                return l is r
+            }}",
+            state_count
+        ));
+        for &cell_state in &numbers_to_test {
+            if cell_state >= state_count {
+                continue;
+            }
+            assert_fn_result(
+                &mut f,
+                &[
+                    ConstValue::CellState(cell_state as u8),
+                    ConstValue::CellStateFilter(CellStateFilter::none(state_count)),
+                ],
+                Ok(ConstValue::Int(0)),
+            );
+            assert_fn_result(
+                &mut f,
+                &[
+                    ConstValue::CellState(cell_state as u8),
+                    ConstValue::CellStateFilter(CellStateFilter::single_cell_state(
+                        state_count,
+                        cell_state as u8,
+                    )),
+                ],
+                Ok(ConstValue::Int(1)),
+            );
+        }
     }
 }

@@ -7,7 +7,7 @@ use std::rc::Rc;
 mod filters;
 mod patterns;
 
-pub use filters::{CellStateFilter, CELL_STATE_FILTER_ARRAY_LEN};
+pub use filters::CellStateFilter;
 pub use patterns::PatternShape;
 
 use crate::errors::*;
@@ -52,8 +52,8 @@ pub enum Type {
     IntRange,
     /// Hyperrectangle of a specific dimensionality (from 1 to 256).
     Rectangle(usize),
-    /// Cell state filter.
-    CellStateFilter,
+    /// Cell state filter for a rule with a specific number of cell states.
+    CellStateFilter(usize),
 }
 impl Default for Type {
     fn default() -> Self {
@@ -70,7 +70,7 @@ impl fmt::Debug for Type {
             Self::Pattern(shape) => write!(f, "{:?}{}", TypeDesc::Pattern, shape),
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{:?}{}", TypeDesc::Rectangle, ndim),
-            Self::CellStateFilter => write!(f, "CellFilter"),
+            Self::CellStateFilter(_) => write!(f, "{:?}", TypeDesc::CellStateFilter),
         }
     }
 }
@@ -84,7 +84,7 @@ impl fmt::Display for Type {
             Self::Pattern(shape) => write!(f, "{}{}", TypeDesc::Pattern, shape),
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{}{}", TypeDesc::Rectangle, ndim),
-            Self::CellStateFilter => write!(f, "CellStateFilter"),
+            Self::CellStateFilter(_) => write!(f, "{}", TypeDesc::CellStateFilter),
         }
     }
 }
@@ -101,7 +101,7 @@ impl Type {
             | Self::Pattern(_)
             | Self::IntRange
             | Self::Rectangle(_)
-            | Self::CellStateFilter => true,
+            | Self::CellStateFilter(_) => true,
         }
     }
 
@@ -113,7 +113,7 @@ impl Type {
     pub fn can_convert_to_bool(&self) -> bool {
         match self {
             Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
-            Self::Void | Self::IntRange | Self::Rectangle(_) | Self::CellStateFilter => false,
+            Self::Void | Self::IntRange | Self::Rectangle(_) | Self::CellStateFilter(_) => false,
         }
     }
     /// Returns the type yielded by iteration over this type, or None if this
@@ -124,7 +124,7 @@ impl Type {
             Self::Pattern(_) => Some(Self::CellState),
             Self::IntRange => Some(Self::Int),
             Self::Rectangle(ndim) => Some(Self::Vector(*ndim)),
-            Self::CellStateFilter => Some(Self::CellState),
+            Self::CellStateFilter(_) => Some(Self::CellState),
             _ => None,
         }
     }
@@ -197,6 +197,8 @@ pub enum TypeDesc {
     Pattern,
     /// Hyperrectangle of any dimensionality.
     Rectangle,
+    /// Cell state filter in an automaton with any number of states.
+    CellStateFilter,
 }
 impl From<Type> for TypeDesc {
     fn from(ty: Type) -> Self {
@@ -210,6 +212,7 @@ impl fmt::Debug for TypeDesc {
             Self::Vector => write!(f, "Vec"),
             Self::Pattern => write!(f, "Pat"),
             Self::Rectangle => write!(f, "Rect"),
+            Self::CellStateFilter => write!(f, "CellFilter"),
         }
     }
 }
@@ -220,6 +223,7 @@ impl fmt::Display for TypeDesc {
             Self::Vector => write!(f, "Vector"),
             Self::Pattern => write!(f, "Pattern"),
             Self::Rectangle => write!(f, "Rectangle"),
+            Self::CellStateFilter => write!(f, "CellStateFilter"),
         }
     }
 }
@@ -249,6 +253,7 @@ impl TypeChecker for TypeDesc {
             TypeDesc::Vector => matches!(ty, Type::Vector(_)),
             TypeDesc::Pattern => matches!(ty, Type::Pattern(_)),
             TypeDesc::Rectangle => matches!(ty, Type::Rectangle(_)),
+            TypeDesc::CellStateFilter => matches!(ty, Type::CellStateFilter(_)),
         }
     }
     fn type_error(&self, got: Type) -> LangErrorMsg {
@@ -299,6 +304,9 @@ macro_rules! get_type_desc {
     };
     ( Rectangle ) => {
         crate::types::TypeDesc::Rectangle
+    };
+    ( CellStateFilter ) => {
+        crate::types::TypeDesc::CellStateFilter
     };
     ( $other:tt ) => {
         crate::types::TypeDesc::Specific(crate::types::Type::$other)

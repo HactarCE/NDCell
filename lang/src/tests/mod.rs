@@ -8,6 +8,7 @@ mod branch;
 mod byterepr;
 mod cmp;
 mod debug;
+mod filters;
 mod funcs;
 mod is;
 mod loops;

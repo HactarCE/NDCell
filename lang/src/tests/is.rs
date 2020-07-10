@@ -1,6 +1,9 @@
 use itertools::Itertools;
 
-use super::{assert_fn_result, compile_test_fn, CellStateFilter, ConstValue, LangInt};
+use super::{
+    assert_fn_result, compile_test_fn, test_values, CellStateFilter, ConstValue, LangInt,
+    STATE_COUNT_TEST_VALUES,
+};
 
 #[test]
 fn test_int_is_range() {
@@ -167,10 +170,7 @@ fn test_vec_is_rectangle() {
 
 #[test]
 fn test_cell_state_filter_membership() {
-    let numbers_to_test = vec![
-        0_usize, 1, 2, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256,
-    ];
-    for &state_count in &numbers_to_test[1..] {
+    for &state_count in STATE_COUNT_TEST_VALUES {
         let mut f = compile_test_fn(&format!(
             "@states {}
             @function Int test(Cell l, CellFilter r) {{
@@ -178,14 +178,14 @@ fn test_cell_state_filter_membership() {
             }}",
             state_count
         ));
-        for &cell_state in &numbers_to_test {
-            if cell_state >= state_count {
+        for &cell_state in test_values() {
+            if cell_state as usize >= state_count {
                 continue;
             }
             assert_fn_result(
                 &mut f,
                 &[
-                    ConstValue::CellState(cell_state as u8),
+                    ConstValue::CellState(cell_state),
                     ConstValue::CellStateFilter(CellStateFilter::none(state_count)),
                 ],
                 Ok(ConstValue::Int(0)),
@@ -193,10 +193,10 @@ fn test_cell_state_filter_membership() {
             assert_fn_result(
                 &mut f,
                 &[
-                    ConstValue::CellState(cell_state as u8),
+                    ConstValue::CellState(cell_state),
                     ConstValue::CellStateFilter(CellStateFilter::single_cell_state(
                         state_count,
-                        cell_state as u8,
+                        cell_state,
                     )),
                 ],
                 Ok(ConstValue::Int(1)),

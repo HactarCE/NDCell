@@ -195,6 +195,7 @@ impl Statement for Error {
     }
     fn compile(&self, compiler: &mut Compiler, _userfunc: &UserFunction) -> LangResult<()> {
         self.error.compile(compiler);
+        compiler.build_new_unreachable_bb();
         Ok(())
     }
 }
@@ -376,7 +377,9 @@ impl Statement for Break {
     fn compile(&self, compiler: &mut Compiler, _userfunc: &UserFunction) -> LangResult<()> {
         compiler
             .build_jump_to_loop_exit()
-            .map_err(|_| NotInLoop.with_span(self.span))
+            .map_err(|_| NotInLoop.with_span(self.span))?;
+        compiler.build_new_unreachable_bb();
+        Ok(())
     }
 }
 
@@ -400,7 +403,9 @@ impl Statement for Continue {
     fn compile(&self, compiler: &mut Compiler, _userfunc: &UserFunction) -> LangResult<()> {
         compiler
             .build_jump_to_loop_entry()
-            .map_err(|_| NotInLoop.with_span(self.span))
+            .map_err(|_| NotInLoop.with_span(self.span))?;
+        compiler.build_new_unreachable_bb();
+        Ok(())
     }
 }
 
@@ -432,6 +437,7 @@ impl Statement for Return {
     fn compile(&self, compiler: &mut Compiler, userfunc: &UserFunction) -> LangResult<()> {
         let return_value = userfunc.compile_expr(compiler, self.ret_expr)?;
         compiler.build_return_ok(return_value)?;
+        compiler.build_new_unreachable_bb();
         Ok(())
     }
 }

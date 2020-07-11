@@ -207,13 +207,12 @@ impl UserFunction {
         // Compile the statements.
         self.compile_statement_block(&mut compiler, &self.top_level_statements)?;
 
-        if compiler.needs_terminator() {
-            // If necessary, add an implicit `return #0` at the end of the
-            // transition function. TODO: change this to `remain` once that's
-            // implemented, and handle other types as well.
-            let default_return_value = compiler.get_default_var_value(&self.kind().return_type());
-            compiler.build_return_ok(default_return_value)?;
-        }
+        // Add an implicit `return #0` at the end of the transition function.
+        // TODO: change this to `remain` once that's implemented, and handle
+        // other types as well.
+        let default_return_value = compiler.get_default_var_value(&self.kind().return_type());
+        compiler.build_return_ok(default_return_value)?;
+
         CompiledFunction::try_new(self.rule_meta.clone(), self.error_points.clone(), compiler)
     }
 
@@ -225,10 +224,6 @@ impl UserFunction {
         block: &StatementBlock,
     ) -> LangResult<()> {
         for &statement in block {
-            if !compiler.needs_terminator() {
-                // The function has already returned.
-                return Ok(());
-            }
             self.compile_statement(compiler, statement)?;
         }
         Ok(())

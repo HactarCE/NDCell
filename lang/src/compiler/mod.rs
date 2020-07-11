@@ -456,8 +456,20 @@ impl Compiler {
 
         // Merge values if the closures provided any.
         self.builder().position_at_end(merge_bb);
-        let ret = value_if_true.merge(value_if_false, if_true_end_bb, if_false_end_bb, self);
+        let ret = PhiMergeable::merge(
+            value_if_true,
+            value_if_false,
+            if_true_end_bb,
+            if_false_end_bb,
+            self,
+        );
         Ok(ret)
+    }
+    /// Adds a new basic block intended to be unreachable and positions the
+    /// builder at the end of it.
+    pub fn build_new_unreachable_bb(&mut self) {
+        let bb = self.append_basic_block("unreachableBlock");
+        self.builder().position_at_end(bb);
     }
 
     /// Records the beginning of a loop (jump target for "continue" statements),

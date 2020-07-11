@@ -415,12 +415,16 @@ impl Compiler {
 
     /// Builds a conditional expression, using an IntValue of any width. Any
     /// nonzero value is truthy, and zero is falsey.
-    pub fn build_conditional(
+    ///
+    /// If the given closures return a basic value, then this method will return
+    /// the value of a phi node that takes the result of whichever of the two
+    /// closures executes.
+    pub fn build_conditional<V: PhiMergeable>(
         &mut self,
         condition_value: IntValue<'static>,
-        build_if_true: impl FnOnce(&mut Self) -> LangResult<()>,
-        build_if_false: impl FnOnce(&mut Self) -> LangResult<()>,
-    ) -> LangResult<()> {
+        build_if_true: impl FnOnce(&mut Self) -> LangResult<V>,
+        build_if_false: impl FnOnce(&mut Self) -> LangResult<V>,
+    ) -> LangResult<V> {
         // Build the destination blocks.
         let if_true_bb = self.append_basic_block("ifTrue");
         let if_false_bb = self.append_basic_block("ifFalse");
@@ -436,20 +440,24 @@ impl Compiler {
 
         // Build the instructions to execute if true.
         self.builder().position_at_end(if_true_bb);
-        build_if_true(self)?;
+        let value_if_true = build_if_true(self)?;
+        let if_true_end_bb = self.current_block();
         if self.needs_terminator() {
             self.builder().build_unconditional_branch(merge_bb);
         }
 
         // Build the instructions to execute if false.
         self.builder().position_at_end(if_false_bb);
-        build_if_false(self)?;
+        let value_if_false = build_if_false(self)?;
+        let if_false_end_bb = self.current_block();
         if self.needs_terminator() {
             self.builder().build_unconditional_branch(merge_bb);
         }
 
+        // Merge values if the closures provided any.
         self.builder().position_at_end(merge_bb);
-        Ok(())
+        let ret = value_if_true.merge(value_if_false, if_true_end_bb, if_false_end_bb, self);
+        Ok(ret)
     }
 
     /// Records the beginning of a loop (jump target for "continue" statements),
@@ -1417,4 +1425,41 @@ pub struct Variable {
     pub ptr: PointerValue<'static>,
     /// The offset of this variable in `inout_bytes`, if it is stored there.
     pub inout_byte_offset: Option<usize>,
+}
+
+/// Trait implemented for () and BasicValueEnum.
+pub trait PhiMergeable: Sized {
+    fn merge(
+        self,
+        other: Self,
+        self_bb: BasicBlock<'static>,
+        other_bb: BasicBlock<'static>,
+        compiler: &mut Compiler,
+    ) -> Self;
+}
+impl PhiMergeable for () {
+    fn merge(
+        self,
+        _other: (),
+        _self_bb: BasicBlock<'static>,
+        _other_bb: BasicBlock<'static>,
+        _compiler: &mut Compiler,
+    ) -> () {
+        ()
+    }
+}
+impl<'a> PhiMergeable for BasicValueEnum<'a> {
+    fn merge(
+        self,
+        other: Self,
+        self_bb: BasicBlock<'static>,
+        other_bb: BasicBlock<'static>,
+        compiler: &mut Compiler,
+    ) -> Self {
+        let phi = compiler
+            .builder()
+            .build_phi(self.get_type(), "mergeValuesEndIf");
+        phi.add_incoming(&[(&self, self_bb), (&other, other_bb)]);
+        phi.as_basic_value()
+    }
 }

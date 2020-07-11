@@ -1,5 +1,7 @@
 //! Values used by the interpreter for NDCA.
 
+use std::rc::Rc;
+
 use crate::errors::*;
 use crate::types::{CellStateFilter, LangCellState, LangInt, Type};
 
@@ -29,7 +31,7 @@ pub enum ConstValue {
     CellStateFilter(CellStateFilter),
 
     /// String of text.
-    String(String),
+    String(Rc<String>),
 }
 impl ConstValue {
     /// Returns the type of this value.
@@ -66,7 +68,7 @@ impl ConstValue {
                 Self::CellStateFilter(CellStateFilter::none(*state_count))
             }
             // Default string is the empty string.
-            Type::String => ConstValue::String(String::new()),
+            Type::String => ConstValue::String(Rc::new(String::new())),
         }
     }
 
@@ -120,7 +122,7 @@ impl ConstValue {
     }
     /// Returns the value inside if this is a ConstValue::String; otherwise
     /// returns an InternalError.
-    pub fn as_string(self) -> LangResult<String> {
+    pub fn as_string(self) -> LangResult<Rc<String>> {
         match self {
             Self::String(s) => Ok(s),
             _ => uncaught_type_error!(),

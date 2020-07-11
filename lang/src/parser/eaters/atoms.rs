@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::*;
 use crate::lexer::*;
 use crate::parser::tree;
@@ -98,7 +100,7 @@ impl TokenEater for StringLiteral {
             }) => Ok(tree::StringLiteral {
                 prefix,
                 quote,
-                contents: contents.to_owned(),
+                contents: Rc::new(contents.to_owned()),
             }),
             _ => tf.expected(self),
         }

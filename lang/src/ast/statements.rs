@@ -22,14 +22,14 @@ pub fn from_parse_tree(
             let expr = userfunc.build_expression_ast(&expr)?;
             let msg = msg
                 .as_ref()
-                .map(|string_lit| string_lit.inner.contents.to_owned());
+                .map(|string_lit| (*string_lit.inner.contents).to_owned());
             Ok(Box::new(Assert::try_new(span, userfunc, expr, msg)?))
         }
         // Error
         parser::Statement::Error { msg } => {
             let msg = msg
                 .as_ref()
-                .map(|string_lit| string_lit.inner.contents.to_owned());
+                .map(|string_lit| (*string_lit.inner.contents).to_owned());
             Ok(Box::new(Error::try_new(span, userfunc, msg)?))
         }
         // Variable assignment statement

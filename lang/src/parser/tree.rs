@@ -283,5 +283,5 @@ pub struct StringLiteral {
     /// The quote character used (either single quote or double quote).
     pub quote: char,
     /// The contents of the string.
-    pub contents: String,
+    pub contents: Rc<String>,
 }

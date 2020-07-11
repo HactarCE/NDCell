@@ -8,7 +8,7 @@ use crate::parser;
 use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{
     CannotAssignToExpr, CannotEvalAsConst, CannotIndexType, Expected, FunctionLookupError,
-    InternalError, InvalidArguments, ReservedWord, Unimplemented,
+    InternalError, InvalidArguments, ReservedWord,
 };
 
 pub fn from_parse_tree(
@@ -40,10 +40,10 @@ pub fn from_parse_tree(
             func = functions::misc::GetVar::with_name(s.to_owned());
         }
         // String literal
-        parser::Expr::String(_) => {
+        parser::Expr::String(s) => {
             name = "string literal".to_owned();
             args = Args::none();
-            func = Err(Unimplemented)?;
+            func = functions::literals::ConstString::with_value(s.contents.clone());
         }
         // Vector literal
         parser::Expr::Vector(exprs) => {

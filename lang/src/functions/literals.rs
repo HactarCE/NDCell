@@ -1,6 +1,7 @@
 //! Functions that return literals.
 
 use itertools::Itertools;
+use std::rc::Rc;
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
@@ -8,10 +9,9 @@ use crate::compiler::{const_int, Compiler, Value};
 use crate::errors::*;
 use crate::types::{CellStateFilter, LangInt, MAX_VECTOR_LEN};
 use crate::{ConstValue, Type};
-use LangErrorMsg::VectorTooBig;
+use LangErrorMsg::{MustBeConstant, VectorTooBig};
 
-/// Built-in function that returns a fixed integer. This struct can be
-/// constructed directly.
+/// Built-in function that returns a fixed integer.
 #[derive(Debug)]
 pub struct Int(LangInt);
 impl Int {
@@ -26,8 +26,6 @@ impl Function for Int {
         if info.args.len() != 0 {
             internal_error!("Arguments passed to int literal function");
         }
-        // We checked argument types in the constructor, so we don't need to
-        // worry about doing that here.
         Ok(Type::Int)
     }
     fn compile(&self, _compiler: &mut Compiler, _info: FuncCallInfo) -> LangResult<Value> {
@@ -35,6 +33,31 @@ impl Function for Int {
     }
     fn const_eval(&self, _info: FuncCallInfo) -> LangResult<ConstValue> {
         Ok(ConstValue::Int(self.0))
+    }
+}
+
+/// Built-in function that returns a fixed string.
+#[derive(Debug)]
+pub struct ConstString(Rc<String>);
+impl ConstString {
+    /// Returns a constructor for a new ConstString instance that returns the
+    /// given constant string.
+    pub fn with_value(s: Rc<String>) -> FuncConstructor {
+        Box::new(move |_info| Ok(Box::new(Self(s))))
+    }
+}
+impl Function for ConstString {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        if info.args.len() != 0 {
+            internal_error!("Arguments passed to string literal function");
+        }
+        Ok(Type::String)
+    }
+    fn compile(&self, _compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        Err(MustBeConstant.with_span(info.span))
+    }
+    fn const_eval(&self, _info: FuncCallInfo) -> LangResult<ConstValue> {
+        Ok(ConstValue::String(self.0.clone()))
     }
 }
 

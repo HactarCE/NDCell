@@ -161,6 +161,7 @@ pub enum LangErrorMsg {
     UseOfUninitializedVariable,
     BecomeInHelperFunction,
     ReturnInTransitionFunction,
+    MustBeConstant,
     CannotEvalAsConst,
     VectorTooBig,
     FunctionLookupError,
@@ -265,6 +266,9 @@ impl fmt::Display for LangErrorMsg {
                     f,
                     "Use 'become' instead of 'return' in transition functions",
                 )?;
+            }
+            Self::MustBeConstant => {
+                write!(f, "This type of value can only be a constant")?;
             }
             Self::CannotEvalAsConst => {
                 write!(f, "Cannot evaluate this expression as a constant")?;

@@ -124,6 +124,7 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "last" => todo!("last cell state matching"),
             _ => None,
         },
+        Type::String => None,
     }
 }
 

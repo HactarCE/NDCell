@@ -13,6 +13,8 @@ pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
 /// Result of a LangError.
 pub type LangResult<T> = Result<T, LangError>;
 
+pub const NO_RUNTIME_REPRESENTATION: &str = "Type has no runtime representation!";
+
 /// An error type and an accompanying line and span of source code.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LangErrorWithSource {

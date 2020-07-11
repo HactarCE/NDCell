@@ -27,6 +27,9 @@ pub enum ConstValue {
     Rectangle(Vec<LangInt>, Vec<LangInt>),
     /// Cell state filter.
     CellStateFilter(CellStateFilter),
+
+    /// String of text.
+    String(String),
 }
 impl ConstValue {
     /// Returns the type of this value.
@@ -39,6 +42,7 @@ impl ConstValue {
             Self::IntRange { .. } => Type::IntRange,
             Self::Rectangle(start, _) => Type::Rectangle(start.len()),
             Self::CellStateFilter(f) => Type::CellStateFilter(f.state_count()),
+            Self::String(_) => Type::String,
         }
     }
     /// Constructs a default value of the given type.
@@ -61,6 +65,8 @@ impl ConstValue {
             Type::CellStateFilter(state_count) => {
                 Self::CellStateFilter(CellStateFilter::none(*state_count))
             }
+            // Default string is the empty string.
+            Type::String => ConstValue::String(String::new()),
         }
     }
 
@@ -112,6 +118,14 @@ impl ConstValue {
             _ => uncaught_type_error!(),
         }
     }
+    /// Returns the value inside if this is a ConstValue::String; otherwise
+    /// returns an InternalError.
+    pub fn as_string(self) -> LangResult<String> {
+        match self {
+            Self::String(s) => Ok(s),
+            _ => uncaught_type_error!(),
+        }
+    }
 
     /// Converts this value to a boolean if it can be converted; otherwise
     /// returns an InternalError.
@@ -123,7 +137,8 @@ impl ConstValue {
             Self::Void
             | Self::IntRange { .. }
             | Self::Rectangle { .. }
-            | Self::CellStateFilter(_) => uncaught_type_error!(),
+            | Self::CellStateFilter(_)
+            | Self::String(_) => uncaught_type_error!(),
         }
     }
     /// Converts this value to a vector of the specified length if this is a

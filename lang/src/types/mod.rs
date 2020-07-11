@@ -54,6 +54,9 @@ pub enum Type {
     Rectangle(usize),
     /// Cell state filter for a rule with a specific number of cell states.
     CellStateFilter(usize),
+
+    /// String of text.
+    String,
 }
 impl Default for Type {
     fn default() -> Self {
@@ -71,6 +74,7 @@ impl fmt::Debug for Type {
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{:?}{}", TypeDesc::Rectangle, ndim),
             Self::CellStateFilter(_) => write!(f, "{:?}", TypeDesc::CellStateFilter),
+            Self::String => write!(f, "String"),
         }
     }
 }
@@ -85,6 +89,7 @@ impl fmt::Display for Type {
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{}{}", TypeDesc::Rectangle, ndim),
             Self::CellStateFilter(_) => write!(f, "{}", TypeDesc::CellStateFilter),
+            Self::String => write!(f, "String"),
         }
     }
 }
@@ -102,6 +107,7 @@ impl Type {
             | Self::IntRange
             | Self::Rectangle(_)
             | Self::CellStateFilter(_) => true,
+            Self::String => false,
         }
     }
 
@@ -113,7 +119,11 @@ impl Type {
     pub fn can_convert_to_bool(&self) -> bool {
         match self {
             Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
-            Self::Void | Self::IntRange | Self::Rectangle(_) | Self::CellStateFilter(_) => false,
+            Self::Void
+            | Self::IntRange
+            | Self::Rectangle(_)
+            | Self::CellStateFilter(_)
+            | Self::String => false,
         }
     }
     /// Returns the type yielded by iteration over this type, or None if this

@@ -1449,6 +1449,7 @@ impl Compiler {
                         .collect_vec(),
                 ),
             ),
+            ConstValue::String(_) => panic!(NO_RUNTIME_REPRESENTATION),
         }
     }
     /// Returns the default value for variables of the given type, panicking if

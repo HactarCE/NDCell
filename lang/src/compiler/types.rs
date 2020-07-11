@@ -5,6 +5,7 @@ use inkwell::AddressSpace;
 use super::get_ctx;
 use crate::types::{CellStateFilter, FnSignature, CELL_STATE_BITS, INT_BITS};
 use crate::{LangResult, Type};
+use crate::errors::NO_RUNTIME_REPRESENTATION;
 
 /// Returns the LLVM type used to represent vales of the given type, or an
 /// InternalError if the given type has no runtime representation.
@@ -18,9 +19,7 @@ pub fn get(ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
         Type::IntRange => Ok(int_range().into()),
         Type::Rectangle(ndim) => Ok(rectangle(*ndim).into()),
         Type::CellStateFilter(state_count) => Ok(cell_state_filter(*state_count).into()),
-        // _ => internal_error!(
-        //     "Attempt to get LLVM representation of type that has none".into(),
-        // ),
+        Type::String => internal_error!(NO_RUNTIME_REPRESENTATION),
     }
 }
 

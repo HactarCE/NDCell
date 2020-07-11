@@ -37,7 +37,7 @@ pub fn from_parse_tree(
         parser::Expr::Ident(s) => {
             name = s.clone();
             args = Args::none();
-            func = Box::new(functions::misc::GetVar::with_name(s.to_owned()));
+            func = functions::misc::GetVar::with_name(s.to_owned());
         }
         // String literal
         parser::Expr::String(_) => {
@@ -312,7 +312,7 @@ impl Expr {
         let info = self.call_info(userfunc);
         self.func
             .as_assignable(info)
-            .ok_or(CannotEvalAsConst.with_span(self.span()))?
+            .ok_or(CannotAssignToExpr.with_span(self.span()))?
             .assign_type(info)
     }
     /// Returns the type that can be assigned to this expression along with its
@@ -367,7 +367,7 @@ pub trait Function: std::fmt::Debug {
     /// This function may panic or return an Err(InternalError) if ArgValues has
     /// invalid types.
     fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
-        Err(CannotAssignToExpr.with_span(info.span))
+        Err(CannotEvalAsConst.with_span(info.span))
     }
 
     /// Returns this function as an AssignableFunction, or

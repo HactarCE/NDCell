@@ -970,6 +970,77 @@ impl Compiler {
         )
     }
 
+    /// Builds construction of a cell state filter that matches all cells less
+    /// than (but not including) the given upper bound.
+    pub fn build_construct_cell_state_filter_below(
+        &mut self,
+        state_count: usize,
+        upper_bound: IntValue<'static>,
+    ) -> LangResult<VectorValue<'static>> {
+        // Compute index of the given cell state.
+        let idx = self.build_compute_cell_state_filter_idx(state_count, upper_bound)?;
+
+        // Start with a range of numbers, then compare them to to idx.vec_idx so
+        // that each element is 1 if its index is less than idx.vec_idx or 0 if
+        // its index is greater.
+        let vec_len = CellStateFilter::vec_len_for_state_count(state_count);
+        let vec_idx_zext = self
+            .builder()
+            .build_int_z_extend(idx.vec_idx, types::int(), "");
+        let vec_idx_vector = self.build_vector_cast(Value::Int(vec_idx_zext), vec_len)?;
+        let bools = self.builder().build_int_compare(
+            IntPredicate::ULT,
+            VectorType::const_vector(&(0..vec_len as u64).map(const_uint).collect_vec()),
+            vec_idx_vector,
+            "cellStateFilterBelow_bools",
+        );
+        // Now sign-extend those booleans to whatever the element size is. At
+        // this point, the elements that need to be all ones or all zeros are
+        // done.
+        let zext_bools = self.builder().build_int_s_extend(
+            bools,
+            types::cell_state_filter(state_count),
+            "cellStateFilterBelow_zextBools",
+        );
+
+        // Subtract one (add -1) from the bitmask to get the bitmask of all bits
+        // below.
+        let bitmask_below_n = self.builder().build_int_sub(
+            idx.bitmask,
+            idx.bitmask.get_type().const_int(1, false),
+            "bitmaskBelowN",
+        );
+        let is_bitmask_zero = self.builder().build_int_compare(
+            IntPredicate::EQ,
+            bitmask_below_n,
+            bitmask_below_n.get_type().const_zero(),
+            "isBitmaskZero",
+        );
+
+        // Apply the bitmask if necessary.
+        let ret = self
+            .build_conditional(
+                is_bitmask_zero,
+                // If the bitmask is empty, then we're done.
+                |_| Ok(BasicValueEnum::from(zext_bools)),
+                // If the bitmask is NOT empty, then insert it into the vector.
+                |c| {
+                    Ok(c.builder()
+                        .build_insert_element(
+                            zext_bools,
+                            bitmask_below_n,
+                            idx.vec_idx,
+                            "cellStateFilterConstructBelowN",
+                        )
+                        .into())
+                },
+            )?
+            .into_vector_value();
+
+        // Return the final result.
+        Ok(ret)
+    }
+
     /* CASTS */
 
     /// Builds a cast from any type to a boolean, represented using the normal

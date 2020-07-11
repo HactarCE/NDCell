@@ -1,6 +1,7 @@
 //! Comparison functions.
 
 use inkwell::values::{IntValue, VectorValue};
+use inkwell::IntPredicate;
 use std::fmt;
 
 use super::{FuncConstructor, FuncResult};
@@ -356,11 +357,11 @@ impl Function for Is {
         let lhs = &info.arg_types()[0];
         let rhs = &info.arg_types()[1];
         // Check right-hand side first, then left-hand side.
-        typecheck!(rhs, [IntRange, Rectangle, CellStateFilter])?;
+        typecheck!(rhs, [IntRange, Rectangle, CellState, CellStateFilter])?;
         match rhs.inner {
             Type::IntRange => typecheck!(lhs, [Int, Vector])?,
             Type::Rectangle(_) => typecheck!(lhs, [Int, Vector])?,
-            Type::CellStateFilter(_) => typecheck!(lhs, CellState)?,
+            Type::CellState | Type::CellStateFilter(_) => typecheck!(lhs, CellState)?,
             _ => unreachable!(),
         }
         // Always return a boolean.
@@ -438,6 +439,22 @@ impl Function for Is {
                     "rangeTestResultAsInt",
                 );
                 Ok(Value::Int(ret))
+            }
+            Value::CellState(rhs_state) => {
+                // No need to cast to cell state filter -- equality works here.
+                let ret = compiler.builder().build_int_compare(
+                    IntPredicate::EQ,
+                    lhs.as_cell_state()?,
+                    rhs_state,
+                    "cellStateEq",
+                );
+                // Zext to integer.
+                let ret_zext = compiler.builder().build_int_z_extend(
+                    ret,
+                    compiler::types::int(),
+                    "cellStateEqZext",
+                );
+                Ok(Value::Int(ret_zext))
             }
             Value::CellStateFilter(state_count, f) => {
                 // Determine which bit to extract.

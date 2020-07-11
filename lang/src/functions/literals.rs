@@ -6,7 +6,7 @@ use super::{FuncConstructor, FuncResult};
 use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{const_int, Compiler, Value};
 use crate::errors::*;
-use crate::types::{LangInt, MAX_VECTOR_LEN};
+use crate::types::{CellStateFilter, LangInt, MAX_VECTOR_LEN};
 use crate::{ConstValue, Type};
 use LangErrorMsg::VectorTooBig;
 
@@ -171,7 +171,13 @@ impl Range {
 impl Function for Range {
     fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
         info.check_args_len(2)?;
-        typecheck!(info.arg_types()[0], [Int, Vector])?;
+        typecheck!(info.arg_types()[0], [Int, Vector, CellState])?;
+        if info.arg_types()[0].inner == Type::CellState {
+            typecheck!(info.arg_types()[1], CellState)?;
+            return Ok(Type::CellStateFilter(
+                info.userfunc.rule_meta().states.len(),
+            ));
+        }
         typecheck!(info.arg_types()[1], [Int, Vector])?;
         use Type::{Int, IntRange, Rectangle, Vector};
         match (&info.arg_types()[0].inner, &info.arg_types()[1].inner) {
@@ -203,6 +209,26 @@ impl Function for Range {
                 let ret = compiler.build_construct_rectangle(start, end);
                 Ok(Value::Rectangle(ret))
             }
+            Type::CellStateFilter(state_count) => {
+                let start = arg1.clone().as_cell_state()?;
+                let end = arg2.clone().as_cell_state()?;
+                let up_to_start =
+                    compiler.build_construct_cell_state_filter_below(*state_count, start)?;
+                let up_to_end =
+                    compiler.build_construct_cell_state_filter_below(*state_count, end)?;
+                let range_missing_top = compiler.builder().build_xor(
+                    up_to_start,
+                    up_to_end,
+                    "cellStateFilterRangeMissingTop",
+                );
+                // Bitwise OR in the start and end to make sure that the endpoints are included in the range.
+                let only_start = compiler.build_cell_state_filter_cast(arg1, *state_count)?;
+                let only_end = compiler.build_cell_state_filter_cast(arg2, *state_count)?;
+                let ret = range_missing_top;
+                let ret = compiler.builder().build_or(ret, only_start, "");
+                let ret = compiler.builder().build_or(ret, only_end, "");
+                Ok(Value::CellStateFilter(*state_count, ret))
+            }
             _ => unreachable!(),
         }
     }
@@ -222,6 +248,15 @@ impl Function for Range {
                 let start = arg1.coerce_to_vector(*ndim)?;
                 let end = arg2.coerce_to_vector(*ndim)?;
                 ConstValue::Rectangle(start, end)
+            }
+            Type::CellStateFilter(state_count) => {
+                let start = arg1.as_cell_state()?;
+                let end = arg2.as_cell_state()?;
+                let mut ret = CellStateFilter::none(*state_count);
+                for i in start..=end {
+                    ret.set_bit(i, true);
+                }
+                ConstValue::CellStateFilter(ret)
             }
             _ => unreachable!(),
         };

@@ -165,6 +165,13 @@ impl Function for BitwiseNot {
             info.arg_types()[0],
             [Int, CellState, Vector, CellStateFilter]
         )?;
+        if info.arg_types()[0].inner == Type::CellState {
+            // Cell states will be cast to cell state filter.
+            return Ok(Type::CellStateFilter(
+                info.userfunc.rule_meta().states.len(),
+            ));
+        }
+        // All other types will remain unchanged.
         Ok(info.arg_types()[0].inner.clone())
     }
     fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {

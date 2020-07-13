@@ -11,23 +11,23 @@ pub struct CellStateFilter {
     bits: Vec<LangUint>,
 }
 impl CellStateFilter {
-    /// Returns a new CellStateFilter that does not match any cell states.
+    /// Constructs a CellStateFilter that does not match any cell states.
     pub fn none(state_count: usize) -> Self {
         let bits = vec![0; Self::vec_len_for_state_count(state_count)];
         Self { state_count, bits }
     }
-    /// Returns a new CellStateFilter that matches all cell sstates.
+    /// Constructs a CellStateFilter that matches all cell sstates.
     pub fn all(state_count: usize) -> Self {
         Self::from_cell_states(
             state_count,
             &(0..state_count).map(|x| x as u8).collect_vec(),
         )
     }
-    /// Returns a new CellStateFilter that matches only the given cell state.
+    /// Constructs a CellStateFilter that matches only the given cell state.
     pub fn single_cell_state(state_count: usize, cell_state: LangCellState) -> Self {
         Self::from_cell_states(state_count, std::iter::once(&cell_state))
     }
-    /// Returns a new CellStateFilter that matches only the given cell states.
+    /// Constructs a CellStateFilter that matches only the given cell states.
     pub fn from_cell_states<'a>(
         state_count: usize,
         cell_states: impl IntoIterator<Item = &'a LangCellState>,

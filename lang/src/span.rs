@@ -112,7 +112,7 @@ impl<T> BorrowMut<T> for Spanned<T> {
     }
 }
 impl<T> Spanned<T> {
-    /// Returns a new Spanned<T> spanning the given byte indices.
+    /// Constructs a Spanned<T> spanning the given byte indices.
     pub fn new(start: usize, end: usize, inner: T) -> Self {
         Self {
             span: Span { start, end },

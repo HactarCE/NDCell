@@ -147,7 +147,8 @@ where
         Some(Self::span(new_min, new_max))
     }
 
-    /// Returns a new NdRect with the minimum and maximum coordinates offset by the given amount.
+    /// Constructs an NdRect with the minimum and maximum coordinates offset by
+    /// the given amount.
     pub fn offset_min_max<T1, T2>(self, min_offset: T1, max_offset: T2) -> Self
     where
         NdVec<D, N>: Add<T1, Output = NdVec<D, N>> + Add<T2, Output = NdVec<D, N>>,

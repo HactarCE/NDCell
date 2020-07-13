@@ -203,7 +203,7 @@ pub enum Statement {
 pub enum Expr {
     /// Integer literal.
     Int(i64),
-    /// Identifier.
+    /// Identifier. (TODO: use Rc<String> here)
     Ident(String),
     /// Type name.
     TypeName(TypeToken),

@@ -31,7 +31,7 @@ impl TokenEater for TypeName {
     }
 }
 
-/// Consumes an identifier
+/// Consumes an identifier. TODO: make this return Rc<String>
 #[derive(Debug, Copy, Clone)]
 pub struct Identifier;
 impl_display!(Identifier, "identifier (variable or function name)");

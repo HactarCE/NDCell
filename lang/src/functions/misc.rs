@@ -132,7 +132,7 @@ impl Function for New {
         Ok(self.ty.clone())
     }
     fn compile(&self, compiler: &mut Compiler, _info: FuncCallInfo) -> LangResult<Value> {
-        Ok(compiler.get_default_var_value(&self.ty))
+        Ok(compiler.get_default_var_value(&self.ty)?)
     }
     fn const_eval(&self, _info: FuncCallInfo) -> LangResult<ConstValue> {
         Ok(ConstValue::default(&self.ty))

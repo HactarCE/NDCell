@@ -1,9 +1,7 @@
 //! Values used by the interpreter for NDCA.
 
-use std::rc::Rc;
-
 use crate::errors::*;
-use crate::types::{CellStateFilter, LangCellState, LangInt, Type};
+use crate::types::{CellStateFilter, LangCellState, LangInt, Stencil, Type};
 
 /// Constant value of any type.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,8 +28,8 @@ pub enum ConstValue {
     /// Cell state filter.
     CellStateFilter(CellStateFilter),
 
-    /// String of text.
-    String(Rc<String>),
+    /// Description of a configuration of cells.
+    Stencil(Stencil),
 }
 impl ConstValue {
     /// Returns the type of this value.
@@ -44,31 +42,31 @@ impl ConstValue {
             Self::IntRange { .. } => Type::IntRange,
             Self::Rectangle(start, _) => Type::Rectangle(start.len()),
             Self::CellStateFilter(f) => Type::CellStateFilter(f.state_count()),
-            Self::String(_) => Type::String,
+            Self::Stencil(_) => Type::Stencil,
         }
     }
     /// Constructs a default value of the given type.
-    pub fn default(ty: &Type) -> Self {
+    pub fn default(ty: &Type) -> LangResult<Self> {
         match ty {
-            Type::Void => Self::Void,
-            Type::Int => Self::Int(0),
-            Type::CellState => Self::CellState(0),
-            Type::Vector(len) => Self::Vector(vec![0; *len]),
+            Type::Void => Ok(Self::Void),
+            Type::Int => Ok(Self::Int(0)),
+            Type::CellState => Ok(Self::CellState(0)),
+            Type::Vector(len) => Ok(Self::Vector(vec![0; *len])),
             Type::Pattern(_) => todo!("default pattern (all #0)"),
             // Default integer range includes only zero.
-            Type::IntRange => Self::IntRange {
+            Type::IntRange => Ok(Self::IntRange {
                 start: 0,
                 end: 0,
                 step: 1,
-            },
+            }),
             // Default rectangle includes only the origin.
-            Type::Rectangle(ndim) => Self::Rectangle(vec![0; *ndim], vec![0; *ndim]),
+            Type::Rectangle(ndim) => Ok(Self::Rectangle(vec![0; *ndim], vec![0; *ndim])),
             // Default cell state filter includes no cells.
             Type::CellStateFilter(state_count) => {
-                Self::CellStateFilter(CellStateFilter::none(*state_count))
+                Ok(Self::CellStateFilter(CellStateFilter::none(*state_count)))
             }
-            // Default string is the empty string.
-            Type::String => ConstValue::String(Rc::new(String::new())),
+            // There is no default stencil.
+            Type::Stencil => internal_error!(NO_RUNTIME_REPRESENTATION),
         }
     }
 
@@ -120,11 +118,11 @@ impl ConstValue {
             _ => uncaught_type_error!(),
         }
     }
-    /// Returns the value inside if this is a ConstValue::String; otherwise
+    /// Returns the value inside if this is a ConstValue::Stencil; otherwise
     /// returns an InternalError.
-    pub fn as_string(self) -> LangResult<Rc<String>> {
+    pub fn as_stencil(self) -> LangResult<Stencil> {
         match self {
-            Self::String(s) => Ok(s),
+            Self::Stencil(s) => Ok(s),
             _ => uncaught_type_error!(),
         }
     }
@@ -140,7 +138,7 @@ impl ConstValue {
             | Self::IntRange { .. }
             | Self::Rectangle { .. }
             | Self::CellStateFilter(_)
-            | Self::String(_) => uncaught_type_error!(),
+            | Self::Stencil(_) => uncaught_type_error!(),
         }
     }
     /// Converts this value to a vector of the specified length if this is a

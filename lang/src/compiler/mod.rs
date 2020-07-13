@@ -301,7 +301,7 @@ impl Compiler {
         // Allocate space.
         let ptr = self.builder().build_alloca(types::get(&ty)?, &name);
         // Initialize to a default value.
-        let default_value = self.get_default_var_value(&ty).into_basic_value()?;
+        let default_value = self.get_default_var_value(&ty)?.into_basic_value()?;
         self.builder().build_store(ptr, default_value);
         Ok(Variable {
             name,
@@ -1404,37 +1404,37 @@ impl Compiler {
     /* MISCELLANY */
 
     /// Constructs a Value from a ConstValue.
-    pub fn value_from_const(&self, const_value: ConstValue) -> Value {
+    pub fn value_from_const(&self, const_value: ConstValue) -> LangResult<Value> {
         match const_value {
-            ConstValue::Void => Value::Void,
-            ConstValue::Int(i) => Value::Int(const_int(i)),
-            ConstValue::CellState(i) => {
-                Value::CellState(types::cell_state().const_int(i as u64, false))
-            }
-            ConstValue::Vector(values) => Value::Vector(VectorType::const_vector(
-                &values.iter().map(|&i| const_int(i)).collect_vec(),
+            ConstValue::Void => Ok(Value::Void),
+            ConstValue::Int(i) => Ok(Value::Int(const_int(i))),
+            ConstValue::CellState(i) => Ok(Value::CellState(
+                types::cell_state().const_int(i as u64, false),
             )),
-            ConstValue::IntRange { start, end, step } => {
+            ConstValue::Vector(values) => Ok(Value::Vector(VectorType::const_vector(
+                &values.iter().map(|&i| const_int(i)).collect_vec(),
+            ))),
+            ConstValue::IntRange { start, end, step } => Ok({
                 Value::IntRange(VectorType::const_vector(&[
                     const_int(start),
                     const_int(end),
                     const_int(step),
                 ]))
-            }
-            ConstValue::Rectangle(start, end) => {
+            }),
+            ConstValue::Rectangle(start, end) => Ok({
                 assert_eq!(start.len(), end.len(), "Rect dimension mismatch");
                 let ndim = start.len();
                 let start = self
-                    .value_from_const(ConstValue::Vector(start))
+                    .value_from_const(ConstValue::Vector(start))?
                     .into_basic_value()
                     .unwrap();
                 let end = self
-                    .value_from_const(ConstValue::Vector(end))
+                    .value_from_const(ConstValue::Vector(end))?
                     .into_basic_value()
                     .unwrap();
                 Value::Rectangle(types::rectangle(ndim).const_named_struct(&[start, end]))
-            }
-            ConstValue::CellStateFilter(f) => Value::CellStateFilter(
+            }),
+            ConstValue::CellStateFilter(f) => Ok(Value::CellStateFilter(
                 f.state_count(),
                 VectorType::const_vector(
                     &f.as_bits()
@@ -1448,14 +1448,14 @@ impl Compiler {
                         })
                         .collect_vec(),
                 ),
-            ),
-            ConstValue::String(_) => panic!(NO_RUNTIME_REPRESENTATION),
+            )),
+            ConstValue::Stencil(_) => internal_error!(NO_RUNTIME_REPRESENTATION),
         }
     }
     /// Returns the default value for variables of the given type, panicking if
     /// the given type has no LLVM representation.
-    pub fn get_default_var_value(&self, ty: &Type) -> Value {
-        self.value_from_const(ConstValue::default(ty))
+    pub fn get_default_var_value(&self, ty: &Type) -> LangResult<Value> {
+        self.value_from_const(ConstValue::default(ty)?)
     }
 
     /// Returns the LLVM type actually returned from this function (as opposed

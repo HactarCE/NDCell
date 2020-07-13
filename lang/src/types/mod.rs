@@ -6,9 +6,11 @@ use std::rc::Rc;
 
 mod filters;
 mod patterns;
+mod stencils;
 
 pub use filters::CellStateFilter;
 pub use patterns::PatternShape;
+pub use stencils::Stencil;
 
 use crate::errors::*;
 use crate::Spanned;
@@ -55,8 +57,8 @@ pub enum Type {
     /// Cell state filter for a rule with a specific number of cell states.
     CellStateFilter(usize),
 
-    /// String of text.
-    String,
+    /// Description of a configuration of cells.
+    Stencil,
 }
 impl Default for Type {
     fn default() -> Self {
@@ -74,7 +76,7 @@ impl fmt::Debug for Type {
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{:?}{}", TypeDesc::Rectangle, ndim),
             Self::CellStateFilter(_) => write!(f, "{:?}", TypeDesc::CellStateFilter),
-            Self::String => write!(f, "String"),
+            Self::Stencil => write!(f, "Stencil"),
         }
     }
 }
@@ -89,7 +91,7 @@ impl fmt::Display for Type {
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{}{}", TypeDesc::Rectangle, ndim),
             Self::CellStateFilter(_) => write!(f, "{}", TypeDesc::CellStateFilter),
-            Self::String => write!(f, "String"),
+            Self::Stencil => write!(f, "Stencil"),
         }
     }
 }
@@ -107,7 +109,7 @@ impl Type {
             | Self::IntRange
             | Self::Rectangle(_)
             | Self::CellStateFilter(_) => true,
-            Self::String => false,
+            Self::Stencil => false,
         }
     }
 
@@ -123,7 +125,7 @@ impl Type {
             | Self::IntRange
             | Self::Rectangle(_)
             | Self::CellStateFilter(_)
-            | Self::String => false,
+            | Self::Stencil => false,
         }
     }
     /// Returns the type yielded by iteration over this type, or None if this

@@ -202,7 +202,7 @@ impl Function for BitwiseNot {
                 let all_ones = compiler
                     .value_from_const(ConstValue::CellStateFilter(!CellStateFilter::none(
                         state_count,
-                    )))
+                    )))?
                     .as_cell_state_filter()?;
                 let ret = compiler
                     .builder()

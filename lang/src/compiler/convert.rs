@@ -97,7 +97,7 @@ pub fn bytes_to_value(ty: Type, bytes: &[u8], target_data: &TargetData) -> Const
                 .collect();
             ConstValue::CellStateFilter(CellStateFilter::from_bits(state_count, bits))
         }
-        Type::String => panic!(NO_RUNTIME_REPRESENTATION),
+        Type::Stencil => panic!(NO_RUNTIME_REPRESENTATION),
     }
 }
 
@@ -184,7 +184,7 @@ pub fn value_to_bytes(value: &ConstValue, bytes: &mut [u8], target_data: &Target
                     _ => panic!("Unknown cell state filter element type"),
                 });
         }
-        ConstValue::String(_) => panic!(NO_RUNTIME_REPRESENTATION),
+        ConstValue::Stencil(_) => panic!(NO_RUNTIME_REPRESENTATION),
     }
 }
 

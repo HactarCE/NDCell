@@ -7,7 +7,7 @@ use super::{FuncConstructor, FuncResult};
 use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{const_int, Compiler, Value};
 use crate::errors::*;
-use crate::types::{CellStateFilter, LangInt, MAX_VECTOR_LEN};
+use crate::types::{CellStateFilter, LangInt, Stencil, MAX_VECTOR_LEN};
 use crate::{ConstValue, Type};
 use LangErrorMsg::{MustBeConstant, VectorTooBig};
 
@@ -38,18 +38,18 @@ impl Function for Int {
 
 /// Built-in function that returns a fixed string.
 #[derive(Debug)]
-pub struct ConstString(Rc<String>);
-impl ConstString {
-    /// Returns a constructor for a new ConstString instance that returns the
-    /// given constant string.
-    pub fn with_value(s: Rc<String>) -> FuncConstructor {
+pub struct ConstStencil(Stencil);
+impl ConstStencil {
+    /// Returns a constructor for a new ConstStencil instance that returns the
+    /// given constant stencil.
+    pub fn with_value(s: Stencil) -> FuncConstructor {
         Box::new(move |_info| Ok(Box::new(Self(s))))
     }
 }
-impl Function for ConstString {
+impl Function for ConstStencil {
     fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
         if info.args.len() != 0 {
-            internal_error!("Arguments passed to string literal function");
+            internal_error!("Arguments passed to stencil literal function");
         }
         Ok(Type::String)
     }
@@ -57,7 +57,7 @@ impl Function for ConstString {
         Err(MustBeConstant.with_span(info.span))
     }
     fn const_eval(&self, _info: FuncCallInfo) -> LangResult<ConstValue> {
-        Ok(ConstValue::String(self.0.clone()))
+        Ok(ConstValue::Stencil(self.0.clone()))
     }
 }
 

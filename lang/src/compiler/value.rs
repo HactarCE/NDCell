@@ -79,7 +79,7 @@ impl Value {
                 );
                 Value::CellStateFilter(*state_count, basic_value.into_vector_value())
             }
-            Type::String => panic!(NO_RUNTIME_REPRESENTATION),
+            Type::Stencil => panic!(NO_RUNTIME_REPRESENTATION),
         }
     }
     /// Returns the LLVM integer value inside if this is Value::Int; otherwise

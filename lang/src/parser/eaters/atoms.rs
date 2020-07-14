@@ -31,18 +31,18 @@ impl TokenEater for TypeName {
     }
 }
 
-/// Consumes an identifier. TODO: make this return Rc<String>
+/// Consumes an identifier.
 #[derive(Debug, Copy, Clone)]
 pub struct Identifier;
 impl_display!(Identifier, "identifier (variable or function name)");
 impl TokenEater for Identifier {
-    type Output = String;
+    type Output = Rc<String>;
     fn might_match(&self, tf: TokenFeeder<'_>) -> bool {
         next_token_matches!(tf, TokenClass::Ident(_))
     }
     fn eat(&self, tf: &mut TokenFeeder<'_>) -> LangResult<Self::Output> {
         match tf.next_class() {
-            Some(TokenClass::Ident(s)) => Ok(s.to_owned()),
+            Some(TokenClass::Ident(s)) => Ok(Rc::new(s.to_owned())),
             _ => tf.expected(self),
         }
     }

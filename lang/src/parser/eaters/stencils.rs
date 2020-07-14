@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use super::*;
 use crate::lexer::*;
 use crate::parser::tree;
@@ -60,7 +58,7 @@ impl TokenEater for StencilChar {
             [
                 OperatorToken::Tag.map(|_| StencilCell::Hashtag),
                 PunctuationToken::Period.map(|_| StencilCell::Period),
-                Identifier.map(Rc::new).map(StencilCell::Ident),
+                Identifier.map(StencilCell::Ident),
             ]
         )
     }

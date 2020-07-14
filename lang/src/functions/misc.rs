@@ -1,5 +1,7 @@
 //! Miscellaneous functions.
 
+use std::rc::Rc;
+
 use super::FuncConstructor;
 use crate::ast::{AssignableFunction, FuncCallInfo, FuncCallInfoMut, Function};
 use crate::compiler::{Compiler, Value};
@@ -12,17 +14,17 @@ use LangErrorMsg::Unimplemented;
 #[derive(Debug)]
 pub struct GetVar {
     /// Name of variable to get.
-    var_name: String,
+    var_name: Rc<String>,
     /// Type of this variable.
     var_type: Type,
 }
 impl GetVar {
     /// Returns a constructor for a new GetVar instance with the given variable
     /// name.
-    pub fn with_name(var_name: String) -> FuncConstructor {
+    pub fn with_name(var_name: Rc<String>) -> FuncConstructor {
         Box::new(|info| {
             let var_type;
-            if var_name == crate::THROWAWAY_VARIABLE {
+            if &**var_name == crate::THROWAWAY_VARIABLE {
                 var_type = Type::Void
             } else {
                 var_type = info.userfunc.try_get_var(info.span, &var_name)?.clone()
@@ -44,7 +46,7 @@ impl Function for GetVar {
         if self.var_type == Type::Void {
             return Ok(Value::Void);
         }
-        let var_ptr = compiler.vars()[&self.var_name].ptr;
+        let var_ptr = compiler.vars()[&*self.var_name].ptr;
         let value = compiler.builder().build_load(var_ptr, &self.var_name);
         Ok(Value::from_basic_value(&self.var_type, value))
     }
@@ -62,7 +64,7 @@ impl AssignableFunction for GetVar {
         if self.var_type == Type::Void {
             return Ok(());
         }
-        let var_ptr = compiler.vars()[&self.var_name].ptr;
+        let var_ptr = compiler.vars()[&*self.var_name].ptr;
         compiler
             .builder()
             .build_store(var_ptr, value.into_basic_value()?);
@@ -74,20 +76,20 @@ impl AssignableFunction for GetVar {
 #[derive(Debug)]
 pub struct CallUserFn {
     /// Name of user function to call.
-    func_name: String,
+    func_name: Rc<String>,
     /// Signature of the function.
     signature: FnSignature,
 }
 impl CallUserFn {
     /// Returns a constructor for a new CallUserFn instance that calls the
     /// function with the given name.
-    pub fn with_name(func_name: String) -> FuncConstructor {
+    pub fn with_name(func_name: Rc<String>) -> FuncConstructor {
         Box::new(|info| {
             let signature = info
                 .userfunc
                 .rule_meta()
                 .helper_function_signatures
-                .get(&func_name)
+                .get(&**func_name)
                 .ok_or_else(|| internal_error_value!("Cannot find user function"))?
                 .clone();
             Ok(Box::new(Self {

@@ -38,9 +38,9 @@ pub fn from_parse_tree(
         }
         // Identifier (variable)
         parser::Expr::Ident(s) => {
-            name = s.clone();
+            name = (**s).clone();
             args = Args::none();
-            func = functions::misc::GetVar::with_name(s.to_owned());
+            func = functions::misc::GetVar::with_name(s.clone());
         }
         // Vector literal
         parser::Expr::Vector(exprs) => {
@@ -182,11 +182,11 @@ pub fn from_parse_tree(
                     if userfunc
                         .rule_meta()
                         .helper_function_signatures
-                        .contains_key(func_name)
+                        .contains_key(&**func_name)
                     {
                         // User-defined function
                         name = format!("user-defined function {}", func_name);
-                        func = functions::misc::CallUserFn::with_name(func_name.to_owned());
+                        func = functions::misc::CallUserFn::with_name(func_name.clone());
                     } else {
                         // Built-in function
                         name = format!("function {}", func_name);

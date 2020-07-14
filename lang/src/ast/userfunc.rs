@@ -15,14 +15,14 @@ pub struct UserFunction {
     /// Metadata of the rule that this user function is part of.
     rule_meta: Rc<RuleMeta>,
     /// Name of this function.
-    name: String,
+    name: Rc<String>,
     /// Kind of this function (including return type).
     kind: UserFunctionKind,
 
     /// HashMap of variable types (including arguments), indexed by name.
     variables: HashMap<String, Type>,
     /// List of variable names for arguments.
-    param_names: Vec<String>,
+    param_names: Vec<Rc<String>>,
 
     /// Top-level statement block, consisting of StatementRefs to self.statements.
     top_level_statements: StatementBlock,
@@ -40,20 +40,25 @@ impl UserFunction {
             kind: UserFunctionKind::Transition,
             // TODO: take arguments in the transition function
             // TODO: reserved word for transition function?
-            ..Self::new_helper_function(rule_meta, "transition".to_owned(), vec![], Type::CellState)
+            ..Self::new_helper_function(
+                rule_meta,
+                Rc::new("transition".to_owned()),
+                vec![],
+                Type::CellState,
+            )
         }
     }
     /// Constructs a new helper function that returns the given type.
     pub fn new_helper_function(
         rule_meta: Rc<RuleMeta>,
-        name: String,
-        args: Vec<(String, Type)>,
+        name: Rc<String>,
+        args: Vec<(Rc<String>, Type)>,
         return_type: Type,
     ) -> Self {
         let mut variables = HashMap::new();
         let mut param_names = vec![];
         for (name, ty) in args {
-            variables.insert(name.clone(), ty);
+            variables.insert((*name).clone(), ty);
             param_names.push(name);
         }
         Self {
@@ -103,7 +108,7 @@ impl UserFunction {
     }
 
     /// Returns the names of the parameters of this function.
-    pub fn param_names(&self) -> &[String] {
+    pub fn param_names(&self) -> &[Rc<String>] {
         &self.param_names
     }
     /// Returns the kind of this function.

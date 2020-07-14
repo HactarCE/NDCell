@@ -121,9 +121,9 @@ pub struct HelperFunc {
     /// Type returned by the helper function.
     pub return_type: Spanned<TypeToken>,
     /// Name of the helper function.
-    pub name: Spanned<String>,
+    pub name: Spanned<Rc<String>>,
     /// Arguments passed to the helper function (name and type).
-    pub params: Vec<Spanned<(Spanned<TypeToken>, Spanned<String>)>>,
+    pub params: Vec<Spanned<(Spanned<TypeToken>, Spanned<Rc<String>>)>>,
     /// Body of the helper function.
     pub body: Spanned<StatementBlock>,
 }
@@ -203,8 +203,8 @@ pub enum Statement {
 pub enum Expr {
     /// Integer literal.
     Int(i64),
-    /// Identifier. (TODO: use Rc<String> here)
-    Ident(String),
+    /// Identifier.
+    Ident(Rc<String>),
     /// Type name.
     TypeName(TypeToken),
     /// Vector literal.
@@ -259,7 +259,7 @@ pub enum Expr {
         /// The object whose attribute to access.
         object: Box<Spanned<Expr>>,
         /// The name of the attribute to access.
-        attribute: Spanned<String>,
+        attribute: Spanned<Rc<String>>,
     },
     /// Function call.
     FnCall {

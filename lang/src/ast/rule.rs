@@ -106,12 +106,12 @@ impl TryFrom<ParseTree> for Rule {
         for helper_func in &helper_function_parse_trees {
             if meta
                 .helper_function_signatures
-                .contains_key(&helper_func.name.inner)
+                .contains_key(&**helper_func.name.inner)
             {
                 Err(FunctionNameConflict.with_span(helper_func.name.span))?;
             } else {
                 meta.helper_function_signatures.insert(
-                    helper_func.name.inner.clone(),
+                    (*helper_func.name.inner).clone(),
                     helper_func.fn_signature(&meta),
                 );
             }
@@ -125,7 +125,7 @@ impl TryFrom<ParseTree> for Rule {
             .into_iter()
             .map(|helper_func| {
                 Ok((
-                    helper_func.name.inner.clone(),
+                    (*helper_func.name.inner).clone(),
                     UserFunction::build_helper_function(&meta, helper_func)?,
                 ))
             })

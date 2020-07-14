@@ -1,10 +1,13 @@
 //! High-level representations of expressions in the AST.
 
+use std::collections::HashMap;
+
 use super::{ArgValues, Args, ErrorPointRef, UserFunction};
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::functions;
 use crate::parser;
+use crate::types::{Stencil, StencilCell, StencilCellFilter};
 use crate::{ConstValue, Span, Spanned, Type};
 use LangErrorMsg::{
     CannotAssignToExpr, CannotEvalAsConst, CannotIndexType, Expected, FunctionLookupError,
@@ -39,12 +42,6 @@ pub fn from_parse_tree(
             args = Args::none();
             func = functions::misc::GetVar::with_name(s.to_owned());
         }
-        // String literal
-        parser::Expr::String(s) => {
-            name = "string literal".to_owned();
-            args = Args::none();
-            func = functions::literals::ConstString::with_value(s.contents.clone());
-        }
         // Vector literal
         parser::Expr::Vector(exprs) => {
             name = "vector literal".to_owned();
@@ -55,6 +52,50 @@ pub fn from_parse_tree(
                     .collect::<LangResult<Vec<_>>>()?,
             );
             func = Box::new(functions::literals::Vector::construct);
+        }
+        // Stencil literal
+        parser::Expr::Stencil { cells, bindings } => {
+            name = "stencil literal".to_owned();
+            args = Args::none();
+            let cells = cells.clone();
+            let bindings = bindings
+                .iter()
+                .map(|binding| {
+                    let state_count = userfunc.rule_meta().states.len();
+                    // Typecheck variable.
+                    if let StencilCell::Ident(s) = &binding.cell.inner {
+                        let ty = if binding.same {
+                            Type::CellState
+                        } else {
+                            Type::CellStateFilter(state_count)
+                        };
+                        Spanned {
+                            span: binding.cell.span,
+                            inner: userfunc.get_or_create_var(&s, ty.clone()),
+                        }
+                        .typecheck(ty)?;
+                    }
+                    // Evaluate and typecheck cell state filter.
+                    let expr = userfunc.build_expression_ast(&binding.expr)?;
+                    let filter = userfunc.const_eval_expr(expr)?;
+                    typecheck!(
+                        Spanned {
+                            span: binding.expr.span,
+                            inner: filter.ty()
+                        },
+                        CellStateFilter
+                    )?;
+                    // Construct the key-value pair for the HashMap.
+                    Ok((
+                        binding.cell.inner.clone(),
+                        StencilCellFilter {
+                            filter: filter.as_cell_state_filter()?,
+                            same: binding.same,
+                        },
+                    ))
+                })
+                .collect::<LangResult<HashMap<_, _>>>()?;
+            func = functions::literals::ConstStencil::with_value(Stencil { cells, bindings });
         }
         // Parenthetical group
         parser::Expr::ParenExpr(inner) => return from_parse_tree(userfunc, inner),

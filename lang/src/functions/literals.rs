@@ -51,7 +51,7 @@ impl Function for ConstStencil {
         if info.args.len() != 0 {
             internal_error!("Arguments passed to stencil literal function");
         }
-        Ok(Type::String)
+        Ok(Type::Stencil)
     }
     fn compile(&self, _compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
         Err(MustBeConstant.with_span(info.span))

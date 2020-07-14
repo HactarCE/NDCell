@@ -318,8 +318,9 @@ fn eat_unary_op(
     precedence: OpPrecedence,
     op_to_expr: impl Fn(TokenClass) -> Option<UnaryOpExprConstructor>,
 ) -> LangResult<Spanned<tree::Expr>> {
-    // TODO: document this whole function
     let expr_eater = ExprWithPrecedence(precedence.next());
+    // First, make a list of operators and their spans, in the order they appear
+    // in the source code.
     let mut ops = vec![];
     let mut op_spans = vec![];
     while let Some(op_fn) = tf.peek_next_class().and_then(&op_to_expr) {
@@ -328,6 +329,7 @@ fn eat_unary_op(
     }
     let mut ret = tf.feed(expr_eater)?;
     for (op, op_span) in ops.into_iter().zip(op_spans) {
+        // Now pop off the next-rightmost operator each time.
         ret = Spanned {
             span: Span::merge(op_span, &ret),
             inner: op(Box::new(ret)),

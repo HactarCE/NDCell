@@ -135,6 +135,6 @@ impl Function for New {
         Ok(compiler.get_default_var_value(&self.ty)?)
     }
     fn const_eval(&self, _info: FuncCallInfo) -> LangResult<ConstValue> {
-        Ok(ConstValue::default(&self.ty))
+        ConstValue::default(&self.ty)
     }
 }

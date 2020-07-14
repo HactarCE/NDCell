@@ -10,7 +10,7 @@ mod stencils;
 
 pub use filters::CellStateFilter;
 pub use patterns::PatternShape;
-pub use stencils::Stencil;
+pub use stencils::{Stencil, StencilCell, StencilCellFilter};
 
 use crate::errors::*;
 use crate::Spanned;

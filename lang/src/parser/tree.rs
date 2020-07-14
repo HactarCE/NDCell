@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use crate::errors::*;
 use crate::lexer::{AssignmentToken, ComparisonToken, OperatorToken, TypeToken};
-use crate::types::FnSignature;
+use crate::types::{FnSignature, StencilCell};
 use crate::{RuleMeta, Span, Spanned};
 use LangErrorMsg::RepeatDirective;
 
@@ -207,10 +207,13 @@ pub enum Expr {
     Ident(String),
     /// Type name.
     TypeName(TypeToken),
-    /// String literal.
-    String(StringLiteral),
     /// Vector literal.
     Vector(Vec<Spanned<Expr>>),
+    /// Stencil literal.
+    Stencil {
+        cells: Vec<StencilCell>,
+        bindings: Vec<StencilBinding>,
+    },
 
     /// Parethetical group.
     ParenExpr(Box<Spanned<Expr>>),
@@ -284,4 +287,15 @@ pub struct StringLiteral {
     pub quote: char,
     /// The contents of the string.
     pub contents: Rc<String>,
+}
+
+/// Stencil binding node in the parse tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StencilBinding {
+    // Cell symbol that is bound.
+    pub cell: Spanned<StencilCell>,
+    // Whether all cells with that symbol must have the same state.
+    pub same: bool,
+    /// The cell state filter expression that symbol is bound to.
+    pub expr: Box<Spanned<Expr>>,
 }

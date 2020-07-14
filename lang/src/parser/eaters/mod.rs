@@ -3,12 +3,14 @@ pub mod combinators;
 pub mod directives;
 pub mod expressions;
 pub mod statements;
+pub mod stencils;
 
 pub use atoms::*;
 pub use combinators::*;
 pub use directives::*;
 pub use expressions::*;
 pub use statements::*;
+pub use stencils::*;
 
 use super::TokenFeeder;
 use crate::errors::*;

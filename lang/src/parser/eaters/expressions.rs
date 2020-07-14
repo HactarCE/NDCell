@@ -5,7 +5,7 @@ use crate::{Span, Spanned};
 
 /// Operator precedence table.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum OpPrecedence {
+pub enum OpPrecedence {
     LogicalOr,
     LogicalXor,
     LogicalAnd,
@@ -26,16 +26,16 @@ enum OpPrecedence {
 }
 impl OpPrecedence {
     /// Returns the lowest precedence level.
-    const fn lowest() -> Self {
+    pub const fn lowest() -> Self {
         Self::LogicalOr
     }
     /// Returns the highest precedence level.
-    const fn highest() -> Self {
+    pub const fn highest() -> Self {
         Self::Atom
     }
     /// Returns the next-highest precedence level. Panics if given
     /// OpPrecedence::Atom.
-    fn next(self) -> Self {
+    pub fn next(self) -> Self {
         match self {
             Self::LogicalOr => Self::LogicalXor,
             Self::LogicalXor => Self::LogicalAnd,
@@ -79,7 +79,7 @@ impl TokenEater for Expr {
 
 /// Consumes an expression with the given precedence level.
 #[derive(Debug, Default, Copy, Clone)]
-pub struct ExprWithPrecedence(OpPrecedence);
+pub struct ExprWithPrecedence(pub OpPrecedence);
 impl_display!(ExprWithPrecedence, "expression");
 impl TokenEater for ExprWithPrecedence {
     type Output = Spanned<tree::Expr>;
@@ -190,7 +190,7 @@ impl TokenEater for ExprWithPrecedence {
                         // Tag.map(tree::Expr::_).spanned(),
                         TypeName.map(tree::Expr::TypeName).spanned().map(Some),
                         IntLiteral.map(tree::Expr::Int).spanned().map(Some),
-                        StringLiteral.map(tree::Expr::String).spanned().map(Some),
+                        StencilLiteral.spanned().map(Some),
                         Surround::paren(Expr)
                             .map(Box::new)
                             .map(tree::Expr::ParenExpr)

@@ -1,7 +1,6 @@
 //! Functions that return literals.
 
 use itertools::Itertools;
-use std::rc::Rc;
 
 use super::{FuncConstructor, FuncResult};
 use crate::ast::{FuncCallInfo, FuncCallInfoMut, Function};

@@ -10,8 +10,6 @@ use crate::types::{LangCellState, LangInt};
 use crate::{ConstValue, Type};
 use LangErrorMsg::CellStateOutOfRange;
 
-// TODO: support int-to-cell-state on int range?
-
 /// Built-in function that returns the cell state with the given ID.
 #[derive(Debug)]
 pub struct IntToCellState {

@@ -134,6 +134,6 @@ impl std::ops::BitXor for CellStateFilter {
 impl std::ops::Not for CellStateFilter {
     type Output = Self;
     fn not(self) -> Self::Output {
-        self ^ Self::all(self.state_count())
+        Self::all(self.state_count()) ^ self
     }
 }

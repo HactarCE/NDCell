@@ -283,11 +283,14 @@ enum_with_str_repr! {
         In = "in",
         Is = "is",
 
+        // Stencil bounds
+        Same = "same",
+        Where = "where",
+
         // Unused reserved words
         Bind = "bind",
         Bound = "bound",
         Static = "static",
-        Where = "where",
         With = "with",
     }
 
@@ -332,6 +335,7 @@ enum_with_str_repr! {
         Comma = ",",
         Semicolon = ";",
         Period = ".",
+        Backtick = "`",
     }
 
     /// Comparison.
@@ -407,6 +411,7 @@ impl PunctuationToken {
             Self::Comma => "comma",
             Self::Semicolon => "semicolon",
             Self::Period => "period",
+            Self::Backtick => "backtick",
         }
     }
 }

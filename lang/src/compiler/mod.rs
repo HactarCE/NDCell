@@ -498,6 +498,32 @@ impl Compiler {
         Ok(())
     }
 
+    /// Builds instructions to fetch a value from a variable.
+    pub fn build_var_load(&mut self, var_name: &str) -> LangResult<Value> {
+        let var = self
+            .vars()
+            .get(var_name)
+            .ok_or_else(|| internal_error_value!("Failed to get variable pointer"))?;
+        let var_ty = var.ty.clone();
+        let var_ptr = var.ptr;
+        let var_value = self.builder().build_load(var_ptr, var_name);
+        Ok(Value::from_basic_value(&var_ty, var_value))
+    }
+    /// Builds instructions to store a value in a variable.
+    pub fn build_var_store(&mut self, var_name: &str, value: &Value) -> LangResult<()> {
+        let var = self
+            .vars()
+            .get(var_name)
+            .ok_or_else(|| internal_error_value!("Failed to get variable pointer"))?;
+        if var.ty != value.ty() {
+            uncaught_type_error!()
+        }
+        let var_ptr = var.ptr;
+        self.builder()
+            .build_store(var_ptr, value.into_basic_value()?);
+        Ok(())
+    }
+
     /// Builds instructions to return a value.
     pub fn build_return_ok(&mut self, value: Value) -> LangResult<()> {
         let ptr = self.function().return_value_ptr.unwrap();

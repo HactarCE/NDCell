@@ -46,9 +46,7 @@ impl Function for GetVar {
         if self.var_type == Type::Void {
             return Ok(Value::Void);
         }
-        let var_ptr = compiler.vars()[&*self.var_name].ptr;
-        let value = compiler.builder().build_load(var_ptr, &self.var_name);
-        Ok(Value::from_basic_value(&self.var_type, value))
+        compiler.build_var_load(&*self.var_name)
     }
     fn as_assignable<'a>(&self, _info: FuncCallInfo) -> Option<&dyn AssignableFunction> {
         Some(self)
@@ -64,11 +62,7 @@ impl AssignableFunction for GetVar {
         if self.var_type == Type::Void {
             return Ok(());
         }
-        let var_ptr = compiler.vars()[&*self.var_name].ptr;
-        compiler
-            .builder()
-            .build_store(var_ptr, value.into_basic_value()?);
-        Ok(())
+        compiler.build_var_store(&*self.var_name, &value)
     }
 }
 

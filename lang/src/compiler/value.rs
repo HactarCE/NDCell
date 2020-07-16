@@ -148,16 +148,16 @@ impl Value {
     }
     /// Returns this value as an LLVM basic value if it is representable as one;
     /// otherwise a TypeError.
-    pub fn into_basic_value(self) -> LangResult<BasicValueEnum<'static>> {
+    pub fn into_basic_value(&self) -> LangResult<BasicValueEnum<'static>> {
         match self {
             Value::Void => Ok(super::types::void().get_undef().into()),
-            Value::Int(i) => Ok(i.into()),
-            Value::CellState(i) => Ok(i.into()),
-            Value::Vector(v) => Ok(v.into()),
+            Value::Int(i) => Ok((*i).into()),
+            Value::CellState(i) => Ok((*i).into()),
+            Value::Vector(v) => Ok((*v).into()),
             Value::Pattern(p) => Ok(p.value.into()),
-            Value::IntRange(r) => Ok(r.into()),
-            Value::Rectangle(r) => Ok(r.into()),
-            Value::CellStateFilter(_, f) => Ok(f.into()),
+            Value::IntRange(r) => Ok((*r).into()),
+            Value::Rectangle(r) => Ok((*r).into()),
+            Value::CellStateFilter(_, f) => Ok((*f).into()),
             // _ => internal_error!("{} has no BasicValue representation", self),
         }
     }

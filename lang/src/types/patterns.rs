@@ -51,11 +51,11 @@ impl PatternShape {
     }
     /// Constructs a square pattern shape with side length 2r+1 given a radius
     /// r.
-    pub fn moore(ndim: u8, radius: usize) -> Self {
+    pub fn moore(ndim: usize, radius: usize) -> Self {
         assert!(ndim <= MAX_NDIM, "Too many dimensions");
         assert!(radius <= 100, "Cannot build pattern with radius > 100");
         let radius = radius as isize;
-        Self::rect(Bounds(vec![(-radius, radius); ndim as usize]))
+        Self::rect(Bounds(vec![(-radius, radius); ndim]))
     }
     /// Construcs a rectangular pattern shape spanning the given bounds.
     pub fn rect(bounds: Bounds) -> Self {
@@ -135,7 +135,6 @@ impl PatternShape {
 
     /// Returns whether the given position is within this pattern shape.
     pub fn has_pos(&self, pos: &[isize]) -> bool {
-        println!("{:?} {:?}", pos, self.get_flattened_idx(pos));
         if let Some(idx) = self.get_flattened_idx(pos) {
             self.mask[idx]
         } else {
@@ -226,7 +225,7 @@ impl BitAnd for PatternShape {
         // new_bounds.expand_to()
         let (lhs_min, lhs_max) = self.bounds().min_and_max();
         let (rhs_min, rhs_max) = rhs.bounds().min_and_max();
-        for dim in 0..MAX_NDIM as usize {
+        for dim in 0..MAX_NDIM {
             new_bounds[dim] = (
                 std::cmp::max(lhs_min[dim], rhs_min[dim]),
                 std::cmp::min(lhs_max[dim], rhs_max[dim]),

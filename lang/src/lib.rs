@@ -34,13 +34,17 @@ use errors::LangResult;
 
 /// Maximum number of dimensions.
 pub const MAX_NDIM: usize = 6;
+/// Maximum neighborhood radius.
+pub const MAX_RADIUS: usize = 32;
 /// Maximum number of states.
 pub const MAX_STATE_COUNT: usize = 256;
 /// Maximum pattern size.
 pub const MAX_PATTERN_SIZE: usize = 4096;
 
 /// Number of dimensions to use when the user doesn't specify.
-const DEFAULT_NDIM: u8 = 2;
+const DEFAULT_NDIM: usize = 2;
+/// Neighborhood radius to use when the user doesn't specify.
+const DEFAULT_NBHD_RADIUS: usize = 1;
 /// Number of states to use when the user doesn't specify.
 const DEFAULT_STATE_COUNT: usize = 2;
 

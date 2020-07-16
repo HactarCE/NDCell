@@ -293,6 +293,12 @@ enum_with_str_repr! {
         Same = "same",
         Where = "where",
 
+        // Reserved function names
+        Transition = "transition",
+        Colors = "colors",
+        Icons = "icons",
+        Models = "models",
+
         // Unused reserved words
         Bind = "bind",
         Bound = "bound",
@@ -548,10 +554,10 @@ impl TypeToken {
             Self::Void => Type::Void,
             Self::Int => Type::Int,
             Self::CellState => Type::CellState,
-            Self::Vector(None) => Type::Vector(rule_meta.ndim as usize),
+            Self::Vector(None) => Type::Vector(rule_meta.ndim),
             Self::Vector(Some(len)) => Type::Vector(len),
             Self::IntRange => Type::IntRange,
-            Self::Rectangle(None) => Type::Rectangle(rule_meta.ndim as usize),
+            Self::Rectangle(None) => Type::Rectangle(rule_meta.ndim),
             Self::Rectangle(Some(rect_ndim)) => Type::Rectangle(rect_ndim),
             Self::CellStateFilter => Type::CellStateFilter(rule_meta.states.len()),
         }

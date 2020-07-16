@@ -116,7 +116,7 @@ impl ToVector {
     pub fn with_len(vector_len: Option<usize>) -> FuncConstructor {
         Box::new(move |info| {
             Ok(Box::new(Self {
-                result_len: vector_len.unwrap_or(info.userfunc.rule_meta().ndim as usize),
+                result_len: vector_len.unwrap_or(info.userfunc.rule_meta().ndim),
             }))
         })
     }
@@ -171,7 +171,7 @@ impl ToRectangle {
     pub fn with_ndim(rect_ndim: Option<usize>) -> FuncConstructor {
         Box::new(move |info| {
             Ok(Box::new(Self {
-                result_ndim: rect_ndim.unwrap_or(info.userfunc.rule_meta().ndim as usize),
+                result_ndim: rect_ndim.unwrap_or(info.userfunc.rule_meta().ndim),
             }))
         })
     }

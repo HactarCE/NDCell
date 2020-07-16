@@ -9,7 +9,7 @@ use super::UserFunction;
 use crate::errors::*;
 use crate::parser::{Directive, DirectiveContents, HelperFunc, ParseTree};
 use crate::types::LangInt;
-use crate::{ConstValue, RuleMeta, Type, DEFAULT_NDIM};
+use crate::{meta, ConstValue, RuleMeta, Type};
 use LangErrorMsg::{
     Expected, FunctionNameConflict, InvalidDimensionCount, InvalidStateCount, TypeError,
 };
@@ -33,34 +33,30 @@ impl TryFrom<ParseTree> for Rule {
         // Get number of dimensions.
         let ndim = match parse_tree.take_single_directive(Directive::Dimensions)? {
             // There is no `@dimensions` directive; use the default.
-            None => DEFAULT_NDIM,
+            None => None,
             // There is an `@dimensions` directive.
             Some((_span, DirectiveContents::Expr(expr))) => {
                 let ndim_expr = temp_func.build_expression_ast(&expr)?;
-                let ndim_value = temp_func.const_eval_expr(ndim_expr)?;
-                const MAX_NDIM: LangInt = crate::MAX_NDIM as LangInt;
-                match ndim_value {
+                typecheck!(temp_func[ndim_expr].spanned_ret_type(), Int)?;
+                let ndim_value = temp_func.const_eval_expr(ndim_expr)?.as_int()?;
+                if 1 <= ndim_value && ndim_value <= crate::MAX_NDIM as LangInt {
                     // The user specified a valid dimension count.
-                    ConstValue::Int(i @ 1..=MAX_NDIM) => i as u8,
-                    // The user specified a number, but it's not a valid
-                    // dimension count.
-                    ConstValue::Int(_) => Err(InvalidDimensionCount.with_span(expr))?,
-                    // The user specified some other value.
-                    _ => Err(TypeError {
-                        expected: Type::Int.into(),
-                        got: ndim_value.ty(),
-                    }
-                    .with_span(expr.span))?,
+                    Some(ndim_value as usize)
+                } else {
+                    Err(InvalidDimensionCount.with_span(expr))?
                 }
             }
             // The user gave something else instead of an expression.
             Some((span, _contents)) => Err(Expected("expression".to_owned()).with_span(span))?,
         };
 
+        // Get neighborhood radius.
+        let radius = None;
+
         // Get states.
         let states = match parse_tree.take_single_directive(Directive::States)? {
             // There is no `@states` directive; use the default states.
-            None => crate::meta::make_default_states(None),
+            None => meta::RuleStatesDescription::None,
             // There is an `@states` directive.
             Some((_span, DirectiveContents::Expr(expr))) => {
                 let states_expr = temp_func.build_expression_ast(&expr)?;
@@ -69,7 +65,7 @@ impl TryFrom<ParseTree> for Rule {
                 match states_value {
                     // The user specified a valid state count.
                     ConstValue::Int(i @ 1..=MAX_STATES) => {
-                        crate::meta::make_default_states(Some(i as usize))
+                        meta::RuleStatesDescription::Count(i as usize)
                     }
                     // The user specified a number, but it's not a valid state
                     // count.
@@ -86,12 +82,14 @@ impl TryFrom<ParseTree> for Rule {
             Some((span, _contents)) => Err(Expected("expression".to_owned()).with_span(span))?,
         };
 
-        let mut meta = RuleMeta {
-            source_code: parse_tree.source_code.clone(),
-            ndim,
-            states,
-            helper_function_signatures: HashMap::new(),
-        };
+        let mut meta = RuleMeta::from_rule_description(
+            Rc::clone(&parse_tree.source_code),
+            meta::RuleDescription {
+                ndim,
+                radius,
+                states,
+            },
+        );
 
         // Gather a list of helper functions.
         let helper_function_parse_trees: Vec<HelperFunc> = parse_tree

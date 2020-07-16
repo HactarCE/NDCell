@@ -3,7 +3,7 @@ use std::ops::Index;
 use std::rc::Rc;
 
 use super::{expressions, statements, Expr, Statement, StatementBlock};
-use crate::compiler::{CompiledFunction, Compiler, Value};
+use crate::compiler::{const_int, CompiledFunction, Compiler, Value};
 use crate::errors::*;
 use crate::parser;
 use crate::{ConstValue, RuleMeta, Span, Spanned, Type};
@@ -36,17 +36,20 @@ pub struct UserFunction {
 impl UserFunction {
     /// Constructs a new transition function.
     pub fn new_transition_function(rule_meta: Rc<RuleMeta>) -> Self {
-        Self {
-            kind: UserFunctionKind::Transition,
-            // TODO: take arguments in the transition function
-            // TODO: reserved word for transition function?
-            ..Self::new_helper_function(
-                rule_meta,
-                Rc::new("transition".to_owned()),
-                vec![],
-                Type::CellState,
-            )
-        }
+        let nbhd_type = Type::Pattern {
+            shape: rule_meta.nbhd_shape.clone(),
+            has_lut: rule_meta.has_cell_state_luts,
+        };
+        let mut ret = Self::new_helper_function(
+            rule_meta,
+            Rc::new("transition".to_owned()),
+            vec![(Rc::new("neighborhood".to_owned()), nbhd_type.clone())],
+            Type::CellState,
+        );
+        ret.kind = UserFunctionKind::Transition;
+        ret.variables.insert("nbhd".to_string(), nbhd_type);
+        ret.variables.insert("this".to_string(), Type::CellState);
+        ret
     }
     /// Constructs a new helper function that returns the given type.
     pub fn new_helper_function(
@@ -209,13 +212,43 @@ impl UserFunction {
             &self.variables,
         )?;
 
+        // Assign variables "nbhd" and "this" if this is a transition function.
+        match self.kind() {
+            UserFunctionKind::Helper(_) => (),
+            UserFunctionKind::Transition => {
+                let nbhd_value = compiler.build_var_load("neighborhood")?;
+                compiler.build_var_store("nbhd", &nbhd_value)?;
+                if self
+                    .rule_meta()
+                    .nbhd_shape
+                    .has_pos(&vec![0; self.rule_meta().ndim])
+                {
+                    let origin =
+                        compiler.build_construct_vector(&vec![const_int(0); self.rule_meta().ndim]);
+                    let this_value = compiler.build_get_pattern_cell_state_unchecked(
+                        &nbhd_value.as_pattern()?,
+                        origin,
+                    )?;
+                    compiler.build_var_store("this", &Value::CellState(this_value))?;
+                }
+            }
+        }
+
         // Compile the statements.
         self.compile_statement_block(&mut compiler, &self.top_level_statements)?;
 
-        // Add an implicit `return #0` at the end of the transition function.
-        // TODO: change this to `remain` once that's implemented, and handle
-        // other types as well.
-        let default_return_value = compiler.get_default_var_value(&self.kind().return_type())?;
+        let default_return_value = match self.kind() {
+            UserFunctionKind::Helper(_) => {
+                // Implicitly return a default value at the end of a helper
+                // function.
+                compiler.get_default_var_value(&self.kind().return_type())?
+            }
+            UserFunctionKind::Transition => {
+                // Impliciitly return `this` at the end of the transition
+                // function.
+                compiler.build_var_load("this")?
+            }
+        };
         compiler.build_return_ok(default_return_value)?;
 
         CompiledFunction::try_new(self.rule_meta.clone(), self.error_points.clone(), compiler)

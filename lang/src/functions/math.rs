@@ -722,7 +722,7 @@ impl Function for BinaryOp {
             (Value::Vector(lhs), Value::Vector(rhs)) => {
                 self.compile_op(compiler, lhs, rhs, ret_type)?
             }
-            _ => unreachable!(),
+            _ => uncaught_type_error!(),
         };
         Ok(Value::from_basic_value(&ret_type, result))
     }

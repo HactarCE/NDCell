@@ -83,7 +83,7 @@ impl Function for Vector {
                 Ok(match ty.inner {
                     Type::Int | Type::IntRange => 1,
                     Type::Vector(len) | Type::Rectangle(len) => len,
-                    _ => unreachable!(),
+                    _ => uncaught_type_error!(),
                 })
             })
             .sum::<LangResult<usize>>()?;
@@ -121,7 +121,7 @@ impl Function for Vector {
                     let end = compiler.build_split_vector(end);
                     components.extend(start.into_iter().zip(end));
                 }
-                _ => unreachable!(),
+                _ => uncaught_type_error!(),
             }
         }
 
@@ -135,7 +135,7 @@ impl Function for Vector {
                 let end = compiler.build_construct_vector(&end_components);
                 Value::Rectangle(compiler.build_construct_rectangle(start, end))
             }
-            _ => unreachable!(),
+            _ => uncaught_type_error!(),
         };
         Ok(ret)
     }
@@ -166,7 +166,7 @@ impl Function for Vector {
                     start_components.extend(start);
                     end_components.extend(end)
                 }
-                _ => unreachable!(),
+                _ => uncaught_type_error!(),
             }
         }
 
@@ -174,7 +174,7 @@ impl Function for Vector {
         let ret = match info.ret_type() {
             Type::Vector(_) => ConstValue::Vector(start_components),
             Type::Rectangle(_) => ConstValue::Rectangle(start_components, end_components),
-            _ => unreachable!(),
+            _ => uncaught_type_error!(),
         };
         Ok(ret)
     }
@@ -207,7 +207,7 @@ impl Function for Range {
             (Vector(len), Int) | (Int, Vector(len)) => Ok(Rectangle(*len)),
             // Extend the shorter vector.
             (Vector(len1), Vector(len2)) => Ok(Rectangle(std::cmp::max(*len1, *len2))),
-            _ => unreachable!(),
+            _ => uncaught_type_error!(),
         }
     }
     fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
@@ -251,7 +251,7 @@ impl Function for Range {
                 let ret = compiler.builder().build_or(ret, only_end, "");
                 Ok(Value::CellStateFilter(*state_count, ret))
             }
-            _ => unreachable!(),
+            _ => uncaught_type_error!(),
         }
     }
     fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
@@ -280,7 +280,7 @@ impl Function for Range {
                 }
                 ConstValue::CellStateFilter(ret)
             }
-            _ => unreachable!(),
+            _ => uncaught_type_error!(),
         };
         Ok(ret)
     }

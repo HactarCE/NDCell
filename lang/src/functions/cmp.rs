@@ -362,7 +362,7 @@ impl Function for Is {
             Type::IntRange => typecheck!(lhs, [Int, Vector])?,
             Type::Rectangle(_) => typecheck!(lhs, [Int, Vector])?,
             Type::CellState | Type::CellStateFilter(_) => typecheck!(lhs, CellState)?,
-            _ => unreachable!(),
+            _ => uncaught_type_error!(),
         }
         // Always return a boolean.
         Ok(Type::Int)
@@ -384,7 +384,7 @@ impl Function for Is {
                         let (start, end) = compiler.build_split_rectangle(rect_value);
                         (Value::Vector(start), Value::Vector(end))
                     }
-                    _ => unreachable!(),
+                    _ => uncaught_type_error!(),
                 };
 
                 // Determine the type to cast to before comparing. Instead of

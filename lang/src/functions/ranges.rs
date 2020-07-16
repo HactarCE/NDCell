@@ -67,7 +67,7 @@ impl Function for Access {
         match info.arg_types()[0].inner {
             Type::IntRange => Ok(Type::Int),
             Type::Rectangle(ndim) => Ok(Type::Vector(ndim)),
-            _ => unreachable!(),
+            _ => uncaught_type_error!(),
         }
     }
     fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {

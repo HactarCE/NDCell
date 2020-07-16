@@ -111,7 +111,7 @@ impl TryFrom<ParseTree> for Rule {
                 Err(FunctionNameConflict.with_span(helper_func.name.span))?;
             } else {
                 meta.helper_function_signatures.insert(
-                    (*helper_func.name.inner).clone(),
+                    String::clone(&*helper_func.name.inner),
                     helper_func.fn_signature(&meta),
                 );
             }
@@ -125,7 +125,7 @@ impl TryFrom<ParseTree> for Rule {
             .into_iter()
             .map(|helper_func| {
                 Ok((
-                    (*helper_func.name.inner).clone(),
+                    String::clone(&*helper_func.name.inner),
                     UserFunction::build_helper_function(&meta, helper_func)?,
                 ))
             })

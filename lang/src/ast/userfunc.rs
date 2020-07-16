@@ -58,7 +58,7 @@ impl UserFunction {
         let mut variables = HashMap::new();
         let mut arg_names = vec![];
         for (name, ty) in args {
-            variables.insert((*name).clone(), ty);
+            variables.insert(String::clone(&*name), ty);
             arg_names.push(name);
         }
         Self {

@@ -1,6 +1,7 @@
 //! High-level representations of expressions in the AST.
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use super::{ArgValues, Args, ErrorPointRef, UserFunction};
 use crate::compiler::{Compiler, Value};
@@ -38,9 +39,9 @@ pub fn from_parse_tree(
         }
         // Identifier (variable)
         parser::Expr::Ident(s) => {
-            name = (**s).clone();
+            name = String::clone(s);
             args = Args::none();
-            func = functions::misc::GetVar::with_name(s.clone());
+            func = functions::misc::GetVar::with_name(Rc::clone(s));
         }
         // Vector literal
         parser::Expr::Vector(exprs) => {

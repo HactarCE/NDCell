@@ -54,6 +54,7 @@ impl CellStateFilter {
         &mut self.bits
     }
 
+    /// Returns the number of cell states in the automaton this filter is for.
     pub fn state_count(&self) -> usize {
         self.state_count
     }

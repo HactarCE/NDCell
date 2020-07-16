@@ -1478,7 +1478,6 @@ impl Compiler {
                         },
                     ),
                     shape: p.shape.clone(),
-                    has_lut: p.lut.is_some(),
                 }
             })),
             ConstValue::IntRange { start, end, step } => {

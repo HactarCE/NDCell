@@ -40,7 +40,7 @@ impl Value {
             Self::Vector(v) => Type::Vector(v.get_type().get_size() as usize),
             Self::Pattern(p) => Type::Pattern {
                 shape: p.shape.clone(),
-                has_lut: p.has_lut,
+                has_lut: p.has_lut(),
             },
             Self::IntRange(_) => Type::IntRange,
             Self::Rectangle(r) => Type::Rectangle({
@@ -68,10 +68,13 @@ impl Value {
                 assert_eq!(Type::Vector(*len), ret.ty(), "LLVM vector length mismatch");
                 ret
             }
-            Type::Pattern { shape, has_lut } => Self::Pattern(PatternValue {
-                value: basic_value.into_struct_value(),
-                shape: shape.clone(),
-                has_lut: *has_lut,
+            Type::Pattern { shape, has_lut } => Self::Pattern({
+                let ret = PatternValue {
+                    value: basic_value.into_struct_value(),
+                    shape: shape.clone(),
+                };
+                assert_eq!(*has_lut, ret.has_lut());
+                ret
             }),
             Type::IntRange => Self::IntRange(basic_value.into_vector_value()),
             Type::Rectangle(ndim) => {
@@ -175,6 +178,10 @@ pub struct PatternValue {
     pub value: StructValue<'static>,
     /// The shape of the pattern, which includes the pattern bounds and mask.
     pub shape: PatternShape,
-    /// Whether the struct value has a cell state LUT field.
-    pub has_lut: bool,
+}
+impl PatternValue {
+    /// Returns whether the struct value has a cell state LUT field.
+    pub fn has_lut(&self) -> bool {
+        self.value.get_type().count_fields() == 3
+    }
 }

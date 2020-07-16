@@ -228,6 +228,7 @@ pub fn from_parse_tree(
             args = Args::from(args_list);
             func = match object_type {
                 Type::Vector(_) => functions::vectors::Access::with_component_idx(None),
+                Type::Pattern { .. } => Box::new(functions::patterns::Access::construct),
                 other_type => Err(CannotIndexType(other_type))?,
             }
         }

@@ -425,6 +425,7 @@ impl Compiler {
         self.builder().position_at_end(if_true_bb);
         let value_if_true = build_if_true(self)?;
         let if_true_end_bb = self.current_block();
+        let if_true_needs_terminator = self.needs_terminator();
         if self.needs_terminator() {
             self.builder().build_unconditional_branch(merge_bb);
         }
@@ -433,19 +434,24 @@ impl Compiler {
         self.builder().position_at_end(if_false_bb);
         let value_if_false = build_if_false(self)?;
         let if_false_end_bb = self.current_block();
+        let if_false_needs_terminator = self.needs_terminator();
         if self.needs_terminator() {
             self.builder().build_unconditional_branch(merge_bb);
         }
 
         // Merge values if the closures provided any.
         self.builder().position_at_end(merge_bb);
-        let ret = PhiMergeable::merge(
-            value_if_true,
-            value_if_false,
-            if_true_end_bb,
-            if_false_end_bb,
-            self,
-        );
+        let ret = match (if_true_needs_terminator, if_false_needs_terminator) {
+            (true, false) => value_if_true,
+            (false, true) => value_if_false,
+            _ => PhiMergeable::merge(
+                value_if_true,
+                value_if_false,
+                if_true_end_bb,
+                if_false_end_bb,
+                self,
+            ),
+        };
         Ok(ret)
     }
     /// Adds a new basic block intended to be unreachable and positions the
@@ -1256,9 +1262,8 @@ impl Compiler {
         &mut self,
         pattern: &PatternValue,
         pos: VectorValue<'static>,
-        on_ok: impl FnOnce(&mut Self, IntValue<'static>) -> LangResult<()>,
-        on_err: impl FnOnce(&mut Self) -> LangResult<()>,
-    ) -> LangResult<()> {
+        on_err: impl Fn(&mut Self) -> LangResult<()>,
+    ) -> LangResult<IntValue<'static>> {
         let ndim = pattern.shape.ndim();
         let bounds = pattern.shape.bounds();
         let mask = pattern.shape.flat_mask();
@@ -1293,7 +1298,7 @@ impl Compiler {
             );
             let too_high_vec =
                 self.builder()
-                    .build_int_compare(IntPredicate::SLT, pos, max, "tooHigh");
+                    .build_int_compare(IntPredicate::SGT, pos, max, "tooHigh");
             let is_too_high = self.build_reduce("or", too_high_vec.into())?;
             // Combine with OR.
             is_out_of_bounds = self
@@ -1301,82 +1306,96 @@ impl Compiler {
                 .build_or(is_too_low, is_too_high, "outOfBounds");
         }
 
-        // Check that the position is inside the mask.
-        let is_excluded_by_mask: IntValue<'static>;
-        if pattern.shape.is_rect() {
-            // This position can't be excluded by the mask if the mask includes
-            // everything.
-            is_excluded_by_mask = llvm_true();
-        } else {
-            // Make a flat array for the mask and store it on the stack. NOTE:
-            // we invert each element here, so that FALSE indicates that a cell
-            // is INCLUDED, while TRUE indicates a cell is EXCLUDED. This is to
-            // avoid inverting at the end.
-            let mask_array = get_ctx().bool_type().const_array(
-                &mask
-                    .iter()
-                    .map(|&x| get_ctx().bool_type().const_int(!x as u64, false))
-                    .collect_vec(),
-            );
-            let mask_array_ptr = self
-                .builder()
-                .build_alloca(mask_array.get_type(), "maskArray");
-            self.builder().build_store(mask_array_ptr, mask_array);
-            // Determine the strides of this flat array by producing cumulative products based on the sizes.
-            let strides: Vec<u64> = bounds
-                .size()
-                .into_iter()
-                .scan(1, |cumulative_product, len_along_axis| {
-                    let this_stride = *cumulative_product;
-                    *cumulative_product *= len_along_axis;
-                    Some(this_stride as u64)
-                })
-                .collect();
-            let strides_vector_value =
-                VectorType::const_vector(&strides.iter().map(|&x| const_uint(x)).collect_vec());
-            // Compute the index of the origin in this flat array.
-            let origin_idx = const_int(
-                strides
-                    .iter()
-                    .zip(bounds.min())
-                    .map(|(&stride, lower_bound)| stride as isize * -lower_bound)
-                    .product::<isize>() as i64,
-            );
-            // Now we can write some LLVM instructions. Multiply the strides by
-            // the position to get the array index offset from the origin.
-            let array_offset_from_origin_vec =
-                self.builder()
-                    .build_int_nuw_mul(pos, strides_vector_value, "maskOffsetFromOrigin");
-            let array_offset_from_origin =
-                self.build_reduce("add", array_offset_from_origin_vec.into())?;
-            // Now add the index of the origin to get the final array index.
-            let array_idx =
-                self.builder()
-                    .build_int_nsw_add(origin_idx, array_offset_from_origin, "maskIndex");
-            // Finally, index into the array.
-            let mask_element_ptr = unsafe {
-                self.builder().build_gep(
-                    mask_array_ptr,
-                    &[const_int(0), array_idx],
-                    "maskElementPtr",
-                )
-            };
-            // See note above for why this tells whether the cells is EXCLUDED
-            // rather than INCLUDED.
-            is_excluded_by_mask = self
-                .builder()
-                .build_load(mask_element_ptr, "excludedByMask")
-                .into_int_value();
-        }
+        // Now branch.
+        self.build_conditional(
+            is_out_of_bounds,
+            |c| {
+                on_err(c)?;
+                Ok(types::cell_state().const_zero().into())
+            },
+            |c| {
+                // Check that the position is inside the mask.
+                let is_included_by_mask: IntValue<'static>;
+                if pattern.shape.is_rect() {
+                    // This position can't be excluded by the mask if the mask includes
+                    // everything.
+                    is_included_by_mask = llvm_true();
+                } else {
+                    // Make a flat array for the mask and store it on the stack.
+                    let mask_array = get_ctx().bool_type().const_array(
+                        &mask
+                            .iter()
+                            .map(|&x| get_ctx().bool_type().const_int(x as u64, false))
+                            .collect_vec(),
+                    );
+                    let mask_array_ptr =
+                        c.builder().build_alloca(mask_array.get_type(), "maskArray");
+                    c.builder().build_store(mask_array_ptr, mask_array);
+                    // Determine the strides of this flat array by producing cumulative products based on the sizes.
+                    let strides: Vec<u64> = bounds
+                        .size()
+                        .into_iter()
+                        .scan(1, |cumulative_product, len_along_axis| {
+                            let this_stride = *cumulative_product;
+                            *cumulative_product *= len_along_axis;
+                            Some(this_stride as u64)
+                        })
+                        .collect();
+                    let strides_vector_value = VectorType::const_vector(
+                        &strides.iter().map(|&x| const_uint(x)).collect_vec(),
+                    );
+                    // Compute the index of the origin in this flat array.
+                    let origin_idx = const_int(
+                        strides
+                            .iter()
+                            .zip(bounds.min())
+                            .map(|(&stride, lower_bound)| stride as isize * -lower_bound)
+                            .product::<isize>() as i64,
+                    );
+                    // Now we can write some LLVM instructions. Multiply the strides by
+                    // the position to get the array index offset from the origin.
+                    let array_offset_from_origin_vec = c.builder().build_int_nuw_mul(
+                        pos,
+                        strides_vector_value,
+                        "maskOffsetFromOrigin",
+                    );
+                    let array_offset_from_origin =
+                        c.build_reduce("add", array_offset_from_origin_vec.into())?;
+                    // Now add the index of the origin to get the final array index.
+                    let array_idx = c.builder().build_int_nsw_add(
+                        origin_idx,
+                        array_offset_from_origin,
+                        "maskIndex",
+                    );
+                    // Finally, index into the array.
+                    let mask_element_ptr = unsafe {
+                        c.builder().build_gep(
+                            mask_array_ptr,
+                            &[const_int(0), array_idx],
+                            "maskElementPtr",
+                        )
+                    };
+                    is_included_by_mask = c
+                        .builder()
+                        .build_load(mask_element_ptr, "excludedByMask")
+                        .into_int_value();
+                }
 
-        let is_err =
-            self.builder()
-                .build_or(is_out_of_bounds, is_excluded_by_mask, "outOfBoundsOrMask");
-        // Branch based on whether the position is in bounds.
-        self.build_conditional(is_err, on_err, |c| {
-            let cell_state_value = c.build_get_pattern_cell_state_unchecked(pattern, pos)?;
-            on_ok(c, cell_state_value)
-        })
+                // Now branch.
+                c.build_conditional(
+                    is_included_by_mask,
+                    |c| {
+                        c.build_get_pattern_cell_state_unchecked(pattern, pos)
+                            .map(BasicValueEnum::from)
+                    },
+                    |c| {
+                        on_err(c)?;
+                        Ok(types::cell_state().const_zero().into())
+                    },
+                )
+            },
+        )
+        .map(BasicValueEnum::into_int_value)
     }
     /// Builds an unchecked read of a cell state patternand returns the value.
     /// Do not use this unless you are absolutely sure that the given position

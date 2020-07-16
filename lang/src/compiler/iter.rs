@@ -90,14 +90,13 @@ impl Compiler {
         for pos in pattern.shape.positions() {
             let pos_vector_value =
                 VectorType::const_vector(&pos.iter().map(|&x| const_int(x as i64)).collect_vec());
-            self.build_get_pattern_cell_state(
+            let cell_state = self.build_get_pattern_cell_state(
                 pattern,
                 pos_vector_value,
-                // Cell state is in bounds, as it should be.
-                |c, cell_state| for_each_cell(c, &pos, cell_state),
                 // Cell state is out of bounds (which should NOT happen here).
                 |c| Ok(c.build_return_internal_err()),
             )?;
+            for_each_cell(self, &pos, cell_state)?;
         }
         Ok(())
     }

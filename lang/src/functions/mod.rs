@@ -9,6 +9,7 @@ pub mod literals;
 pub mod logic;
 pub mod math;
 pub mod misc;
+pub mod patterns;
 pub mod ranges;
 pub mod vectors;
 

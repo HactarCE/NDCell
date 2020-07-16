@@ -107,6 +107,14 @@ impl ConstValue {
             _ => uncaught_type_error!(),
         }
     }
+    /// Returns the pattern value inside if this is a ConstValue::Pattern;
+    /// otherwise returns an InternalError.
+    pub fn as_pattern(self) -> LangResult<Pattern> {
+        match self {
+            Self::Pattern(p) => Ok(p),
+            _ => uncaught_type_error!(),
+        }
+    }
     /// Returns the start, end, and step inside if this is a
     /// ConstValue::IntRange; otherwise returns an InternalError.
     pub fn as_int_range(self) -> LangResult<(LangInt, LangInt, LangInt)> {

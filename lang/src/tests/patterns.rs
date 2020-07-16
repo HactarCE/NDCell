@@ -5,11 +5,53 @@ fn test_empty_transition_fn() {
     let mut f = compile_transition_fn("@states 10 @transition {}");
     assert_fn_result(
         &mut f,
-        &mut [ConstValue::Pattern(Pattern {
-            cells: vec![0, 0, 0, 0, 5, 0, 0, 0, 0],
-            shape: PatternShape::moore(2, 1),
-            lut: None,
-        })],
+        &mut [demo_pattern_3x3()],
         Ok(ConstValue::CellState(5)),
     );
+}
+
+#[test]
+fn test_square_pattern_indexing() {
+    let mut expected = 1;
+    for (&y, &x) in iproduct!(&[-1, 0, 1], &[-1, 0, 1]) {
+        let mut f = compile_transition_fn(&format!(
+            "@states 10
+            @transition {{
+                become nbhd[{}, {}]
+            }}",
+            x, y
+        ));
+        assert_fn_result(
+            &mut f,
+            &mut [demo_pattern_3x3()],
+            Ok(ConstValue::CellState(expected)),
+        );
+        expected += 1;
+    }
+    for (&y, &x) in iproduct!(&[-2, 0, 2], &[-2, 0, 2]) {
+        if x == 0 && y == 0 {
+            continue;
+        }
+        let mut f = compile_transition_fn(&format!(
+            "@states 10
+            @transition {{
+                become nbhd[{}, {}]
+            }}",
+            x, y
+        ));
+
+        assert_fn_result(
+            &mut f,
+            &mut [demo_pattern_3x3()],
+            Err((&format!("nbhd[{}, {}]", x, y), "Index out of bounds")),
+        )
+    }
+}
+
+fn demo_pattern_3x3() -> ConstValue {
+    ConstValue::Pattern(Pattern {
+        cells: (1..10).collect(),
+        shape: PatternShape::moore(2, 1),
+        lut: None,
+    })
 }

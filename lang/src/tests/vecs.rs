@@ -103,7 +103,7 @@ fn test_vector_access() {
             return v[-1]
         }",
     );
-    let expected = Err(("-1", "Index out of bounds"));
+    let expected = Err(("v[-1]", "Index out of bounds"));
     assert_fn_result(&mut f, &mut [], expected);
 
     // Test in-bounds modification.

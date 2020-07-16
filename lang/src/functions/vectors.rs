@@ -28,14 +28,7 @@ impl Access {
     /// component at the given index.
     pub fn with_component_idx(component_idx: Option<LangInt>) -> FuncConstructor {
         Box::new(move |info| {
-            let arg_span = info
-                .arg_types()
-                .get(1)
-                .map(|sp| sp.span)
-                .unwrap_or(info.span);
-            let out_of_bounds_error = info
-                .userfunc
-                .add_error_point(IndexOutOfBounds.with_span(arg_span));
+            let out_of_bounds_error = info.add_error_point(IndexOutOfBounds);
             Ok(Box::new(Self {
                 component_idx,
                 out_of_bounds_error,

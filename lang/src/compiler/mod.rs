@@ -45,7 +45,7 @@ pub use function::CompiledFunction;
 pub use value::{PatternValue, Value};
 
 use crate::errors::*;
-use crate::types::{CellStateFilter, TypeDesc, CELL_STATE_BITS, INT_BITS};
+use crate::types::{CellStateFilter, LangInt, TypeDesc, CELL_STATE_BITS, INT_BITS};
 use crate::{ConstValue, Type};
 
 /// Name of the LLVM module.
@@ -1329,8 +1329,11 @@ impl Compiler {
                     .build_int_nsw_add(origin_idx, array_offset_from_origin, "maskIndex");
             // Finally, index into the array.
             let mask_element_ptr = unsafe {
-                self.builder()
-                    .build_gep(mask_array_ptr, &[array_idx], "maskElementPtr")
+                self.builder().build_gep(
+                    mask_array_ptr,
+                    &[const_int(0), array_idx],
+                    "maskElementPtr",
+                )
             };
             // See note above for why this tells whether the cells is EXCLUDED
             // rather than INCLUDED.
@@ -1387,7 +1390,7 @@ impl Compiler {
     /* MISCELLANY */
 
     /// Constructs a Value from a ConstValue.
-    pub fn value_from_const(&self, const_value: ConstValue) -> LangResult<Value> {
+    pub fn value_from_const(&mut self, const_value: ConstValue) -> LangResult<Value> {
         match const_value {
             ConstValue::Void => Ok(Value::Void),
             ConstValue::Int(i) => Ok(Value::Int(const_int(i))),
@@ -1397,14 +1400,68 @@ impl Compiler {
             ConstValue::Vector(values) => Ok(Value::Vector(VectorType::const_vector(
                 &values.iter().map(|&i| const_int(i)).collect_vec(),
             ))),
-            ConstValue::Pattern(p) => todo!("pattern from const value"),
-            ConstValue::IntRange { start, end, step } => Ok({
-                Value::IntRange(VectorType::const_vector(&[
+            ConstValue::Pattern(p) => Ok(Value::Pattern({
+                let cell_type = types::cell_state();
+                let cells = self.module.add_global(
+                    cell_type.array_type(p.cells.len() as u32),
+                    None,
+                    "constPatternCells",
+                );
+                cells.set_initializer(&BasicValueEnum::from(
+                    cell_type.const_array(
+                        &p.cells
+                            .iter()
+                            .map(|&x| cell_type.const_int(x as u64, false))
+                            .collect_vec(),
+                    ),
+                ));
+                let cells_start_ptr = cells.as_pointer_value();
+                let offset = p.shape.get_unchecked_flattened_idx(&vec![0; p.ndim()]);
+                // Note that this address might be outside the bounds of the
+                // cells array (if the pattern does not include the origin).
+                let cells_origin_ptr = unsafe {
+                    self.builder().build_gep(
+                        cells_start_ptr,
+                        &[const_int(offset as i64)],
+                        "ptrToPatternOrigin",
+                    )
+                };
+                let strides_vector = self
+                    .value_from_const(ConstValue::Vector(
+                        p.shape
+                            .strides()
+                            .into_iter()
+                            .map(|x| x as LangInt)
+                            .collect(),
+                    ))?
+                    .into_basic_value()?;
+                let cell_state_lut_id = get_ctx()
+                    .i8_type()
+                    .const_int(p.lut.unwrap_or_default() as u64, false);
+                let struct_values = [
+                    cells_origin_ptr.into(),
+                    strides_vector,
+                    cell_state_lut_id.into(),
+                ];
+                PatternValue {
+                    value: types::pattern(p.ndim(), p.lut.is_some()).const_named_struct(
+                        if p.lut.is_some() {
+                            &struct_values
+                        } else {
+                            &struct_values[..2]
+                        },
+                    ),
+                    shape: p.shape.clone(),
+                    has_lut: p.lut.is_some(),
+                }
+            })),
+            ConstValue::IntRange { start, end, step } => {
+                Ok(Value::IntRange(VectorType::const_vector(&[
                     const_int(start),
                     const_int(end),
                     const_int(step),
-                ]))
-            }),
+                ])))
+            }
             ConstValue::Rectangle(start, end) => Ok({
                 assert_eq!(start.len(), end.len(), "Rect dimension mismatch");
                 let ndim = start.len();
@@ -1438,7 +1495,7 @@ impl Compiler {
     }
     /// Returns the default value for variables of the given type, panicking if
     /// the given type has no LLVM representation.
-    pub fn get_default_var_value(&self, ty: &Type) -> LangResult<Value> {
+    pub fn get_default_var_value(&mut self, ty: &Type) -> LangResult<Value> {
         self.value_from_const(ConstValue::default(ty)?)
     }
 

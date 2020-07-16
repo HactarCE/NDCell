@@ -1,7 +1,7 @@
 //! Values used by the interpreter for NDCA.
 
 use crate::errors::*;
-use crate::types::{CellStateFilter, LangCellState, LangInt, Stencil, Type};
+use crate::types::{CellStateFilter, LangCellState, LangInt, Pattern, Stencil, Type};
 
 /// Constant value of any type.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,6 +14,8 @@ pub enum ConstValue {
     CellState(LangCellState),
     /// Vector of a specific length from 1 to 256.
     Vector(Vec<LangInt>),
+    /// Configuration of cells of a specific size and shape.
+    Pattern(Pattern),
     /// Inclusive integer range.
     IntRange {
         /// First number in the range.
@@ -39,8 +41,15 @@ impl ConstValue {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
             Self::Vector(values) => Type::Vector(values.len()),
+            Self::Pattern(p) => Type::Pattern {
+                shape: p.shape.clone(),
+                has_lut: p.lut.is_some(),
+            },
             Self::IntRange { .. } => Type::IntRange,
-            Self::Rectangle(start, _) => Type::Rectangle(start.len()),
+            Self::Rectangle(start, end) => {
+                assert_eq!(start.len(), end.len());
+                Type::Rectangle(start.len())
+            }
             Self::CellStateFilter(f) => Type::CellStateFilter(f.state_count()),
             Self::Stencil(_) => Type::Stencil,
         }
@@ -52,7 +61,11 @@ impl ConstValue {
             Type::Int => Ok(Self::Int(0)),
             Type::CellState => Ok(Self::CellState(0)),
             Type::Vector(len) => Ok(Self::Vector(vec![0; *len])),
-            Type::Pattern(_) => todo!("default pattern (all #0)"),
+            // Default pattern is all 0.
+            Type::Pattern { shape, has_lut } => {
+                let lut = if *has_lut { Some(0) } else { None };
+                Ok(Self::Pattern(Pattern::zeros(shape.clone(), lut)))
+            }
             // Default integer range includes only zero.
             Type::IntRange => Ok(Self::IntRange {
                 start: 0,
@@ -134,6 +147,11 @@ impl ConstValue {
             Self::Int(i) => Ok(i != 0),
             Self::CellState(i) => Ok(i != 0),
             Self::Vector(v) => Ok(v.into_iter().any(|i| i != 0)),
+            Self::Pattern(p) => Ok(p
+                .cells
+                .iter()
+                .zip(p.shape.flat_mask())
+                .any(|(&cell, &mask)| mask && cell != 0)),
             Self::Void
             | Self::IntRange { .. }
             | Self::Rectangle { .. }

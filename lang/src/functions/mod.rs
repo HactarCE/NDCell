@@ -89,7 +89,7 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "len" => Some(Box::new(vectors::GetLen::construct)),
             _ => None,
         },
-        Type::Pattern(_) => match name {
+        Type::Pattern { .. } => match name {
             "count" => todo!("count cells in pattern"),
             "find" => todo!("find cell in pattern"),
             "outer" => todo!("exclude center cell from pattern"),

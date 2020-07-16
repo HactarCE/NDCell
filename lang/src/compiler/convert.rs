@@ -44,11 +44,35 @@ impl<'a> ValueConvert<'a> {
         match value {
             ConstValue::Void => (),
             ConstValue::Int(i) => i.to_ne_bytes().iter().copied().fill_u64_slice(&mut bytes),
-            ConstValue::CellState(i) => i.to_ne_bytes().iter().copied().fill_u64_slice(&mut bytes),
+            ConstValue::CellState(i) => std::iter::once(*i).fill_u64_slice(&mut bytes),
             ConstValue::Vector(values) => values
                 .iter()
                 .flat_map(|i| i.to_ne_bytes().iter().copied().collect_vec())
                 .fill_u64_slice(&mut bytes),
+            ConstValue::Pattern(p) => {
+                let struct_type = super::types::pattern(p.ndim(), p.lut.is_some());
+                let offsets = struct_offsets(&struct_type, target_data);
+                let start_ptr = p.cells.as_ptr();
+                let origin_offset = p.shape.get_unchecked_flattened_idx(&vec![0; p.ndim()]);
+                let origin_ptr = start_ptr.wrapping_offset(origin_offset);
+                std::iter::empty()
+                    .pad_using(offsets[0], |_| 0_u8)
+                    .chain((origin_ptr as usize).to_ne_bytes().to_vec())
+                    .pad_using(offsets[1], |_| 0_u8)
+                    .chain(
+                        p.shape
+                            .strides()
+                            .iter()
+                            .flat_map(|i| i.to_ne_bytes().to_vec()),
+                    )
+                    // It doesn't matter if we include the LUT even when it's
+                    // not used, because even if fill_u64_slice() writes it the
+                    // JIT code will just ignore it (since it's not expecting a
+                    // LUT).
+                    .pad_using(offsets[2], |_| 0_u8)
+                    .chain(std::iter::once(p.lut.unwrap_or_default()))
+                    .fill_u64_slice(&mut bytes);
+            }
             ConstValue::IntRange { start, end, step } => std::iter::empty()
                 .chain(&start.to_ne_bytes())
                 .chain(&end.to_ne_bytes())
@@ -131,6 +155,9 @@ impl<'a> ValueConvert<'a> {
                     .map(|b| LangInt::from_ne_bytes(b.try_into().unwrap()))
                     .collect(),
             ),
+            Type::Pattern { .. } => {
+                return Err(());
+            }
             Type::IntRange => {
                 let mut values = bytes
                     .chunks(INT_BYTES)

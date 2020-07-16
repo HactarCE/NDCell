@@ -1,7 +1,6 @@
 //! Values used by the JIT compiler.
 
 use inkwell::values::{BasicValueEnum, IntValue, StructValue, VectorValue};
-use std::rc::Rc;
 
 use crate::errors::*;
 use crate::types::PatternShape;
@@ -39,7 +38,10 @@ impl Value {
             Self::Int(_) => Type::Int,
             Self::CellState(_) => Type::CellState,
             Self::Vector(v) => Type::Vector(v.get_type().get_size() as usize),
-            Self::Pattern(p) => Type::Pattern(p.shape.clone()),
+            Self::Pattern(p) => Type::Pattern {
+                shape: p.shape.clone(),
+                has_lut: p.has_lut,
+            },
             Self::IntRange(_) => Type::IntRange,
             Self::Rectangle(r) => Type::Rectangle({
                 let field1 = r.get_type().get_field_type_at_index(0).unwrap();
@@ -52,6 +54,11 @@ impl Value {
     }
     /// Constructs a value of the given type from an LLVM basic value.
     pub fn from_basic_value(ty: &Type, basic_value: BasicValueEnum<'static>) -> Self {
+        assert_eq!(
+            basic_value.get_type(),
+            super::types::get(ty).expect("Cannot convert to type from basic value"),
+            "Wrong basic type to construct value of this type",
+        );
         match ty {
             Type::Void => Self::Void,
             Type::Int => Self::Int(basic_value.into_int_value()),
@@ -61,9 +68,10 @@ impl Value {
                 assert_eq!(Type::Vector(*len), ret.ty(), "LLVM vector length mismatch");
                 ret
             }
-            Type::Pattern(shape) => Self::Pattern(PatternValue {
+            Type::Pattern { shape, has_lut } => Self::Pattern(PatternValue {
                 value: basic_value.into_struct_value(),
                 shape: shape.clone(),
+                has_lut: *has_lut,
             }),
             Type::IntRange => Self::IntRange(basic_value.into_vector_value()),
             Type::Rectangle(ndim) => {
@@ -160,9 +168,13 @@ impl Value {
 pub struct PatternValue {
     /// Struct containing two values:
     /// 1. Pointer to the origin (0 along all axes) in an array of cell states.
-    /// 2. Pointer offset to increment the given axis by 1. (Length of this
-    ///    array is the number of dimensions in the pattern.)
+    /// 2. Pointer offsets (strides) to increment each axis by 1. (Length of
+    ///    this vector is the number of dimensions in the pattern.)
+    /// 3. (optional) Single byte indicating which cell state lookup table to
+    ///    use to account for individual cell state rotations/reflections.
     pub value: StructValue<'static>,
     /// The shape of the pattern, which includes the pattern bounds and mask.
-    pub shape: Rc<PatternShape>,
+    pub shape: PatternShape,
+    /// Whether the struct value has a cell state LUT field.
+    pub has_lut: bool,
 }

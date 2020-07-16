@@ -15,7 +15,7 @@ pub fn get(ty: &Type) -> LangResult<BasicTypeEnum<'static>> {
         Type::Int => Ok(int().into()),
         Type::CellState => Ok(cell_state().into()),
         Type::Vector(len) => Ok(vec(*len).into()),
-        Type::Pattern(shape) => Ok(pattern(shape.ndim()).into()),
+        Type::Pattern { shape, has_lut } => Ok(pattern(shape.ndim(), *has_lut).into()),
         Type::IntRange => Ok(int_range().into()),
         Type::Rectangle(ndim) => Ok(rectangle(*ndim).into()),
         Type::CellStateFilter(state_count) => Ok(cell_state_filter(*state_count).into()),
@@ -52,16 +52,27 @@ pub fn vec(ndim: usize) -> VectorType<'static> {
 }
 
 /// Returns the LLVM type used to represent a pattern with the given number of
-/// dimensions.
-pub fn pattern(ndim: usize) -> StructType<'static> {
+/// dimensions and optionally a cell state LUT.
+pub fn pattern(ndim: usize, has_lut: bool) -> StructType<'static> {
+    let field_types = [
+        // Pointer to the origin (0 along all axes) in an array of
+        // cell states.
+        cell_state()
+            .array_type(0)
+            .ptr_type(AddressSpace::Generic)
+            .into(),
+        // Strides to increment the given axis by 1.
+        vec(ndim).into(),
+        // ID of cell state lookup table.
+        get_ctx().i8_type().into(),
+    ];
     get_ctx().struct_type(
-        &[
-            // Pointer to the origin (0 along all axes) in an array of
-            // cell states.
-            cell_state().ptr_type(AddressSpace::Generic).into(),
-            // Strides to increment the given axis by 1.
-            vec(ndim).into(),
-        ],
+        if has_lut {
+            &field_types
+        } else {
+            // Exclude the cell state LUT if it is not needed.
+            &field_types[..2]
+        },
         false,
     )
 }

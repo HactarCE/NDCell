@@ -2,14 +2,13 @@
 
 use itertools::Itertools;
 use std::fmt;
-use std::rc::Rc;
 
 mod filters;
 mod patterns;
 mod stencils;
 
 pub use filters::CellStateFilter;
-pub use patterns::PatternShape;
+pub use patterns::{Pattern, PatternShape};
 pub use stencils::{Stencil, StencilCell, StencilCellFilter};
 
 use crate::errors::*;
@@ -51,7 +50,13 @@ pub enum Type {
     /// Vector of a specific length (from 1 to 256).
     Vector(usize),
     /// Configuration of cells of a specific size and shape.
-    Pattern(Rc<PatternShape>),
+    Pattern {
+        /// Size and shape of the pattern.
+        shape: PatternShape,
+        /// Whether the pattern includes a cell state LUT (to rotate/reflect
+        /// individual cell states).
+        has_lut: bool,
+    },
     /// Contiguous range of integers.
     IntRange,
     /// Hyperrectangle of a specific dimensionality (from 1 to 256).
@@ -74,7 +79,7 @@ impl fmt::Debug for Type {
             Self::Int => write!(f, "Int"),
             Self::CellState => write!(f, "Cell"),
             Self::Vector(len) => write!(f, "{:?}{}", TypeDesc::Vector, len),
-            Self::Pattern(shape) => write!(f, "{:?}{}", TypeDesc::Pattern, shape),
+            Self::Pattern { shape, .. } => write!(f, "{:?}{}", TypeDesc::Pattern, shape),
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{:?}{}", TypeDesc::Rectangle, ndim),
             Self::CellStateFilter(_) => write!(f, "{:?}", TypeDesc::CellStateFilter),
@@ -89,7 +94,7 @@ impl fmt::Display for Type {
             Self::Int => write!(f, "Integer"),
             Self::CellState => write!(f, "CellState"),
             Self::Vector(len) => write!(f, "{}{}", TypeDesc::Vector, len),
-            Self::Pattern(shape) => write!(f, "{}{}", TypeDesc::Pattern, shape),
+            Self::Pattern { shape, .. } => write!(f, "{}{}", TypeDesc::Pattern, shape),
             Self::IntRange => write!(f, "Range"),
             Self::Rectangle(ndim) => write!(f, "{}{}", TypeDesc::Rectangle, ndim),
             Self::CellStateFilter(_) => write!(f, "{}", TypeDesc::CellStateFilter),
@@ -107,7 +112,7 @@ impl Type {
             | Self::Int
             | Self::CellState
             | Self::Vector(_)
-            | Self::Pattern(_)
+            | Self::Pattern { .. }
             | Self::IntRange
             | Self::Rectangle(_)
             | Self::CellStateFilter(_) => true,
@@ -122,7 +127,7 @@ impl Type {
     /// Compiler::build_convert_to_bool()
     pub fn can_convert_to_bool(&self) -> bool {
         match self {
-            Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern(_) => true,
+            Self::Int | Self::CellState | Self::Vector(_) | Self::Pattern { .. } => true,
             Self::Void
             | Self::IntRange
             | Self::Rectangle(_)
@@ -135,7 +140,7 @@ impl Type {
     pub fn iteration_type(&self) -> Option<Type> {
         match self {
             Self::Vector(_) => Some(Self::Int),
-            Self::Pattern(_) => Some(Self::CellState),
+            Self::Pattern { .. } => Some(Self::CellState),
             Self::IntRange => Some(Self::Int),
             Self::Rectangle(ndim) => Some(Self::Vector(*ndim)),
             Self::CellStateFilter(_) => Some(Self::CellState),
@@ -265,7 +270,7 @@ impl TypeChecker for TypeDesc {
         match self {
             TypeDesc::Specific(this) => this.matches(ty),
             TypeDesc::Vector => matches!(ty, Type::Vector(_)),
-            TypeDesc::Pattern => matches!(ty, Type::Pattern(_)),
+            TypeDesc::Pattern => matches!(ty, Type::Pattern { .. }),
             TypeDesc::Rectangle => matches!(ty, Type::Rectangle(_)),
             TypeDesc::CellStateFilter => matches!(ty, Type::CellStateFilter(_)),
         }

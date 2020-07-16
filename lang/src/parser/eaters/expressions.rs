@@ -104,6 +104,7 @@ impl TokenEater for ExprWithPrecedence {
                 Directive(_) => false,
                 Tag(_) => true,
                 Ident(_) => true,
+                Unknown(_) => false,
                 Comment => false, // shouldn't even be possible
             },
         }

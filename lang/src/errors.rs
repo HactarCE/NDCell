@@ -126,9 +126,10 @@ pub enum LangErrorMsg {
     Unimplemented,
     UnknownError,
     InternalError(Cow<'static, str>),
+    IntegerOutOfRange,
+    CellStateOutOfRange,
 
     // Compile errors
-    UnknownSymbol,
     Unterminated(&'static str),
     Expected(String),
     ReservedWord,
@@ -171,7 +172,6 @@ pub enum LangErrorMsg {
     IntegerOverflow,
     DivideByZero,
     NegativeExponent,
-    CellStateOutOfRange,
     IndexOutOfBounds,
     AssertionFailed(Option<String>),
     UserError(Option<String>),
@@ -188,10 +188,13 @@ impl fmt::Display for LangErrorMsg {
             Self::InternalError(s) => {
                 write!(f, "Internal error: {}\nThis is a bug in NDCell, not your cellular automaton. Please report this to the developer!", s)?;
             }
-
-            Self::UnknownSymbol => {
-                write!(f, "Unknown symbol")?;
+            Self::IntegerOutOfRange => {
+                write!(f, "Integer out of range")?;
             }
+            Self::CellStateOutOfRange => {
+                write!(f, "Cell state out of range")?;
+            }
+
             Self::Unterminated(s) => {
                 write!(f, "This {} never ends", s)?;
             }
@@ -296,9 +299,6 @@ impl fmt::Display for LangErrorMsg {
             }
             Self::NegativeExponent => {
                 write!(f, "Negative exponent")?;
-            }
-            Self::CellStateOutOfRange => {
-                write!(f, "Cell state out of range")?;
             }
             Self::IndexOutOfBounds => {
                 write!(f, "Index out of bounds")?;

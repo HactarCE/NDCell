@@ -1,7 +1,12 @@
+use itertools::Itertools;
+use std::convert::TryInto;
+use std::rc::Rc;
+
 use super::*;
 use crate::lexer::*;
 use crate::parser::tree;
 use crate::types::StencilCell;
+use LangErrorMsg::{CellStateOutOfRange, ReservedWord};
 
 /// Consumes a stencil literal.
 #[derive(Debug, Copy, Clone)]
@@ -17,7 +22,7 @@ impl TokenEater for StencilLiteral {
         let mut cells = vec![];
         let mut bindings = vec![];
         enum Either {
-            Cell(StencilCell),
+            Cells(Vec<StencilCell>),
             Bindings(Vec<tree::StencilBinding>),
             Done,
         }
@@ -25,12 +30,12 @@ impl TokenEater for StencilLiteral {
             match feed_one_of!(
                 tf,
                 [
-                    StencilChar.map(Either::Cell),
+                    StencilCells.map(Either::Cells),
                     StencilBindings.map(Either::Bindings),
                     PunctuationToken::Backtick.map(|_| Either::Done),
                 ]
             )? {
-                Either::Cell(c) => cells.push(c),
+                Either::Cells(c) => cells.extend_from_slice(&c),
                 Either::Bindings(b) => bindings.extend_from_slice(&b),
                 Either::Done => return Ok(tree::Expr::Stencil { cells, bindings }),
             }
@@ -38,29 +43,77 @@ impl TokenEater for StencilLiteral {
     }
 }
 
-/// Consumes a cell character in a stencil literal.
+/// Consumes one or more cells in a stencil literal.
 #[derive(Debug, Copy, Clone)]
-struct StencilChar;
-impl_display!(StencilChar, "character representing a cell state filter");
-impl TokenEater for StencilChar {
-    type Output = StencilCell;
+struct StencilCells;
+impl_display!(
+    StencilCells,
+    "identifier, number, or symbol representing a cell state filter"
+);
+impl TokenEater for StencilCells {
+    type Output = Vec<StencilCell>;
     fn might_match(&self, tf: TokenFeeder<'_>) -> bool {
-        next_token_matches!(
-            tf,
-            TokenClass::Operator(OperatorToken::Tag)
-            | TokenClass::Punctuation(PunctuationToken::Period)
-            | TokenClass::Ident(_)
-        )
+        match tf.peek_next_class() {
+            None => false,
+            Some(TokenClass::Keyword(_)) => false,
+            Some(TokenClass::String { .. }) => false,
+            Some(_) => true,
+        }
     }
     fn eat(&self, tf: &mut TokenFeeder<'_>) -> LangResult<Self::Output> {
-        feed_one_of!(
-            tf,
-            [
-                OperatorToken::Tag.map(|_| StencilCell::Hashtag),
-                PunctuationToken::Period.map(|_| StencilCell::Period),
-                Identifier.map(StencilCell::Ident),
-            ]
-        )
+        match tf.next_class() {
+            None => tf.expected(self),
+            Some(TokenClass::Keyword(_)) => tf.err(ReservedWord),
+            Some(TokenClass::String { .. }) => tf.expected(self),
+            Some(TokenClass::Ident(s)) => Ok(vec![StencilCell::Ident(Rc::new(s.to_owned()))]),
+            Some(TokenClass::Integer(i)) => Ok(vec![StencilCell::Number(
+                i.try_into().map_err(|_| tf.error(CellStateOutOfRange))?,
+            )]),
+            Some(_) => Ok(tf
+                .current()
+                .unwrap()
+                .string
+                .chars()
+                .map(StencilCell::Other)
+                .collect()),
+        }
+    }
+}
+
+/// Consumes exactly one cell in a stencil literal.
+#[derive(Debug, Copy, Clone)]
+struct QuotedStencilCell;
+impl_display!(
+    QuotedStencilCell,
+    "identifier or symbol representing a cell state filter (symbols must be quoted with single quotes)"
+);
+impl TokenEater for QuotedStencilCell {
+    type Output = StencilCell;
+    fn might_match(&self, tf: TokenFeeder<'_>) -> bool {
+        next_token_matches!(tf, TokenClass::Ident(_) | TokenClass::String { .. })
+    }
+    fn eat(&self, tf: &mut TokenFeeder<'_>) -> LangResult<Self::Output> {
+        match tf.next_class() {
+            None => tf.expected(self),
+            Some(TokenClass::Ident(s)) => Ok(StencilCell::Ident(Rc::new(s.to_owned()))),
+            Some(TokenClass::String {
+                prefix: None,
+                quote: '\'',
+                contents,
+            }) => {
+                match contents.chars().exactly_one() {
+                    Err(_) => tf.expected("exactly one character in the string"),
+                    // These would be valid identifiers, so they should not
+                    // be quoted.
+                    Ok('A'..='Z') | Ok('a'..='z') | Ok('_') => tf.expected(self),
+                    // These would be valid integers, so they should not be
+                    // quoted (and cannot be overridden anyway).
+                    Ok('0'..='9') => tf.expected(self),
+                    Ok(other) => Ok(StencilCell::Other(other)),
+                }
+            }
+            _ => tf.expected(self),
+        }
     }
 }
 
@@ -77,7 +130,7 @@ impl TokenEater for StencilBindings {
         tf.feed(KeywordToken::Where)?;
         let mut ret = vec![];
         loop {
-            let cell = tf.feed(StencilChar.spanned())?;
+            let cell = tf.feed(QuotedStencilCell.spanned())?;
             tf.feed(KeywordToken::Is)?;
             let same = tf.try_feed(KeywordToken::Same).transpose()?.is_some();
             let expr = Box::new(tf.feed(ExprWithPrecedence(OpPrecedence::Is.next()))?);

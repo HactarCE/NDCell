@@ -15,22 +15,22 @@ pub struct Stencil {
 /// A single cell in a pattern stencil.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum StencilCell {
-    Period,
-    Hashtag,
     Number(LangCellState),
     Ident(Rc<String>),
+    Other(char),
 }
 impl StencilCell {
     /// Returns the default binding for this cell.
     pub fn default_binding(&self, state_count: usize) -> StencilCellFilter {
         let filter = match self {
-            StencilCell::Period => CellStateFilter::single_cell_state(state_count, 0),
-            StencilCell::Hashtag => {
+            StencilCell::Number(i) => CellStateFilter::single_cell_state(state_count, *i),
+            StencilCell::Ident(_) => CellStateFilter::all(state_count),
+            StencilCell::Other('.') => CellStateFilter::single_cell_state(state_count, 0),
+            StencilCell::Other('#') => {
                 CellStateFilter::all(state_count)
                     & !CellStateFilter::single_cell_state(state_count, 0)
             }
-            StencilCell::Number(i) => CellStateFilter::single_cell_state(state_count, *i),
-            StencilCell::Ident(_) => CellStateFilter::all(state_count),
+            StencilCell::Other(_) => CellStateFilter::all(state_count),
         };
         StencilCellFilter {
             filter,

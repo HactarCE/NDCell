@@ -10,7 +10,7 @@ use std::str::FromStr;
 use crate::errors::*;
 use crate::types::{LangInt, MAX_VECTOR_LEN};
 use crate::{RuleMeta, Span, Type};
-use LangErrorMsg::{UnknownSymbol, Unterminated};
+use LangErrorMsg::{IntegerOutOfRange, Unterminated};
 
 /// A list of token patterns, arranged roughly from least to most general.
 const TOKEN_PATTERNS: &'static [&'static str] = &[
@@ -45,8 +45,9 @@ const TOKEN_PATTERNS: &'static [&'static str] = &[
     r#"(\.\.|\*\*|<<|>>>?)"#,
     // Equality checks `==`, `!=`, `<=`, and `>=`.
     r#"[=!<>]="#,
-    // Any other single character.
-    r#"[^\s]"#,
+    // Any other single character from the letter, numeral, punctuation, or
+    // symbol Unicode categories.
+    r#"[\pL\pN\pP\pS]"#,
 ];
 
 lazy_static! {
@@ -56,6 +57,8 @@ lazy_static! {
 
     /// A regex that matches any valid identifier (or keyword, but that's fine).
     static ref IDENT_PATTERN: Regex = Regex::new(r#"^[A-Za-z_][A-Za-z_\d]*$"#).unwrap();
+    /// A regex that matches any valid integer literal without leading zeros.
+    static ref INT_PATTERN: Regex = Regex::new(r#"^\-?(0|[1-9]\d*)$"#).unwrap();
     /// A regex that matches any named tag.
     static ref TAG_PATTERN: Regex = Regex::new(r#"^#[A-Za-z_][A-Za-z_\d]*$"#).unwrap();
     /// A regex that matches any directive.
@@ -161,6 +164,8 @@ pub enum TokenClass<'a> {
     Tag(&'a str),
     /// Identifier.
     Ident(&'a str),
+    /// Unknown character,
+    Unknown(&'a str),
     /// Comment.
     Comment,
 }
@@ -182,6 +187,7 @@ impl<'a> fmt::Display for TokenClass<'a> {
             Self::Directive(s) => write!(f, "directive '@{}'", s),
             Self::Tag(s) => write!(f, "tag '#{}'", s),
             Self::Ident(s) => write!(f, "identifier '{}'", s),
+            Self::Unknown(s) => write!(f, "unknown symbol '{}'", s),
             Self::Comment => write!(f, "comment"),
         }
     }
@@ -204,8 +210,8 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
             Ok(Self::Operator(operator))
         } else if let Ok(punctuation) = s.parse() {
             Ok(Self::Punctuation(punctuation))
-        } else if let Ok(i) = s.parse() {
-            Ok(Self::Integer(i))
+        } else if INT_PATTERN.is_match(s) {
+            s.parse().map(Self::Integer).map_err(|_| IntegerOutOfRange)
         } else if let Some(captures) = STRING_PATTERN.captures(s) {
             if let Some(contents_capture) = captures.get(3) {
                 let prefix = captures.get(1).unwrap().as_str().chars().next();
@@ -240,7 +246,7 @@ impl<'a> TryFrom<&'a str> for TokenClass<'a> {
                 Ok(Self::Comment)
             }
         } else {
-            Err(UnknownSymbol)
+            Ok(Self::Unknown(s))
         }
     }
 }

@@ -124,7 +124,7 @@ impl Function for NegOrAbs {
             ConstValue::Vector(v) => v
                 .into_iter()
                 .map(|i| self.eval_op_int(i))
-                .collect::<LangResult<Vec<LangInt>>>()
+                .try_collect()
                 .map(ConstValue::Vector),
             ConstValue::IntRange { start, end, step } => [start, end, step]
                 .iter()
@@ -139,10 +139,8 @@ impl Function for NegOrAbs {
                 start
                     .into_iter()
                     .map(|i| self.eval_op_int(i))
-                    .collect::<LangResult<Vec<LangInt>>>()?,
-                end.into_iter()
-                    .map(|i| self.eval_op_int(i))
-                    .collect::<LangResult<Vec<LangInt>>>()?,
+                    .try_collect()?,
+                end.into_iter().map(|i| self.eval_op_int(i)).try_collect()?,
             )),
             _ => uncaught_type_error!(),
         }
@@ -745,12 +743,12 @@ impl Function for BinaryOp {
                     .into_iter()
                     .zip(&rhs)
                     .map(|(l, &r)| self.eval_op_int(l, r))
-                    .collect::<LangResult<Vec<LangInt>>>()?;
+                    .try_collect()?;
                 let end = end
                     .into_iter()
                     .zip(&rhs)
                     .map(|(l, &r)| self.eval_op_int(l, r))
-                    .collect::<LangResult<Vec<LangInt>>>()?;
+                    .try_collect()?;
                 Ok(ConstValue::Rectangle(start, end))
             }
             Type::Vector(len) => {
@@ -762,7 +760,7 @@ impl Function for BinaryOp {
                     .into_iter()
                     .zip(rhs)
                     .map(|(l, r)| self.eval_op_int(l, r))
-                    .collect::<LangResult<Vec<LangInt>>>()?;
+                    .try_collect()?;
                 Ok(ConstValue::Vector(ret))
             }
             Type::IntRange => todo!("add int range to int"),

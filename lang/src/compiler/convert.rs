@@ -61,16 +61,9 @@ impl<'a> ValueConvert<'a> {
                 let offsets = struct_offsets(&struct_type, target_data);
                 std::iter::empty()
                     .pad_using(offsets[0], |_| 0_u8)
-                    .chain(
-                        start
-                            .iter()
-                            .flat_map(|i| i.to_ne_bytes().iter().copied().collect_vec()),
-                    )
+                    .chain(start.iter().flat_map(|i| i.to_ne_bytes().to_vec()))
                     .pad_using(offsets[1], |_| 0_u8)
-                    .chain(
-                        end.iter()
-                            .flat_map(|i| i.to_ne_bytes().iter().copied().collect_vec()),
-                    )
+                    .chain(end.iter().flat_map(|i| i.to_ne_bytes().to_vec()))
                     .fill_u64_slice(&mut bytes)
             }
             ConstValue::CellStateFilter(f) => {

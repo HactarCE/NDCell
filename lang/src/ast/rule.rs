@@ -1,5 +1,6 @@
 //! Root node of the AST.
 
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::rc::Rc;
@@ -102,7 +103,7 @@ impl TryFrom<ParseTree> for Rule {
                 DirectiveContents::Func(f) => Ok(f),
                 _ => internal_error!("Invalid parse tree on helper function"),
             })
-            .collect::<LangResult<Vec<_>>>()?;
+            .try_collect()?;
         for helper_func in &helper_function_parse_trees {
             if meta
                 .helper_function_signatures

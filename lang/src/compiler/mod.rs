@@ -6,16 +6,14 @@
 //!
 //! When we compile a function, we don't actually know how many arguments it
 //! takes or what its return type is, so we can't encode this in Rust's type
-//! system. Instead we create a struct containing all of the inputs to the
-//! function and pass a pointer to that as the first argument, then create a
-//! variable for the output of the function and pass a pointer to that as the
-//! second argument. The actual return value of the function is just an integer
-//! to indicate any error.
+//! system. Instead we create an array containing pointers to all of the inputs
+//! to the function and pass a pointer to that array as the first argument, then
+//! create a variable for the output of the function and pass a pointer to that
+//! as the second argument. The actual return value of the function is just an
+//! integer to indicate any error.
 //!
-//! The values in that first struct I've called "in/out" values, or `inouts`.
-//! Actual function arguments only matter as inputs, but when debugging a
-//! function we can pass variable values as "in/out" values, and read the value
-//! after executing part of the function.
+//! Note that the compiled function is able to mutate its arguments, which may
+//! be useful for debugging or other capabilities in the future.
 
 use itertools::Itertools;
 use std::collections::HashMap;
@@ -28,7 +26,7 @@ use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction, UnsafeFunctionPointer};
 use inkwell::module::Module;
 use inkwell::targets::TargetData;
-use inkwell::types::{BasicType, BasicTypeEnum, FunctionType, IntType, StructType, VectorType};
+use inkwell::types::{BasicType, BasicTypeEnum, FunctionType, IntType, VectorType};
 use inkwell::values::{
     BasicValueEnum, FunctionValue, IntMathValue, IntValue, PhiValue, PointerValue, StructValue,
     VectorValue,
@@ -157,17 +155,18 @@ impl Compiler {
         &mut self,
         name: &str,
         return_type: Type,
-        param_names: &[String],
+        arg_names: &[String],
         var_types: &HashMap<String, Type>,
     ) -> LangResult<()> {
         // Determine the LLVM function type (signature).
         let llvm_return_type = types::get(&return_type)?;
-        let llvm_arg_types = param_names
+        let llvm_arg_types = arg_names
             .iter()
             .map(|name| &var_types[name])
             .map(types::get)
             .collect::<LangResult<Vec<_>>>()?;
         let fn_type = llvm_return_type.fn_type(&llvm_arg_types, false);
+
         // Construct the FunctionInProgress.
         self.function = Some(FunctionInProgress {
             llvm_fn: self.module.add_function(name, fn_type, None),
@@ -176,9 +175,9 @@ impl Compiler {
             return_type,
             return_value_ptr: None,
 
-            inout_struct_type: None,
             vars_by_name: HashMap::new(),
         });
+
         // Allocate and initialize variables and add them to the HashMap of all
         // variables.
         for (name, ty) in var_types {
@@ -195,34 +194,16 @@ impl Compiler {
         &mut self,
         name: &str,
         return_type: Type,
-        param_names: &[Rc<String>],
+        arg_names: &[Rc<String>],
         var_types: &HashMap<String, Type>,
     ) -> LangResult<()> {
-        // TODO: maybe sort variables (and arguments?) by alignment to reduce
-        // unnecessary padding
-        let param_names: Vec<&String> = param_names.iter().map(|x| &**x).collect();
-        let mut inout_var_names = param_names.clone();
-        let mut alloca_var_names: Vec<&String> = vec![];
-        for (name, _ty) in var_types {
-            if !param_names.contains(&name) {
-                if self.config.enable_debug_mode {
-                    inout_var_names.push(name);
-                } else {
-                    alloca_var_names.push(name);
-                }
-            }
-        }
-
         // Determine the LLVM function type (signature).
-        // The first parameter is a pointer to a struct containing all of the
-        // inout parameters.
-        let inout_var_types = inout_var_names
-            .iter()
-            .map(|&name| &var_types[name])
-            .map(types::get)
-            .collect::<LangResult<Vec<_>>>()?;
-        let inout_struct_type = get_ctx().struct_type(&inout_var_types, false);
-        let inout_struct_ptr_type = inout_struct_type
+        // The first parameter is a pointer to an array containing pointers to
+        // all of the arguments.
+        let args_array_ptr_type = get_ctx()
+            .i8_type()
+            .ptr_type(AddressSpace::Generic)
+            .array_type(arg_names.len() as u32)
             .ptr_type(AddressSpace::Generic)
             .as_basic_type_enum();
         // The second parameter is a pointer to hold the return value.
@@ -230,9 +211,8 @@ impl Compiler {
             .ptr_type(AddressSpace::Generic)
             .as_basic_type_enum();
         // The actual LLVM return value just signals whether there was an error.
-        let fn_type = self
-            .get_llvm_return_type()
-            .fn_type(&[inout_struct_ptr_type, return_ptr_type], false);
+        let fn_arg_types = &[args_array_ptr_type, return_ptr_type];
+        let fn_type = self.get_llvm_return_type().fn_type(fn_arg_types, false);
 
         // Construct the FunctionInProgress.
         self.function = Some(FunctionInProgress {
@@ -242,57 +222,59 @@ impl Compiler {
             return_type,
             return_value_ptr: None,
 
-            inout_struct_type: Some(inout_struct_type),
             vars_by_name: HashMap::new(),
         });
         let entry_bb = self.append_basic_block("entry");
         self.builder().position_at_end(entry_bb);
 
-        // Get pointers to the arguments.
-        let shared_data_ptr = self
-            .llvm_fn()
-            .get_nth_param(0)
-            .unwrap()
-            .into_pointer_value();
-        self.function_mut().return_value_ptr = Some(
-            self.llvm_fn()
-                .get_nth_param(1)
-                .unwrap()
-                .into_pointer_value(),
-        );
+        // Get pointers to the LLVM arguments.
+        let params = self.llvm_fn().get_params();
+        assert_eq!(2, params.len());
+        let args_ptr = params[0].into_pointer_value();
+        self.function_mut().return_value_ptr = Some(params[1].into_pointer_value());
 
-        // Add inout variables to the HashMap of all variables.
-        for (element_idx, &name) in inout_var_names.iter().enumerate() {
-            // Get the byte offset of this field (so that Rust code can read and
-            // modify this element).
-            let byte_offset = self
-                .execution_engine
-                .get_target_data()
-                .offset_of_element(&inout_struct_type, element_idx as u32)
-                .unwrap() as usize;
-            // Get a pointer to the corresponding field in the struct.
-            let ptr = self
+        // Get pointers to arguments and add them to the HashMap of all
+        // variables.
+        for (i, arg_name) in arg_names.iter().enumerate() {
+            let arg_type = var_types[&**arg_name].clone();
+            // Index the array.
+            let arg_ptr_ptr = unsafe {
+                self.builder().build_in_bounds_gep(
+                    args_ptr,
+                    &[const_int(0), const_uint(i as u64)],
+                    &format!("arg{}_ptr_ptr", i),
+                )
+            };
+            let arg_ptr = self
                 .builder()
-                .build_struct_gep(shared_data_ptr, element_idx as u32, name)
-                .unwrap();
-            // Insert this into the main HashMap of all variables.
+                .build_load(arg_ptr_ptr, &format!("arg{}_ptr_untyped", i))
+                .into_pointer_value();
+            // Cast the pointer type.
+            let arg_ptr = self.builder().build_pointer_cast(
+                arg_ptr,
+                types::get(&arg_type)?.ptr_type(AddressSpace::Generic),
+                &format!("arg{}_ptr", i),
+            );
             self.function_mut().vars_by_name.insert(
-                name.clone(),
+                String::clone(arg_name),
                 Variable {
-                    name: name.clone(),
-                    ty: var_types[name].clone(),
-                    is_arg: param_names.contains(&name),
-                    ptr,
-                    inout_byte_offset: Some(byte_offset),
+                    name: String::clone(arg_name),
+                    ty: arg_type,
+                    is_arg: true,
+                    ptr: arg_ptr,
                 },
             );
         }
-        // Allocate and initialize alloca'd variables and add them to the
+
+        // Allocate and initialize all the other variables and add them to the
         // HashMap of all variables.
-        for name in alloca_var_names {
-            let ty = var_types[name].clone();
-            let var = self.alloca_and_init_var(name.clone(), ty)?;
-            self.function_mut().vars_by_name.insert(name.clone(), var);
+        for (var_name, ty) in var_types {
+            if !self.function_mut().vars_by_name.contains_key(var_name) {
+                let var_value = self.alloca_and_init_var(var_name.clone(), ty.clone())?;
+                self.function_mut()
+                    .vars_by_name
+                    .insert(var_name.clone(), var_value);
+            }
         }
 
         Ok(())
@@ -310,7 +292,6 @@ impl Compiler {
             ty,
             ptr,
             is_arg: false,
-            inout_byte_offset: None,
         })
     }
 
@@ -1416,6 +1397,7 @@ impl Compiler {
             ConstValue::Vector(values) => Ok(Value::Vector(VectorType::const_vector(
                 &values.iter().map(|&i| const_int(i)).collect_vec(),
             ))),
+            ConstValue::Pattern(p) => todo!("pattern from const value"),
             ConstValue::IntRange { start, end, step } => Ok({
                 Value::IntRange(VectorType::const_vector(&[
                     const_int(start),
@@ -1484,10 +1466,6 @@ struct FunctionInProgress {
     /// LLVM instruction builder.
     builder: Builder<'static>,
 
-    /// Struct type used to input arguments, output a return value, and debug
-    /// variables if debugging is enabled.
-    inout_struct_type: Option<StructType<'static>>,
-
     /// Return type of this function.
     return_type: Type,
     /// Pointer to the place to put the return value.
@@ -1506,11 +1484,8 @@ pub struct Variable {
     pub ty: Type,
     /// Whether this variable is an argument.
     pub is_arg: bool,
-
     /// The LLVM pointer to where this variable is stored.
     pub ptr: PointerValue<'static>,
-    /// The offset of this variable in `inout_bytes`, if it is stored there.
-    pub inout_byte_offset: Option<usize>,
 }
 
 /// Trait implemented for () and BasicValueEnum.

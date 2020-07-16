@@ -22,6 +22,8 @@ pub type LangInt = i64;
 pub type LangUint = u64;
 /// Number of bits in an NDCA integer.
 pub const INT_BITS: u32 = 64;
+/// Number of bytes in an NDCA integer.
+pub const INT_BYTES: usize = INT_BITS as usize / 8;
 
 /// Rust type used for an NDCA cell state.
 pub type LangCellState = u8;

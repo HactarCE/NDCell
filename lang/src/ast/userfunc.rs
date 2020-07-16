@@ -22,7 +22,7 @@ pub struct UserFunction {
     /// HashMap of variable types (including arguments), indexed by name.
     variables: HashMap<String, Type>,
     /// List of variable names for arguments.
-    param_names: Vec<Rc<String>>,
+    arg_names: Vec<Rc<String>>,
 
     /// Top-level statement block, consisting of StatementRefs to self.statements.
     top_level_statements: StatementBlock,
@@ -56,17 +56,17 @@ impl UserFunction {
         return_type: Type,
     ) -> Self {
         let mut variables = HashMap::new();
-        let mut param_names = vec![];
+        let mut arg_names = vec![];
         for (name, ty) in args {
             variables.insert((*name).clone(), ty);
-            param_names.push(name);
+            arg_names.push(name);
         }
         Self {
             rule_meta,
             name,
             kind: UserFunctionKind::Helper(return_type),
 
-            param_names,
+            arg_names,
             variables,
 
             top_level_statements: vec![],
@@ -108,8 +108,8 @@ impl UserFunction {
     }
 
     /// Returns the names of the parameters of this function.
-    pub fn param_names(&self) -> &[Rc<String>] {
-        &self.param_names
+    pub fn arg_names(&self) -> &[Rc<String>] {
+        &self.arg_names
     }
     /// Returns the kind of this function.
     pub fn kind(&self) -> &UserFunctionKind {
@@ -205,7 +205,7 @@ impl UserFunction {
         compiler.begin_extern_function(
             &self.name,
             self.kind().return_type(),
-            &self.param_names,
+            &self.arg_names,
             &self.variables,
         )?;
 

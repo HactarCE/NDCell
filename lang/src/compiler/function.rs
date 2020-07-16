@@ -2,8 +2,10 @@
 
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::targets::TargetData;
+use itertools::Itertools;
 use std::rc::Rc;
 
+use super::convert::ValueConvert;
 use super::Compiler;
 use crate::errors::*;
 use crate::{ConstValue, RuleMeta, Type};
@@ -18,11 +20,10 @@ pub struct CompiledFunction {
     /// Immutable data that is the same, even if this struct is cloned.
     meta: Rc<CompiledFunctionMeta>,
     /// The JIT function to run. (This has an Rc internally.)
-    jit_fn: JitFunction<'static, unsafe extern "C" fn(*mut u8, *mut u8) -> u32>,
-    /// Bytes used to store arguments and optionally debug values.
-    param_bytes: Vec<u8>,
-    /// Bytes used to store return value.
-    out_bytes: Vec<u8>,
+    jit_fn: JitFunction<'static, unsafe extern "C" fn(*mut *mut u64, *mut u64) -> u32>,
+
+    /// Pointers to argument values, which are passed to the JIT function.
+    arg_pointers: Vec<*mut u64>,
 }
 impl CompiledFunction {
     /// Completes the compilation process and returns a compiled function.
@@ -37,7 +38,7 @@ impl CompiledFunction {
         // Make sure that the LLVM code is valid.
         if !compiler.llvm_fn().verify(true) {
             eprint!(
-                "Error encountered during function compilation; dumping LLVM function to sttderr"
+                "Error encountered during function compilation; dumping LLVM function to stderr"
             );
             compiler.llvm_fn().print_to_stderr();
             internal_error!("LLVM function is invalid! This is a big problem");
@@ -45,75 +46,77 @@ impl CompiledFunction {
         // JIT-compile the function.
         let jit_fn = unsafe { compiler.finish_jit_function() }?;
 
-        let target_data = compiler.target_data();
-
-        // Make a list of all the inout values.
-        let mut inout_values: Vec<ParamValue> = vec![];
-        let mut arg_count = 0;
-        for (name, var) in compiler.vars() {
-            if let Some(byte_offset) = var.inout_byte_offset {
+        // Make a list of all the arguments and the return value.
+        let args = compiler
+            .vars()
+            .iter()
+            .filter_map(|(name, var)| {
                 if var.is_arg {
-                    arg_count += 1;
+                    Some(Parameter {
+                        name: name.clone(),
+                        ty: var.ty.clone(),
+                    })
+                } else {
+                    None
                 }
-                inout_values.push(ParamValue {
-                    name: name.clone(),
-                    ty: var.ty.clone(),
-                    byte_offset,
-                });
-            }
-        }
-        inout_values.sort_by_key(|v| v.byte_offset);
-        // Allocate space for all the inout values.
-        let param_bytes = vec![
-            0_u8;
-            target_data.get_store_size(&compiler.function().inout_struct_type.unwrap())
-                as usize
-        ];
-
-        // Allocate space for the return value.
-        let out_type = compiler.function().return_type.clone();
-        let out_bytes = vec![0_u8; super::types::size_of(&out_type, target_data)];
+            })
+            .collect_vec();
+        let return_type = compiler.function().return_type.clone();
+        let arg_pointers = vec![0 as *mut u64; args.len()];
 
         Ok(Self {
             meta: Rc::new(CompiledFunctionMeta {
                 rule_meta,
                 error_points,
 
-                out_type,
-
-                param_values: inout_values,
-                arg_count,
+                args,
+                return_type,
 
                 execution_engine: compiler.execution_engine,
             }),
             jit_fn,
-            param_bytes,
-            out_bytes,
+
+            arg_pointers,
         })
     }
 
     /// Calls this compiled function and returns its return value.
-    pub fn call(&mut self, args: &[ConstValue]) -> LangResult<ConstValue> {
-        // Set arguments.
-        if args.len() != self.meta.arg_count {
+    pub fn call(&self, args: &mut [ConstValue]) -> LangResult<ConstValue> {
+        // Set argument values.
+        if args.len() != self.meta.args.len() {
             panic!("Wrong number of arguments passed to JIT function",);
         }
-        for (idx, arg) in args.iter().enumerate() {
-            self.param_mut(idx).set(arg);
-        }
+        let target_data = self.meta.target_data();
+        let mut arg_values = args
+            .iter_mut()
+            .map(|v| ValueConvert::from_value(v, target_data))
+            .collect_vec();
+        let mut arg_pointers = arg_values
+            .iter_mut()
+            .map(|v| v.bytes().as_mut_ptr())
+            .collect_vec();
+        let args_pointer = arg_pointers.as_mut_ptr();
+
+        // Make space for the return value.
+        let mut ret_value = ConstValue::default(&self.meta.return_type)?;
+        let mut ret_value_convert = ValueConvert::from_value(&mut ret_value, target_data);
+        let ret_pointer = ret_value_convert.bytes().as_mut_ptr();
 
         // Call the function.
-        let ret: u32 = unsafe {
-            self.jit_fn
-                .call(self.param_bytes.as_mut_ptr(), self.out_bytes.as_mut_ptr())
-        };
+        let ret: u32 = unsafe { self.jit_fn.call(args_pointer, ret_pointer) };
+
+        // Drop arguments AFTER calling the function.
+        drop(arg_values);
+
         if ret == u32::MAX {
             // No error occurred; get the return value from self.out_bytes.
-            Ok(super::convert::bytes_to_value(
-                self.meta.out_type.clone(),
-                &self.out_bytes,
-                self.meta.target_data(),
-            ))
+            ret_value_convert.update_value_from_bytes().map_err(|_| {
+                internal_error_value!(
+                    "Unable to get return value of type {}",
+                    self.meta.return_type
+                )
+            })?;
+            Ok(ret_value)
         } else {
             // An error occurred, and the return value holds the error index.
             Err(self
@@ -127,39 +130,9 @@ impl CompiledFunction {
         }
     }
 
-    /// Returns a mutable reference to the raw bytes used for arguments and
-    /// debug values.
-    ///
-    /// In order to mutate this safely, the bytes must encode valid ConstValues
-    /// in the proper positions matching the LLVM struct.
-    pub unsafe fn param_bytes(&mut self) -> &mut [u8] {
-        &mut self.param_bytes
-    }
-
-    /// Returns the number of argument that this function takes.
+    /// Returns the number of arguments that this function takes.
     pub fn arg_count(&self) -> usize {
-        self.meta.arg_count
-    }
-    /// Returns the number of in/out values of this function (including
-    /// arguments).
-    pub fn param_count(&self) -> usize {
-        self.meta.param_values.len()
-    }
-    /// Returns a mutable reference to an in/out value of this function.
-    pub fn param_mut<'a>(&'a mut self, idx: usize) -> ParamValueMut<'a> {
-        let value = self
-            .meta
-            .param_values
-            .get(idx)
-            .expect("Invalid argument index for JIT function");
-        let start = value.byte_offset;
-        let end = start + super::types::size_of(&value.ty, self.meta.target_data());
-        ParamValueMut {
-            name: &value.name,
-            ty: &value.ty,
-            bytes: &mut self.param_bytes[start..end],
-            target_data: self.meta.target_data(),
-        }
+        self.meta.args.len()
     }
 
     /// Returns the metadata for the rule that this function is a part of.
@@ -176,13 +149,10 @@ struct CompiledFunctionMeta {
     /// List of possible runtime errors.
     error_points: Vec<LangError>,
 
-    /// The return type of this function.
-    out_type: Type,
-
-    /// List of parameters (excluding the return value) for this function.
-    param_values: Vec<ParamValue>,
-    /// The number of arguments.
-    arg_count: usize,
+    /// Arguments.
+    args: Vec<Parameter>,
+    /// Return type.
+    return_type: Type,
 
     /// Execution engine used to execute this function. If there were a way to
     /// get owned or refcounted access to the JIT TargetData, then this wouldn't
@@ -190,61 +160,17 @@ struct CompiledFunctionMeta {
     execution_engine: ExecutionEngine<'static>,
 }
 impl CompiledFunctionMeta {
-    fn arg_values(&self) -> &[ParamValue] {
-        &self.param_values[..self.arg_count]
-    }
     fn target_data(&self) -> &TargetData {
         self.execution_engine.get_target_data()
     }
 }
 
-/// Parameter of a JIT-compiled function.
+/// Parameter of a JIT function.
 #[derive(Debug)]
-struct ParamValue {
+struct Parameter {
     /// Name of the variable that holds this value (displayed by interactive
     /// debugger).
     name: String,
     /// Type of this value.
     ty: Type,
-    /// Byte offset in param_bytes.
-    byte_offset: usize,
-}
-
-/// Mutable reference to a parameter value of a JIT-compiled function.
-#[derive(Debug)]
-pub struct ParamValueMut<'a> {
-    /// Name of the variable that holds this value (displayed by interactive
-    /// debugger).
-    name: &'a str,
-    /// Type of this value.
-    ty: &'a Type,
-    /// Raw bytes that hold this value.
-    bytes: &'a mut [u8],
-    /// LLVM TargetData.
-    target_data: &'a TargetData,
-}
-impl<'a> ParamValueMut<'a> {
-    /// Returns the name of the variable that holds this value.
-    pub fn name(&self) -> &'a str {
-        self.name
-    }
-    /// Returns the type of this value.
-    pub fn ty(&self) -> &'a Type {
-        self.ty
-    }
-    /// Returns the value.
-    pub fn get(&self) -> ConstValue {
-        super::convert::bytes_to_value(self.ty.clone(), self.bytes, self.target_data)
-    }
-    /// Sets the value.
-    ///
-    /// Panics if given a value of the wrong type.
-    pub fn set(&mut self, value: &ConstValue) {
-        assert_eq!(
-            &value.ty(),
-            self.ty,
-            "Wrong type for parameter value in JIT function",
-        );
-        super::convert::value_to_bytes(value, self.bytes, self.target_data);
-    }
 }

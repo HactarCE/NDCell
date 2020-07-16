@@ -85,8 +85,8 @@ const THROWAWAY_VARIABLE: &'static str = "_";
 fn compile_and_run(source_code: Rc<String>) -> LangResult<ConstValue> {
     let rule = ast::make_rule(source_code.clone())?;
     let compiler = compiler::Compiler::new()?;
-    let mut transition_function = rule.transition_function().compile(compiler)?;
-    transition_function.call(&[])
+    let transition_function = rule.transition_function().compile(compiler)?;
+    transition_function.call(&mut [])
 }
 
 #[cfg(test)]

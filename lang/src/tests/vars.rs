@@ -4,7 +4,7 @@ use super::{assert_compile_error, assert_fn_result, compile_test_fn, ConstValue}
 #[test]
 fn test_implicit_return_int() {
     let mut f = compile_test_fn("@function Int test() { }");
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(0)));
 }
 
 /// Tests that undeclared variables produce an error when generating the AST.
@@ -31,7 +31,7 @@ fn test_var_init() {
             return x
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(0)));
 }
 
 /// Tests basic variable usage.
@@ -47,7 +47,7 @@ fn test_variables() {
             }
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(10)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(10)));
 }
 
 /// Tests throwaway variable.
@@ -61,7 +61,7 @@ fn test_throwaway_variable() {
             _ = [1, 2, 3]
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Void));
 
     // Value is always void, even after assigning to it
     let mut f = compile_test_fn(
@@ -70,5 +70,5 @@ fn test_throwaway_variable() {
             return _
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Void));
 }

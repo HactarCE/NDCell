@@ -43,9 +43,9 @@ fn test_userfunc() {
             return x + y
         }
     ";
-    // let args = [ConstValue::Int(10)];
+    // let mut args = [ConstValue::Int(10)];
     // let expected = Ok(ConstValue::Int(13));
-    // assert_threadlocal_fn_result(&USERFUNC_FN, &args, expected);
+    // assert_threadlocal_fn_result(&USERFUNC_FN,&mut args, expected);
     let expected = ("other_func(3, y)", "This feature is unimplemented");
     assert_fn_compile_error(Some("test"), source_code, expected);
 }

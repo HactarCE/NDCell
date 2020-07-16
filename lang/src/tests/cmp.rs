@@ -54,40 +54,40 @@ fn test_multi_comparisons_corner_cases() {
 }
 
 fn test_comparisons(x: LangInt, y: LangInt) {
-    let args = [ConstValue::Int(x), ConstValue::Int(y)];
+    let mut args = [ConstValue::Int(x), ConstValue::Int(y)];
 
     // Equal
     let expected = Ok(ConstValue::Int((x == y).into()));
-    assert_threadlocal_fn_result(&EQL_FN, &args, expected);
+    assert_threadlocal_fn_result(&EQL_FN, &mut args, expected);
 
     // Not equal
     let expected = Ok(ConstValue::Int((x != y).into()));
-    assert_threadlocal_fn_result(&NEQ_FN, &args, expected);
+    assert_threadlocal_fn_result(&NEQ_FN, &mut args, expected);
 
     // Less than
     let expected = Ok(ConstValue::Int((x < y).into()));
-    assert_threadlocal_fn_result(&LT_FN, &args, expected);
+    assert_threadlocal_fn_result(&LT_FN, &mut args, expected);
 
     // Greater than
     let expected = Ok(ConstValue::Int((x > y).into()));
-    assert_threadlocal_fn_result(&GT_FN, &args, expected);
+    assert_threadlocal_fn_result(&GT_FN, &mut args, expected);
 
     // Less than or equal
     let expected = Ok(ConstValue::Int((x <= y).into()));
-    assert_threadlocal_fn_result(&LTE_FN, &args, expected);
+    assert_threadlocal_fn_result(&LTE_FN, &mut args, expected);
 
     // Greater than or equal
     let expected = Ok(ConstValue::Int((x >= y).into()));
-    assert_threadlocal_fn_result(&GTE_FN, &args, expected);
+    assert_threadlocal_fn_result(&GTE_FN, &mut args, expected);
 }
 fn test_multi_comparisons(x: LangInt, y: LangInt, z: LangInt) {
-    let args = [ConstValue::Int(x), ConstValue::Int(y), ConstValue::Int(z)];
+    let mut args = [ConstValue::Int(x), ConstValue::Int(y), ConstValue::Int(z)];
 
     // Equal
     let expected = Ok(ConstValue::Int((x == y && y == z).into()));
-    assert_threadlocal_fn_result(&MULTI_EQ_FN, &args, expected);
+    assert_threadlocal_fn_result(&MULTI_EQ_FN, &mut args, expected);
 
     // Range
     let expected = Ok(ConstValue::Int((x < y && y <= z).into()));
-    assert_threadlocal_fn_result(&RANGE_TEST_FN, &args, expected);
+    assert_threadlocal_fn_result(&RANGE_TEST_FN, &mut args, expected);
 }

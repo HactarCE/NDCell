@@ -13,7 +13,7 @@ fn ok_rect<T>(start: &[LangInt], end: &[LangInt]) -> Result<ConstValue, T> {
 #[test]
 fn test_rectangle_new() {
     let mut f = compile_test_fn("@function Rect3 test() { return Rect3.new }");
-    assert_fn_result(&mut f, &[], ok_rect(&[0; 3], &[0; 3]));
+    assert_fn_result(&mut f, &mut [], ok_rect(&[0; 3], &[0; 3]));
 }
 
 #[test]
@@ -22,7 +22,7 @@ fn test_rectangle_construct() {
     let mut f = compile_test_fn("@function Rect2 test(Vec2 a, Vec2 b) { return a..b }");
     assert_fn_result(
         &mut f,
-        &vec_args(&[1, 10], &[-3, 12]),
+        &mut vec_args(&[1, 10], &[-3, 12]),
         ok_rect(&[1, 10], &[-3, 12]),
     );
 }
@@ -35,7 +35,7 @@ fn test_rectangle_construct_brackets() {
             return [1, 2, 3..10]
         }",
     );
-    assert_fn_result(&mut f, &[], ok_rect(&[1, 2, 3], &[1, 2, 10]));
+    assert_fn_result(&mut f, &mut [], ok_rect(&[1, 2, 3], &[1, 2, 10]));
 }
 
 #[test]
@@ -46,27 +46,27 @@ fn test_rectangle_constructor() {
             return rect3(10)
         }",
     );
-    assert_fn_result(&mut f, &[], ok_rect(&[10; 3], &[10; 3]));
+    assert_fn_result(&mut f, &mut [], ok_rect(&[10; 3], &[10; 3]));
     let mut f = compile_test_fn(
         "@function Rect5 test() {
             return rect5(-2..4)
         }",
     );
-    assert_fn_result(&mut f, &[], ok_rect(&[-2; 5], &[4; 5]));
+    assert_fn_result(&mut f, &mut [], ok_rect(&[-2; 5], &[4; 5]));
 }
 
 #[test]
 fn test_rectangle_construct_dim_infer() {
     // Test that number of dimensions can be inferred.
     let mut f = compile_test_fn("@ndim 4 @function Rect test() { return Vec(10)..Vec(5) }");
-    assert_fn_result(&mut f, &[], ok_rect(&[10; 4], &[5; 4]));
+    assert_fn_result(&mut f, &mut [], ok_rect(&[10; 4], &[5; 4]));
 }
 
 #[test]
 fn test_rectangle_construct_literals() {
     // Test that literals are parsed correctly.
     let mut f = compile_test_fn("@function Rect3 test() { return [1, 2, 3]..[4, 5, 6] }");
-    assert_fn_result(&mut f, &[], ok_rect(&[1, 2, 3], &[4, 5, 6]));
+    assert_fn_result(&mut f, &mut [], ok_rect(&[1, 2, 3], &[4, 5, 6]));
 
     // Test mismatched types.
     let mut f = compile_test_fn(
@@ -79,7 +79,7 @@ fn test_rectangle_construct_literals() {
             assert [10, 20]..[30, 40, 50] == [10, 20, 0]..[30, 40, 50]
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Void));
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn test_rectangle_properties() {
         }",
     );
     let (mut ax, mut ay, mut bx, mut by) = (10, 11, 12, 13);
-    let args = vec_args(&[ax, ay], &[bx, by]);
+    let mut args = vec_args(&[ax, ay], &[bx, by]);
     ax += 5;
     ay += 5;
     ax *= 2;
@@ -107,7 +107,11 @@ fn test_rectangle_properties() {
     by -= 20;
     bx *= 5;
     by *= 6;
-    assert_fn_result(&mut f, &args, Ok(ConstValue::Vector(vec![ax, ay, bx, by])));
+    assert_fn_result(
+        &mut f,
+        &mut args,
+        Ok(ConstValue::Vector(vec![ax, ay, bx, by])),
+    );
 
     // Test axes.
     let mut f = compile_test_fn(
@@ -124,7 +128,7 @@ fn test_rectangle_properties() {
         }",
     );
     let (mut ax, mut ay, mut bx, mut by) = (10, 11, 12, 13);
-    let args = vec_args(&[ax, ay], &[bx, by]);
+    let mut args = vec_args(&[ax, ay], &[bx, by]);
     ax += 5;
     bx += 5;
     ax *= 2;
@@ -133,7 +137,11 @@ fn test_rectangle_properties() {
     by -= 20;
     ay *= 5;
     by *= 6;
-    assert_fn_result(&mut f, &args, Ok(ConstValue::Vector(vec![ax, ay, bx, by])));
+    assert_fn_result(
+        &mut f,
+        &mut args,
+        Ok(ConstValue::Vector(vec![ax, ay, bx, by])),
+    );
 
     // Test direct assignment.
     let mut f = compile_test_fn(
@@ -146,12 +154,12 @@ fn test_rectangle_properties() {
     );
     #[allow(unused_assignments)]
     let (mut ax, ay, mut bx, mut by) = (10, 11, 12, 13);
-    let args = vec_args(&[ax, ay], &[bx, by]);
+    let mut args = vec_args(&[ax, ay], &[bx, by]);
     ax = 100;
     // bx = 120;
     bx = -8;
     by = -8;
-    assert_fn_result(&mut f, &args, ok_rect(&[ax, ay], &[bx, by]));
+    assert_fn_result(&mut f, &mut args, ok_rect(&[ax, ay], &[bx, by]));
 }
 
 #[test]
@@ -195,5 +203,5 @@ fn test_rectangle_ops() {
             assert c == [200..-100, 100..-200]
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Void));
 }

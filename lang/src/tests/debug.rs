@@ -14,16 +14,16 @@ fn test_errors() {
     );
 
     let expected = Err(("error", r#"Error"#));
-    assert_fn_result(&mut f, &[ConstValue::Int(5)], expected);
+    assert_fn_result(&mut f, &mut [ConstValue::Int(5)], expected);
 
     let expected = Err((
         "error 'x is negative! very scary'",
         r#"Error: "x is negative! very scary""#,
     ));
-    assert_fn_result(&mut f, &[ConstValue::Int(-5)], expected);
+    assert_fn_result(&mut f, &mut [ConstValue::Int(-5)], expected);
 
     let expected = Ok(ConstValue::Void);
-    assert_fn_result(&mut f, &[ConstValue::Int(0)], expected);
+    assert_fn_result(&mut f, &mut [ConstValue::Int(0)], expected);
 }
 
 /// Tests assertions.
@@ -37,7 +37,7 @@ fn test_assertions() {
         }",
     );
     let expected = Err(("3 == 2", "Assertion failed"));
-    assert_fn_result(&mut f, &[], expected);
+    assert_fn_result(&mut f, &mut [], expected);
 
     // Test assert with message.
     let mut f = compile_test_fn(
@@ -47,5 +47,5 @@ fn test_assertions() {
         }",
     );
     let expected = Err(("3 == 2", r#"Assertion failed: "ok""#));
-    assert_fn_result(&mut f, &[], expected);
+    assert_fn_result(&mut f, &mut [], expected);
 }

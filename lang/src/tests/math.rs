@@ -9,7 +9,7 @@ use super::{
 #[test]
 fn test_integer_new() {
     let mut f = compile_test_fn("@function Int test() { return Integer.new() }");
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(0)));
 }
 
 thread_local! {
@@ -79,7 +79,7 @@ fn test_bitshift_corner_cases() {
 
 fn test_arithmetic(x: LangInt, y: LangInt) {
     println!("Testing arithmetic with inputs {:?}", (x, y));
-    let args = [ConstValue::Int(x), ConstValue::Int(y)];
+    let mut args = [ConstValue::Int(x), ConstValue::Int(y)];
 
     let overflow_err_msg = "Integer overflow";
     let div_err_msg = if y == 0 {
@@ -93,53 +93,53 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
         .checked_add(y)
         .map(ConstValue::Int)
         .ok_or(("x + y", overflow_err_msg));
-    assert_threadlocal_fn_result(&ADD_FN, &args, expected);
+    assert_threadlocal_fn_result(&ADD_FN, &mut args, expected);
     // Subtraction
     let expected = x
         .checked_sub(y)
         .map(ConstValue::Int)
         .ok_or(("x - y", overflow_err_msg));
-    assert_threadlocal_fn_result(&SUB_FN, &args, expected);
+    assert_threadlocal_fn_result(&SUB_FN, &mut args, expected);
     // Multiplication
     let expected = x
         .checked_mul(y)
         .map(ConstValue::Int)
         .ok_or(("x * y", overflow_err_msg));
-    assert_threadlocal_fn_result(&MUL_FN, &args, expected);
+    assert_threadlocal_fn_result(&MUL_FN, &mut args, expected);
     // Division
     let expected = x
         .checked_div(y)
         .map(ConstValue::Int)
         .ok_or(("x / y", div_err_msg));
-    assert_threadlocal_fn_result(&DIV_FN, &args, expected);
+    assert_threadlocal_fn_result(&DIV_FN, &mut args, expected);
     // Remainder
     let expected = x
         .checked_rem(y)
         .map(ConstValue::Int)
         .ok_or(("x % y", div_err_msg));
-    assert_threadlocal_fn_result(&MOD_FN, &args, expected);
+    assert_threadlocal_fn_result(&MOD_FN, &mut args, expected);
     // Unary plus (no-op)
     let expected = Ok(ConstValue::Int(x));
-    assert_threadlocal_fn_result(&PLUS_FN, &args, expected);
+    assert_threadlocal_fn_result(&PLUS_FN, &mut args, expected);
     // Negation
     let expected = x
         .checked_neg()
         .map(ConstValue::Int)
         .ok_or(("-x", overflow_err_msg));
-    assert_threadlocal_fn_result(&NEG_FN, &args, expected);
+    assert_threadlocal_fn_result(&NEG_FN, &mut args, expected);
 
     // Bitwise OR
     let expected = Ok(ConstValue::Int(x | y));
-    assert_threadlocal_fn_result(&BIT_OR_FN, &args, expected);
+    assert_threadlocal_fn_result(&BIT_OR_FN, &mut args, expected);
     // Bitwise XOR
     let expected = Ok(ConstValue::Int(x ^ y));
-    assert_threadlocal_fn_result(&BIT_XOR_FN, &args, expected);
+    assert_threadlocal_fn_result(&BIT_XOR_FN, &mut args, expected);
     // Bitwise AND
     let expected = Ok(ConstValue::Int(x & y));
-    assert_threadlocal_fn_result(&BIT_AND_FN, &args, expected);
+    assert_threadlocal_fn_result(&BIT_AND_FN, &mut args, expected);
     // Bitwise NOT
     let expected = Ok(ConstValue::Int(!x));
-    assert_threadlocal_fn_result(&BIT_NOT_FN, &args, expected);
+    assert_threadlocal_fn_result(&BIT_NOT_FN, &mut args, expected);
 
     // Shift left
     let expected = y
@@ -148,7 +148,7 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
         .and_then(|y| x.checked_shl(y))
         .map(ConstValue::Int)
         .ok_or(("x << y", div_err_msg));
-    assert_threadlocal_fn_result(&LSH_FN, &args, expected);
+    assert_threadlocal_fn_result(&LSH_FN, &mut args, expected);
     // Shift right arithmetic
     let expected = y
         .try_into()
@@ -156,7 +156,7 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
         .and_then(|y| x.checked_shr(y))
         .map(ConstValue::Int)
         .ok_or(("x >> y", div_err_msg));
-    assert_threadlocal_fn_result(&RSH_ARITH_FN, &args, expected);
+    assert_threadlocal_fn_result(&RSH_ARITH_FN, &mut args, expected);
     // Shift right logical
     let expected = y
         .try_into()
@@ -165,14 +165,14 @@ fn test_arithmetic(x: LangInt, y: LangInt) {
         .map(|i| i as LangInt)
         .map(ConstValue::Int)
         .ok_or(("x >>> y", div_err_msg));
-    assert_threadlocal_fn_result(&RSH_LOGIC_FN, &args, expected);
+    assert_threadlocal_fn_result(&RSH_LOGIC_FN, &mut args, expected);
 
     // Maximum
     let expected = Ok(ConstValue::Int(std::cmp::max(x, y)));
-    assert_threadlocal_fn_result(&MAX_FN, &args, expected);
+    assert_threadlocal_fn_result(&MAX_FN, &mut args, expected);
     // Minimum
     let expected = Ok(ConstValue::Int(std::cmp::min(x, y)));
-    assert_threadlocal_fn_result(&MIN_FN, &args, expected);
+    assert_threadlocal_fn_result(&MIN_FN, &mut args, expected);
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn test_abs() {
         } else {
             expected = Ok(ConstValue::Void);
         }
-        assert_fn_result(&mut f, &[ConstValue::Int(x)], expected);
+        assert_fn_result(&mut f, &mut [ConstValue::Int(x)], expected);
     }
 }
 
@@ -215,7 +215,7 @@ fn test_min_and_max() {
         let min = min(min(x, y), min(z, w));
         assert_fn_result(
             &mut f,
-            &[ConstValue::Vector(vec![x, y, z, w])],
+            &mut [ConstValue::Vector(vec![x, y, z, w])],
             Ok(ConstValue::Vector(vec![max, min])),
         )
     }
@@ -247,7 +247,7 @@ fn test_min_and_max() {
         let c = ConstValue::Vector(vec![cx, cy, cz]);
         assert_fn_result(
             &mut f,
-            &[a, b, c],
+            &mut [a, b, c],
             Ok(ConstValue::Vector(vec![
                 max_x, max_y, max_z, min_x, min_y, min_z,
             ])),

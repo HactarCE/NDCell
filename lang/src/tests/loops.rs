@@ -61,7 +61,7 @@ fn test_iter_vec() {
             assert count == v.len
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Void));
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(10)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(10)));
 
     // Ascending, step = +2
     let mut f = compile_test_fn(
@@ -90,7 +90,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(5)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(5)));
 
     // Ascending, step = 0
     let mut f = compile_test_fn(
@@ -102,7 +102,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(0)));
 
     // Ascending, step = -1
     let mut f = compile_test_fn(
@@ -114,7 +114,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(0)));
 
     // Descending, step = -1
     let mut f = compile_test_fn(
@@ -127,7 +127,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(10)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(10)));
 
     // Descending, step = -2
     let mut f = compile_test_fn(
@@ -140,7 +140,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(5)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(5)));
 
     // Descending, step = 0
     let mut f = compile_test_fn(
@@ -152,7 +152,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(0)));
 
     // Descending, step = +1
     let mut f = compile_test_fn(
@@ -164,7 +164,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(0)));
 
     // start = end, step = +1
     let mut f = compile_test_fn(
@@ -177,7 +177,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(1)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(1)));
 
     // start = end, step = -1
     let mut f = compile_test_fn(
@@ -190,7 +190,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(1)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(1)));
 
     // start = end, step = 0
     let mut f = compile_test_fn(
@@ -202,7 +202,7 @@ fn test_iter_int_range() {
             return count
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Int(0)));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Int(0)));
 }
 
 #[test]
@@ -231,7 +231,7 @@ fn test_iter_rectangle() {
           assert total == 5 * 41 * 401
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Void));
 }
 
 #[test]
@@ -254,7 +254,7 @@ fn test_iter_cell_state_filter() {
           assert total == 5
         }",
     );
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Void));
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Void));
 }
 
 #[test]
@@ -304,5 +304,5 @@ fn test_iter_break_and_continue() {
             }
         }
     }
-    assert_fn_result(&mut f, &[], Ok(ConstValue::Vector(expected)))
+    assert_fn_result(&mut f, &mut [], Ok(ConstValue::Vector(expected)))
 }

@@ -13,7 +13,7 @@ fn test_ints_to_bytes() {
     );
     assert_fn_result(
         &mut f,
-        &[
+        &mut [
             ConstValue::Int(10),
             ConstValue::Int(-20),
             ConstValue::Int(30),
@@ -37,7 +37,7 @@ fn test_mixed_to_bytes() {
     );
     assert_fn_result(
         &mut f,
-        &[
+        &mut [
             ConstValue::Int(10),
             ConstValue::CellState(20),
             ConstValue::Vector((-7..=-1).collect()),

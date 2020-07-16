@@ -26,22 +26,22 @@ fn test_cell_state_filter_ops() {
             let arg2 = ConstValue::CellStateFilter(f2.clone());
             assert_fn_result(
                 &mut f,
-                &[arg1.clone(), arg2.clone(), ConstValue::Int(0)],
+                &mut [arg1.clone(), arg2.clone(), ConstValue::Int(0)],
                 Ok(ConstValue::CellStateFilter(f1.clone() & f2.clone())),
             );
             assert_fn_result(
                 &mut f,
-                &[arg1.clone(), arg2.clone(), ConstValue::Int(1)],
+                &mut [arg1.clone(), arg2.clone(), ConstValue::Int(1)],
                 Ok(ConstValue::CellStateFilter(f1.clone() | f2.clone())),
             );
             assert_fn_result(
                 &mut f,
-                &[arg1.clone(), arg2.clone(), ConstValue::Int(2)],
+                &mut [arg1.clone(), arg2.clone(), ConstValue::Int(2)],
                 Ok(ConstValue::CellStateFilter(f1.clone() ^ f2.clone())),
             );
             assert_fn_result(
                 &mut f,
-                &[arg1.clone(), arg2.clone(), ConstValue::Int(3)],
+                &mut [arg1.clone(), arg2.clone(), ConstValue::Int(3)],
                 Ok(ConstValue::CellStateFilter(!f1.clone())),
             );
         }
@@ -65,7 +65,7 @@ fn test_cell_state_filter_construct_from_cell_state() {
             }
             assert_fn_result(
                 &mut f,
-                &[ConstValue::CellState(cell_state)],
+                &mut [ConstValue::CellState(cell_state)],
                 Ok(ConstValue::CellStateFilter(
                     !CellStateFilter::single_cell_state(state_count, cell_state),
                 )),
@@ -95,7 +95,7 @@ fn test_cell_state_filter_construct_from_cell_state() {
             }
             assert_fn_result(
                 &mut f,
-                &[
+                &mut [
                     ConstValue::CellState(cell_state1),
                     ConstValue::CellState(cell_state2),
                 ],

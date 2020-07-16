@@ -9,9 +9,9 @@ fn test_condition_values() {
                 else { return 20 }
             }",
         );
-        let args = [ConstValue::Int(cond)];
+        let mut args = [ConstValue::Int(cond)];
         let expected = Ok(ConstValue::Int(if cond != 0 { 10 } else { 20 }));
-        assert_fn_result(&mut f, &args, expected);
+        assert_fn_result(&mut f, &mut args, expected);
     }
 }
 
@@ -68,7 +68,7 @@ fn test_if_statement() {
         let expected_ret = ConstValue::Int(expected_ret.unwrap_or(0));
 
         let mut function = compile_test_fn(&source_code);
-        assert_fn_result(&mut function, &[], Ok(expected_ret));
+        assert_fn_result(&mut function, &mut [], Ok(expected_ret));
     }
 }
 
@@ -79,7 +79,7 @@ fn test_unless_statement() {
     for &x in test_values() {
         assert_fn_result(
             &mut f,
-            &[ConstValue::Int(x)],
+            &mut [ConstValue::Int(x)],
             Ok(ConstValue::Int(if x != 0 { 10 } else { 5 })),
         )
     }

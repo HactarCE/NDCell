@@ -65,7 +65,7 @@ fn assert_fn_compile_error(fn_name: Option<&str>, source_code: &str, expected: (
 /// threadlocal!().
 fn assert_threadlocal_fn_result(
     function: &'static LocalKey<CompiledFunction>,
-    args: &[ConstValue],
+    args: &mut [ConstValue],
     expected: Result<ConstValue, (&str, &str)>,
 ) {
     let mut function = function.with(|f| f.clone());
@@ -76,7 +76,7 @@ fn assert_threadlocal_fn_result(
 /// it produces the correct output (whether Err or Ok).
 fn assert_fn_result(
     function: &mut CompiledFunction,
-    args: &[ConstValue],
+    args: &mut [ConstValue],
     expected: Result<ConstValue, (&str, &str)>,
 ) {
     let expected_result = expected.map_err(|(a, b)| (a.to_owned(), b.to_owned()));

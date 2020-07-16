@@ -8,9 +8,9 @@ fn test_bool_convert() {
         }",
     );
     for &x in test_values() {
-        let args = [ConstValue::Int(x)];
+        let mut args = [ConstValue::Int(x)];
         let expected = Ok(ConstValue::Int((x != 0) as LangInt));
-        assert_fn_result(&mut f, &args, expected);
+        assert_fn_result(&mut f, &mut args, expected);
     }
 }
 
@@ -32,7 +32,7 @@ fn test_bool_ops() {
     );
     for &x in test_values() {
         for &y in test_values() {
-            let args = [ConstValue::Int(x), ConstValue::Int(y)];
+            let mut args = [ConstValue::Int(x), ConstValue::Int(y)];
             let expected = Ok(ConstValue::Vector(vec![
                 (x == 0) as LangInt,               // not x
                 (x != 0) as LangInt,               // not not x
@@ -43,7 +43,7 @@ fn test_bool_ops() {
                 (x == 0 || y != 0) as LangInt,     // not x or  y
                 ((x == 0) != (y != 0)) as LangInt, // not x xor y
             ]));
-            assert_fn_result(&mut f, &args, expected);
+            assert_fn_result(&mut f, &mut args, expected);
         }
     }
 }

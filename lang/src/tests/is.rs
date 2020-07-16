@@ -18,7 +18,7 @@ fn test_int_is_range() {
         // );
         assert_fn_result(
             &mut f,
-            &[
+            &mut [
                 ConstValue::Int(i),
                 ConstValue::IntRange { start, end, step },
             ],
@@ -44,7 +44,7 @@ fn test_int_is_rectangle() {
         // );
         assert_fn_result(
             &mut f,
-            &[
+            &mut [
                 ConstValue::Int(i),
                 ConstValue::Rectangle(start.clone(), end.clone()),
             ],
@@ -74,7 +74,7 @@ fn test_vec_is_range() {
         // );
         assert_fn_result(
             &mut f,
-            &[
+            &mut [
                 ConstValue::Vector(vec![x, y, z]),
                 ConstValue::IntRange { start, end, step },
             ],
@@ -108,7 +108,7 @@ fn test_vec_is_rectangle() {
     for (v, start, end) in iproduct!(&test_vec2s, &test_vec2s, &test_vec2s) {
         assert_fn_result(
             &mut f,
-            &[
+            &mut [
                 ConstValue::Vector(v.clone()),
                 ConstValue::Rectangle(start.clone(), end.clone()),
             ],
@@ -128,7 +128,7 @@ fn test_vec_is_rectangle() {
     for (v, start, end) in iproduct!(&test_vec3s, &test_vec2s, &test_vec2s) {
         assert_fn_result(
             &mut f,
-            &[
+            &mut [
                 ConstValue::Vector(v.clone()),
                 ConstValue::Rectangle(start.clone(), end.clone()),
             ],
@@ -150,7 +150,7 @@ fn test_vec_is_rectangle() {
     for (v, start, end) in iproduct!(&test_vec2s, &test_vec3s, &test_vec3s) {
         assert_fn_result(
             &mut f,
-            &[
+            &mut [
                 ConstValue::Vector(v.clone()),
                 ConstValue::Rectangle(start.clone(), end.clone()),
             ],
@@ -184,7 +184,7 @@ fn test_cell_state_filter_membership() {
             }
             assert_fn_result(
                 &mut f,
-                &[
+                &mut [
                     ConstValue::CellState(cell_state),
                     ConstValue::CellStateFilter(CellStateFilter::none(state_count)),
                 ],
@@ -192,7 +192,7 @@ fn test_cell_state_filter_membership() {
             );
             assert_fn_result(
                 &mut f,
-                &[
+                &mut [
                     ConstValue::CellState(cell_state),
                     ConstValue::CellStateFilter(CellStateFilter::single_cell_state(
                         state_count,

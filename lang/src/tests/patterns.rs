@@ -48,6 +48,30 @@ fn test_square_pattern_indexing() {
     }
 }
 
+#[test]
+fn test_pattern_iter() {
+    let mut f = compile_transition_fn(
+        "@states 10
+        @transition {
+            i = 1
+            for cell in nbhd {
+                assert cell != #0
+                if cell != #(i) {
+                    become cell
+                }
+                i += 1
+            }
+            assert i == 10
+            become #0
+        }",
+    );
+    assert_fn_result(
+        &mut f,
+        &mut [demo_pattern_3x3()],
+        Ok(ConstValue::CellState(0)),
+    );
+}
+
 fn demo_pattern_3x3() -> ConstValue {
     ConstValue::Pattern(Pattern {
         cells: (1..10).collect(),

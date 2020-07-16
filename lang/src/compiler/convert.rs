@@ -55,23 +55,20 @@ impl<'a> ValueConvert<'a> {
                 let start_ptr = p.cells.as_ptr();
                 let origin_offset = p.shape.get_unchecked_flattened_idx(&vec![0; p.ndim()]);
                 let origin_ptr = start_ptr.wrapping_offset(origin_offset);
-                std::iter::empty()
+                let strides = p.shape.strides();
+                let mut first_two_elements = std::iter::empty()
                     .pad_using(offsets[0], |_| 0_u8)
                     .chain((origin_ptr as usize).to_ne_bytes().to_vec())
                     .pad_using(offsets[1], |_| 0_u8)
-                    .chain(
-                        p.shape
-                            .strides()
-                            .iter()
-                            .flat_map(|i| i.to_ne_bytes().to_vec()),
-                    )
-                    // It doesn't matter if we include the LUT even when it's
-                    // not used, because even if fill_u64_slice() writes it the
-                    // JIT code will just ignore it (since it's not expecting a
-                    // LUT).
-                    .pad_using(offsets[2], |_| 0_u8)
-                    .chain(std::iter::once(p.lut.unwrap_or_default()))
-                    .fill_u64_slice(&mut bytes);
+                    .chain(strides.iter().flat_map(|i| i.to_ne_bytes().to_vec()));
+                if let Some(lut) = p.lut {
+                    first_two_elements
+                        .pad_using(offsets[2], |_| 0_u8)
+                        .chain(std::iter::once(lut))
+                        .fill_u64_slice(&mut bytes);
+                } else {
+                    first_two_elements.fill_u64_slice(&mut bytes);
+                }
             }
             ConstValue::IntRange { start, end, step } => std::iter::empty()
                 .chain(&start.to_ne_bytes())

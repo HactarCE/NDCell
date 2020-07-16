@@ -13,6 +13,7 @@ mod funcs;
 mod is;
 mod loops;
 mod math;
+mod patterns;
 mod ranges;
 mod rects;
 mod types;
@@ -23,7 +24,7 @@ mod vecs;
 use crate::ast;
 use crate::compiler::{CompiledFunction, Compiler};
 use crate::errors::CompleteLangResult;
-use crate::types::{CellStateFilter, LangInt};
+use crate::types::{CellStateFilter, LangInt, Pattern, PatternShape};
 use crate::ConstValue;
 use values::*;
 
@@ -94,6 +95,11 @@ fn assert_fn_result(
 /// Compiles the function named "test" in the given source code, panicking if compilation fails.
 fn compile_test_fn(source_code: &str) -> CompiledFunction {
     compile_fn(Some("test"), source_code).expect("Compilation failed")
+}
+
+/// Compiles the transition function in the given source code, panicking if compilation fails.
+fn compile_transition_fn(source_code: &str) -> CompiledFunction {
+    compile_fn(None, source_code).expect("Compilation failed")
 }
 
 /// Compiles the specified function of the given source code. If the function

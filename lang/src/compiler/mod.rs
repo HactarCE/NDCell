@@ -1404,7 +1404,7 @@ impl Compiler {
         // Use the result of that as a pointer offset.
         let cell_ptr = unsafe {
             self.builder()
-                .build_gep(cells_ptr, &[ptr_offset], "cellPtr")
+                .build_gep(cells_ptr, &[const_int(0), ptr_offset], "cellPtr")
         };
         // And finally load from that pointer.
         Ok(self

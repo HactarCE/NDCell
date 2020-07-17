@@ -22,3 +22,4 @@ send_wrapper = "0.4"
 simple_logger = "1.0"
 
 ndcell_core = { path = "../core" }
+ndcell_lang = { path = "../lang" }

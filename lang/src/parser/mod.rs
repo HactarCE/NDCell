@@ -1,6 +1,6 @@
 //! Functions for producing a parse tree.
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[macro_use]
 mod macros;
@@ -16,7 +16,7 @@ use crate::Spanned;
 use feeder::TokenFeeder;
 
 /// Parses the given tokens and returns a ParseTree.
-pub fn parse(source_code: Rc<String>, tokens: &[Token]) -> LangResult<ParseTree> {
+pub fn parse(source_code: Arc<String>, tokens: &[Token]) -> LangResult<ParseTree> {
     let mut directives: HashMap<Directive, Vec<Spanned<DirectiveContents>>> = HashMap::new();
     // When parsing, span information is attached to the whole directive (name
     // and contents). But because we only store the name of each directive once

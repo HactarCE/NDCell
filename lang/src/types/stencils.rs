@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::{CellStateFilter, LangCellState};
 
@@ -16,7 +16,7 @@ pub struct Stencil {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum StencilCell {
     Number(LangCellState),
-    Ident(Rc<String>),
+    Ident(Arc<String>),
     Other(char),
 }
 impl StencilCell {

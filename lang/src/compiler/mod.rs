@@ -17,7 +17,7 @@
 
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 use thread_local::ThreadLocal;
 
 use inkwell::basic_block::BasicBlock;
@@ -194,7 +194,7 @@ impl Compiler {
         &mut self,
         name: &str,
         return_type: Type,
-        arg_names: &[Rc<String>],
+        arg_names: &[Arc<String>],
         var_types: &HashMap<String, Type>,
     ) -> LangResult<()> {
         // Determine the LLVM function type (signature).

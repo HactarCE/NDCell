@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use std::convert::TryInto;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::*;
 use crate::lexer::*;
@@ -65,7 +65,7 @@ impl TokenEater for StencilCells {
             None => tf.expected(self),
             Some(TokenClass::Keyword(_)) => tf.err(ReservedWord),
             Some(TokenClass::String { .. }) => tf.expected(self),
-            Some(TokenClass::Ident(s)) => Ok(vec![StencilCell::Ident(Rc::new(s.to_owned()))]),
+            Some(TokenClass::Ident(s)) => Ok(vec![StencilCell::Ident(Arc::new(s.to_owned()))]),
             Some(TokenClass::Integer(i)) => Ok(vec![StencilCell::Number(
                 i.try_into().map_err(|_| tf.error(CellStateOutOfRange))?,
             )]),
@@ -95,7 +95,7 @@ impl TokenEater for QuotedStencilCell {
     fn eat(&self, tf: &mut TokenFeeder<'_>) -> LangResult<Self::Output> {
         match tf.next_class() {
             None => tf.expected(self),
-            Some(TokenClass::Ident(s)) => Ok(StencilCell::Ident(Rc::new(s.to_owned()))),
+            Some(TokenClass::Ident(s)) => Ok(StencilCell::Ident(Arc::new(s.to_owned()))),
             Some(TokenClass::String {
                 prefix: None,
                 quote: '\'',

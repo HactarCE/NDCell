@@ -3,7 +3,7 @@
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::UserFunction;
 use crate::errors::*;
@@ -19,7 +19,7 @@ use LangErrorMsg::{
 #[derive(Debug)]
 pub struct Rule {
     /// Metadata (e.g. source code, cell state information).
-    meta: Rc<RuleMeta>,
+    meta: Arc<RuleMeta>,
     /// Helper functions.
     helper_functions: HashMap<String, UserFunction>,
     /// Transition function used to simulate this rule.
@@ -83,7 +83,7 @@ impl TryFrom<ParseTree> for Rule {
         };
 
         let mut meta = RuleMeta::from_rule_description(
-            Rc::clone(&parse_tree.source_code),
+            Arc::clone(&parse_tree.source_code),
             meta::RuleDescription {
                 ndim,
                 radius,
@@ -117,7 +117,7 @@ impl TryFrom<ParseTree> for Rule {
         }
 
         // The rule metadata is set in stone at this point.
-        let meta = Rc::new(meta);
+        let meta = Arc::new(meta);
 
         // Build helper functions.
         let helper_functions = helper_function_parse_trees

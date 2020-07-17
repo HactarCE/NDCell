@@ -11,7 +11,7 @@
 //! (UserFunction implements Index<StatementRef> and Index<ExprRef> for this.)
 
 use std::convert::TryFrom;
-use std::rc::Rc;
+use std::sync::Arc;
 
 mod args;
 mod expressions;
@@ -27,7 +27,7 @@ pub use userfunc::*;
 
 use crate::errors::*;
 
-pub fn make_rule(source_code: Rc<String>) -> LangResult<Rule> {
+pub fn make_rule(source_code: Arc<String>) -> LangResult<Rule> {
     let tokens = super::lexer::tokenize(&source_code)?;
     let parse_tree = super::parser::parse(source_code.clone(), &tokens)?;
     Rule::try_from(parse_tree)

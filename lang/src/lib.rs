@@ -84,15 +84,6 @@ const THROWAWAY_VARIABLE: &'static str = "_";
 //     Ok(())
 // }
 
-/// Runs the given rule's transition function using the compiler and returns the
-/// result.
-fn compile_and_run(source_code: Rc<String>) -> LangResult<ConstValue> {
-    let rule = ast::make_rule(source_code.clone())?;
-    let compiler = compiler::Compiler::new()?;
-    let transition_function = rule.transition_function().compile(compiler)?;
-    transition_function.call(&mut [])
-}
-
 #[cfg(test)]
 #[macro_use]
 extern crate itertools;

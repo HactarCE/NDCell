@@ -1,6 +1,6 @@
 //! NDCA black-box test suite.
 
-use std::rc::Rc;
+use std::sync::Arc;
 use std::thread::LocalKey;
 
 mod bools;
@@ -118,5 +118,5 @@ fn compile_fn(fn_name: Option<&str>, source_code: &str) -> CompleteLangResult<Co
 
 /// Constructs a Rule AST from the given source code.
 fn make_ast(source_code: &str) -> CompleteLangResult<ast::Rule> {
-    ast::make_rule(Rc::new(source_code.to_owned())).map_err(|e| e.with_source(source_code))
+    ast::make_rule(Arc::new(source_code.to_owned())).map_err(|e| e.with_source(source_code))
 }

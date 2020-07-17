@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::types::{FnSignature, PatternShape};
 use crate::{DEFAULT_NBHD_RADIUS, DEFAULT_NDIM, DEFAULT_STATE_COUNT};
@@ -11,7 +11,7 @@ use crate::{DEFAULT_NBHD_RADIUS, DEFAULT_NDIM, DEFAULT_STATE_COUNT};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuleMeta {
     /// Raw source code.
-    pub source_code: Rc<String>,
+    pub source_code: Arc<String>,
     /// Map of names and signatures of helper functions.
     pub helper_function_signatures: HashMap<String, FnSignature>,
 
@@ -31,12 +31,12 @@ pub struct RuleMeta {
 }
 impl Default for RuleMeta {
     fn default() -> Self {
-        Self::from_rule_description(Rc::new(String::new()), RuleDescription::default())
+        Self::from_rule_description(Arc::new(String::new()), RuleDescription::default())
     }
 }
 impl RuleMeta {
     /// Constructs new rule metadata from a rule description.
-    pub fn from_rule_description(source_code: Rc<String>, desc: RuleDescription) -> Self {
+    pub fn from_rule_description(source_code: Arc<String>, desc: RuleDescription) -> Self {
         let ndim = desc.ndim.unwrap_or(DEFAULT_NDIM);
         let radius = desc.radius.unwrap_or(DEFAULT_NBHD_RADIUS);
         let nbhd_shape = PatternShape::moore(ndim, radius);

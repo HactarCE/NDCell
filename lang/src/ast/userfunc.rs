@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Index;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::{expressions, statements, Expr, Statement, StatementBlock};
 use crate::compiler::{const_int, CompiledFunction, Compiler, Value};
@@ -13,16 +13,16 @@ use LangErrorMsg::{InternalError, UseOfUninitializedVariable};
 #[derive(Debug, Default)]
 pub struct UserFunction {
     /// Metadata of the rule that this user function is part of.
-    rule_meta: Rc<RuleMeta>,
+    rule_meta: Arc<RuleMeta>,
     /// Name of this function.
-    name: Rc<String>,
+    name: Arc<String>,
     /// Kind of this function (including return type).
     kind: UserFunctionKind,
 
     /// HashMap of variable types (including arguments), indexed by name.
     variables: HashMap<String, Type>,
     /// List of variable names for arguments.
-    arg_names: Vec<Rc<String>>,
+    arg_names: Vec<Arc<String>>,
 
     /// Top-level statement block, consisting of StatementRefs to self.statements.
     top_level_statements: StatementBlock,
@@ -35,15 +35,15 @@ pub struct UserFunction {
 }
 impl UserFunction {
     /// Constructs a new transition function.
-    pub fn new_transition_function(rule_meta: Rc<RuleMeta>) -> Self {
+    pub fn new_transition_function(rule_meta: Arc<RuleMeta>) -> Self {
         let nbhd_type = Type::Pattern {
             shape: rule_meta.nbhd_shape.clone(),
             has_lut: rule_meta.has_cell_state_luts,
         };
         let mut ret = Self::new_helper_function(
             rule_meta,
-            Rc::new("transition".to_owned()),
-            vec![(Rc::new("neighborhood".to_owned()), nbhd_type.clone())],
+            Arc::new("transition".to_owned()),
+            vec![(Arc::new("neighborhood".to_owned()), nbhd_type.clone())],
             Type::CellState,
         );
         ret.kind = UserFunctionKind::Transition;
@@ -53,9 +53,9 @@ impl UserFunction {
     }
     /// Constructs a new helper function that returns the given type.
     pub fn new_helper_function(
-        rule_meta: Rc<RuleMeta>,
-        name: Rc<String>,
-        args: Vec<(Rc<String>, Type)>,
+        rule_meta: Arc<RuleMeta>,
+        name: Arc<String>,
+        args: Vec<(Arc<String>, Type)>,
         return_type: Type,
     ) -> Self {
         let mut variables = HashMap::new();
@@ -83,7 +83,7 @@ impl UserFunction {
         }
     }
     pub fn build_helper_function(
-        rule_meta: &Rc<RuleMeta>,
+        rule_meta: &Arc<RuleMeta>,
         helper_func: parser::HelperFunc,
     ) -> LangResult<Self> {
         let mut ret = Self::new_helper_function(
@@ -102,7 +102,7 @@ impl UserFunction {
 
     /// Returns the metadata associated with the rule that this function is a
     /// member of.
-    pub fn rule_meta(&self) -> &Rc<RuleMeta> {
+    pub fn rule_meta(&self) -> &Arc<RuleMeta> {
         &self.rule_meta
     }
     /// Returns the name of this function.
@@ -111,7 +111,7 @@ impl UserFunction {
     }
 
     /// Returns the names of the parameters of this function.
-    pub fn arg_names(&self) -> &[Rc<String>] {
+    pub fn arg_names(&self) -> &[Arc<String>] {
         &self.arg_names
     }
     /// Returns the kind of this function.

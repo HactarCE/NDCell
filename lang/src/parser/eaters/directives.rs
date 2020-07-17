@@ -1,5 +1,5 @@
 use std::convert::TryFrom;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::*;
 use crate::lexer::*;
@@ -85,7 +85,7 @@ impl_display!(
     "function parameter (type followed by parameter name)",
 );
 impl TokenEater for FunctionParameter {
-    type Output = (Spanned<TypeToken>, Spanned<Rc<String>>);
+    type Output = (Spanned<TypeToken>, Spanned<Arc<String>>);
     fn might_match(&self, tf: TokenFeeder<'_>) -> bool {
         TypeName.might_match(tf)
     }

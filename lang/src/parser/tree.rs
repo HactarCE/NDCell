@@ -3,7 +3,7 @@
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::errors::*;
 use crate::lexer::{AssignmentToken, ComparisonToken, OperatorToken, TypeToken};
@@ -15,7 +15,7 @@ use LangErrorMsg::RepeatDirective;
 #[derive(Debug, Clone)]
 pub struct ParseTree {
     /// Raw source code.
-    pub source_code: Rc<String>,
+    pub source_code: Arc<String>,
     /// Directives and their contents.
     ///
     /// Note that the span on `DirectiveContents` represents the span of the
@@ -121,9 +121,9 @@ pub struct HelperFunc {
     /// Type returned by the helper function.
     pub return_type: Spanned<TypeToken>,
     /// Name of the helper function.
-    pub name: Spanned<Rc<String>>,
+    pub name: Spanned<Arc<String>>,
     /// Arguments passed to the helper function (name and type).
-    pub params: Vec<Spanned<(Spanned<TypeToken>, Spanned<Rc<String>>)>>,
+    pub params: Vec<Spanned<(Spanned<TypeToken>, Spanned<Arc<String>>)>>,
     /// Body of the helper function.
     pub body: Spanned<StatementBlock>,
 }
@@ -204,7 +204,7 @@ pub enum Expr {
     /// Integer literal.
     Int(i64),
     /// Identifier.
-    Ident(Rc<String>),
+    Ident(Arc<String>),
     /// Type name.
     TypeName(TypeToken),
     /// Vector literal.
@@ -259,7 +259,7 @@ pub enum Expr {
         /// The object whose attribute to access.
         object: Box<Spanned<Expr>>,
         /// The name of the attribute to access.
-        attribute: Spanned<Rc<String>>,
+        attribute: Spanned<Arc<String>>,
     },
     /// Function call.
     FnCall {
@@ -286,7 +286,7 @@ pub struct StringLiteral {
     /// The quote character used (either single quote or double quote).
     pub quote: char,
     /// The contents of the string.
-    pub contents: Rc<String>,
+    pub contents: Arc<String>,
 }
 
 /// Stencil binding node in the parse tree.

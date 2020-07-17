@@ -1,6 +1,6 @@
 //! Miscellaneous functions.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::FuncConstructor;
 use crate::ast::{AssignableFunction, FuncCallInfo, FuncCallInfoMut, Function};
@@ -14,14 +14,14 @@ use LangErrorMsg::Unimplemented;
 #[derive(Debug)]
 pub struct GetVar {
     /// Name of variable to get.
-    var_name: Rc<String>,
+    var_name: Arc<String>,
     /// Type of this variable.
     var_type: Type,
 }
 impl GetVar {
     /// Returns a constructor for a new GetVar instance with the given variable
     /// name.
-    pub fn with_name(var_name: Rc<String>) -> FuncConstructor {
+    pub fn with_name(var_name: Arc<String>) -> FuncConstructor {
         Box::new(|info| {
             let var_type;
             if &**var_name == crate::THROWAWAY_VARIABLE {
@@ -70,14 +70,14 @@ impl AssignableFunction for GetVar {
 #[derive(Debug)]
 pub struct CallUserFn {
     /// Name of user function to call.
-    func_name: Rc<String>,
+    func_name: Arc<String>,
     /// Signature of the function.
     signature: FnSignature,
 }
 impl CallUserFn {
     /// Returns a constructor for a new CallUserFn instance that calls the
     /// function with the given name.
-    pub fn with_name(func_name: Rc<String>) -> FuncConstructor {
+    pub fn with_name(func_name: Arc<String>) -> FuncConstructor {
         Box::new(|info| {
             let signature = info
                 .userfunc

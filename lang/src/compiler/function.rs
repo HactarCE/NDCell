@@ -1,9 +1,8 @@
 //! Compiled user function.
 
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
-use inkwell::targets::TargetData;
 use itertools::Itertools;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::convert::ValueConvert;
 use super::Compiler;
@@ -17,13 +16,25 @@ use crate::{ConstValue, RuleMeta, Type};
 /// function multiple times simultaneously.
 #[derive(Debug, Clone)]
 pub struct CompiledFunction {
-    /// Immutable data that is the same, even if this struct is cloned.
-    meta: Rc<CompiledFunctionMeta>,
-    /// The JIT function to run. (This has an Rc internally.)
-    jit_fn: JitFunction<'static, unsafe extern "C" fn(*mut *mut u64, *mut u64) -> u32>,
+    /// Rule metadata.
+    rule_meta: Arc<RuleMeta>,
+    /// List of possible runtime errors.
+    error_points: Vec<LangError>,
+
+    /// Arguments.
+    args: Vec<Argument>,
+    /// Return type.
+    return_type: Type,
 
     /// Pointers to argument values, which are passed to the JIT function.
     arg_pointers: Vec<*mut u64>,
+
+    /// Execution engine used to execute this function. If there were a way to
+    /// get owned or refcounted access to the JIT TargetData, then this wouldn't
+    /// be necesssary.
+    execution_engine: ExecutionEngine<'static>,
+    /// The JIT function to run.
+    jit_fn: JitFunction<'static, unsafe extern "C" fn(*mut *mut u64, *mut u64) -> u32>,
 }
 impl CompiledFunction {
     /// Completes the compilation process and returns a compiled function.
@@ -31,7 +42,7 @@ impl CompiledFunction {
     /// The only reason the compiler is owned rather than mutably borrowed is to
     /// get a long-lasting reference to the TargetData.
     pub fn try_new(
-        rule_meta: Rc<RuleMeta>,
+        rule_meta: Arc<RuleMeta>,
         error_points: Vec<LangError>,
         compiler: Compiler,
     ) -> LangResult<Self> {
@@ -52,7 +63,7 @@ impl CompiledFunction {
             .iter()
             .filter_map(|(name, var)| {
                 if var.is_arg {
-                    Some(Parameter {
+                    Some(Argument {
                         name: name.clone(),
                         ty: var.ty.clone(),
                     })
@@ -65,28 +76,26 @@ impl CompiledFunction {
         let arg_pointers = vec![0 as *mut u64; args.len()];
 
         Ok(Self {
-            meta: Rc::new(CompiledFunctionMeta {
-                rule_meta,
-                error_points,
+            rule_meta,
+            error_points,
 
-                args,
-                return_type,
-
-                execution_engine: compiler.execution_engine,
-            }),
-            jit_fn,
+            args,
+            return_type,
 
             arg_pointers,
+
+            jit_fn,
+            execution_engine: compiler.execution_engine,
         })
     }
 
     /// Calls this compiled function and returns its return value.
     pub fn call(&self, args: &mut [ConstValue]) -> LangResult<ConstValue> {
         // Set argument values.
-        if args.len() != self.meta.args.len() {
+        if args.len() != self.args.len() {
             panic!("Wrong number of arguments passed to JIT function",);
         }
-        let target_data = self.meta.target_data();
+        let target_data = self.execution_engine.get_target_data();
         let mut arg_values = args
             .iter_mut()
             .map(|v| ValueConvert::from_value(v, target_data))
@@ -98,7 +107,7 @@ impl CompiledFunction {
         let args_pointer = arg_pointers.as_mut_ptr();
 
         // Make space for the return value.
-        let mut ret_value = ConstValue::default(&self.meta.return_type)?;
+        let mut ret_value = ConstValue::default(&self.return_type)?;
         let mut ret_value_convert = ValueConvert::from_value(&mut ret_value, target_data);
         let ret_pointer = ret_value_convert.bytes().as_mut_ptr();
 
@@ -111,16 +120,12 @@ impl CompiledFunction {
         if ret == u32::MAX {
             // No error occurred; get the return value from self.out_bytes.
             ret_value_convert.update_value_from_bytes().map_err(|_| {
-                internal_error_value!(
-                    "Unable to get return value of type {}",
-                    self.meta.return_type
-                )
+                internal_error_value!("Unable to get return value of type {}", self.return_type)
             })?;
             Ok(ret_value)
         } else {
             // An error occurred, and the return value holds the error index.
             Err(self
-                .meta
                 .error_points
                 .get(ret as usize)
                 .ok_or_else(|| {
@@ -132,42 +137,18 @@ impl CompiledFunction {
 
     /// Returns the number of arguments that this function takes.
     pub fn arg_count(&self) -> usize {
-        self.meta.args.len()
+        self.args.len()
     }
 
     /// Returns the metadata for the rule that this function is a part of.
-    pub fn rule_meta(&self) -> &Rc<RuleMeta> {
-        &self.meta.rule_meta
-    }
-}
-
-/// Immutable metadata for a compiled function.
-#[derive(Debug)]
-struct CompiledFunctionMeta {
-    /// Rule metadata.
-    rule_meta: Rc<RuleMeta>,
-    /// List of possible runtime errors.
-    error_points: Vec<LangError>,
-
-    /// Arguments.
-    args: Vec<Parameter>,
-    /// Return type.
-    return_type: Type,
-
-    /// Execution engine used to execute this function. If there were a way to
-    /// get owned or refcounted access to the JIT TargetData, then this wouldn't
-    /// be necesssary.
-    execution_engine: ExecutionEngine<'static>,
-}
-impl CompiledFunctionMeta {
-    fn target_data(&self) -> &TargetData {
-        self.execution_engine.get_target_data()
+    pub fn rule_meta(&self) -> &Arc<RuleMeta> {
+        &self.rule_meta
     }
 }
 
 /// Parameter of a JIT function.
-#[derive(Debug)]
-struct Parameter {
+#[derive(Debug, Clone)]
+struct Argument {
     /// Name of the variable that holds this value (displayed by interactive
     /// debugger).
     name: String,

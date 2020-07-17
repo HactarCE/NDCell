@@ -4,10 +4,15 @@ use regex::Regex;
 use std::convert::TryFrom;
 
 /// A 2-state totalistic 2D range-1 Moore-neighborhood algorithm.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct MooreTotalistic2D {
     birth: [u8; 9],
     survival: [u8; 9],
+}
+impl Default for MooreTotalistic2D {
+    fn default() -> Self {
+        LIFE
+    }
 }
 
 impl TryFrom<&str> for MooreTotalistic2D {
@@ -33,17 +38,17 @@ impl Rule<u8, Dim2D> for MooreTotalistic2D {
         1
     }
     fn get_transition_function(&self) -> TransitionFunction<u8, Dim2D> {
-        Box::new(move |napkin| {
+        Box::new(move |nbhd| {
             // Count live neighbors.
-            let nbhood = Rect2D::moore(self.radius() as isize);
+            let nbhd_shape = Rect2D::moore(self.radius() as isize);
             let mut live_neighbors = 0;
-            for cell_coords in nbhood.iter() {
-                if napkin[&cell_coords] != 0 {
+            for cell_coords in nbhd_shape.iter() {
+                if nbhd[&cell_coords] != 0 {
                     live_neighbors += 1;
                 }
             }
             // Index LUT to get next cell state.
-            if napkin[&NdVec::origin()] != 0 {
+            if nbhd[&NdVec::origin()] != 0 {
                 live_neighbors -= 1;
                 self.survival[live_neighbors]
             } else {

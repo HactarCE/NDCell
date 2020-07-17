@@ -16,18 +16,19 @@ pub trait Rule<C: CellType, D: Dim>: fmt::Debug + Send + Sync {
     /// Returns the maximum distance away that a cell may need to see in order
     /// to compute its next state.
     fn radius(&self) -> usize;
-    /// Returns a function that can be used to compute cell transitions.
+    /// Returns a function that computes a cell's next state, given its
+    /// neighborhood.
     fn get_transition_function(&self) -> TransitionFunction<C, D>;
 }
 
 /// A basic rule that never changes any cell states.
-#[derive(Debug)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct DummyRule;
 impl<C: CellType, D: Dim> Rule<C, D> for DummyRule {
     fn radius(&self) -> usize {
         0
     }
     fn get_transition_function(&self) -> TransitionFunction<C, D> {
-        Box::new(|napkin| napkin[&NdVec::origin()])
+        Box::new(|nbhd| nbhd[&NdVec::origin()])
     }
 }

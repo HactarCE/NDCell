@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Index;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 
 use super::{expressions, statements, Expr, Statement, StatementBlock};
 use crate::compiler::{const_int, CompiledFunction, Compiler, Value};
@@ -204,7 +204,14 @@ impl UserFunction {
     }
 
     /// JIT compiles this function and returns an executable function.
-    pub fn compile(&self, mut compiler: Compiler) -> LangResult<CompiledFunction> {
+    ///
+    /// **This function blocks** until all instances of the CompiledFunction
+    /// have been dropped.
+    pub fn compile(
+        &self,
+        mpsc_sender: &mpsc::Sender<LangResult<CompiledFunction>>,
+        mut compiler: Compiler,
+    ) -> LangResult<()> {
         compiler.begin_extern_function(
             &self.name,
             self.kind().return_type(),
@@ -251,7 +258,12 @@ impl UserFunction {
         };
         compiler.build_return_ok(default_return_value)?;
 
-        CompiledFunction::try_new(self.rule_meta.clone(), self.error_points.clone(), compiler)
+        CompiledFunction::send_new(
+            mpsc_sender,
+            self.rule_meta.clone(),
+            self.error_points.clone(),
+            compiler,
+        )
     }
 
     /// Compiles a block of statements into LLVM IR, stopping if a terminator

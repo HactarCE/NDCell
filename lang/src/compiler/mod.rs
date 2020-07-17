@@ -155,14 +155,14 @@ impl Compiler {
         &mut self,
         name: &str,
         return_type: Type,
-        arg_names: &[String],
+        arg_names: &[Arc<String>],
         var_types: &HashMap<String, Type>,
     ) -> LangResult<()> {
         // Determine the LLVM function type (signature).
         let llvm_return_type = types::get(&return_type)?;
         let llvm_arg_types = arg_names
             .iter()
-            .map(|name| &var_types[name])
+            .map(|name| &var_types[&**name])
             .map(types::get)
             .collect::<LangResult<Vec<_>>>()?;
         let fn_type = llvm_return_type.fn_type(&llvm_arg_types, false);
@@ -175,6 +175,7 @@ impl Compiler {
             return_type,
             return_value_ptr: None,
 
+            arg_names: arg_names.to_vec(),
             vars_by_name: HashMap::new(),
         });
 
@@ -222,6 +223,7 @@ impl Compiler {
             return_type,
             return_value_ptr: None,
 
+            arg_names: arg_names.to_vec(),
             vars_by_name: HashMap::new(),
         });
         let entry_bb = self.append_basic_block("entry");
@@ -1572,6 +1574,8 @@ struct FunctionInProgress {
     /// Pointer to the place to put the return value.
     return_value_ptr: Option<PointerValue<'static>>,
 
+    /// Argument names.
+    arg_names: Vec<Arc<String>>,
     /// Variables, indexed by name.
     vars_by_name: HashMap<String, Variable>,
 }

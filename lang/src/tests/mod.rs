@@ -22,7 +22,7 @@ mod vars;
 mod vecs;
 
 use crate::ast;
-use crate::compiler::{CompiledFunction, Compiler};
+use crate::compiler::CompiledFunction;
 use crate::errors::CompleteLangResult;
 use crate::types::{CellStateFilter, LangInt, Pattern, PatternShape};
 use crate::ConstValue;
@@ -105,14 +105,7 @@ fn compile_transition_fn(source_code: &str) -> CompiledFunction {
 /// Compiles the specified function of the given source code. If the function
 /// name is None, then the transition function is returned.
 fn compile_fn(fn_name: Option<&str>, source_code: &str) -> CompleteLangResult<CompiledFunction> {
-    let rule = make_ast(source_code)?;
-    let user_fn = if let Some(name) = fn_name {
-        &rule.helper_functions()[name]
-    } else {
-        rule.transition_function()
-    };
-    user_fn
-        .compile(Compiler::new().unwrap())
+    crate::compile_blocking(Arc::new(source_code.to_owned()), fn_name.map(str::to_owned))
         .map_err(|e| e.with_source(source_code))
 }
 

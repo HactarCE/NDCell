@@ -561,7 +561,7 @@ dependencies = [
 [[package]]
 name = "inkwell"
 version = "0.1.0"
-source = "git+https://github.com/TheDan64/inkwell?branch=llvm10-0#f211c50f020a83fe3fb35bea3ea8cec50b700033"
+source = "git+https://github.com/HactarCE/inkwell?branch=llvm10-0#ae48148f6ebf3b586527d3fe5ac43f2cf5757097"
 dependencies = [
  "either",
  "inkwell_internals",
@@ -574,8 +574,8 @@ dependencies = [
 
 [[package]]
 name = "inkwell_internals"
-version = "0.1.0"
-source = "git+https://github.com/TheDan64/inkwell?branch=llvm10-0#f211c50f020a83fe3fb35bea3ea8cec50b700033"
+version = "0.2.0"
+source = "git+https://github.com/HactarCE/inkwell?branch=llvm10-0#ae48148f6ebf3b586527d3fe5ac43f2cf5757097"
 dependencies = [
  "proc-macro2 1.0.16",
  "quote 1.0.6",
@@ -709,6 +709,7 @@ dependencies = [
  "lazy_static",
  "log",
  "ndcell_core",
+ "ndcell_lang",
  "noisy_float",
  "num",
  "send_wrapper",
@@ -741,6 +742,7 @@ dependencies = [
  "proptest",
  "regex",
  "seahash",
+ "send_wrapper",
  "thread_local",
 ]
 

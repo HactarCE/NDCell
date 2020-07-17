@@ -8,32 +8,26 @@ use crate::errors::NO_RUNTIME_REPRESENTATION;
 use crate::types::{CellStateFilter, LangCellState, LangInt, LangUint, INT_BYTES};
 use crate::{ConstValue, Type};
 
-/// Wrapper around a ConstValue converted to raw bytes which can be passed to a
-/// JIT function.
+/// Converter for a specific type of ConstValue to raw bytes which can be passed
+/// to a JIT function.
 ///
 /// Note that some types may be mutated if the JIT code modifies the value (e.g.
 /// the backing store for a cell pattern) so this struct holds a mutable
 /// reference.
-pub struct ValueConvert<'a> {
+#[derive(Debug, Clone)]
+pub struct ValueConverter {
     /// Type of the value.
     ty: Type,
-    /// Value convert to bytes. We have to hold onto this because the bytes may
-    /// contain a pointer to data owned by this value.
-    value: &'a mut ConstValue,
+    /// Byte offsets of the elements of the LLVM struct used to store this
+    /// value, if applicable.
+    offsets: Option<Vec<usize>>,
     /// Bytes which can be passed to a JIT function. We use Vec<u64> instead of
     /// Vec<u8> to force 8-bytes alignment, which is required for some types.
     bytes: Vec<u64>,
-    /// LLVM target data.
-    target_data: &'a TargetData,
 }
-impl<'a> ValueConvert<'a> {
-    /// Converts a value to raw bytes. Panics if this type has no runtime
-    /// representation.
-    pub fn from_value(value: &'a mut ConstValue, target_data: &'a TargetData) -> Self {
-        let ty = value.ty();
-        let size = size_of(&ty, target_data);
-        let mut bytes = vec![0_u64; crate::utils::div_ceil(size, std::mem::size_of::<u64>())];
-
+impl ValueConverter {
+    /// Constructs a new ValueConverter for the given type.
+    pub fn new(ty: Type, target_data: &TargetData) -> Self {
         // Check that this type can be represented in raw bytes.
         assert!(
             ty.has_runtime_representation(),
@@ -41,17 +35,45 @@ impl<'a> ValueConvert<'a> {
             ty,
         );
 
+        // Compute struct offsets, if applicable.
+        let offsets = match &ty {
+            Type::Pattern { shape, has_lut } => Some(super::types::pattern(shape.ndim(), *has_lut)),
+            Type::Rectangle(ndim) => Some(super::types::rectangle(*ndim)),
+            _ => None,
+        }
+        .map(|struct_type| struct_offsets(&struct_type, target_data));
+
+        // Allocate bytes.
+        let size = size_of(&ty, target_data);
+        let bytes = vec![0_u64; crate::utils::div_ceil(size, std::mem::size_of::<u64>())];
+
+        Self { ty, offsets, bytes }
+    }
+
+    /// Returns the type that this ValueConverter converts.
+    pub fn ty(&self) -> &Type {
+        &self.ty
+    }
+
+    /// Converts a value to raw bytes. Panics if this type has no runtime
+    /// representation.
+    pub fn value_to_bytes<'a>(&'a mut self, value: &'a mut ConstValue) -> &'a mut [u64] {
+        assert_eq!(self.ty, value.ty(), "Type mismatch in ValueConverter");
+
         match value {
             ConstValue::Void => (),
-            ConstValue::Int(i) => i.to_ne_bytes().iter().copied().fill_u64_slice(&mut bytes),
-            ConstValue::CellState(i) => std::iter::once(*i).fill_u64_slice(&mut bytes),
+            ConstValue::Int(i) => i
+                .to_ne_bytes()
+                .iter()
+                .copied()
+                .fill_u64_slice(&mut self.bytes),
+            ConstValue::CellState(i) => std::iter::once(*i).fill_u64_slice(&mut self.bytes),
             ConstValue::Vector(values) => values
                 .iter()
                 .flat_map(|i| i.to_ne_bytes().iter().copied().collect_vec())
-                .fill_u64_slice(&mut bytes),
+                .fill_u64_slice(&mut self.bytes),
             ConstValue::Pattern(p) => {
-                let struct_type = super::types::pattern(p.ndim(), p.lut.is_some());
-                let offsets = struct_offsets(&struct_type, target_data);
+                let offsets = self.offsets.as_ref().unwrap();
                 let start_ptr = p.cells.as_ptr();
                 let origin_offset = p.shape.get_unchecked_flattened_idx(&vec![0; p.ndim()]);
                 let origin_ptr = start_ptr.wrapping_offset(origin_offset);
@@ -65,9 +87,9 @@ impl<'a> ValueConvert<'a> {
                     first_two_elements
                         .pad_using(offsets[2], |_| 0_u8)
                         .chain(std::iter::once(lut))
-                        .fill_u64_slice(&mut bytes);
+                        .fill_u64_slice(&mut self.bytes);
                 } else {
-                    first_two_elements.fill_u64_slice(&mut bytes);
+                    first_two_elements.fill_u64_slice(&mut self.bytes);
                 }
             }
             ConstValue::IntRange { start, end, step } => std::iter::empty()
@@ -75,24 +97,22 @@ impl<'a> ValueConvert<'a> {
                 .chain(&end.to_ne_bytes())
                 .chain(&step.to_ne_bytes())
                 .copied()
-                .fill_u64_slice(&mut bytes),
+                .fill_u64_slice(&mut self.bytes),
             ConstValue::Rectangle(start, end) => {
-                let ndim = start.len();
-                let struct_type = super::types::rectangle(ndim);
-                let offsets = struct_offsets(&struct_type, target_data);
+                let offsets = self.offsets.as_ref().unwrap();
                 std::iter::empty()
                     .pad_using(offsets[0], |_| 0_u8)
                     .chain(start.iter().flat_map(|i| i.to_ne_bytes().to_vec()))
                     .pad_using(offsets[1], |_| 0_u8)
                     .chain(end.iter().flat_map(|i| i.to_ne_bytes().to_vec()))
-                    .fill_u64_slice(&mut bytes)
+                    .fill_u64_slice(&mut self.bytes)
             }
             ConstValue::CellStateFilter(f) => {
                 let llvm_ty = super::types::cell_state_filter(f.state_count());
                 let bits_per_element = llvm_ty.get_element_type().into_int_type().get_bit_width();
                 let bytes_per_element = bits_per_element as usize / 8;
                 for (i, &bits) in f.as_bits().iter().enumerate() {
-                    bytes[i] = match bytes_per_element {
+                    self.bytes[i] = match bytes_per_element {
                         1 => {
                             let [b0] = (bits as u8).to_ne_bytes();
                             u64::from_ne_bytes([b0, 0, 0, 0, 0, 0, 0, 0])
@@ -113,49 +133,37 @@ impl<'a> ValueConvert<'a> {
             ConstValue::Stencil(_) => panic!(NO_RUNTIME_REPRESENTATION),
         };
 
-        Self {
-            ty,
-            value,
-            bytes,
-            target_data,
-        }
+        &mut self.bytes
     }
-
     /// Reads the value encoded by the bytes into the &mut ConstValue passed to
     /// from_value().
     ///
-    /// Note that this method cannot read cell patterns (because doing so much
+    /// Note that this method cannot read cell patterns (because doing so might
     /// dereference a freed pointer, which is UB) so it returns Err(_) instead.
-    ///
-    /// This function is marked unsafe because the bytes may contain a raw
-    /// pointer, and dereferencing that pointer may be unsafe if the value was
-    /// formed
-    pub fn update_value_from_bytes(&mut self) -> Result<(), ()> {
+    pub fn bytes_to_value(&self) -> Result<ConstValue, ()> {
         // Transmute u64 to u8.
         let (pre, bytes, post) = unsafe { self.bytes.align_to::<u8>() };
         assert!(pre.is_empty());
         assert!(post.is_empty());
-        *self.value = match &self.ty {
-            Type::Void => ConstValue::Void,
-            Type::Int => ConstValue::Int({
+        match &self.ty {
+            Type::Void => Ok(ConstValue::Void),
+            Type::Int => Ok(ConstValue::Int({
                 let bytes: &[u8; INT_BYTES] = bytes[..INT_BYTES].try_into().unwrap();
                 LangInt::from_ne_bytes(*bytes)
-            }),
-            Type::CellState => ConstValue::CellState({
+            })),
+            Type::CellState => Ok(ConstValue::CellState({
                 const CELL_STATE_BYTES: usize = std::mem::size_of::<LangCellState>();
                 let bytes: &[u8; CELL_STATE_BYTES] = bytes[..CELL_STATE_BYTES].try_into().unwrap();
                 LangCellState::from_ne_bytes(*bytes)
-            }),
-            Type::Vector(_) => ConstValue::Vector(
+            })),
+            Type::Vector(_) => Ok(ConstValue::Vector(
                 bytes
                     .chunks(INT_BYTES)
                     .map(|b| LangInt::from_ne_bytes(b.try_into().unwrap()))
                     .collect(),
-            ),
-            Type::Pattern { .. } => {
-                return Err(());
-            }
-            Type::IntRange => {
+            )),
+            Type::Pattern { .. } => Err(()),
+            Type::IntRange => Ok({
                 let mut values = bytes
                     .chunks(INT_BYTES)
                     .map(|b| LangInt::from_ne_bytes(b.try_into().unwrap()));
@@ -164,10 +172,9 @@ impl<'a> ValueConvert<'a> {
                     end: values.next().unwrap(),
                     step: values.next().unwrap(),
                 }
-            }
-            Type::Rectangle(ndim) => {
-                let struct_type = super::types::rectangle(*ndim);
-                let offsets = struct_offsets(&struct_type, self.target_data);
+            }),
+            Type::Rectangle(ndim) => Ok({
+                let offsets = self.offsets.as_ref().unwrap();
                 let start = bytes[offsets[0]..]
                     .chunks(INT_BYTES)
                     .take(*ndim)
@@ -179,8 +186,8 @@ impl<'a> ValueConvert<'a> {
                     .map(|b| LangInt::from_ne_bytes(b.try_into().unwrap()))
                     .collect();
                 ConstValue::Rectangle(start, end)
-            }
-            Type::CellStateFilter(state_count) => {
+            }),
+            Type::CellStateFilter(state_count) => Ok({
                 let llvm_ty = super::types::cell_state_filter(*state_count);
                 let bits_per_element = llvm_ty.get_element_type().into_int_type().get_bit_width();
                 let bytes_per_element = bits_per_element as usize / 8;
@@ -196,15 +203,9 @@ impl<'a> ValueConvert<'a> {
                     .take(CellStateFilter::vec_len_for_state_count(*state_count))
                     .collect();
                 ConstValue::CellStateFilter(CellStateFilter::from_bits(*state_count, bits))
-            }
+            }),
             Type::Stencil => panic!(NO_RUNTIME_REPRESENTATION),
-        };
-        Ok(())
-    }
-
-    /// Returns the raw bytes representing this value.
-    pub fn bytes(&mut self) -> &mut [u64] {
-        &mut self.bytes
+        }
     }
 }
 
@@ -295,9 +296,9 @@ mod tests {
             .chain(rectangles)
             .chain(cell_state_filters)
         {
-            let mut new_value = old_value.clone();
-            let mut bytes = ValueConvert::from_value(&mut new_value, target_data);
-            bytes.update_value_from_bytes().unwrap();
+            let mut converter = ValueConverter::new(old_value.ty(), target_data);
+            let _bytes = converter.value_to_bytes(&mut old_value.clone());
+            let new_value = converter.bytes_to_value().unwrap();
             assert_eq!(old_value, new_value);
         }
     }

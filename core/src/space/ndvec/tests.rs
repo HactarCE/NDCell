@@ -19,8 +19,8 @@ fn test_ndvec_macro() {
 
 #[test]
 fn test_bigvec() {
-    let x = BigInt::from(1i64 << 62);
-    let y = BigInt::from(-(1i64 << 62));
+    let x = BigInt::from(1_i64 << 62);
+    let y = BigInt::from(-(1_i64 << 62));
     let z = BigInt::from(10);
     let scalar = BigInt::from(1) << 20;
     let mut v1: BigVec3D = NdVec([x.clone(), y.clone(), z.clone()]);
@@ -72,8 +72,8 @@ proptest! {
     fn test_ops(
         pos1: IVec3D,
         pos2: IVec3D,
-        scalar in -100..=100isize,
-        shift in 0..10isize,
+        scalar in -100..=100_isize,
+        shift in 0..10_isize,
     ) {
         for &ax in Dim3D::axes() {
             assert_eq!(-(pos1[ax]), (-pos1)[ax]);

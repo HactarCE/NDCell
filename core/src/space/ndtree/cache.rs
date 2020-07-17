@@ -26,7 +26,7 @@ pub struct NdTreeCache<C: CellType, D: Dim> {
 }
 
 impl<C: CellType, D: Dim> NdTreeCache<C, D> {
-    /// Returns a new empty NdTreeNode cache.
+    /// Constructs an empty NdTreeNode cache.
     pub fn new() -> Self {
         Self::default()
     }

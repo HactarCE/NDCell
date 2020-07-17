@@ -1,0 +1,11 @@
+@transition {
+    if nbhd[0, 1] == #1
+        xor nbhd[1, 0] == #1
+        xor nbhd[0, -1] == #1
+        xor nbhd[-1, 0] == #1
+    {
+        become #1
+    } else {
+        become #0
+    }
+}

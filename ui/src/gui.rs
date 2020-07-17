@@ -5,6 +5,9 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use log::warn;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
+use std::fs::File;
+use std::io::Read;
+use std::sync::Arc;
 use std::time::Instant;
 
 use ndcell_core::*;
@@ -35,7 +38,19 @@ fn make_default_gridview() -> GridView {
         warn!("Unable to parse default pattern; using empty pattern instead");
         Default::default()
     });
-    automaton.set_sim(Simulation::from(rule::LIFE));
+
+    let sim = if let Ok(mut file) = File::open("rule.ndca") {
+        let mut source_code = String::new();
+        file.read_to_string(&mut source_code)
+            .expect("Error reading file");
+        let rule = ndcell_lang::compile_blocking(Arc::new(source_code), None)
+            .expect("Error compiling rule");
+        Simulation::from(rule)
+    } else {
+        Simulation::from(rule::LIFE)
+    };
+
+    automaton.set_sim(sim);
     GridView::from(automaton)
 }
 

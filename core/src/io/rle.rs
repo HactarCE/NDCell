@@ -341,8 +341,8 @@ impl RleCellType for bool {
     }
     fn from_str(s: &str) -> ParseResult<Self> {
         RleCellType::from_str(s).and_then(|n| match n {
-            0u8 => Ok(false),
-            1u8 => Ok(true),
+            0_u8 => Ok(false),
+            1_u8 => Ok(true),
             _ => Err(ParseError::CellStateOutOfRange),
         })
     }

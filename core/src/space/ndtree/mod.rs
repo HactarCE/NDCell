@@ -317,8 +317,8 @@ mod tests {
         fn test_ndtree_get_slice_containing(
             cells_to_set: Vec<(IVec2D, bool)>,
             center: IVec2D,
-            x_radius in 0..20isize,
-            y_radius in 0..20isize,
+            x_radius in 0..20_isize,
+            y_radius in 0..20_isize,
         ) {
             let mut ndtree = NdTree::new();
             let mut hashmap = HashMap::new();

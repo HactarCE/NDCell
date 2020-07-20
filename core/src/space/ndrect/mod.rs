@@ -122,6 +122,7 @@ where
     }
 
     /// Returns true if the two hyperrectangles intersect at all.
+    #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn intersects(self, other: Self) -> bool {
         for &ax in D::Dim::axes() {
             // If the rectangles do not intersect along this axis, return false.
@@ -136,6 +137,7 @@ where
 
     /// Returns the intersection of the two hyperrectangles, or None if they do
     /// not intersect.
+    #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn intersection(self, other: Self) -> Option<Self> {
         let new_min = NdVec::max(&self.min(), &other.min());
         let new_max = NdVec::min(&self.max(), &other.max());
@@ -149,6 +151,7 @@ where
 
     /// Constructs an NdRect with the minimum and maximum coordinates offset by
     /// the given amount.
+    #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn offset_min_max<T1, T2>(self, min_offset: T1, max_offset: T2) -> Self
     where
         NdVec<D, N>: Add<T1, Output = NdVec<D, N>> + Add<T2, Output = NdVec<D, N>>,

@@ -214,10 +214,10 @@ impl<'a> RenderInProgress<'a> {
             // Convert offset from render-cell-space to screen-space.
             offset *= scale;
 
-            let x_scale = scale[X].raw() as f32;
-            let y_scale = scale[Y].raw() as f32;
-            let x_offset = offset[X].raw() as f32;
-            let y_offset = offset[Y].raw() as f32;
+            let x_scale = scale[X].to_f32().unwrap();
+            let y_scale = scale[Y].to_f32().unwrap();
+            let x_offset = offset[X].to_f32().unwrap();
+            let y_offset = offset[Y].to_f32().unwrap();
             view_matrix = [
                 [x_scale, 0.0, 0.0, 0.0],
                 [0.0, y_scale, 0.0, 0.0],

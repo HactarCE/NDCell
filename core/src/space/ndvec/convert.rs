@@ -57,7 +57,7 @@ impl<D: Dim> AsIVec<D> for BigVec<D> {
 }
 impl<D: Dim> AsIVec<D> for FVec<D> {
     fn as_ivec(&self) -> IVec<D> {
-        IVec::from_fn(|ax| self[ax].raw() as isize)
+        IVec::from_fn(|ax| self[ax].to_isize().unwrap())
     }
 }
 

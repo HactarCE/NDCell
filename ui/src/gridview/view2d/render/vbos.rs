@@ -1,5 +1,6 @@
 use glium::VertexBuffer;
 use noisy_float::prelude::r64;
+use num::cast::ToPrimitive;
 use send_wrapper::SendWrapper;
 use std::cell::{RefCell, RefMut};
 
@@ -36,8 +37,8 @@ pub fn quadtree_quad_with_quadtree_coords<'a>(
     let bottom = rect.min()[Y] as i32;
     let top = rect.max()[Y] as i32;
     let dest_top_right = texture_fraction * r64(2.0) - r64(1.0);
-    let dest_right = dest_top_right[X].raw() as f32;
-    let dest_top = dest_top_right[Y].raw() as f32;
+    let dest_right = dest_top_right[X].to_f32().unwrap();
+    let dest_top = dest_top_right[Y].to_f32().unwrap();
     ret.write(&[
         QuadtreePosVertex {
             cell_coords: [left, bottom],
@@ -64,10 +65,10 @@ pub fn blit_quad<'a>() -> RefMut<'a, VertexBuffer<TexturePosVertex>> {
 }
 pub fn blit_quad_with_src_coords<'a>(rect: FRect2D) -> RefMut<'a, VertexBuffer<TexturePosVertex>> {
     let ret = blit_quad();
-    let left = rect.min()[X].raw() as f32;
-    let right = rect.max()[X].raw() as f32;
-    let bottom = rect.min()[Y].raw() as f32;
-    let top = rect.max()[Y].raw() as f32;
+    let left = rect.min()[X].to_f32().unwrap();
+    let right = rect.max()[X].to_f32().unwrap();
+    let bottom = rect.min()[Y].to_f32().unwrap();
+    let top = rect.max()[Y].to_f32().unwrap();
     ret.write(&[
         TexturePosVertex {
             src_coords: [left, bottom],

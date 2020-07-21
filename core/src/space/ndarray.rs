@@ -15,8 +15,8 @@ pub struct NdArray<T, D: Dim> {
 }
 
 // Create an NdArray from the cells in an NdTreeNode.
-impl<C: CellType, D: Dim> From<&NdTreeNode<C, D>> for NdArray<C, D> {
-    fn from(node: &NdTreeNode<C, D>) -> Self {
+impl<D: Dim> From<&NdTreeNode<D>> for NdArray<u8, D> {
+    fn from(node: &NdTreeNode<D>) -> Self {
         let count = node
             .len()
             .pow(D::NDIM)
@@ -33,8 +33,8 @@ impl<C: CellType, D: Dim> From<&NdTreeNode<C, D>> for NdArray<C, D> {
         Self { size, data }
     }
 }
-impl<C: CellType, D: Dim> From<&NdCachedNode<C, D>> for NdArray<C, D> {
-    fn from(node: &NdCachedNode<C, D>) -> Self {
+impl<D: Dim> From<&NdCachedNode<D>> for NdArray<u8, D> {
+    fn from(node: &NdCachedNode<D>) -> Self {
         Self::from(&**node)
     }
 }

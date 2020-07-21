@@ -5,9 +5,9 @@ use super::*;
 
 /// An immutable view into an NdTree.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NdTreeSlice<C: CellType, D: Dim> {
+pub struct NdTreeSlice<D: Dim> {
     /// The root NdTreeNode of this slice.
-    pub root: NdCachedNode<C, D>,
+    pub root: NdCachedNode<D>,
     /// The position of the lower bound of the root node.
     pub offset: BigVec<D>,
 }
@@ -15,52 +15,27 @@ pub struct NdTreeSlice<C: CellType, D: Dim> {
 /// The same as NdTreeBranch, but using NdTreeSlice instead of NdCachedNode (so
 /// it retains global location information).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NdTreeSliceBranch<C: CellType, D: Dim> {
+pub enum NdTreeSliceBranch<D: Dim> {
     /// A "layer 0" node; i.e. a single cell.
-    Leaf(C, BigVec<D>),
+    Leaf(u8, BigVec<D>),
     /// A tree slice whose layer is >= 1.
-    Node(NdTreeSlice<C, D>),
+    Node(NdTreeSlice<D>),
 }
 
 /// A 1D grid represented as a bintree.
-pub type NdTreeSlice1D<C> = NdTreeSlice<C, Dim1D>;
+pub type NdTreeSlice1D = NdTreeSlice<Dim1D>;
 /// A 2D grid represented as a quadtree.
-pub type NdTreeSlice2D<C> = NdTreeSlice<C, Dim2D>;
+pub type NdTreeSlice2D = NdTreeSlice<Dim2D>;
 /// A 3D grid represented as an octree.
-pub type NdTreeSlice3D<C> = NdTreeSlice<C, Dim3D>;
+pub type NdTreeSlice3D = NdTreeSlice<Dim3D>;
 /// A 4D grid represented as a tree with nodes of degree 16.
-pub type NdTreeSlice4D<C> = NdTreeSlice<C, Dim4D>;
+pub type NdTreeSlice4D = NdTreeSlice<Dim4D>;
 /// A 5D grid represented as a tree with nodes of degree 32.
-pub type NdTreeSlice5D<C> = NdTreeSlice<C, Dim5D>;
+pub type NdTreeSlice5D = NdTreeSlice<Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
-pub type NdTreeSlice6D<C> = NdTreeSlice<C, Dim6D>;
+pub type NdTreeSlice6D = NdTreeSlice<Dim6D>;
 
-/// A cell type that can be printed as a single char to stdout for debugging.
-pub trait DisplayCell: CellType {
-    /// Returns the char that is used to display this cell state.
-    fn cell_char(&self) -> char;
-}
-impl DisplayCell for u8 {
-    fn cell_char(&self) -> char {
-        match self {
-            0 => '.',
-            1 => '#',
-            2 => '2',
-            3 => '3',
-            _ => '?',
-        }
-    }
-}
-impl DisplayCell for bool {
-    fn cell_char(&self) -> char {
-        match *self {
-            false => '.',
-            true => '#',
-        }
-    }
-}
-
-impl<C: DisplayCell> fmt::Display for NdTreeSlice<C, Dim2D> {
+impl fmt::Display for NdTreeSlice<Dim2D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.root.layer > 8 {
             panic!("Cannot display node larger than 256x256");
@@ -70,7 +45,8 @@ impl<C: DisplayCell> fmt::Display for NdTreeSlice<C, Dim2D> {
         for y in rect.axis_range(Y).rev() {
             line.clear();
             for x in rect.axis_range(X) {
-                line.push(self[NdVec([x, y.clone()])].cell_char());
+                let state = self[NdVec([x, y.clone()])];
+                line.push(".#23456789".chars().nth(state as usize).unwrap_or('?'));
                 line.push(' ');
             }
             line.pop();
@@ -80,16 +56,16 @@ impl<C: DisplayCell> fmt::Display for NdTreeSlice<C, Dim2D> {
     }
 }
 
-impl<C: CellType, D: Dim> Index<BigVec<D>> for NdTreeSlice<C, D> {
-    type Output = C;
-    fn index(&self, pos: BigVec<D>) -> &C {
+impl<D: Dim> Index<BigVec<D>> for NdTreeSlice<D> {
+    type Output = u8;
+    fn index(&self, pos: BigVec<D>) -> &u8 {
         &self.root[&(pos - &self.offset)]
     }
 }
 
-impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
+impl<D: Dim> NdTreeSlice<D> {
     /// Constructs a new NdTreeSlice of a given node centered on the origin.
-    pub fn centered(root: NdCachedNode<C, D>) -> Self {
+    pub fn centered(root: NdCachedNode<D>) -> Self {
         Self {
             offset: NdVec::origin() - &(root.len() / 2),
             root,
@@ -115,7 +91,7 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
 
     /// Returns a reference to the cell value at the given position, if it is
     /// within the bounds of the slice.
-    pub fn get_cell_ref(&self, pos: &BigVec<D>) -> Option<&C> {
+    pub fn get_cell_ref(&self, pos: &BigVec<D>) -> Option<&u8> {
         if self.rect().contains(pos) {
             Some(self.root.get_cell_ref(&(pos - &self.offset)))
         } else {
@@ -124,13 +100,13 @@ impl<C: CellType, D: Dim> NdTreeSlice<C, D> {
     }
     /// Returns the cell value at the given position, if it is within the bounds
     /// of the slice.
-    pub fn get_cell(&self, pos: &BigVec<D>) -> Option<C> {
+    pub fn get_cell(&self, pos: &BigVec<D>) -> Option<u8> {
         self.get_cell_ref(pos).map(|cell| cell.clone())
     }
 
     /// Returns an NdTreeSlice of the root node's branch with the given branch
     /// index.
-    pub fn get_branch(&self, branch_idx: ByteVec<D>) -> NdTreeSliceBranch<C, D> {
+    pub fn get_branch(&self, branch_idx: ByteVec<D>) -> NdTreeSliceBranch<D> {
         match &self.root[branch_idx.clone()] {
             NdTreeBranch::Leaf(cell_state) => NdTreeSliceBranch::Leaf(
                 *cell_state,

@@ -7,23 +7,23 @@ use super::*;
 
 /// An NdTree represented as an list of nodes.
 #[derive(Debug)]
-pub struct IndexedNdTree<C: CellType, D: Dim> {
+pub struct IndexedNdTree<D: Dim> {
     layers: usize,
-    nodes: Vec<Vec<IndexedNdTreeBranch<C, D>>>,
+    nodes: Vec<Vec<IndexedNdTreeBranch<D>>>,
     root_idx: usize,
 }
 
 /// A branch of a node in a IndexedNdTree.
 #[derive(Debug)]
-pub enum IndexedNdTreeBranch<C: CellType, D: Dim> {
+pub enum IndexedNdTreeBranch<D: Dim> {
     /// The last "indexed" node in a IndexedNdTree; can be either an NdTreeNode
     /// or a single cell.
-    Leaf(NdTreeBranch<C, D>),
+    Leaf(NdTreeBranch<D>),
     /// A pointer to another node in the list of nodes.
     Pointer(usize),
 }
 
-impl<C: CellType, D: Dim> IndexedNdTree<C, D> {
+impl<D: Dim> IndexedNdTree<D> {
     /// Gets the number of indexed layers; i.e. how many times you have to
     /// follow a pointer (including getting the initial node) to reach a leaf.
     /// The minimum is 1.
@@ -31,7 +31,7 @@ impl<C: CellType, D: Dim> IndexedNdTree<C, D> {
         self.layers
     }
     /// Gets the list of nodes.
-    pub fn get_nodes(&self) -> &[Vec<IndexedNdTreeBranch<C, D>>] {
+    pub fn get_nodes(&self) -> &[Vec<IndexedNdTreeBranch<D>>] {
         &self.nodes
     }
     /// Gets the list index of the root node.
@@ -41,7 +41,7 @@ impl<C: CellType, D: Dim> IndexedNdTree<C, D> {
 
     /// Constructs a IndexedNdTree from an NdCachedNode, indexing nodes down to
     /// the given layer. Use `min_layer = 0` to store the entire NdTree.
-    pub fn from_node(node: &NdCachedNode<C, D>, min_layer: usize) -> Self {
+    pub fn from_node(node: &NdCachedNode<D>, min_layer: usize) -> Self {
         IndexedNdTreeInProgress {
             min_layer,
             nodes: vec![],
@@ -50,12 +50,12 @@ impl<C: CellType, D: Dim> IndexedNdTree<C, D> {
         .complete(node)
     }
     /// Converts this IndexedNdTree back into an NdCachedNode.
-    pub fn to_node(&self, cache: &NdTreeCache<C, D>) -> NdCachedNode<C, D> {
+    pub fn to_node(&self, cache: &NdTreeCache<D>) -> NdCachedNode<D> {
         self.partial_to_node(cache, self.root_idx)
     }
     /// Converts a single node (and its descendants) of this IndexedNdTree into an
     /// NdCachedNode.
-    fn partial_to_node(&self, cache: &NdTreeCache<C, D>, start_idx: usize) -> NdCachedNode<C, D> {
+    fn partial_to_node(&self, cache: &NdTreeCache<D>, start_idx: usize) -> NdCachedNode<D> {
         let mut branch_iter = self.nodes[start_idx].iter();
         cache.get_node_from_fn(|_| match branch_iter.next().unwrap() {
             IndexedNdTreeBranch::Leaf(branch) => branch.clone(),
@@ -67,15 +67,15 @@ impl<C: CellType, D: Dim> IndexedNdTree<C, D> {
 }
 
 /// A temporary struct used to create a IndexedNdTree.
-struct IndexedNdTreeInProgress<'a, C: CellType, D: Dim> {
+struct IndexedNdTreeInProgress<'a, D: Dim> {
     min_layer: usize,
-    nodes: Vec<Vec<IndexedNdTreeBranch<C, D>>>,
-    cache: HashMap<&'a NdCachedNode<C, D>, usize, NodeHasher>,
+    nodes: Vec<Vec<IndexedNdTreeBranch<D>>>,
+    cache: HashMap<&'a NdCachedNode<D>, usize, NodeHasher>,
 }
-impl<'a, C: CellType, D: Dim> IndexedNdTreeInProgress<'a, C, D> {
+impl<'a, D: Dim> IndexedNdTreeInProgress<'a, D> {
     /// Adds a node recursively to the indexed NdTree if it is not already
     /// present and returns its index.
-    fn add_node(&mut self, node: &'a NdCachedNode<C, D>) -> usize {
+    fn add_node(&mut self, node: &'a NdCachedNode<D>) -> usize {
         if let Some(&node_index) = self.cache.get(node) {
             node_index
         } else {
@@ -98,7 +98,7 @@ impl<'a, C: CellType, D: Dim> IndexedNdTreeInProgress<'a, C, D> {
         }
     }
     /// Returns the final IndexedNdTree, using the given node as the root.
-    pub fn complete(mut self, node: &'a NdCachedNode<C, D>) -> IndexedNdTree<C, D> {
+    pub fn complete(mut self, node: &'a NdCachedNode<D>) -> IndexedNdTree<D> {
         let root_idx = self.add_node(node);
         IndexedNdTree {
             layers: node.layer - self.min_layer,

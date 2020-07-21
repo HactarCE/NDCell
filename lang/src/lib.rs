@@ -80,7 +80,7 @@ pub fn compile_blocking(
         .unwrap_or_else(|e| internal_error!("MPSC channel error: {:?}", e))
 }
 
-impl ndcell_core::Rule<u8, ndcell_core::Dim2D> for compiler::CompiledFunction {
+impl ndcell_core::Rule<ndcell_core::Dim2D> for compiler::CompiledFunction {
     fn radius(&self) -> usize {
         let (min, max) = self.rule_meta().nbhd_shape.bounds().min_and_max();
         min.into_iter()
@@ -89,7 +89,7 @@ impl ndcell_core::Rule<u8, ndcell_core::Dim2D> for compiler::CompiledFunction {
             .max()
             .unwrap()
     }
-    fn get_transition_function(&self) -> ndcell_core::TransitionFunction<u8, ndcell_core::Dim2D> {
+    fn get_transition_function(&self) -> ndcell_core::TransitionFunction<ndcell_core::Dim2D> {
         let mut compiled_func = self.clone();
         Box::new(move |neighborhood| {
             let nbhd_pattern = types::Pattern {

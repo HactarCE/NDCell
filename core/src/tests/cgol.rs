@@ -2,13 +2,13 @@ use std::collections::HashSet;
 
 use super::*;
 
-fn get_non_default_set<C: CellType, D: Dim>(slice: &NdTreeSlice<C, D>) -> HashSet<BigVec<D>> {
+fn get_non_default_set<D: Dim>(slice: &NdTreeSlice<D>) -> HashSet<BigVec<D>> {
     let mut ret = HashSet::new();
     for (branch_idx, branch) in slice.root.branch_iter() {
         let branch_offset = &slice.offset + slice.root.branch_offset(branch_idx);
         match branch {
             NdTreeBranch::Leaf(cell_state) => {
-                if *cell_state != C::default() {
+                if *cell_state != 0 {
                     ret.insert(branch_offset);
                 }
             }

@@ -328,7 +328,7 @@ enum ParseError {
 }
 
 /// Conversions from/to CellTypes to/from text-based RLE.
-trait RleCellType: CellType {
+trait RleCellType: Copy + Into<u8> {
     /// Append the RLE representation of this cell to the given string.
     fn push_to_string(self, chars: &mut String);
     /// Decode the given string slice as a single cell.

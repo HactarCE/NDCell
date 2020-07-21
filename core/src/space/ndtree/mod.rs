@@ -14,54 +14,54 @@ pub use slice::*;
 
 /// An N-dimensional generalization of a quadtree.
 #[derive(Debug, Clone)]
-pub struct NdTree<C: CellType, D: Dim> {
+pub struct NdTree<D: Dim> {
     /// The cache for this tree's nodes.
-    pub cache: Arc<NdTreeCache<C, D>>,
+    pub cache: Arc<NdTreeCache<D>>,
     /// The slice describing the root node and offset.
-    pub slice: NdTreeSlice<C, D>,
+    pub slice: NdTreeSlice<D>,
 }
-impl<C: CellType, D: Dim> PartialEq for NdTree<C, D> {
+impl<D: Dim> PartialEq for NdTree<D> {
     fn eq(&self, other: &Self) -> bool {
         self.slice == other.slice
     }
 }
-impl<C: CellType, D: Dim> Eq for NdTree<C, D> {}
+impl<D: Dim> Eq for NdTree<D> {}
 
 /// A 1D grid represented as a bintree.
-pub type NdTree1D<C> = NdTree<C, Dim1D>;
+pub type NdTree1D = NdTree<Dim1D>;
 /// A 2D grid represented as a quadtree.
-pub type NdTree2D<C> = NdTree<C, Dim2D>;
+pub type NdTree2D = NdTree<Dim2D>;
 /// A 3D grid represented as an octree.
-pub type NdTree3D<C> = NdTree<C, Dim3D>;
+pub type NdTree3D = NdTree<Dim3D>;
 /// A 4D grid represented as a tree with nodes of degree 16.
-pub type NdTree4D<C> = NdTree<C, Dim4D>;
+pub type NdTree4D = NdTree<Dim4D>;
 /// A 5D grid represented as a tree with nodes of degree 32.
-pub type NdTree5D<C> = NdTree<C, Dim5D>;
+pub type NdTree5D = NdTree<Dim5D>;
 /// A 6D grid represented as a tree with nodes of degree 64.
-pub type NdTree6D<C> = NdTree<C, Dim6D>;
+pub type NdTree6D = NdTree<Dim6D>;
 
-impl<C: CellType, D: Dim> fmt::Display for NdTree<C, D>
+impl<D: Dim> fmt::Display for NdTree<D>
 where
-    NdTreeSlice<C, D>: fmt::Display,
+    NdTreeSlice<D>: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.slice)
     }
 }
 
-impl<C: CellType, D: Dim> Default for NdTree<C, D> {
+impl<D: Dim> Default for NdTree<D> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<C: CellType, D: Dim> AsRef<NdTreeSlice<C, D>> for NdTree<C, D> {
-    fn as_ref(&self) -> &NdTreeSlice<C, D> {
+impl<D: Dim> AsRef<NdTreeSlice<D>> for NdTree<D> {
+    fn as_ref(&self) -> &NdTreeSlice<D> {
         &self.slice
     }
 }
 
-impl<C: CellType, D: Dim> NdTree<C, D> {
+impl<D: Dim> NdTree<D> {
     /// Constructs a new empty NdTree with an empty node cache centered on the
     /// origin.
     pub fn new() -> Self {
@@ -75,15 +75,15 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     }
 
     /// Returns the root node of this tree.
-    pub fn get_root(&self) -> &NdCachedNode<C, D> {
+    pub fn get_root(&self) -> &NdCachedNode<D> {
         &self.slice.root
     }
     /// Sets the root node of this tree.
-    pub fn set_root(&mut self, new_root: NdCachedNode<C, D>) {
+    pub fn set_root(&mut self, new_root: NdCachedNode<D>) {
         self.slice.root = new_root;
     }
     /// Sets the root node of this tree and adjusts the offset so that the tree remains centered on the same point.
-    pub fn set_root_centered(&mut self, new_root: NdCachedNode<C, D>) {
+    pub fn set_root_centered(&mut self, new_root: NdCachedNode<D>) {
         self.slice.offset += &((self.get_root().len() - new_root.len()) / 2);
         self.set_root(new_root);
     }
@@ -148,11 +148,11 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     }
 
     /// Returns the state of the cell at the given position.
-    pub fn get_cell(&self, pos: &BigVec<D>) -> C {
+    pub fn get_cell(&self, pos: &BigVec<D>) -> u8 {
         self.slice.get_cell(pos).unwrap_or_default()
     }
     /// Sets the state of the cell at the given position.
-    pub fn set_cell(&mut self, pos: &BigVec<D>, cell_state: C) {
+    pub fn set_cell(&mut self, pos: &BigVec<D>, cell_state: u8) {
         self.expand_to(&pos);
         self.slice.root =
             self.slice
@@ -167,7 +167,7 @@ impl<C: CellType, D: Dim> NdTree<C, D> {
     /// centered on an existing node, and thus composed out of smaller existing
     /// nodes. The only guarantee is that the node will be less than twice as
     /// big as it needs to be.
-    pub fn get_slice_containing(&mut self, rect: &BigRect<D>) -> NdTreeSlice<C, D> {
+    pub fn get_slice_containing(&mut self, rect: &BigRect<D>) -> NdTreeSlice<D> {
         // Ensure that the desired rectangle is contained in the whole tree.
         self.expand_to(&rect.min());
         self.expand_to(&rect.max());
@@ -235,22 +235,22 @@ mod tests {
     use super::*;
 
     fn assert_ndtree_valid(
-        expected_cells: &HashMap<IVec2D, bool>,
-        ndtree: &mut NdTree2D<bool>,
+        expected_cells: &HashMap<IVec2D, u8>,
+        ndtree: &mut NdTree2D,
         cells_to_check: &Vec<IVec2D>,
     ) {
         assert_eq!(
             BigInt::from(
                 expected_cells
                     .iter()
-                    .filter(|(_, &cell_state)| cell_state)
+                    .filter(|(_, &cell_state)| cell_state != 0)
                     .count()
             ),
             ndtree.get_root().population
         );
         for pos in cells_to_check {
             assert_eq!(
-                *expected_cells.get(pos).unwrap_or(&false),
+                *expected_cells.get(pos).unwrap_or(&0),
                 ndtree.get_cell(&pos.convert())
             );
         }
@@ -265,7 +265,7 @@ mod tests {
         /// Tests set_cell() and get_cell() by comparing against a HashMap.
         #[test]
         fn test_ndtree_set_get(
-            cells_to_set: Vec<(IVec2D, bool)>,
+            cells_to_set: Vec<(IVec2D, u8)>,
             mut cells_to_get: Vec<IVec2D>,
         ) {
             let mut ndtree = NdTree::new();
@@ -296,7 +296,7 @@ mod tests {
         #[ignore]
         #[test]
         fn test_ndtree_cache(
-            cells_to_set: Vec<(IVec2D, bool)>,
+            cells_to_set: Vec<(IVec2D, u8)>,
         ) {
             prop_assume!(!cells_to_set.is_empty());
             let mut ndtree = NdTree::new();
@@ -315,7 +315,7 @@ mod tests {
         /// Tests NdTree::get_slice_containing().
         #[test]
         fn test_ndtree_get_slice_containing(
-            cells_to_set: Vec<(IVec2D, bool)>,
+            cells_to_set: Vec<(IVec2D, u8)>,
             center: IVec2D,
             x_radius in 0..20_isize,
             y_radius in 0..20_isize,

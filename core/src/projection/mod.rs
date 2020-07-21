@@ -12,26 +12,26 @@ pub use slice2d::SliceProjection2D;
 pub use slice3d::SliceProjection3D;
 
 /// A container for any type of NdProjector.
-pub struct NdProjection<C: CellType, D: Dim, P: Dim>(pub Box<dyn NdProjector<C, D, P>>);
-impl<C: CellType, D: Dim, P: Dim> Clone for NdProjection<C, D, P> {
+pub struct NdProjection<D: Dim, P: Dim>(pub Box<dyn NdProjector<D, P>>);
+impl<D: Dim, P: Dim> Clone for NdProjection<D, P> {
     fn clone(&self) -> Self {
         let params = self.0.get_params();
         Self(params.try_into().expect("Failed to clone projection"))
     }
 }
-impl<C: CellType, D: Dim> Default for NdProjection<C, D, D> {
+impl<D: Dim> Default for NdProjection<D, D> {
     fn default() -> Self {
         Self(Box::new(SimpleProjection))
     }
 }
-impl<C: CellType, D: Dim, P: Dim> NdProjector<C, D, P> for NdProjection<C, D, P> {
-    fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P> {
+impl<D: Dim, P: Dim> NdProjector<D, P> for NdProjection<D, P> {
+    fn project(&self, tree: &NdTree<D>) -> NdTree<P> {
         self.0.project(tree)
     }
     fn unproject_pos(&self, pos: &BigVec<P>) -> BigVec<D> {
         self.0.unproject_pos(pos)
     }
-    fn overwrite_projected(&self, destination: &mut NdTree<C, D>, source: &NdTree<C, P>) {
+    fn overwrite_projected(&self, destination: &mut NdTree<D>, source: &NdTree<P>) {
         self.0.overwrite_projected(destination, source);
     }
     fn get_params(&self) -> ProjectionParams {
@@ -41,13 +41,13 @@ impl<C: CellType, D: Dim, P: Dim> NdProjector<C, D, P> for NdProjection<C, D, P>
 
 /// A method for extracting or constructing a P-dimensional slice from a
 /// D-dimensional automaton.
-pub trait NdProjector<C: CellType, D: Dim, P: Dim>: Send {
+pub trait NdProjector<D: Dim, P: Dim>: Send {
     /// Projects a D-dimensional NdTree into a P-dimensional NdTree.
-    fn project(&self, tree: &NdTree<C, D>) -> NdTree<C, P>;
+    fn project(&self, tree: &NdTree<D>) -> NdTree<P>;
     /// Unprojects a P-dimensional point back into D-dimensional space.
     fn unproject_pos(&self, pos: &BigVec<P>) -> BigVec<D>;
     /// Modifies part of a projected NdTree.
-    fn overwrite_projected(&self, destination: &mut NdTree<C, D>, source: &NdTree<C, P>);
+    fn overwrite_projected(&self, destination: &mut NdTree<D>, source: &NdTree<P>);
     /// Returns the ProjectionParams that describe this projection.
     fn get_params(&self) -> ProjectionParams;
 }
@@ -65,9 +65,9 @@ pub enum ProjectionParams {
     /// A SliceProjection3D.
     Slice3D(BigVecEnum, (Axis, Axis, Axis)),
 }
-impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for ProjectionParams {
+impl<'a, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<D, P>>> for ProjectionParams {
     type Error = NdProjectionError;
-    fn try_into(self) -> Result<Box<dyn NdProjector<C, D, P>>, Self::Error> {
+    fn try_into(self) -> Result<Box<dyn NdProjector<D, P>>, Self::Error> {
         // This method is a little Sketchy™; there's a lot of pointer (Box)
         // casting using std::mem::transmute(), using my own runtime value
         // checking instead of Rust's compile-time type checking. Although all
@@ -76,7 +76,7 @@ impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for
             ProjectionParams::Simple => {
                 // Check that D = P.
                 if D::NDIM == P::NDIM {
-                    let ret: Box<dyn NdProjector<C, D, D>> = Box::new(SimpleProjection);
+                    let ret: Box<dyn NdProjector<D, D>> = Box::new(SimpleProjection);
                     Ok(unsafe { std::mem::transmute(ret) })
                 } else {
                     Err(NdProjectionError::WrongProjectedDim)
@@ -90,7 +90,7 @@ impl<'a, C: CellType, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<C, D, P>>> for
                 // Check P.
                 if P::NDIM == 2 {
                     let ret = SliceProjection2D::new(slice_pos, h, v);
-                    let ret: Box<dyn NdProjector<C, D, Dim2D>> = Box::new(ret);
+                    let ret: Box<dyn NdProjector<D, Dim2D>> = Box::new(ret);
                     Ok(unsafe { std::mem::transmute(ret) })
                 } else {
                     Err(NdProjectionError::WrongProjectedDim)?

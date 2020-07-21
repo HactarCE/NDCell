@@ -11,24 +11,24 @@ use super::*;
 
 /// A HashLife simulation of a given automaton that caches simulation results.
 #[derive(Debug)]
-pub struct Simulation<C: CellType, D: Dim> {
-    rule: Arc<dyn Rule<C, D>>,
+pub struct Simulation<D: Dim> {
+    rule: Arc<dyn Rule<D>>,
     min_layer: usize,
-    results: ResultsCache<C, D>,
+    results: ResultsCache<D>,
 }
-impl<C: CellType, D: Dim> Default for Simulation<C, D> {
+impl<D: Dim> Default for Simulation<D> {
     fn default() -> Self {
         Self::new(Arc::new(DummyRule))
     }
 }
 
-impl<C: CellType, D: Dim> Simulation<C, D> {
+impl<D: Dim> Simulation<D> {
     /// Constructs a new Simulation using the given rule.
-    pub fn from<R: 'static + Rule<C, D>>(rule: R) -> Self {
+    pub fn from<R: 'static + Rule<D>>(rule: R) -> Self {
         Self::new(Arc::new(rule))
     }
     /// Constructs a new Simulation using the given rule.
-    pub fn new(rule: Arc<dyn Rule<C, D>>) -> Self {
+    pub fn new(rule: Arc<dyn Rule<D>>) -> Self {
         // Determine the minimum layer at which we can simulate one generation
         // of the automaton, using `n / 4 >= r`. (See the documentation for
         // Simulation::advance_inner_node() for an explanation.) Even at r=0 or
@@ -47,7 +47,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
     }
 
     /// Advances the given NdTree by the given number of generations.
-    pub fn step(&mut self, tree: &mut NdTree<C, D>, step_size: &BigInt) {
+    pub fn step(&mut self, tree: &mut NdTree<D>, step_size: &BigInt) {
         assert!(
             step_size.is_positive(),
             "Step size must be a positive integer"
@@ -107,11 +107,11 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
     #[must_use]
     fn advance_inner_node(
         &mut self,
-        cache: &NdTreeCache<C, D>,
-        node: &NdCachedNode<C, D>,
+        cache: &NdTreeCache<D>,
+        node: &NdCachedNode<D>,
         generations: &BigInt,
-        transition_function: &mut TransitionFunction<C, D>,
-    ) -> NdCachedNode<C, D> {
+        transition_function: &mut TransitionFunction<D>,
+    ) -> NdCachedNode<D> {
         // Handle the simplest case of just not simulating anything. This is one
         // of the recursive base cases.
         if generations.is_zero() {
@@ -174,7 +174,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 
             // 1. Make a 4^D array of nodes at layer `L-2` of the original node
             //    at time `0`.
-            let unsimmed_nodes: NdArray<NdTreeBranch<C, D>, D> = NdArray::from_flat_data(
+            let unsimmed_nodes: NdArray<NdTreeBranch<D>, D> = NdArray::from_flat_data(
                 UVec::repeat(4usize),
                 NdRect::span(ByteVec::origin(), ByteVec::repeat(3))
                     .iter()
@@ -184,7 +184,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 
             // 2. Combine adjacent nodes at layer `L-2` to make a 3^D array of
             //    nodes at layer `L-1` and time `0`.
-            let combined_unsimmed_nodes: NdArray<NdCachedNode<C, D>, D> = NdArray::from_flat_data(
+            let combined_unsimmed_nodes: NdArray<NdCachedNode<D>, D> = NdArray::from_flat_data(
                 UVec::repeat(3usize),
                 NdRect::span(IVec::origin(), IVec::repeat(2isize))
                     .iter()
@@ -201,7 +201,7 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 
             // 3. Simulate each of those nodes to get a new node at layer `L-2`
             //    and time `t/2` (red squares).
-            let half_simmed_nodes: NdArray<NdTreeBranch<C, D>, D> =
+            let half_simmed_nodes: NdArray<NdTreeBranch<D>, D> =
                 combined_unsimmed_nodes.map(|node| {
                     NdTreeBranch::Node(self.advance_inner_node(
                         cache,
@@ -213,25 +213,24 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 
             // 4. Combine adjacent nodes from step #3 to make a 2^D array of
             //    nodes at layer `L-1` and time `t/2`.
-            let combined_half_simmed_nodes: NdArray<NdCachedNode<C, D>, D> =
-                NdArray::from_flat_data(
-                    UVec::repeat(2usize),
-                    NdRect::span(IVec::origin(), IVec::repeat(1isize))
-                        .iter()
-                        .map(|pos| {
-                            cache.get_node(
-                                NdRect::span(pos.clone(), pos + 1)
-                                    .iter()
-                                    .map(|pos| half_simmed_nodes[&pos].clone())
-                                    .collect(),
-                            )
-                        })
-                        .collect(),
-                );
+            let combined_half_simmed_nodes: NdArray<NdCachedNode<D>, D> = NdArray::from_flat_data(
+                UVec::repeat(2usize),
+                NdRect::span(IVec::origin(), IVec::repeat(1isize))
+                    .iter()
+                    .map(|pos| {
+                        cache.get_node(
+                            NdRect::span(pos.clone(), pos + 1)
+                                .iter()
+                                .map(|pos| half_simmed_nodes[&pos].clone())
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+            );
 
             // 5. Simulate each of those nodes to get a new node at layer `L-2`
             //    and time `t` (green squares).
-            let full_simmed_nodes: NdArray<NdTreeBranch<C, D>, D> =
+            let full_simmed_nodes: NdArray<NdTreeBranch<D>, D> =
                 combined_half_simmed_nodes.map(|node| {
                     NdTreeBranch::Node(self.advance_inner_node(
                         cache,
@@ -256,23 +255,14 @@ impl<C: CellType, D: Dim> Simulation<C, D> {
 
 /// A cache of simulation results for a variety of step sizes.
 #[derive(Debug, Default, Clone)]
-struct ResultsCache<C: CellType, D: Dim>(HashMap<BigInt, SingleStepResultsCache<C, D>, NodeHasher>);
-impl<C: CellType, D: Dim> ResultsCache<C, D> {
-    fn get_result(
-        &self,
-        node: &NdCachedNode<C, D>,
-        step_size: &BigInt,
-    ) -> Option<&NdCachedNode<C, D>> {
+struct ResultsCache<D: Dim>(HashMap<BigInt, SingleStepResultsCache<D>, NodeHasher>);
+impl<D: Dim> ResultsCache<D> {
+    fn get_result(&self, node: &NdCachedNode<D>, step_size: &BigInt) -> Option<&NdCachedNode<D>> {
         self.0
             .get(step_size)
             .and_then(|single_step_cache| single_step_cache.get_result(node))
     }
-    fn set_result(
-        &mut self,
-        node: NdCachedNode<C, D>,
-        step_size: &BigInt,
-        result: NdCachedNode<C, D>,
-    ) {
+    fn set_result(&mut self, node: NdCachedNode<D>, step_size: &BigInt, result: NdCachedNode<D>) {
         // TODO: once #![feature(entry_insert)] is stabalized, use that instead.
         let single_step_results_cache;
         if let Some(existing) = self.0.get_mut(step_size) {
@@ -289,14 +279,12 @@ impl<C: CellType, D: Dim> ResultsCache<C, D> {
 
 /// A cache of simulation results for a given step size.
 #[derive(Debug, Default, Clone)]
-struct SingleStepResultsCache<C: CellType, D: Dim>(
-    HashMap<NdCachedNode<C, D>, NdCachedNode<C, D>, NodeHasher>,
-);
-impl<C: CellType, D: Dim> SingleStepResultsCache<C, D> {
-    fn get_result(&self, node: &NdCachedNode<C, D>) -> Option<&NdCachedNode<C, D>> {
+struct SingleStepResultsCache<D: Dim>(HashMap<NdCachedNode<D>, NdCachedNode<D>, NodeHasher>);
+impl<D: Dim> SingleStepResultsCache<D> {
+    fn get_result(&self, node: &NdCachedNode<D>) -> Option<&NdCachedNode<D>> {
         self.0.get(node)
     }
-    fn set_result(&mut self, node: NdCachedNode<C, D>, result: NdCachedNode<C, D>) {
+    fn set_result(&mut self, node: NdCachedNode<D>, result: NdCachedNode<D>) {
         self.0.insert(node, result);
     }
 }

@@ -91,7 +91,7 @@ const TINY_OFFSET: f32 = 1.0 / 16.0;
 
 #[derive(Default)]
 pub struct RenderCache {
-    gl_quadtree: CachedGlQuadtree<u8>,
+    gl_quadtree: CachedGlQuadtree,
 }
 
 pub struct RenderInProgress<'a> {
@@ -104,7 +104,7 @@ pub struct RenderInProgress<'a> {
     /// Zoom level to draw render cells at.
     render_cell_zoom: Zoom2D,
     /// Slice of the quadtree that encompasses all visible cells.
-    quadtree_slice: NdTreeSlice<u8, Dim2D>,
+    quadtree_slice: NdTreeSlice<Dim2D>,
     /// The render cell position within quadtree_slice that is centered on the
     /// screen.
     pos: FVec2D,
@@ -148,7 +148,7 @@ impl<'a> RenderInProgress<'a> {
         // of visible cells relative to that node, and a floating-point render
         // cell position relative to that node that will be in the center of the
         // screen.
-        let quadtree_slice: NdTreeSlice<u8, Dim2D>;
+        let quadtree_slice: NdTreeSlice<Dim2D>;
         let visible_rect: IRect2D;
         let mut pos: FVec2D;
         {
@@ -332,7 +332,7 @@ impl<'a> RenderInProgress<'a> {
         //     glium::uniforms::MagnifySamplerFilter::Linear,
         // );
     }
-    fn get_branch_pixel_color(branch: &NdTreeBranch<u8, Dim2D>) -> [u8; 4] {
+    fn get_branch_pixel_color(branch: &NdTreeBranch<Dim2D>) -> [u8; 4] {
         let ratio = match branch {
             NdTreeBranch::Leaf(cell_state) => *cell_state as f64,
             NdTreeBranch::Node(node) => {

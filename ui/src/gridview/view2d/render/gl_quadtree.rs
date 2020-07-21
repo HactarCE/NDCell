@@ -16,17 +16,17 @@ const WARN_TEXTURE_SIZE_THRESHOLD: usize = 1024;
 static WARN_TEXTURE_SIZE: Once = Once::new();
 
 #[derive(Default)]
-pub struct CachedGlQuadtree<C: CellType> {
+pub struct CachedGlQuadtree {
     cached: Option<GlQuadtree>,
-    current_node: Option<NdCachedNode<C, Dim2D>>,
+    current_node: Option<NdCachedNode<Dim2D>>,
     current_min_layer: usize,
 }
-impl<C: CellType> CachedGlQuadtree<C> {
+impl CachedGlQuadtree {
     pub fn set_node(
         &mut self,
-        node: NdCachedNode<C, Dim2D>,
+        node: NdCachedNode<Dim2D>,
         min_layer: usize,
-        pixelator: impl FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4],
+        pixelator: impl FnMut(&NdTreeBranch<Dim2D>) -> [u8; 4],
     ) {
         // Only recompute quadtree if necessary.
         if self.current_min_layer == min_layer && Some(&node) == self.current_node.as_ref() {
@@ -38,9 +38,9 @@ impl<C: CellType> CachedGlQuadtree<C> {
     }
     pub fn from_node(
         &mut self,
-        node: NdCachedNode<C, Dim2D>,
+        node: NdCachedNode<Dim2D>,
         min_layer: usize,
-        pixelator: impl FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4],
+        pixelator: impl FnMut(&NdTreeBranch<Dim2D>) -> [u8; 4],
     ) -> &GlQuadtree {
         self.set_node(node, min_layer, pixelator);
         self.unwrap()
@@ -64,10 +64,10 @@ pub struct GlQuadtree {
 impl GlQuadtree {
     /// Constructs a GlQuadtree from a node and a function to turn a node into a
     /// solid color.
-    pub fn from_node<C: CellType>(
-        node: &NdCachedNode<C, Dim2D>,
+    pub fn from_node(
+        node: &NdCachedNode<Dim2D>,
         min_layer: usize,
-        mut pixelator: impl FnMut(&NdTreeBranch<C, Dim2D>) -> [u8; 4],
+        mut pixelator: impl FnMut(&NdTreeBranch<Dim2D>) -> [u8; 4],
     ) -> Self {
         let indexed_tree = IndexedNdTree::from_node(node, min_layer);
         let mut pixel_vec: Vec<u32> = indexed_tree

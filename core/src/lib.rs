@@ -36,7 +36,7 @@ pub use space::*;
 #[enum_dispatch]
 pub trait NdProjectedAutomatonTrait<P: Dim> {
     /// Returns the projected NdTree.
-    fn get_projected_tree(&self) -> NdTree<u8, P>;
+    fn get_projected_tree(&self) -> NdTree<P>;
     /// Returns the ProjectionParams used to create this projection.
     fn get_projection_params(&self) -> ProjectionParams;
     /// Sets the projection from the ProjectionParams.
@@ -153,7 +153,7 @@ impl<P: Dim> IntoNdSimulate for ProjectedAutomaton<P> {
 #[derive(Clone)]
 pub struct NdProjectedAutomaton<D: Dim, P: Dim> {
     pub automaton: NdAutomaton<D>,
-    pub projection: NdProjection<u8, D, P>,
+    pub projection: NdProjection<D, P>,
 }
 impl<D: Dim> From<NdAutomaton<D>> for NdProjectedAutomaton<D, D> {
     fn from(automaton: NdAutomaton<D>) -> Self {
@@ -177,7 +177,7 @@ impl<D: Dim, P: Dim> IntoNdSimulate for NdProjectedAutomaton<D, P> {
     }
 }
 impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P> {
-    fn get_projected_tree(&self) -> NdTree<u8, P> {
+    fn get_projected_tree(&self) -> NdTree<P> {
         self.projection.project(&self.automaton.tree)
     }
     fn get_projection_params(&self) -> ProjectionParams {
@@ -199,8 +199,8 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
 #[allow(missing_docs)]
 #[derive(Clone, Default)]
 pub struct NdAutomaton<D: Dim> {
-    pub tree: NdTree<u8, D>,
-    pub sim: Arc<Mutex<Simulation<u8, D>>>,
+    pub tree: NdTree<D>,
+    pub sim: Arc<Mutex<Simulation<D>>>,
     pub generations: BigInt,
 }
 impl<D: Dim> NdSimulate for NdAutomaton<D> {
@@ -223,7 +223,7 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
 }
 impl<D: Dim> NdAutomaton<D> {
     /// Sets the simulation of this automaton.
-    pub fn set_sim(&mut self, new_sim: Simulation<u8, D>) {
+    pub fn set_sim(&mut self, new_sim: Simulation<D>) {
         self.sim = Arc::new(Mutex::new(new_sim));
     }
 }

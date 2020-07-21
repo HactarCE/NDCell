@@ -12,14 +12,14 @@ pub struct SliceProjection2D<D: Dim> {
     v: Axis,
 }
 
-impl<C: CellType, D: Dim> NdProjector<C, D, Dim2D> for SliceProjection2D<D> {
-    fn project(&self, _tree: &NdTree<C, D>) -> NdTree<C, Dim2D> {
+impl<D: Dim> NdProjector<D, Dim2D> for SliceProjection2D<D> {
+    fn project(&self, _tree: &NdTree<D>) -> NdTree<Dim2D> {
         unimplemented!()
     }
     fn unproject_pos(&self, _pos: &BigVec<Dim2D>) -> BigVec<D> {
         unimplemented!()
     }
-    fn overwrite_projected(&self, _destination: &mut NdTree<C, D>, _source: &NdTree<C, Dim2D>) {
+    fn overwrite_projected(&self, _destination: &mut NdTree<D>, _source: &NdTree<Dim2D>) {
         unimplemented!()
     }
     fn get_params(&self) -> ProjectionParams {

@@ -12,20 +12,20 @@ use crate::*;
 pub type NodeHasher = BuildHasherDefault<SeaHasher>;
 
 /// A cached NdTreeNode.
-pub type NdCachedNode<C, D> = Arc<NdTreeNode<C, D>>;
+pub type NdCachedNode<D> = Arc<NdTreeNode<D>>;
 
 /// A cache of NdTreeNodes.
 #[derive(Debug, Default)]
-pub struct NdTreeCache<C: CellType, D: Dim> {
+pub struct NdTreeCache<D: Dim> {
     /// A HashSet of all of the nodes.
-    nodes: DashMap<NdBaseTreeNode<C, D>, NdCachedNode<C, D>, NodeHasher>,
+    nodes: DashMap<NdBaseTreeNode<D>, NdCachedNode<D>, NodeHasher>,
     /// A cache of empty nodes at various layers.
     ///
     /// The element at index N is the empty node at layer N-1.
-    empty_nodes: RwLock<Vec<NdCachedNode<C, D>>>,
+    empty_nodes: RwLock<Vec<NdCachedNode<D>>>,
 }
 
-impl<C: CellType, D: Dim> NdTreeCache<C, D> {
+impl<D: Dim> NdTreeCache<D> {
     /// Constructs an empty NdTreeNode cache.
     pub fn new() -> Self {
         Self::default()
@@ -33,7 +33,7 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
 
     /// Returns the cached node with the given branches, creating it if it does
     /// not exist.
-    pub fn get_node(&self, branches: Vec<NdTreeBranch<C, D>>) -> NdCachedNode<C, D> {
+    pub fn get_node(&self, branches: Vec<NdTreeBranch<D>>) -> NdCachedNode<D> {
         // Create an NdBaseTreeNode (cheaper than a full NdTreeNode) for HashSet
         // lookup.
         let base_node = NdBaseTreeNode::from(branches);
@@ -49,7 +49,7 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
             .clone()
     }
     /// Returns the NdTreeNode at the given layer with all default cells.
-    pub fn get_empty_node(&self, layer: usize) -> NdCachedNode<C, D> {
+    pub fn get_empty_node(&self, layer: usize) -> NdCachedNode<D> {
         let empty_nodes = self.empty_nodes.read().unwrap();
         if let Some(ret) = empty_nodes.get(layer - 1) {
             // Cache hit
@@ -71,17 +71,17 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
     }
     /// Returns the NdTreeBranch containing a node at the given layer with all
     /// default cells (or just an NdTreeBranch::Leaf of the default cell state).
-    pub fn get_empty_branch(&self, layer: usize) -> NdTreeBranch<C, D> {
+    pub fn get_empty_branch(&self, layer: usize) -> NdTreeBranch<D> {
         match layer {
-            0 => NdTreeBranch::Leaf(C::default()),
+            0 => NdTreeBranch::Leaf(0),
             _ => NdTreeBranch::Node(self.get_empty_node(layer)),
         }
     }
     /// Returns a cached node, using a function to generate each branch.
     pub fn get_node_from_fn(
         &self,
-        generator: impl FnMut(ByteVec<D>) -> NdTreeBranch<C, D>,
-    ) -> NdCachedNode<C, D> {
+        generator: impl FnMut(ByteVec<D>) -> NdTreeBranch<D>,
+    ) -> NdCachedNode<D> {
         let branches = (0..D::TREE_BRANCHES)
             .map(ByteVec::from_array_idx)
             .map(generator)
@@ -95,8 +95,8 @@ impl<C: CellType, D: Dim> NdTreeCache<C, D> {
         &self,
         layer: usize,
         offset: IVec<D>,
-        generator: &mut impl FnMut(IVec<D>) -> C,
-    ) -> NdCachedNode<C, D> {
+        generator: &mut impl FnMut(IVec<D>) -> u8,
+    ) -> NdCachedNode<D> {
         self.get_node_from_fn(|branch_idx| {
             let branch_offset: IVec<D> = branch_idx.branch_offset(layer);
             let total_offset = &offset + branch_offset;

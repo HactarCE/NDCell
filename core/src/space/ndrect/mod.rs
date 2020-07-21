@@ -192,6 +192,14 @@ where
     }
 }
 
+/// A trait to allow overloading of the contains() method.
+pub trait CanContain<I> {
+    /// Returns true if `inner` is within `self`; usually implemented for
+    /// structs that range over a set of cells on a grid with respect to cell
+    /// position vectors.
+    fn contains(&self, inner: I) -> bool;
+}
+
 impl<D: DimFor<N>, N: NdVecNum> CanContain<&NdVec<D, N>> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec,

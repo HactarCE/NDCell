@@ -7,7 +7,7 @@ use std::cell::{RefCell, RefMut};
 use ndcell_core::{FRect2D, FVec2D, IRect2D, X, Y};
 
 use super::vertices::*;
-use super::GRIDLINE_BATCH_SIZE;
+use super::CELL_OVERLAY_BATCH_SIZE;
 use crate::DISPLAY;
 
 type StaticVbo<T> = SendWrapper<RefCell<VertexBuffer<T>>>;
@@ -21,7 +21,7 @@ fn empty_static_vbo<T: glium::Vertex>(size: usize) -> StaticVbo<T> {
 lazy_static! {
     static ref QUADTREE_QUAD: StaticVbo<QuadtreePosVertex> = empty_static_vbo(4);
     static ref BLIT_QUAD: StaticVbo<TexturePosVertex> = empty_static_vbo(4);
-    static ref GRIDLINES: StaticVbo<RgbaVertex> = empty_static_vbo(GRIDLINE_BATCH_SIZE);
+    static ref GRIDLINES: StaticVbo<RgbaVertex> = empty_static_vbo(4 * CELL_OVERLAY_BATCH_SIZE);
 }
 
 pub fn quadtree_quad<'a>() -> RefMut<'a, VertexBuffer<QuadtreePosVertex>> {

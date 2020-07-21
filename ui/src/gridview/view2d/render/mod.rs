@@ -47,6 +47,7 @@ use num::{BigInt, ToPrimitive, Zero};
 use ndcell_core::space::*;
 
 mod gl_quadtree;
+mod ibos;
 mod shaders;
 mod textures;
 mod vbos;
@@ -76,13 +77,13 @@ const DEAD_COLOR: (u8, u8, u8) = (0, 0, 0);
 /// Color for live cells. This will be configurable in the future.
 const LIVE_COLOR: (u8, u8, u8) = (255, 255, 255);
 
-/// Number of gridlines in each render batch.
-const GRIDLINE_BATCH_SIZE: usize = 256;
+/// Number of cell overlay rectangles in each render batch.
+const CELL_OVERLAY_BATCH_SIZE: usize = 256;
 
 /// Depth at which to render gridlines.
 const GRIDLINE_DEPTH: f32 = 0.1;
 /// Depth at which to render highlight/crosshairs.
-const CROSSHAIR_DEPTH: f32 = 0.2;
+const CURSOR_DEPTH: f32 = 0.2;
 
 /// A small offset used to force correct Z order or align things at the
 /// sub-pixel scale.
@@ -94,22 +95,22 @@ pub struct RenderCache {
 }
 
 pub struct RenderInProgress<'a> {
-    /// The viewport to use when rendering.
+    /// Viewport to use when rendering.
     viewport: Viewport2D,
-    /// The target to render to.
+    /// Target to render to.
     target: &'a mut glium::Frame,
-    /// The node layer of a render cell.
+    /// Node layer of a render cell.
     render_cell_layer: usize,
-    /// The zoom level to draw render cells at.
+    /// Zoom level to draw render cells at.
     render_cell_zoom: Zoom2D,
-    /// A slice of the quadtree that encompasses all visible cells.
+    /// Slice of the quadtree that encompasses all visible cells.
     quadtree_slice: NdTreeSlice<u8, Dim2D>,
     /// The render cell position within quadtree_slice that is centered on the
     /// screen.
     pos: FVec2D,
-    /// A rectangle of render cells within quadtree_slice that is visible.
+    /// Rectangle of render cells within quadtree_slice that is visible.
     visible_rect: IRect2D,
-    /// The view matrix converting from quadtree_slice space (1 unit = 1 render
+    /// View matrix converting from quadtree_slice space (1 unit = 1 render
     /// cell; (0, 0) = bottom left) to screen space ((-1, -1) = bottom left; (1,
     /// 1) = top right).
     view_matrix: [[f32; 4]; 4],
@@ -387,8 +388,8 @@ impl<'a> RenderInProgress<'a> {
         Some(global_pos)
     }
 
-    /// Draw the gridlines that appear in the viewport.
-    pub fn draw_gridlines(&mut self, width: f32) {
+    /// Draws gridlines at varying opacity and spacing depending on zoom level.
+    pub fn draw_gridlines(&mut self, width: f64) {
         // Compute the minimum pixel spacing between maximum-opacity gridlines.
         let pixel_spacing = MAX_GRIDLINE_SPACING as f64;
         // Compute the cell spacing between the gridlines that will be drawn
@@ -412,24 +413,20 @@ impl<'a> RenderInProgress<'a> {
             color[3] *= alpha;
             // Draw gridlines with the given spacing.
             let offset = (-self.visible_rect.min()).mod_floor(&(spacing as isize));
-            self.draw_cell_borders(
-                &self
-                    .visible_rect
-                    .axis_range(X)
-                    .skip(offset[X] as usize)
-                    .step_by(spacing)
-                    .collect_vec(),
-                &self
-                    .visible_rect
-                    .axis_range(Y)
-                    .skip(offset[Y] as usize)
-                    .step_by(spacing)
-                    .collect_vec(),
-                color,
-                width,
-                None,
-                None,
-                GRIDLINE_DEPTH,
+            self.draw_cell_overlay_rects(
+                &self.generate_solid_cell_borders(
+                    self.visible_rect
+                        .axis_range(X)
+                        .skip(offset[X] as usize)
+                        .step_by(spacing),
+                    self.visible_rect
+                        .axis_range(Y)
+                        .skip(offset[Y] as usize)
+                        .step_by(spacing),
+                    GRIDLINE_DEPTH,
+                    width,
+                    color,
+                ),
             );
             // Decrease the spacing.
             spacing /= GRIDLINE_SPACING_BASE;
@@ -438,174 +435,273 @@ impl<'a> RenderInProgress<'a> {
     }
 
     /// Draws a highlight around the given cell.
-    pub fn draw_blue_crosshairs_highlight(
-        &mut self,
-        cell_position: &BigVec2D,
-        width: f32,
-        draw_gridline_backing: bool,
-    ) {
-        let local_pos: IVec2D = (cell_position - &self.quadtree_slice.offset).as_ivec();
-        let mut fill_color = GRID_HIGHLIGHT_COLOR;
+    pub fn draw_blue_cursor_highlight(&mut self, cell_position: &BigVec2D, width: f64) {
+        if !self.quadtree_slice.rect().contains(cell_position) {
+            return;
+        }
+        let pos = (cell_position - &self.quadtree_slice.offset).as_ivec();
+
+        self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
+            IRect2D::single_cell(pos),
+            CURSOR_DEPTH,
+            width,
+            GRID_HIGHLIGHT_COLOR,
+            RectHighlightParams {
+                fill: true,
+                crosshairs: true,
+            },
+        ));
+    }
+
+    /// Generates a cell overlay to outline the given cell rectangle, with
+    /// optional fill and crosshairs.
+    #[must_use = "This method only generates the rectangles; call `draw_cell_overlay_rects` to draw them"]
+    fn generate_cell_rect_outline(
+        &self,
+        rect: IRect2D,
+        z: f32,
+        width: f64,
+        color: [f32; 4],
+        params: RectHighlightParams,
+    ) -> Vec<CellOverlayRect> {
+        let bright_color = color;
+        let mut dull_color = color;
+        dull_color[3] *= 0.25;
+        let mut fill_color = color;
         fill_color[0] *= 0.5;
         fill_color[1] *= 0.5;
         fill_color[2] *= 0.5;
         fill_color[3] *= 0.75;
-        let x = local_pos[X];
-        let y = local_pos[Y];
-        let highlight_rect = IRect2D::single_cell(local_pos);
 
-        // Only draw two crosshairs (vertical & horizontal) if we are zoomed out
-        // past 1:1.5 scale.
-        let mut xs = vec![x];
-        let mut ys = vec![y];
-        if self.viewport.zoom.factor() > 1.5 {
-            xs.push(x + 1);
-            ys.push(y + 1);
+        let NdVec([min_x, min_y]) = self.visible_rect.min();
+        let NdVec([max_x, max_y]) = self.visible_rect.max() + 1;
+
+        // If there are more than 1.5 pixels per render cell, the upper boundary
+        // should be *between* cells (+1). If there are fewer, the upper
+        // boundary should be *on* the cell (+0).
+        let pixels_per_cell = self.render_cell_zoom.pixels_per_cell();
+        let a = rect.min();
+        let b = rect.max() + (pixels_per_cell > 1.5) as isize;
+        let NdVec([ax, ay]) = a;
+        let NdVec([bx, by]) = b;
+
+        let mut h_stops = vec![
+            (min_x, dull_color),
+            (ax - 1, dull_color),
+            (ax, bright_color),
+            (bx, bright_color),
+            (bx + 1, dull_color),
+            (max_x, dull_color),
+        ];
+        let mut v_stops = vec![
+            (min_y, dull_color),
+            (ay - 1, dull_color),
+            (ay, bright_color),
+            (by, bright_color),
+            (by + 1, dull_color),
+            (max_y, dull_color),
+        ];
+
+        // Optionally remove crosshairs.
+        if !params.crosshairs {
+            h_stops = h_stops
+                .into_iter()
+                .filter(|&(_, color)| color == bright_color)
+                .collect();
+            v_stops = v_stops
+                .into_iter()
+                .filter(|&(_, color)| color == bright_color)
+                .collect();
         }
 
-        if draw_gridline_backing {
-            // Redraw normal gridlines to ensure they are full opacity and the
-            // same width as the crosshairs.
-            self.draw_cell_borders(
-                &xs,
-                &ys,
-                GRID_COLOR,
+        let mut ret = vec![];
+
+        // In case the crosshairs/outline is transparent, render gridlines
+        // beneath it. Draw order works in our favor here:
+        // https://stackoverflow.com/a/20231235/4958484
+        if params.crosshairs {
+            ret.extend_from_slice(&self.generate_solid_cell_borders(
+                vec![ax, bx],
+                vec![ay, by],
+                z - TINY_OFFSET,
                 width,
-                None,
-                None,
-                GRIDLINE_DEPTH + TINY_OFFSET,
-            );
+                GRID_COLOR,
+            ));
         }
-        // Now draw the crosshairs and highlight.
-        self.draw_cell_borders(
-            &xs,
-            &ys,
-            GRID_HIGHLIGHT_COLOR,
-            width,
-            Some(highlight_rect),
-            Some(fill_color),
-            CROSSHAIR_DEPTH,
-        );
+
+        // Generate lines.
+        for &x in &[ax, bx] {
+            ret.extend_from_slice(&self.generate_gradient_cell_border(
+                v_stops.iter().map(|&(y, color)| (NdVec([x, y]), color)),
+                z,
+                width,
+                Y,
+            ));
+        }
+        for &y in &[ay, by] {
+            ret.extend_from_slice(&self.generate_gradient_cell_border(
+                h_stops.iter().map(|&(x, color)| (NdVec([x, y]), color)),
+                z,
+                width,
+                X,
+            ));
+        }
+
+        // Generate fill after lines.
+        if params.fill {
+            ret.push(CellOverlayRect {
+                start: a,
+                end: b,
+                z,
+                start_color: fill_color,
+                end_color: fill_color,
+                line_params: None,
+            })
+        }
+
+        ret
     }
 
-    fn draw_cell_borders(
-        &mut self,
-        columns: &[isize],
-        rows: &[isize],
-        color: [f32; 4],
-        line_width: f32,
-        highlight_range: Option<IRect2D>,
-        highlight_fill_color: Option<[f32; 4]>,
+    /// Generates a cell overlay for solid borders along the given columns and
+    /// rows.
+    #[must_use = "This method only generates the rectangles; call `draw_cell_overlay_rects` to draw them"]
+    fn generate_solid_cell_borders(
+        &self,
+        columns: impl IntoIterator<Item = isize>,
+        rows: impl IntoIterator<Item = isize>,
         z: f32,
-    ) {
-        let mut base_color = color;
-        if highlight_range.is_some() {
-            base_color[3] *= 0.25;
+        width: f64,
+        color: [f32; 4],
+    ) -> Vec<CellOverlayRect> {
+        let min = self.visible_rect.min();
+        let max = self.visible_rect.max() + 1;
+        let min_x = min[X];
+        let min_y = min[Y];
+        let max_x = max[X];
+        let max_y = max[Y];
+
+        let h_line_params = Some(LineParams {
+            width,
+            include_endpoints: true,
+            axis: X,
+        });
+        let v_line_params = Some(LineParams {
+            width,
+            include_endpoints: true,
+            axis: Y,
+        });
+
+        let mut ret = Vec::with_capacity(4 * self.visible_rect.size().sum() as usize);
+        for x in columns {
+            ret.push(CellOverlayRect {
+                start: NdVec([x, min_y]),
+                end: NdVec([x, max_y]),
+                z,
+                start_color: color,
+                end_color: color,
+                line_params: v_line_params,
+            });
         }
-
-        // Generate a pair of vertices for each gridline.
-        let gridline_indices = glium::index::NoIndices(PrimitiveType::LinesList);
-        let mut gridline_vertices: Vec<RgbaVertex>;
-        {
-            gridline_vertices = Vec::with_capacity((columns.len() + rows.len()) as usize * 2);
-            let min = self.visible_rect.min();
-            let max = self.visible_rect.max() + 1;
-            let min_x = min[X];
-            let min_y = min[Y];
-            let max_x = max[X];
-            let max_y = max[Y];
-            let z2 = z + TINY_OFFSET;
-            // Generate vertical gridlines.
-            for &x in columns {
-                gridline_vertices.push(([x, min_y], z, base_color).into());
-                if let Some(rect) = highlight_range {
-                    let y1 = rect.min()[Y];
-                    gridline_vertices.push(([x, y1 - 1], z, base_color).into());
-                    gridline_vertices.push(([x, y1 - 1], z, base_color).into());
-                    gridline_vertices.push(([x, y1], z, color).into());
-                    gridline_vertices.push(([x, y1], z2, color).into());
-                    let y2 = rect.max()[Y];
-                    gridline_vertices.push(([x, y2 + 1], z2, color).into());
-                    gridline_vertices.push(([x, y2 + 1], z, color).into());
-                    gridline_vertices.push(([x, y2 + 2], z, base_color).into());
-                    gridline_vertices.push(([x, y2 + 2], z, base_color).into());
-                }
-                gridline_vertices.push(([x, max_y], z, base_color).into());
-            }
-            // Generate horizontal gridlines.
-            for &y in rows {
-                gridline_vertices.push(([min_x, y], z, base_color).into());
-                if let Some(rect) = highlight_range {
-                    let x1 = rect.min()[X];
-                    gridline_vertices.push(([x1 - 1, y], z, base_color).into());
-                    gridline_vertices.push(([x1 - 1, y], z, base_color).into());
-                    gridline_vertices.push(([x1, y], z, color).into());
-                    gridline_vertices.push(([x1, y], z2, color).into());
-                    let x2 = rect.max()[X];
-                    gridline_vertices.push(([x2 + 1, y], z2, color).into());
-                    gridline_vertices.push(([x2 + 1, y], z, color).into());
-                    gridline_vertices.push(([x2 + 2, y], z, base_color).into());
-                    gridline_vertices.push(([x2 + 2, y], z, base_color).into());
-                }
-                gridline_vertices.push(([max_x, y], z, base_color).into());
-            }
+        for y in rows {
+            ret.push(CellOverlayRect {
+                start: NdVec([min_x, y]),
+                end: NdVec([max_x, y]),
+                z,
+                start_color: color,
+                end_color: color,
+                line_params: h_line_params,
+            });
         }
+        ret
+    }
 
-        let uniform = uniform! { matrix: self.view_matrix };
-        let draw_params = glium::DrawParameters {
-            line_width: Some(line_width),
-            blend: glium::Blend::alpha_blending(),
-            depth: glium::Depth {
-                test: glium::DepthTest::IfMore,
-                write: true,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+    /// Generates a cell overlay for a gradient cell border.
+    #[must_use = "This method only generates the rectangles; call `draw_cell_overlay_rects` to draw them"]
+    fn generate_gradient_cell_border(
+        &self,
+        stops: impl IntoIterator<Item = (IVec2D, [f32; 4])>,
+        z: f32,
+        width: f64,
+        axis: Axis,
+    ) -> Vec<CellOverlayRect> {
+        // Generate a rectangle for each stop (so that there is a definitive
+        // color at each point) AND a rectangle between each adjacent pair of
+        // stops.
+        let mut ret = vec![];
+        let mut prev_stop = None;
+        let btwn_stops_line_params = Some(LineParams {
+            width,
+            include_endpoints: false,
+            axis,
+        });
+        let single_stop_line_params = Some(LineParams {
+            width,
+            include_endpoints: true,
+            axis,
+        });
+        for stop in stops {
+            let (pos, color) = stop;
+            if let Some((prev_pos, prev_color)) = prev_stop {
+                ret.push(CellOverlayRect {
+                    start: prev_pos,
+                    end: pos,
+                    z,
+                    start_color: prev_color,
+                    end_color: color,
+                    line_params: btwn_stops_line_params,
+                });
+            }
+            ret.push(CellOverlayRect {
+                start: pos,
+                end: pos,
+                z,
+                start_color: color,
+                end_color: color,
+                line_params: single_stop_line_params,
+            });
+            prev_stop = Some(stop);
+        }
+        ret
+    }
 
+    /// Draws a cell overlay.
+    fn draw_cell_overlay_rects(&mut self, rects: &[CellOverlayRect]) {
         // Draw the gridlines in batches, because the VBO might not be able to
         // hold all the points at once.
-        for batch in gridline_vertices.chunks(GRIDLINE_BATCH_SIZE) {
+        for rect_batch in rects
+            .into_iter()
+            .chunks(CELL_OVERLAY_BATCH_SIZE)
+            .into_iter()
+        {
+            let rect_batch = rect_batch.into_iter().collect_vec();
+            let count = rect_batch.len();
+            // Generate vertices.
+            let verts = rect_batch
+                .iter()
+                .flat_map(|&rect| rect.verts(self.render_cell_zoom).to_vec())
+                .collect_vec();
             // Put the data in a slice of the VBO.
             let gridlines_vbo = vbos::gridlines();
-            let vbo_slice = gridlines_vbo.slice(0..batch.len()).unwrap();
-            vbo_slice.write(batch);
+            let vbo_slice = gridlines_vbo.slice(0..(4 * count)).unwrap();
+            vbo_slice.write(&verts);
             // Draw gridlines.
             self.target
                 .draw(
                     vbo_slice,
-                    &gridline_indices,
+                    &ibos::rect_indices(count),
                     &shaders::POINTS,
-                    &uniform,
-                    &draw_params,
+                    &uniform! { matrix: self.view_matrix },
+                    &glium::DrawParameters {
+                        blend: glium::Blend::alpha_blending(),
+                        depth: glium::Depth {
+                            test: glium::DepthTest::IfMore,
+                            write: true,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
                 )
-                .expect("Failed to draw cell borders");
-        }
-
-        // Draw the highlight fill.
-        if let (Some(rect), Some(fill_color)) = (highlight_range, highlight_fill_color) {
-            // Generate vertices.
-            let fill_indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
-            let highlight_vertices: Vec<RgbaVertex> = vec![
-                ([rect.min()[X], rect.min()[Y]], z, fill_color).into(),
-                ([rect.max()[X] + 1, rect.min()[Y]], z, fill_color).into(),
-                ([rect.min()[X], rect.max()[Y] + 1], z, fill_color).into(),
-                ([rect.max()[X] + 1, rect.max()[Y] + 1], z, fill_color).into(),
-            ];
-            // Put the data in a slice of the VBO.
-            let gridlines_vbo = vbos::gridlines();
-            let vbo_slice = gridlines_vbo.slice(0..highlight_vertices.len()).unwrap();
-            vbo_slice.write(&highlight_vertices);
-            // Draw highlight fill.
-            self.target
-                .draw(
-                    vbo_slice,
-                    &fill_indices,
-                    &shaders::POINTS,
-                    &uniform,
-                    &draw_params,
-                )
-                .expect("Failed to draw cursor crosshairs");
+                .expect("Failed to draw cell-aligned rectangles");
         }
     }
 }
@@ -637,4 +733,96 @@ fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: 
     }
     let progress = (x - min) / (max - min);
     min_result + (max_result - min_result) * progress
+}
+
+/// A simple rectangle in a cell overlay.
+///
+/// Because glLineWidth is not supported on all platforms, we draw rectangles to
+/// vary gridline width.
+#[derive(Debug, Copy, Clone)]
+struct CellOverlayRect {
+    /// Start point of a line, or one corner of a rectangle.
+    start: IVec2D,
+    /// End point of a line, or other corner of a rectangle.
+    end: IVec2D,
+    /// Z order.
+    z: f32,
+    /// Color at the start of the line.
+    start_color: [f32; 4],
+    /// Color at the end of the line.
+    end_color: [f32; 4],
+    /// Optional parameters for lines.
+    line_params: Option<LineParams>,
+}
+impl CellOverlayRect {
+    fn solid_rect(rect: IRect2D, z: f32, color: [f32; 4]) -> Self {
+        Self {
+            start: rect.min(),
+            end: rect.max(),
+            z,
+            start_color: color,
+            end_color: color,
+            line_params: None,
+        }
+    }
+    fn verts(self, render_cell_zoom: Zoom2D) -> [RgbaVertex; 4] {
+        let mut a = self.start.as_fvec();
+        let mut b = self.end.as_fvec();
+        let mut colors = [
+            self.start_color,
+            self.start_color,
+            self.end_color,
+            self.end_color,
+        ];
+        if let Some(LineParams {
+            width,
+            include_endpoints,
+            axis,
+        }) = self.line_params
+        {
+            let width = width.round().max(1.0);
+            // At this point, the rectangle should have zero width.
+            let cells_per_pixel = render_cell_zoom.cells_per_pixel();
+            let offset = FVec::repeat(r64(cells_per_pixel * width / 2.0)) * (b - a).signum();
+            // Expand it in all directions, so now it has the correct width and
+            // includes its endpoints.
+            a -= offset;
+            b += offset;
+            // Now exclude the endpoints, if requested.
+            if !include_endpoints {
+                a[axis] += offset[axis] * 2.0;
+                b[axis] -= offset[axis] * 2.0;
+            }
+            if axis == X {
+                // Use horizontal gradient instead of vertical gradient.
+                colors.swap(1, 2);
+            }
+        }
+        let ax = a[X].to_f32().unwrap();
+        let ay = a[Y].to_f32().unwrap();
+        let bx = b[X].to_f32().unwrap();
+        let by = b[Y].to_f32().unwrap();
+        [
+            RgbaVertex::from(([ax, ay, self.z], colors[0])),
+            RgbaVertex::from(([bx, ay, self.z], colors[1])),
+            RgbaVertex::from(([ax, by, self.z], colors[2])),
+            RgbaVertex::from(([bx, by, self.z], colors[3])),
+        ]
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct LineParams {
+    /// Line width.
+    pub width: f64,
+    /// Whether to include the squares at the endpoints of this line.
+    pub include_endpoints: bool,
+    /// The axis this line is along.
+    pub axis: Axis,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct RectHighlightParams {
+    pub fill: bool,
+    pub crosshairs: bool,
 }

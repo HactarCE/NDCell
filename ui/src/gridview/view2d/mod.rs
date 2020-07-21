@@ -290,13 +290,13 @@ impl RenderGridView for GridView2D {
         rip.draw_cells();
 
         // Draw gridlines.
-        let gridlines_width = self.interpolating_viewport.zoom.factor() as f32 / 32.0;
+        let gridlines_width = self.interpolating_viewport.zoom.factor() / 32.0;
         rip.draw_gridlines(gridlines_width);
         // Draw crosshairs.
         if let Some(cursor_pos) = params.cursor_pos {
             hover_pos = rip.pixel_pos_to_cell_pos(cursor_pos);
             if let Some(pos) = &hover_pos {
-                rip.draw_blue_crosshairs_highlight(pos, gridlines_width * 2.0, true);
+                rip.draw_blue_cursor_highlight(pos, gridlines_width * 2.0);
             }
         }
 

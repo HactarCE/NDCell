@@ -237,6 +237,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "colorous"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aba0709907d231ef5ac2ab2209bd52e16c4788b05fded799f0ec5b6f33895089"
+
+[[package]]
 name = "const-random"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -701,6 +707,7 @@ name = "ndcell"
 version = "0.0.1"
 dependencies = [
  "clipboard",
+ "colorous",
  "enum_dispatch",
  "glium",
  "imgui",

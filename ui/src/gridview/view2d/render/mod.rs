@@ -333,29 +333,36 @@ impl<'a> RenderInProgress<'a> {
         // );
     }
     fn get_branch_pixel_color(branch: &NdTreeBranch<Dim2D>) -> [u8; 4] {
-        let ratio = match branch {
-            NdTreeBranch::Leaf(cell_state) => *cell_state as f64,
+        let (r, g, b) = match branch {
+            NdTreeBranch::Leaf(cell_state) => match *cell_state {
+                0 => DEAD_COLOR,
+                1 => LIVE_COLOR,
+                i => colorous::TURBO
+                    .eval_rational(257 - i as usize, 256)
+                    .as_tuple(),
+            },
             NdTreeBranch::Node(node) => {
-                if node.population.is_zero() {
+                let ratio = if node.population.is_zero() {
                     0.0
                 } else if let Some(node_len) = node.len().to_f64() {
                     let population = node.population.to_f64().unwrap();
                     (population / 2.0) / node_len.powf(2.0) + 0.5
                 } else {
                     1.0
-                }
+                };
+                let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
+                    + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
+                    .powf(0.5);
+                let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
+                    + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
+                    .powf(0.5);
+                let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
+                    + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
+                    .powf(0.5);
+                (r as u8, g as u8, b as u8)
             }
         };
-        let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
-            + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
-            .powf(0.5);
-        let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
-            + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
-            .powf(0.5);
-        let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
-            + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
-            .powf(0.5);
-        [r as u8, g as u8, b as u8, 255]
+        [r, g, b, 255]
     }
 
     /// Returns the coordinates of the cell at the given pixel, or None if the

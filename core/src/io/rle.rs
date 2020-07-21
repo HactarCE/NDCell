@@ -232,13 +232,14 @@ impl RleEncode for Automaton2D {
         if let Some(cxrle) = cxrle {
             ret.generations = cxrle.gen;
             pos = cxrle.pos;
+            // Y coordinates increase upwards in NDCell, but downwards in RLE, so
+            // reflect over the Y axis.
+            pos[Y] *= -1;
         } else {
-            pos = NdVec([-header.x / 2, -header.y / 2]);
+            // Center on (0, 0).
+            pos = NdVec([-header.x / 2, header.y / 2 - 1]);
         }
         let x_start = pos[X].clone();
-        // Y coordinates increase upwards in NDCell, but downwards in RLE, so
-        // reflect over the Y axis.
-        pos[Y] *= -1;
 
         for row in cell_array {
             for cell in row {

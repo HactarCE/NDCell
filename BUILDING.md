@@ -1,43 +1,29 @@
-# NDCA
+# Building NDCell
 
-This is a testing ground for a cellular automaton description language for [NDCell](https://github.com/HactarCE/NDCell).
-
-## Short-term to-do list
-
-* [x] Compile helper functions
-* [x] Calls to built-in functions
-* [x] Calls to built-in methods
-* [x] Vector operations
-* [x] Unary `+` operator
-* [x] Refactor parser
-* [x] `is` expressions
-* [x] cell state filters
-* [x] `for` loops
-* [ ] pattern masks
-* [ ] patterns
-* [ ] pattern matchers
-* [ ] merge to `master`!
+Building NDCell is more difficult compared to most Rust programs because it includes a JIT compiler using LLVM.
 
 ## Building on Linux or macOS
 
 1. Download/install Cargo.
-2. Download [LLVM](https://releases.llvm.org/download.html) 10.0.0 precompiled binaries and extract them somewhere.
-3. Either put those LLVM binaries somewhere in your path so that they are accessible on the command line, or set an environment variable `LLVM_SYS_60_PREFIX` containing the path pointing to wherever you extracted LLVM.
+2. Download [LLVM](https://releases.llvm.org/download.html) 10.0.0 precompiled binaries and extract them somewhere, or install them using your package manager if you can.
+3. Either put those LLVM binaries somewhere in your path so that they are accessible on the command line, or set an environment variable `LLVM_SYS_100_PREFIX` containing the path pointing to wherever you extracted LLVM.
 4. Clone this project and build/run:
 
 ```sh
 git clone https://github.com/HactarCE/NDCA
 cd NDCA
-cargo build # or cargo run
+cargo run --release
 ```
+
+The first build may take ~10 minutes or more. Remove `--release` to disable optimizations, which makes building faster but NDCell will be much slower.
 
 ## Building on Windows
 
 What you'll need:
 
 * Rustup
-* CMake
-* Visual Studio + Visual Studio Build Tools
+* CMake (if you want to build LLVM from scratch)
+* Visual Studio + Visual Studio Build Tools (if you want to build LLVM from scratch)
 
 ### Part 1 - Rust setup
 
@@ -50,9 +36,9 @@ What you'll need:
 
 ### Part 2 - Building LLVM
 
-Fair warning: I don't do C or C++ development so it's entirely possible that I've completely butchered the proper build process, but this is what finally worked for me.
+**If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://github.com/HactarCE/LLVM-MSVC-Win64-Dev/). Extract that somewhere and skip to step #11, using the path where you extracted it place of `C:\LLVM_solution\MinSizeRel`.** I can't promise that will work, but it's waaaay easier than compiling LLVM yourself.
 
-If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://1drv.ms/u/s!AnInQYQ5foGSi7hmxnhb-hG1mCmWAw?e=HVPNn9). (SHA256 = `676a81c273653c87682696afa0d73762cf07720d637e57439d743fe4321ea342`) Extract that somewhere and skip to step #11, using the path where you extracted it place of `C:\LLVM_solution\MinSizeRel`. I can't promise that this will work, but it's waaaay easier than compiling LLVM yourself.
+Fair warning: I don't do C or C++ development so it's entirely possible that I've botched the build process, but this is what finally worked for me.
 
 1. Download/install [CMake](https://cmake.org/download/). WSL or Cygwin `cmake` might work, but I wouldn't count on it.
 2. Download [LLVM](https://releases.llvm.org/download.html) 10.0.0 source code. The precompiled binaries probably won't work, but you can try.
@@ -74,9 +60,11 @@ By the way, **do not use cmake-gui**. I don't think there's any way to make it u
 8. Now there should be a folder at `C:\LLVM_solution\MinSizeRel` that contains folders named `bin` and `lib`. If that's there, good.
 9. Copy `C:\LLVM_solution\include` into `C:\LLVM_solution\MinSizeRel` so that the new `include` folder is next to `bin` and `lib`.
 10. Also copy the contents of `C:\LLVM_source_code\include` into `C:\LLVM_solution\MinSizeRel\include`, merging the contents. There might be a file or two that are overwritten and that's fine.
-11. Finally, make a new environment variable (system variable or user variable, doesn't matter) called `LLVM_SYS_80_PREFIX` with the value `C:\LLVM_solution\MinSizeRel`. Reboot to make sure this takes effect.
+11. Finally, make a new environment variable (system variable or user variable, doesn't matter) called `LLVM_SYS_100_PREFIX` with the value `C:\LLVM_solution\MinSizeRel`. Reboot to make sure this takes effect.
 
 ### Part 3 - Building NDCA
 
 1. Download this project and extract it somewhere.
-2. Open a terminal in the folder where you extracted NDCA (it should have `Cargo.toml` in it) and build it using `cargo build` or run it using `cargo run`.
+2. Open a terminal in the folder where you extracted NDCA (it should have `Cargo.toml` in it) and build it using `cargo build --release` or run it using `cargo run --release`.
+
+The first build may take ~10 minutes or more. Remove `--release` to disable optimizations, which makes building faster but NDCell will be much slower.

@@ -55,8 +55,10 @@ html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 
 html_theme_options = {
+    'logo_only': True,
+    'style_nav_header_background': '#343131',
     'sticky_navigation': False,
 }
-html_logo = 'img/ndcell_icon.svg'
+html_logo = 'img/ndcell_logo.svg'
 
 master_doc = 'index'

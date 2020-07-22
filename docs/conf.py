@@ -56,7 +56,7 @@ html_static_path = ['_static']
 
 html_theme_options = {
     'sticky_navigation': False,
-    'html_logo': 'img/ndcell_icon.svg',
 }
+html_logo = 'img/ndcell_icon.svg'
 
 master_doc = 'index'

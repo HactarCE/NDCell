@@ -1,11 +1,18 @@
-.. NDCell documentation master file, created by
-   sphinx-quickstart on Tue Jul 21 23:49:45 2020.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+######
+NDCell
+######
 
-Welcome to NDCell's documentation!
-==================================
+NDCell is an N-dimensional `cellular automaton`__ simulator written in Rust. You can read more on the `GitHub repository`__.
+
+__ https://en.wikipedia.org/wiki/Cellular_automaton
+__ https://www.github.com/HactarCE/NDCell
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Custom rules
+   :hidden:
+
+   Getting started <custom-rules/guide>
+   custom-rules/examples
+   Specification <custom-rules/spec>
+   custom-rules/rationale

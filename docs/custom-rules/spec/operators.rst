@@ -2,10 +2,13 @@
 Operators
 *********
 
-Besides the ``is`` operator, both arguments to any binary (two-input) operator must be of the same type, or one type must be able to implicitly convert to the other. See [Conversions] for more details. Some additional rules apply for operators:
+Besides the ``is`` operator, both `arguments`__ to any binary (two-input) operator must be of the same type, or one type must be able to implicitly convert to the other. See :ref:`conversions` for more details. Some additional rules apply for operators:
+
+__ https://en.wikipedia.org/wiki/Argument_of_a_function
 
 - For the binary operators ``+``, ``-``, ``|``, ``^``, ``<<``, ``>>>``, and ``>>``, the shorter vector is extended and the result is the length of the longer vector.
 - For the binary operators ``*``, ``/``, ``%``, ``**``, and ``&``, the longer vector is truncated and the result is the length of the shorter vector. (This is because extending the shorter vector with ``0`` would not produce useful output.)
+- Arguments to a boolean operator
 
 - Integers will implicitly convert to vectors of any length. See [Integer to vector conversion](#integer-to-vector-conversion).
 - Cells will implicitly convert to cell filters. See [Cell to cell filter conversion](#cell-to-cell-filter-conversion).
@@ -13,6 +16,8 @@ Besides the ``is`` operator, both arguments to any binary (two-input) operator m
   - A vector is truthy if any component is nonzero.
   - A cell is truthy if it is not ``#0``.
   - A pattern is truthy if any cell is nonzero.
+
+.. _arithmetic-operators:
 
 Arithmetic operators
 ====================
@@ -32,9 +37,18 @@ NOTE: In the future, the behavior of ``/`` and ``%`` with negative numbers may b
 
 All of these operations can be applied to integers and vectors.
 
-If an operation is applied to two vectors of different lengths, then one vector is truncated or extended so that they are the same length. (See [Conversions] for more details.) For ``+`` and ``-``, the shorter vector is extended; for ``*``, ``/``, ``%``, and ``**``, the longer vector is truncated.
+If an operation is applied to two vectors of different lengths or applied to a vector and an integer, then both arguments are converted to the a vector of the same length:
+
+- For ``+`` and ``-``, the length of the shorter vector is used.
+-
+
+. (See [Conversions] for more details.) For ``+`` and ``-``, the shorter vector is extended; for ``*``, ``/``, ``%``, and ``**``, the longer vector is truncated.
+
+Overflow, underflow, or division by zero abort the simulation with an error.
 
 [vector lengths]: Types#vector-lengths
+
+.. _bitwise-operators:
 
 Bitwise operators
 =================
@@ -58,6 +72,10 @@ Given two values ``a`` and ``b``:
 
 All of these operations are defined for integers and vectors.
 
+Bitshifting by less than 0 or more than 64 aborts the simulation with an error.
+
+.. _set-operators:
+
 Set operators
 =============
 
@@ -75,6 +93,8 @@ Given two values ``a`` and ``b``:
 
 Set operations are defined for cell filters. If one of these operators is applied to a cell, it is automatically converted to a cell filter that matches only that cell.
 
+.. _comparison-operators:
+
 Comparison operators
 ====================
 
@@ -86,6 +106,8 @@ Comparison operators
 - ``a >= b`` — Is ``a`` greater than or equal to ``b``?
 
 All of these operations are defined for integers and vectors. ``==`` and ``!=`` are defined for cell states and patterns.
+
+.. _boolean-operators:
 
 Boolean operators
 =================
@@ -100,17 +122,25 @@ Boolean operators
 [logical XOR]: https://en.wikipedia.org/wiki/XOR_gate
 [logical NOT]: https://en.wikipedia.org/wiki/Inverter_(logic_gate)
 
+.. _range-operator:
+
+Range operator
+==============
+
+- ``a..b``
+
+.. _indexing:
+
+Indexing
+========
+
+- ``a[b]``
+
+.. _is-operator:
+
 Membership test
 ===============
 
 - ``a is b``
 
 This operator takes a basic type for ``a`` and the corresponding filter type for ``b``. (Note that implicit type conversion rules apply)
-
-Indexing
-========
-
-Range
-=====
-
-- ``a..b``

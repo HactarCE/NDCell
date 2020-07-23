@@ -1,3 +1,5 @@
+.. _variables:
+
 *********
 Variables
 *********

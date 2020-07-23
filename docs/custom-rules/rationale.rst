@@ -1,3 +1,5 @@
+.. _rationale:
+
 *********
 Rationale
 *********
@@ -11,4 +13,4 @@ __ https://www.lua.org/
 - **Speed** — Lua can be JIT-compiled, but it still has dynamic typing which costs speed compared to a statically typed JIT-compiled language.
 - **Less bloat** — Though Lua is very small, it has many features that are not helpful in most cellular automata, such as tables, metatables, double-precision floating point numbers, etc.
 - **Guarantees** — NDCA offers useful guarantees by disallowing dynamic memory allocation and nondeterministic behavior, which improve safety and reliability.
-- **Custom features** — Types like :ref:`vectors <vectors>` and :ref:`cell patterns <patterns>` are first-class in NDCA, and there is custom syntax for handling symmetries, groups of cell states, and numerous other features that would be awkward to emulate in a general-purpose programming language.
+- **Custom features** — Types like :ref:`vectors <vector>` and :ref:`cell patterns <pattern>` are first-class in NDCA, and there is custom syntax for handling symmetries, groups of cell states, and numerous other features that would be awkward to emulate in a general-purpose programming language.

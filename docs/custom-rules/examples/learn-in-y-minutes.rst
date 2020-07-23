@@ -1,3 +1,5 @@
+.. _learn-in-y-minutes:
+
 ***********************
 Learn NDCA in Y minutes
 ***********************

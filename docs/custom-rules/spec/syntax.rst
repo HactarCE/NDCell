@@ -1,8 +1,10 @@
+.. _syntax:
+
 ******
 Syntax
 ******
 
-.. _directives:
+.. _directive-syntax:
 
 Directives
 ==========

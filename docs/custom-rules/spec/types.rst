@@ -1,3 +1,5 @@
+.. _types:
+
 *****
 Types
 *****
@@ -36,7 +38,7 @@ Basic types
 
   The first component of a vector is the X component at index 0; the second is the Y component at index 1; etc.
 
-  Vectors are written as a list of integers separated by commas surrounded by square brackets. For example, ``[3, -1, 0]`` is a vector of length ``3`` with X component ``3``, Y component ``-1``, Z component ``0``. Vectors can also be written using :ref:`vec-function` and its variants.
+  Vectors are written as a list of integers separated by commas surrounded by square brackets. For example, ``[3, -1, 0]`` is a vector of length ``3`` with X component ``3``, Y component ``-1``, Z component ``0``. Vectors can also be written using :func:`vec()` and its variants.
 
   Example vector types:
 

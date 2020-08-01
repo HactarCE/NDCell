@@ -11,9 +11,11 @@ __ https://en.wikipedia.org/wiki/Domain-specific_language
 .. toctree::
    :titlesonly:
 
+   spec/types
    spec/syntax
    spec/directives
-   spec/types
+   spec/statements
+   spec/expressions
    spec/operators
    spec/conversions
    spec/variables

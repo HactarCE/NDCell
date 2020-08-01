@@ -35,7 +35,9 @@ Given two values ``a`` and ``b``:
 - ``-a`` — negation
 - ``+a`` — no operation
 
-NOTE: In the future, the behavior of ``/`` and ``%`` with negative numbers may be changed to emulate [floored or euclidean division/modulo](https://en.wikipedia.org/wiki/Modulo_operation).
+NOTE: In the future, the behavior of ``/`` and ``%`` with negative numbers may be changed to emulate `floored or euclidean division/modulo`__.
+
+__ https://en.wikipedia.org/wiki/Modulo_operation
 
 All of these operations can be applied to integers and vectors.
 

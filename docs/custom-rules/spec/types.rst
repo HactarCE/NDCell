@@ -54,7 +54,7 @@ For most operations, when an operation is applied between vectors of different l
 
 ### Vector comparisons
 
-Vectors support all the same comparisons as [integers][integer], by applying them componentwise. When comparing vectors, the shorter vector is first extended using `0`. A comparison between vectors compares all components, and is true only if that comparison is true for all components. For example `[-1, 0] < [0, 1]` is true because `-1 < 1` and `0 < 1` are both true. `[-1, 1] < [0, 1]`, however, is false because `0 < 0` is false.
+Vectors support all the same comparisons as [integers][integer], by applying them componentwise. When comparing vectors, the shorter vector is first extended using `0`. A comparison between vectors compares all components, and is true only if that comparison is true for all components. For example `[-1, 2] < [0, 4]` is true because `-1 < 0` and `2 < 4` are both true. `[-1, 2] < [0, 1]`, however, is false because `2 < 1` is false.
 
 .. _cell:
 

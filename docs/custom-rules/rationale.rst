@@ -14,3 +14,10 @@ __ https://www.lua.org/
 - **Less bloat** — Though Lua is very small, it has many features that are not helpful in most cellular automata, such as tables, metatables, double-precision floating point numbers, etc.
 - **Guarantees** — NDCA offers useful guarantees by disallowing dynamic memory allocation and nondeterministic behavior, which improve safety and reliability.
 - **Custom features** — Types like :ref:`vectors <vector>` and :ref:`cell patterns <pattern>` are first-class in NDCA, and there is custom syntax for handling symmetries, groups of cell states, and numerous other features that would be awkward to emulate in a general-purpose programming language.
+
+NDCA takes inspiration from the following sources:
+
+* **Rust** — basic syntax and static typing with inference
+* **GLSL** — first-class vectors and user code designed to run in parallel, processing a vast amount of data in small chunks
+* **Golly rule tables** — symmetry, ``@directive`` syntax, and pattern matching
+* **Java** — `>>>` logical right-shift operator

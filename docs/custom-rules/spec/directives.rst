@@ -40,7 +40,7 @@ Automaton directives
 
   TODO: describe special variables ``this``, ``neighborhood``, and ``nbhd``.
 
-  :type: Code block
+  :type: :ref:`Code block <code-block>`
   :default value: ``{ remain }``
   :examples: See :ref:`examples`
 
@@ -52,7 +52,7 @@ Automaton directives
 
   NOTE: not yet implemented, and may be removed
 
-  :type: :data:`String`
+  :type: :ref:`String literal <string-literal>`
   :default value: None
   :examples:
 
@@ -67,7 +67,7 @@ Metadata directives
 
   NOTE: not yet implemented
 
-  :type: :data:`String`
+  :type: :ref:`String literal <string-literal>`
   :default value: Name of the file, excluding the extension.
   :examples:
 
@@ -80,7 +80,7 @@ Metadata directives
 
   NOTE: not yet implemented
 
-  :type: :data:`String`
+  :type: :ref:`String literal <string-literal>`
   :default value: ``"Unknown"``
   :examples:
 
@@ -94,8 +94,8 @@ Metadata directives
 
   NOTE: not yet implemented
 
-  :type: :data:`String`
-  :default value: Same as ``@author``
+  :type: :ref:`String literal <string-literal>`
+  :default value: Same as :data:`@author`
   :examples:
 
     - ``@designer "John Conway"``
@@ -108,7 +108,7 @@ Metadata directives
 
   NOTE: not yet implemented
 
-  :type: :data:`String`
+  :type: :ref:`String literal <string-literal>`
   :default value: ``"Unknown"``
   :examples:
 
@@ -123,8 +123,8 @@ Metadata directives
 
   NOTE: not yet implemented
 
-  :type: :data:`String`
-  :default value: ``"Unknown"``
+  :type: :ref:`String literal <string-literal>`
+  :default value: ``"None"``
   :examples:
 
     - ``@url "https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life"``

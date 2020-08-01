@@ -8,7 +8,7 @@ Functions
 
   :param value: The value to convert to a boolean
   :type value: any basic type
-  :rtype: :data:`TRUE` if the value is
+  :rtype: :data:`TRUE` if the value is truthy, or :data:`FALSE` if it is falsey
 
   Converts a value to a boolean. See :ref:`boolean-conversion`.
 

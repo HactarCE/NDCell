@@ -44,11 +44,11 @@ Cell to cell filter conversion
 Boolean conversion
 ==================
 
-Any :ref:`basic type <basic-types>` can be converted to a boolean. This can happen implicitly (when used in a place where a boolean is required) or explicitly (using :func:`bool`).
+Any :ref:`basic type <basic-types>` can be converted to a boolean, which is represented using an :ref:`integer <integer>`. This can happen implicitly (when used in a place where a boolean is required) or explicitly (using :func:`bool`).
 
 - An integer is truthy if it is not equal to ``0``.
 - A vector is truthy if any of its components is not equal to ``0``.
 - A cell is truthy if it is not equal to ``#0``.
 - A pattern is truthy if any of its cells is not equal to ``#0``.
 
-"Truthy" values become :data:`TRUE` (``1``) and "falsey" values become :data:`FALSE` (``0``).
+"Truthy" values become :data:`TRUE` (``1``) and "falsey" values (anything not truthy) become :data:`FALSE` (``0``).

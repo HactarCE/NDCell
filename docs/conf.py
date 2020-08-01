@@ -60,6 +60,9 @@ html_theme_options = {
     'style_nav_header_background': '#343131',
     'sticky_navigation': False,
 }
+
 html_logo = 'img/ndcell_logo.svg'
+
+highlight_language = 'none'
 
 master_doc = 'index'

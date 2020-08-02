@@ -5,10 +5,10 @@ authors = ["HactarCE <6060305+HactarCE@users.noreply.github.com>"]
 edition = "2018"
 
 [dependencies]
-dashmap = "3.4"
-enum_dispatch = "0.2"
+dashmap = "3.11"
+enum_dispatch = "0.3"
 noisy_float = "0.1"
-num = "0.2"
+num = "0.3"
 pest = "2.1"
 pest_derive = "2.1"
 regex = "1"

@@ -1,17 +1,22 @@
 use glium::glutin::dpi::PhysicalPosition;
-use glium::glutin::*;
+use glium::glutin::event::*;
 use noisy_float::prelude::r64;
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut, Index};
 use std::time::{Duration, Instant};
 
-use ndcell_core::{AsFVec, IVec2D, NdVec, X};
+use ndcell_core::{AsFVec, FVec2D, IVec2D, NdVec, X, Y};
 
 use crate::config::Config;
 use crate::gridview::{control::*, GridView, GridViewTrait, RenderGridView};
 
 const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;
+
+const SHIFT: ModifiersState = ModifiersState::SHIFT;
+const CTRL: ModifiersState = ModifiersState::CTRL;
+const ALT: ModifiersState = ModifiersState::ALT;
+const LOGO: ModifiersState = ModifiersState::LOGO;
 
 // Define keyboard scancodes. OSX scancodes are from
 // https://eastmanreference.com/complete-list-of-applescript-key-codes
@@ -38,6 +43,8 @@ mod sc {
 pub struct State {
     /// A record of which keys are pressed.
     keys: KeysPressed,
+    /// A record of which modifiers are pressed.
+    modifiers: ModifiersState,
     /// Whether the right mouse button is held.
     rmb_held: bool,
     /// The pixel position of the mouse cursor from the top left of the window.
@@ -60,7 +67,7 @@ impl State {
         imgui_io: &imgui::Io,
     ) -> FrameInProgress<'a> {
         FrameInProgress {
-            stable_state: self,
+            state: self,
             config,
             gridview,
             has_keyboard: !imgui_io.want_capture_keyboard,
@@ -69,9 +76,10 @@ impl State {
     }
 }
 
+// TODO: document this
 #[must_use = "call finish()"]
 pub struct FrameInProgress<'a> {
-    stable_state: &'a mut State,
+    state: &'a mut State,
     config: &'a mut Config,
     gridview: &'a GridView,
     /// Whether to handle keyboard input (false if it is captured by imgui).
@@ -82,12 +90,12 @@ pub struct FrameInProgress<'a> {
 impl<'a> Deref for FrameInProgress<'a> {
     type Target = State;
     fn deref(&self) -> &State {
-        &self.stable_state
+        &self.state
     }
 }
 impl<'a> DerefMut for FrameInProgress<'a> {
     fn deref_mut(&mut self) -> &mut State {
-        &mut self.stable_state
+        &mut self.state
     }
 }
 impl<'a> FrameInProgress<'a> {
@@ -100,7 +108,7 @@ impl<'a> FrameInProgress<'a> {
         self.draw_cell_state = None;
     }
 
-    pub fn handle_event(&mut self, ev: &Event) {
+    pub fn handle_event(&mut self, ev: &Event<()>) {
         if !self.has_mouse {
             self.cursor_pos = None;
         }
@@ -114,11 +122,16 @@ impl<'a> FrameInProgress<'a> {
                             self.handle_key(input);
                         }
                     }
+                    WindowEvent::ModifiersChanged(new_modifiers) => {
+                        self.modifiers = *new_modifiers;
+                    }
                     WindowEvent::CursorLeft { .. } => {
                         self.cursor_pos = None;
                     }
-                    WindowEvent::CursorMoved { position, .. } if self.has_mouse => {
-                        let PhysicalPosition { x, y } = position.to_physical(self.config.gfx.dpi);
+                    WindowEvent::CursorMoved {
+                        position: PhysicalPosition { x, y },
+                        ..
+                    } if self.has_mouse => {
                         let new_pos = NdVec([x.round() as isize, y.round() as isize]);
 
                         if let (true, Some(old_pos)) = (self.rmb_held, self.cursor_pos) {
@@ -204,17 +217,14 @@ impl<'a> FrameInProgress<'a> {
             KeyboardInput {
                 state: ElementState::Pressed,
                 virtual_keycode,
-                modifiers,
                 ..
             } => {
-                match modifiers {
-                    // No modifiers
-                    ModifiersState {
-                        shift: false,
-                        ctrl: false,
-                        alt: false,
-                        logo: false,
-                    } => match virtual_keycode {
+                // We don't care about left vs. right modifiers, so just extract
+                // the bits that don't specify left vs. right.
+                let modifiers = self.state.modifiers & (SHIFT | CTRL | ALT | LOGO);
+
+                if modifiers.is_empty() {
+                    match virtual_keycode {
                         Some(VirtualKeyCode::Space) => {
                             self.gridview.enqueue(SimCommand::Step(1.into()))
                         }
@@ -226,15 +236,11 @@ impl<'a> FrameInProgress<'a> {
                         }
                         Some(VirtualKeyCode::Escape) => self.gridview.enqueue(SimCommand::Cancel),
                         _ => (),
-                    },
+                    }
+                }
 
-                    // CTRL
-                    ModifiersState {
-                        shift: false,
-                        ctrl: true,
-                        alt: false,
-                        logo: false,
-                    } => match virtual_keycode {
+                if modifiers == CTRL {
+                    match virtual_keycode {
                         // Undo.
                         Some(VirtualKeyCode::Z) => self.gridview.enqueue(HistoryCommand::Undo),
                         // Redo.
@@ -252,14 +258,11 @@ impl<'a> FrameInProgress<'a> {
                             .gridview
                             .enqueue(MoveCommand2D::SetPos(NdVec::origin()).decay()),
                         _ => (),
-                    },
-                    // SHIFT + CTRL
-                    ModifiersState {
-                        shift: true,
-                        ctrl: true,
-                        alt: false,
-                        logo: false,
-                    } => match virtual_keycode {
+                    }
+                }
+
+                if modifiers == SHIFT | CTRL {
+                    match virtual_keycode {
                         // Redo.
                         Some(VirtualKeyCode::Z) => self.gridview.enqueue(HistoryCommand::Redo),
                         // Copy with extra info.
@@ -267,8 +270,7 @@ impl<'a> FrameInProgress<'a> {
                             self.gridview.enqueue(ClipboardCommand::CopyCxrle)
                         }
                         _ => (),
-                    },
-                    _ => (),
+                    }
                 }
             }
             // Ignore key release.
@@ -277,14 +279,6 @@ impl<'a> FrameInProgress<'a> {
     }
 
     pub fn finish(mut self) {
-        let no_modifiers_pressed = !(self.keys[VirtualKeyCode::LAlt]
-            || self.keys[VirtualKeyCode::LControl]
-            || self.keys[VirtualKeyCode::LWin]
-            || self.keys[VirtualKeyCode::RAlt]
-            || self.keys[VirtualKeyCode::RControl]
-            || self.keys[VirtualKeyCode::RWin]);
-        let shift_pressed = self.keys[VirtualKeyCode::LShift] || self.keys[VirtualKeyCode::RShift];
-
         if let Some(draw_state) = self.draw_cell_state {
             match self.gridview {
                 GridView::View2D(view2d) => {
@@ -303,34 +297,32 @@ impl<'a> FrameInProgress<'a> {
         let mut moved = false;
         let mut zoomed = false;
 
-        let speed = if shift_pressed { 2.0 } else { 1.0 };
-        let move_speed = 25.0 * speed * self.config.gfx.dpi;
+        // TODO: divide by FPS
+        let speed = if self.modifiers.shift() { 2.0 } else { 1.0 };
+        let move_speed = r64(25.0 * speed * self.config.gfx.dpi);
         let zoom_speed = 0.1 * speed;
         match self.gridview {
             GridView::View2D(view2d) => {
-                if self.has_keyboard && no_modifiers_pressed {
-                    let mut pan_x = 0.0;
-                    let mut pan_y = 0.0;
+                if self.has_keyboard && !self.modifiers.intersects(CTRL | ALT | LOGO) {
+                    let mut pan = FVec2D::origin();
                     // 'A' or left arrow => pan west.
                     if self.keys[sc::A] || self.keys[VirtualKeyCode::Left] {
-                        pan_x -= move_speed;
+                        pan[X] -= move_speed;
                     }
                     // 'D' or right arrow => pan west.
                     if self.keys[sc::D] || self.keys[VirtualKeyCode::Right] {
-                        pan_x += move_speed;
+                        pan[X] += move_speed;
                     }
                     // 'W' or up arrow => pan north.
                     if self.keys[sc::W] || self.keys[VirtualKeyCode::Up] {
-                        pan_y += move_speed;
+                        pan[Y] += move_speed;
                     }
                     // 'S' or down arrow => pan down.
                     if self.keys[sc::S] || self.keys[VirtualKeyCode::Down] {
-                        pan_y -= move_speed;
+                        pan[Y] -= move_speed;
                     }
-                    if pan_x != 0.0 || pan_y != 0.0 {
-                        view2d.enqueue(
-                            MoveCommand2D::PanPixels(NdVec([r64(pan_x), r64(pan_y)])).decay(),
-                        );
+                    if !pan.is_zero() {
+                        view2d.enqueue(MoveCommand2D::PanPixels(pan).decay());
                         moved = true;
                     }
                     // 'Q' or page up => zoom in.

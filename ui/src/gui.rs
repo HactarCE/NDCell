@@ -1,14 +1,17 @@
-use glium::glutin;
+use glium::glutin::event::{Event, StartCause, WindowEvent};
+use glium::glutin::event_loop::{ControlFlow, EventLoop};
+use glium::glutin::{window::WindowBuilder, ContextBuilder};
 use imgui::{Context, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use log::warn;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use ndcell_core::*;
 
@@ -16,14 +19,17 @@ use super::clipboard_compat::*;
 use super::gridview::*;
 
 lazy_static! {
-    static ref EVENTS_LOOP: SendWrapper<RefCell<glutin::EventsLoop>> =
-        SendWrapper::new(RefCell::new(glutin::EventsLoop::new()));
+    static ref EVENT_LOOP: SendWrapper<RefCell<Option<EventLoop<()>>>> =
+        SendWrapper::new(RefCell::new(Some(EventLoop::new())));
     pub static ref DISPLAY: SendWrapper<glium::Display> = SendWrapper::new({
-        let wb = glutin::WindowBuilder::new().with_title(super::TITLE.to_owned());
-        let cb = glutin::ContextBuilder::new().with_vsync(true);
-        glium::Display::new(wb, cb, &EVENTS_LOOP.borrow()).expect("Failed to initialize display")
+        let wb = WindowBuilder::new().with_title(super::TITLE.to_owned());
+        let cb = ContextBuilder::new().with_vsync(true);
+        glium::Display::new(wb, cb, EVENT_LOOP.borrow().as_ref().unwrap())
+            .expect("Failed to initialize display")
     });
 }
+
+const FPS: f64 = 60.0;
 
 const GOSPER_GLIDER_GUN_SYNTH_RLE: &str = "
 #CXRLE Gen=-31
@@ -55,7 +61,7 @@ fn make_default_gridview() -> GridView {
 }
 
 /// Display the main application window.
-pub fn show_gui() {
+pub fn show_gui() -> ! {
     let display = &**DISPLAY;
 
     // Initialize runtime data.
@@ -63,6 +69,7 @@ pub fn show_gui() {
     let mut gridview = make_default_gridview();
     let mut main_window = super::windows::MainWindow::default();
     let mut input_state = super::input::State::default();
+    let mut events_buffer = VecDeque::new();
 
     // Initialize imgui.
     let mut imgui = Context::create();
@@ -75,9 +82,9 @@ pub fn show_gui() {
     // borders and other things fuzzy for me (DPI = 1.5 in my setup) and
     // scaling can otherwise be accomplished by changing the font size, with
     // a MUCH crisper result.
-    platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Default);
+    platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
     config.gfx.dpi = platform.hidpi_factor(); // Fetch the DPI we want.
-    platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Locked(1.0));
+    platform.attach_window(imgui.io_mut(), window, HiDpiMode::Locked(1.0));
 
     // Initialize imgui fonts.
     let font_size = 16.0 * config.gfx.dpi as f32;
@@ -92,60 +99,99 @@ pub fn show_gui() {
 
     // Main loop
     let mut last_frame_time = Instant::now();
-    let mut closed = false;
-    while !closed {
-        let imgui_io = imgui.io_mut();
-        platform
-            .prepare_frame(imgui_io, &window)
-            .expect("Failed to start frame");
-        last_frame_time = imgui_io.update_delta_time(last_frame_time);
-
-        let mut input_frame = input_state.frame(&mut config, &gridview, &imgui_io);
-
-        EVENTS_LOOP.borrow_mut().poll_events(|ev| {
-            // Let imgui handle events.
-            platform.handle_event(imgui_io, &window, &ev);
-            // Handle events for the grid view.
-            input_frame.handle_event(&ev);
-            // Handle events ourself.
-            match ev {
-                glutin::Event::WindowEvent { event, .. } => match event {
-                    // Handle window close event.
-                    glutin::WindowEvent::CloseRequested => closed = true,
-                    _ => (),
+    EVENT_LOOP
+        .borrow_mut()
+        .take()
+        .unwrap()
+        .run(move |event, _ev_loop, control_flow| {
+            // Decide whether to handle events and render everything.
+            let do_frame = match event.to_static() {
+                Some(Event::NewEvents(cause)) => match cause {
+                    StartCause::ResumeTimeReached { .. } | StartCause::Init => true,
+                    _ => false,
                 },
-                _ => (),
+                Some(Event::LoopDestroyed) => {
+                    // The program is about to exit.
+                    false
+                }
+                Some(ev) => {
+                    // Queue the event to be handled next time we render
+                    // everything.
+                    events_buffer.push_back(ev);
+                    false
+                }
+                None => {
+                    // Ignore this event.
+                    false
+                }
+            };
+
+            if do_frame {
+                let current_time = Instant::now();
+                let next_frame_time = current_time + Duration::from_secs_f64(1.0 / FPS);
+                *control_flow = ControlFlow::WaitUntil(next_frame_time);
+
+                // Prep imgui for event handling.
+                let imgui_io = imgui.io_mut();
+                platform
+                    .prepare_frame(imgui_io, gl_window.window())
+                    .expect("Failed to start frame");
+                last_frame_time = imgui_io.update_delta_time(last_frame_time);
+
+                // Prep the gridview for event handling.
+                let mut input_frame = input_state.frame(&mut config, &gridview, &imgui_io);
+
+                for ev in events_buffer.drain(..) {
+                    // Let imgui handle events.
+                    platform.handle_event(imgui_io, gl_window.window(), &ev);
+                    // Handle events for the gridview.
+                    input_frame.handle_event(&ev);
+                    // Handle events ourself.
+                    match ev {
+                        Event::WindowEvent { event, .. } => match event {
+                            // Handle window close event.
+                            WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                            _ => (),
+                        },
+                        _ => (),
+                    }
+                }
+
+                // Finish handling events for the gridview.
+                input_frame.finish();
+
+                // Prep imgui for rendering.
+                let ui = imgui.frame();
+                main_window.build(&ui, &mut config, &gridview);
+
+                // Update the viewport and run the simulation if necessary.
+                gridview.do_frame(&config);
+
+                let mut target = display.draw();
+
+                // Render the gridview.
+                match &mut gridview {
+                    GridView::View2D(view2d) => {
+                        view2d.render(
+                            &config,
+                            &mut target,
+                            View2DRenderParams {
+                                cursor_pos: input_state.get_cursor_pos(),
+                            },
+                        );
+                    }
+                    GridView::View3D(_view3d) => (),
+                };
+
+                // Render imgui.
+                platform.prepare_render(&ui, gl_window.window());
+                let draw_data = ui.render();
+                renderer
+                    .render(&mut target, draw_data)
+                    .expect("Rendering failed");
+
+                // Put it all on the screen.
+                target.finish().expect("Failed to swap buffers");
             }
-        });
-
-        input_frame.finish();
-
-        let ui = imgui.frame();
-        main_window.build(&ui, &mut config, &gridview);
-
-        gridview.do_frame(&config);
-
-        let mut target = display.draw();
-
-        match &mut gridview {
-            GridView::View2D(view2d) => {
-                view2d.render(
-                    &config,
-                    &mut target,
-                    View2DRenderParams {
-                        cursor_pos: input_state.get_cursor_pos(),
-                    },
-                );
-            }
-            GridView::View3D(_view3d) => (),
-        };
-
-        platform.prepare_render(&ui, &window);
-        let draw_data = ui.render();
-        renderer
-            .render(&mut target, draw_data)
-            .expect("Rendering failed");
-
-        target.finish().expect("Failed to swap buffers");
-    }
+        })
 }

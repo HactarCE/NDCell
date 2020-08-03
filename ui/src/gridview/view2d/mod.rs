@@ -163,7 +163,7 @@ impl GridViewTrait for GridView2D {
                                     .and_then(|s| rle::RleEncode::from_rle(&s));
                                 match result {
                                     Ok(mut new_automaton) => {
-                                        new_automaton.set_sim(Simulation::from(rule::LIFE));
+                                        new_automaton.set_sim(crate::load_custom_rule());
                                         *self = Self::from(new_automaton)
                                     }
                                     Err(msg) => warn!("Failed to load RLE from clipboard: {}", msg),

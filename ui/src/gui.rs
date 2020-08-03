@@ -8,9 +8,6 @@ use log::warn;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::fs::File;
-use std::io::Read;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ndcell_core::*;
@@ -43,18 +40,8 @@ fn make_default_gridview() -> GridView {
         Default::default()
     });
 
-    let sim = if let Ok(mut file) = File::open("rule.ndca") {
-        let mut source_code = String::new();
-        file.read_to_string(&mut source_code)
-            .expect("Error reading file");
-        let rule = ndcell_lang::compile_blocking(Arc::new(source_code), None)
-            .expect("Error compiling rule");
-        Simulation::from(rule)
-    } else {
-        Simulation::from(rule::LIFE)
-    };
+    automaton.set_sim(crate::load_custom_rule());
 
-    automaton.set_sim(sim);
     GridView::from(automaton)
 }
 

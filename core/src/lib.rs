@@ -36,9 +36,9 @@ pub use space::*;
 #[enum_dispatch]
 pub trait NdProjectedAutomatonTrait<P: Dim> {
     /// Returns the projected NdTree.
-    fn get_projected_tree(&self) -> NdTree<P>;
+    fn projected_tree(&self) -> NdTree<P>;
     /// Returns the ProjectionParams used to create this projection.
-    fn get_projection_params(&self) -> ProjectionParams;
+    fn projection_params(&self) -> ProjectionParams;
     /// Sets the projection from the ProjectionParams.
     fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError>;
     /// Sets a cell using projected coordinates.
@@ -124,8 +124,8 @@ where
         Self::from(NdProjectedAutomaton::from(automaton))
     }
 }
-impl<P: Dim> IntoNdSimulate for ProjectedAutomaton<P> {
-    fn ndsim(&self) -> &dyn NdSimulate {
+impl<P: Dim> AsNdSimulate for ProjectedAutomaton<P> {
+    fn as_ndsim(&self) -> &dyn NdSimulate {
         match self {
             Self::From1D(inner) => inner,
             Self::From2D(inner) => inner,
@@ -135,7 +135,7 @@ impl<P: Dim> IntoNdSimulate for ProjectedAutomaton<P> {
             Self::From6D(inner) => inner,
         }
     }
-    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         match self {
             Self::From1D(inner) => inner,
             Self::From2D(inner) => inner,
@@ -168,20 +168,20 @@ impl<D: Dim> Default for NdProjectedAutomaton<D, D> {
         Self::from(NdAutomaton::default())
     }
 }
-impl<D: Dim, P: Dim> IntoNdSimulate for NdProjectedAutomaton<D, P> {
-    fn ndsim(&self) -> &dyn NdSimulate {
+impl<D: Dim, P: Dim> AsNdSimulate for NdProjectedAutomaton<D, P> {
+    fn as_ndsim(&self) -> &dyn NdSimulate {
         &self.automaton
     }
-    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         &mut self.automaton
     }
 }
 impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P> {
-    fn get_projected_tree(&self) -> NdTree<P> {
-        self.projection.project(&self.automaton.tree)
+    fn projected_tree(&self) -> NdTree<P> {
+        self.projection.project_tree(&self.automaton.tree)
     }
-    fn get_projection_params(&self) -> ProjectionParams {
-        self.projection.get_params()
+    fn projection_params(&self) -> ProjectionParams {
+        self.projection.params()
     }
     fn set_projection_params(&mut self, params: ProjectionParams) -> Result<(), NdProjectionError> {
         self.projection = NdProjection(params.try_into()?);
@@ -204,13 +204,13 @@ pub struct NdAutomaton<D: Dim> {
     pub generations: BigInt,
 }
 impl<D: Dim> NdSimulate for NdAutomaton<D> {
-    fn get_ndim(&self) -> usize {
+    fn ndim(&self) -> usize {
         D::NDIM
     }
-    fn get_population(&self) -> &BigInt {
-        &self.tree.get_root().population
+    fn population_count(&self) -> &BigInt {
+        &self.tree.root().population
     }
-    fn get_generation_count(&self) -> &BigInt {
+    fn generation_count(&self) -> &BigInt {
         &self.generations
     }
     fn set_generation_count(&mut self, generations: BigInt) {

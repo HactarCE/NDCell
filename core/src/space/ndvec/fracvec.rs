@@ -16,7 +16,7 @@ impl FracVec2D {
     pub fn normalize(&mut self) {
         let int_delta = self.frac.floor();
         self.frac -= int_delta;
-        self.int += int_delta.as_ivec();
+        self.int += int_delta.to_ivec();
     }
     /// Returns a new vector with the fractional component within [0, 1) without
     /// changing the value of the vector.
@@ -24,6 +24,10 @@ impl FracVec2D {
     pub fn normalized(mut self) -> Self {
         self.normalize();
         self
+    }
+    /// Converts this FracVec into an FVec, panicking if it does not fit.
+    pub fn to_fvec(&self) -> FVec<Dim2D> {
+        self.int.to_fvec() + self.frac
     }
 }
 impl From<FVec2D> for FracVec2D {
@@ -66,11 +70,5 @@ impl std::ops::SubAssign<&FracVec2D> for FracVec2D {
         self.int -= &rhs.int;
         self.frac -= rhs.frac;
         self.normalize();
-    }
-}
-
-impl AsFVec<Dim2D> for FracVec2D {
-    fn as_fvec(&self) -> FVec<Dim2D> {
-        self.int.as_fvec() + self.frac
     }
 }

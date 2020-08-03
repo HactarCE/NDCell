@@ -57,7 +57,7 @@ impl CachedGlQuadtree {
 /// a quadtree.
 pub struct GlQuadtree {
     pub texture: UnsignedTexture2d,
-    pub layers: usize,
+    pub max_layer: usize,
     pub root_idx: usize,
 }
 
@@ -71,7 +71,7 @@ impl GlQuadtree {
     ) -> Self {
         let indexed_tree = IndexedNdTree::from_node(node, min_layer);
         let mut pixel_vec: Vec<u32> = indexed_tree
-            .get_nodes()
+            .nodes()
             .iter()
             .flatten()
             .map(|indexed_branch| match indexed_branch {
@@ -103,8 +103,8 @@ impl GlQuadtree {
             UnsignedTexture2d::new(&**DISPLAY, raw_image).expect("Failed to create texture");
         Self {
             texture,
-            layers: indexed_tree.get_layer_count(),
-            root_idx: indexed_tree.get_root_idx(),
+            max_layer: indexed_tree.max_layer(),
+            root_idx: indexed_tree.root_idx(),
         }
     }
 }

@@ -107,9 +107,9 @@ impl<D: Dim> From<NdBaseTreeNode<D>> for NdTreeNode<D> {
         );
         // Check that all branches are at the same layer.
         let mut branch_iter = branches.iter();
-        let branch_layer = branch_iter.next().unwrap().get_layer();
+        let branch_layer = branch_iter.next().unwrap().layer();
         assert!(
-            branch_iter.all(|branch| branch.get_layer() == branch_layer),
+            branch_iter.all(|branch| branch.layer() == branch_layer),
             "Cannot construct node using branches with differing layers: {:?}",
             branches
         );
@@ -227,7 +227,7 @@ impl<D: Dim> NdTreeNode<D> {
     /// A node's inner node is the node one layer down, centered on the original
     /// node. For example, the inner node of a 16x16 node (layer 4) is the 8x8
     /// node (layer 3) centered on it.
-    pub fn get_inner_node(&self, cache: &NdTreeCache<D>) -> NdCachedNode<D> {
+    pub fn inner_node(&self, cache: &NdTreeCache<D>) -> NdCachedNode<D> {
         assert_ne!(1, self.layer, "Cannot take inner node of node at layer 1");
         let new_branches = self
             .branches
@@ -317,7 +317,7 @@ pub enum NdTreeBranch<D: Dim> {
 impl<D: Dim> NdTreeBranch<D> {
     /// Returns the layer of this tree branch, which is the same as its
     /// contained node (if it is a node) or 0 if it is a leaf.
-    pub fn get_layer(&self) -> usize {
+    pub fn layer(&self) -> usize {
         match self {
             NdTreeBranch::Leaf(_) => 0,
             NdTreeBranch::Node(node) => node.layer,

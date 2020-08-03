@@ -85,7 +85,7 @@ impl Function for Access {
         // Now fetch the cell state from the pattern.
         let cell_idx = pattern
             .shape
-            .get_flattened_idx(&pos)
+            .flatten_idx(&pos)
             .ok_or_else(|| self.out_of_bounds_error.error())?;
         let ret = pattern.cells[cell_idx];
 

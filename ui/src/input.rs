@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::ops::{Deref, DerefMut, Index};
 use std::time::{Duration, Instant};
 
-use ndcell_core::{AsFVec, FVec2D, IVec2D, NdVec, X, Y};
+use ndcell_core::{FVec2D, IVec2D, NdVec, X, Y};
 
 use crate::config::Config;
 use crate::gridview::{control::*, GridView, GridViewTrait, RenderGridView, Zoom2D};
@@ -57,7 +57,7 @@ pub struct State {
     draw_cell_state: Option<u8>,
 }
 impl State {
-    pub fn get_cursor_pos(&self) -> Option<IVec2D> {
+    pub fn cursor_pos(&self) -> Option<IVec2D> {
         self.cursor_pos
     }
     pub fn frame<'a>(
@@ -141,7 +141,7 @@ impl<'a> FrameInProgress<'a> {
                                 GridView::View2D(view2d) => {
                                     // Pan both viewports so that the viewport stays matched with the cursor.
                                     view2d.enqueue(
-                                        MoveCommand2D::PanPixels(delta.as_fvec()).direct(),
+                                        MoveCommand2D::PanPixels(delta.to_fvec()).direct(),
                                     );
                                 }
                                 _ => (),
@@ -165,7 +165,7 @@ impl<'a> FrameInProgress<'a> {
                                 view2d.enqueue(
                                     MoveCommand2D::Zoom {
                                         power: dy,
-                                        fixed_point: view2d.get_render_result(0).hover_pos.clone(),
+                                        fixed_point: view2d.nth_render_result(0).hover_pos.clone(),
                                     }
                                     .decay(),
                                 );
@@ -184,7 +184,7 @@ impl<'a> FrameInProgress<'a> {
                         ElementState::Pressed => {
                             match self.gridview {
                                 GridView::View2D(view2d) => {
-                                    if let Some(pos) = view2d.get_render_result(0).draw_pos.as_ref()
+                                    if let Some(pos) = view2d.nth_render_result(0).draw_pos.as_ref()
                                     {
                                         // Start drawing.
                                         self.start_drawing(if view2d.get_cell(&pos.int) == 1 {
@@ -295,8 +295,8 @@ impl<'a> FrameInProgress<'a> {
         if let Some(draw_state) = self.draw_cell_state {
             match self.gridview {
                 GridView::View2D(view2d) => {
-                    if let Some(pos1) = view2d.get_render_result(0).draw_pos.clone() {
-                        if let Some(pos2) = view2d.get_render_result(1).draw_pos.clone() {
+                    if let Some(pos1) = view2d.nth_render_result(0).draw_pos.clone() {
+                        if let Some(pos2) = view2d.nth_render_result(1).draw_pos.clone() {
                             view2d.enqueue(DrawCommand2D::Line(pos1.int, pos2.int, draw_state))
                         } else {
                             view2d.enqueue(DrawCommand2D::Cell(pos1.int, draw_state));

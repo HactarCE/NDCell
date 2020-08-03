@@ -8,8 +8,14 @@ use super::*;
 /// An NdTree represented as an list of nodes.
 #[derive(Debug)]
 pub struct IndexedNdTree<D: Dim> {
-    layers: usize,
+    /// The layer of the largest node.
+    ///
+    /// Note that the minimum layer in this NdTree might represent multiple
+    /// cells, such as when rendering zoomed out past 1:1.
+    max_layer: usize,
+    /// A list of all the nodes.
     nodes: Vec<Vec<IndexedNdTreeBranch<D>>>,
+    /// The index of the root node.
     root_idx: usize,
 }
 
@@ -27,15 +33,15 @@ impl<D: Dim> IndexedNdTree<D> {
     /// Gets the number of indexed layers; i.e. how many times you have to
     /// follow a pointer (including getting the initial node) to reach a leaf.
     /// The minimum is 1.
-    pub fn get_layer_count(&self) -> usize {
-        self.layers
+    pub fn max_layer(&self) -> usize {
+        self.max_layer
     }
     /// Gets the list of nodes.
-    pub fn get_nodes(&self) -> &[Vec<IndexedNdTreeBranch<D>>] {
+    pub fn nodes(&self) -> &[Vec<IndexedNdTreeBranch<D>>] {
         &self.nodes
     }
     /// Gets the list index of the root node.
-    pub fn get_root_idx(&self) -> usize {
+    pub fn root_idx(&self) -> usize {
         self.root_idx
     }
 
@@ -84,7 +90,7 @@ impl<'a, D: Dim> IndexedNdTreeInProgress<'a, D> {
                 .branches
                 .iter()
                 .map(|branch| {
-                    if branch.get_layer() <= self.min_layer {
+                    if branch.layer() <= self.min_layer {
                         IndexedNdTreeBranch::Leaf(branch.clone())
                     } else {
                         IndexedNdTreeBranch::Pointer(self.add_node(branch.node().unwrap()))
@@ -101,7 +107,7 @@ impl<'a, D: Dim> IndexedNdTreeInProgress<'a, D> {
     pub fn complete(mut self, node: &'a NdCachedNode<D>) -> IndexedNdTree<D> {
         let root_idx = self.add_node(node);
         IndexedNdTree {
-            layers: node.layer - self.min_layer,
+            max_layer: node.layer - self.min_layer,
             nodes: self.nodes,
             root_idx,
         }
@@ -149,19 +155,19 @@ x = 8, y = 8, rule = B3/S23
         // of indexed nodes is indexed_N.nodes.len().
 
         let indexed_0 = IndexedNdTree::from_node(&node, 0);
-        assert_eq!(3, indexed_0.layers);
+        assert_eq!(3, indexed_0.max_layer);
         // 1+3+2 = 6, so there should be a total of eight nodes in this one.
         assert_eq!(6, indexed_0.nodes.len());
         assert_eq!(node, indexed_0.to_node(&cache));
 
         let indexed_1 = IndexedNdTree::from_node(&node, 1);
-        assert_eq!(2, indexed_1.layers);
+        assert_eq!(2, indexed_1.max_layer);
         // 1+3 = 4
         assert_eq!(4, indexed_1.nodes.len());
         assert_eq!(node, indexed_1.to_node(&cache));
 
         let indexed_2 = IndexedNdTree::from_node(&node, 2);
-        assert_eq!(1, indexed_2.layers);
+        assert_eq!(1, indexed_2.max_layer);
         // 1 = 1
         assert_eq!(1, indexed_2.nodes.len());
         assert_eq!(node, indexed_2.to_node(&cache));

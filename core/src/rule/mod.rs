@@ -18,7 +18,7 @@ pub trait Rule<D: Dim>: fmt::Debug + Send + Sync {
     fn radius(&self) -> usize;
     /// Returns a function that computes a cell's next state, given its
     /// neighborhood.
-    fn get_transition_function(&self) -> TransitionFunction<D>;
+    fn transition_function(&self) -> TransitionFunction<D>;
 }
 
 /// A basic rule that never changes any cell states.
@@ -28,7 +28,7 @@ impl<D: Dim> Rule<D> for DummyRule {
     fn radius(&self) -> usize {
         0
     }
-    fn get_transition_function(&self) -> TransitionFunction<D> {
+    fn transition_function(&self) -> TransitionFunction<D> {
         Box::new(|nbhd| nbhd[&NdVec::origin()])
     }
 }

@@ -174,7 +174,7 @@ pub fn show_gui() -> ! {
                             &config,
                             &mut target,
                             View2DRenderParams {
-                                cursor_pos: input_state.get_cursor_pos(),
+                                cursor_pos: input_state.cursor_pos(),
                             },
                         );
                     }

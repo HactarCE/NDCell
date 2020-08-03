@@ -6,7 +6,7 @@ use super::*;
 pub struct SimpleProjection;
 
 impl<D: Dim> NdProjector<D, D> for SimpleProjection {
-    fn project(&self, tree: &NdTree<D>) -> NdTree<D> {
+    fn project_tree(&self, tree: &NdTree<D>) -> NdTree<D> {
         tree.clone()
     }
     fn unproject_pos(&self, pos: &BigVec<D>) -> BigVec<D> {
@@ -15,7 +15,7 @@ impl<D: Dim> NdProjector<D, D> for SimpleProjection {
     fn overwrite_projected(&self, _destination: &mut NdTree<D>, _source: &NdTree<D>) {
         unimplemented!()
     }
-    fn get_params(&self) -> ProjectionParams {
+    fn params(&self) -> ProjectionParams {
         ProjectionParams::Simple
     }
 }

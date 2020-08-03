@@ -56,7 +56,7 @@ impl<D: Dim> Simulation<D> {
         // reference which would prevent self.advance_inner_node() from taking a
         // &mut self.)
         let rule = self.rule.clone();
-        let mut transition_function = rule.get_transition_function();
+        let mut transition_function = rule.transition_function();
         // Expand out to the sphere of influence of the existing pattern,
         // following `expansion_distance >= r * t` (rounding `r` and `t` each to
         // the next-highest power of two).
@@ -65,7 +65,7 @@ impl<D: Dim> Simulation<D> {
         let mut expansion_distance = BigInt::from(0);
         while expansion_distance < min_expansion_distance {
             tree.expand();
-            expansion_distance += tree.get_root().len() / 4;
+            expansion_distance += tree.root().len() / 4;
         }
         // Now expand one more layer to guarantee that the sphere of influence
         // is within the inner node, because Simulation::advance_inner_node()
@@ -115,7 +115,7 @@ impl<D: Dim> Simulation<D> {
         // Handle the simplest case of just not simulating anything. This is one
         // of the recursive base cases.
         if generations.is_zero() {
-            return node.get_inner_node(cache);
+            return node.inner_node(cache);
         }
 
         // If the entire node is empty, then in the future it will remain empty.

@@ -133,7 +133,7 @@ impl GridViewTrait for GridView2D {
                         self.stop_running();
                         match c {
                             ClipboardCommand::CopyRle => {
-                                let result = match self.get_automaton() {
+                                let result = match self.as_automaton() {
                                     Automaton::Automaton2D(automaton) => {
                                         clipboard_set(rle::RleEncode::to_rle(automaton))
                                             .map_err(|_| "Unable to set clipboard contents")
@@ -145,7 +145,7 @@ impl GridViewTrait for GridView2D {
                                 }
                             }
                             ClipboardCommand::CopyCxrle => {
-                                let result = match self.get_automaton() {
+                                let result = match self.as_automaton() {
                                     Automaton::Automaton2D(automaton) => {
                                         clipboard_set(rle::RleEncode::to_cxrle(automaton))
                                             .map_err(|_| "Unable to set clipboard contents")
@@ -196,7 +196,7 @@ impl GridViewTrait for GridView2D {
         // Update automaton.
         if self.is_running
             && config.sim.use_breakpoint
-            && self.get_generation_count() >= &config.sim.breakpoint_gen
+            && self.generation_count() >= &config.sim.breakpoint_gen
         {
             self.stop_running();
         } else {
@@ -252,19 +252,19 @@ impl GridViewTrait for GridView2D {
         self.reset_worker();
     }
 
-    fn get_automaton<'a>(&'a self) -> Automaton<'a> {
+    fn as_automaton<'a>(&'a self) -> Automaton<'a> {
         Automaton::from(&self.automaton)
     }
-    fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
+    fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
         AutomatonMut::from(&mut self.automaton)
     }
 }
 
-impl IntoNdSimulate for GridView2D {
-    fn ndsim(&self) -> &dyn NdSimulate {
+impl AsNdSimulate for GridView2D {
+    fn as_ndsim(&self) -> &dyn NdSimulate {
         &self.automaton
     }
-    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         &mut self.automaton
     }
 }
@@ -321,9 +321,9 @@ impl RenderGridView for GridView2D {
             draw_pos,
             ..Default::default()
         });
-        self.get_render_result(0)
+        self.nth_render_result(0)
     }
-    fn get_render_result(&self, frame: usize) -> Cow<View2DRenderResult> {
+    fn nth_render_result(&self, frame: usize) -> Cow<View2DRenderResult> {
         if frame > RENDER_RESULTS_COUNT {
             warn!("Attempted to access render result {:?} of GridView2D, but render results are only kept for {:?} frames", frame, RENDER_RESULTS_COUNT);
         }
@@ -336,7 +336,7 @@ impl RenderGridView for GridView2D {
 
 impl GridView2D {
     pub fn get_cell(&self, pos: &BigVec2D) -> u8 {
-        self.automaton.get_projected_tree().get_cell(pos)
+        self.automaton.projected_tree().get_cell(pos)
     }
     fn get_worker(&mut self) -> &mut Worker<ProjectedAutomaton2D> {
         if let None = self.worker {

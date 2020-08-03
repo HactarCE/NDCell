@@ -15,7 +15,7 @@ pub use slice3d::SliceProjection3D;
 pub struct NdProjection<D: Dim, P: Dim>(pub Box<dyn NdProjector<D, P>>);
 impl<D: Dim, P: Dim> Clone for NdProjection<D, P> {
     fn clone(&self) -> Self {
-        let params = self.0.get_params();
+        let params = self.0.params();
         Self(params.try_into().expect("Failed to clone projection"))
     }
 }
@@ -25,8 +25,8 @@ impl<D: Dim> Default for NdProjection<D, D> {
     }
 }
 impl<D: Dim, P: Dim> NdProjector<D, P> for NdProjection<D, P> {
-    fn project(&self, tree: &NdTree<D>) -> NdTree<P> {
-        self.0.project(tree)
+    fn project_tree(&self, tree: &NdTree<D>) -> NdTree<P> {
+        self.0.project_tree(tree)
     }
     fn unproject_pos(&self, pos: &BigVec<P>) -> BigVec<D> {
         self.0.unproject_pos(pos)
@@ -34,8 +34,8 @@ impl<D: Dim, P: Dim> NdProjector<D, P> for NdProjection<D, P> {
     fn overwrite_projected(&self, destination: &mut NdTree<D>, source: &NdTree<P>) {
         self.0.overwrite_projected(destination, source);
     }
-    fn get_params(&self) -> ProjectionParams {
-        self.0.get_params()
+    fn params(&self) -> ProjectionParams {
+        self.0.params()
     }
 }
 
@@ -43,13 +43,13 @@ impl<D: Dim, P: Dim> NdProjector<D, P> for NdProjection<D, P> {
 /// D-dimensional automaton.
 pub trait NdProjector<D: Dim, P: Dim>: Send {
     /// Projects a D-dimensional NdTree into a P-dimensional NdTree.
-    fn project(&self, tree: &NdTree<D>) -> NdTree<P>;
+    fn project_tree(&self, tree: &NdTree<D>) -> NdTree<P>;
     /// Unprojects a P-dimensional point back into D-dimensional space.
     fn unproject_pos(&self, pos: &BigVec<P>) -> BigVec<D>;
     /// Modifies part of a projected NdTree.
     fn overwrite_projected(&self, destination: &mut NdTree<D>, source: &NdTree<P>);
     /// Returns the ProjectionParams that describe this projection.
-    fn get_params(&self) -> ProjectionParams;
+    fn params(&self) -> ProjectionParams;
 }
 
 /// A set of parameters that fully describes an NdProjection.
@@ -123,7 +123,7 @@ pub enum BigVecEnum {
 }
 impl BigVecEnum {
     /// Returns the number of dimensions of the BigVec.
-    fn get_ndim(&self) -> usize {
+    fn ndim(&self) -> usize {
         match self {
             Self::Vec1D(_) => 1,
             Self::Vec2D(_) => 2,
@@ -174,7 +174,7 @@ impl<'a, D: Dim> From<BigVec<D>> for BigVecEnum {
 impl<'a, D: Dim> TryInto<BigVec<D>> for BigVecEnum {
     type Error = ();
     fn try_into(self) -> Result<BigVec<D>, ()> {
-        if self.get_ndim() == D::NDIM {
+        if self.ndim() == D::NDIM {
             Ok(match self {
                 Self::Vec1D(inner) => transmute_ndvec(inner),
                 Self::Vec2D(inner) => transmute_ndvec(inner),

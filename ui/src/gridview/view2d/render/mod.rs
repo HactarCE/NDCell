@@ -167,11 +167,11 @@ impl<'a> RenderInProgress<'a> {
                 let half_diag: FVec2D = target_cells_size / 2.0;
 
                 global_visible_rect =
-                    BigRect2D::centered(viewport.center.int.clone(), &half_diag.ceil().as_bigvec());
+                    BigRect2D::centered(viewport.center.int.clone(), &half_diag.ceil().to_bigvec());
             }
 
             // Now fetch the NdTreeSlice containing all of the visible cells.
-            quadtree_slice = g.automaton.get_projected_tree().get_slice_containing(
+            quadtree_slice = g.automaton.projected_tree().get_slice_containing(
                 // Convert chunk coordinates into normal cell coordinates.
                 &global_visible_rect,
             );
@@ -182,14 +182,14 @@ impl<'a> RenderInProgress<'a> {
             // Divide by render_cell_len to get render cells.
             tmp_visible_rect = tmp_visible_rect.div_outward(&render_cell_len);
             // Now it is safe to convert from BigInt to isize.
-            visible_rect = tmp_visible_rect.as_irect();
+            visible_rect = tmp_visible_rect.to_irect();
 
             // Subtract the slice offset from the viewport position and divide
             // by the size of a render cell to get the render cell offset from
             // the lower corner of the slice.
             let integer_pos =
                 (&viewport.center.int - &quadtree_slice.offset).div_floor(&render_cell_len);
-            pos = integer_pos.as_fvec();
+            pos = integer_pos.to_fvec();
             // Offset by half a pixel if the viewport dimensions are odd, so
             // that cells boundaries always line up with pixel boundaries.
             pos += (target_pixels_size % 2.0) * r64(render_cell_zoom.cells_per_pixel() / 2.0);
@@ -249,7 +249,7 @@ impl<'a> RenderInProgress<'a> {
         let gl_quadtree = self.cache.gl_quadtree.from_node(
             self.quadtree_slice.root.clone(),
             self.render_cell_layer,
-            Self::get_branch_pixel_color,
+            Self::branch_pixel_color,
         );
         // Step #2: draw at 1 pixel per render cell, including only the cells
         // inside self.visible_rect.
@@ -268,7 +268,7 @@ impl<'a> RenderInProgress<'a> {
                 &shaders::QUADTREE,
                 &uniform! {
                     quadtree_texture: &gl_quadtree.texture,
-                    max_layer: gl_quadtree.layers as i32,
+                    max_layer: gl_quadtree.max_layer as i32,
                     root_idx: gl_quadtree.root_idx as u32,
                 },
                 &glium::DrawParameters::default(),
@@ -307,10 +307,10 @@ impl<'a> RenderInProgress<'a> {
         let (target_w, target_h) = self.target.get_dimensions();
         let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let render_cells_size = target_size / r64(self.render_cell_zoom.pixels_per_cell());
-        let render_cells_center = self.pos - self.visible_rect.min().as_fvec();
+        let render_cells_center = self.pos - self.visible_rect.min().to_fvec();
         let mut render_cells_frect =
             FRect2D::centered(render_cells_center, render_cells_size / 2.0);
-        render_cells_frect /= self.visible_rect.size().as_fvec();
+        render_cells_frect /= self.visible_rect.size().to_fvec();
         render_cells_frect *= scaled_cells_texture_fract;
 
         self.target
@@ -334,7 +334,7 @@ impl<'a> RenderInProgress<'a> {
         //     glium::uniforms::MagnifySamplerFilter::Linear,
         // );
     }
-    fn get_branch_pixel_color(branch: &NdTreeBranch<Dim2D>) -> [u8; 4] {
+    fn branch_pixel_color(branch: &NdTreeBranch<Dim2D>) -> [u8; 4] {
         let (r, g, b) = match branch {
             NdTreeBranch::Leaf(cell_state) => match *cell_state {
                 0 => DEAD_COLOR,
@@ -450,7 +450,7 @@ impl<'a> RenderInProgress<'a> {
         let render_cell_pos = cell_pos.div_floor(&render_cell_size);
 
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-            IRect2D::single_cell(render_cell_pos.as_ivec()),
+            IRect2D::single_cell(render_cell_pos.to_ivec()),
             CURSOR_DEPTH,
             width,
             GRID_HIGHLIGHT_COLOR,
@@ -774,8 +774,8 @@ impl CellOverlayRect {
         }
     }
     fn verts(self, render_cell_zoom: Zoom2D) -> [RgbaVertex; 4] {
-        let mut a = self.start.as_fvec();
-        let mut b = self.end.as_fvec();
+        let mut a = self.start.to_fvec();
+        let mut b = self.end.to_fvec();
         let mut colors = [
             self.start_color,
             self.start_color,

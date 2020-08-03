@@ -36,7 +36,7 @@ pub trait GridViewTrait: Sized + NdSimulate + History {
             }
             // TODO make this JumpTo instead of UndoTo
             HistoryCommand::UndoTo(gen) => {
-                while self.get_generation_count() > &gen && self.has_undo() {
+                while self.generation_count() > &gen && self.has_undo() {
                     self.undo();
                 }
             }
@@ -82,8 +82,8 @@ pub trait GridViewTrait: Sized + NdSimulate + History {
     fn start_running(&mut self, config: &Config);
     fn stop_running(&mut self);
 
-    fn get_automaton<'a>(&'a self) -> Automaton<'a>;
-    fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;
+    fn as_automaton<'a>(&'a self) -> Automaton<'a>;
+    fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;
 }
 
 pub trait RenderGridView: GridViewTrait {
@@ -104,13 +104,13 @@ pub trait RenderGridView: GridViewTrait {
     /// Returns the RenderResult of the Nth most recent render, or
     /// RenderResult::default() if there hasn't been one or it has been
     /// forgotten.
-    fn get_render_result(&self, frame: usize) -> Cow<Self::RenderResult>;
+    fn nth_render_result(&self, frame: usize) -> Cow<Self::RenderResult>;
     /// Returns the framerate measured between the last two frames, or the
     /// user-configured FPS if that fails.
     fn fps(&self, config: &Config) -> f64 {
-        self.get_render_result(0)
+        self.nth_render_result(0)
             .instant()
-            .checked_duration_since(self.get_render_result(1).instant())
+            .checked_duration_since(self.nth_render_result(1).instant())
             .map(|duration| 1.0 / duration.as_secs_f64())
             .unwrap_or(config.gfx.fps)
     }
@@ -134,14 +134,14 @@ impl From<Automaton2D> for GridView {
     }
 }
 
-impl IntoNdSimulate for GridView {
-    fn ndsim(&self) -> &dyn NdSimulate {
+impl AsNdSimulate for GridView {
+    fn as_ndsim(&self) -> &dyn NdSimulate {
         match self {
             Self::View2D(view2d) => view2d,
             Self::View3D(view3d) => view3d,
         }
     }
-    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         match self {
             Self::View2D(view2d) => view2d,
             Self::View3D(view3d) => view3d,
@@ -151,28 +151,28 @@ impl IntoNdSimulate for GridView {
 
 impl History for GridView {
     fn record(&mut self) {
-        self.history().record()
+        self.as_history().record()
     }
     fn has_undo(&mut self) -> bool {
-        self.history().has_undo()
+        self.as_history().has_undo()
     }
     fn has_redo(&mut self) -> bool {
-        self.history().has_redo()
+        self.as_history().has_redo()
     }
     fn undo(&mut self) -> bool {
-        let ret = self.history().undo();
+        let ret = self.as_history().undo();
         self.reset_worker();
         ret
     }
     fn redo(&mut self) -> bool {
-        let ret = self.history().redo();
+        let ret = self.as_history().redo();
         self.reset_worker();
         ret
     }
 }
 
 impl GridView {
-    fn history(&mut self) -> &mut dyn History {
+    fn as_history(&mut self) -> &mut dyn History {
         match self {
             Self::View2D(view2d) => view2d,
             Self::View3D(view3d) => view3d,

@@ -213,7 +213,7 @@ impl Compiler {
             .as_basic_type_enum();
         // The actual LLVM return value just signals whether there was an error.
         let fn_arg_types = &[args_array_ptr_type, return_ptr_type];
-        let fn_type = self.get_llvm_return_type().fn_type(fn_arg_types, false);
+        let fn_type = self.llvm_return_type().fn_type(fn_arg_types, false);
 
         // Construct the FunctionInProgress.
         self.function = Some(FunctionInProgress {
@@ -287,7 +287,7 @@ impl Compiler {
         // Allocate space.
         let ptr = self.builder().build_alloca(types::get(&ty)?, &name);
         // Initialize to a default value.
-        let default_value = self.get_default_var_value(&ty)?.into_basic_value()?;
+        let default_value = self.default_var_value(&ty)?.into_basic_value()?;
         self.builder().build_store(ptr, default_value);
         Ok(Variable {
             name,
@@ -536,15 +536,13 @@ impl Compiler {
     pub fn build_return_ok(&mut self, value: Value) -> LangResult<()> {
         let ptr = self.function().return_value_ptr.unwrap();
         self.builder().build_store(ptr, value.into_basic_value()?);
-        let llvm_return_value = self.get_llvm_return_type().const_int(u64::MAX, true);
+        let llvm_return_value = self.llvm_return_type().const_int(u64::MAX, true);
         self.builder().build_return(Some(&llvm_return_value));
         Ok(())
     }
     /// Builds instructions to return an error.
     pub fn build_return_err(&mut self, error_index: usize) {
-        let llvm_return_value = self
-            .get_llvm_return_type()
-            .const_int(error_index as u64, false);
+        let llvm_return_value = self.llvm_return_type().const_int(error_index as u64, false);
         self.builder().build_return(Some(&llvm_return_value));
     }
     /// Builds instructions to return an internal error.
@@ -1463,7 +1461,7 @@ impl Compiler {
                     ),
                 ));
                 let cells_start_ptr = cells.as_pointer_value();
-                let offset = p.shape.get_unchecked_flattened_idx(&vec![0; p.ndim()]);
+                let offset = p.shape.flatten_idx_unchecked(&vec![0; p.ndim()]);
                 // Note that this address might be outside the bounds of the
                 // cells array (if the pattern does not include the origin).
                 let cells_origin_ptr = unsafe {
@@ -1541,13 +1539,13 @@ impl Compiler {
     }
     /// Returns the default value for variables of the given type, panicking if
     /// the given type has no LLVM representation.
-    pub fn get_default_var_value(&mut self, ty: &Type) -> LangResult<Value> {
+    pub fn default_var_value(&mut self, ty: &Type) -> LangResult<Value> {
         self.value_from_const(ConstValue::default(ty)?)
     }
 
     /// Returns the LLVM type actually returned from this function (as opposed
     /// to the type semantically returned).
-    pub fn get_llvm_return_type(&self) -> IntType<'static> {
+    pub fn llvm_return_type(&self) -> IntType<'static> {
         get_ctx().i32_type()
     }
 }

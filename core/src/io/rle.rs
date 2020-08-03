@@ -117,7 +117,7 @@ impl RleEncode for Automaton2D {
             // Y coordinates increase upwards in NDCell, but downwards in RLE, so
             // reflect over the Y axis.
             pos[Y] = root.len().to_usize().unwrap() - pos[Y] - 1;
-            let cell = cell_array[&pos.as_ivec()];
+            let cell = cell_array[&pos.to_ivec()];
             if pos[X] == 0 && pos[Y] != 0 {
                 // We're at the beginning of a new row. Remove trailing
                 // zeros.
@@ -478,7 +478,7 @@ o$3o!
 ",
         )
         .unwrap();
-        assert_eq!(BigInt::from(5), imported.tree.get_root().population);
+        assert_eq!(BigInt::from(5), imported.tree.root().population);
         assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 14])));
         assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 13])));
         assert_eq!(1, imported.tree.get_cell(&NdVec::big([10, 12])));

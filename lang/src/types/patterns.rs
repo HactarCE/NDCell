@@ -110,14 +110,14 @@ impl PatternShape {
     /// Returns the index of the given position in a flattened array
     /// representing cells or a mask with this pattern shape. Returns None if
     /// the position is out of bounds or excluded by the mask.
-    pub fn get_flattened_idx(&self, pos: &[isize]) -> Option<usize> {
+    pub fn flatten_idx(&self, pos: &[isize]) -> Option<usize> {
         assert_eq!(
             self.ndim(),
             pos.len(),
             "Dimension mismatch between pattern shape and cell coordinates",
         );
         if self.bounds.contains(pos) {
-            Some(self.get_unchecked_flattened_idx(pos) as usize)
+            Some(self.flatten_idx_unchecked(pos) as usize)
         } else {
             None
         }
@@ -125,7 +125,7 @@ impl PatternShape {
     /// Returns the index of the given position in a flattened array
     /// representing cells or a mask with this pattern shape. May return an
     /// out-of-bounds index if the given position is out-of-bounds.
-    pub fn get_unchecked_flattened_idx(&self, pos: &[isize]) -> isize {
+    pub fn flatten_idx_unchecked(&self, pos: &[isize]) -> isize {
         pos.iter()
             .zip(self.bounds.min())
             .zip(self.strides())
@@ -134,8 +134,8 @@ impl PatternShape {
     }
 
     /// Returns whether the given position is within this pattern shape.
-    pub fn has_pos(&self, pos: &[isize]) -> bool {
-        if let Some(idx) = self.get_flattened_idx(pos) {
+    pub fn contains_pos(&self, pos: &[isize]) -> bool {
+        if let Some(idx) = self.flatten_idx(pos) {
             self.mask[idx]
         } else {
             false
@@ -184,7 +184,7 @@ impl PatternShape {
         // the exterior, but oh well.
         let mut new_bounds = Bounds::unbounded(self.ndim());
         for pos in self.bounds().iter() {
-            if self.has_pos(&pos) {
+            if self.contains_pos(&pos) {
                 new_bounds.expand_to(&pos);
             }
         }
@@ -195,7 +195,7 @@ impl PatternShape {
             // Bail early if no change is needed.
             return self;
         } else {
-            Self::from_fn(new_bounds, |pos| self.has_pos(&pos))
+            Self::from_fn(new_bounds, |pos| self.contains_pos(&pos))
         }
     }
 }
@@ -215,7 +215,10 @@ impl BitOr for PatternShape {
         let mut new_bounds = self.bounds().clone();
         new_bounds.expand_to(&rhs.bounds().min());
         new_bounds.expand_to(&rhs.bounds().max());
-        Self::from_fn(new_bounds, |pos| self.has_pos(&pos) || rhs.has_pos(&pos)).shrink()
+        Self::from_fn(new_bounds, |pos| {
+            self.contains_pos(&pos) || rhs.contains_pos(&pos)
+        })
+        .shrink()
     }
 }
 impl BitAnd for PatternShape {
@@ -231,7 +234,10 @@ impl BitAnd for PatternShape {
                 std::cmp::min(lhs_max[dim], rhs_max[dim]),
             );
         }
-        Self::from_fn(new_bounds, |pos| self.has_pos(&pos) && rhs.has_pos(&pos)).shrink()
+        Self::from_fn(new_bounds, |pos| {
+            self.contains_pos(&pos) && rhs.contains_pos(&pos)
+        })
+        .shrink()
     }
 }
 

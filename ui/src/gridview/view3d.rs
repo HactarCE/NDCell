@@ -19,11 +19,11 @@ impl GridView3D {
     }
 }
 
-impl IntoNdSimulate for GridView3D {
-    fn ndsim(&self) -> &dyn NdSimulate {
+impl AsNdSimulate for GridView3D {
+    fn as_ndsim(&self) -> &dyn NdSimulate {
         unimplemented!()
     }
-    fn ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
         unimplemented!()
     }
 }
@@ -54,10 +54,10 @@ impl GridViewTrait for GridView3D {
         unimplemented!()
     }
 
-    fn get_automaton<'a>(&'a self) -> Automaton<'a> {
+    fn as_automaton<'a>(&'a self) -> Automaton<'a> {
         unimplemented!()
     }
-    fn get_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
+    fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
         unimplemented!()
     }
 }

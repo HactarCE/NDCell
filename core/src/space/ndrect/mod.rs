@@ -51,7 +51,7 @@ where
         }
         let mut size = b;
         size -= a.clone();
-        size += NdVec::repeat(N::get_min_rect_size());
+        size += NdVec::repeat(N::min_rect_size());
         Self { start: a, size }
     }
     /// Constructs an NdRect consisting of a single cell.
@@ -67,7 +67,7 @@ where
         NdVec<D, N>: Add<X, Output = NdVec<D, N>> + Sub<X, Output = NdVec<D, N>>,
     {
         let start = center - radius;
-        let size = NdVec::repeat(N::get_min_rect_size()) + radius + radius;
+        let size = NdVec::repeat(N::min_rect_size()) + radius + radius;
         Self { start, size }
     }
     /// Constructs an NdRect describing a Moore neighborhood of a given radius
@@ -85,7 +85,7 @@ where
     }
     /// Returns the maximum (most positive) corner of this NdRect.
     pub fn max(&self) -> NdVec<D, N> {
-        self.start.clone() + self.size.clone() - NdVec::repeat(N::get_min_rect_size())
+        self.start.clone() + self.size.clone() - NdVec::repeat(N::min_rect_size())
     }
 
     /// Returns an NdVec representing the length of this NdRect along each axis.
@@ -173,22 +173,10 @@ where
     }
 }
 
-impl<D: Dim + DimFor<N>, N: NdVecNum> NdRect<D, N>
-where
-    NdVec<D, N>: NdRectVec + AsUVec<D>,
-{
-    /// Converts this NdRect into one using usize.
-    pub fn as_urect(&self) -> URect<D> {
-        URect::new(self.start.as_uvec(), self.size.as_uvec())
-    }
-}
-impl<D: Dim + DimFor<N>, N: NdVecNum> NdRect<D, N>
-where
-    NdVec<D, N>: NdRectVec + AsIVec<D>,
-{
-    /// Converts this NdRect into one using isize.
-    pub fn as_irect(&self) -> IRect<D> {
-        IRect::new(self.start.as_ivec(), self.size.as_ivec())
+impl<D: Dim> BigRect<D> {
+    /// Converts this BigRect into an IRect.
+    pub fn to_irect(&self) -> IRect<D> {
+        IRect::new(self.start.to_ivec(), self.size.to_ivec())
     }
 }
 

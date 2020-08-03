@@ -89,7 +89,7 @@ impl ndcell_core::Rule<ndcell_core::Dim2D> for compiler::CompiledFunction {
             .max()
             .unwrap()
     }
-    fn get_transition_function(&self) -> ndcell_core::TransitionFunction<ndcell_core::Dim2D> {
+    fn transition_function(&self) -> ndcell_core::TransitionFunction<ndcell_core::Dim2D> {
         let mut compiled_func = self.clone();
         Box::new(move |neighborhood| {
             let nbhd_pattern = types::Pattern {

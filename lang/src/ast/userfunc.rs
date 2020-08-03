@@ -228,7 +228,7 @@ impl UserFunction {
                 if self
                     .rule_meta()
                     .nbhd_shape
-                    .has_pos(&vec![0; self.rule_meta().ndim])
+                    .contains_pos(&vec![0; self.rule_meta().ndim])
                 {
                     let origin =
                         compiler.build_construct_vector(&vec![const_int(0); self.rule_meta().ndim]);
@@ -248,7 +248,7 @@ impl UserFunction {
             UserFunctionKind::Helper(_) => {
                 // Implicitly return a default value at the end of a helper
                 // function.
-                compiler.get_default_var_value(&self.kind().return_type())?
+                compiler.default_var_value(&self.kind().return_type())?
             }
             UserFunctionKind::Transition => {
                 // Impliciitly return `this` at the end of the transition

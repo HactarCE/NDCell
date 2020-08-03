@@ -83,8 +83,8 @@ mod tests {
 
         let rect = NdRect::span(big_start.clone(), big_end.clone());
 
-        let f_start: FVec<D> = start.as_fvec();
-        let f_end: FVec<D> = end.as_fvec();
+        let f_start: FVec<D> = start.to_fvec();
+        let f_end: FVec<D> = end.to_fvec();
 
         let mut delta = f_end - f_start.clone();
         let longest_axis = delta.max_axis(|_, val| val.abs());
@@ -96,7 +96,7 @@ mod tests {
         for p in bresenham(big_start, big_end.clone()) {
             println!("integer {}", p);
             println!("float   {}", &f_current);
-            let diff = p.as_fvec() - f_current.clone();
+            let diff = p.to_fvec() - f_current.clone();
             println!("diff    {}", diff);
             println!();
 

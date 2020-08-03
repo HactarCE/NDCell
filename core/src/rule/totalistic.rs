@@ -37,7 +37,7 @@ impl Rule<Dim2D> for MooreTotalistic2D {
     fn radius(&self) -> usize {
         1
     }
-    fn get_transition_function(&self) -> TransitionFunction<Dim2D> {
+    fn transition_function(&self) -> TransitionFunction<Dim2D> {
         Box::new(move |nbhd| {
             // Count live neighbors.
             let nbhd_shape = Rect2D::moore(self.radius() as isize);

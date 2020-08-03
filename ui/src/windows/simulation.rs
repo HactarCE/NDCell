@@ -77,8 +77,8 @@ impl SimulationWindow {
                     if old_breakpoint_gen_i32 != breakpoint_gen_i32 {
                         config.sim.breakpoint_gen = breakpoint_gen_i32.into();
                     }
-                    if &config.sim.breakpoint_gen < gridview.get_generation_count() {
-                        config.sim.breakpoint_gen = gridview.get_generation_count().clone()
+                    if &config.sim.breakpoint_gen < gridview.generation_count() {
+                        config.sim.breakpoint_gen = gridview.generation_count().clone()
                     }
                 }
                 ui.spacing();

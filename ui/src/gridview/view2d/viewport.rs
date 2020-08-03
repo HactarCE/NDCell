@@ -42,7 +42,7 @@ impl Viewport2D {
             factor
         );
         let fixed_point_offset = fixed_point
-            .map(|pos| (pos - &self.center).as_fvec())
+            .map(|pos| (pos - &self.center).to_fvec())
             .unwrap_or_default();
         let fixed_point_old_pos_pixel_offset =
             fixed_point_offset * r64(self.zoom.pixels_per_cell());
@@ -184,6 +184,6 @@ impl Viewport2D {
             .unwrap_or(r64(2.0.powf(z1)));
         // Now we can just multiply k by the number of cells to travel get the
         // total number of pixels to travel for the entire interpolation.
-        (b.center.clone() - &a.center).as_fvec() * k
+        (b.center.clone() - &a.center).to_fvec() * k
     }
 }

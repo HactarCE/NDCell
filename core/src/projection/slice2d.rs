@@ -13,7 +13,7 @@ pub struct SliceProjection2D<D: Dim> {
 }
 
 impl<D: Dim> NdProjector<D, Dim2D> for SliceProjection2D<D> {
-    fn project(&self, _tree: &NdTree<D>) -> NdTree<Dim2D> {
+    fn project_tree(&self, _tree: &NdTree<D>) -> NdTree<Dim2D> {
         unimplemented!()
     }
     fn unproject_pos(&self, _pos: &BigVec<Dim2D>) -> BigVec<D> {
@@ -22,7 +22,7 @@ impl<D: Dim> NdProjector<D, Dim2D> for SliceProjection2D<D> {
     fn overwrite_projected(&self, _destination: &mut NdTree<D>, _source: &NdTree<Dim2D>) {
         unimplemented!()
     }
-    fn get_params(&self) -> ProjectionParams {
+    fn params(&self) -> ProjectionParams {
         ProjectionParams::Slice2D(self.slice_pos.clone().into(), (self.h, self.v))
     }
 }
@@ -63,7 +63,7 @@ impl<D: Dim> SliceProjection2D<D> {
     }
 
     /// Returns the display axes as a tuple, `(horizontal, vertical)`.
-    pub fn get_display_axes(&self) -> (Axis, Axis) {
+    pub fn display_axes(&self) -> (Axis, Axis) {
         (self.h, self.v)
     }
 

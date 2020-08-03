@@ -38,30 +38,30 @@ pub trait NdVecNum:
 {
     /// The minimum size for an NdRect using this number type as coordinates.
     /// For integers, this is 1; for floats, this is 0.
-    fn get_min_rect_size() -> Self;
+    fn min_rect_size() -> Self;
 }
 impl NdVecNum for BigInt {
-    fn get_min_rect_size() -> Self {
+    fn min_rect_size() -> Self {
         Self::one()
     }
 }
 impl NdVecNum for R64 {
-    fn get_min_rect_size() -> Self {
+    fn min_rect_size() -> Self {
         Self::zero()
     }
 }
 impl NdVecNum for isize {
-    fn get_min_rect_size() -> Self {
+    fn min_rect_size() -> Self {
         1
     }
 }
 impl NdVecNum for usize {
-    fn get_min_rect_size() -> Self {
+    fn min_rect_size() -> Self {
         1
     }
 }
 impl NdVecNum for u8 {
-    fn get_min_rect_size() -> Self {
+    fn min_rect_size() -> Self {
         1
     }
 }
@@ -139,16 +139,6 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     pub fn repeat<X: Into<N>>(value: X) -> Self {
         let value = value.into();
         Self::from_fn(|_| value.clone())
-    }
-
-    /// Converts an NdVec from one number type to another using
-    /// std::convert::Into.
-    pub fn convert<N2: NdVecNum>(&self) -> NdVec<D, N2>
-    where
-        D: DimFor<N2>,
-        N: Into<N2>,
-    {
-        NdVec::from_fn(|ax| N2::from(self[ax].clone().into()))
     }
 
     /// Constructs an NdVec where each component is the minimum of the

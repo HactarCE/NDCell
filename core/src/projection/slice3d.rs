@@ -15,7 +15,7 @@ pub struct SliceProjection3D<D: Dim> {
 }
 
 impl<D: Dim> NdProjector<D, Dim3D> for SliceProjection3D<D> {
-    fn project(&self, _tree: &NdTree<D>) -> NdTree<Dim3D> {
+    fn project_tree(&self, _tree: &NdTree<D>) -> NdTree<Dim3D> {
         unimplemented!()
     }
     fn unproject_pos(&self, _pos: &BigVec<Dim3D>) -> BigVec<D> {
@@ -24,7 +24,7 @@ impl<D: Dim> NdProjector<D, Dim3D> for SliceProjection3D<D> {
     fn overwrite_projected(&self, _destination: &mut NdTree<D>, _source: &NdTree<Dim3D>) {
         unimplemented!()
     }
-    fn get_params(&self) -> ProjectionParams {
+    fn params(&self) -> ProjectionParams {
         ProjectionParams::Slice3D(self.slice_pos.clone().into(), (self.h, self.v, self.n))
     }
 }

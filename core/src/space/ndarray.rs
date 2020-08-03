@@ -194,7 +194,7 @@ mod tests {
     #[test]
     fn test_flatten_unflatten_ndarray_idx() {
         let size: UVec4D = NdVec([4, 5, 6, 7]);
-        let rect: IRect4D = NdRect::new(NdVec::origin(), size.as_ivec());
+        let rect: IRect4D = NdRect::new(NdVec::origin(), size.to_ivec());
         let count = rect.count() as usize;
         for pos in rect.iter() {
             let flat_idx: usize = flatten_idx(&size, &pos);

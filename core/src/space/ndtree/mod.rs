@@ -75,7 +75,7 @@ impl<D: Dim> NdTree<D> {
     }
 
     /// Returns the root node of this tree.
-    pub fn get_root(&self) -> &NdCachedNode<D> {
+    pub fn root(&self) -> &NdCachedNode<D> {
         &self.slice.root
     }
     /// Sets the root node of this tree.
@@ -84,7 +84,7 @@ impl<D: Dim> NdTree<D> {
     }
     /// Sets the root node of this tree and adjusts the offset so that the tree remains centered on the same point.
     pub fn set_root_centered(&mut self, new_root: NdCachedNode<D>) {
-        self.slice.offset += &((self.get_root().len() - new_root.len()) / 2);
+        self.slice.offset += &((self.root().len() - new_root.len()) / 2);
         self.set_root(new_root);
     }
 
@@ -110,7 +110,7 @@ impl<D: Dim> NdTree<D> {
             // And return a branch with that node.
             NdTreeBranch::Node(self.cache.get_node(inner_branches))
         });
-        self.slice.offset -= &(self.get_root().len() / 4);
+        self.slice.offset -= &(self.root().len() / 4);
     }
     /// "Zooms out" by calling NdTree::expand() until the given position is
     /// contained in the known part of the tree, and return the number of calls
@@ -129,13 +129,13 @@ impl<D: Dim> NdTree<D> {
     /// factor of 2.
     pub fn shrink(&mut self) -> usize {
         // If we are already at the minimum layer, do not shrink further.
-        if self.get_root().layer == 1 {
+        if self.root().layer == 1 {
             return 0;
         }
-        let new_node = self.get_root().get_inner_node(&self.cache);
+        let new_node = self.root().inner_node(&self.cache);
         // Make sure the populations are the same (i.e. we haven't lost any
         // cells); otherwise don't do anything.
-        if new_node.population == self.get_root().population {
+        if new_node.population == self.root().population {
             self.set_root_centered(new_node);
             1 + self.shrink()
         } else {
@@ -246,7 +246,7 @@ mod tests {
                     .filter(|(_, &cell_state)| cell_state != 0)
                     .count()
             ),
-            ndtree.get_root().population
+            ndtree.root().population
         );
         for pos in cells_to_check {
             assert_eq!(

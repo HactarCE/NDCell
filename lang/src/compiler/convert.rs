@@ -75,7 +75,7 @@ impl ValueConverter {
             ConstValue::Pattern(p) => {
                 let offsets = self.offsets.as_ref().unwrap();
                 let start_ptr = p.cells.as_ptr();
-                let origin_offset = p.shape.get_unchecked_flattened_idx(&vec![0; p.ndim()]);
+                let origin_offset = p.shape.flatten_idx_unchecked(&vec![0; p.ndim()]);
                 let origin_ptr = start_ptr.wrapping_offset(origin_offset);
                 let strides = p.shape.strides();
                 let mut first_two_elements = std::iter::empty()

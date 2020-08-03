@@ -6,6 +6,8 @@ use std::convert::TryInto;
 
 use super::*;
 
+// TODO: change these traits to simple method impls and rename `as` to `to`.
+
 /// NdVecs that can be converted to UVecs but not using From/Into.
 pub trait AsUVec<D: Dim> {
     /// Converts the NdVec to a UVec, panicking if it does not fit.

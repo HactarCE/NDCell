@@ -42,6 +42,7 @@ use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use itertools::Itertools;
 use noisy_float::prelude::r64;
+use num::traits::*;
 use num::{BigInt, ToPrimitive, Zero};
 
 use ndcell_core::space::*;
@@ -166,7 +167,7 @@ impl<'a> RenderInProgress<'a> {
                 let half_diag: FVec2D = target_cells_size / 2.0;
 
                 global_visible_rect =
-                    BigRect2D::centered(viewport.pos.clone(), &half_diag.ceil().as_bigvec());
+                    BigRect2D::centered(viewport.center.int.clone(), &half_diag.ceil().as_bigvec());
             }
 
             // Now fetch the NdTreeSlice containing all of the visible cells.
@@ -186,15 +187,16 @@ impl<'a> RenderInProgress<'a> {
             // Subtract the slice offset from the viewport position and divide
             // by the size of a render cell to get the render cell offset from
             // the lower corner of the slice.
-            let integer_pos = (&viewport.pos - &quadtree_slice.offset).div_floor(&render_cell_len);
+            let integer_pos =
+                (&viewport.center.int - &quadtree_slice.offset).div_floor(&render_cell_len);
             pos = integer_pos.as_fvec();
             // Offset by half a pixel if the viewport dimensions are odd, so
             // that cells boundaries always line up with pixel boundaries.
             pos += (target_pixels_size % 2.0) * r64(render_cell_zoom.cells_per_pixel() / 2.0);
-            // viewport.offset is a sub-cell offset, so it only matters when
+            // viewport.pos.frac is a sub-cell offset, so it only matters when
             // zoomed in more than 1:1.
             if viewport.zoom.pixels_per_cell() > 1.0 {
-                pos += viewport.offset;
+                pos += viewport.center.frac;
             }
         }
 
@@ -365,12 +367,8 @@ impl<'a> RenderInProgress<'a> {
         [r, g, b, 255]
     }
 
-    /// Returns the coordinates of the cell at the given pixel, or None if the
-    /// viewport is zoomed out beyond 1:1.
-    pub fn pixel_pos_to_cell_pos(&self, cursor_position: IVec2D) -> Option<BigVec2D> {
-        if self.viewport.zoom.power() < 0.0 {
-            return None;
-        }
+    /// Returns the coordinates of the cell at the given pixel.
+    pub fn pixel_pos_to_cell_pos(&self, cursor_position: IVec2D) -> FracVec2D {
         let mut x = cursor_position[X];
         let mut y = cursor_position[Y];
         // Center the coordinates.
@@ -381,18 +379,19 @@ impl<'a> RenderInProgress<'a> {
         // want the Y coordinate increasing upwards.
         y = -y;
         // Convert to float.
-        let mut x = x as f64;
-        let mut y = y as f64;
+        let pixels_from_center = NdVec([r64(x as f64), r64(y as f64)]);
+        // Convert to render cell space (relative to slice).
+        let render_cells_from_center = pixels_from_center / self.render_cell_zoom.pixels_per_cell();
         // Convert to local cell space (relative to slice).
-        x /= self.viewport.zoom.pixels_per_cell();
-        y /= self.viewport.zoom.pixels_per_cell();
-        x += self.pos[X].raw();
-        y += self.pos[Y].raw();
-        // Floor to integer.
-        let local_pos = NdVec([x.floor() as isize, y.floor() as isize]);
+        let local_pos =
+            (self.pos + render_cells_from_center) * r64((1 << self.render_cell_layer) as f64);
         // Convert to global cell space.
-        let global_pos = local_pos.convert() + &self.quadtree_slice.offset;
-        Some(global_pos)
+        let global_pos = FracVec2D {
+            int: self.quadtree_slice.offset.clone(),
+            frac: local_pos,
+        }
+        .normalized();
+        global_pos
     }
 
     /// Draws gridlines at varying opacity and spacing depending on zoom level.
@@ -446,10 +445,12 @@ impl<'a> RenderInProgress<'a> {
         if !self.quadtree_slice.rect().contains(cell_position) {
             return;
         }
-        let pos = (cell_position - &self.quadtree_slice.offset).as_ivec();
+        let cell_pos = cell_position - &self.quadtree_slice.offset;
+        let render_cell_size = BigInt::one() << self.render_cell_layer;
+        let render_cell_pos = cell_pos.div_floor(&render_cell_size);
 
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-            IRect2D::single_cell(pos),
+            IRect2D::single_cell(render_cell_pos.as_ivec()),
             CURSOR_DEPTH,
             width,
             GRID_HIGHLIGHT_COLOR,

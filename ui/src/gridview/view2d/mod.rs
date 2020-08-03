@@ -1,7 +1,8 @@
 use log::{trace, warn};
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ndcell_core::*;
 
@@ -13,7 +14,7 @@ use super::control::*;
 use super::worker::*;
 use super::{GridViewTrait, RenderGridView};
 use crate::clipboard_compat::{clipboard_get, clipboard_set};
-use crate::config::Config;
+use crate::config::{Config, Interpolation2D};
 use crate::history::{History, HistoryManager};
 use render::{RenderCache, RenderInProgress};
 pub use viewport::Viewport2D;
@@ -23,10 +24,6 @@ pub use zoom::Zoom2D;
 const RENDER_RESULTS_COUNT: usize = 4;
 /// The number of previous simulation steps to track for counting UPS.
 const MAX_LAST_SIM_TIMES: usize = 4;
-
-lazy_static! {
-    static ref DEFAULT_RENDER_RESULT: View2DRenderResult = View2DRenderResult::default();
-}
 
 #[derive(Default)]
 pub struct GridView2D {
@@ -86,12 +83,15 @@ impl GridViewTrait for GridView2D {
                     };
                     match c {
                         MoveCommand2D::PanPixels(delta) => new_viewport.pan_pixels(delta),
-                        MoveCommand2D::ZoomByPower(zoom_power) => {
-                            new_viewport.zoom_by(2.0f64.powf(zoom_power))
+                        MoveCommand2D::Zoom { power, fixed_point } => {
+                            new_viewport.zoom_by(2.0f64.powf(power), fixed_point)
                         }
-                        MoveCommand2D::SetPos(pos) => new_viewport.pos = pos,
+                        MoveCommand2D::SetPos(pos) => new_viewport.center = pos,
+                        MoveCommand2D::SetZoom { zoom, fixed_point } => {
+                            new_viewport.zoom_by(zoom / new_viewport.zoom, fixed_point)
+                        }
                         MoveCommand2D::SnapPos => new_viewport.snap_pos(),
-                        MoveCommand2D::SnapZoom => new_viewport.snap_zoom(),
+                        MoveCommand2D::SnapZoom(fixed_point) => new_viewport.snap_zoom(fixed_point),
                     };
                     self.viewport = new_viewport;
                     match interpolation {
@@ -176,12 +176,26 @@ impl GridViewTrait for GridView2D {
         }
 
         // Update viewport.
-        const DECAY_CONSTANT: f64 = 4.0;
+        let last_frame_time = self
+            .get_render_result(0)
+            .time
+            .checked_duration_since(self.get_render_result(1).time)
+            .map(|duration| duration.as_secs_f64())
+            .unwrap_or(1.0 / config.gfx.fps);
         if self.interpolating_viewport != self.viewport {
-            self.interpolating_viewport = Viewport2D::interpolate(
+            let t = match config.ctrl.interpolation_2d {
+                Interpolation2D::None => 1.0,
+                Interpolation2D::Linear { speed } => {
+                    last_frame_time * speed
+                        / Viewport2D::distance(&self.interpolating_viewport, &self.viewport)
+                }
+                Interpolation2D::Exponential { decay_constant } => last_frame_time / decay_constant,
+            };
+            self.interpolating_viewport = Viewport2D::lerp(
                 &self.interpolating_viewport,
                 &self.viewport,
-                1.0 / DECAY_CONSTANT,
+                // Clamp to 0 <= t <= 1.
+                t.max(0.0).min(1.0),
             );
         }
 
@@ -283,39 +297,46 @@ impl RenderGridView for GridView2D {
         _config: &Config,
         target: &mut glium::Frame,
         params: View2DRenderParams,
-    ) -> &View2DRenderResult {
-        let mut hover_pos = None;
+    ) -> Cow<View2DRenderResult> {
         let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
         let mut rip = RenderInProgress::new(self, &mut render_cache, target);
         rip.draw_cells();
+
+        let hover_pos = params.cursor_pos.map(|pos| rip.pixel_pos_to_cell_pos(pos));
+        // Only allow drawing at 1:1 or bigger.
+        let draw_pos = if self.interpolating_viewport.zoom.power() >= 0.0 {
+            hover_pos.clone()
+        } else {
+            None
+        };
 
         // Draw gridlines.
         let gridlines_width = self.interpolating_viewport.zoom.factor() / 32.0;
         rip.draw_gridlines(gridlines_width);
         // Draw crosshairs.
-        if let Some(cursor_pos) = params.cursor_pos {
-            hover_pos = rip.pixel_pos_to_cell_pos(cursor_pos);
-            if let Some(pos) = &hover_pos {
-                rip.draw_blue_cursor_highlight(pos, gridlines_width * 2.0);
-            }
+        if let Some(pos) = &draw_pos {
+            rip.draw_blue_cursor_highlight(&pos.int, gridlines_width * 2.0);
         }
 
         self.render_cache = Some(render_cache);
         if self.render_results.len() >= RENDER_RESULTS_COUNT {
             self.render_results.pop_back();
         }
-        self.render_results
-            .push_front(View2DRenderResult { hover_pos });
+        self.render_results.push_front(View2DRenderResult {
+            hover_pos,
+            draw_pos,
+            ..Default::default()
+        });
         self.get_render_result(0)
     }
-    fn get_render_result(&self, frame: usize) -> &View2DRenderResult {
+    fn get_render_result(&self, frame: usize) -> Cow<View2DRenderResult> {
         if frame > RENDER_RESULTS_COUNT {
             warn!("Attempted to access render result {:?} of GridView2D, but render results are only kept for {:?} frames", frame, RENDER_RESULTS_COUNT);
         }
-        &self
-            .render_results
-            .get(frame)
-            .unwrap_or(&*DEFAULT_RENDER_RESULT)
+        match &self.render_results.get(frame) {
+            Some(res) => Cow::Borrowed(res),
+            None => Cow::Owned(View2DRenderResult::default()),
+        }
     }
 }
 
@@ -337,10 +358,23 @@ pub struct View2DRenderParams {
     /// where the gridview is being drawn.
     pub cursor_pos: Option<IVec2D>,
 }
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct View2DRenderResult {
     /// The cell that the mouse cursor is hovering over.
-    pub hover_pos: Option<BigVec2D>,
+    pub hover_pos: Option<FracVec2D>,
+    /// The cell to draw at if the user draws.
+    pub draw_pos: Option<FracVec2D>,
+    /// The moment that this render finished.
+    pub time: Instant,
+}
+impl Default for View2DRenderResult {
+    fn default() -> Self {
+        Self {
+            hover_pos: None,
+            draw_pos: None,
+            time: Instant::now(),
+        }
+    }
 }
 
 pub struct HistoryEntry {

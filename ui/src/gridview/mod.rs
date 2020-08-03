@@ -1,4 +1,5 @@
 use enum_dispatch::enum_dispatch;
+use std::borrow::Cow;
 
 use ndcell_core::*;
 
@@ -89,7 +90,7 @@ pub trait RenderGridView: GridViewTrait {
     type RenderParams: Default;
     /// Information generated during the render that may be useful to the
     /// caller.
-    type RenderResult: Default;
+    type RenderResult: Default + Clone;
     /// Draws the 2D grid and return a RenderResult which includes the
     /// coordinates of the cell that the mouse is hovering over. This is the
     /// entry point for the entire 2D grid rendering process.
@@ -98,11 +99,11 @@ pub trait RenderGridView: GridViewTrait {
         config: &Config,
         target: &mut glium::Frame,
         params: Self::RenderParams,
-    ) -> &Self::RenderResult;
+    ) -> Cow<Self::RenderResult>;
     /// Returns the RenderResult of the Nth most recent render, or
     /// RenderResult::default() if there hasn't been one or it has been
     /// forgotten.
-    fn get_render_result(&self, frame: usize) -> &Self::RenderResult;
+    fn get_render_result(&self, frame: usize) -> Cow<Self::RenderResult>;
 }
 
 /// An enum between 2D and 3D views that manages the automaton.

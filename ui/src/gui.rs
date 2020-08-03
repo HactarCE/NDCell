@@ -29,8 +29,6 @@ lazy_static! {
     });
 }
 
-const FPS: f64 = 60.0;
-
 const GOSPER_GLIDER_GUN_SYNTH_RLE: &str = "
 #CXRLE Gen=-31
 x = 47, y = 14, rule = Life
@@ -128,7 +126,7 @@ pub fn show_gui() -> ! {
 
             if do_frame {
                 let current_time = Instant::now();
-                let next_frame_time = current_time + Duration::from_secs_f64(1.0 / FPS);
+                let next_frame_time = current_time + Duration::from_secs_f64(1.0 / config.gfx.fps);
                 *control_flow = ControlFlow::WaitUntil(next_frame_time);
 
                 // Prep imgui for event handling.

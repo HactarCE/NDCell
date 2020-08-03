@@ -21,6 +21,7 @@ mod any;
 mod axis;
 mod convert;
 mod dim;
+mod fracvec;
 mod ops;
 
 pub use aliases::*;
@@ -29,6 +30,7 @@ pub use axis::Axis::{U, V, W, X, Y, Z};
 pub use axis::*;
 pub use convert::*;
 pub use dim::*;
+pub use fracvec::*;
 
 /// A "trait alias" for types that can be used as coordinates in an NdVec.
 pub trait NdVecNum:

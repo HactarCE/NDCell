@@ -63,11 +63,11 @@ impl MainWindow {
             ui.text("");
             match &gridview {
                 GridView::View2D(view2d) => {
-                    let Viewport2D { pos, offset, zoom } = &view2d.viewport;
+                    let Viewport2D { center, zoom } = &view2d.viewport;
                     ui.text(format!("Zoom = {}", zoom));
-                    let total_pos = pos.as_fvec() + offset.clone();
+                    let center_fvec = center.as_fvec();
                     for &ax in Dim2D::axes() {
-                        let value = total_pos[ax];
+                        let value = center_fvec[ax];
                         if format!("{:.1}", value).ends_with("0") {
                             ui.text(format!("{} = {:.0}", ax.name(), value));
                         } else {
@@ -76,8 +76,8 @@ impl MainWindow {
                     }
                     if let Some(hover_pos) = view2d.get_render_result(0).hover_pos.as_ref() {
                         ui.text(format!(
-                            "Selected: X = {}, Y = {}",
-                            hover_pos[X], hover_pos[Y]
+                            "Cursor: X = {}, Y = {}",
+                            hover_pos.int[X], hover_pos.int[Y]
                         ));
                     } else {
                         ui.text("");

@@ -31,7 +31,7 @@ use inkwell::values::{
     BasicValueEnum, FunctionValue, IntMathValue, IntValue, PhiValue, PointerValue, StructValue,
     VectorValue,
 };
-use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
+use inkwell::{AddressSpace, IntPredicate};
 
 mod config;
 pub mod convert;
@@ -128,15 +128,16 @@ impl Compiler {
     /// After constructing a Compiler, call begin_function() before building any
     /// instructions.
     pub fn new() -> LangResult<Self> {
+        let config = CompilerConfig::default();
         let module = get_ctx().create_module(MODULE_NAME);
         let execution_engine = module
-            .create_jit_execution_engine(OptimizationLevel::None)
+            .create_jit_execution_engine(config.optimization_level)
             .map_err(|e| internal_error_value!("Error creating JIT execution engine: {:?}", e))?;
         Ok(Self {
             module,
             execution_engine,
             function: None,
-            config: CompilerConfig::default(),
+            config,
 
             loop_entry_points: vec![],
             loop_exit_points: vec![],

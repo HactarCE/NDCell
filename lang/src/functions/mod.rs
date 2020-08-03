@@ -75,7 +75,10 @@ pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
             "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsMethod)),
             _ => None,
         },
-        Type::CellState => todo!("methods on cell states"),
+        Type::CellState => match name {
+            "id" => Some(Box::new(convert::CellStateToInt::construct)),
+            _ => None,
+        },
         Type::Vector(_) => match name {
             // Reductions
             "max" => Some(vectors::MinMax::max()),

@@ -76,6 +76,39 @@ impl Function for IntToCellState {
     }
 }
 
+/// Built-in function that returns ID of the given cell state.
+#[derive(Debug)]
+pub struct CellStateToInt;
+impl CellStateToInt {
+    /// Constructs a new CellStateToInt instance.
+    pub fn construct(_info: &mut FuncCallInfoMut) -> FuncResult {
+        Ok(Box::new(Self))
+    }
+}
+impl Function for CellStateToInt {
+    fn return_type(&self, info: &mut FuncCallInfoMut) -> LangResult<Type> {
+        info.check_args_len(1)?;
+        typecheck!(info.arg_types()[0], CellState)?;
+        Ok(Type::Int)
+    }
+    fn compile(&self, compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
+        let args = info.arg_values();
+
+        // Perform an integer cast.
+        let cell_state_value = args.compile(compiler, 0)?.as_cell_state()?;
+        Ok(Value::Int(compiler.builder().build_int_z_extend(
+            cell_state_value,
+            compiler::types::int(),
+            "tmp_intFromCellState",
+        )))
+    }
+    fn const_eval(&self, info: FuncCallInfo) -> LangResult<ConstValue> {
+        let args = info.arg_values();
+        let arg = args.const_eval(0)?.as_cell_state()?;
+        Ok(ConstValue::Int(arg as LangInt))
+    }
+}
+
 /// Built-in function that converts a value to a boolean.
 #[derive(Debug)]
 pub struct ToBool;

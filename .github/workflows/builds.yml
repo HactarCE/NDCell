@@ -61,7 +61,7 @@ jobs:
     name: Build macOS latest
     runs-on: macos-latest
     env:
-      LLVM_SYS_100_PREFIX: ~/LLVM
+      LLVM_SYS_100_PREFIX: /tmp/LLVM
     steps:
       - uses: actions/checkout@v2
       - uses: actions/cache@v2
@@ -75,7 +75,7 @@ jobs:
         run: |
           wget https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-apple-darwin.tar.xz -O /tmp/llvm.tar.xz
           tar -xvf /tmp/llvm.tar.xz -C /tmp
-          mv /tmp/clang+llvm-10.0.0-x86_64-apple-darwin ~/LLVM
+          mv /tmp/clang+llvm-10.0.0-x86_64-apple-darwin /tmp/LLVM
       - name: Build NDCell
         run: cargo build --release
       - name: Upload executable

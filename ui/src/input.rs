@@ -312,10 +312,14 @@ impl<'a> FrameInProgress<'a> {
         let mut moved = false;
         let mut zoomed = false;
 
-        // TODO: divide by FPS
-        let speed = if self.modifiers.shift() { 2.0 } else { 1.0 };
-        let move_speed = r64(25.0 * speed * self.config.gfx.dpi);
-        let zoom_speed = 0.1 * speed;
+        let speed_per_second = if self.modifiers.shift() {
+            self.config.ctrl.base_speed_2
+        } else {
+            self.config.ctrl.base_speed_1
+        };
+        let speed = speed_per_second / self.gridview.fps(&self.config);
+        let move_speed = r64(self.config.ctrl.move_speed * speed * self.config.gfx.dpi);
+        let zoom_speed = self.config.ctrl.zoom_speed * speed;
         match self.gridview {
             GridView::View2D(view2d) => {
                 if self.has_keyboard && !self.modifiers.intersects(CTRL | ALT | LOGO) {

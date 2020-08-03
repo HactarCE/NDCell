@@ -1,5 +1,6 @@
 use enum_dispatch::enum_dispatch;
 use std::borrow::Cow;
+use std::time::Instant;
 
 use ndcell_core::*;
 
@@ -90,7 +91,7 @@ pub trait RenderGridView: GridViewTrait {
     type RenderParams: Default;
     /// Information generated during the render that may be useful to the
     /// caller.
-    type RenderResult: Default + Clone;
+    type RenderResult: RenderResultTrait;
     /// Draws the 2D grid and return a RenderResult which includes the
     /// coordinates of the cell that the mouse is hovering over. This is the
     /// entry point for the entire 2D grid rendering process.
@@ -104,6 +105,19 @@ pub trait RenderGridView: GridViewTrait {
     /// RenderResult::default() if there hasn't been one or it has been
     /// forgotten.
     fn get_render_result(&self, frame: usize) -> Cow<Self::RenderResult>;
+    /// Returns the framerate measured between the last two frames, or the
+    /// user-configured FPS if that fails.
+    fn fps(&self, config: &Config) -> f64 {
+        self.get_render_result(0)
+            .instant()
+            .checked_duration_since(self.get_render_result(1).instant())
+            .map(|duration| 1.0 / duration.as_secs_f64())
+            .unwrap_or(config.gfx.fps)
+    }
+}
+
+pub trait RenderResultTrait: Default + Clone {
+    fn instant(&self) -> Instant;
 }
 
 /// An enum between 2D and 3D views that manages the automaton.
@@ -162,6 +176,12 @@ impl GridView {
         match self {
             Self::View2D(view2d) => view2d,
             Self::View3D(view3d) => view3d,
+        }
+    }
+    pub fn fps(&self, config: &Config) -> f64 {
+        match self {
+            Self::View2D(view2d) => view2d.fps(config),
+            Self::View3D(_) => todo!("3D FPS"),
         }
     }
 }

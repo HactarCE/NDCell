@@ -9,11 +9,19 @@ pub struct Config {
 
 #[derive(Debug)]
 pub struct CtrlConfig {
+    pub move_speed: f64,
+    pub zoom_speed: f64,
+    pub base_speed_1: f64,
+    pub base_speed_2: f64,
     pub interpolation_2d: Interpolation2D,
 }
 impl Default for CtrlConfig {
     fn default() -> Self {
         Self {
+            move_speed: 1000.0,
+            zoom_speed: 4.0,
+            base_speed_1: 1.0,
+            base_speed_2: 3.0,
             interpolation_2d: Interpolation2D::default(),
         }
     }

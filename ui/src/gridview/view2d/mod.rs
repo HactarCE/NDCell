@@ -12,7 +12,7 @@ mod zoom;
 
 use super::control::*;
 use super::worker::*;
-use super::{GridViewTrait, RenderGridView};
+use super::{GridViewTrait, RenderGridView, RenderResultTrait};
 use crate::clipboard_compat::{clipboard_get, clipboard_set};
 use crate::config::{Config, Interpolation2D};
 use crate::history::{History, HistoryManager};
@@ -176,20 +176,14 @@ impl GridViewTrait for GridView2D {
         }
 
         // Update viewport.
-        let last_frame_time = self
-            .get_render_result(0)
-            .time
-            .checked_duration_since(self.get_render_result(1).time)
-            .map(|duration| duration.as_secs_f64())
-            .unwrap_or(1.0 / config.gfx.fps);
+        let fps = self.fps(config);
         if self.interpolating_viewport != self.viewport {
             let t = match config.ctrl.interpolation_2d {
                 Interpolation2D::None => 1.0,
                 Interpolation2D::Linear { speed } => {
-                    last_frame_time * speed
-                        / Viewport2D::distance(&self.interpolating_viewport, &self.viewport)
+                    speed / fps / Viewport2D::distance(&self.interpolating_viewport, &self.viewport)
                 }
-                Interpolation2D::Exponential { decay_constant } => last_frame_time / decay_constant,
+                Interpolation2D::Exponential { decay_constant } => 1.0 / fps / decay_constant,
             };
             self.interpolating_viewport = Viewport2D::lerp(
                 &self.interpolating_viewport,
@@ -365,15 +359,20 @@ pub struct View2DRenderResult {
     /// The cell to draw at if the user draws.
     pub draw_pos: Option<FracVec2D>,
     /// The moment that this render finished.
-    pub time: Instant,
+    pub instant: Instant,
 }
 impl Default for View2DRenderResult {
     fn default() -> Self {
         Self {
             hover_pos: None,
             draw_pos: None,
-            time: Instant::now(),
+            instant: Instant::now(),
         }
+    }
+}
+impl RenderResultTrait for View2DRenderResult {
+    fn instant(&self) -> Instant {
+        self.instant
     }
 }
 

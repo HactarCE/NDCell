@@ -1,4 +1,4 @@
-use glium::glutin::dpi::PhysicalPosition;
+use glium::glutin::dpi::{PhysicalPosition, PhysicalSize};
 use glium::glutin::event::*;
 use noisy_float::prelude::r64;
 use std::collections::HashSet;
@@ -55,6 +55,11 @@ pub struct State {
     time_to_snap_zoom: Option<Instant>,
     /// The cell state being used in the current drawing operation.
     draw_cell_state: Option<u8>,
+
+    /// Window size.
+    window_size: Option<PhysicalSize<u32>>,
+    /// Window position.
+    window_position: Option<PhysicalPosition<i32>>,
 }
 impl State {
     pub fn cursor_pos(&self) -> Option<IVec2D> {
@@ -208,6 +213,30 @@ impl<'a> FrameInProgress<'a> {
                     } if self.has_mouse => {
                         self.rmb_held = *state == ElementState::Pressed;
                     }
+
+                    WindowEvent::Resized(size) => {
+                        if self.config.ctrl.immersive {
+                            if let Some(old_size) = self.state.window_size {
+                                let dw = r64((size.width as f64 - old_size.width as f64) / 2.0);
+                                let dh = r64((size.height as f64 - old_size.height as f64) / 2.0);
+                                self.gridview
+                                    .enqueue(MoveCommand2D::PanPixels(NdVec([dw, -dh])).direct());
+                            }
+                            self.state.window_size = Some(*size);
+                        }
+                    }
+                    WindowEvent::Moved(position) => {
+                        if self.config.ctrl.immersive {
+                            if let Some(old_position) = self.state.window_position {
+                                let dx = r64((position.x - old_position.x) as f64);
+                                let dy = r64((position.y - old_position.y) as f64);
+                                self.gridview
+                                    .enqueue(MoveCommand2D::PanPixels(NdVec([dx, -dy])).direct());
+                            }
+                            self.state.window_position = Some(*position);
+                        }
+                    }
+
                     _ => (),
                 }
             }

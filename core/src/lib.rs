@@ -4,7 +4,7 @@
 //! automata.
 
 #![allow(dead_code)]
-#![warn(missing_docs)]
+#![warn(missing_debug_implementations, missing_docs, rust_2018_idioms)]
 
 #[macro_use]
 extern crate pest_derive;

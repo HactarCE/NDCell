@@ -26,7 +26,7 @@ impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
         let mut data = Vec::with_capacity(count);
         for idx in 0..count {
             // TODO: do this in a way that doesn't revisit nodes
-            data.push(node.cell_at_pos(&unflatten_idx(size.clone(), idx).convert()));
+            data.push(node.cell_at_pos(&unflatten_idx(size.clone(), idx).to_bigvec()));
         }
         assert_eq!(count, data.len());
         let data = data.into_boxed_slice();

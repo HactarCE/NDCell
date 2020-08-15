@@ -95,8 +95,8 @@ impl<'cache, D: Dim> NdTreeSlice<'cache, D> {
             .enumerate()
             .map(move |(child_index, subcube)| {
                 let child_offset = node_math::leaf_node_cell_index_to_pos::<D>(1, child_index)
-                    .convert::<BigInt>()
-                    * &subcube.big_len();
+                    .to_bigvec()
+                    << subcube.layer();
                 Self::with_offset(subcube, child_offset + &self.offset)
             })
             .collect())

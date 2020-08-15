@@ -2,6 +2,7 @@ use num::{Float, Integer, ToPrimitive};
 use std::ops::{Add, AddAssign, MulAssign, Sub, SubAssign};
 
 mod aliases;
+mod convert;
 mod iter;
 mod ops;
 
@@ -27,7 +28,7 @@ where
 {
     /// The most negative corner of the hyperrectangle.
     start: NdVec<D, N>,
-    /// The size of the hyperrectangle.
+    /// The size of the hyperrectangle along each axis.
     size: NdVec<D, N>,
 }
 
@@ -157,26 +158,6 @@ where
         NdVec<D, N>: Add<T1, Output = NdVec<D, N>> + Add<T2, Output = NdVec<D, N>>,
     {
         Self::span(self.min() + min_offset, self.max() + max_offset)
-    }
-
-    /// Converts this NdRect from one numeric type to another using
-    /// NdVec::convert().
-    pub fn convert<N2: NdVecNum>(&self) -> NdRect<D, N2>
-    where
-        D: DimFor<N2>,
-        NdVec<D, N2>: NdRectVec,
-        N2: std::convert::From<N>,
-    {
-        let start = self.start.convert();
-        let size = self.size.convert();
-        NdRect { start, size }
-    }
-}
-
-impl<D: Dim> BigRect<D> {
-    /// Converts this BigRect into an IRect.
-    pub fn to_irect(&self) -> IRect<D> {
-        IRect::new(self.start.to_ivec(), self.size.to_ivec())
     }
 }
 

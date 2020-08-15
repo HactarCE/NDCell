@@ -23,7 +23,7 @@ fn get_non_default_set<D: Dim>(slice: NdTreeSlice<'_, D>) -> HashSet<BigVec<D>> 
 }
 
 fn make_cell_coords_set<D: Dim>(coords_vec: Vec<IVec<D>>) -> HashSet<BigVec<D>> {
-    coords_vec.iter().map(NdVec::convert).collect()
+    coords_vec.iter().map(IVec::to_bigvec).collect()
 }
 
 #[test]

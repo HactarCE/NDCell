@@ -259,7 +259,9 @@ impl<D: Dim> NdTree<D> {
             // Get the rectangle of grandchildren of the current root that
             // includes the desired rectangle. Each axis is in the range from 0
             // to 3.
-            let mut grandchild_rect: IRect<D> = (rect.clone() >> grandchild_layer).to_irect();
+            let grandchild_rect: URect<D> = (rect.clone() >> grandchild_layer).to_urect();
+            let mut new_min = grandchild_rect.min();
+            let new_max = grandchild_rect.max();
             for &ax in D::axes() {
                 // We want to include exactly two grandchild-lengths (which is
                 // equal to the length of one child) along each axis, so if
@@ -270,39 +272,40 @@ impl<D: Dim> NdTree<D> {
                     0 => unreachable!(),
                     1 => {
                         // Expand so that the length along this axis is 2.
-                        grandchild_rect = if grandchild_rect.min()[ax] < 2 {
+                        if new_min[ax] < 2 {
                             // It's more on the negative end, so bump up the
                             // maximum edge.
-                            grandchild_rect.offset_min_max(0, 1)
+                            new_max[ax] += 1;
                         } else {
                             // It's more on the positive end, so bump down the
                             // minimum edge.
-                            grandchild_rect.offset_min_max(-1, 0)
+                            new_min[ax] -= 1;
                         };
                     }
                     2 => (),
                     _ => break,
                 }
             }
+            let grandchild_square = URect::span(new_min, new_max);
 
             // Fetch the 2^NDIM nodes that comprise the new node by iterating
-            // over the grandchild positions in grandchild_rect.
+            // over the grandchild positions in grandchild_square.
             let grandchildren = root
                 .children()
                 .map(|child| node_access.subdivide(child).unwrap())
                 .collect_vec();
-            let new_children = grandchild_rect
+            let new_children = grandchild_square
                 .iter()
                 .map(|grandchild_pos| {
                     let child_index =
-                        node_math::non_leaf_pos_to_child_index::<D>(2, &grandchild_pos.convert());
+                        node_math::non_leaf_pos_to_child_index::<D>(2, &grandchild_pos.to_bigvec());
                     let grandchild_index =
-                        node_math::non_leaf_pos_to_child_index::<D>(1, &grandchild_pos.convert());
+                        node_math::non_leaf_pos_to_child_index::<D>(1, &grandchild_pos.to_bigvec());
                     grandchildren[child_index][grandchild_index].as_raw()
                 })
                 .collect_vec();
             // Compute the new offset.
-            ret.offset += grandchild_rect.min().convert::<BigInt>() << grandchild_layer;
+            ret.offset += grandchild_square.min().to_bigvec() << grandchild_layer;
 
             // Create the new node.
             ret.root = node_access.join_nodes(new_children);
@@ -337,7 +340,7 @@ mod tests {
         for pos in cells_to_check {
             assert_eq!(
                 *expected_cells.get(pos).unwrap_or(&0),
-                ndtree.get_cell(&node_access, &pos.convert())
+                ndtree.get_cell(&node_access, &pos.to_bigvec())
             );
         }
     }
@@ -359,8 +362,8 @@ mod tests {
             let cache = ndtree.cache();
             let node_access = cache.node_access();
             for (pos, state) in cells_to_set {
-                hashmap.insert(pos.convert(), state);
-                ndtree.set_cell(&node_access, &pos.convert(), state);
+                hashmap.insert(pos, state);
+                ndtree.set_cell(&node_access, &pos.to_bigvec(), state);
                 cells_to_get.push(pos);
             }
             assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
@@ -391,8 +394,8 @@ mod tests {
             let cache = ndtree.cache();
             let node_access = cache.node_access();
             for (pos, state) in cells_to_set {
-                ndtree.set_cell(&node_access, &(pos - 128).convert(), state);
-                ndtree.set_cell(&node_access, &(pos + 128).convert(), state);
+                ndtree.set_cell(&node_access, &(pos - 128).to_bigvec(), state);
+                ndtree.set_cell(&node_access, &(pos + 128).to_bigvec(), state);
             }
             let slice = ndtree.slice(&node_access);
             let children = slice.subdivide().unwrap();
@@ -416,10 +419,10 @@ mod tests {
             let node_access = cache.node_access();
             for (pos, state) in cells_to_set {
                 hashmap.insert(pos, state);
-                ndtree.set_cell(&node_access, &pos.convert(), state);
+                ndtree.set_cell(&node_access, &pos.to_bigvec(), state);
             }
             let half_diag = NdVec([x_radius, y_radius]);
-            let rect = NdRect::span(center - half_diag, center + half_diag).convert();
+            let rect = IRect::span(center - half_diag, center + half_diag).to_bigrect();
             let slice = ndtree.get_slice_containing(&rect);
             let slice_rect = slice.rect();
             assert!(slice_rect.contains(&rect));
@@ -429,8 +432,8 @@ mod tests {
                 || slice.root.big_len() < rect.len(Y) * 2
             );
             for (pos, state) in hashmap {
-                if slice_rect.contains(&pos.convert()) {
-                    if let Some(cell_state) = slice.get_cell(&pos.convert()) {
+                if slice_rect.contains(&pos.to_bigvec()) {
+                    if let Some(cell_state) = slice.get_cell(&pos.to_bigvec()) {
                         assert_eq!(state, cell_state);
                     }
                 }

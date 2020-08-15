@@ -72,8 +72,8 @@ mod tests {
     use super::*;
 
     fn test_bresenham_single_line<D: Dim>(start: IVec<D>, end: IVec<D>) {
-        let big_start: BigVec<D> = start.convert();
-        let big_end: BigVec<D> = end.convert();
+        let big_start: BigVec<D> = start.to_bigvec();
+        let big_end: BigVec<D> = end.to_bigvec();
 
         if big_start == big_end {
             let points: Vec<BigVec<D>> = bresenham(big_start.clone(), big_end).collect();

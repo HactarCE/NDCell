@@ -198,7 +198,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
 impl<D: Dim> BigVec<D> {
     /// Constructs a new BigVec using isize components.
     pub fn big(isize_array: <D as DimFor<isize>>::Array) -> Self {
-        NdVec::<D, isize>(isize_array).convert()
+        NdVec::<D, isize>(isize_array).to_bigvec()
     }
 }
 

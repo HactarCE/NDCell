@@ -10,9 +10,8 @@
 extern crate pest_derive;
 
 use enum_dispatch::enum_dispatch;
-use num::BigInt;
+use num::{BigInt, BigUint};
 use std::convert::TryInto;
-use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 mod io;
@@ -188,9 +187,11 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
         Ok(())
     }
     fn set_cell(&mut self, pos: &BigVec<P>, state: u8) {
-        self.automaton
-            .tree
-            .set_cell(&self.projection.unproject_pos(pos), state);
+        self.automaton.tree.set_cell(
+            todo!("cache access"),
+            &self.projection.unproject_pos(pos),
+            state,
+        );
     }
 }
 
@@ -207,8 +208,8 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
     fn ndim(&self) -> usize {
         D::NDIM
     }
-    fn population_count(&self) -> &BigInt {
-        &self.tree.root().population
+    fn population(&self) -> &BigUint {
+        self.tree.root.population()
     }
     fn generation_count(&self) -> &BigInt {
         &self.generations

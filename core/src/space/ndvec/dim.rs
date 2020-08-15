@@ -11,7 +11,7 @@ use super::*;
 /// application). Similar to ndarray's Dimension trait, this trait should not
 /// and cannot be implemented outside of this crate.
 pub trait Dim:
-    DimFor<BigInt> + DimFor<R64> + DimFor<isize> + DimFor<usize> + DimFor<u8> + Send
+    'static + DimFor<BigInt> + DimFor<R64> + DimFor<isize> + DimFor<usize> + DimFor<u8> + Send
 {
     /// The number of dimensions (number of axes).
     const NDIM: usize;

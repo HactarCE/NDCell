@@ -98,7 +98,7 @@ impl ndcell_core::Rule<ndcell_core::Dim2D> for compiler::CompiledFunction {
                     .nbhd_shape
                     .bounds()
                     .iter()
-                    .map(|pos| neighborhood[&ndcell_core::Vec2D::from_fn(|ax| pos[ax as usize])])
+                    .map(|pos| neighborhood[ndcell_core::Vec2D::from_fn(|ax| pos[ax as usize])])
                     .collect(),
                 shape: compiled_func.rule_meta().nbhd_shape.clone(),
                 lut: None,

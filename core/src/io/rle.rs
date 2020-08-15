@@ -98,26 +98,25 @@ impl RleEncode for Automaton2D {
         // distance each direction from the origin, we don't have negate the X
         // position.
         let cxrle = CxrleHeader {
-            pos: self.tree.slice.min(),
+            pos: self.tree.offset(),
             gen: self.generations.clone(),
         };
         format!("{}\n{}", cxrle.to_string(), self.to_rle())
     }
     fn to_rle(&self) -> String {
-        let root = &self.tree.slice.root;
         let header = RleHeader {
-            x: root.len(),
-            y: root.len(),
+            x: self.tree.len(),
+            y: self.tree.len(),
             // TODO: Actually use a proper rulestring.
             rule: Some("Life".to_owned()),
         };
-        let cell_array = NdArray::from(root);
+        let cell_array = NdArray::from(self.tree.root().as_ref(&self.tree.node_access()));
         let mut items: Vec<(usize, RleItem<u8>)> = vec![];
         for mut pos in cell_array.rect().iter() {
             // Y coordinates increase upwards in NDCell, but downwards in RLE, so
             // reflect over the Y axis.
-            pos[Y] = root.len().to_usize().unwrap() - pos[Y] - 1;
-            let cell = cell_array[&pos.to_ivec()];
+            pos[Y] = self.tree.len().to_usize().unwrap() - pos[Y] - 1;
+            let cell = cell_array[pos];
             if pos[X] == 0 && pos[Y] != 0 {
                 // We're at the beginning of a new row. Remove trailing
                 // zeros.
@@ -241,9 +240,12 @@ impl RleEncode for Automaton2D {
         }
         let x_start = pos[X].clone();
 
+        // TODO: can we get node access from automaton instead of tree?
+        let cache = ret.tree.cache();
+        let node_access = cache.node_access();
         for row in cell_array {
             for cell in row {
-                ret.tree.set_cell(&pos, cell);
+                ret.tree.set_cell(&node_access, &pos, cell);
                 pos[X] += 1;
             }
             pos[X] = x_start.clone();
@@ -261,13 +263,13 @@ fn parse_header(pair: TokenPair) -> Result<RleHeader, String> {
         .ok_or("No X value in RLE header")?
         .as_str()
         .parse()
-        .map_err(|_| "Could not parse RLE X value as integer")?;
+        .map_err(|_| "Could not parse RLE X value as a positive integer")?;
     let y: BigInt = inners
         .next()
         .ok_or("No Y value in RLE header")?
         .as_str()
         .parse()
-        .map_err(|_| "Could not parse RLE Y value as integer")?;
+        .map_err(|_| "Could not parse RLE Y value as a positive integer")?;
     let rule: Option<String> = inners.next().map(|inner| inner.as_str().to_owned());
     Ok(RleHeader { x, y, rule })
 }
@@ -478,12 +480,14 @@ o$3o!
 ",
         )
         .unwrap();
-        assert_eq!(BigInt::from(5), imported.tree.root().population);
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 14])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 13])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([10, 12])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 12])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 12])));
+        let cache = imported.tree.cache();
+        let access = cache.node_access();
+        assert_eq!(5, imported.tree.root.population().to_usize().unwrap());
+        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([11, 14])));
+        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([12, 13])));
+        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([10, 12])));
+        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([11, 12])));
+        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([12, 12])));
         let exported = RleEncode::to_cxrle(&imported);
         // Right now, the RLE writer includes a fair bit of padding around all
         // the edges. In future this might be fixed, and then this hard-coded

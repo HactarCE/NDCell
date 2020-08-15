@@ -136,8 +136,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         }
     }
     /// Constructs an NdVec using the given value for all components.
-    pub fn repeat<X: Into<N>>(value: X) -> Self {
-        let value = value.into();
+    pub fn repeat(value: N) -> Self {
         Self::from_fn(|_| value.clone())
     }
 

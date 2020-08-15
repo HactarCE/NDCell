@@ -1,4 +1,4 @@
-use num::BigInt;
+use num::{BigInt, BigUint};
 
 /// Simulation-related methods whose type signatures are the same for all
 /// automata, regardless of dimensionality.
@@ -6,7 +6,7 @@ pub trait NdSimulate {
     /// Returns the number of dimensions of the underlying automaton.
     fn ndim(&self) -> usize;
     /// Returns the number of live cells in the simulation.
-    fn population_count(&self) -> &BigInt;
+    fn population(&self) -> &BigUint;
     /// Returns the number of generations that have elapsed in the simulation.
     fn generation_count(&self) -> &BigInt;
     /// Sets the number of generations that have elapsed in the simulation.
@@ -34,8 +34,8 @@ where
     fn ndim(&self) -> usize {
         self.as_ndsim().ndim()
     }
-    fn population_count(&self) -> &BigInt {
-        self.as_ndsim().population_count()
+    fn population(&self) -> &BigUint {
+        self.as_ndsim().population()
     }
     fn generation_count(&self) -> &BigInt {
         self.as_ndsim().generation_count()

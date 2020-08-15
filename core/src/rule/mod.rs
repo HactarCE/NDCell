@@ -29,6 +29,6 @@ impl<D: Dim> Rule<D> for DummyRule {
         0
     }
     fn transition_function(&self) -> TransitionFunction<D> {
-        Box::new(|nbhd| nbhd[&NdVec::origin()])
+        Box::new(|nbhd| nbhd[NdVec::origin()])
     }
 }

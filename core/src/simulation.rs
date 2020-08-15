@@ -1,20 +1,19 @@
 //! The functions that apply a rule to each cell in a grid.
 
+use itertools::Itertools;
 use num::{BigInt, One, Signed, Zero};
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use super::*;
 
-// TODO: garbage collect results cache
+// TODO: parallelize using threadpool and crossbeam_channel (call execute threadpool.max_count times with closures that just loop)
 
 /// A HashLife simulation of a given automaton that caches simulation results.
 #[derive(Debug)]
 pub struct Simulation<D: Dim> {
     rule: Arc<dyn Rule<D>>,
-    min_layer: usize,
-    results: ResultsCache<D>,
+    min_layer: u32,
 }
 impl<D: Dim> Default for Simulation<D> {
     fn default() -> Self {
@@ -35,15 +34,11 @@ impl<D: Dim> Simulation<D> {
         // r=1, the minimum layer is 2 because we need to return the inner node
         // (which is at a lower layer) and the minimum layer is 1.
         let mut min_layer = 2;
-        while (1 << min_layer) / 4 < rule.radius() {
+        while (1 << min_layer as usize) / 4 < rule.radius() {
             min_layer += 1;
         }
 
-        Self {
-            rule,
-            min_layer,
-            results: ResultsCache::default(),
-        }
+        Self { rule, min_layer }
     }
 
     /// Advances the given NdTree by the given number of generations.
@@ -60,12 +55,13 @@ impl<D: Dim> Simulation<D> {
         // Expand out to the sphere of influence of the existing pattern,
         // following `expansion_distance >= r * t` (rounding `r` and `t` each to
         // the next-highest power of two).
-        let min_expansion_distance =
-            BigInt::from(1) << (BigInt::from(self.rule.radius()).bits() + step_size.bits());
-        let mut expansion_distance = BigInt::from(0);
+        let radius_log2 = self.rule.radius().next_power_of_two().trailing_zeros();
+        let step_size_log2 = step_size.bits();
+        let min_expansion_distance = BigInt::one() << (radius_log2 as u64 + step_size_log2);
+        let mut expansion_distance = BigInt::zero();
         while expansion_distance < min_expansion_distance {
             tree.expand();
-            expansion_distance += tree.root().len() / 4;
+            expansion_distance += tree.len() >> 2;
         }
         // Now expand one more layer to guarantee that the sphere of influence
         // is within the inner node, because Simulation::advance_inner_node()
@@ -75,15 +71,21 @@ impl<D: Dim> Simulation<D> {
         // minimum layer for a node.)
         tree.expand();
         // Now do the actual simulation.
-        let new_node = self.advance_inner_node(
-            &tree.cache,
-            &tree.slice.root,
-            step_size,
-            &mut transition_function,
+        let node_access = tree.node_access();
+        let new_root = ArcNode::new(
+            tree.cache(),
+            self.advance_inner_node(
+                tree.root.as_ref(&node_access),
+                step_size,
+                &mut transition_function,
+            ),
         );
-        tree.set_root_centered(new_node);
+        drop(node_access);
+        tree.set_root(new_root);
         // Shrink the tree as much as possible to avoid wasted space.
         tree.shrink();
+
+        // TODO: garbage collect
     }
 
     /// Computes the inner node for a given node after the given numebr of
@@ -104,56 +106,62 @@ impl<D: Dim> Simulation<D> {
     /// inner node to the edge of the outer node.) In practice, however, each
     /// layer must be computed separately, so the `r` and `t` must each be
     /// replaced with their next lowest power of two.
-    #[must_use]
-    fn advance_inner_node(
+    #[must_use = "This method returns a new value instead of mutating its input"]
+    fn advance_inner_node<'a>(
         &mut self,
-        cache: &NdTreeCache<D>,
-        node: &NdCachedNode<D>,
+        node: NodeRef<'a, D>,
         generations: &BigInt,
         transition_function: &mut TransitionFunction<D>,
-    ) -> NdCachedNode<D> {
-        // Handle the simplest case of just not simulating anything. This is one
-        // of the recursive base cases.
-        if generations.is_zero() {
-            return node.inner_node(cache);
-        }
-
-        // If the entire node is empty, then in the future it will remain empty.
-        // This is not strictly necessary, but it is an obvious optimization for
-        // rules without "B0" behavior.
-        if node.is_empty() {
-            // Rather than constructing a new node or fetching one from the
-            // cache, just clone one of the branches of this one (since we know
-            // it's empty).
-            return node.branches[0].node().unwrap().clone();
-        }
-
-        // If the result is already in the cache, just return that.
-        if let Some(result) = self.results.get_result(node, generations) {
-            return result.clone();
-        }
-
-        // Otherwise make sure we're above the minimum layer.
+    ) -> NodeRef<'a, D> {
+        // Make sure we're above the minimum layer.
         assert!(
-            node.layer >= self.min_layer,
+            node.layer() >= self.min_layer,
             "Cannot advance inner node at layer below minimum simulation layer"
         );
 
-        let ret;
+        let ret = if let Some(result) = node.result() {
+            // If the result is already computed, just return that.
+            return result;
+        } else if generations.is_zero() {
+            // Handle the simplest case of just not simulating anything. This is
+            // one of the recursive base cases.
+            node.centered_inner().unwrap()
+        } else if node.is_empty() {
+            // If the entire node is empty, then in the future it will remain
+            // empty. This is not strictly necessary, but it is an obvious
+            // optimization for rules without "B0" behavior.
 
-        // If this is the minimum layer, just compute each cell manually. This
-        // is the other recursive base case.
-        if node.layer == self.min_layer {
+            // Rather than constructing a new node or fetching one from the
+            // cache, just return one of the children of this one (since we know
+            // it's empty).
+            match node.as_enum() {
+                NodeRefEnum::Leaf(node) => node.subdivide().unwrap()[0],
+                NodeRefEnum::NonLeaf(node) => node.child_at_index(0),
+            }
+        } else if node.layer() == self.min_layer {
+            // If this is the minimum layer, just process each cell
+            // individually. This another recursive base case.
             assert!(
                 generations.is_one(),
                 "Cannot simulate more than 1 generation at minimum layer"
             );
             let old_cell_ndarray = Rc::new(NdArray::from(node));
-            let base_offset = 1 << (node.layer - 2);
-            ret = cache.get_small_node_from_cell_fn(node.layer - 1, NdVec::origin(), &mut |pos| {
-                let slice = old_cell_ndarray.clone().offset_slice(-&pos - base_offset);
-                transition_function(slice)
-            })
+            let base_offset = 1 << (node.layer() as usize - 2);
+            // cache.get_small_node_from_cell_fn(
+            //     node.layer() as usize - 1,
+            //     NdVec::origin(),
+            //     &mut |pos| {
+            //         let slice = old_cell_ndarray.clone().offset_slice(-&pos - base_offset);
+            //         transition_function(slice)
+            //     },
+            // )
+            todo!("simulate for one generation");
+        } else if node.layer() - 1 <= node.repr().base_layer {
+            // If this node's children are leaf nodes, the node is small enough
+            // to process each cell individually. This is the final recursive
+            // base case.
+
+            todo!("simulate for multiple generations")
         } else {
             // In the algorithm described below, there are two `t/2`s that must
             // add up to `t` (where `t` is the number of generations to
@@ -167,6 +175,9 @@ impl<D: Dim> Simulation<D> {
             // Let `L` be the layer of the current node, and let `t` be the
             // number of generations to simulate. Colors refer to Figure 4 in
             // this article: https://www.drdobbs.com/jvm/_/184406478.
+            //
+            // We already checked that this node's children (at layer `L-1`) are
+            // not leaf nodes, but its grandchildren (at layer `L-2`) might be.
 
             // TODO: Note that the use of NdArray here assumes that NdRect
             // iterates in the same order as NdArray; this probably shouldn't be
@@ -174,117 +185,82 @@ impl<D: Dim> Simulation<D> {
 
             // 1. Make a 4^D array of nodes at layer `L-2` of the original node
             //    at time `0`.
-            let unsimmed_nodes: NdArray<NdTreeBranch<D>, D> = NdArray::from_flat_data(
-                UVec::repeat(4usize),
-                NdRect::span(ByteVec::origin(), ByteVec::repeat(3))
+            let unsimmed_quarter_size_nodes: NdArray<NodeRef<'a, D>, D> = NdArray::from_flat_slice(
+                UVec::repeat(4_usize),
+                URect::<D>::span(UVec::origin(), UVec::repeat(3_usize))
                     .iter()
-                    .map(|pos| node.get_sub_branch(pos).clone())
-                    .collect(),
+                    .map(|pos| {
+                        node.as_non_leaf()
+                            .unwrap()
+                            .grandchild_at_index(node_math::leaf_node_pos_to_cell_index::<D>(
+                                2, pos,
+                            ))
+                            .unwrap()
+                    })
+                    .collect_vec(),
             );
 
             // 2. Combine adjacent nodes at layer `L-2` to make a 3^D array of
             //    nodes at layer `L-1` and time `0`.
-            let combined_unsimmed_nodes: NdArray<NdCachedNode<D>, D> = NdArray::from_flat_data(
-                UVec::repeat(3usize),
-                NdRect::span(IVec::origin(), IVec::repeat(2isize))
+            let unsimmed_half_size_nodes: NdArray<NodeRef<'a, D>, D> = NdArray::from_flat_slice(
+                UVec::repeat(3_usize),
+                URect::<D>::span(UVec::origin(), UVec::repeat(2_usize))
                     .iter()
                     .map(|pos| {
-                        cache.get_node(
-                            NdRect::span(pos.clone(), pos + 1)
-                                .iter()
-                                .map(|pos| unsimmed_nodes[&pos].clone())
-                                .collect(),
-                        )
+                        node.cache_access()
+                            .join_nodes(
+                                NdRect::span(pos.clone(), pos + 1)
+                                    .iter()
+                                    .map(|pos| unsimmed_quarter_size_nodes[pos].as_raw())
+                                    .collect_vec(),
+                            )
+                            .as_ref()
                     })
-                    .collect(),
+                    .collect_vec(),
             );
 
             // 3. Simulate each of those nodes to get a new node at layer `L-2`
             //    and time `t/2` (red squares).
-            let half_simmed_nodes: NdArray<NdTreeBranch<D>, D> =
-                combined_unsimmed_nodes.map(|node| {
-                    NdTreeBranch::Node(self.advance_inner_node(
-                        cache,
-                        &node,
-                        &t_inner,
-                        transition_function,
-                    ))
-                });
+            let half_simmed_quarter_size_nodes: NdArray<NodeRef<'a, D>, D> =
+                unsimmed_half_size_nodes
+                    .map(|&node| self.advance_inner_node(node, &t_inner, transition_function));
 
             // 4. Combine adjacent nodes from step #3 to make a 2^D array of
             //    nodes at layer `L-1` and time `t/2`.
-            let combined_half_simmed_nodes: NdArray<NdCachedNode<D>, D> = NdArray::from_flat_data(
-                UVec::repeat(2usize),
-                NdRect::span(IVec::origin(), IVec::repeat(1isize))
+            let half_simmed_half_size_nodes: NdArray<NodeRef<'a, D>, D> = NdArray::from_flat_slice(
+                UVec::repeat(2_usize),
+                URect::<D>::span(UVec::origin(), UVec::repeat(1_usize))
                     .iter()
                     .map(|pos| {
-                        cache.get_node(
-                            NdRect::span(pos.clone(), pos + 1)
-                                .iter()
-                                .map(|pos| half_simmed_nodes[&pos].clone())
-                                .collect(),
-                        )
+                        node.cache_access()
+                            .join_nodes(
+                                NdRect::span(pos.clone(), pos + 1)
+                                    .iter()
+                                    .map(|pos| half_simmed_quarter_size_nodes[pos].as_raw())
+                                    .collect_vec(),
+                            )
+                            .as_ref()
                     })
-                    .collect(),
+                    .collect_vec(),
             );
 
             // 5. Simulate each of those nodes to get a new node at layer `L-2`
             //    and time `t` (green squares).
-            let full_simmed_nodes: NdArray<NdTreeBranch<D>, D> =
-                combined_half_simmed_nodes.map(|node| {
-                    NdTreeBranch::Node(self.advance_inner_node(
-                        cache,
-                        &node,
-                        &t_outer,
-                        transition_function,
-                    ))
+            let fully_simmed_quarter_size_nodes: NdArray<&RawNode, D> = half_simmed_half_size_nodes
+                .map(|&node| {
+                    self.advance_inner_node(node, &t_outer, transition_function)
+                        .as_raw()
                 });
 
             // 6. Combine the nodes from step #5 to make a new node at layer
             //    `L-1` and time `t` (blue square). This is the final result.
-            ret = cache.get_node(full_simmed_nodes.into_flat_data());
-        }
+            node.cache_access()
+                .join_nodes(fully_simmed_quarter_size_nodes.into_flat_slice())
+                .as_ref()
+        };
 
-        // Add the result to the cache so we don't have to do all that work next
-        // time.
-        self.results
-            .set_result(node.clone(), generations, ret.clone());
+        // Cache that result so we don't have to do all that work next time.
+        node.set_result(Some(ret));
         ret
-    }
-}
-
-/// A cache of simulation results for a variety of step sizes.
-#[derive(Debug, Default, Clone)]
-struct ResultsCache<D: Dim>(HashMap<BigInt, SingleStepResultsCache<D>, NodeHasher>);
-impl<D: Dim> ResultsCache<D> {
-    fn get_result(&self, node: &NdCachedNode<D>, step_size: &BigInt) -> Option<&NdCachedNode<D>> {
-        self.0
-            .get(step_size)
-            .and_then(|single_step_cache| single_step_cache.get_result(node))
-    }
-    fn set_result(&mut self, node: NdCachedNode<D>, step_size: &BigInt, result: NdCachedNode<D>) {
-        // TODO: once #![feature(entry_insert)] is stabalized, use that instead.
-        let single_step_results_cache;
-        if let Some(existing) = self.0.get_mut(step_size) {
-            single_step_results_cache = existing;
-        } else {
-            single_step_results_cache = self
-                .0
-                .entry(step_size.clone())
-                .or_insert_with(SingleStepResultsCache::default)
-        }
-        single_step_results_cache.set_result(node, result);
-    }
-}
-
-/// A cache of simulation results for a given step size.
-#[derive(Debug, Default, Clone)]
-struct SingleStepResultsCache<D: Dim>(HashMap<NdCachedNode<D>, NdCachedNode<D>, NodeHasher>);
-impl<D: Dim> SingleStepResultsCache<D> {
-    fn get_result(&self, node: &NdCachedNode<D>) -> Option<&NdCachedNode<D>> {
-        self.0.get(node)
-    }
-    fn set_result(&mut self, node: NdCachedNode<D>, result: NdCachedNode<D>) {
-        self.0.insert(node, result);
     }
 }

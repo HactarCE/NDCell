@@ -14,6 +14,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         D: DimFor<N2>,
         N: Into<N2>,
     {
+        todo!("replace this with explicit conversion methods");
         NdVec::from_fn(|ax| N2::from(self[ax].clone().into()))
     }
 }
@@ -25,6 +26,14 @@ impl<D: Dim> BigVec<D> {
             self[ax]
                 .to_isize()
                 .expect("Cannot convert this UVec into an IVec")
+        })
+    }
+    /// Converts this BigVec to a UVec, panicking if it does not fit.
+    pub fn to_uvec(&self) -> UVec<D> {
+        UVec::from_fn(|ax| {
+            self[ax]
+                .to_usize()
+                .expect("Cannot convert this IVec into a UVec")
         })
     }
     /// Converts this BigVec to an FVec, panicking if it does not fit.

@@ -1,4 +1,4 @@
-use num::Integer;
+use num::{Integer, ToPrimitive};
 
 use super::*;
 
@@ -11,9 +11,10 @@ where
     start: NdVec<D, N>,
     end: NdVec<D, N>,
     next: Option<NdVec<D, N>>,
+    remaining: Option<usize>,
 }
 
-impl<D: DimFor<N>, N: NdVecNum + Integer> From<&NdRect<D, N>> for NdRectIter<D, N>
+impl<D: DimFor<N>, N: NdVecNum + Integer + ToPrimitive> From<&NdRect<D, N>> for NdRectIter<D, N>
 where
     NdVec<D, N>: NdRectVec,
 {
@@ -21,7 +22,13 @@ where
         let start = rect.min();
         let end = rect.max();
         let next = Some(start.clone());
-        Self { start, end, next }
+        let remaining = rect.count().to_usize();
+        Self {
+            start,
+            end,
+            next,
+            remaining,
+        }
     }
 }
 
@@ -44,5 +51,8 @@ where
             self.next = None;
         }
         return ret;
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining.unwrap_or(usize::MAX), self.remaining)
     }
 }

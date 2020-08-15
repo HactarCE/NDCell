@@ -43,12 +43,12 @@ impl Rule<Dim2D> for MooreTotalistic2D {
             let nbhd_shape = Rect2D::moore(self.radius() as isize);
             let mut live_neighbors = 0;
             for cell_coords in nbhd_shape.iter() {
-                if nbhd[&cell_coords] != 0 {
+                if nbhd[cell_coords] != 0 {
                     live_neighbors += 1;
                 }
             }
             // Index LUT to get next cell state.
-            if nbhd[&NdVec::origin()] != 0 {
+            if nbhd[NdVec::origin()] != 0 {
                 live_neighbors -= 1;
                 self.survival[live_neighbors]
             } else {

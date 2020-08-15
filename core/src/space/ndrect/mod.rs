@@ -1,4 +1,4 @@
-use num::{Float, Integer};
+use num::{Float, Integer, ToPrimitive};
 use std::ops::{Add, AddAssign, MulAssign, Sub, SubAssign};
 
 mod aliases;
@@ -72,11 +72,11 @@ where
     }
     /// Constructs an NdRect describing a Moore neighborhood of a given radius
     /// centered at the origin.
-    pub fn moore<X: Into<N>>(radius: X) -> Self
+    pub fn moore<X: Copy + Into<N>>(radius: X) -> Self
     where
-        NdVec<D, N>: Copy + Add<X, Output = NdVec<D, N>> + Sub<X, Output = NdVec<D, N>>,
+        NdVec<D, N>: Add<X, Output = NdVec<D, N>> + Sub<X, Output = NdVec<D, N>>,
     {
-        Self::centered(NdVec::origin(), NdVec::repeat(radius))
+        Self::centered(NdVec::origin(), radius)
     }
 
     /// Returns the minimum (most negative) corner of this NdRect.
@@ -107,7 +107,7 @@ where
     /// Returns an iterator over all the positions in this hyperrectangle.
     pub fn iter(&self) -> NdRectIter<D, N>
     where
-        N: Integer,
+        N: Integer + ToPrimitive,
     {
         self.into()
     }

@@ -115,3 +115,46 @@ where
         self.size /= operand;
     }
 }
+
+// Implement left shift and right shift on anything that an NdVec can be
+// left/right-shifted by.
+impl<D: DimFor<N>, N: NdVecNum, X> Shl<X> for NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec + Shl<X, Output = NdVec<D, N>>,
+{
+    type Output = Self;
+    fn shl(self, operand: X) -> Self {
+        Self {
+            start: self.start << operand,
+            size: self.size,
+        }
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X> ShlAssign<X> for NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec + ShlAssign<X>,
+{
+    fn shl_assign(&mut self, operand: X) {
+        self.start <<= operand
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X> Shr<X> for NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec + Shr<X, Output = NdVec<D, N>>,
+{
+    type Output = Self;
+    fn shr(self, operand: X) -> Self {
+        Self {
+            start: self.start >> operand,
+            size: self.size,
+        }
+    }
+}
+impl<D: DimFor<N>, N: NdVecNum, X> ShrAssign<X> for NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec + ShrAssign<X>,
+{
+    fn shr_assign(&mut self, operand: X) {
+        self.start >>= operand
+    }
+}

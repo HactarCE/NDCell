@@ -1,6 +1,6 @@
 //! Basic N-dimensional arrays for smaller patterns.
 
-use num::traits::Pow;
+use itertools::Itertools;
 use num::ToPrimitive;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
@@ -11,43 +11,39 @@ use super::*;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NdArray<T, D: Dim> {
     size: UVec<D>,
-    data: Vec<T>,
+    data: Box<[T]>,
 }
 
-// Create an NdArray from the cells in an NdTreeNode.
-impl<D: Dim> From<&NdTreeNode<D>> for NdArray<u8, D> {
-    fn from(node: &NdTreeNode<D>) -> Self {
+// Create an NdArray from the cells in an NdTree NodeRef.
+impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
+    fn from(node: NodeRef<'a, D>) -> Self {
         let count = node
-            .len()
-            .pow(D::NDIM)
+            .big_num_cells()
             .to_usize()
             .expect("Cannot make NdArray using such a large node");
-        let size = UVec::repeat(node.len().to_usize().unwrap());
+        let size = UVec::repeat(node.big_len().to_usize().unwrap());
 
         let mut data = Vec::with_capacity(count);
         for idx in 0..count {
-            data.push(node[unflatten_idx(&size, idx)]);
+            // TODO: do this in a way that doesn't revisit nodes
+            data.push(node.cell_at_pos(&unflatten_idx(size.clone(), idx).convert()));
         }
         assert_eq!(count, data.len());
+        let data = data.into_boxed_slice();
 
         Self { size, data }
     }
 }
-impl<D: Dim> From<&NdCachedNode<D>> for NdArray<u8, D> {
-    fn from(node: &NdCachedNode<D>) -> Self {
-        Self::from(&**node)
-    }
-}
 
 // Get or set an element in an NdArray.
-impl<T, D: Dim> Index<&IVec<D>> for NdArray<T, D> {
+impl<T, D: Dim> Index<UVec<D>> for NdArray<T, D> {
     type Output = T;
-    fn index(&self, pos: &IVec<D>) -> &T {
+    fn index(&self, pos: UVec<D>) -> &T {
         &self.data[self.flatten_idx(pos)]
     }
 }
-impl<T, D: Dim> IndexMut<&IVec<D>> for NdArray<T, D> {
-    fn index_mut(&mut self, pos: &IVec<D>) -> &mut T {
+impl<T, D: Dim> IndexMut<UVec<D>> for NdArray<T, D> {
+    fn index_mut(&mut self, pos: UVec<D>) -> &mut T {
         let idx = self.flatten_idx(pos);
         &mut self.data[idx]
     }
@@ -56,12 +52,13 @@ impl<T, D: Dim> IndexMut<&IVec<D>> for NdArray<T, D> {
 impl<T, D: Dim> NdArray<T, D> {
     /// Creates an NdArray from a flat vector. Panics if the vector is not the
     /// right length.,
-    pub fn from_flat_data(size: UVec<D>, data: Vec<T>) -> Self {
+    pub fn from_flat_slice(size: UVec<D>, data: impl Into<Box<[T]>>) -> Self {
+        let data = data.into();
         assert_eq!(size.product(), data.len(), "Wrong size for NdArray");
         Self { size, data }
     }
     /// Returns the flat data behind this array.
-    pub fn into_flat_data(self) -> Vec<T> {
+    pub fn into_flat_slice(self) -> Box<[T]> {
         self.data
     }
 
@@ -84,20 +81,21 @@ impl<T, D: Dim> NdArray<T, D> {
     }
     /// Returns an iterator over all the elements in this array, enumerated by
     /// their positions.
-    pub fn iter_enumerated<'a>(&'a self) -> impl Iterator<Item = (IVec<D>, &T)> + 'a {
+    pub fn iter_enumerated<'a>(&'a self) -> impl 'a + Iterator<Item = (UVec<D>, &T)> {
         self.data
             .iter()
             .enumerate()
-            .map(move |(idx, item)| (unflatten_idx(&self.size, idx), item))
+            .map(move |(idx, item)| (unflatten_idx(self.size.clone(), idx), item))
     }
     /// Applies a function to every element in the array, returning a new array
     /// of the same size and shape.
-    pub fn map<U>(self, f: impl FnMut(T) -> U) -> NdArray<U, D> {
-        NdArray::from_flat_data(self.size, self.data.into_iter().map(f).collect())
+    #[must_use = "This method returns a new value instead of mutating its input"]
+    pub fn map<U>(&self, f: impl FnMut(&T) -> U) -> NdArray<U, D> {
+        NdArray::from_flat_slice(self.size.clone(), self.data.iter().map(f).collect_vec())
     }
 
-    fn flatten_idx(&self, pos: &IVec<D>) -> usize {
-        flatten_idx(&self.size, pos)
+    fn flatten_idx(&self, pos: UVec<D>) -> usize {
+        flatten_idx(self.size.clone(), pos)
     }
 }
 
@@ -119,10 +117,10 @@ impl<T, D: Dim> From<Rc<NdArray<T, D>>> for NdArrayView<T, D> {
     }
 }
 
-impl<T, D: Dim> Index<&IVec<D>> for NdArrayView<T, D> {
+impl<T, D: Dim> Index<IVec<D>> for NdArrayView<T, D> {
     type Output = T;
-    fn index(&self, pos: &IVec<D>) -> &T {
-        &self.array[&(pos - self.offset.clone()).convert()]
+    fn index(&self, pos: IVec<D>) -> &T {
+        &self.array[(pos - self.offset.clone()).to_uvec()]
     }
 }
 
@@ -137,23 +135,23 @@ impl<T, D: Dim> NdArrayView<T, D> {
 }
 
 /// Converts a usize array index into an NdVec position.
-fn unflatten_idx<D: Dim>(size: &UVec<D>, mut idx: usize) -> IVec<D> {
-    let mut ret = IVec::origin();
+fn unflatten_idx<D: Dim>(size: UVec<D>, mut idx: usize) -> UVec<D> {
+    let mut ret = UVec::origin();
     assert!(idx < size.product() as usize);
     for &ax in D::axes() {
-        ret[ax] = idx.rem_euclid(size[ax]) as isize;
+        ret[ax] = idx.rem_euclid(size[ax]);
         idx = idx.div_euclid(size[ax]);
     }
     ret
 }
 
 /// Converts an NdVec position into a usize array index.
-fn flatten_idx<D: Dim>(size: &UVec<D>, pos: &IVec<D>) -> usize {
+fn flatten_idx<D: Dim>(size: UVec<D>, pos: UVec<D>) -> usize {
     let mut ret = 0;
     let mut stride = 1;
     for &ax in D::axes() {
-        assert!(0 <= pos[ax] && pos[ax] < size[ax] as isize);
-        ret += pos[ax] as usize * stride;
+        assert!(0 <= pos[ax] && pos[ax] < size[ax]);
+        ret += pos[ax] * stride;
         stride *= size[ax];
     }
     ret
@@ -194,12 +192,12 @@ mod tests {
     #[test]
     fn test_flatten_unflatten_ndarray_idx() {
         let size: UVec4D = NdVec([4, 5, 6, 7]);
-        let rect: IRect4D = NdRect::new(NdVec::origin(), size.to_ivec());
+        let rect: URect4D = NdRect::new(NdVec::origin(), size - 1);
         let count = rect.count() as usize;
         for pos in rect.iter() {
-            let flat_idx: usize = flatten_idx(&size, &pos);
+            let flat_idx: usize = flatten_idx(size, pos);
             assert!(flat_idx < count);
-            assert_eq!(pos, unflatten_idx(&size, flat_idx));
+            assert_eq!(pos, unflatten_idx(size, flat_idx));
         }
     }
 }

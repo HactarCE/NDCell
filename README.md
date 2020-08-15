@@ -7,6 +7,8 @@
 [Builds badge]: https://github.com/HactarCE/NDCell/workflows/Build%20latest/badge.svg "Download latest build"
 [Builds link]: https://github.com/HactarCE/NDCell/actions?query=workflow%3A%22Build-latest%22
 
+[NDCA docs]: https://ndcell.rtfd.io/
+
 _Any number of dimensions_  
 _Any neighborhood range_  
 _Any computable transition function_
@@ -27,13 +29,20 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 
 - [x] Render 2D
 - [x] Basic editing in 2D
-- [ ] Basic custom rules
+- [x] Basic custom rules
   - [x] Implementation
-  - [ ] Documentation
+  - [ ] [Documentation][NDCA docs]
 - [ ] Improve performance
-  - [ ] Custom node cache
+  - [ ] New ND-tree node cache
+    - [ ] Garbage collection
+  - [ ] Lazy population computation
   - [ ] Multithreaded simulation
-  - [ ] Precompute HashLife time splits
+  - [ ] Reduce `BigInt` allocations
+    - [ ] Precompute HashLife time splits
+  - [ ] Rewrite RLE export/import
+  - [ ] Macrocell export/import
+- [ ] Render 3D
+- [ ] Basic editing in 3D
 - [ ] Improve UI
   - [ ] Better error reporting
     - [ ] RLE loading
@@ -52,8 +61,13 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
     - [ ] Customize key bindings
     - [ ] Customize mouse bindings
 - [ ] More custom rules features
-- [ ] Render 3D
-- [ ] Basic editing in 3D
+  - [ ] Finish documentation
+  - [ ] More methods (`.count`)
+  - [ ] More cell states
+  - [ ] Pattern masks
+  - [ ] Pattern matching
+  - [ ] Basic symmetries
+  - [ ] Spacetime residues
 
 ## What works right now
 
@@ -66,7 +80,7 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - Run continuously with <kbd>Enter</kbd>
   - Set step size
   - Set breakpoint
-- **Custom rules** written in NDCA, a custom JIT-compiled programming language. Documentation coming soon.
+- **Custom rules** written in NDCA, a custom JIT-compiled programming language. Documentation in progress at [ndcell.rtfd.io][NDCA docs].
 - **Undo/redo** with <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
 - **Copy/paste RLE** with <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>
 
@@ -82,8 +96,8 @@ In roughly descending order of priority/likelihood:
 - **Anywhere from 1 to 6 dimensions** - Only a 2D or 3D slice of spacetime will be shown at any time; the position of the slice along the hidden axes will be adjustable.
 - **Command-line interface** for use in scripts and other automated tools.
 - **Lua scripting** - Still working out the details -- I'll update this when I have a more concrete plan.
-- **Custom space and time parity** - Rules will be able to define several arbitrary "spacetime parities" (linear combination of spatial and temporal positions, modulo some value) available for use in the transition function, within some reasonable limit. This means a rule like [Busy Boxes] would only need 2 states instead of 7.
-- **Block CA** such as Margolus - This would be possible anyway with the spacetime parities above, but native support would improve ergonomics.
+- **Spacetime residue** - Rules will be able to define several arbitrary "spacetime residues" (linear combination of spatial and temporal positions, modulo some value) available for use in the transition function, within some reasonable limit. This means a rule like [Busy Boxes] would only need 2 states instead of 7.
+- **Block CA** such as Margolus - This would be possible anyway with the spacetime residues above (using `x + time mod 2` and `y + time mod 2`), but native support would improve ergonomics.
 - **Custom regular tilings** - Only those that are an affine transformation away from square/cubic. (Hexagonal and triangular neighborhoods qualify!)
 - **Reversible CA** - "Go back in time" in a reversible CA, if an inverse transition function is defined.
 - **Grid topology** - Each axis will be able to be infinite, half-infinite, finite, looped (torus), looped with an offset (twisted torus), or flipped (Möbius loop),
@@ -95,7 +109,7 @@ In roughly descending order of priority/likelihood:
 
 These are things that NDCell will probably never support, in rough order from least likely to most likely:
 
-- **More than 256 states** - Original plans for NDCell included up to 2^64 states, but this particular generalization has proved much harder to support than arbitrary range or number of dimensions without significantly harming memory usage and speed for automata with 256 states or fewer, which comprise the vast majority of CA. Hopefully other features like spacetime parity will be able to curb the number of states required for most automata.
+- **More than 256 states** - Original plans for NDCell included up to 2^64 states, but this particular generalization has proved much harder to support than arbitrary range or number of dimensions without significantly harming memory usage and speed for automata with 256 states or fewer, which comprise the vast majority of CA. Hopefully other features like spacetime residue will be able to curb the number of states required for most automata.
 - **[LtL] and other "continuous" CA** - Although NDCell can simulate LargerThanLife with smaller neighborhoods, continuous CA are better simulated using [GPGPU]. [Ready] is a fantastic simulator for such automata written by the Golly Gang.
 - **Nondeterministic CA** - Nondeterministic CA are incompatible with [HashLife], which NDCell relies on for efficient simulation. It's possible that NDCell will support non-hashing simulation in the future, but nondeterministic CA would still require significant work to make usable.
 

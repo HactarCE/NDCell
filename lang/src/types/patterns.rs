@@ -175,7 +175,7 @@ impl PatternShape {
 
     /// Returns a new pattern shape that is equivalent to this one, but with the
     /// smallest possible rectangular bounds.
-    #[must_use]
+    #[must_use = "This method returns a new value instead of mutating its input"]
     fn shrink(self) -> Self {
         // TODO: test this method!
 

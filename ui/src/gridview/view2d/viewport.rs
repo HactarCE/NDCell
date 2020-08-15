@@ -75,7 +75,7 @@ impl Viewport2D {
     /// This function linearly interpolates panning speed in terms of pixels
     /// rather than cells, and linearly interpolates zoom power rather than zoom
     /// factor (equivalent to an exponential interpolation of zoom power).
-    #[must_use]
+    #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn lerp(a: &Self, b: &Self, t: f64) -> Self {
         let mut ret = a.clone();
 

@@ -29,20 +29,6 @@ impl Axis {
     }
 }
 
-impl From<usize> for Axis {
-    fn from(axis_index: usize) -> Self {
-        match axis_index {
-            0 => Axis::X,
-            1 => Axis::Y,
-            2 => Axis::Z,
-            3 => Axis::W,
-            4 => Axis::U,
-            5 => Axis::V,
-            _ => unreachable!("Dimensions above 6 are not supported"),
-        }
-    }
-}
-
 const AXES: &'static [Axis] = &[Axis::X, Axis::Y, Axis::Z, Axis::W, Axis::U, Axis::V];
 
 /// Returns a vector of axes given a number of dimensions.

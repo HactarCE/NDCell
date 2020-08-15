@@ -135,40 +135,16 @@ impl BigVecEnum {
     }
 }
 
-/// Converts an NdVec between arbitrary dimensionalities, as long as those
-/// dimensionalities are the same. Only really useful when passing generic type
-/// parameters.
-///
-/// This function is not marked as unsafe because it performs "runtime" checking
-/// that the initial and final dimensionalities are the same, even though that
-/// "runtime" checking is almost certianly compile-time-optimized away.
-///
-/// If the dimensionalities do not match, panics.
-fn transmute_ndvec<D1: Dim + DimFor<N>, D2: Dim + DimFor<N>, N: NdVecNum>(
-    ndvec: NdVec<D1, N>,
-) -> NdVec<D2, N> {
-    if D1::NDIM == D2::NDIM {
-        unsafe { *std::mem::transmute::<Box<NdVec<D1, N>>, Box<NdVec<D2, N>>>(Box::new(ndvec)) }
-    } else {
-        panic!(
-            "Cannot convert NdVec<_, Dim{}D> into NdVec<_, Dim{}D>",
-            D1::NDIM,
-            D2::NDIM
-        )
-    }
-}
-
 impl<'a, D: Dim> From<BigVec<D>> for BigVecEnum {
     fn from(inner: BigVec<D>) -> Self {
-        match D::NDIM {
-            1 => Self::Vec1D(transmute_ndvec(inner)),
-            2 => Self::Vec2D(transmute_ndvec(inner)),
-            3 => Self::Vec3D(transmute_ndvec(inner)),
-            4 => Self::Vec4D(transmute_ndvec(inner)),
-            5 => Self::Vec5D(transmute_ndvec(inner)),
-            6 => Self::Vec6D(transmute_ndvec(inner)),
-            _ => unreachable!("Dimensions above 6 are not supported"),
-        }
+        match_ndim!(match D {
+            1 => Self::Vec1D(NdVec::transmute(inner)),
+            2 => Self::Vec2D(NdVec::transmute(inner)),
+            3 => Self::Vec3D(NdVec::transmute(inner)),
+            4 => Self::Vec4D(NdVec::transmute(inner)),
+            5 => Self::Vec5D(NdVec::transmute(inner)),
+            6 => Self::Vec6D(NdVec::transmute(inner)),
+        })
     }
 }
 impl<'a, D: Dim> TryInto<BigVec<D>> for BigVecEnum {
@@ -176,12 +152,12 @@ impl<'a, D: Dim> TryInto<BigVec<D>> for BigVecEnum {
     fn try_into(self) -> Result<BigVec<D>, ()> {
         if self.ndim() == D::NDIM {
             Ok(match self {
-                Self::Vec1D(inner) => transmute_ndvec(inner),
-                Self::Vec2D(inner) => transmute_ndvec(inner),
-                Self::Vec3D(inner) => transmute_ndvec(inner),
-                Self::Vec4D(inner) => transmute_ndvec(inner),
-                Self::Vec5D(inner) => transmute_ndvec(inner),
-                Self::Vec6D(inner) => transmute_ndvec(inner),
+                Self::Vec1D(inner) => NdVec::transmute(inner),
+                Self::Vec2D(inner) => NdVec::transmute(inner),
+                Self::Vec3D(inner) => NdVec::transmute(inner),
+                Self::Vec4D(inner) => NdVec::transmute(inner),
+                Self::Vec5D(inner) => NdVec::transmute(inner),
+                Self::Vec6D(inner) => NdVec::transmute(inner),
             })
         } else {
             Err(())

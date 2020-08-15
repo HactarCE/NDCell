@@ -18,6 +18,8 @@ use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 mod io;
+#[macro_use]
+mod macros;
 pub mod math;
 mod ndsimulate;
 pub mod projection;
@@ -76,7 +78,7 @@ pub enum ProjectedAutomaton<P: Dim> {
 impl<P: Dim> Default for ProjectedAutomaton<P> {
     fn default() -> Self {
         let inner = Box::new(NdProjectedAutomaton::<P, P>::default());
-        match P::NDIM {
+        match_ndim!(match P {
             1 => Self::From1D(unsafe {
                 *std::mem::transmute::<
                     Box<NdProjectedAutomaton<P, P>>,
@@ -113,8 +115,7 @@ impl<P: Dim> Default for ProjectedAutomaton<P> {
                     Box<NdProjectedAutomaton<Dim6D, P>>,
                 >(inner)
             }),
-            _ => unreachable!("Dimensions above 6 are not supported"),
-        }
+        })
     }
 }
 impl<D: Dim, P: Dim> From<NdAutomaton<D>> for ProjectedAutomaton<P>

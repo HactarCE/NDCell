@@ -6,6 +6,28 @@ use std::convert::TryInto;
 
 use super::*;
 
+impl<D1: DimFor<N>, N: NdVecNum> NdVec<D1, N> {
+    /// Converts an `NdVec` between arbitrary dimensionalities, as long as those
+    /// dimensionalities are the same. This function is only really useful with
+    /// generic dimensionalities.
+    ///
+    /// This function is safe because it performs "runtime" checking that the
+    /// initial and final dimensionalities are the same, even though that
+    /// "runtime" checking is almost certainly compile-time-optimized away.
+    ///
+    /// Panics if the dimensionalities do not match.
+    pub fn transmute<D2: DimFor<N>>(ndvec: Self) -> NdVec<D2, N> {
+        assert_eq!(
+            D1::Dim::NDIM,
+            D2::Dim::NDIM,
+            "Cannot convert NdVec<_, Dim{}D> into NdVec<_, Dim{}D>",
+            D1::Dim::NDIM,
+            D2::Dim::NDIM,
+        );
+        unsafe { *std::mem::transmute::<Box<NdVec<D1, N>>, Box<NdVec<D2, N>>>(Box::new(ndvec)) }
+    }
+}
+
 impl<D: Dim> BigVec<D> {
     /// Converts this `BigVec` to an `IVec`.
     pub fn to_ivec(&self) -> IVec<D> {

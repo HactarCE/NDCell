@@ -42,7 +42,7 @@ use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use itertools::Itertools;
 use noisy_float::prelude::r64;
-use num::traits::*;
+use num::traits::*; // TODO: is this needed?
 use num::{BigInt, ToPrimitive, Zero};
 
 use ndcell_core::space::*;

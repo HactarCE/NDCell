@@ -328,13 +328,13 @@ impl<'cache, D: Dim> NonLeafNodeRef<'cache, D> {
     /// Returns an iterator over this node's children, each of which is one
     /// layer below this node.
     pub fn children(self) -> impl Iterator<Item = NodeRef<'cache, D>> {
-        (0..self.repr().branching_factor).map(move |i| self.child_at_index(i))
+        (0..D::BRANCHING_FACTOR).map(move |i| self.child_at_index(i))
     }
     /// Returns a reference to the child node at the given index.
     ///
     /// Panics if the index is not between 0 and 2^NDIM-1.
     pub fn child_at_index(self, index: usize) -> NodeRef<'cache, D> {
-        assert!(index < self.repr().branching_factor);
+        assert!(index < D::BRANCHING_FACTOR);
         unsafe {
             NodeRef::new(
                 self.cache(),
@@ -358,7 +358,7 @@ impl<'cache, D: Dim> NonLeafNodeRef<'cache, D> {
         index: usize,
     ) -> Result<NodeRef<'cache, D>, LeafNodeRef<'cache, D>> {
         todo!("Test this");
-        assert!(index < self.repr().branching_factor * self.repr().branching_factor);
+        assert!(index < D::BRANCHING_FACTOR * D::BRANCHING_FACTOR);
 
         // Split the index into child and grandchild indices.
         let pos = node_math::leaf_node_cell_index_to_pos::<D>(2, index);
@@ -416,7 +416,7 @@ impl<'cache, D: Dim> Node<'cache, D> for NodeRef<'cache, D> {
         } else {
             debug_assert_eq!(
                 cell_slice_len,
-                repr.branching_factor * std::mem::size_of::<NonNull<RawNode>>()
+                D::BRANCHING_FACTOR * std::mem::size_of::<NonNull<RawNode>>()
             );
             NonLeafNodeRef(self).into()
         }
@@ -464,7 +464,8 @@ impl<'node, D: Dim> Iterator for NodeChildren<'node, D> {
         })
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let ret = self.node_repr.branching_factor - self.next_index;
+        let ret = D::BRANCHING_FACTOR - self.next_index;
         (ret, Some(ret))
     }
 }
+impl<'node, D: Dim> ExactSizeIterator for NodeChildren<'node, D> {}

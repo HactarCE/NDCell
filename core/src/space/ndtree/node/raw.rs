@@ -102,7 +102,7 @@ impl RawNode {
         }
     }
     pub fn new_non_leaf<D: Dim>(repr: &NodeRepr<D>, children: Box<[&RawNode]>) -> Self {
-        assert_eq!(repr.branching_factor, children.len());
+        assert_eq!(D::BRANCHING_FACTOR, children.len());
         let layer = children[0].layer + 1;
         for child in &children[1..] {
             debug_assert_eq!(layer - 1, child.layer());
@@ -114,7 +114,7 @@ impl RawNode {
             layer,
             residue: 0,
             flags: NodeFlags::with_empty(is_empty),
-            slice_len: (repr.branching_factor * std::mem::size_of::<*const Self>()) as u16,
+            slice_len: (D::BRANCHING_FACTOR * std::mem::size_of::<*const Self>()) as u16,
             slice_ptr: NonNull::from(start_of_children).cast(),
             result_ptr: AtomicUsize::new(0),
         }

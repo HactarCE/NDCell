@@ -1,4 +1,4 @@
-//! Type aliases for NdVecs.
+//! Type aliases for `NdVec`s.
 
 use super::*;
 
@@ -15,15 +15,15 @@ pub type Vec5D<N> = NdVec<Dim5D, N>;
 /// A 6D vector.
 pub type Vec6D<N> = NdVec<Dim6D, N>;
 
-/// An N-dimensional vector with BigInt coordinates.
+/// A `D`-dimensional vector with `BigInt` coordinates.
 pub type BigVec<D> = NdVec<D, BigInt>;
-/// An N-dimensional vector with R64 coordinates.
+/// A `D`-dimensional vector with `R64` coordinates.
 pub type FVec<D> = NdVec<D, R64>;
-/// An N-dimensional vector with isize coordinates.
+/// A `D`-dimensional vector with `isize` coordinates.
 pub type IVec<D> = NdVec<D, isize>;
-/// An N-dimensional vector with usize coordinates.
+/// A `D`-dimensional vector with `usize` coordinates.
 pub type UVec<D> = NdVec<D, usize>;
-/// An N-dimensional vector with u8 coordinates.
+/// A `D`-dimensional vector with `u8` coordinates.
 pub type ByteVec<D> = NdVec<D, u8>;
 
 /// A vector of unknown dimensionality with BigInt coordinates.

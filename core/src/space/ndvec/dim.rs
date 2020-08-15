@@ -16,9 +16,8 @@ pub trait Dim:
     /// The number of dimensions (number of axes).
     const NDIM: usize;
 
-    /// The number of branches for each node in an NdTree of this
-    /// dimensionality.
-    const TREE_BRANCHES: usize = 1 << Self::NDIM;
+    /// Branching factor of ND-trees with this dimensionality.
+    const BRANCHING_FACTOR: usize = 1 << Self::NDIM;
 
     /// Returns a Vector of the axes of this many dimensions.
     fn axes() -> &'static [Axis] {

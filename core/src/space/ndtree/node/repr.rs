@@ -25,8 +25,6 @@ const MAX_BYTES_PER_LEAF: usize = 64;
 /// pointers can omit this information.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NodeRepr<D: Dim> {
-    /// Number of child nodes for each non-leaf node. This equals `2 ** ndim`.
-    pub branching_factor: usize,
     /// Layer at which nodes contain cells rather than smaller nodes. In other
     /// words, the minimum node layer.
     pub base_layer: u32,
@@ -42,11 +40,9 @@ impl<D: Dim> NodeRepr<D> {
     /// Computes the node representation for a simulation with the given number
     /// of dimensions and states.
     pub fn new(state_count: usize) -> Self {
-        let branching_factor = 1 << D::NDIM;
         let base_layer = Self::base_layer(D::NDIM, state_count);
         let bits_per_cell = Self::bits_per_cell(state_count);
         Self {
-            branching_factor,
             base_layer,
             state_count,
             bits_per_cell,

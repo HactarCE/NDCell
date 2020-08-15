@@ -130,8 +130,7 @@ impl<D: Dim> NdTree<D> {
         let node_access = self.node_access();
         let root = self.root().as_ref(&node_access);
         let empty_node = node_access.get_empty(root.layer() - 1);
-        let branching_factor = node_access.node_repr().branching_factor;
-        let child_index_bitmask = node_access.node_repr().branching_factor - 1;
+        let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         let new_root = self.new_arc_node(
             node_access.join_nodes(
                 root.subdivide()
@@ -144,7 +143,7 @@ impl<D: Dim> NdTree<D> {
                         let opposite_child_index = child_index ^ child_index_bitmask;
                         // All children of this node will be empty ...
                         let mut children =
-                            vec![empty_node.as_raw(); branching_factor].into_boxed_slice();
+                            vec![empty_node.as_raw(); D::BRANCHING_FACTOR].into_boxed_slice();
                         // ... except for the opposite child, which will be
                         // closest to the center of the NdTree.
                         children[opposite_child_index] = subcube.as_raw();
@@ -179,7 +178,7 @@ impl<D: Dim> NdTree<D> {
 
         let node_access = self.node_access();
         let root = self.root().as_ref(&node_access);
-        let child_index_bitmask = root.repr().branching_factor - 1;
+        let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         // Fetch the grandchildren of this node that are closest to the center.
         let new_children: Vec<_> = root
             .subdivide()

@@ -172,7 +172,7 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
                     // smaller than it and use that to form this one.
                     self.join_nodes(vec![
                         self.get_empty(layer - 1).as_raw();
-                        self.node_repr().branching_factor
+                        D::BRANCHING_FACTOR
                     ])
                 }
             })
@@ -215,7 +215,7 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
         // TODO: note that all children MUST be from this cache
         let children = children.into();
         let node_repr = self.node_repr();
-        assert_eq!(children.len(), node_repr.branching_factor);
+        assert_eq!(children.len(), D::BRANCHING_FACTOR);
         let child_layer = children[0].layer();
         for child in &children[1..] {
             debug_assert_eq!(child_layer, child.layer());
@@ -300,7 +300,7 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
             NodeRefEnum::NonLeaf(node) => {
                 // TODO: write this better -- just grab the cells you need
                 // directly instead of subdividing first
-                let child_index_bitmask = self.node_repr().branching_factor - 1;
+                let child_index_bitmask = D::BRANCHING_FACTOR - 1;
                 let new_children = self
                     .subdivide(node)
                     .map_err(|_| ())?

@@ -3,8 +3,11 @@
 //! This crate contains everything needed to store and simulate cellular
 //! automata.
 
-#![allow(dead_code)]
-#![warn(missing_debug_implementations, missing_docs, rust_2018_idioms)]
+#![warn(missing_debug_implementations)]
+#![warn(missing_docs)]
+#![warn(rust_2018_idioms)]
+#![warn(clippy::all)]
+#![deny(clippy::correctness)]
 
 #[macro_use]
 extern crate pest_derive;

@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 mod io;
 #[macro_use]
 mod macros;
+pub mod fixed;
 pub mod math;
 mod ndsimulate;
 pub mod projection;
@@ -27,6 +28,7 @@ pub mod rule;
 pub mod simulation;
 pub mod space;
 
+pub use fixed::FixedPoint;
 pub use io::*;
 pub use ndsimulate::*;
 pub use projection::*;

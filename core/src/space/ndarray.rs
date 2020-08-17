@@ -1,4 +1,4 @@
-//! Basic N-dimensional arrays for smaller patterns.
+//! N-dimensional arrays.
 
 use itertools::Itertools;
 use num::ToPrimitive;

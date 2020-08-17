@@ -2,102 +2,102 @@
 
 use super::*;
 
-/// A 1D vector.
+/// 1D vector wiith coordinates of type `N`.
 pub type Vec1D<N> = NdVec<Dim1D, N>;
-/// A 2D vector.
+/// 2D vector wiith coordinates of type `N`.
 pub type Vec2D<N> = NdVec<Dim2D, N>;
-/// A 3D vector.
+/// 3D vector wiith coordinates of type `N`.
 pub type Vec3D<N> = NdVec<Dim3D, N>;
-/// A 4D vector.
+/// 4D vector wiith coordinates of type `N`.
 pub type Vec4D<N> = NdVec<Dim4D, N>;
-/// A 5D vector.
+/// 5D vector wiith coordinates of type `N`.
 pub type Vec5D<N> = NdVec<Dim5D, N>;
-/// A 6D vector.
+/// 6D vector wiith coordinates of type `N`.
 pub type Vec6D<N> = NdVec<Dim6D, N>;
 
-/// A `D`-dimensional vector with `BigInt` coordinates.
+/// `D`-dimensional vector with `BigInt` coordinates.
 pub type BigVec<D> = NdVec<D, BigInt>;
-/// A `D`-dimensional vector with `R64` coordinates.
+/// `D`-dimensional vector with `Fixed` coordinates.
+pub type FixedVec<D> = NdVec<D, FixedPoint>;
+/// `D`-dimensional vector with `R64` coordinates.
 pub type FVec<D> = NdVec<D, R64>;
-/// A `D`-dimensional vector with `isize` coordinates.
+/// `D`-dimensional vector with `isize` coordinates.
 pub type IVec<D> = NdVec<D, isize>;
-/// A `D`-dimensional vector with `usize` coordinates.
+/// `D`-dimensional vector with `usize` coordinates.
 pub type UVec<D> = NdVec<D, usize>;
-/// A `D`-dimensional vector with `u8` coordinates.
-pub type ByteVec<D> = NdVec<D, u8>;
 
-/// A vector of unknown dimensionality with BigInt coordinates.
+/// Vector with any dimensionality and `BigInt` coordinates.
 pub type AnyDimBigVec = AnyDimVec<BigInt>;
-/// A vector of unknown dimensionality with R64 coordinates.
+/// Vector with any dimensionality and `R64` coordinates.
 pub type AnyDimFVec = AnyDimVec<R64>;
-/// A vector of unknown dimensionality with isize coordinates.
+/// Vector with any dimensionality and `isize` coordinates.
 pub type AnyDimIVec = AnyDimVec<isize>;
-/// A vector of unknown dimensionality with usize coordinates.
+/// Vector with any dimensionality and `usize` coordinates.
 pub type AnyDimUVec = AnyDimVec<usize>;
-/// A vector of unknown dimensionality with u8 coordinates.
+/// Vector with any dimensionality and `u8` coordinates.
 pub type AnyDimByteVec = AnyDimVec<u8>;
 
-/// A 1D vector with BigInt coordinates.
+/// 1D vector with `BigInt` coordinates.
 pub type BigVec1D = BigVec<Dim1D>;
-/// A 2D vector with BigInt coordinates.
+/// 2D vector with `BigInt` coordinates.
 pub type BigVec2D = BigVec<Dim2D>;
-/// A 3D vector with BigInt coordinates.
+/// 3D vector with `BigInt` coordinates.
 pub type BigVec3D = BigVec<Dim3D>;
-/// A 4D vector with BigInt coordinates.
+/// 4D vector with `BigInt` coordinates.
 pub type BigVec4D = BigVec<Dim4D>;
-/// A 5D vector with BigInt coordinates.
+/// 5D vector with `BigInt` coordinates.
 pub type BigVec5D = BigVec<Dim5D>;
-/// A 6D vector with BigInt coordinates.
+/// 6D vector with `BigInt` coordinates.
 pub type BigVec6D = BigVec<Dim6D>;
 
-/// A 1D vector with R64 coordinates.
+/// 1D vector with `FixedPoint` coordinates.
+pub type FixedVec1D = FixedVec<Dim1D>;
+/// 2D vector with `FixedPoint` coordinates.
+pub type FixedVec2D = FixedVec<Dim2D>;
+/// 3D vector with `FixedPoint` coordinates.
+pub type FixedVec3D = FixedVec<Dim3D>;
+/// 4D vector with `FixedPoint` coordinates.
+pub type FixedVec4D = FixedVec<Dim4D>;
+/// 5D vector with `FixedPoint` coordinates.
+pub type FixedVec5D = FixedVec<Dim5D>;
+/// 6D vector with `FixedPoint` coordinates.
+pub type FixedVec6D = FixedVec<Dim6D>;
+
+/// 1D vector with `R64` coordinates.
 pub type FVec1D = FVec<Dim1D>;
-/// A 2D vector with R64 coordinates.
+/// 2D vector with `R64` coordinates.
 pub type FVec2D = FVec<Dim2D>;
-/// A 3D vector with R64 coordinates.
+/// 3D vector with `R64` coordinates.
 pub type FVec3D = FVec<Dim3D>;
-/// A 4D vector with R64 coordinates.
+/// 4D vector with `R64` coordinates.
 pub type FVec4D = FVec<Dim4D>;
-/// A 5D vector with R64 coordinates.
+/// 5D vector with `R64` coordinates.
 pub type FVec5D = FVec<Dim5D>;
-/// A 6D vector with R64 coordinates.
+/// 6D vector with `R64` coordinates.
 pub type FVec6D = FVec<Dim6D>;
 
-/// A 1D vector with isize coordinates.
+/// 1D vector with `isize` coordinates.
 pub type IVec1D = IVec<Dim1D>;
-/// A 2D vector with isize coordinates.
+/// 2D vector with `isize` coordinates.
 pub type IVec2D = IVec<Dim2D>;
-/// A 3D vector with isize coordinates.
+/// 3D vector with `isize` coordinates.
 pub type IVec3D = IVec<Dim3D>;
-/// A 4D vector with isize coordinates.
+/// 4D vector with `isize` coordinates.
 pub type IVec4D = IVec<Dim4D>;
-/// A 5D vector with isize coordinates.
+/// 5D vector with `isize` coordinates.
 pub type IVec5D = IVec<Dim5D>;
-/// A 6D vector with isize coordinates.
+/// 6D vector with `isize` coordinates.
 pub type IVec6D = IVec<Dim6D>;
 
-/// A 1D vector with u8 coordinates.
-pub type ByteVec1D = ByteVec<Dim1D>;
-/// A 2D vector with u8 coordinates.
-pub type ByteVec2D = ByteVec<Dim2D>;
-/// A 3D vector with u8 coordinates.
-pub type ByteVec3D = ByteVec<Dim3D>;
-/// A 4D vector with u8 coordinates.
-pub type ByteVec4D = ByteVec<Dim4D>;
-/// A 5D vector with u8 coordinates.
-pub type ByteVec5D = ByteVec<Dim5D>;
-/// A 6D vector with u8 coordinates.
-pub type ByteVec6D = ByteVec<Dim6D>;
-
-/// A 1D vector with usize coordinates.
+/// 1D vector with `usize` coordinates.
 pub type UVec1D = UVec<Dim1D>;
-/// A 2D vector with usize coordinates.
+/// 2D vector with `usize` coordinates.
 pub type UVec2D = UVec<Dim2D>;
-/// A 3D vector with usize coordinates.
+/// 3D vector with `usize` coordinates.
 pub type UVec3D = UVec<Dim3D>;
-/// A 4D vector with usize coordinates.
+/// 4D vector with `usize` coordinates.
 pub type UVec4D = UVec<Dim4D>;
-/// A 5D vector with usize coordinates.
+/// 5D vector with `usize` coordinates.
 pub type UVec5D = UVec<Dim5D>;
-/// A 6D vector with usize coordinates.
+/// 6D vector with `usize` coordinates.
 pub type UVec6D = UVec<Dim6D>;

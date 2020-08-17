@@ -1,6 +1,8 @@
+//! Enumeration of `NdVec`s with different dimensionality.
+
 use super::*;
 
-/// An NdVec of unknown dimensionality.
+/// Vector with any dimensionality and coordinates of type `N`.
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum AnyDimVec<N: NdVecNum> {
@@ -13,6 +15,7 @@ pub enum AnyDimVec<N: NdVecNum> {
 }
 
 impl<D: DimFor<N>, N: NdVecNum> From<NdVec<D, N>> for AnyDimVec<N> {
+    #[inline]
     fn from(ndvec: NdVec<D, N>) -> Self {
         match_ndim!(match D::Dim {
             1 => AnyDimVec::Vec1D(NdVec::transmute(ndvec)),

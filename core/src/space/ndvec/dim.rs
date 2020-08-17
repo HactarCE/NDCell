@@ -1,19 +1,20 @@
-use noisy_float::prelude::R64;
-use num::BigInt;
+//! Dimensionality trait, which provides a number of dimensions.
+//!
+//! Until generic associated types are stable (see rust-lang#44265), we have to
+//! use a hacky `DimFor` trait to get generic vectors with different numeric
+//! types to work.
 
 use super::*;
 
-/// A vector of a given dimensionality; mostly used as a type argument to convey
-/// the number of dimensions something has.
+/// Dimensionality of a vector.
 ///
-/// This is basically exactly the same as ndarray's Dimension trait, except it
-/// uses any number type instead of usize (which is crucial for this
-/// application). Similar to ndarray's Dimension trait, this trait should not
-/// and cannot be implemented outside of this crate.
+/// This trait is only implemented for the six structs `Dim1D`, `Dim2D`,
+/// `Dim3D`, `Dim4D`, `Dim5D`, and `Dim6D`. (NDCell does not and will not
+/// support more than six dimensions.)
 pub trait Dim:
-    'static + DimFor<BigInt> + DimFor<R64> + DimFor<isize> + DimFor<usize> + DimFor<u8> + Send
+    'static + DimFor<BigInt> + DimFor<FixedPoint> + DimFor<R64> + DimFor<isize> + DimFor<usize> + Send
 {
-    /// The number of dimensions (number of axes).
+    /// Number of dimensions.
     const NDIM: usize;
 
     /// Branching factor of ND-trees with this dimensionality.
@@ -30,23 +31,23 @@ pub trait Dim:
     }
 }
 
-/// A type representing 1D things.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// 1 dimension.
+#[derive(fmt::Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Dim1D;
-/// A type representing 2D things.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// 2 dimensions.
+#[derive(fmt::Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Dim2D;
-/// A type representing 3D things.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// 3 dimensions.
+#[derive(fmt::Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Dim3D;
-/// A type representing 4D things.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// 4 dimensions.
+#[derive(fmt::Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Dim4D;
-/// A type representing 5D things.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// 5 dimensions.
+#[derive(fmt::Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Dim5D;
-/// A type representing 6D things.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// 6 dimensions.
+#[derive(fmt::Debug, Default, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Dim6D;
 
 impl Dim for Dim1D {
@@ -68,45 +69,45 @@ impl Dim for Dim6D {
     const NDIM: usize = 6;
 }
 
-/// A trait providing an array type to create a generic N-length array.
+/// Trait providing an array type to create a generic N-length array.
 ///
-/// Once generic associated types come along, this can be merged into Dim to
-/// simplify things.
+/// Once generic associated types come along, this can be merged into `Dim`.
 pub trait DimFor<T: Default + Clone + Eq>:
-    Debug + Default + Copy + Eq + Hash + Sync + private::Sealed
+    fmt::Debug + Default + Copy + Eq + Hash + Sync + private::Sealed
 {
-    /// The pure Dim type associated with this DimFor (i.e. Self)
+    /// Pure `Dim` type associated with this DimFor (i.e. `Self`).
     type Dim: Dim;
-    /// The array type used for vectors.
-    type Array: Debug + Default + Clone + Eq + Hash + Send + AsRef<[T]> + AsMut<[T]>;
+    /// Array type used for vectors.
+    type Array: fmt::Debug + Default + Clone + Eq + Hash + Send + AsRef<[T]> + AsMut<[T]>;
 }
 
-impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim1D {
-    type Dim = Dim1D;
+impl<T: NdVecNum> DimFor<T> for Dim1D {
+    type Dim = Self;
     type Array = [T; 1];
 }
-impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim2D {
-    type Dim = Dim2D;
+impl<T: NdVecNum> DimFor<T> for Dim2D {
+    type Dim = Self;
     type Array = [T; 2];
 }
-impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim3D {
-    type Dim = Dim3D;
+impl<T: NdVecNum> DimFor<T> for Dim3D {
+    type Dim = Self;
     type Array = [T; 3];
 }
-impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim4D {
-    type Dim = Dim4D;
+impl<T: NdVecNum> DimFor<T> for Dim4D {
+    type Dim = Self;
     type Array = [T; 4];
 }
-impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim5D {
-    type Dim = Dim5D;
+impl<T: NdVecNum> DimFor<T> for Dim5D {
+    type Dim = Self;
     type Array = [T; 5];
 }
-impl<T: Debug + Default + Clone + Eq + Hash + Send> DimFor<T> for Dim6D {
-    type Dim = Dim6D;
+impl<T: NdVecNum> DimFor<T> for Dim6D {
+    type Dim = Self;
     type Array = [T; 6];
 }
 
-// Make Dim a "sealed trait" https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
+// Make `Dim` a "sealed trait."
+// https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 mod private {
     use super::*;
 

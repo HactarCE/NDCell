@@ -1,4 +1,4 @@
-//! Division and modulo/remainder operations between an NdVec and a scalar.
+//! Division and modulo/remainder operations between an `NdVec` and a scalar.
 
 use num::{Float, Integer};
 use std::ops::*;

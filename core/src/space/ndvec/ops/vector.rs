@@ -1,4 +1,4 @@
-//! Operations between two NdVecs (and unary negation operator).
+//! Operations between two `NdVec`s (also unary negation).
 
 use noisy_float::prelude::R64;
 use num::Signed;

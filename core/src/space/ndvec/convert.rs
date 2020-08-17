@@ -1,4 +1,4 @@
-//! Methods for converting between different types of NdVecs.
+//! Conversions between different types of `NdVec`s.
 
 use noisy_float::prelude::r64;
 use num::{FromPrimitive, ToPrimitive};
@@ -13,9 +13,12 @@ impl<D1: DimFor<N>, N: NdVecNum> NdVec<D1, N> {
     ///
     /// This function is safe because it performs "runtime" checking that the
     /// initial and final dimensionalities are the same, even though that
-    /// "runtime" checking is almost certainly compile-time-optimized away.
+    /// "runtime" checking is trivially compile-time-optimized away.
     ///
-    /// Panics if the dimensionalities do not match.
+    /// # Panics
+    ///
+    /// This method panics if the dimensionalities do not match.
+    #[inline]
     pub fn transmute<D2: DimFor<N>>(ndvec: Self) -> NdVec<D2, N> {
         assert_eq!(
             D1::Dim::NDIM,
@@ -30,6 +33,7 @@ impl<D1: DimFor<N>, N: NdVecNum> NdVec<D1, N> {
 
 impl<D: Dim> BigVec<D> {
     /// Converts this `BigVec` to an `IVec`.
+    #[inline]
     pub fn to_ivec(&self) -> IVec<D> {
         IVec::from_fn(|ax| {
             self[ax]
@@ -37,7 +41,12 @@ impl<D: Dim> BigVec<D> {
                 .expect("Cannot convert this UVec into an IVec")
         })
     }
-    /// Converts this `BigVec` to a `UVec`, panicking if it does not fit.
+    /// Converts this `BigVec` to a `UVec`.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if any component does not fit in `usize`.
+    #[inline]
     pub fn to_uvec(&self) -> UVec<D> {
         UVec::from_fn(|ax| {
             self[ax]
@@ -45,7 +54,12 @@ impl<D: Dim> BigVec<D> {
                 .expect("Cannot convert this IVec into a UVec")
         })
     }
-    /// Converts this `BigVec` to an `FVec`, panicking if it does not fit.
+    /// Converts this `BigVec` to an `FVec`.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if any component does not fit in `f64`.
+    #[inline]
     pub fn to_fvec(&self) -> FVec<D> {
         FVec::from_fn(|ax| {
             self[ax]
@@ -57,7 +71,12 @@ impl<D: Dim> BigVec<D> {
 }
 
 impl<D: Dim> FVec<D> {
-    /// Converts this `FVec` to an `IVec`, panicking if it does not fit.
+    /// Converts this `FVec` to an `IVec`.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if any component does not fit in `isize`.
+    #[inline]
     pub fn to_ivec(&self) -> IVec<D> {
         IVec::from_fn(|ax| {
             self[ax]
@@ -65,18 +84,27 @@ impl<D: Dim> FVec<D> {
                 .expect("Cannot convert this UVec into an IVec")
         })
     }
-    /// Converts this `FVec` to a `BigVec`, panicking if it does not fit.
+    /// Converts this `FVec` to a `BigVec`.
+    #[inline]
     pub fn to_bigvec(&self) -> BigVec<D> {
+        // This should not panic, because `R64` only allows finite values (which
+        // all have `BigInt` representations).
         BigVec::from_fn(|ax| BigInt::from_f64(self[ax].raw()).unwrap())
     }
 }
 
 impl<D: Dim> IVec<D> {
     /// Converts this `IVec` into a `BigVec`.
+    #[inline]
     pub fn to_bigvec(&self) -> BigVec<D> {
         BigVec::from_fn(|ax| self[ax].into())
     }
-    /// Converts this `IVec` to a `UVec`, panicking if it does not fit.
+    /// Converts this `IVec` to a `UVec`.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if any component does not fit in `usize`.
+    #[inline]
     pub fn to_uvec(&self) -> UVec<D> {
         UVec::from_fn(|ax| {
             self[ax]
@@ -84,7 +112,12 @@ impl<D: Dim> IVec<D> {
                 .expect("Cannot convert this IVec into a UVec")
         })
     }
-    /// Converts this `IVec` to an `FVec`, panicking if it does not fit.
+    /// Converts this `IVec` to an `FVec`.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if any component does not fit in `f64`.
+    #[inline]
     pub fn to_fvec(&self) -> FVec<D> {
         FVec::from_fn(|ax| {
             self[ax]
@@ -97,10 +130,16 @@ impl<D: Dim> IVec<D> {
 
 impl<D: Dim> UVec<D> {
     /// Converts thihs `UVec` to a `BigVec`.
+    #[inline]
     pub fn to_bigvec(&self) -> BigVec<D> {
         BigVec::from_fn(|ax| self[ax].into())
     }
-    /// Converts this `UVec` to an `IVec`, panicking if it does not fit.
+    /// Converts this `UVec` to an `IVec`.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if any component does not fit in `isize`.
+    #[inline]
     pub fn to_ivec(&self) -> IVec<D> {
         IVec::from_fn(|ax| {
             self[ax]

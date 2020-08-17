@@ -1,18 +1,18 @@
 //! N-dimensional vectors.
 //!
-//! Until generic associated types work (see rust-lang#44265), this module and
-//! ndrect are kind of a mess. We have to use a hacky DimFor trait to get
+//! Until generic associated types are stable (see rust-lang#44265), this module
+//! and ndrect are kind of a mess. We have to use a hacky `DimFor` trait to get
 //! generic vectors to work, and generic-dimensioned vectors can't implement
-//! Copy.
+//! `Copy` (although they probably wouldn't with GATs either).
 //!
-//! Note that we use noisy_float's R64 type here instead of f64 so that we don't
-//! have to deal with infinities and NaN, which really should NEVER show up in
-//! NdVecs.
+//! Note that we use `noisy_float`'s `R64` type instead of `f64` so that we
+//! don't have to deal with infinities and NaN, which should never appear in
+//! `NdVecs`.
 
 use noisy_float::prelude::R64;
 use num::{BigInt, Num, One, Zero};
 use std::cmp::Eq;
-use std::fmt::{Debug, Display};
+use std::fmt;
 use std::hash::Hash;
 use std::ops::*;
 
@@ -21,28 +21,35 @@ mod any;
 mod axis;
 mod convert;
 mod dim;
-mod fracvec;
 mod ops;
 
 pub use aliases::*;
-pub use any::*;
+pub use any::AnyDimVec;
 pub use axis::Axis::{U, V, W, X, Y, Z};
 pub use axis::*;
 pub use convert::*;
 pub use dim::*;
-pub use fracvec::*;
 
-/// A "trait alias" for types that can be used as coordinates in an NdVec.
+use crate::FixedPoint;
+
+/// "Trait alias" for types that can be used as coordinates in an NdVec.
 pub trait NdVecNum:
-    Debug + Default + Clone + Eq + Hash + Ord + Send + Num + AddAssign + MulAssign
+    fmt::Debug + Default + Clone + Eq + Hash + Ord + Send + Num + AddAssign + MulAssign
 {
-    /// The minimum size for an NdRect using this number type as coordinates.
-    /// For integers, this is 1; for floats, this is 0.
+    /// Minimum size for an `NdRect` using this number type as coordinates.
+    /// Integer `NdRect`s have an inclusive minimum and maximium, so this
+    /// function returns 1 for integral types; for floating-point types, it
+    /// function returns 0.
     fn min_rect_size() -> Self;
 }
 impl NdVecNum for BigInt {
     fn min_rect_size() -> Self {
         Self::one()
+    }
+}
+impl NdVecNum for FixedPoint {
+    fn min_rect_size() -> Self {
+        Self::zero()
     }
 }
 impl NdVecNum for R64 {
@@ -60,37 +67,34 @@ impl NdVecNum for usize {
         1
     }
 }
-impl NdVecNum for u8 {
-    fn min_rect_size() -> Self {
-        1
-    }
-}
 
+/// `D`-dimensional vector with coordinates of type `N`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-/// A set of coordinates for a given dimensionality.
 pub struct NdVec<D: DimFor<N>, N: NdVecNum>(pub D::Array);
 
-// Implement Copy when coordinate type is Copy.
+// Implement `Copy` when `N` is `Copy`.
 //
-// Unfortunately this only works when the dimensionality is known, not when it
-// is a type parameter. It's useful enough regardless that it's worth including.
+// Unfortunately this only works when `D` is known, and not in generic contexts,
+// but this is useful enough regardless that it's worth including. Just keep in
+// mind whenever you see `some_ndvec.clone()` that it is "free" (no heap
+// allocation) if the type parameter `N` is `Copy`.
 impl<D: DimFor<N>, N: NdVecNum + Copy> Copy for NdVec<D, N> where D::Array: Copy {}
 
-impl<D: DimFor<N>, N: NdVecNum + Display> Display for NdVec<D, N> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl<D: DimFor<N>, N: NdVecNum + fmt::Display> fmt::Display for NdVec<D, N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[")?;
         for &ax in D::Dim::axes() {
             if ax != X {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", self[ax])?;
+            fmt::Display::fmt(&self[ax], f)?;
         }
         write!(f, "]")?;
         Ok(())
     }
 }
 
-// Implement indexing using Axis.
+// Implement indexing using `Axis`.
 impl<D: DimFor<N>, N: NdVecNum> Index<Axis> for NdVec<D, N> {
     type Output = N;
     fn index(&self, axis: Axis) -> &N {
@@ -104,7 +108,7 @@ impl<D: DimFor<N>, N: NdVecNum> IndexMut<Axis> for NdVec<D, N> {
 }
 
 impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
-    /// Returns a vector consisting of all zeros.
+    /// Creates a vector consisting of all zeros.
     pub fn origin() -> Self {
         Self::default()
     }
@@ -112,15 +116,14 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     pub fn is_zero(&self) -> bool {
         *self == Self::default()
     }
-    /// Returns the unit vector pointing along the given axis.
+    /// Creates a unit vector pointing along `axis`.
     pub fn unit(axis: Axis) -> Self {
         let mut ret = Self::default();
         ret[axis] = N::one();
         ret
     }
 
-    /// Constructs an NdVec using a function of an axis to generate each
-    /// component.
+    /// Creates a vector by evaluating `generator` for each axis.
     pub fn from_fn(mut generator: impl FnMut(Axis) -> N) -> Self {
         let mut ret: Self = Self::default();
         for &ax in D::Dim::axes() {
@@ -128,20 +131,19 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         }
         ret
     }
-    /// Applies a function to each component of this vector, constructing a new
-    /// NdVec.
+    /// Creates a vector by evaluating `f` on each each component of this one.
     pub fn map_fn(&mut self, mut f: impl FnMut(Axis, &mut N)) {
         for &ax in D::Dim::axes() {
             f(ax, &mut self[ax]);
         }
     }
-    /// Constructs an NdVec using the given value for all components.
+    /// Creates a vector using `value` for all components.
     pub fn repeat(value: N) -> Self {
         Self::from_fn(|_| value.clone())
     }
 
-    /// Constructs an NdVec where each component is the minimum of the
-    /// corresponding components in the two given vectors.
+    /// Creates a vector by taking the minimum of the corresponding components
+    /// in `v1` and `v2`.
     pub fn min(v1: &Self, v2: &Self) -> Self {
         let mut ret = Self::default();
         for &ax in D::Dim::axes() {
@@ -149,8 +151,8 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         }
         ret
     }
-    /// Constructs an NdVec where each component is the maximum of the
-    /// corresponding components in the two given vectors.
+    /// Creates a vector by taking the maximum of the corresponding components
+    /// in `v1` and `v2`.
     pub fn max(v1: &Self, v2: &Self) -> Self {
         let mut ret = Self::default();
         for &ax in D::Dim::axes() {
@@ -159,7 +161,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         ret
     }
 
-    /// Adds together all the components of this vector.
+    /// Returns the sum of the components of the vector.
     pub fn sum(&self) -> N {
         let mut ret = N::zero();
         for &ax in D::Dim::axes() {
@@ -167,7 +169,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         }
         ret
     }
-    /// Multiplies together all the components of this vector.
+    /// Returns the product of the components of the vector.
     pub fn product(&self) -> N {
         let mut ret = N::one();
         for &ax in D::Dim::axes() {
@@ -176,8 +178,8 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         ret
     }
 
-    /// Returns the Axis that is the farthest from the origin in this vector (or
-    /// one of them, if there is a tie).
+    /// Returns the `Axis` of the component that is the most positive (or one of
+    /// them, if there is a tie).
     pub fn max_axis<X: std::cmp::Ord>(&self, key: impl Fn(Axis, &N) -> X) -> Axis {
         *D::Dim::axes()
             .into_iter()
@@ -185,8 +187,8 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
             .unwrap()
     }
 
-    /// Returns the Axis that is the closest to the origin in this vector (or
-    /// one of them, if there is a tie).
+    /// Returns the `Axis` of the component that is the most negative (or one of
+    /// them, if there is a tie).
     pub fn min_axis<X: std::cmp::Ord>(&self, key: impl Fn(Axis, &N) -> X) -> Axis {
         *D::Dim::axes()
             .into_iter()

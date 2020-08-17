@@ -1,4 +1,4 @@
-//! Floaty operations for floating-point NdVecs.
+//! Floaty operations for floating-point `NdVecs`.
 
 use noisy_float::prelude::{r64, R64};
 use num::Float;

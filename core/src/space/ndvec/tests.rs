@@ -69,7 +69,7 @@ impl proptest::arbitrary::Arbitrary for IVec3D {
 proptest! {
     /// Tests various vector operations.
     #[test]
-    fn test_ops(
+    fn test_ndvec_ops(
         pos1: IVec3D,
         pos2: IVec3D,
         scalar in -100..=100_isize,

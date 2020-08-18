@@ -20,12 +20,12 @@ pub trait Dim:
     /// Branching factor of ND-trees with this dimensionality.
     const BRANCHING_FACTOR: usize = 1 << Self::NDIM;
 
-    /// Returns a Vector of the axes of this many dimensions.
+    /// Returns an array of the axes of this many dimensions.
     fn axes() -> &'static [Axis] {
         ndim_axes(Self::NDIM)
     }
 
-    /// Returns true if the given axis belongs to this dimensionality.
+    /// Returns true if this dimensionality includes the given axis.
     fn contains(axis: Axis) -> bool {
         (axis as usize) < Self::NDIM
     }

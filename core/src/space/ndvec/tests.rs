@@ -75,6 +75,7 @@ proptest! {
         scalar in -100..=100_isize,
         shift in 0..10_isize,
     ) {
+        // Test operations.
         for &ax in Dim3D::axes() {
             assert_eq!(-(pos1[ax]), (-pos1)[ax]);
             assert_eq!(pos1[ax] + pos2[ax],   (pos1 + pos2  )[ax]);
@@ -105,5 +106,15 @@ proptest! {
         result = pos1; result ^= scalar; assert_eq!(result, pos1 ^ scalar);
         result = pos1; result <<= shift; assert_eq!(result, pos1 << shift);
         result = pos1; result >>= shift; assert_eq!(result, pos1 >> shift);
+
+        // Test comparison.
+        let cmp_x = pos1[X].partial_cmp(&pos2[X]);
+        let cmp_y = pos1[Y].partial_cmp(&pos2[Y]);
+        let cmp_z = pos1[Z].partial_cmp(&pos2[Z]);
+        if cmp_x == cmp_y && cmp_y == cmp_z {
+            assert_eq!(cmp_x, pos1.partial_cmp(&pos2));
+        } else {
+            assert_eq!(None, pos1.partial_cmp(&pos2));
+        }
     }
 }

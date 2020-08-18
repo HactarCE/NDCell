@@ -9,6 +9,7 @@
 //! don't have to deal with infinities and NaN, which should never appear in
 //! `NdVecs`.
 
+use itertools::Itertools;
 use noisy_float::prelude::R64;
 use num::{BigInt, Num, One, Zero};
 use std::cmp::Eq;

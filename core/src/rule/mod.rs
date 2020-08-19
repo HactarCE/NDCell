@@ -9,7 +9,7 @@ mod totalistic;
 pub use totalistic::*;
 
 /// Type alias for a CA transition function.
-pub type TransitionFunction<'a, D> = Box<dyn 'a + FnMut(NdArrayView<u8, D>) -> u8>;
+pub type TransitionFunction<'a, D> = Box<dyn 'a + FnMut(NdArray<u8, D>, UVec<D>) -> u8>;
 
 /// A cellular automaton rule.
 pub trait Rule<D: Dim>: fmt::Debug + Send + Sync {
@@ -29,6 +29,6 @@ impl<D: Dim> Rule<D> for DummyRule {
         0
     }
     fn transition_function(&self) -> TransitionFunction<D> {
-        Box::new(|nbhd| nbhd[NdVec::origin()])
+        Box::new(|nbhd, pos| nbhd[pos])
     }
 }

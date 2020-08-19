@@ -38,9 +38,9 @@ impl Rule<Dim2D> for MooreTotalistic2D {
         1
     }
     fn transition_function(&self) -> TransitionFunction<Dim2D> {
-        Box::new(move |nbhd| {
+        Box::new(move |nbhd, pos| {
             // Count live neighbors.
-            let nbhd_shape = Rect2D::moore(self.radius() as isize);
+            let nbhd_shape = Rect2D::span(pos - self.radius(), pos + self.radius());
             let mut live_neighbors = 0;
             for cell_coords in nbhd_shape.iter() {
                 if nbhd[cell_coords] != 0 {

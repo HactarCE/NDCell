@@ -3,19 +3,20 @@
 use itertools::Itertools;
 use num::ToPrimitive;
 use std::ops::{Index, IndexMut};
-use std::rc::Rc;
 
 use super::*;
 
-/// A basic N-dimensional array, implemented using a flat Vec<T>.
+/// `D`-dimensional array of values of type `T`.
+///
+/// The minimum coordinate of the array is always 0 along all axes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NdArray<T, D: Dim> {
     size: UVec<D>,
     data: Box<[T]>,
 }
 
-// Create an NdArray from the cells in an NdTree NodeRef.
 impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
+    /// Creates an `NdArray` from the cells in an `ndtree::NodeRef`.
     fn from(node: NodeRef<'a, D>) -> Self {
         let count = node
             .big_num_cells()
@@ -25,7 +26,9 @@ impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
 
         let mut data = Vec::with_capacity(count);
         for idx in 0..count {
-            // TODO: do this in a way that doesn't revisit nodes
+            // TODO: Do this in a way that doesn't recompute indices and revisit
+            // nodes and then benchmark to see if that's faster, since this
+            // function is called during simulation.
             data.push(node.cell_at_pos(&unflatten_idx(size.clone(), idx).to_bigvec()));
         }
         assert_eq!(count, data.len());
@@ -35,14 +38,16 @@ impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
     }
 }
 
-// Get or set an element in an NdArray.
 impl<T, D: Dim> Index<UVec<D>> for NdArray<T, D> {
     type Output = T;
+
+    #[inline]
     fn index(&self, pos: UVec<D>) -> &T {
         &self.data[self.flatten_idx(pos)]
     }
 }
 impl<T, D: Dim> IndexMut<UVec<D>> for NdArray<T, D> {
+    #[inline]
     fn index_mut(&mut self, pos: UVec<D>) -> &mut T {
         let idx = self.flatten_idx(pos);
         &mut self.data[idx]
@@ -50,91 +55,59 @@ impl<T, D: Dim> IndexMut<UVec<D>> for NdArray<T, D> {
 }
 
 impl<T, D: Dim> NdArray<T, D> {
-    /// Creates an NdArray from a flat vector. Panics if the vector is not the
-    /// right length.,
+    /// Creates an `NdArray` from a flat vector.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the length of `data` does not match `size`.
+    #[inline]
     pub fn from_flat_slice(size: UVec<D>, data: impl Into<Box<[T]>>) -> Self {
         let data = data.into();
         assert_eq!(size.product(), data.len(), "Wrong size for NdArray");
         Self { size, data }
     }
-    /// Returns the flat data behind this array.
+
+    /// Returns the flat data behind the array.
+    #[inline]
     pub fn into_flat_slice(self) -> Box<[T]> {
         self.data
     }
 
-    /// Returns an NdArrayView of this NdArray with no offset.
-    pub fn slice(self: Rc<Self>) -> NdArrayView<T, D> {
-        self.into()
-    }
-    /// Returns an NdArrayView of this NdArray with the given offset.
-    pub fn offset_slice(self: Rc<Self>, offset: IVec<D>) -> NdArrayView<T, D> {
-        let array = self;
-        NdArrayView { array, offset }
-    }
-    /// Returns the size vector of this NdArray.
+    /// Returns the size of the array along each axis.
+    #[inline]
     pub fn size(&self) -> &UVec<D> {
         &self.size
     }
-    /// Returns the rectangle of this NdArray.
+
+    /// Returns the rectangular bounds of the array.
+    #[inline]
     pub fn rect(&self) -> URect<D> {
-        URect::new(UVec::origin(), self.size.clone())
+        URect::with_size(UVec::origin(), self.size.clone())
     }
-    /// Returns an iterator over all the elements in this array, enumerated by
+
+    /// Returns an iterator over all the elements in the array, enumerated by
     /// their positions.
+    #[inline]
     pub fn iter_enumerated<'a>(&'a self) -> impl 'a + Iterator<Item = (UVec<D>, &T)> {
-        self.data
-            .iter()
-            .enumerate()
-            .map(move |(idx, item)| (unflatten_idx(self.size.clone(), idx), item))
+        self.rect().iter().zip(&*self.data)
     }
-    /// Applies a function to every element in the array, returning a new array
-    /// of the same size and shape.
+
+    /// Creates a new array of the same size and shape by applying a function to
+    /// every element in the array.
+    #[inline]
     #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn map<U>(&self, f: impl FnMut(&T) -> U) -> NdArray<U, D> {
         NdArray::from_flat_slice(self.size.clone(), self.data.iter().map(f).collect_vec())
     }
 
+    /// Returns the index into `data` corresponding to a `UVec` position.
     fn flatten_idx(&self, pos: UVec<D>) -> usize {
         flatten_idx(self.size.clone(), pos)
     }
 }
 
-/// An offset immutable slice of a NdArray.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NdArrayView<T, D: Dim> {
-    array: Rc<NdArray<T, D>>,
-    offset: IVec<D>,
-}
-impl<T, D: Dim> AsRef<NdArray<T, D>> for NdArrayView<T, D> {
-    fn as_ref(&self) -> &NdArray<T, D> {
-        &self.array
-    }
-}
-impl<T, D: Dim> From<Rc<NdArray<T, D>>> for NdArrayView<T, D> {
-    fn from(array: Rc<NdArray<T, D>>) -> Self {
-        let offset = IVec::origin();
-        Self { array, offset }
-    }
-}
-
-impl<T, D: Dim> Index<IVec<D>> for NdArrayView<T, D> {
-    type Output = T;
-    fn index(&self, pos: IVec<D>) -> &T {
-        &self.array[(pos - self.offset.clone()).to_uvec()]
-    }
-}
-
-impl<T, D: Dim> NdArrayView<T, D> {
-    /// Returns the rectangle of this NdArrayView.
-    pub fn rect(&self) -> IRect<D> {
-        IRect::new(
-            -self.offset.clone(),
-            IVec::from_fn(|ax| self.array.size[ax] as isize),
-        )
-    }
-}
-
-/// Converts a usize array index into an NdVec position.
+/// Converts a "flattened" `usize` array index into a `UVec` position for an
+/// `NdArray` with the given size.
 fn unflatten_idx<D: Dim>(size: UVec<D>, mut idx: usize) -> UVec<D> {
     let mut ret = UVec::origin();
     assert!(idx < size.product() as usize);
@@ -145,59 +118,79 @@ fn unflatten_idx<D: Dim>(size: UVec<D>, mut idx: usize) -> UVec<D> {
     ret
 }
 
-/// Converts an NdVec position into a usize array index.
+/// Converts a `UVec` position into a "flattened" `usize` array index for an
+/// `NdArray` with the given size.
 fn flatten_idx<D: Dim>(size: UVec<D>, pos: UVec<D>) -> usize {
     let mut ret = 0;
     let mut stride = 1;
+    assert!(pos < size);
     for &ax in D::axes() {
-        assert!(0 <= pos[ax] && pos[ax] < size[ax]);
+        assert!(pos[ax] < size[ax]);
         ret += pos[ax] * stride;
         stride *= size[ax];
     }
     ret
 }
 
-/// A 1D array.
+/// 1D array of values of type `T`.
 pub type Array1D<T> = NdArray<T, Dim1D>;
-/// A 2D array.
+/// 2D array of values of type `T`.
 pub type Array2D<T> = NdArray<T, Dim2D>;
-/// A 3D array.
+/// 3D array of values of type `T`.
 pub type Array3D<T> = NdArray<T, Dim3D>;
-/// A 4D array.
+/// 4D array of values of type `T`.
 pub type Array4D<T> = NdArray<T, Dim4D>;
-/// A 5D array.
+/// 5D array of values of type `T`.
 pub type Array5D<T> = NdArray<T, Dim5D>;
-/// A 6D array.
+/// 6D array of values of type `T`.
 pub type Array6D<T> = NdArray<T, Dim6D>;
-
-/// An offset slice of a 1D array.
-pub type ArrayView1D<T> = NdArrayView<T, Dim1D>;
-/// An offset slice of a 2D array.
-pub type ArrayView2D<T> = NdArrayView<T, Dim2D>;
-/// An offset slice of a 3D array.
-pub type ArrayView3D<T> = NdArrayView<T, Dim3D>;
-/// An offset slice of a 4D array.
-pub type ArrayView4D<T> = NdArrayView<T, Dim4D>;
-/// An offset slice of a 5D array.
-pub type ArrayView5D<T> = NdArrayView<T, Dim5D>;
-/// An offset slice of a 6D array.
-pub type ArrayView6D<T> = NdArrayView<T, Dim6D>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Tests that flatten_idx() and unflatten_idx() are inverses and never
-    /// return values out of range.
+    /// Tests `flatten_idx()` and `unflatten_idx()`.
     #[test]
-    fn test_flatten_unflatten_ndarray_idx() {
+    fn test_ndarray_flatten_unflatten_idx() {
         let size: UVec4D = NdVec([4, 5, 6, 7]);
-        let rect: URect4D = NdRect::new(NdVec::origin(), size - 1);
+        let rect: URect4D = NdRect::with_size(NdVec::origin(), size);
+        assert_eq!(rect.size(), size);
         let count = rect.count() as usize;
+        let mut last_index = None;
         for pos in rect.iter() {
             let flat_idx: usize = flatten_idx(size, pos);
             assert!(flat_idx < count);
             assert_eq!(pos, unflatten_idx(size, flat_idx));
+            if let Some(last) = last_index {
+                assert_eq!(flat_idx, last + 1);
+            }
+            last_index = Some(flat_idx);
+        }
+    }
+
+    /// Tests `NdArray::from::<NodeRef>()`.
+    #[test]
+    fn test_ndarray_from_noderef() {
+        // Create a 2D 4x4 node that looks like this:
+        //
+        // . . . .
+        // . # # .
+        // # # . .
+        // . . # .
+        // (+x to the right, +y up)
+        let flats_cells = [
+            0, 0, 1, 0, // Y = 0
+            1, 1, 0, 0, // Y = 1
+            0, 1, 1, 0, // Y = 2
+            0, 0, 0, 0, // Y = 3
+        ];
+        let cache = NodeCache::<Dim2D>::default();
+        let node_access = cache.node_access();
+        let node = node_access.get_from_cells(flats_cells);
+        let array = NdArray::from(node);
+        assert_eq!(*array.data, flats_cells);
+        for pos in node.big_rect().iter() {
+            assert_eq!(node.cell_at_pos(&pos), array[pos.to_uvec()]);
         }
     }
 }

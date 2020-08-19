@@ -1,17 +1,18 @@
-//! Operations on NdRects that are equivalent to applying the operation to the
-//! minimum and maximum corners of the hyperrectangle.
+//! Operations involving `NdRects`.
 
 use std::ops::*;
 
 use super::*;
 
 // Implement addition and subtraction on anything that can be added/subtracted
-// to/from an NdVec.
+// to/from an `NdVec`.
 impl<D: DimFor<N>, N: NdVecNum, X> Add<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + Add<X, Output = NdVec<D, N>>,
 {
     type Output = Self;
+
+    #[inline]
     fn add(self, operand: X) -> Self {
         Self {
             start: self.start + operand,
@@ -23,6 +24,7 @@ impl<D: DimFor<N>, N: NdVecNum, X> AddAssign<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + AddAssign<X>,
 {
+    #[inline]
     fn add_assign(&mut self, operand: X) {
         self.start += operand
     }
@@ -32,6 +34,8 @@ where
     NdVec<D, N>: NdRectVec + Sub<X, Output = NdVec<D, N>>,
 {
     type Output = Self;
+
+    #[inline]
     fn sub(self, operand: X) -> Self {
         Self {
             start: self.start - operand,
@@ -43,19 +47,20 @@ impl<D: DimFor<N>, N: NdVecNum, X> SubAssign<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + SubAssign<X>,
 {
+    #[inline]
     fn sub_assign(&mut self, operand: X) {
         self.start -= operand
     }
 }
 
-// Integer multiplication is special, because bounds are inclusive.
-// Multiplication by a negative number panics.
 impl<D: DimFor<N>, N: NdVecNum, X> Mul<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec,
     Self: MulAssign<X>,
 {
     type Output = Self;
+
+    #[inline]
     fn mul(self, operand: X) -> Self {
         let mut ret = self;
         ret *= operand;
@@ -66,18 +71,20 @@ impl<D: DimFor<N>, N: NdVecNum, X: Copy> MulAssign<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + MulAssign<X>,
 {
+    /// Scales the rectangle by the given value along each axis.
+    ///
+    /// # Panics
+    ///
+    /// This operation panics if the right-hand side is zero or negative along
+    /// any axis.
+    #[inline]
     fn mul_assign(&mut self, operand: X) {
-        // Call span() rather than constructing directly because if we multiply
-        // by a negative number then the min and max might swap, so we need to
-        // double-check the bounds.
         self.start *= operand;
         self.size *= operand;
-        for &ax in D::Dim::axes() {
-            assert!(
-                self.size[ax] > N::zero(),
-                "Cannot multiply an NdRect by a negative value"
-            );
-        }
+        assert!(
+            self.size > NdVec::origin(),
+            "NdRect must have positive volume"
+        );
     }
 }
 
@@ -88,8 +95,9 @@ where
 {
     /// "Outward-rounded" integer division; returns the largest rectangle that is
     /// the given fraction of the size of the original.
+    #[inline]
     pub fn div_outward(&self, other: &N) -> Self {
-        Self::span(self.min().div_floor(other), self.max().div_ceil(other))
+        Self::span(self.min().div_floor(other), self.max().div_floor(other))
     }
 }
 
@@ -100,6 +108,8 @@ where
     Self: DivAssign<X>,
 {
     type Output = Self;
+
+    #[inline]
     fn div(self, operand: X) -> Self {
         let mut ret = self;
         ret /= operand;
@@ -110,9 +120,14 @@ impl<D: DimFor<N>, N: NdVecNum + Float, X: Copy> DivAssign<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + DivAssign<X>,
 {
+    #[inline]
     fn div_assign(&mut self, operand: X) {
         self.start /= operand;
         self.size /= operand;
+        assert!(
+            self.size > NdVec::origin(),
+            "NdRect must have positive volume"
+        );
     }
 }
 
@@ -123,6 +138,8 @@ where
     NdVec<D, N>: NdRectVec + Shl<X, Output = NdVec<D, N>>,
 {
     type Output = Self;
+
+    #[inline]
     fn shl(self, operand: X) -> Self {
         Self {
             start: self.start << operand,
@@ -134,6 +151,7 @@ impl<D: DimFor<N>, N: NdVecNum, X> ShlAssign<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + ShlAssign<X>,
 {
+    #[inline]
     fn shl_assign(&mut self, operand: X) {
         self.start <<= operand
     }
@@ -143,6 +161,8 @@ where
     NdVec<D, N>: NdRectVec + Shr<X, Output = NdVec<D, N>>,
 {
     type Output = Self;
+
+    #[inline]
     fn shr(self, operand: X) -> Self {
         Self {
             start: self.start >> operand,
@@ -154,6 +174,7 @@ impl<D: DimFor<N>, N: NdVecNum, X> ShrAssign<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + ShrAssign<X>,
 {
+    #[inline]
     fn shr_assign(&mut self, operand: X) {
         self.start >>= operand
     }

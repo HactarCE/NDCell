@@ -1,8 +1,24 @@
+//! Iterator over `NdVec` positions in an integer `NdRect`.
+
 use num::{Integer, ToPrimitive};
 
 use super::*;
 
-/// An iterator over a hyperrectangle of cell positions.
+impl<D: DimFor<N>, N: NdVecNum + Integer + ToPrimitive> IntoIterator for &NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec,
+{
+    type Item = NdVec<D, N>;
+    type IntoIter = NdRectIter<D, N>;
+
+    /// Returns an iterator over all the integer positions in the rectangle.
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.into()
+    }
+}
+
+/// Iterator over positions in an integer hyperrectangle.
 #[derive(Debug, Clone)]
 pub struct NdRectIter<D: DimFor<N>, N: NdVecNum + Integer>
 where
@@ -18,6 +34,7 @@ impl<D: DimFor<N>, N: NdVecNum + Integer + ToPrimitive> From<&NdRect<D, N>> for 
 where
     NdVec<D, N>: NdRectVec,
 {
+    #[inline]
     fn from(rect: &NdRect<D, N>) -> Self {
         let start = rect.min();
         let end = rect.max();
@@ -37,6 +54,8 @@ where
     NdVec<D, N>: NdRectVec,
 {
     type Item = NdVec<D, N>;
+
+    #[inline]
     fn next(&mut self) -> Option<NdVec<D, N>> {
         let ret = self.next.clone();
         if let Some(ref mut next) = &mut self.next {
@@ -52,6 +71,8 @@ where
         }
         return ret;
     }
+
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.remaining.unwrap_or(usize::MAX), self.remaining)
     }

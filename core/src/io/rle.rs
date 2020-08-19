@@ -112,7 +112,7 @@ impl RleEncode for Automaton2D {
         };
         let cell_array = NdArray::from(self.tree.root().as_ref(&self.tree.node_access()));
         let mut items: Vec<(usize, RleItem<u8>)> = vec![];
-        for mut pos in cell_array.rect().iter() {
+        for mut pos in &cell_array.rect() {
             // Y coordinates increase upwards in NDCell, but downwards in RLE, so
             // reflect over the Y axis.
             pos[Y] = self.tree.len().to_usize().unwrap() - pos[Y] - 1;

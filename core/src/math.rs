@@ -1,39 +1,20 @@
-//! Miscellaneous math functions
+//! Math utilities.
 
 use num::{BigInt, Signed};
 
 use crate::{BigVec, Dim};
 
-/// Computes the base-2 logarithm of a number, rounded up.
+/// Returns an iterator of points along a line between `start` and `end`
+/// generated using an N-dimensional generalized version of Bresenham's
+/// line-drawing algorithm.
 ///
-/// Put another way: returns the smallest number `p` (minimum `0`) such that `n <= 2
-/// ** p`.
-pub fn ceil_log_base_2(mut n: usize) -> usize {
-    if n <= 1 {
-        return 0;
-    }
-    n -= 1;
-    let total_bytes = std::mem::size_of::<usize>();
-    let total_bits = total_bytes * 8;
-    let real_bits = total_bits - n.leading_zeros() as usize;
-    real_bits
-}
-
-/// Rounds a number to the nearest multiple of another number.
-pub fn round_to(n: f32, m: f32) -> f32 {
-    (n / m).round() * m
-}
-
-/// Returns an iterator that uses a generalized version of Bresenham's
-/// line-drawing algorithm to return the integer points on a line between the
-/// given points.
-///
-/// TODO: comment this method!
+/// Note that the points may be in reverse order (i.e. from `end` to `start`).
 pub fn bresenham<D: Dim>(
     mut start: BigVec<D>,
     mut end: BigVec<D>,
 ) -> impl Iterator<Item = BigVec<D>> {
     let mut delta = &end - &start;
+
     let longest_axis = delta.max_axis(|_, val| val.abs());
     // Ensure that delta[longest_axis] is positive.
     let negate = delta[longest_axis].is_negative();
@@ -42,9 +23,12 @@ pub fn bresenham<D: Dim>(
         end = -end;
         delta = -delta;
     }
+
     let longest_axis_range = num::range_inclusive(BigInt::from(0), delta[longest_axis].clone());
+
     let double_delta = &delta * &BigInt::from(2);
     let double_longest_axis_len = double_delta[longest_axis].clone();
+
     let mut current = start;
     let mut error = delta.signum() * BigVec::repeat(delta[longest_axis].clone());
     longest_axis_range.map(move |_| {
@@ -120,22 +104,10 @@ mod tests {
     }
 
     proptest! {
-        #[test]
-        fn test_ceil_log_base_2(n in 0..10000_usize) {
-            let p = ceil_log_base_2(n);
-            if n <= 1 {
-                assert_eq!(0, p)
-            } else {
-                assert!(n <= 1 << p);
-                assert!(n > 1 << (p - 1));
-            }
-        }
-
-        /// Test the line-drawing algorithm by comparing it against a
-        /// floating point implementation.
+        /// Tests the line-drawing algorithm by comparing it against a floating
+        /// point implementation.
         #[test]
         fn test_bresenham(start: IVec3D, end: IVec3D) {
-            prop_assume!(start != end);
             test_bresenham_single_line(start, end);
         }
     }

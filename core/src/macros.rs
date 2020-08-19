@@ -1,4 +1,22 @@
 /// Matches based on a dimensionality type parameter.
+///
+/// # Examples
+///
+/// ```
+/// # use ndcell_core::{Dim, match_ndim};
+/// fn f<D: Dim>() {
+///     match_ndim!(match D {
+///         1 => (/* 1 dimension  */),
+///         2 => (/* 2 dimensions */),
+///         3 => (/* 3 dimensions */),
+///         4 => (/* 4 dimensions */),
+///         5 => (/* 5 dimensions */),
+///         6 => (/* 6 dimensions */),
+///
+///         // No "default" case needed!
+///     })
+/// }
+/// ```
 #[macro_export]
 macro_rules! match_ndim {
     (match $dim:ty {

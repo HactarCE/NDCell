@@ -44,7 +44,7 @@ fn assert_compile_error(source_code: &str, expected: (&str, &str)) {
     }
 }
 
-/// Asserts that the given source code produces the giiven error when attempting
+/// Asserts that the given source code produces the given error when attempting
 /// to compile the function with the given name (or the transition function, if
 /// the function name is None).
 fn assert_fn_compile_error(fn_name: Option<&str>, source_code: &str, expected: (&str, &str)) {

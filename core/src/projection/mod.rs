@@ -71,7 +71,7 @@ impl<'a, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<D, P>>> for ProjectionParam
         // This method is a little Sketchy™; there's a lot of pointer (Box)
         // casting using std::mem::transmute(), using my own runtime value
         // checking instead of Rust's compile-time type checking. Although all
-        // of the "runtime" checks should be compile-time-optiimzed away.
+        // of the "runtime" checks should be compile-time-optimized away.
         match self {
             ProjectionParams::Simple => {
                 // Check that D = P.

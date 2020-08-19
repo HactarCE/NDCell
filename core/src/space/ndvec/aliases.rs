@@ -2,17 +2,17 @@
 
 use super::*;
 
-/// 1D vector wiith coordinates of type `N`.
+/// 1D vector with coordinates of type `N`.
 pub type Vec1D<N> = NdVec<Dim1D, N>;
-/// 2D vector wiith coordinates of type `N`.
+/// 2D vector with coordinates of type `N`.
 pub type Vec2D<N> = NdVec<Dim2D, N>;
-/// 3D vector wiith coordinates of type `N`.
+/// 3D vector with coordinates of type `N`.
 pub type Vec3D<N> = NdVec<Dim3D, N>;
-/// 4D vector wiith coordinates of type `N`.
+/// 4D vector with coordinates of type `N`.
 pub type Vec4D<N> = NdVec<Dim4D, N>;
-/// 5D vector wiith coordinates of type `N`.
+/// 5D vector with coordinates of type `N`.
 pub type Vec5D<N> = NdVec<Dim5D, N>;
-/// 6D vector wiith coordinates of type `N`.
+/// 6D vector with coordinates of type `N`.
 pub type Vec6D<N> = NdVec<Dim6D, N>;
 
 /// `D`-dimensional vector with `BigInt` coordinates.

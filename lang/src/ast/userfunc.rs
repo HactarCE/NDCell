@@ -251,7 +251,7 @@ impl UserFunction {
                 compiler.default_var_value(&self.kind().return_type())?
             }
             UserFunctionKind::Transition => {
-                // Impliciitly return `this` at the end of the transition
+                // Implicitly return `this` at the end of the transition
                 // function.
                 compiler.build_var_load("this")?
             }

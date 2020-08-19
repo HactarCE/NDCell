@@ -51,6 +51,7 @@ where
         assert!(size > NdVec::origin(), "NdRect must have positive volume");
         NdRect { start, size }
     }
+
     /// Creates an `NdRect` spanning between the given positions (inclusive).
     #[inline]
     pub fn span(mut a: NdVec<D, N>, mut b: NdVec<D, N>) -> Self {
@@ -64,6 +65,7 @@ where
         size += NdVec::repeat(N::min_rect_size());
         Self { start: a, size }
     }
+
     /// Creates a unit square with its minimum corner at the given position.
     #[inline]
     pub fn single_cell(pos: NdVec<D, N>) -> Self {
@@ -72,6 +74,7 @@ where
             size: NdVec::repeat(N::one()),
         }
     }
+
     /// Creates an `NdRect` with size `2r + 1`, given a center point and a
     /// radius `r`.
     #[inline]
@@ -83,6 +86,7 @@ where
         let size = NdVec::repeat(N::min_rect_size()) + radius + radius;
         Self { start, size }
     }
+
     /// Creates an `NdRect` describing a Moore neighborhood of a given radius
     /// centered at the origin.
     #[inline]
@@ -92,6 +96,7 @@ where
     {
         Self::centered(NdVec::origin(), radius)
     }
+
     /// Creates a square `NdRect` with the given size and its minimum corner at
     /// the origin.
     pub fn square_from_origin<X: Copy + Into<N>>(size: X) -> Self {
@@ -103,6 +108,7 @@ where
     pub fn min(&self) -> NdVec<D, N> {
         self.start.clone()
     }
+
     /// Returns the maximum (most positive) corner of the rectangle.
     #[inline]
     pub fn max(&self) -> NdVec<D, N> {
@@ -114,11 +120,13 @@ where
     pub fn size(&self) -> NdVec<D, N> {
         self.size.clone()
     }
+
     /// Returns the length of the rectangle along the given axis.
     #[inline]
     pub fn len(&self, axis: Axis) -> N {
         self.size[axis].clone()
     }
+
     /// Returns the number of integer positions in the rectangle.
     #[inline]
     pub fn count(&self) -> N

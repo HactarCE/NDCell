@@ -1,3 +1,4 @@
+/// Matches based on a dimensionality type parameter.
 #[macro_export]
 macro_rules! match_ndim {
     (match $dim:ty {

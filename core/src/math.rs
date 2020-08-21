@@ -1,7 +1,6 @@
 //! Math utilities.
 
-use num::{BigInt, Signed};
-
+use crate::num::{BigInt, Signed};
 use crate::{BigVec, Dim};
 
 /// Returns an iterator of points along a line between `start` and `end`
@@ -48,12 +47,12 @@ pub fn bresenham<D: Dim>(
 
 #[cfg(test)]
 mod tests {
-    use noisy_float::prelude::r64;
     use proptest::prelude::*;
 
-    use crate::space::*;
-
     use super::*;
+    use crate::ndrect::CanContain;
+    use crate::num::r64;
+    use crate::{FVec, IVec, IVec3D, NdRect};
 
     fn test_bresenham_single_line<D: Dim>(start: IVec<D>, end: IVec<D>) {
         let big_start: BigVec<D> = start.to_bigvec();

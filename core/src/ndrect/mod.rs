@@ -1,7 +1,5 @@
 //! N-dimensional rectangles.
 
-use noisy_float::prelude::R64;
-use num::{BigInt, Float, Integer, ToPrimitive};
 use std::ops::{Add, AddAssign, MulAssign, Sub, SubAssign};
 
 mod aliases;
@@ -9,7 +7,10 @@ mod convert;
 mod iter;
 mod ops;
 
-use super::*;
+use crate::dim::{Dim, DimFor};
+use crate::ndvec::*;
+use crate::num::*;
+use crate::Axis;
 pub use aliases::*;
 use iter::*;
 

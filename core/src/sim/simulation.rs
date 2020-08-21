@@ -1,13 +1,16 @@
 //! The functions that apply a rule to each cell in a grid.
 
 use itertools::Itertools;
-use num::{BigInt, One, Signed, Zero};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use super::*;
+use crate::num::{BigInt, One, Signed, Zero};
+// TODO: glob bad
+use crate::*;
 
 // TODO: parallelize using threadpool and crossbeam_channel (call execute threadpool.max_count times with closures that just loop)
+
+// TODO: consider renaming to Simulator or something else
 
 /// A HashLife simulation of a given automaton that caches simulation results.
 #[derive(Debug)]

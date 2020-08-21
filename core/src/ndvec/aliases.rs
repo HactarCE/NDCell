@@ -1,6 +1,8 @@
 //! Type aliases for `NdVec`s.
 
-use super::*;
+use super::{AnyDimVec, NdVec};
+use crate::dim::*;
+use crate::num::{BigInt, FixedPoint, R64};
 
 /// 1D vector with coordinates of type `N`.
 pub type Vec1D<N> = NdVec<Dim1D, N>;

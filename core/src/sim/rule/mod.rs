@@ -1,11 +1,11 @@
 //! Everything related to the description of a cellular automaton rule,
 //! primarily the transition function.
 
-use crate::space::*;
 use core::fmt;
 
 mod totalistic;
 
+use crate::{Dim, NdArray, UVec};
 pub use totalistic::*;
 
 /// Type alias for a CA transition function.

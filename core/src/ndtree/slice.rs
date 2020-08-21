@@ -1,6 +1,6 @@
-use num::ToPrimitive;
-
 use super::*;
+use crate::num::ToPrimitive;
+use Axis::{X, Y};
 
 /// Immutable view into an NdTree.
 #[derive(Debug, Clone)]

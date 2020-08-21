@@ -1,17 +1,15 @@
 //! N-dimensional vectors.
 //!
 //! Until generic associated types are stable (see rust-lang#44265), this module
-//! and ndrect are kind of a mess. We have to use a hacky `DimFor` trait to get
-//! generic vectors to work, and generic-dimensioned vectors can't implement
-//! `Copy` (although they probably wouldn't with GATs either).
+//! and `ndrect` are kind of a mess. We have to use a hacky `DimFor` trait to
+//! get generic-dimensioned vectors to work, and generic-dimensioned vectors
+//! can't implement `Copy` (although they probably couldn't with GATs either).
 //!
 //! Note that we use `noisy_float`'s `R64` type instead of `f64` so that we
 //! don't have to deal with infinities and NaN, which should never appear in
-//! `NdVecs`.
+//! `NdVec`s.
 
 use itertools::Itertools;
-use noisy_float::prelude::R64;
-use num::{BigInt, Num, One, Zero};
 use std::cmp::Eq;
 use std::fmt;
 use std::hash::Hash;
@@ -19,55 +17,15 @@ use std::ops::*;
 
 mod aliases;
 mod any;
-mod axis;
 mod convert;
-mod dim;
 mod ops;
 
 pub use aliases::*;
 pub use any::AnyDimVec;
-pub use axis::Axis::{U, V, W, X, Y, Z};
-pub use axis::*;
-pub use convert::*;
-pub use dim::*;
 
-use crate::FixedPoint;
-
-/// "Trait alias" for types that can be used as coordinates in an NdVec.
-pub trait NdVecNum:
-    fmt::Debug + Default + Clone + Eq + Hash + Ord + Send + Num + AddAssign + MulAssign
-{
-    /// Minimum size for an `NdRect` using this number type as coordinates.
-    /// Integer `NdRect`s have an inclusive minimum and maximium, so this
-    /// function returns 1 for integral types; for floating-point types, it
-    /// function returns 0.
-    fn min_rect_size() -> Self;
-}
-impl NdVecNum for BigInt {
-    fn min_rect_size() -> Self {
-        Self::one()
-    }
-}
-impl NdVecNum for FixedPoint {
-    fn min_rect_size() -> Self {
-        Self::zero()
-    }
-}
-impl NdVecNum for R64 {
-    fn min_rect_size() -> Self {
-        Self::zero()
-    }
-}
-impl NdVecNum for isize {
-    fn min_rect_size() -> Self {
-        1
-    }
-}
-impl NdVecNum for usize {
-    fn min_rect_size() -> Self {
-        1
-    }
-}
+use crate::dim::{Dim, DimFor};
+use crate::num::{BigInt, NdVecNum};
+use crate::Axis;
 
 /// `D`-dimensional vector with coordinates of type `N`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -85,7 +43,7 @@ impl<D: DimFor<N>, N: NdVecNum + fmt::Display> fmt::Display for NdVec<D, N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[")?;
         for &ax in D::Dim::axes() {
-            if ax != X {
+            if ax != Axis::X {
                 write!(f, ", ")?;
             }
             fmt::Display::fmt(&self[ax], f)?;

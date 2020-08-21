@@ -1,10 +1,11 @@
 //! N-dimensional arrays.
 
 use itertools::Itertools;
-use num::ToPrimitive;
 use std::ops::{Index, IndexMut};
 
 use super::*;
+
+use crate::num::*;
 
 /// `D`-dimensional array of values of type `T`.
 ///

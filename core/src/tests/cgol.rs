@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::*;
+use crate::*;
 
 fn get_non_default_set<D: Dim>(slice: NdTreeSlice<'_, D>) -> HashSet<BigVec<D>> {
     let mut ret = HashSet::new();
@@ -29,7 +29,7 @@ fn make_cell_coords_set<D: Dim>(coords_vec: Vec<IVec<D>>) -> HashSet<BigVec<D>> 
 #[test]
 fn test_cgol() {
     let mut grid = NdTree::new();
-    let rule = rule::LIFE;
+    let rule = sim::rule::LIFE;
     let mut sim = Simulation::from(rule);
 
     // Make a glider.

@@ -1,6 +1,7 @@
 //! Conversions between different types of `NdRect`s.
 
-use super::*;
+use super::{BigRect, IRect, URect};
+use crate::Dim;
 
 // NOTE: when implementing conversions involving `FRect` or `FixedRect`, make
 // sure to account for off-by-one error with bounds.

@@ -1,4 +1,6 @@
-//! Projections that turn an NdTree into one with fewer dimensions.
+//! Projections for `NdTree`s.
+
+// TODO: consider renaming module to 'project' and including ProjectedAutomaton
 
 use std::convert::TryInto;
 

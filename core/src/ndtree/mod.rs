@@ -1,7 +1,6 @@
-//! ND-tree data structure, an N-dimensional generalization of a quadtree.
+//! N-dimensional generalization of quadtrees.
 
 use itertools::Itertools;
-use num::{BigInt, One};
 use std::fmt;
 use std::sync::Arc;
 
@@ -10,6 +9,7 @@ mod node;
 mod slice;
 
 use super::*;
+use crate::num::{BigInt, One};
 pub use indexed::*;
 pub use node::*;
 pub use slice::*;
@@ -315,11 +315,12 @@ impl<D: Dim> NdTree<D> {
 
 #[cfg(test)]
 mod tests {
-    use num::BigUint;
     use proptest::prelude::*;
     use std::collections::HashMap;
 
     use super::*;
+    use crate::num::BigUint;
+    use Axis::{X, Y};
 
     fn assert_ndtree_valid(
         expected_cells: &HashMap<IVec2D, u8>,

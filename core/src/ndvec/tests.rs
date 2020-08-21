@@ -4,6 +4,9 @@ use proptest::prelude::*;
 
 use super::*;
 
+use crate::dim::Dim3D;
+use crate::Axis::{X, Y, Z};
+
 #[test]
 fn test_ndvec_macro() {
     let v1: IVec3D = NdVec([2, 10, -3]);

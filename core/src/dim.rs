@@ -1,10 +1,14 @@
-//! Dimensionality trait, which provides a number of dimensions.
+//! Dimensionality marker types.
 //!
 //! Until generic associated types are stable (see rust-lang#44265), we have to
 //! use a hacky `DimFor` trait to get generic vectors with different numeric
 //! types to work.
 
-use super::*;
+use std::fmt;
+use std::hash::Hash;
+
+use crate::num::{BigInt, FixedPoint, NdVecNum, R64};
+use crate::Axis;
 
 /// Dimensionality of a vector.
 ///
@@ -22,13 +26,27 @@ pub trait Dim:
 
     /// Returns an array of the axes of this many dimensions.
     fn axes() -> &'static [Axis] {
-        ndim_axes(Self::NDIM)
+        crate::axis::ndim_axes(Self::NDIM)
     }
 
     /// Returns true if this dimensionality includes the given axis.
     fn contains(axis: Axis) -> bool {
         (axis as usize) < Self::NDIM
     }
+}
+
+// Make `Dim` a "sealed trait."
+// https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
+mod private {
+    use super::*;
+
+    pub trait Sealed {}
+    impl Sealed for Dim1D {}
+    impl Sealed for Dim2D {}
+    impl Sealed for Dim3D {}
+    impl Sealed for Dim4D {}
+    impl Sealed for Dim5D {}
+    impl Sealed for Dim6D {}
 }
 
 /// 1 dimension.
@@ -104,18 +122,4 @@ impl<T: NdVecNum> DimFor<T> for Dim5D {
 impl<T: NdVecNum> DimFor<T> for Dim6D {
     type Dim = Self;
     type Array = [T; 6];
-}
-
-// Make `Dim` a "sealed trait."
-// https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
-mod private {
-    use super::*;
-
-    pub trait Sealed {}
-    impl Sealed for Dim1D {}
-    impl Sealed for Dim2D {}
-    impl Sealed for Dim3D {}
-    impl Sealed for Dim4D {}
-    impl Sealed for Dim5D {}
-    impl Sealed for Dim6D {}
 }

@@ -1,4 +1,6 @@
-//! Enumeration of axes, used to index an `NdVec`.
+//! Enumeration of axes.
+//!
+//! These are mainly used for indexing specific components in an `NdVec`.
 
 /// Enumeration of the six dimensions supported by NDCell.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

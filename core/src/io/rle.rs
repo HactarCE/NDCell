@@ -1,5 +1,5 @@
-//! Code for reading and writing Golly's 2D RLE format, described here:
-//! http://golly.sourceforge.net/Help/formats.html#rle
+//! Support for Golly's 2D ["Extended RLE"
+//! format](http://golly.sourceforge.net/Help/formats.html#rle)
 //!
 //! Note that RLEs always have Y values increasing downwards, while NDCell has Y
 //! values increasing upwards, so RLEs coordinates are reflected over the X
@@ -7,10 +7,11 @@
 
 #![allow(missing_docs)]
 
-use num::{BigInt, ToPrimitive, Zero};
 use pest::Parser;
 
-use super::*;
+// TODO: glob bad
+use crate::*;
+use Axis::{X, Y};
 
 const MAX_LINE_LEN: usize = 70;
 

@@ -1,6 +1,10 @@
 //! Type aliases for `NdRect`s.
 
-use super::*;
+use super::NdRect;
+use crate::dim::*;
+use crate::num::{BigInt, R64};
+
+// TODO: add FixedPoint aliases
 
 /// 1D hyperrectangle (linear range) with coordinates of type `N`.
 pub type Rect1D<N> = NdRect<Dim1D, N>;

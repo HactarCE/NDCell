@@ -1,7 +1,9 @@
-use super::{Rule, TransitionFunction};
-use crate::space::*;
 use regex::Regex;
 use std::convert::TryFrom;
+
+use super::{Rule, TransitionFunction};
+use crate::dim::Dim2D;
+use crate::{NdVec, Rect2D};
 
 /// A 2-state totalistic 2D range-1 Moore-neighborhood algorithm.
 #[derive(Debug, Copy, Clone)]

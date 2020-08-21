@@ -1,4 +1,3 @@
-//! Tests for `FixedPoint`.
 
 use proptest::prelude::*;
 use std::convert::TryInto;

@@ -15,7 +15,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::ops::*;
 
-mod aliases;
+pub mod aliases;
 mod any;
 mod convert;
 mod ops;
@@ -23,9 +23,9 @@ mod ops;
 pub use aliases::*;
 pub use any::AnyDimVec;
 
+use crate::axis::Axis;
 use crate::dim::{Dim, DimFor};
 use crate::num::{BigInt, NdVecNum};
-use crate::Axis;
 
 /// `D`-dimensional vector with coordinates of type `N`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]

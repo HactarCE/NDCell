@@ -1,10 +1,12 @@
-use num::{BigInt, BigUint};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ptr::NonNull;
 
 use super::{node_math, NodeCache, NodeCacheAccess, NodeCells, NodeFlags, NodeRepr, RawNode};
-use crate::{BigRect, BigVec, Dim, URect, UVec};
+use crate::dim::Dim;
+use crate::ndrect::{BigRect, URect};
+use crate::ndvec::{BigVec, UVec};
+use crate::num::{BigInt, BigUint};
 
 /// Common functionality for references to NdTree nodes.
 pub trait Node<'cache, D: Dim>: Copy {

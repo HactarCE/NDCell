@@ -1,10 +1,15 @@
-use super::*;
+use std::fmt;
+
+use super::{node_math, Node, NodeRef};
+use crate::axis::Axis::{X, Y};
+use crate::dim::*;
+use crate::ndrect::{BigRect, CanContain};
+use crate::ndvec::{BigVec, NdVec};
 use crate::num::ToPrimitive;
-use Axis::{X, Y};
 
 /// Immutable view into an NdTree.
 #[derive(Debug, Clone)]
-// TODO: note that a slice can be 1x1
+// TODO: note that a slice can be 1x1 while a tree cannot
 pub struct NdTreeSlice<'cache, D: Dim> {
     /// Root NdTreeNode of this slice.
     pub root: NodeRef<'cache, D>,

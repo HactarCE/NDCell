@@ -1,5 +1,8 @@
 // TODO: rewrite this file
 
-pub mod ndsimulate;
+mod ndsimulate;
 pub mod rule;
-pub mod simulation;
+mod simulation;
+
+pub use ndsimulate::{AsNdSimulate, NdSimulate};
+pub use simulation::Simulation;

@@ -4,9 +4,13 @@ use itertools::Itertools;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use super::rule::{DummyRule, Rule, TransitionFunction};
+use crate::dim::Dim;
+use crate::ndarray::NdArray;
+use crate::ndrect::{NdRect, URect};
+use crate::ndtree::{node_math, ArcNode, NdTree, Node, NodeRef, NodeRefEnum, RawNode};
+use crate::ndvec::UVec;
 use crate::num::{BigInt, One, Signed, Zero};
-// TODO: glob bad
-use crate::*;
 
 // TODO: parallelize using threadpool and crossbeam_channel (call execute threadpool.max_count times with closures that just loop)
 

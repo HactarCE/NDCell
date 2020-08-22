@@ -5,7 +5,9 @@ use core::fmt;
 
 mod totalistic;
 
-use crate::{Dim, NdArray, UVec};
+use crate::dim::Dim;
+use crate::ndarray::NdArray;
+use crate::ndvec::UVec;
 pub use totalistic::*;
 
 /// Type alias for a CA transition function.

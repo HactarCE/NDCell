@@ -9,9 +9,11 @@
 
 use pest::Parser;
 
-// TODO: glob bad
-use crate::*;
-use Axis::{X, Y};
+use crate::automaton::{Automaton2D, NdAutomaton};
+use crate::axis::Axis::{X, Y};
+use crate::ndarray::NdArray;
+use crate::ndvec::{BigVec2D, NdVec};
+use crate::num::{BigInt, ToPrimitive, Zero};
 
 const MAX_LINE_LEN: usize = 70;
 

@@ -8,7 +8,10 @@ mod simple;
 mod slice2d;
 mod slice3d;
 
-use super::*;
+use crate::axis::Axis;
+use crate::dim::{Dim, Dim2D, Dim3D};
+use crate::ndtree::NdTree;
+use crate::ndvec::{AnyDimBigVec, BigVec, NdVec};
 pub use simple::SimpleProjection;
 pub use slice2d::SliceProjection2D;
 pub use slice3d::SliceProjection3D;

@@ -2,7 +2,7 @@ use itertools::Itertools;
 use size_hint::HintSize;
 use std::marker::PhantomData;
 
-use crate::Dim;
+use crate::dim::Dim;
 
 // Let's set an arbitrary limit of 64 bytes for each leaf node.
 //

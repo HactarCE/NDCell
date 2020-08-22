@@ -27,7 +27,7 @@ macro_rules! match_ndim {
         5 => $case5:expr,
         6 => $case6:expr $(,)?
     }) => {
-        match <$dim as $crate::Dim>::NDIM {
+        match <$dim as $crate::dim::Dim>::NDIM {
             1 => $case1,
             2 => $case2,
             3 => $case3,

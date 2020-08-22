@@ -1,8 +1,9 @@
 //! Utilities to compute properties of a node based on its layer.
 
-use num::{BigInt, One};
-
-use crate::{BigRect, BigVec, Dim, URect, UVec};
+use crate::dim::Dim;
+use crate::ndrect::{BigRect, URect};
+use crate::ndvec::{BigVec, UVec};
+use crate::num::{BigInt, One};
 
 pub fn node_num_cells<D: Dim>(layer: u32) -> usize {
     1 << (layer as usize * D::NDIM)

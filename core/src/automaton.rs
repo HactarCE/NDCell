@@ -1,4 +1,13 @@
-use crate::*;
+use enum_dispatch::enum_dispatch;
+use std::convert::TryInto;
+use std::sync::{Arc, Mutex};
+
+use crate::dim::*;
+use crate::ndtree::NdTree;
+use crate::ndvec::BigVec;
+use crate::num::{BigInt, BigUint};
+use crate::projection::{NdProjection, NdProjectionError, NdProjector, ProjectionParams};
+use crate::sim::{AsNdSimulate, NdSimulate, Simulation};
 
 /// ProjectedAutomaton functionality implemented by dispatching to
 /// NdProjectedAutomaton.

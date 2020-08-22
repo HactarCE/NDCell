@@ -1,6 +1,7 @@
-use super::*;
 use proptest::prelude::*;
 use std::collections::HashSet;
+
+use super::*;
 
 fn test_ndrect_iter_validity<D: Dim>(rect: IRect<D>) {
     // Test that the iterator agrees with `count()`.

@@ -1,9 +1,9 @@
 //! Division and modulo/remainder operations between an `NdVec` and a scalar.
 
-use num::{Float, Integer};
 use std::ops::*;
 
 use super::*;
+use crate::num::{Float, Integer};
 
 // Implement floored and ceiled euclidean division between an NdVec and a scalar
 // (i.e. divide each coordinate by the scalar). Note that these are not the same

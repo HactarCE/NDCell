@@ -8,12 +8,13 @@
 //! Individual nodes in an NdTree.
 
 mod cache;
-mod math;
+pub mod math;
 mod raw;
 mod refs;
 mod repr;
-mod utils;
+pub mod utils;
 
+// TODO: reconsider node_math and node_utils
 pub mod node_math {
     pub use super::math::*;
 }

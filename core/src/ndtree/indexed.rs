@@ -5,8 +5,8 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use super::*;
-use crate::Dim;
+use super::{Node, NodeCacheAccess, NodeHasher, NodeRef};
+use crate::dim::Dim;
 
 /// NdTree represented as a list of nodes.
 #[derive(Debug)]
@@ -163,7 +163,8 @@ impl<'a, D: Dim, T, F: Fn(NodeRef<'a, D>) -> T> IndexedNdTreeBuilder<'a, D, T, F
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{rle, Automaton2D};
+    use crate::automaton::Automaton2D;
+    use crate::io::rle;
 
     // TODO: write tests that include different `min_layer`s and `base_layer`s
 

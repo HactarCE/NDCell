@@ -7,8 +7,8 @@
 use std::fmt;
 use std::hash::Hash;
 
+use crate::axis::Axis;
 use crate::num::{BigInt, FixedPoint, NdVecNum, R64};
-use crate::Axis;
 
 /// Dimensionality of a vector.
 ///

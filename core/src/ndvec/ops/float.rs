@@ -1,9 +1,7 @@
 //! Floaty operations for floating-point `NdVecs`.
 
-use noisy_float::prelude::{r64, R64};
-use num::Float;
-
 use super::*;
+use crate::num::{r64, Float, R64};
 
 impl<D: Dim> FVec<D> {
     /// Round each component of this vector to the nearest integer.

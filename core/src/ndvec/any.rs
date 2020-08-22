@@ -1,6 +1,10 @@
 //! Enumeration of `NdVec`s with different dimensionality.
 
-use super::*;
+use std::convert::TryFrom;
+
+use super::{NdVec, Vec1D, Vec2D, Vec3D, Vec4D, Vec5D, Vec6D};
+use crate::dim::{Dim, DimFor};
+use crate::num::NdVecNum;
 
 /// Vector with any dimensionality and coordinates of type `N`.
 #[allow(missing_docs)]

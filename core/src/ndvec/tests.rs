@@ -4,8 +4,8 @@ use proptest::prelude::*;
 
 use super::*;
 
+use crate::axis::Axis::{X, Y, Z};
 use crate::dim::Dim3D;
-use crate::Axis::{X, Y, Z};
 
 #[test]
 fn test_ndvec_macro() {

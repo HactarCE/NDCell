@@ -1,11 +1,10 @@
 //! Operations between two `NdVec`s (also unary negation).
 
-use noisy_float::prelude::R64;
-use num::Signed;
 use std::iter::IntoIterator;
 use std::ops::*;
 
 use super::*;
+use crate::num::{Signed, R64};
 
 impl<D: DimFor<N>, N: NdVecNum + Signed> NdVec<D, N> {
     /// Returns a vector consisting of the sign of each member of this one. See

@@ -4,13 +4,16 @@ use itertools::Itertools;
 use std::fmt;
 use std::sync::Arc;
 
-mod indexed;
+// TODO: `aliases` module, and include it in crate::prelude
+
+pub mod indexed;
 mod node;
 mod slice;
 
-use super::*;
+use crate::dim::*;
+use crate::ndrect::{BigRect, CanContain, URect};
+use crate::ndvec::BigVec;
 use crate::num::{BigInt, One};
-pub use indexed::*;
 pub use node::*;
 pub use slice::*;
 
@@ -319,8 +322,10 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
+    use crate::axis::Axis::{X, Y};
+    use crate::ndrect::IRect;
+    use crate::ndvec::{IVec2D, NdVec};
     use crate::num::BigUint;
-    use Axis::{X, Y};
 
     fn assert_ndtree_valid(
         expected_cells: &HashMap<IVec2D, u8>,

@@ -1,7 +1,7 @@
 //! Iterator over `NdVec` positions in an integer `NdRect`.
 
-use crate::Dim;
-use num::{Integer, ToPrimitive};
+use crate::dim::Dim;
+use crate::num::{Integer, ToPrimitive};
 
 use super::*;
 

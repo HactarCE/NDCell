@@ -2,9 +2,8 @@ use std::hash::Hash;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering::Relaxed};
 
-use super::utils;
-use super::NodeRepr;
-use crate::Dim;
+use super::{utils, NodeRepr};
+use crate::dim::Dim;
 
 // TODO: document struct & methods and explain invariants
 #[derive(Debug)]

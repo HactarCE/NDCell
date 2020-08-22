@@ -1,7 +1,9 @@
 use itertools::Itertools;
 use size_hint::HintSize;
 
-use crate::{Dim, URect, UVec};
+use crate::dim::Dim;
+use crate::ndrect::URect;
+use crate::ndvec::UVec;
 
 // TODO: remove this module -- maybe merge with math?
 

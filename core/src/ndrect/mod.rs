@@ -2,19 +2,19 @@
 
 use std::ops::{Add, AddAssign, MulAssign, Sub, SubAssign};
 
-mod aliases;
+pub mod aliases;
 mod convert;
-mod iter;
+pub mod iter;
 mod ops;
 
+use crate::axis::Axis;
 use crate::dim::{Dim, DimFor};
-use crate::ndvec::*;
-use crate::num::*;
-use crate::Axis;
+use crate::ndvec::NdVec;
+use crate::num::{Float, Integer, NdVecNum, ToPrimitive};
 pub use aliases::*;
-use iter::*;
+use iter::NdRectIter;
 
-/// "Trait alias" for types that can be used as vectors in an NdRect.
+/// "Trait alias" for types that can be used as vectors in an `NdRect`.
 pub trait NdRectVec:
     Sized + Add<Self, Output = Self> + Sub<Self, Output = Self> + AddAssign + SubAssign
 {

@@ -5,7 +5,6 @@
 
 use dashmap::DashSet;
 use itertools::Itertools;
-use num::BigUint;
 use parking_lot::{RwLock, RwLockReadGuard};
 use seahash::SeaHasher;
 use std::collections::HashMap;
@@ -16,7 +15,9 @@ use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::sync::{Arc, Mutex};
 
 use super::{node_math, node_utils, Node, NodeRef, NodeRefEnum, NodeRepr, RawNode};
-use crate::{BigVec, Dim};
+use crate::dim::Dim;
+use crate::ndvec::BigVec;
+use crate::num::BigUint;
 
 /// Fast hasher used for nodes.
 pub type NodeHasher = BuildHasherDefault<SeaHasher>;

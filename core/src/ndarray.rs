@@ -3,9 +3,11 @@
 use itertools::Itertools;
 use std::ops::{Index, IndexMut};
 
-use super::*;
-
-use crate::num::*;
+use crate::dim::*;
+use crate::ndrect::URect;
+use crate::ndtree::{Node, NodeRef};
+use crate::ndvec::UVec;
+use crate::num::ToPrimitive;
 
 /// `D`-dimensional array of values of type `T`.
 ///
@@ -149,6 +151,10 @@ pub type Array6D<T> = NdArray<T, Dim6D>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::ndrect::{NdRect, URect4D};
+    use crate::ndtree::NodeCache;
+    use crate::ndvec::{NdVec, UVec4D};
 
     /// Tests `flatten_idx()` and `unflatten_idx()`.
     #[test]

@@ -1,10 +1,10 @@
 //! Conversions between different types of `NdVec`s.
 
-use noisy_float::prelude::r64;
-use num::{FromPrimitive, ToPrimitive};
 use std::convert::TryInto;
 
-use super::*;
+use super::{BigVec, FVec, IVec, NdVec, UVec};
+use crate::dim::{Dim, DimFor};
+use crate::num::{r64, BigInt, FromPrimitive, NdVecNum, ToPrimitive};
 
 impl<D1: DimFor<N>, N: NdVecNum> NdVec<D1, N> {
     /// Converts an `NdVec` between arbitrary dimensionalities, as long as those

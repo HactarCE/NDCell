@@ -1,6 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ndcell_core::*;
-use num::{BigInt, BigUint};
+use ndcell_core::prelude::*;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let gotts_dots = Automaton2D::from_rle(

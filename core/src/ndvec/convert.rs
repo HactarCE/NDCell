@@ -129,7 +129,7 @@ impl<D: Dim> IVec<D> {
 }
 
 impl<D: Dim> UVec<D> {
-    /// Converts thihs `UVec` to a `BigVec`.
+    /// Converts this `UVec` to a `BigVec`.
     #[inline]
     pub fn to_bigvec(&self) -> BigVec<D> {
         BigVec::from_fn(|ax| self[ax].into())

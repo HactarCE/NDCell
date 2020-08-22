@@ -19,6 +19,7 @@ pub enum AnyDimVec<N: NdVecNum> {
 }
 impl<N: NdVecNum> AnyDimVec<N> {
     /// Returns the number of dimensions of this vector.
+    #[inline]
     pub fn ndim(&self) -> usize {
         match self {
             AnyDimVec::Vec1D(_) => 1,

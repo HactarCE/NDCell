@@ -56,11 +56,13 @@ impl<D: DimFor<N>, N: NdVecNum + fmt::Display> fmt::Display for NdVec<D, N> {
 // Implement indexing using `Axis`.
 impl<D: DimFor<N>, N: NdVecNum> Index<Axis> for NdVec<D, N> {
     type Output = N;
+    #[inline]
     fn index(&self, axis: Axis) -> &N {
         &self.0.as_ref()[axis as usize]
     }
 }
 impl<D: DimFor<N>, N: NdVecNum> IndexMut<Axis> for NdVec<D, N> {
+    #[inline]
     fn index_mut(&mut self, axis: Axis) -> &mut N {
         &mut self.0.as_mut()[axis as usize]
     }
@@ -68,14 +70,17 @@ impl<D: DimFor<N>, N: NdVecNum> IndexMut<Axis> for NdVec<D, N> {
 
 impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     /// Creates a vector consisting of all zeros.
+    #[inline]
     pub fn origin() -> Self {
         Self::default()
     }
     /// Returns true if the vector is all zeros, or false otherwise.
+    #[inline]
     pub fn is_zero(&self) -> bool {
         *self == Self::default()
     }
     /// Creates a unit vector pointing along `axis`.
+    #[inline]
     pub fn unit(axis: Axis) -> Self {
         let mut ret = Self::default();
         ret[axis] = N::one();
@@ -83,6 +88,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     }
 
     /// Creates a vector by evaluating `generator` for each axis.
+    #[inline]
     pub fn from_fn(mut generator: impl FnMut(Axis) -> N) -> Self {
         let mut ret: Self = Self::default();
         for &ax in D::Dim::axes() {
@@ -91,18 +97,21 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         ret
     }
     /// Creates a vector by evaluating `f` on each each component of this one.
+    #[inline]
     pub fn map_fn(&mut self, mut f: impl FnMut(Axis, &mut N)) {
         for &ax in D::Dim::axes() {
             f(ax, &mut self[ax]);
         }
     }
     /// Creates a vector using `value` for all components.
+    #[inline]
     pub fn repeat(value: N) -> Self {
         Self::from_fn(|_| value.clone())
     }
 
     /// Creates a vector by taking the minimum of the corresponding components
     /// in `v1` and `v2`.
+    #[inline]
     pub fn min(v1: &Self, v2: &Self) -> Self {
         let mut ret = Self::default();
         for &ax in D::Dim::axes() {
@@ -112,6 +121,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     }
     /// Creates a vector by taking the maximum of the corresponding components
     /// in `v1` and `v2`.
+    #[inline]
     pub fn max(v1: &Self, v2: &Self) -> Self {
         let mut ret = Self::default();
         for &ax in D::Dim::axes() {
@@ -121,6 +131,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     }
 
     /// Returns the sum of the components of the vector.
+    #[inline]
     pub fn sum(&self) -> N {
         let mut ret = N::zero();
         for &ax in D::Dim::axes() {
@@ -129,6 +140,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         ret
     }
     /// Returns the product of the components of the vector.
+    #[inline]
     pub fn product(&self) -> N {
         let mut ret = N::one();
         for &ax in D::Dim::axes() {
@@ -139,6 +151,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
 
     /// Returns the `Axis` of the component that is the most positive (or one of
     /// them, if there is a tie).
+    #[inline]
     pub fn max_axis<X: std::cmp::Ord>(&self, key: impl Fn(Axis, &N) -> X) -> Axis {
         *D::Dim::axes()
             .into_iter()
@@ -148,6 +161,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
 
     /// Returns the `Axis` of the component that is the most negative (or one of
     /// them, if there is a tie).
+    #[inline]
     pub fn min_axis<X: std::cmp::Ord>(&self, key: impl Fn(Axis, &N) -> X) -> Axis {
         *D::Dim::axes()
             .into_iter()
@@ -157,6 +171,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
 }
 
 impl<D: Dim> BigVec<D> {
+    #[inline]
     /// Constructs a new BigVec using isize components.
     pub fn big(isize_array: <D as DimFor<isize>>::Array) -> Self {
         NdVec::<D, isize>(isize_array).to_bigvec()

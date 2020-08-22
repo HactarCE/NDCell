@@ -63,9 +63,9 @@ pub enum ProjectionParams {
     /// A SimpleProjection.
     Simple,
     /// A SliceProjection2D.
-    Slice2D(BigVecEnum, (Axis, Axis)),
+    Slice2D(AnyDimBigVec, (Axis, Axis)),
     /// A SliceProjection3D.
-    Slice3D(BigVecEnum, (Axis, Axis, Axis)),
+    Slice3D(AnyDimBigVec, (Axis, Axis, Axis)),
 }
 impl<'a, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<D, P>>> for ProjectionParams {
     type Error = NdProjectionError;
@@ -110,59 +110,4 @@ pub enum NdProjectionError {
     WrongCellType,
     WrongNdTreeDim,
     WrongProjectedDim,
-}
-
-/// A BigVec of an unknown dimensionality, for use in ProjectionParams.
-#[allow(missing_docs)]
-#[derive(Debug, Clone)]
-pub enum BigVecEnum {
-    Vec1D(BigVec1D),
-    Vec2D(BigVec2D),
-    Vec3D(BigVec3D),
-    Vec4D(BigVec4D),
-    Vec5D(BigVec5D),
-    Vec6D(BigVec6D),
-}
-impl BigVecEnum {
-    /// Returns the number of dimensions of the BigVec.
-    fn ndim(&self) -> usize {
-        match self {
-            Self::Vec1D(_) => 1,
-            Self::Vec2D(_) => 2,
-            Self::Vec3D(_) => 3,
-            Self::Vec4D(_) => 4,
-            Self::Vec5D(_) => 5,
-            Self::Vec6D(_) => 6,
-        }
-    }
-}
-
-impl<'a, D: Dim> From<BigVec<D>> for BigVecEnum {
-    fn from(inner: BigVec<D>) -> Self {
-        match_ndim!(match D {
-            1 => Self::Vec1D(NdVec::transmute(inner)),
-            2 => Self::Vec2D(NdVec::transmute(inner)),
-            3 => Self::Vec3D(NdVec::transmute(inner)),
-            4 => Self::Vec4D(NdVec::transmute(inner)),
-            5 => Self::Vec5D(NdVec::transmute(inner)),
-            6 => Self::Vec6D(NdVec::transmute(inner)),
-        })
-    }
-}
-impl<'a, D: Dim> TryInto<BigVec<D>> for BigVecEnum {
-    type Error = ();
-    fn try_into(self) -> Result<BigVec<D>, ()> {
-        if self.ndim() == D::NDIM {
-            Ok(match self {
-                Self::Vec1D(inner) => NdVec::transmute(inner),
-                Self::Vec2D(inner) => NdVec::transmute(inner),
-                Self::Vec3D(inner) => NdVec::transmute(inner),
-                Self::Vec4D(inner) => NdVec::transmute(inner),
-                Self::Vec5D(inner) => NdVec::transmute(inner),
-                Self::Vec6D(inner) => NdVec::transmute(inner),
-            })
-        } else {
-            Err(())
-        }
-    }
 }

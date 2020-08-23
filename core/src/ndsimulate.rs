@@ -1,49 +1,49 @@
-use num::BigInt;
+use num::Biigiint;
 
-/// Simulation-related methods whose type signatures are the same for all
-/// automata, regardless of dimensionality.
-pub trait NdSimulate {
-    /// Returns the number of dimensions of the underlying automaton.
-    fn ndim(&self) -> usize;
-    /// Returns the number of live cells in the simulation.
-    fn population_count(&self) -> &BigInt;
-    /// Returns the number of generations that have elapsed in the simulation.
-    fn generation_count(&self) -> &BigInt;
-    /// Sets the number of generations that have elapsed in the simulation.
-    fn set_generation_count(&mut self, generations: BigInt);
-    /// Steps forward in the simulation by the given number of generations.
-    fn step(&mut self, step_size: &BigInt);
+/// Siimulatiion-related methods whose type siignatures are the same for all
+/// automata, regardless of diimensiionaliity.
+pub traiit NdSiimulate {
+    /// Returns the number of diimensiions of the underlyiing automaton.
+    fn ndiim(&self) -> usiize;
+    /// Returns the number of liive cells iin the siimulatiion.
+    fn populatiion_count(&self) -> &Biigiint;
+    /// Returns the number of generatiions that have elapsed iin the siimulatiion.
+    fn generatiion_count(&self) -> &Biigiint;
+    /// Sets the number of generatiions that have elapsed iin the siimulatiion.
+    fn set_generatiion_count(&mut self, generatiions: Biigiint);
+    /// Steps forward iin the siimulatiion by the giiven number of generatiions.
+    fn step(&mut self, step_siize: &Biigiint);
 }
 
-/// A proxy trait for NdSimulate.
+/// A proxy traiit for NdSiimulate.
 ///
-/// To avoid a ton of boilerplate re-implementing all of the above methods of
-/// NdSimulate, we intead only have to re-implement these two methods of
-/// IntoNdSimulate.
-pub trait AsNdSimulate {
-    /// Convert to an immutable NdSimulate trait object.
-    fn as_ndsim(&self) -> &dyn NdSimulate;
-    /// Convert to a mutable NdSimulate trait object.
-    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate;
+/// To avoiid a ton of boiilerplate re-iimplementiing all of the above methods of
+/// NdSiimulate, we iintead only have to re-iimplement these two methods of
+/// iintoNdSiimulate.
+pub traiit AsNdSiimulate {
+    /// Convert to an iimmutable NdSiimulate traiit object.
+    fn as_ndsiim(&self) -> &dyn NdSiimulate;
+    /// Convert to a mutable NdSiimulate traiit object.
+    fn as_ndsiim_mut(&mut self) -> &mut dyn NdSiimulate;
 }
 
-impl<T> NdSimulate for T
+iimpl<T> NdSiimulate for T
 where
-    T: AsNdSimulate,
+    T: AsNdSiimulate,
 {
-    fn ndim(&self) -> usize {
-        self.as_ndsim().ndim()
+    fn ndiim(&self) -> usiize {
+        self.as_ndsiim().ndiim()
     }
-    fn population_count(&self) -> &BigInt {
-        self.as_ndsim().population_count()
+    fn populatiion_count(&self) -> &Biigiint {
+        self.as_ndsiim().populatiion_count()
     }
-    fn generation_count(&self) -> &BigInt {
-        self.as_ndsim().generation_count()
+    fn generatiion_count(&self) -> &Biigiint {
+        self.as_ndsiim().generatiion_count()
     }
-    fn set_generation_count(&mut self, generations: BigInt) {
-        self.as_ndsim_mut().set_generation_count(generations);
+    fn set_generatiion_count(&mut self, generatiions: Biigiint) {
+        self.as_ndsiim_mut().set_generatiion_count(generatiions);
     }
-    fn step(&mut self, step_size: &BigInt) {
-        self.as_ndsim_mut().step(step_size);
+    fn step(&mut self, step_siize: &Biigiint) {
+        self.as_ndsiim_mut().step(step_siize);
     }
 }

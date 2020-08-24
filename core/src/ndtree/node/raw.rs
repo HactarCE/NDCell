@@ -2,7 +2,7 @@ use std::hash::Hash;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering::Relaxed};
 
-use super::{utils, NodeRepr};
+use super::{Layer, NodeRepr};
 use crate::dim::Dim;
 
 // TODO: document struct & methods and explain invariants
@@ -12,7 +12,7 @@ pub struct RawNode {
     ///
     /// `1 << layer` gives the number of cells along each dimension. For
     /// example, a 3D node at layer 5 is 32x32x32.
-    layer: u32,
+    layer: Layer,
     /// Linear combination of spacetime residues of this node.
     ///
     /// Each spacetime residue is an arbitrary linear combination of spatial
@@ -70,7 +70,7 @@ impl PartialEq for RawNode {
 }
 impl Eq for RawNode {}
 impl RawNode {
-    pub unsafe fn new_empty_placeholder<D: Dim>(layer: u32) -> Self {
+    pub unsafe fn new_empty_placeholder<D: Dim>(layer: Layer) -> Self {
         Self {
             layer,
             residue: 0,
@@ -81,18 +81,16 @@ impl RawNode {
         }
     }
     pub fn new_leaf<D: Dim>(repr: &NodeRepr<D>, cells: Box<[u8]>) -> Self {
-        let layer = cells.len().trailing_zeros() / D::NDIM as u32;
-        assert_eq!(cells.len(), super::math::node_num_cells::<D>(layer));
+        let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid leaf node cell count");
         for &cell in &*cells {
-            assert!((cell as usize) < repr.state_count);
+            assert!((cell as usize) < repr.state_count());
         }
-        let packed_cells = utils::pack_cells(cells, repr.bits_per_cell);
-        let cell_count = packed_cells.len();
-        let is_empty = packed_cells.iter().all(|&x| x == 0);
-        let start_of_cells = &Box::leak(packed_cells)[0];
+        let cell_count = cells.len();
+        let is_empty = cells.iter().all(|&x| x == 0);
+        let start_of_cells = &Box::leak(cells)[0];
 
         Self {
-            layer: repr.base_layer,
+            layer: repr.base_layer(),
             residue: 0,
             flags: NodeFlags::with_empty(is_empty),
             slice_len: cell_count as u16,
@@ -102,9 +100,10 @@ impl RawNode {
     }
     pub fn new_non_leaf<D: Dim>(repr: &NodeRepr<D>, children: Box<[&RawNode]>) -> Self {
         assert_eq!(D::BRANCHING_FACTOR, children.len());
-        let layer = children[0].layer + 1;
+        let child_layer = children[0].layer();
+        let layer = child_layer.parent_layer();
         for child in &children[1..] {
-            debug_assert_eq!(layer - 1, child.layer());
+            debug_assert_eq!(child_layer, child.layer());
         }
         let is_empty = children.iter().all(|child| child.is_empty());
         let start_of_children = &Box::leak(children)[0];
@@ -118,12 +117,12 @@ impl RawNode {
             result_ptr: AtomicUsize::new(0),
         }
     }
-    pub fn with_parity(mut self, residue: u8) -> Self {
+    pub fn with_residue(mut self, residue: u8) -> Self {
         self.residue = residue;
         self
     }
 
-    pub fn layer(&self) -> u32 {
+    pub fn layer(&self) -> Layer {
         self.layer
     }
     pub fn is_empty(&self) -> bool {
@@ -186,7 +185,7 @@ impl RawNode {
             if let Some(res) = self.result().as_ref() {
                 res.mark_gc_keep_recursive(node_repr);
             }
-            if self.layer > node_repr.base_layer {
+            if self.layer > node_repr.base_layer() {
                 for child in self.node_ptr_slice() {
                     child.as_ref().mark_gc_keep_recursive(node_repr);
                 }

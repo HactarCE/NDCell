@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{node_math, Node, NodeRef};
+use super::{Layer, Node, NodeRef};
 use crate::axis::Axis::{X, Y};
 use crate::dim::*;
 use crate::ndrect::{BigRect, CanContain};
@@ -39,8 +39,9 @@ pub type NdTreeSlice6D<'cache> = NdTreeSlice<'cache, Dim6D>;
 
 impl fmt::Display for NdTreeSlice<'_, Dim2D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.root.layer() > 8 {
-            panic!("Cannot display node larger than 256x256");
+        if self.root.layer() > Layer(8) {
+            writeln!(f, "Node larger than 256x256")?;
+            return Ok(());
         }
         let rect = self.rect();
         let mut line = String::with_capacity(self.root.big_len().to_usize().unwrap() * 2);
@@ -99,9 +100,8 @@ impl<'cache, D: Dim> NdTreeSlice<'cache, D> {
             .into_iter()
             .enumerate()
             .map(move |(child_index, subcube)| {
-                let child_offset = node_math::leaf_node_cell_index_to_pos::<D>(1, child_index)
-                    .to_bigvec()
-                    << subcube.layer();
+                let child_offset =
+                    Layer(1).leaf_pos(child_index).to_bigvec() << subcube.layer().to_u32();
                 Self::with_offset(subcube, child_offset + &self.offset)
             })
             .collect())

@@ -5,53 +5,7 @@ use crate::dim::Dim;
 use crate::ndrect::URect;
 use crate::ndvec::UVec;
 
-// TODO: remove this module -- maybe merge with math?
-
-pub fn pack_cells(cells: Box<[u8]>, bits_per_cell: u8) -> Box<[u8]> {
-    match bits_per_cell {
-        1 => cells
-            .into_iter()
-            .batching(|iter| {
-                Some(
-                    (0..8)
-                        .step_by(1)
-                        .map(|i| iter.next().copied().unwrap_or(0) << i)
-                        .sum(),
-                )
-            })
-            .hint_size(cells.len() * 8)
-            .collect_vec()
-            .into_boxed_slice(),
-        2 => cells
-            .into_iter()
-            .batching(|iter| {
-                Some(
-                    (0..8)
-                        .step_by(2)
-                        .map(|i| iter.next().copied().unwrap_or(0) << i)
-                        .sum(),
-                )
-            })
-            .hint_size(cells.len() * 4)
-            .collect_vec()
-            .into_boxed_slice(),
-        4 => cells
-            .into_iter()
-            .batching(|iter| {
-                Some(
-                    (0..8)
-                        .step_by(4)
-                        .map(|i| iter.next().copied().unwrap_or(0) << i)
-                        .sum(),
-                )
-            })
-            .hint_size(cells.len() * 2)
-            .collect_vec()
-            .into_boxed_slice(),
-        8 => cells,
-        _ => panic!("Invalid cell representation"),
-    }
-}
+// TODO: remove this module
 
 /// Subdivide a power-of-2 hypercube of cells into 2^NDIM hypercubes of half the
 /// size. If the hypercube contains only one cell, that cell is returned wrapped
@@ -89,7 +43,7 @@ pub fn subdivide_cell_square<'a, D: Dim>(
 
 /// Creates a power-of-2 hypercube of cells from 2^NDIM hypercubes of half the
 /// size.
-pub fn join_cell_squares<D: Dim>(squares: &[Box<[u8]>]) -> Box<[u8]> {
+pub fn join_cell_squares<D: Dim>(squares: &[&[u8]]) -> Box<[u8]> {
     todo!("Test this");
 
     debug_assert_eq!(squares[0].len(), squares[0].len().next_power_of_two());

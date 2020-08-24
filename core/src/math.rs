@@ -1,8 +1,20 @@
 //! Math utilities.
 
+use std::num::NonZeroUsize;
+
 use crate::dim::Dim;
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, Signed};
+
+/// Returns `1 << pow` if the result fits in a `usize`, or `None` if it does
+/// not.
+pub fn try_pow_2(pow: usize) -> Option<NonZeroUsize> {
+    if pow < 8 * std::mem::size_of::<usize>() {
+        NonZeroUsize::new(1 << pow)
+    } else {
+        None
+    }
+}
 
 /// Returns an iterator of points along a line between `start` and `end`
 /// generated using an N-dimensional generalized version of Bresenham's
@@ -55,6 +67,17 @@ mod tests {
     use crate::ndrect::NdRect;
     use crate::ndvec::{FVec, IVec, IVec3D};
     use crate::num::r64;
+
+    #[test]
+    fn test_try_pow_2() {
+        let bits = 8 * std::mem::size_of::<usize>();
+        for pow in 0..bits {
+            assert_eq!(Some(1 << pow), try_pow_2(pow).map(NonZeroUsize::get));
+        }
+        assert_eq!(None, try_pow_2(bits));
+        assert_eq!(None, try_pow_2(bits + 1));
+        assert_eq!(None, try_pow_2(bits + 2));
+    }
 
     fn test_bresenham_single_line<D: Dim>(start: IVec<D>, end: IVec<D>) {
         let big_start: BigVec<D> = start.to_bigvec();

@@ -14,7 +14,7 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::sync::{Arc, Mutex};
 
-use super::{node_math, node_utils, Node, NodeRef, NodeRefEnum, NodeRepr, RawNode};
+use super::{utils, Layer, Node, NodeRef, NodeRefEnum, NodeRepr, RawNode};
 use crate::dim::Dim;
 use crate::ndvec::BigVec;
 use crate::num::BigUint;
@@ -154,25 +154,25 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
 
     /// Returns the largest possible canonical leaf node containing only state #0.
     pub fn get_empty_base<'s>(&'s self) -> NodeRef<'s, D> {
-        self.get_empty(self.node_repr().base_layer)
+        self.get_empty(self.node_repr().base_layer())
     }
     /// Returns the canonical node at the given layer containing only state #0.
-    pub fn get_empty<'s>(&'s self, layer: u32) -> NodeRef<'s, D> {
+    pub fn get_empty<'s>(&'s self, layer: Layer) -> NodeRef<'s, D> {
         // Try to do this in O(1) by just looking for an empty node at the right
         // layer.
         self.try_get(&unsafe { RawNode::new_empty_placeholder::<D>(layer) })
             .unwrap_or_else(|| {
                 // If that fails, we have to actually make a new empty node.
-                if layer <= self.node_repr().base_layer {
+                if layer <= self.node_repr().base_layer() {
                     // The node will be a leaf.
                     self.get_from_cells(
-                        vec![0_u8; node_math::node_num_cells::<D>(layer)].into_boxed_slice(),
+                        vec![0_u8; layer.num_cells::<D>().unwrap().get()].into_boxed_slice(),
                     )
                 } else {
                     // The node is not a leaf, so recurse to get the empty node
                     // smaller than it and use that to form this one.
                     self.join_nodes(vec![
-                        self.get_empty(layer - 1).as_raw();
+                        self.get_empty(layer.child_layer()).as_raw();
                         D::BRANCHING_FACTOR
                     ])
                 }
@@ -222,22 +222,13 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
             debug_assert_eq!(child_layer, child.layer());
         }
 
-        if child_layer < node_repr.base_layer {
+        if child_layer < node_repr.base_layer() {
             // Children are below the base layer, so make a leaf node by
             // combining the cells of the children.
             self.get_from_cells(super::utils::join_cell_squares::<D>(
                 &children
                     .iter()
-                    .map(|raw_child| {
-                        self.try_get(raw_child)
-                            .unwrap()
-                            .as_leaf()
-                            .unwrap()
-                            .cells()
-                            .iter()
-                            .collect_vec()
-                            .into_boxed_slice()
-                    })
+                    .map(|raw_child| self.try_get(raw_child).unwrap().as_leaf().unwrap().cells())
                     .collect_vec(),
             ))
         } else {
@@ -249,17 +240,16 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
     pub fn get_from_cells<'s>(&'s self, cells: impl Into<Box<[u8]>>) -> NodeRef<'s, D> {
         let cells = cells.into();
         let node_repr = self.node_repr();
-        let layer = cells.len().trailing_zeros() / D::NDIM as u32;
-        assert_eq!(cells.len(), node_math::node_num_cells::<D>(layer));
+        let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid cell count");
 
-        if layer <= node_repr.base_layer {
+        if layer <= node_repr.base_layer() {
             // This node is at or below the base layer, so make a leaf node.
             self.get(RawNode::new_leaf(node_repr, cells))
         } else {
             // This node is above the base layer, so subdivide the cells into
             // smaller leaf nodes and make this a non-leaf node.
             self.join_nodes(
-                node_utils::subdivide_cell_square::<D>(&cells)
+                utils::subdivide_cell_square::<D>(&cells)
                     .unwrap()
                     .map(|subcube| self.get_from_cells(subcube).as_raw())
                     .collect_vec(),
@@ -276,11 +266,9 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
         todo!("Test this");
 
         Ok(match node.as_enum() {
-            NodeRefEnum::Leaf(node) => {
-                node_utils::subdivide_cell_square::<D>(&node.cells().into_boxed_slice())?
-                    .map(|subcube| self.get_from_cells(subcube))
-                    .collect()
-            }
+            NodeRefEnum::Leaf(node) => utils::subdivide_cell_square::<D>(node.cells())?
+                .map(|subcube| self.get_from_cells(subcube))
+                .collect(),
             NodeRefEnum::NonLeaf(node) => node.children().collect(),
         })
     }
@@ -289,14 +277,15 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
 
         todo!("Test this");
 
-        if node.layer() < 2 {
+        // Cannot get the centered inner of a node smaller than 4x4.
+        if node.layer() < Layer(2) {
             return Err(());
         }
 
         Ok(match node.as_enum() {
-            NodeRefEnum::Leaf(node) => self.get_from_cells(node_utils::centered_cell_square::<D>(
-                &node.cells().into_boxed_slice(),
-                node.layer() as usize - 1,
+            NodeRefEnum::Leaf(node) => self.get_from_cells(utils::centered_cell_square::<D>(
+                node.cells(),
+                node.layer().child_layer().to_usize(),
             )),
             NodeRefEnum::NonLeaf(node) => {
                 // TODO: write this better -- just grab the cells you need
@@ -341,7 +330,7 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
                 let cell_index = node.pos_to_cell_index(node.modulo_pos(pos).to_uvec());
                 // Possible optimization: avoid unpacking cells; just copy the
                 // packed cells and modify the cell there.
-                let mut new_cells = node.cells().into_boxed_slice();
+                let mut new_cells = node.cells().to_vec().into_boxed_slice();
                 new_cells[cell_index] = cell_state;
                 self.get_from_cells(new_cells)
             }

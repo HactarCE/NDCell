@@ -8,7 +8,7 @@ use super::rule::{DummyRule, Rule, TransitionFunction};
 use crate::dim::Dim;
 use crate::ndarray::NdArray;
 use crate::ndrect::{NdRect, URect};
-use crate::ndtree::{node_math, ArcNode, NdTree, Node, NodeRef, NodeRefEnum, RawNode};
+use crate::ndtree::{ArcNode, Layer, NdTree, Node, NodeRef, NodeRefEnum, RawNode};
 use crate::ndvec::UVec;
 use crate::num::{BigInt, One, Signed, Zero};
 
@@ -20,7 +20,7 @@ use crate::num::{BigInt, One, Signed, Zero};
 #[derive(Debug)]
 pub struct Simulation<D: Dim> {
     rule: Arc<dyn Rule<D>>,
-    min_layer: u32,
+    min_layer: Layer,
 }
 impl<D: Dim> Default for Simulation<D> {
     fn default() -> Self {
@@ -40,9 +40,9 @@ impl<D: Dim> Simulation<D> {
         // Simulation::advance_inner_node() for an explanation.) Even at r=0 or
         // r=1, the minimum layer is 2 because we need to return the inner node
         // (which is at a lower layer) and the minimum layer is 1.
-        let mut min_layer = 2;
-        while (1 << min_layer as usize) / 4 < rule.radius() {
-            min_layer += 1;
+        let mut min_layer = Layer(2);
+        while min_layer.len().unwrap().get() / 4 < rule.radius() {
+            min_layer = min_layer.parent_layer();
         }
 
         Self { rule, min_layer }
@@ -153,7 +153,8 @@ impl<D: Dim> Simulation<D> {
                 "Cannot simulate more than 1 generation at minimum layer"
             );
             let old_cell_ndarray = Rc::new(NdArray::from(node));
-            let base_offset = 1 << (node.layer() as usize - 2);
+            // let base_offset = 1 << (node.layer() as usize - 2);
+
             // cache.get_small_node_from_cell_fn(
             //     node.layer() as usize - 1,
             //     NdVec::origin(),
@@ -163,7 +164,7 @@ impl<D: Dim> Simulation<D> {
             //     },
             // )
             todo!("simulate for one generation");
-        } else if node.layer() - 1 <= node.repr().base_layer {
+        } else if node.layer().child_layer() <= node.repr().base_layer() {
             // If this node's children are leaf nodes, the node is small enough
             // to process each cell individually. This is the final recursive
             // base case.
@@ -199,9 +200,7 @@ impl<D: Dim> Simulation<D> {
                     .map(|pos| {
                         node.as_non_leaf()
                             .unwrap()
-                            .grandchild_at_index(node_math::leaf_node_pos_to_cell_index::<D>(
-                                2, pos,
-                            ))
+                            .grandchild_at_index(Layer(2).leaf_cell_index(pos))
                             .unwrap()
                     })
                     .collect_vec(),

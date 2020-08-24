@@ -82,7 +82,7 @@ impl<D: Dim> NdTree<D> {
     pub fn set_root(&mut self, new_root: ArcNode<D>) {
         // TODO: note that it must be at least 2x2 (layer 1)
         assert!(
-            new_root.as_raw().layer() > 0,
+            new_root.as_raw().layer() > Layer(0),
             "Root of NdTree must be larger than a single cell"
         );
         self.root = new_root;
@@ -98,21 +98,21 @@ impl<D: Dim> NdTree<D> {
     pub fn node_access(&self) -> NodeCacheAccess<D> {
         self.root().cache().node_access()
     }
-    pub fn layer(&self) -> u32 {
+    pub fn layer(&self) -> Layer {
         todo!("document");
         self.root().as_raw().layer()
     }
     /// Returns the length of this tree along one axis.
     pub fn len(&self) -> BigInt {
-        BigInt::one() << self.root().as_raw().layer()
+        self.layer().big_len()
     }
     pub fn offset(&self) -> BigVec<D> {
         todo!("document");
-        -BigVec::repeat(self.len()) >> 1
+        BigVec::repeat(-self.layer().child_layer().big_len())
     }
     pub fn rect(&self) -> BigRect<D> {
         todo!("document");
-        BigRect::span(self.offset(), -self.offset() - &BigInt::one())
+        self.layer().big_rect() + self.offset()
     }
     /// Returns an `NdTreeSlice` view into this tree.
     pub fn slice<'cache>(
@@ -132,7 +132,7 @@ impl<D: Dim> NdTree<D> {
     pub fn expand(&mut self) {
         let node_access = self.node_access();
         let root = self.root().as_ref(&node_access);
-        let empty_node = node_access.get_empty(root.layer() - 1);
+        let empty_node = node_access.get_empty(root.layer().child_layer());
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         let new_root = self.new_arc_node(
             node_access.join_nodes(
@@ -175,7 +175,7 @@ impl<D: Dim> NdTree<D> {
         // If we are already at the minimum layer (2x2), we can't shrink any
         // more. The root node must be at least 4x4 so that we can split it into
         // grandchildren.
-        if self.layer() == 1 {
+        if self.layer() == Layer(1) {
             return Err(());
         }
 
@@ -257,11 +257,11 @@ impl<D: Dim> NdTree<D> {
 
             // Since the root is not a leaf node, we know it is at least at
             // layer 2.
-            let grandchild_layer = root.layer() - 2;
+            let grandchild_layer = root.layer().child_layer().child_layer();
             // Get the rectangle of grandchildren of the current root that
             // includes the desired rectangle. Each axis is in the range from 0
             // to 3.
-            let grandchild_rect: URect<D> = (rect.clone() >> grandchild_layer).to_urect();
+            let grandchild_rect: URect<D> = (rect.clone() >> grandchild_layer.to_u32()).to_urect();
             let mut new_min = grandchild_rect.min();
             let new_max = grandchild_rect.max();
             for &ax in D::axes() {
@@ -299,15 +299,13 @@ impl<D: Dim> NdTree<D> {
             let new_children = grandchild_square
                 .iter()
                 .map(|grandchild_pos| {
-                    let child_index =
-                        node_math::non_leaf_pos_to_child_index::<D>(2, &grandchild_pos.to_bigvec());
-                    let grandchild_index =
-                        node_math::non_leaf_pos_to_child_index::<D>(1, &grandchild_pos.to_bigvec());
+                    let child_index = Layer(1).leaf_cell_index(grandchild_pos.clone() >> 1);
+                    let grandchild_index = Layer(1).leaf_cell_index(grandchild_pos & 1);
                     grandchildren[child_index][grandchild_index].as_raw()
                 })
                 .collect_vec();
             // Compute the new offset.
-            ret.offset += grandchild_square.min().to_bigvec() << grandchild_layer;
+            ret.offset += grandchild_square.min().to_bigvec() << grandchild_layer.to_u32();
 
             // Create the new node.
             ret.root = node_access.join_nodes(new_children);
@@ -374,7 +372,7 @@ mod tests {
             assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
             // Test that expansion preserves population and positions.
             let old_layer = ndtree.layer();
-            while ndtree.layer() < 5 {
+            while ndtree.layer() < Layer(5) {
                 ndtree.expand();
                 assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
             }
@@ -432,7 +430,7 @@ mod tests {
             let slice_rect = slice.rect();
             assert!(slice_rect.contains(&rect));
             assert!(
-                slice.root.layer() == 1
+                slice.root.layer() == Layer(1)
                 || slice.root.big_len() < rect.len(X) * 2
                 || slice.root.big_len() < rect.len(Y) * 2
             );

@@ -1,4 +1,20 @@
-//! N-dimensional cellular automaton storage and simulation backend.
+//! Low-level N-dimensional cellular automaton storage and simulation backend.
+//!
+//! # Arrays
+//!
+//! N-dimensional arrays appear quite frequently in this crate. These are always
+//! in generalized row-major order, so the X axis is always "least significant."
+//! For example, a 3D 4x3x2 array would be laid out as follows, with
+//! alphabetical order representing order in memory:
+//!
+//! ```text
+//!         (z = 0)    (z = 1)
+//! x =     0 1 2 3    0 1 2 3
+//!
+//! y = 0   A B C D    M N O P
+//! y = 1   E F G H    Q R S T
+//! y = 2   I J K L    U V W X
+//! ```
 
 #![warn(missing_debug_implementations)]
 #![warn(missing_docs)]

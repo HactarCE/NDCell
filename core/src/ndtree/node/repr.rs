@@ -1,11 +1,13 @@
-// TODO: document this module and explain somewhere (crate root?) that ALL
-// n-dimensional arrays use row-major or column-major or whatever order it is;
-// also explain strides
+//! Representation of nodes and wrapper type representing a node layer.
+//!
+//! The `Layer` wrapper type is here because its methods are very much related
+//! to how nodes are stored rather than dealing with their actual contents; thus
+//! it's mostly related to the representation of ND-tree nodes. Also `raw.rs`
+//! would become much longer than this file and it doesn't need another struct.
 
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
-use crate::axis::Axis;
 use crate::dim::Dim;
 use crate::ndrect::{BigRect, URect};
 use crate::ndvec::{BigVec, UVec};
@@ -44,6 +46,10 @@ pub struct NodeRepr<D: Dim> {
 impl<D: Dim> NodeRepr<D> {
     /// Creates the node representation for a simulation with the given number
     /// of dimensions and cell states.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the state count is not within the range `1..=256`.
     pub fn new(state_count: usize) -> Self {
         // Fit as many cells as possible without exceeding MAX_BYTES_PER_LEAF.
         let base_layer = (2..)
@@ -62,11 +68,16 @@ impl<D: Dim> NodeRepr<D> {
         }
     }
 
+    /// Returns the number of possible cell states, which is always in the range
+    /// `1..=256`.
     #[inline]
     pub fn state_count(self) -> usize {
         self.state_count
     }
 
+    /// Returns the largest layer at which ND-tree nodes should be leaf nodes
+    /// containing raw cell data; all larger nodes should be non-leaf nodes
+    /// containing 2^NDIM smaller nodes.
     #[inline]
     pub fn base_layer(self) -> Layer {
         self.base_layer
@@ -74,17 +85,42 @@ impl<D: Dim> NodeRepr<D> {
 }
 
 /// Layer of a node (32-bit unsigned integer).
+///
+/// The ND-tree is composed of leaf nodes and non-leaf nodes. Every node has a
+/// `Layer`, which is the base-2 log of the number of cells along each axis in
+/// the node. For example, a 3D node at `Layer(5)` contains a 32x32x32 cube of
+/// cells. In the case of leaf nodes, those cells are stored in one array (see
+/// the crate's root documentation for more on that). Non-leaf nodes contain
+/// pointers to 2^NDIM nodes one layer lower.
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[repr(transparent)]
 pub struct Layer(pub u32);
 impl Into<u32> for Layer {
+    #[inline]
     fn into(self) -> u32 {
         self.to_u32()
     }
 }
 impl Into<usize> for Layer {
+    #[inline]
     fn into(self) -> usize {
         self.to_usize()
+    }
+}
+impl std::ops::Add for Layer {
+    type Output = Layer;
+
+    #[inline]
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+impl std::ops::Sub for Layer {
+    type Output = Layer;
+
+    #[inline]
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 - rhs.0)
     }
 }
 impl Layer {
@@ -110,7 +146,7 @@ impl Layer {
         }
     }
 
-    /// Returns the layer below.
+    /// Returns the layer of this node's children.
     #[inline]
     pub fn child_layer(self) -> Layer {
         Layer(
@@ -119,7 +155,7 @@ impl Layer {
                 .expect("Tried to get layer below minimum"),
         )
     }
-    /// Returns the layer above.
+    /// Returns the layer of this node's parent.
     #[inline]
     pub fn parent_layer(self) -> Layer {
         Layer(
@@ -129,27 +165,27 @@ impl Layer {
         )
     }
 
-    /// Returns the number of cells along each axis for a node at this layer, or
+    /// Returns the number of cells along each axis of a node at this layer, or
     /// `None` if it does not fit in a `usize`.
     #[inline]
     pub fn len(self) -> Option<NonZeroUsize> {
         crate::math::try_pow_2(self.to_usize())
     }
-    /// Returns the number of cells along each axis for a node at this layer as
-    /// a `BigInt`.
+    /// Returns the number of cells along each axis of a node at this layer as a
+    /// `BigInt`.
     #[inline]
     pub fn big_len(self) -> BigInt {
         BigInt::one() << self.to_usize()
     }
 
-    /// Returns the total number of cells for a node at this layer, or `None` if
+    /// Returns the total number of cells of a node at this layer, or `None` if
     /// it does not fit in a `usize`.
     #[inline]
     pub fn num_cells<D: Dim>(self) -> Option<NonZeroUsize> {
         crate::math::try_pow_2(self.to_usize() * D::NDIM)
     }
-    /// Returns the number of cells along each axis for a node at this layer as
-    /// a `BigInt`.
+    /// Returns the number of cells along each axis of a node at this layer as a
+    /// `BigInt`.
     #[inline]
     pub fn big_num_cells<D: Dim>(self) -> BigInt {
         BigInt::one() << (self.to_usize() * D::NDIM)
@@ -163,7 +199,7 @@ impl Layer {
             .map(|len| URect::span(UVec::origin(), UVec::repeat(len.get() - 1)))
     }
     /// Returns a rectangle the size of a node at this layer with the lower
-    /// corner at the origin as `BigRect`.
+    /// corner at the origin as a `BigRect`.
     #[inline]
     pub fn big_rect<D: Dim>(self) -> BigRect<D> {
         BigRect::span(BigVec::origin(), BigVec::repeat(self.big_len() - 1))
@@ -171,9 +207,12 @@ impl Layer {
 
     /// Returns the index of the child of a node at this layer that contains the
     /// given position, modulo the node length along each axis.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if the layer is `Layer(0)`, which does not have children.
     #[inline]
     pub fn non_leaf_child_index<D: Dim>(self, pos: &BigVec<D>) -> usize {
-        todo!("test this");
         // Extract the single bit of each component that is relevant for this
         // layer.
         let child_layer = self.child_layer();
@@ -185,10 +224,7 @@ impl Layer {
 
     /// Returns the strides of the cell array for a leaf node at this layer.
     ///
-    /// Each element of a strides vector is the number of elements to traverse
-    /// to increment that axis by one. To use a strides vector, multiply it
-    /// elementwise by a position vector and then add up the components to get a
-    /// flat index into the array.
+    /// See the documentation at the crate root for more details.
     ///
     /// # Panics
     ///
@@ -198,14 +234,13 @@ impl Layer {
         UVec::from_fn(|ax| 1 << (self.to_usize() * ax as usize))
     }
     /// Returns the index of the cell at the given position in a leaf node at
-    /// this layer.
+    /// this layer, modulo the node length along each axis.
     ///
     /// # Panics
     ///
     /// This method may panic if the layer is too high to be a leaf node layer.
     #[inline]
     pub fn leaf_cell_index<D: Dim>(self, pos: UVec<D>) -> usize {
-        todo!("test this");
         let pos = pos & (self.len().unwrap().get() - 1);
         (pos * self.leaf_strides::<D>()).sum()
     }
@@ -214,35 +249,74 @@ impl Layer {
     ///
     /// # Panics
     ///
-    /// This method may panic if the layer is too high to be a leaf node layer.
+    /// This method panics if `index` is out of range and may panic if the layer
+    /// is too high to be a leaf node layer.
     #[inline]
     pub fn leaf_pos<D: Dim>(self, index: usize) -> UVec<D> {
-        todo!("test this");
         assert!(index < self.num_cells::<D>().unwrap().get());
-        UVec::from_fn(|ax| {
-            let mask = if ax == Axis::X {
-                1 << self.to_usize()
-            } else {
-                (1 << (self.to_usize() * ax as usize))
-                    - (1 << (self.to_usize() * (ax as usize - 1)))
-            };
-            index & mask
-        })
+        let pow = self.to_usize();
+        let mask = self.len().unwrap().get() - 1;
+        UVec::from_fn(|ax| (index >> (pow * ax as usize)) & mask)
+    }
+
+    /// Returns the given position modulo the size of a node at this layer along
+    /// each axis.
+    #[inline]
+    pub fn modulo_pos<D: Dim>(self, pos: &BigVec<D>) -> BigVec<D> {
+        pos & &(self.big_len() - 1)
     }
 }
-impl std::ops::Add for Layer {
-    type Output = Layer;
 
-    #[inline]
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dim::Dim3D;
+    use crate::ndrect::{IRect3D, URect3D};
+    use crate::ndvec::{IVec3D, NdVec, UVec3D};
+
+    /// Tests `Layer::non_leaf_child_index()`.
+    #[test]
+    fn test_ndtree_node_child_index() {
+        let layer = Layer(3);
+        assert_eq!(8, layer.len().unwrap().get());
+        // This is ~2^16 iterations, which shouldn't take too long to enumerate.
+        for pos in IRect3D::centered(IVec3D::origin(), 20).iter() {
+            let NdVec([x, y, z]) = pos.div_floor(&4) & 1;
+            let expected = (x + 2 * y + 4 * z) as usize;
+            let actual = layer.non_leaf_child_index(&pos.to_bigvec());
+            assert_eq!(expected, actual);
+        }
     }
-}
-impl std::ops::Sub for Layer {
-    type Output = Layer;
 
-    #[inline]
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0 - rhs.0)
+    /// Tests `Layer::leaf_cell_index()`.
+    #[test]
+    fn test_ndtree_node_leaf_cell_index() {
+        let layer = Layer(3);
+        assert_eq!(8, layer.len().unwrap().get());
+        // This is ~2^15 iterations, which shouldn't take too long to enumerate.
+        for pos in URect3D::span(UVec3D::origin(), UVec3D::repeat(30)).iter() {
+            let NdVec([x, y, z]) = pos & 7;
+            let expected = (x + 8 * y + 64 * z) as usize;
+            let actual = layer.leaf_cell_index(pos);
+            println!("{:?}", pos);
+            assert_eq!(expected, actual);
+        }
+    }
+
+    /// Tests `Layer::leaf_pos()`.
+    #[test]
+    fn test_ndtree_node_leaf_pos() {
+        let layer = Layer(3);
+        assert_eq!(8, layer.len().unwrap().get());
+
+        let rect: URect3D = layer.rect().unwrap();
+        assert_eq!(NdVec::repeat(0), rect.min());
+        assert_eq!(NdVec::repeat(7), rect.max());
+        assert_eq!(rect.count(), layer.num_cells::<Dim3D>().unwrap().get());
+
+        for (i, pos) in rect.iter().enumerate() {
+            assert_eq!(i, layer.leaf_cell_index(pos));
+            assert_eq!(pos, layer.leaf_pos(i));
+        }
     }
 }

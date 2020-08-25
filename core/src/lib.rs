@@ -3,9 +3,9 @@
 //! # Arrays
 //!
 //! N-dimensional arrays appear quite frequently in this crate. These are always
-//! in generalized row-major order, so the X axis is always "least significant."
-//! For example, a 3D 4x3x2 array would be laid out as follows, with
-//! alphabetical order representing order in memory:
+//! stored in generalized row-major order, so the X axis is always "least
+//! significant." For example, a 3D 4x3x2 array would be laid out as follows,
+//! with alphabetical order representing order in memory:
 //!
 //! ```text
 //!         (z = 0)    (z = 1)
@@ -15,6 +15,19 @@
 //! y = 1   E F G H    Q R S T
 //! y = 2   I J K L    U V W X
 //! ```
+//!
+//! (`A` is stored at index 0, `B` at index 1, etc. up to `X` at index 23.)
+//!
+//! # Strides
+//!
+//! To index an array, we create a vector of **strides**; each stride is the
+//! number of elements to traverse that is equivalent to one unit along that
+//! axis. For example, the strides for the array above would be `[1, 4, 12]`.
+//!
+//! Conveniently, taking the dot product of the strides with a position vector
+//! gives the integer index of that position in the array. For example, the dot
+//! product of `[1, 4, 12]` and `[3, 0, 1]` is `15`, which is indeed the index
+//! of the element at `[3, 0, 1]` (letter `P` in the array above).
 
 #![warn(missing_debug_implementations)]
 #![warn(missing_docs)]

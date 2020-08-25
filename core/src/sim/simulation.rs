@@ -41,7 +41,7 @@ impl<D: Dim> Simulation<D> {
         // r=1, the minimum layer is 2 because we need to return the inner node
         // (which is at a lower layer) and the minimum layer is 1.
         let mut min_layer = Layer(2);
-        while min_layer.len().unwrap().get() / 4 < rule.radius() {
+        while min_layer.len().unwrap() / 4 < rule.radius() {
             min_layer = min_layer.parent_layer();
         }
 

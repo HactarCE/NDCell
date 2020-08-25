@@ -275,7 +275,7 @@ impl<'cache, D: Dim> LeafNodeRef<'cache, D> {
     /// Returns the number of cells along each axis of the node.
     #[inline]
     pub fn len(&self) -> usize {
-        self.layer().len().unwrap_or_else(|| unreachable!()).get()
+        self.layer().len().unwrap_or_else(|| unreachable!())
     }
     /// Returns the total number of cells in the node.
     #[inline]
@@ -434,7 +434,7 @@ impl<'cache, D: Dim> Node<'cache, D> for NodeRef<'cache, D> {
         let repr = self.repr();
         let cell_slice_len = self.raw_node.cell_slice().len();
         if self.layer() <= repr.base_layer() {
-            debug_assert_eq!(cell_slice_len, self.layer().num_cells::<D>().unwrap().get());
+            debug_assert_eq!(cell_slice_len, self.layer().num_cells::<D>().unwrap());
             LeafNodeRef(self).into()
         } else {
             debug_assert_eq!(

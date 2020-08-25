@@ -1,16 +1,15 @@
 //! Math utilities.
 
-use std::num::NonZeroUsize;
-
 use crate::dim::Dim;
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, Signed};
 
 /// Returns `1 << pow` if the result fits in a `usize`, or `None` if it does
 /// not.
-pub fn try_pow_2(pow: usize) -> Option<NonZeroUsize> {
+#[inline]
+pub fn try_pow_2(pow: usize) -> Option<usize> {
     if pow < 8 * std::mem::size_of::<usize>() {
-        NonZeroUsize::new(1 << pow)
+        Some(1 << pow)
     } else {
         None
     }
@@ -72,7 +71,7 @@ mod tests {
     fn test_try_pow_2() {
         let bits = 8 * std::mem::size_of::<usize>();
         for pow in 0..bits {
-            assert_eq!(Some(1 << pow), try_pow_2(pow).map(NonZeroUsize::get));
+            assert_eq!(Some(1 << pow), try_pow_2(pow));
         }
         assert_eq!(None, try_pow_2(bits));
         assert_eq!(None, try_pow_2(bits + 1));

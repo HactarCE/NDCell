@@ -6,7 +6,6 @@
 //! would become much longer than this file and it doesn't need another struct.
 
 use std::marker::PhantomData;
-use std::num::NonZeroUsize;
 
 use crate::dim::Dim;
 use crate::ndrect::{BigRect, URect};
@@ -54,9 +53,7 @@ impl<D: Dim> NodeRepr<D> {
         // Fit as many cells as possible without exceeding MAX_BYTES_PER_LEAF.
         let base_layer = (2..)
             .map(Layer)
-            .take_while(|&base_layer| {
-                base_layer.num_cells::<D>().unwrap().get() < MAX_CELLS_PER_LEAF
-            })
+            .take_while(|&base_layer| base_layer.num_cells::<D>().unwrap() < MAX_CELLS_PER_LEAF)
             .last()
             // If all the options are too big, use a 2x2 (layer = 1) base node.
             .unwrap_or(Layer(1));
@@ -168,7 +165,7 @@ impl Layer {
     /// Returns the number of cells along each axis of a node at this layer, or
     /// `None` if it does not fit in a `usize`.
     #[inline]
-    pub fn len(self) -> Option<NonZeroUsize> {
+    pub fn len(self) -> Option<usize> {
         crate::math::try_pow_2(self.to_usize())
     }
     /// Returns the number of cells along each axis of a node at this layer as a
@@ -181,7 +178,7 @@ impl Layer {
     /// Returns the total number of cells of a node at this layer, or `None` if
     /// it does not fit in a `usize`.
     #[inline]
-    pub fn num_cells<D: Dim>(self) -> Option<NonZeroUsize> {
+    pub fn num_cells<D: Dim>(self) -> Option<usize> {
         crate::math::try_pow_2(self.to_usize() * D::NDIM)
     }
     /// Returns the number of cells along each axis of a node at this layer as a
@@ -196,7 +193,7 @@ impl Layer {
     #[inline]
     pub fn rect<D: Dim>(self) -> Option<URect<D>> {
         self.len()
-            .map(|len| URect::span(UVec::origin(), UVec::repeat(len.get() - 1)))
+            .map(|len| URect::span(UVec::origin(), UVec::repeat(len - 1)))
     }
     /// Returns a rectangle the size of a node at this layer with the lower
     /// corner at the origin as a `BigRect`.
@@ -241,7 +238,7 @@ impl Layer {
     /// This method may panic if the layer is too high to be a leaf node layer.
     #[inline]
     pub fn leaf_cell_index<D: Dim>(self, pos: UVec<D>) -> usize {
-        let pos = pos & (self.len().unwrap().get() - 1);
+        let pos = pos & (self.len().unwrap() - 1);
         (pos * self.leaf_strides::<D>()).sum()
     }
     /// Returns the vector position of the cell at the given index in a leaf
@@ -253,9 +250,9 @@ impl Layer {
     /// is too high to be a leaf node layer.
     #[inline]
     pub fn leaf_pos<D: Dim>(self, index: usize) -> UVec<D> {
-        assert!(index < self.num_cells::<D>().unwrap().get());
+        assert!(index < self.num_cells::<D>().unwrap());
         let pow = self.to_usize();
-        let mask = self.len().unwrap().get() - 1;
+        let mask = self.len().unwrap() - 1;
         UVec::from_fn(|ax| (index >> (pow * ax as usize)) & mask)
     }
 
@@ -278,7 +275,7 @@ mod tests {
     #[test]
     fn test_ndtree_node_child_index() {
         let layer = Layer(3);
-        assert_eq!(8, layer.len().unwrap().get());
+        assert_eq!(8, layer.len().unwrap());
         // This is ~2^16 iterations, which shouldn't take too long to enumerate.
         for pos in IRect3D::centered(IVec3D::origin(), 20).iter() {
             let NdVec([x, y, z]) = pos.div_floor(&4) & 1;
@@ -292,7 +289,7 @@ mod tests {
     #[test]
     fn test_ndtree_node_leaf_cell_index() {
         let layer = Layer(3);
-        assert_eq!(8, layer.len().unwrap().get());
+        assert_eq!(8, layer.len().unwrap());
         // This is ~2^15 iterations, which shouldn't take too long to enumerate.
         for pos in URect3D::span(UVec3D::origin(), UVec3D::repeat(30)).iter() {
             let NdVec([x, y, z]) = pos & 7;
@@ -307,12 +304,12 @@ mod tests {
     #[test]
     fn test_ndtree_node_leaf_pos() {
         let layer = Layer(3);
-        assert_eq!(8, layer.len().unwrap().get());
+        assert_eq!(8, layer.len().unwrap());
 
         let rect: URect3D = layer.rect().unwrap();
         assert_eq!(NdVec::repeat(0), rect.min());
         assert_eq!(NdVec::repeat(7), rect.max());
-        assert_eq!(rect.count(), layer.num_cells::<Dim3D>().unwrap().get());
+        assert_eq!(rect.count(), layer.num_cells::<Dim3D>().unwrap());
 
         for (i, pos) in rect.iter().enumerate() {
             assert_eq!(i, layer.leaf_cell_index(pos));

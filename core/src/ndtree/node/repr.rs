@@ -14,8 +14,9 @@ use crate::num::{BigInt, One};
 
 /// Arbitrary limit of 64 bytes to represent the cells in each leaf node.
 ///
-/// Since each cell takes up a single byte, this results in the following leaf
-/// node size for each number of dimensions:
+/// Since each cell takes up a single byte (though this may change in the
+/// future), this results in the following leaf node size for each number of
+/// dimensions:
 ///
 /// - 1D => 64
 /// - 2D => 8x8
@@ -49,7 +50,7 @@ impl<D: Dim> NodeRepr<D> {
     /// # Panics
     ///
     /// This function panics if the state count is not within the range `1..=256`.
-    pub fn new(state_count: usize) -> Self {
+    pub fn with_state_count(state_count: usize) -> Self {
         // Fit as many cells as possible without exceeding MAX_BYTES_PER_LEAF.
         let base_layer = (2..)
             .map(Layer)
@@ -158,7 +159,7 @@ impl Layer {
         Layer(
             self.0
                 .checked_add(1)
-                .expect("NdTree node layer exceeds maximum"),
+                .expect("ND-tree node layer exceeds maximum"),
         )
     }
 

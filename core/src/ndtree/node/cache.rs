@@ -1,4 +1,4 @@
-//! The cache for NdTree (generalized N-dimensional quadtree) nodes.
+//! Cache for ND-tree (generalized N-dimensional quadtree) nodes.
 //!
 //! Reading from and adding to the cache only requires a &NodeCache, but garbage
 //! collection requires a &mut NodeCache.
@@ -14,7 +14,7 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::sync::{Arc, Mutex};
 
-use super::{utils, Layer, Node, NodeRef, NodeRefEnum, NodeRepr, RawNode};
+use super::{Layer, Node, NodeRef, NodeRefEnum, NodeRepr, RawNode};
 use crate::dim::Dim;
 use crate::ndvec::BigVec;
 use crate::num::BigUint;
@@ -25,7 +25,7 @@ pub type NodeHasher = BuildHasherDefault<SeaHasher>;
 type NodeSet = DashSet<Box<RawNode>, NodeHasher>;
 type ArcNodeMap = HashMap<NonNull<RawNode>, Box<AtomicUsize>, NodeHasher>;
 
-/// Cache of NdTree nodes for a single simulation.
+/// Cache of ND-tree nodes for a single simulation.
 #[derive(Debug)]
 pub struct NodeCache<D: Dim> {
     /// Information about the representation of a node.
@@ -47,13 +47,22 @@ pub struct NodeCache<D: Dim> {
     arc_nodes: Mutex<ArcNodeMap>,
 }
 impl<D: Dim> NodeCache<D> {
-    // TODO: document
+    /// Creates a node cache for cells with the given number of states.
+    pub fn with_repr(node_repr: NodeRepr<D>) -> Self {
+        Self {
+            node_repr,
+            nodes: RwLock::new(NodeSet::default()),
+            arc_nodes: Mutex::new(ArcNodeMap::default()),
+        }
+    }
+
+    /// Returns the format of nodes stored in the cache.
     pub fn node_repr(&self) -> &NodeRepr<D> {
         &self.node_repr
     }
 
     /// Returns a guard which grants access to nodes in the cache.
-    pub fn node_access(&self) -> NodeCacheAccess<D> {
+    pub fn node_access<'a>(&'a self) -> NodeCacheAccess<'a, D> {
         NodeCacheAccess {
             cache: self,
             nodes: self.nodes.read(),
@@ -119,15 +128,22 @@ impl<D: Dim> NodeCache<D> {
             raw_node.set_result(std::ptr::null());
         }
     }
-}
-impl<D: Dim> Default for NodeCache<D> {
-    fn default() -> Self {
-        todo!("NodeCache should not implement Default")
+
+    /// Asserts that the node is from this cache.
+    fn assert_owns_node<'a>(&self, node: impl Node<'a, D>) {
+        assert!(
+            std::ptr::eq(self, node.cache()),
+            "Attempt to operate on a node from a different cache",
+        );
     }
 }
 
+/// Shared access to the node cache that allows reading existing nodes and
+/// adding new ones.
+///
+/// All methods that take `Node`s or `RawNode`s panic if the node is from a
+/// different cache.
 pub struct NodeCacheAccess<'cache, D: Dim> {
-    // TODO: can this be removed?
     cache: &'cache NodeCache<D>,
     nodes: RwLockReadGuard<'cache, DashSet<Box<RawNode>, NodeHasher>>,
 }
@@ -148,6 +164,7 @@ impl<D: Dim> PartialEq for NodeCacheAccess<'_, D> {
 }
 impl<D: Dim> Eq for NodeCacheAccess<'_, D> {}
 impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
+    /// Returns the format of nodes stored in the cache.
     pub fn node_repr(&self) -> &'cache NodeRepr<D> {
         &self.cache.node_repr
     }
@@ -166,22 +183,20 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
                 if layer <= self.node_repr().base_layer() {
                     // The node will be a leaf.
                     self.get_from_cells(
-                        vec![0_u8; layer.num_cells::<D>().unwrap().get()].into_boxed_slice(),
+                        vec![0_u8; layer.num_cells::<D>().unwrap()].into_boxed_slice(),
                     )
                 } else {
                     // The node is not a leaf, so recurse to get the empty node
                     // smaller than it and use that to form this one.
-                    self.join_nodes(vec![
-                        self.get_empty(layer.child_layer()).as_raw();
-                        D::BRANCHING_FACTOR
-                    ])
+                    self.join_nodes(std::iter::repeat(self.get_empty(layer.child_layer())))
                 }
             })
     }
     /// Returns a reference to the canonical instance of the given node if it
     /// already in the cache; otherwise returns `None`.
     pub fn try_get<'s, 'n>(&'s self, raw_node: &'n RawNode) -> Option<NodeRef<'s, D>> {
-        let raw_node_ref: dashmap::setref::one::Ref<Box<RawNode>, _> = self.nodes.get(raw_node)?;
+        let raw_node_ref: dashmap::setref::one::Ref<'s, Box<RawNode>, _> =
+            self.nodes.get(raw_node)?;
         // Internally, `DashMap` uses `RwLocks` to guard certain parts of the
         // HashMap, so once we throw away the `DashMap::setref::one::Ref` the
         // `RwLock` guard is released and the reference to the data inside there
@@ -214,23 +229,40 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
             .expect("Node deleted without mutable access to cache")
     }
 
-    pub fn join_nodes<'s, 'n>(&'s self, children: impl Into<Box<[&'n RawNode]>>) -> NodeRef<'s, D> {
-        // TODO: note that all children MUST be from this cache
-        let children = children.into();
+    /// Creates a new node by joining `children` together.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if the number of children is less than 2^NDIM. Extra
+    /// children are ignored.
+    ///
+    /// This method panics in debug mode if the children are not all at the same
+    /// layer.
+    pub fn join_nodes<'s, 'n>(
+        &'s self,
+        children: impl IntoIterator<Item = NodeRef<'n, D>>,
+    ) -> NodeRef<'s, D> {
         let node_repr = self.node_repr();
+        let children = children
+            .into_iter()
+            .inspect(|&node| self.cache.assert_owns_node(node))
+            .map(Node::as_raw)
+            .take(D::BRANCHING_FACTOR)
+            .collect_vec()
+            .into_boxed_slice();
         assert_eq!(children.len(), D::BRANCHING_FACTOR);
         let child_layer = children[0].layer();
-        for child in &children[1..] {
+        for child in &*children {
             debug_assert_eq!(child_layer, child.layer());
         }
 
         if child_layer < node_repr.base_layer() {
             // Children are below the base layer, so make a leaf node by
             // combining the cells of the children.
-            self.get_from_cells(super::utils::join_cell_squares::<D>(
+            self.get_from_cells(super::cells::join::<D>(
                 &children
                     .iter()
-                    .map(|raw_child| self.try_get(raw_child).unwrap().as_leaf().unwrap().cells())
+                    .map(|child| self.try_get(child).unwrap().as_leaf().unwrap().cells())
                     .collect_vec(),
             ))
         } else {
@@ -239,6 +271,7 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
             self.get(RawNode::new_non_leaf(node_repr, children))
         }
     }
+    /// Creates a node containing the given cells.
     pub fn get_from_cells<'s>(&'s self, cells: impl Into<Box<[u8]>>) -> NodeRef<'s, D> {
         let cells = cells.into();
         let node_repr = self.node_repr();
@@ -251,47 +284,39 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
             // This node is above the base layer, so subdivide the cells into
             // smaller leaf nodes and make this a non-leaf node.
             self.join_nodes(
-                utils::subdivide_cell_square::<D>(&cells)
+                super::cells::subdivide::<D>(&cells)
                     .unwrap()
-                    .map(|subcube| self.get_from_cells(subcube).as_raw())
-                    .collect_vec(),
+                    .map(|subcube| self.get_from_cells(subcube)),
             )
         }
     }
+    /// Subdivides the node into 2^NDIM smaller nodes at one layer lower. If the
+    /// node is only a single cell, returns `Err()` containing that cell state.
     pub fn subdivide<'s: 'n, 'n>(
         &'s self,
         node: impl Node<'n, D>,
     ) -> Result<Vec<NodeRef<'n, D>>, u8> {
-        // TODO: note that the node MUST be from this cache
-
-        // TODO: should not need &self?
-        todo!("Test this");
+        self.cache.assert_owns_node(node);
 
         Ok(match node.as_enum() {
-            NodeRefEnum::Leaf(node) => utils::subdivide_cell_square::<D>(node.cells())?
+            NodeRefEnum::Leaf(node) => super::cells::subdivide::<D>(node.cells())?
                 .map(|subcube| self.get_from_cells(subcube))
                 .collect(),
             NodeRefEnum::NonLeaf(node) => node.children().collect(),
         })
     }
+    /// Creates a node one layer lower containing the contents of the center of
+    /// the node.
+    ///
+    /// If the node is below `Layer(2)`, returns `Err(())`.
     pub fn centered_inner<'s, 'n>(&'s self, node: impl Node<'n, D>) -> Result<NodeRef<'s, D>, ()> {
-        // TODO: note that the node MUST be from this cache
-
-        todo!("Test this");
-
-        // Cannot get the centered inner of a node smaller than 4x4.
-        if node.layer() < Layer(2) {
-            return Err(());
-        }
+        self.cache.assert_owns_node(node);
 
         Ok(match node.as_enum() {
-            NodeRefEnum::Leaf(node) => self.get_from_cells(utils::centered_cell_square::<D>(
-                node.cells(),
-                node.layer().child_layer().to_usize(),
-            )),
+            NodeRefEnum::Leaf(node) => {
+                self.get_from_cells(super::cells::shrink_centered::<D>(node.cells())?)
+            }
             NodeRefEnum::NonLeaf(node) => {
-                // TODO: write this better -- just grab the cells you need
-                // directly instead of subdividing first
                 let child_index_bitmask = D::BRANCHING_FACTOR - 1;
                 let new_children = self
                     .subdivide(node)
@@ -307,16 +332,15 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
                         // center is non-empty, then we can't shrink any more.
                         let grandchildren = self.subdivide(child).unwrap();
                         // Return the grandchild closest to the center.
-                        grandchildren[opposite_child_index].as_raw()
-                    })
-                    .collect_vec();
+                        grandchildren[opposite_child_index]
+                    });
                 self.join_nodes(new_children)
             }
         })
     }
 
-    /// Returns a new node with a cell changed at the given position, modulo the
-    /// node length along each axis.
+    /// Creates an identical node except with the cell at the given position
+    /// (modulo the node length along each axis) modified.
     #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn set_cell<'s, 'n>(
         &'s self,
@@ -324,6 +348,8 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
         pos: &BigVec<D>,
         cell_state: u8,
     ) -> NodeRef<'s, D> {
+        self.cache.assert_owns_node(node);
+
         // Modulo the node length along each axis using bitwise AND.
         match node.as_enum() {
             NodeRefEnum::Leaf(node) => {
@@ -339,12 +365,8 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
             NodeRefEnum::NonLeaf(node) => {
                 let child_index = node.child_index_with_pos(pos);
                 let new_child = self.set_cell(node.child_at_index(child_index), pos, cell_state);
-                let mut new_children = node
-                    .children()
-                    .into_iter()
-                    .map(|node| node.as_raw())
-                    .collect_vec();
-                new_children[child_index] = new_child.as_raw();
+                let mut new_children = node.children().collect_vec();
+                new_children[child_index] = new_child;
                 self.join_nodes(new_children)
             }
         }
@@ -352,8 +374,8 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
     }
 }
 
-/// Shared-ownership access to a node in the cache, which also prevents it from
-/// being garbage-collected.
+/// Shared-ownership access to a node that prevents the node from being
+/// garbage-collected.
 #[derive(Debug)]
 pub struct ArcNode<D: Dim> {
     /// Access to the cache, to make sure the cache doesn't get dropped.
@@ -389,6 +411,7 @@ impl<D: Dim> PartialEq for ArcNode<D> {
 }
 impl<D: Dim> Eq for ArcNode<D> {}
 impl<D: Dim> ArcNode<D> {
+    /// Creates a new reference-counted node from a node reference.
     pub fn new<'n>(cache: Arc<NodeCache<D>>, node: impl Node<'n, D>) -> Self {
         let node_ptr = NonNull::from(node.as_raw());
         let ref_count_ptr = NonNull::from(
@@ -415,21 +438,29 @@ impl<D: Dim> ArcNode<D> {
             ref_count_ptr,
         }
     }
+
+    /// Returns the cache that the node is stored in.
     pub fn cache(&self) -> &Arc<NodeCache<D>> {
         &self.cache
     }
+
+    /// Returns a reference to the node.
     pub fn as_ref<'cache>(
         &self,
         node_access: &'cache NodeCacheAccess<'cache, D>,
     ) -> NodeRef<'cache, D> {
-        unsafe { NodeRef::new(node_access.cache, node_access, self.node_ptr.as_ref()) }
+        unsafe { NodeRef::new(node_access.cache, node_access, self.node_ptr) }
     }
+
+    /// Returns the raw node, which can be used to get basic information such as
+    /// layer and residue.
     pub fn as_raw(&self) -> &RawNode {
         unsafe { self.node_ptr.as_ref() }
     }
 
+    /// Returns the population of the node.
     pub fn population(&self) -> &BigUint {
-        todo!("COUNT POPULATION")
+        todo!("Compute population")
     }
 }
 
@@ -450,10 +481,11 @@ mod tests {
         }
     }
 
-    // Test that inserting an equal key into a DashSet does NOT update the key.
-    // This isn't documented by Dashmap, but it's important for the NodeCache
-    // and is true for now because DashSet uses DashMap which ultimately
-    // delegates to std::collections::HashMap, which does make this promise.
+    /// Tests that inserting an equal key into a DashSet does NOT update the
+    /// key. This isn't documented by Dashmap, but it's important for the
+    /// NodeCache and is true for now because DashSet uses DashMap which
+    /// ultimately delegates to std::collections::HashMap, which does make this
+    /// promise.
     #[test]
     fn test_dashset_insert_eq() {
         let h = dashmap::DashSet::new();

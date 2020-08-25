@@ -15,7 +15,6 @@ pest = "2.1"
 pest_derive = "2.1"
 regex = "1"
 seahash = "4.0"
-size_hint = "0.1"
 
 [dev-dependencies]
 criterion = "0.3"

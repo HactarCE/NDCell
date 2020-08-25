@@ -229,7 +229,8 @@ impl RleEncode for Automaton2D {
         }
         let header = header.ok_or("Missing RLE header")?;
 
-        let mut ret = NdAutomaton::default();
+        // TODO: max state count?
+        let mut ret = NdAutomaton::with_state_count(256);
         let mut pos;
         if let Some(cxrle) = cxrle {
             ret.generations = cxrle.gen;

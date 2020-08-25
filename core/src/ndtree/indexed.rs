@@ -1,4 +1,4 @@
-//! "Indexed" NdTrees, to export/import MacroCell format or for passing to GLSL
+//! "Indexed" ND-tree, to export/import MacroCell format or for passing to GLSL
 //! in rendering.
 
 use itertools::Itertools;
@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use super::{Layer, Node, NodeCacheAccess, NodeHasher, NodeRef};
 use crate::dim::Dim;
 
-/// NdTree represented as a list of nodes.
+/// ND-tree represented as a list of nodes.
 #[derive(Debug)]
 pub struct IndexedNdTree<D: Dim, T> {
     /// Layer of the largest node, in the context of this `IndexedNdTree`.
@@ -89,8 +89,7 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
             IndexedNdTreeNode::NonLeaf(indices, _) => node_cache.join_nodes(
                 indices
                     .iter()
-                    .map(|&index| self._to_node(node_cache, &data_to_node, index).as_raw())
-                    .collect_vec(),
+                    .map(|&index| self._to_node(node_cache, &data_to_node, index)),
             ),
         }
     }

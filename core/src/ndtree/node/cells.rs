@@ -172,19 +172,6 @@ mod tests {
         );
     }
 
-    fn test_cells_join_single_case<D: Dim>(layer: Layer) {
-        let num_cells = layer.num_cells::<D>().unwrap();
-        if num_cells >= 256 {
-            panic!("too many cells for testing");
-        }
-        let cells = (0..num_cells as u8).collect_vec().into_boxed_slice();
-        let subdivided = subdivide::<D>(&cells).unwrap().collect_vec();
-        assert_eq!(
-            cells,
-            join::<D>(&subdivided.iter().map(|x| &**x).collect_vec()),
-        );
-    }
-
     /// Tests `cells::join()`.
     #[test]
     fn test_cells_join() {
@@ -255,16 +242,16 @@ mod tests {
             expand_centered::<Dim2D>(&(1..=64).collect_vec())
         );
     }
-
-    fn test_cells_shrink_centered_single_case<D: Dim>(layer: Layer) {
+    fn test_cells_join_single_case<D: Dim>(layer: Layer) {
         let num_cells = layer.num_cells::<D>().unwrap();
         if num_cells >= 256 {
             panic!("too many cells for testing");
         }
-        let cells = (1..=num_cells as u8).collect_vec().into_boxed_slice();
+        let cells = (0..num_cells as u8).collect_vec().into_boxed_slice();
+        let subdivided = subdivide::<D>(&cells).unwrap().collect_vec();
         assert_eq!(
             cells,
-            shrink_centered::<D>(&expand_centered::<D>(&*cells).unwrap()).unwrap(),
+            join::<D>(&subdivided.iter().map(|x| &**x).collect_vec()),
         );
     }
 
@@ -282,5 +269,16 @@ mod tests {
 
         // Test 8x8.
         test_cells_shrink_centered_single_case::<Dim2D>(Layer(3));
+    }
+    fn test_cells_shrink_centered_single_case<D: Dim>(layer: Layer) {
+        let num_cells = layer.num_cells::<D>().unwrap();
+        if num_cells >= 256 {
+            panic!("too many cells for testing");
+        }
+        let cells = (1..=num_cells as u8).collect_vec().into_boxed_slice();
+        assert_eq!(
+            cells,
+            shrink_centered::<D>(&expand_centered::<D>(&*cells).unwrap()).unwrap(),
+        );
     }
 }

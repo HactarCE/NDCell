@@ -49,49 +49,6 @@ pub enum ProjectedAutomaton<P: Dim> {
     From5D(NdProjectedAutomaton<Dim5D, P>),
     From6D(NdProjectedAutomaton<Dim6D, P>),
 }
-impl<P: Dim> Default for ProjectedAutomaton<P> {
-    fn default() -> Self {
-        let inner = Box::new(NdProjectedAutomaton::<P, P>::default());
-        match_ndim!(match P {
-            1 => Self::From1D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim1D, P>>,
-                >(inner)
-            }),
-            2 => Self::From2D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim2D, P>>,
-                >(inner)
-            }),
-            3 => Self::From3D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim3D, P>>,
-                >(inner)
-            }),
-            4 => Self::From4D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim4D, P>>,
-                >(inner)
-            }),
-            5 => Self::From5D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim5D, P>>,
-                >(inner)
-            }),
-            6 => Self::From6D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim6D, P>>,
-                >(inner)
-            }),
-        })
-    }
-}
 impl<D: Dim, P: Dim> From<NdAutomaton<D>> for ProjectedAutomaton<P>
 where
     NdProjectedAutomaton<D, P>: From<NdAutomaton<D>>,
@@ -140,11 +97,6 @@ impl<D: Dim> From<NdAutomaton<D>> for NdProjectedAutomaton<D, D> {
         }
     }
 }
-impl<D: Dim> Default for NdProjectedAutomaton<D, D> {
-    fn default() -> Self {
-        Self::from(NdAutomaton::default())
-    }
-}
 impl<D: Dim, P: Dim> AsNdSimulate for NdProjectedAutomaton<D, P> {
     fn as_ndsim(&self) -> &dyn NdSimulate {
         &self.automaton
@@ -176,7 +128,7 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
 /// A fully-fledged cellular automaton, including a grid (NdTree), rule
 /// (Simulation), and generation count.
 #[allow(missing_docs)]
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<D>,
     pub sim: Arc<Mutex<Simulation<D>>>,
@@ -201,7 +153,15 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
     }
 }
 impl<D: Dim> NdAutomaton<D> {
-    /// Sets the simulation of this automaton.
+    /// Creates a new automaton with the given number of states.
+    pub fn with_state_count(state_count: usize) -> Self {
+        Self {
+            tree: NdTree::with_state_count(state_count),
+            sim: Default::default(),
+            generations: Default::default(),
+        }
+    }
+    /// Sets the simulation of the automaton.
     pub fn set_sim(&mut self, new_sim: Simulation<D>) {
         self.sim = Arc::new(Mutex::new(new_sim));
     }

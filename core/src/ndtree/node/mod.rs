@@ -1,7 +1,4 @@
-//! Individual nodes in an NdTree.
-//!
-//! TODO: explain more in-depth how nodes work, leaf vs. non-leaf, why layer < base_layer is
-//! allowed (and how they'll be GC'ed), etc.
+//! Individual nodes in an ND-tree.
 
 mod cache;
 pub mod cells;

@@ -28,7 +28,7 @@ fn make_cell_coords_set<D: Dim>(coords_vec: Vec<IVec<D>>) -> HashSet<BigVec<D>> 
 
 #[test]
 fn test_cgol() {
-    let mut grid = NdTree::new();
+    let mut grid = NdTree::with_state_count(2);
     let rule = crate::sim::rule::LIFE;
     let mut sim = Simulation::from(rule);
 

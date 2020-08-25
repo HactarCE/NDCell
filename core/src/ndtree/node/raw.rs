@@ -1,4 +1,6 @@
-//! Owned ND-tree node data structure.
+//! Owned ND-tree node.
+//!
+//! This is based loosely on `hlife_algo.cpp` in Golly.
 
 use std::hash::Hash;
 use std::ptr::NonNull;
@@ -113,7 +115,7 @@ impl RawNode {
     /// inferred layer is above `repr.base_layer()`.
     pub fn new_leaf<D: Dim>(repr: &NodeRepr<D>, cells: Box<[u8]>) -> Self {
         let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid leaf node cell count");
-        assert!(layer < repr.base_layer());
+        assert!(layer <= repr.base_layer());
         for &cell in &*cells {
             assert!((cell as usize) < repr.state_count());
         }

@@ -69,7 +69,7 @@ pub trait Node<'cache, D: Dim>: Copy {
     fn assert_same_cache<'a>(self, other: impl Node<'a, D>) {
         assert!(
             std::ptr::eq(self.cache(), other.cache()),
-            "Attempt to operate on nodes from different caches"
+            "Attempt to operate on nodes from different caches",
         );
     }
 
@@ -163,20 +163,20 @@ pub trait Node<'cache, D: Dim>: Copy {
         todo!("Compute population")
     }
 
-    /// Subdivides this node into 2^NDIM smaller nodes at one layer lower. If
-    /// the node is only a single cell, returns `Err()` containing that cell
-    /// state.
+    /// Subdivides the node into 2^NDIM smaller nodes at one layer lower. If the
+    /// node is only a single cell, returns `Err()` containing that cell state.
     #[inline]
     fn subdivide(self) -> Result<Vec<NodeRef<'cache, D>>, u8> {
         self.cache_access().subdivide(self)
     }
     /// Creates a node one layer lower containing the contents of the center of
-    /// this node.
+    /// the node.
     #[inline]
     fn centered_inner(self) -> Result<NodeRef<'cache, D>, ()> {
         self.cache_access().centered_inner(self)
     }
-    /// Creates a node identical to this one except with one cell modified.
+    /// Creates an identical node except with the cell at the given position
+    /// (modulo the node length along each axis) modified.
     #[inline]
     fn set_cell(self, pos: &BigVec<D>, cell_state: u8) -> NodeRef<'cache, D> {
         self.cache_access().set_cell(self, pos, cell_state)
@@ -371,23 +371,20 @@ impl<'cache, D: Dim> NonLeafNodeRef<'cache, D> {
     pub fn child_with_pos(self, pos: &BigVec<D>) -> NodeRef<'cache, D> {
         self.child_at_index(self.layer().non_leaf_child_index(pos))
     }
-    /// Returns a reference to the grandchild node at the given index wrapped in
-    /// `Ok`, or the child that would contain it wrapped in `Err` if this node's
-    /// children are leaf nodes.
+    /// Returns a reference to the grandchild node at the given index.
     ///
     /// # Panics
     ///
     /// This method panics if the index is not between 0 and 4^NDIM (exclusive).
     #[inline]
-    pub fn grandchild_at_index(
-        self,
-        index: usize,
-    ) -> Result<NodeRef<'cache, D>, LeafNodeRef<'cache, D>> {
+    pub fn grandchild_at_index(self, index: usize) -> NodeRef<'cache, D> {
         assert!(index < D::BRANCHING_FACTOR * D::BRANCHING_FACTOR);
         let (child_index, grandchild_index) = split_grandchild_index::<D>(index);
         match self.child_at_index(child_index).as_enum() {
-            NodeRefEnum::Leaf(node) => Err(node),
-            NodeRefEnum::NonLeaf(node) => Ok(node.child_at_index(grandchild_index)),
+            // TODO: optimize by only creating the child requested, not all
+            // 2^NDIM
+            NodeRefEnum::Leaf(node) => node.subdivide().unwrap()[grandchild_index],
+            NodeRefEnum::NonLeaf(node) => node.child_at_index(grandchild_index),
         }
     }
 }

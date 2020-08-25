@@ -1,4 +1,13 @@
 //! N-dimensional generalization of quadtrees.
+//!
+//! To store an infinite N-dimensional universe, we start with power-of-2-sized
+//! hypercubes of cells, which are stored in a flat array (see the crate root
+//! documentation for more details). To build larger universes, we combine
+//! 2^NDIM of these hypercubes into a hypercube twice the size. For example, in
+//! 2D a 128x128 hypercube consists of four 64x64 hypercubes.
+//!
+//! Each of these hypercubes is stored in a **node**. See the `ndtree::node`
+//! documentation for more details.
 
 use itertools::Itertools;
 use std::fmt;
@@ -55,19 +64,16 @@ where
     }
 }
 
-impl<D: Dim> Default for NdTree<D> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<D: Dim> NdTree<D> {
-    /// Constructs a new empty NdTree with an empty node cache centered on the
-    /// origin.
-    pub fn new() -> Self {
-        Self::from_cache(Arc::new(NodeCache::default()))
+    /// Creates a new empty ND-tree using a new node cache with the given state
+    /// count.
+    pub fn with_state_count(state_count: usize) -> Self {
+        let repr = NodeRepr::with_state_count(state_count);
+        let cache = Arc::new(NodeCache::with_repr(repr));
+        Self::with_cache(cache)
     }
-    pub fn from_cache(node_cache: Arc<NodeCache<D>>) -> Self {
+    /// Creates a new empty ND-tree using the given node cache.
+    pub fn with_cache(node_cache: Arc<NodeCache<D>>) -> Self {
         let node_access = node_cache.node_access();
         let root_ref = node_access.get_empty_base();
         let root = ArcNode::new(Arc::clone(&node_cache), root_ref);
@@ -135,25 +141,19 @@ impl<D: Dim> NdTree<D> {
         let empty_node = node_access.get_empty(root.layer().child_layer());
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         let new_root = self.new_arc_node(
-            node_access.join_nodes(
-                root.subdivide()
-                    .unwrap()
-                    .into_iter()
-                    .enumerate()
-                    .map(|(child_index, subcube)| {
-                        // Invert the bits of the child index to get the index
-                        // of the opposite child.
-                        let opposite_child_index = child_index ^ child_index_bitmask;
-                        // All children of this node will be empty ...
-                        let mut children =
-                            vec![empty_node.as_raw(); D::BRANCHING_FACTOR].into_boxed_slice();
-                        // ... except for the opposite child, which will be
-                        // closest to the center of the NdTree.
-                        children[opposite_child_index] = subcube.as_raw();
-                        node_access.join_nodes(children).as_raw()
-                    })
-                    .collect_vec(),
-            ),
+            node_access.join_nodes(root.subdivide().unwrap().into_iter().enumerate().map(
+                |(child_index, subcube)| {
+                    // Invert the bits of the child index to get the index
+                    // of the opposite child.
+                    let opposite_child_index = child_index ^ child_index_bitmask;
+                    // All children of this node will be empty ...
+                    let mut children = vec![empty_node; D::BRANCHING_FACTOR];
+                    // ... except for the opposite child, which will be
+                    // closest to the center of the NdTree.
+                    children[opposite_child_index] = subcube;
+                    node_access.join_nodes(children)
+                },
+            )),
         );
         drop(node_access);
         self.set_root(new_root);
@@ -202,7 +202,7 @@ impl<D: Dim> NdTree<D> {
                     }
                 }
                 // Return the grandchild closest to the center.
-                Ok(grandchildren[opposite_child_index].as_raw())
+                Ok(grandchildren[opposite_child_index])
             })
             .try_collect()?;
         let new_root = self.new_arc_node(node_access.join_nodes(new_children));
@@ -291,19 +291,14 @@ impl<D: Dim> NdTree<D> {
             let grandchild_square = URect::span(new_min, new_max);
 
             // Fetch the 2^NDIM nodes that comprise the new node by iterating
-            // over the grandchild positions in grandchild_square.
+            // over the grandchild positions in `grandchild_square`.
             let grandchildren = root
                 .children()
                 .map(|child| node_access.subdivide(child).unwrap())
                 .collect_vec();
-            let new_children = grandchild_square
-                .iter()
-                .map(|grandchild_pos| {
-                    let child_index = Layer(1).leaf_cell_index(grandchild_pos.clone() >> 1);
-                    let grandchild_index = Layer(1).leaf_cell_index(grandchild_pos & 1);
-                    grandchildren[child_index][grandchild_index].as_raw()
-                })
-                .collect_vec();
+            let new_children = grandchild_square.iter().map(|grandchild_pos| {
+                root.grandchild_at_index(Layer(2).leaf_cell_index(grandchild_pos))
+            });
             // Compute the new offset.
             ret.offset += grandchild_square.min().to_bigvec() << grandchild_layer.to_u32();
 
@@ -315,132 +310,4 @@ impl<D: Dim> NdTree<D> {
 }
 
 #[cfg(test)]
-mod tests {
-    use proptest::prelude::*;
-    use std::collections::HashMap;
-
-    use super::*;
-    use crate::axis::Axis::{X, Y};
-    use crate::ndrect::IRect;
-    use crate::ndvec::{IVec2D, NdVec};
-    use crate::num::BigUint;
-
-    fn assert_ndtree_valid(
-        expected_cells: &HashMap<IVec2D, u8>,
-        ndtree: &mut NdTree2D,
-        cells_to_check: &Vec<IVec2D>,
-    ) {
-        let node_access = ndtree.node_access();
-        assert_eq!(
-            &BigUint::from(
-                expected_cells
-                    .iter()
-                    .filter(|(_, &cell_state)| cell_state != 0)
-                    .count()
-            ),
-            ndtree.root().population()
-        );
-        for pos in cells_to_check {
-            assert_eq!(
-                *expected_cells.get(pos).unwrap_or(&0),
-                ndtree.get_cell(&node_access, &pos.to_bigvec())
-            );
-        }
-    }
-
-    proptest! {
-        #![proptest_config(ProptestConfig {
-            max_shrink_iters: 4096,
-            ..Default::default()
-        })]
-
-        /// Tests set_cell() and get_cell() by comparing against a HashMap.
-        #[test]
-        fn test_ndtree_set_get(
-            cells_to_set: Vec<(IVec2D, u8)>,
-            mut cells_to_get: Vec<IVec2D>,
-        ) {
-            let mut ndtree = NdTree::new();
-            let mut hashmap = HashMap::new();
-            let cache = ndtree.cache();
-            let node_access = cache.node_access();
-            for (pos, state) in cells_to_set {
-                hashmap.insert(pos, state);
-                ndtree.set_cell(&node_access, &pos.to_bigvec(), state);
-                cells_to_get.push(pos);
-            }
-            assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
-            // Test that expansion preserves population and positions.
-            let old_layer = ndtree.layer();
-            while ndtree.layer() < Layer(5) {
-                ndtree.expand();
-                assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
-            }
-            // Test that shrinking actually shrinks.
-            ndtree.shrink();
-            assert!(ndtree.layer() <= old_layer);
-            // Test that shrinking preserves population and positions.
-            assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
-        }
-
-        /// Tests that NdTreeCache automatically caches identical nodes.
-
-        // TODO: does this work consistently now?
-        // TODO: move this to ndtree::node::cache
-        // #[ignore]
-        #[test]
-        fn test_ndtree_cache(
-            cells_to_set: Vec<(IVec2D, u8)>,
-        ) {
-            prop_assume!(!cells_to_set.is_empty());
-            let mut ndtree = NdTree::new();
-            let cache = ndtree.cache();
-            let node_access = cache.node_access();
-            for (pos, state) in cells_to_set {
-                ndtree.set_cell(&node_access, &(pos - 128).to_bigvec(), state);
-                ndtree.set_cell(&node_access, &(pos + 128).to_bigvec(), state);
-            }
-            let slice = ndtree.slice(&node_access);
-            let children = slice.subdivide().unwrap();
-            let subnode1 = &children[0];
-            let subnode2 = &children[children.len() - 1];
-            assert_eq!(subnode1, subnode2);
-            assert!(std::ptr::eq(subnode1.root.as_raw(), subnode2.root.as_raw()));
-        }
-
-        /// Tests NdTree::get_slice_containing().
-        #[test]
-        fn test_ndtree_get_slice_containing(
-            cells_to_set: Vec<(IVec2D, u8)>,
-            center: IVec2D,
-            x_radius in 0..20_isize,
-            y_radius in 0..20_isize,
-        ) {
-            let mut ndtree = NdTree::new();
-            let mut hashmap = HashMap::new();
-            let cache = ndtree.cache();
-            let node_access = cache.node_access();
-            for (pos, state) in cells_to_set {
-                hashmap.insert(pos, state);
-                ndtree.set_cell(&node_access, &pos.to_bigvec(), state);
-            }
-            let half_diag = NdVec([x_radius, y_radius]);
-            let rect = IRect::span(center - half_diag, center + half_diag).to_bigrect();
-            let slice = ndtree.get_slice_containing(&rect);
-            let slice_rect = slice.rect();
-            assert!(slice_rect.contains(&rect));
-            assert!(
-                slice.root.layer() == Layer(1)
-                || slice.root.big_len() < rect.len(X) * 2
-                || slice.root.big_len() < rect.len(Y) * 2
-            );
-            for (pos, state) in hashmap {
-                if slice_rect.contains(&pos.to_bigvec()) {
-                    if let Some(cell_state) = slice.get_cell(&pos.to_bigvec()) {
-                        assert_eq!(state, cell_state);
-                    }
-                }
-            }
-        }
-    }
-}
+mod tests;

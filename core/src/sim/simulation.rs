@@ -196,7 +196,7 @@ impl<D: Dim> Simulation<D> {
             let unsimmed_quarter_size_nodes: NdArray<NodeRef<'a, D>, D> = NdArray::from_flat_slice(
                 UVec::repeat(4_usize),
                 (0..(D::BRANCHING_FACTOR * D::BRANCHING_FACTOR))
-                    .map(|i| node.as_non_leaf().unwrap().grandchild_at_index(i).unwrap())
+                    .map(|i| node.as_non_leaf().unwrap().grandchild_at_index(i))
                     .collect_vec(),
             );
 
@@ -207,14 +207,11 @@ impl<D: Dim> Simulation<D> {
                 URect::<D>::span(UVec::origin(), UVec::repeat(2_usize))
                     .iter()
                     .map(|pos| {
-                        node.cache_access()
-                            .join_nodes(
-                                NdRect::span(pos.clone(), pos + 1)
-                                    .iter()
-                                    .map(|pos| unsimmed_quarter_size_nodes[pos].as_raw())
-                                    .collect_vec(),
-                            )
-                            .as_ref()
+                        node.cache_access().join_nodes(
+                            NdRect::span(pos.clone(), pos + 1)
+                                .iter()
+                                .map(|pos| unsimmed_quarter_size_nodes[pos]),
+                        )
                     })
                     .collect_vec(),
             );
@@ -227,35 +224,26 @@ impl<D: Dim> Simulation<D> {
 
             // 4. Combine adjacent nodes from step #3 to make a 2^D array of
             //    nodes at layer `L-1` and time `t/2`.
-            let half_simmed_half_size_nodes: NdArray<NodeRef<'a, D>, D> = NdArray::from_flat_slice(
-                UVec::repeat(2_usize),
+            let half_simmed_half_size_nodes =
                 URect::<D>::span(UVec::origin(), UVec::repeat(1_usize))
                     .iter()
                     .map(|pos| {
-                        node.cache_access()
-                            .join_nodes(
-                                NdRect::span(pos.clone(), pos + 1)
-                                    .iter()
-                                    .map(|pos| half_simmed_quarter_size_nodes[pos].as_raw())
-                                    .collect_vec(),
-                            )
-                            .as_ref()
-                    })
-                    .collect_vec(),
-            );
+                        node.cache_access().join_nodes(
+                            NdRect::span(pos.clone(), pos + 1)
+                                .iter()
+                                .map(|pos| half_simmed_quarter_size_nodes[pos]),
+                        )
+                    });
 
             // 5. Simulate each of those nodes to get a new node at layer `L-2`
             //    and time `t` (green squares).
-            let fully_simmed_quarter_size_nodes: NdArray<&RawNode, D> = half_simmed_half_size_nodes
-                .map(|&node| {
-                    self.advance_inner_node(node, &t_outer, transition_function)
-                        .as_raw()
-                });
+            let fully_simmed_quarter_size_nodes = half_simmed_half_size_nodes
+                .map(|node| self.advance_inner_node(node, &t_outer, transition_function));
 
             // 6. Combine the nodes from step #5 to make a new node at layer
             //    `L-1` and time `t` (blue square). This is the final result.
             node.cache_access()
-                .join_nodes(fully_simmed_quarter_size_nodes.into_flat_slice())
+                .join_nodes(fully_simmed_quarter_size_nodes)
                 .as_ref()
         };
 

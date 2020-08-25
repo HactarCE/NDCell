@@ -153,7 +153,7 @@ mod tests {
     use super::*;
 
     use crate::ndrect::{NdRect, URect4D};
-    use crate::ndtree::NodeCache;
+    use crate::ndtree::{NodeCache, NodeRepr};
     use crate::ndvec::{NdVec, UVec4D};
 
     /// Tests `flatten_idx()` and `unflatten_idx()`.
@@ -191,7 +191,7 @@ mod tests {
             0, 1, 1, 0, // Y = 2
             0, 0, 0, 0, // Y = 3
         ];
-        let cache = NodeCache::<Dim2D>::default();
+        let cache = NodeCache::<Dim2D>::with_repr(NodeRepr::with_state_count(2));
         let node_access = cache.node_access();
         let node = node_access.get_from_cells(flats_cells);
         let array = NdArray::from(node);

@@ -182,21 +182,23 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
     /// already in the cache; otherwise returns `None`.
     pub fn try_get<'s, 'n>(&'s self, raw_node: &'n RawNode) -> Option<NodeRef<'s, D>> {
         let raw_node_ref: dashmap::setref::one::Ref<Box<RawNode>, _> = self.nodes.get(raw_node)?;
-
-        // Internally, DashMap uses RwLocks to guard certain parts of the
-        // HashMap, so once we throw away the DashMap::setref::one::Ref the
-        // RwLock guard is released and the reference to the data inside there
+        // Internally, `DashMap` uses `RwLocks` to guard certain parts of the
+        // HashMap, so once we throw away the `DashMap::setref::one::Ref` the
+        // `RwLock` guard is released and the reference to the data inside there
         // expires. But we know that **as long as there is a read handle on the
         // whole `NodeSet`, no nodes will be deleted** (or modified in a way
-        // that requires exclusive access). Even if the DashMap itself is
+        // that requires exclusive access). Even if the `DashMap` itself is
         // resized, the reference to the `RawNode` will remain valid because it
-        // is behind a `Box<T>`. That is why this node can live last as long as
-        // the reference to this `NodeCacheAccess` lives, and why this
-        // transmutation is safe.
-        let raw_node_ref =
-            unsafe { std::mem::transmute::<&'_ RawNode, &'s RawNode>(&**raw_node_ref) };
-
-        Some(unsafe { NodeRef::new(self.cache, self, raw_node_ref) })
+        // is behind a `Box`. That is why this node can live last as long as the
+        // reference to this `NodeCacheAccess` lives, and why `NodeRef::new` can
+        // safely extend the lifetime to `'s`.
+        Some(unsafe {
+            NodeRef::new(
+                self.cache,
+                self,
+                NonNull::new(&**raw_node_ref as *const _ as *mut _).unwrap(),
+            )
+        })
     }
     /// Returns a reference to the canonical instance of the given node, adding
     /// it to the cache if one does not exist.

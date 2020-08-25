@@ -17,5 +17,5 @@ pub mod utils;
 
 pub use cache::{ArcNode, NodeCache, NodeCacheAccess, NodeHasher};
 pub use raw::{NodeFlags, RawNode};
-pub use refs::{LeafNodeRef, Node, NodeChildren, NodeRef, NodeRefEnum, NonLeafNodeRef};
+pub use refs::{LeafNodeRef, Node, NodeChildrenIter, NodeRef, NodeRefEnum, NonLeafNodeRef};
 pub use repr::{Layer, NodeRepr};

@@ -195,14 +195,8 @@ impl<D: Dim> Simulation<D> {
             //    at time `0`.
             let unsimmed_quarter_size_nodes: NdArray<NodeRef<'a, D>, D> = NdArray::from_flat_slice(
                 UVec::repeat(4_usize),
-                URect::<D>::span(UVec::origin(), UVec::repeat(3_usize))
-                    .iter()
-                    .map(|pos| {
-                        node.as_non_leaf()
-                            .unwrap()
-                            .grandchild_at_index(Layer(2).leaf_cell_index(pos))
-                            .unwrap()
-                    })
+                (0..(D::BRANCHING_FACTOR * D::BRANCHING_FACTOR))
+                    .map(|i| node.as_non_leaf().unwrap().grandchild_at_index(i).unwrap())
                     .collect_vec(),
             );
 

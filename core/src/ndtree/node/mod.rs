@@ -1,19 +1,13 @@
 //! Individual nodes in an NdTree.
 //!
-//! This is based somewhat on hlife_algo.cpp in Golly.
-//!
-//! TODO: explain more in-depth how nodes work, why layer < base_layer is
+//! TODO: explain more in-depth how nodes work, leaf vs. non-leaf, why layer < base_layer is
 //! allowed (and how they'll be GC'ed), etc.
 
-//! Individual nodes in an NdTree.
-
 mod cache;
+pub mod cells;
 mod raw;
 mod refs;
 mod repr;
-pub mod utils;
-
-// TODO: try to get rid of utils
 
 pub use cache::{ArcNode, NodeCache, NodeCacheAccess, NodeHasher};
 pub use raw::{NodeFlags, RawNode};

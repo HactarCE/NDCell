@@ -90,7 +90,7 @@ impl<D: Dim> NodeRepr<D> {
 /// `Layer`, which is the base-2 log of the number of cells along each axis in
 /// the node. For example, a 3D node at `Layer(5)` contains a 32x32x32 cube of
 /// cells. In the case of leaf nodes, those cells are stored in one array (see
-/// the crate's root documentation for more on that). Non-leaf nodes contain
+/// the crate's root documentation for more details). Non-leaf nodes contain
 /// pointers to 2^NDIM nodes one layer lower.
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[repr(transparent)]

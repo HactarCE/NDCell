@@ -4,7 +4,7 @@
 Statements
 **********
 
-Several statements involve boolean conversion; for more on that, see :ref:`boolean-conversion`.
+Several statements involve boolean conversion; for more details, see :ref:`boolean-conversion`.
 
 .. contents::
    :local:

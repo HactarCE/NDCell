@@ -135,9 +135,9 @@ impl Layer {
     /// `None` if one does not exist.
     #[inline]
     pub fn from_num_cells<D: Dim>(num_cells: usize) -> Option<Self> {
-        let len_log_2 = num_cells.trailing_zeros() / D::NDIM as u32;
-        if 1 << len_log_2 == num_cells {
-            Some(Self(len_log_2))
+        let ret = Self(num_cells.trailing_zeros() / D::NDIM as u32);
+        if num_cells == ret.num_cells::<D>().unwrap() {
+            Some(ret)
         } else {
             None
         }

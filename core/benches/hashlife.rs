@@ -8,8 +8,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         180b2o$179bo$183b4o$182bo3bo$186bo$185bo$175bo$176bo$170bo5bo$171b6o!",
     )
     .unwrap();
-    c.bench_function("Gott's Dots 4096 gens", |b| {
-        b.iter(|| run_simulation(black_box(&gotts_dots), 4096, 4))
+    c.bench_function("Gott's Dots 64 gens", |b| {
+        b.iter(|| run_simulation(black_box(&gotts_dots), 64, 4))
     });
 
     let ggg = Automaton2D::from_rle(
@@ -19,8 +19,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         $26bobo!",
     )
     .unwrap();
-    c.bench_function("Gosper's Glider Gun 4096 gens", |b| {
-        b.iter(|| run_simulation(black_box(&ggg), 4096, 4))
+    c.bench_function("Gosper's Glider Gun 1024 gens", |b| {
+        b.iter(|| run_simulation(black_box(&ggg), 1024, 4))
     });
 }
 

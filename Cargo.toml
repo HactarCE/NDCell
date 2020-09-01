@@ -1,2 +1,5 @@
 [workspace]
-members = [ "core", "lang", "ui" ]
+members = [ "core", "lang", "ui", "testing" ]
+
+[profile.release]
+debug = true

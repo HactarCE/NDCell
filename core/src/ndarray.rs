@@ -5,7 +5,7 @@ use std::ops::{Index, IndexMut};
 
 use crate::dim::*;
 use crate::ndrect::URect;
-use crate::ndtree::{NodeRef, NodeRefTrait};
+use crate::ndtree::{Layer, NodeRef, NodeRefEnum, NodeRefTrait};
 use crate::ndvec::UVec;
 use crate::num::ToPrimitive;
 
@@ -16,29 +16,6 @@ use crate::num::ToPrimitive;
 pub struct NdArray<T, D: Dim> {
     size: UVec<D>,
     data: Box<[T]>,
-}
-
-impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
-    /// Creates an `NdArray` from the cells in an `ndtree::Node`.
-    fn from(node: NodeRef<'a, D>) -> Self {
-        let count = node
-            .big_num_cells()
-            .to_usize()
-            .expect("Cannot make NdArray using such a large node");
-        let size = UVec::repeat(node.big_len().to_usize().unwrap());
-
-        let mut data = Vec::with_capacity(count);
-        for idx in 0..count {
-            // TODO: Do this in a way that doesn't recompute indices and revisit
-            // nodes and then benchmark to see if that's faster, since this
-            // function is called during simulation.
-            data.push(node.cell_at_pos(&unflatten_idx(size.clone(), idx).to_bigvec()));
-        }
-        assert_eq!(count, data.len());
-        let data = data.into_boxed_slice();
-
-        Self { size, data }
-    }
 }
 
 impl<T, D: Dim> Index<UVec<D>> for NdArray<T, D> {
@@ -116,6 +93,47 @@ impl<T, D: Dim> NdArray<T, D> {
     /// Returns the index into `data` corresponding to a `UVec` position.
     fn flatten_idx(&self, pos: UVec<D>) -> usize {
         flatten_idx(self.size.clone(), pos)
+    }
+}
+
+impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
+    /// Creates an `NdArray` from the cells in an `ndtree::Node`.
+    fn from(node: NodeRef<'a, D>) -> Self {
+        let count = node
+            .big_num_cells()
+            .to_usize()
+            .expect("Cannot make NdArray using such a large node");
+        let size = UVec::repeat(node.big_len().to_usize().unwrap());
+
+        // SAFETY: Uninitialized `u8` is safe because `u8` can be any byte
+        // value.
+        let data = vec![unsafe { std::mem::MaybeUninit::<u8>::uninit().assume_init() }; count]
+            .into_boxed_slice();
+        let mut ret = Self { size, data };
+        ret.populate_from_node(0, node);
+        ret
+    }
+}
+impl<D: Dim> NdArray<u8, D> {
+    fn populate_from_node(&mut self, base_idx: usize, node: NodeRef<'_, D>) {
+        match node.as_enum() {
+            NodeRefEnum::Leaf(n) => {
+                for (index, &cell) in n.cells().iter().enumerate() {
+                    let cell_vector_offset = n.cell_index_to_pos(index);
+                    let cell_array_offset = self.flatten_idx(cell_vector_offset);
+                    self.data[base_idx + cell_array_offset] = cell;
+                }
+            }
+            NodeRefEnum::NonLeaf(n) => {
+                for (index, child) in n.children().enumerate() {
+                    // TODO: consider adding child_offset() method on Layer
+                    let child_vector_offset =
+                        Layer(1).leaf_pos(index) << node.layer().child_layer().to_u32();
+                    let child_array_offset = self.flatten_idx(child_vector_offset);
+                    self.populate_from_node(base_idx + child_array_offset, child);
+                }
+            }
+        }
     }
 }
 

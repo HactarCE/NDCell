@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{Layer, Node, NodeRef};
+use super::{Layer, LeafNodeRef, NodeCow, NodeRefEnum, NodeRefTrait};
 use crate::axis::Axis::{X, Y};
 use crate::dim::*;
 use crate::ndrect::{BigRect, CanContain};
@@ -8,37 +8,18 @@ use crate::ndvec::{BigVec, NdVec};
 use crate::num::ToPrimitive;
 
 /// Immutable view into an NdTree.
-#[derive(Debug, Clone)]
-// TODO: note that a slice can be 1x1 while a tree cannot
-pub struct NdTreeSlice<'cache, D: Dim> {
-    /// Root NdTreeNode of this slice.
-    pub root: NodeRef<'cache, D>,
+///
+/// Note that like an `NdTree`, `NdTreeSlice` cannot be smaller than a base node.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NdTreeSlice<'node, D: Dim> {
+    /// Root node.
+    pub root: NodeCow<'node, D>,
     /// Position of the lower bound of the root node.
     pub offset: BigVec<D>,
 }
-// TODO: derive these instead
-impl<D: Dim> PartialEq for NdTreeSlice<'_, D> {
-    fn eq(&self, other: &Self) -> bool {
-        self.root == other.root && self.offset == other.offset
-    }
-}
-impl<D: Dim> Eq for NdTreeSlice<'_, D> {}
-
-/// A 1D grid represented as a bintree.
-pub type NdTreeSlice1D<'cache> = NdTreeSlice<'cache, Dim1D>;
-/// A 2D grid represented as a quadtree.
-pub type NdTreeSlice2D<'cache> = NdTreeSlice<'cache, Dim2D>;
-/// A 3D grid represented as an octree.
-pub type NdTreeSlice3D<'cache> = NdTreeSlice<'cache, Dim3D>;
-/// A 4D grid represented as a tree with nodes of degree 16.
-pub type NdTreeSlice4D<'cache> = NdTreeSlice<'cache, Dim4D>;
-/// A 5D grid represented as a tree with nodes of degree 32.
-pub type NdTreeSlice5D<'cache> = NdTreeSlice<'cache, Dim5D>;
-/// A 6D grid represented as a tree with nodes of degree 64.
-pub type NdTreeSlice6D<'cache> = NdTreeSlice<'cache, Dim6D>;
 
 impl fmt::Display for NdTreeSlice<'_, Dim2D> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.root.layer() > Layer(8) {
             writeln!(f, "Node larger than 256x256")?;
             return Ok(());
@@ -59,25 +40,24 @@ impl fmt::Display for NdTreeSlice<'_, Dim2D> {
     }
 }
 
-impl<'cache, D: Dim> NdTreeSlice<'cache, D> {
-    pub fn with_offset(root: NodeRef<'cache, D>, offset: BigVec<D>) -> Self {
-        todo!("document");
-        Self { root, offset }
-    }
-
-    /// Returns the NdRect bounding this slice.
+impl<'node, D: Dim> NdTreeSlice<'node, D> {
+    /// Returns the NdRect bounding the slice.
+    #[inline]
     pub fn rect(&self) -> BigRect<D> {
         self.root.big_rect() + &self.offset
     }
-    /// Returns the minimum position in this NdTree.
+    /// Returns the minimum position in the slice.
+    #[inline]
     pub fn min(&self) -> BigVec<D> {
         self.rect().min()
     }
-    /// Returns the maximum position in this NdTree.
+    /// Returns the maximum position in the slice.
+    #[inline]
     pub fn max(&self) -> BigVec<D> {
         self.rect().max()
     }
-    /// Returns the vector size of this NdTree.
+    /// Returns the vector size of the slice.
+    #[inline]
     pub fn size(&self) -> BigVec<D> {
         self.rect().size()
     }
@@ -92,18 +72,37 @@ impl<'cache, D: Dim> NdTreeSlice<'cache, D> {
         }
     }
 
-    pub fn subdivide(&self) -> Result<Vec<NdTreeSlice<D>>, (u8, &BigVec<D>)> {
-        Ok(self
-            .root
-            .subdivide()
-            .map_err(|cell| (cell, &self.offset))?
-            .into_iter()
-            .enumerate()
-            .map(move |(child_index, subcube)| {
-                let child_offset =
-                    Layer(1).leaf_pos(child_index).to_bigvec() << subcube.layer().to_u32();
-                Self::with_offset(subcube, child_offset + &self.offset)
-            })
-            .collect())
+    /// Subdivides the slice into 2^NDIM slices half the size. If the slice
+    /// contains only one cell, returns `Err()` containing that cell and its
+    /// position.
+    pub fn subdivide<'a: 'node>(
+        &'a self,
+    ) -> Result<Vec<NdTreeSlice<'a, D>>, (LeafNodeRef<'a, D>, &'a BigVec<D>)> {
+        match self.root.as_enum() {
+            NodeRefEnum::Leaf(n) => Err((n, &self.offset)),
+            NodeRefEnum::NonLeaf(n) => {
+                Ok(n.children()
+                    .enumerate()
+                    .map(move |(child_index, subcube)| {
+                        // TODO: consider adding child_offset() method on Layer
+                        let child_offset =
+                            Layer(1).leaf_pos(child_index).to_bigvec() << subcube.layer().to_u32();
+                        Self {
+                            root: subcube.into(),
+                            offset: child_offset + &self.offset,
+                        }
+                    })
+                    .collect())
+            }
+        }
+    }
+
+    /// Converts the root node to an `ArcNode`, making this slice owned.
+    #[inline]
+    pub fn into_arc<'a>(self) -> NdTreeSlice<'a, D> {
+        NdTreeSlice {
+            root: self.root.into_arc().into(),
+            offset: self.offset,
+        }
     }
 }

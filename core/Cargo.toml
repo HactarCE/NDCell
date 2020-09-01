@@ -5,7 +5,7 @@ authors = ["HactarCE <6060305+HactarCE@users.noreply.github.com>"]
 edition = "2018"
 
 [dependencies]
-dashmap = "3.11"
+arc-swap = "0.4"
 enum_dispatch = "0.3"
 itertools = "0.9"
 noisy_float = "0.1"
@@ -15,6 +15,7 @@ pest = "2.1"
 pest_derive = "2.1"
 regex = "1"
 seahash = "4.0"
+weak-table = "0.3"
 
 [dev-dependencies]
 criterion = "0.3"

@@ -6,7 +6,7 @@ pub trait NdSimulate {
     /// Returns the number of dimensions of the underlying automaton.
     fn ndim(&self) -> usize;
     /// Returns the number of live cells in the simulation.
-    fn population(&self) -> &BigUint;
+    fn population(&self) -> BigUint;
     /// Returns the number of generations that have elapsed in the simulation.
     fn generation_count(&self) -> &BigInt;
     /// Sets the number of generations that have elapsed in the simulation.
@@ -34,7 +34,7 @@ where
     fn ndim(&self) -> usize {
         self.as_ndsim().ndim()
     }
-    fn population(&self) -> &BigUint {
+    fn population(&self) -> BigUint {
         self.as_ndsim().population()
     }
     fn generation_count(&self) -> &BigInt {

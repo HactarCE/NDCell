@@ -1,86 +1,11 @@
-//! Representation of nodes and wrapper type representing a node layer.
-//!
-//! The `Layer` wrapper type is here because its methods are very much related
-//! to how nodes are stored rather than dealing with their actual contents; thus
-//! it's mostly related to the representation of ND-tree nodes. Also `raw.rs`
-//! would become much longer than this file and it doesn't need another struct.
-
-use std::marker::PhantomData;
+//! Wrapper type representing the layer of a node.
 
 use crate::dim::Dim;
 use crate::ndrect::{BigRect, URect};
 use crate::ndvec::{BigVec, UVec};
 use crate::num::{BigInt, One};
 
-/// Arbitrary limit of 64 bytes to represent the cells in each leaf node.
-///
-/// Since each cell takes up a single byte (though this may change in the
-/// future), this results in the following leaf node size for each number of
-/// dimensions:
-///
-/// - 1D => 64
-/// - 2D => 8x8
-/// - 3D => 4x4x4
-/// - 4D => 2x2x2x2
-/// - 5D => 2x2x2x2x2
-/// - 6D => 2x2x2x2x2x2
-///
-/// Even if this value is lowered, 2x2 (or rather, 2^N) is always the minimum
-/// size of a leaf node.
-const MAX_CELLS_PER_LEAF: usize = 64;
-
-/// Precomputed description of the format used for NdTree nodes.
-///
-/// This is shared for a whole node cache so that individual nodes and node
-/// pointers can omit this information.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct NodeRepr<D: Dim> {
-    /// Number of cell states.
-    state_count: usize,
-    /// Largest layer at which nodes contain cells rather than smaller nodes. In
-    /// a large enough ND-tree, this is the minimum node layer.
-    base_layer: Layer,
-    /// Phantom data for polymorphism.
-    _marker: PhantomData<D>,
-}
-impl<D: Dim> NodeRepr<D> {
-    /// Creates the node representation for a simulation with the given number
-    /// of dimensions and cell states.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the state count is not within the range `1..=256`.
-    pub fn with_state_count(state_count: usize) -> Self {
-        // Fit as many cells as possible without exceeding MAX_BYTES_PER_LEAF.
-        let base_layer = (2..)
-            .map(Layer)
-            .take_while(|&base_layer| base_layer.num_cells::<D>().unwrap() < MAX_CELLS_PER_LEAF)
-            .last()
-            // If all the options are too big, use a 2x2 (layer = 1) base node.
-            .unwrap_or(Layer(1));
-
-        Self {
-            base_layer,
-            state_count,
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns the number of possible cell states, which is always in the range
-    /// `1..=256`.
-    #[inline]
-    pub fn state_count(self) -> usize {
-        self.state_count
-    }
-
-    /// Returns the largest layer at which ND-tree nodes should be leaf nodes
-    /// containing raw cell data; all larger nodes should be non-leaf nodes
-    /// containing 2^NDIM smaller nodes.
-    #[inline]
-    pub fn base_layer(self) -> Layer {
-        self.base_layer
-    }
-}
+// TODO: consider moving `Layer` into `ndtree::node::raw`.
 
 /// Layer of a node (32-bit unsigned integer).
 ///
@@ -93,16 +18,16 @@ impl<D: Dim> NodeRepr<D> {
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[repr(transparent)]
 pub struct Layer(pub u32);
-impl Into<u32> for Layer {
+impl From<Layer> for u32 {
     #[inline]
-    fn into(self) -> u32 {
-        self.to_u32()
+    fn from(l: Layer) -> u32 {
+        l.to_u32()
     }
 }
-impl Into<usize> for Layer {
+impl From<Layer> for usize {
     #[inline]
-    fn into(self) -> usize {
-        self.to_usize()
+    fn from(l: Layer) -> usize {
+        l.to_usize()
     }
 }
 impl std::ops::Add for Layer {
@@ -142,6 +67,29 @@ impl Layer {
         } else {
             None
         }
+    }
+
+    /// Returns the highest layer at which leaf nodes are allowed.
+    pub fn base<D: Dim>() -> Self {
+        // Let's set an arbitrary limit of 64 bytes to represent the cells in
+        // each leaf node. Since each cell takes up a single byte, this results
+        // in the following maximum leaf node size for each dimensionality:
+        match_ndim!(match D {
+            1 => Layer(6), // 64          = 64 bytes
+            2 => Layer(3), // 8x8         = 64 bytes
+            3 => Layer(2), // 4x4x4       = 64 bytes
+            4 => Layer(1), // 2x2x2x2     = 16 bytes
+            5 => Layer(1), // 2x2x2x2x2   = 32 bytes
+            6 => Layer(1), // 2x2x2x2x2x2 = 64 bytes
+        })
+    }
+    /// Returns `true` if a node at this layer would be a leaf node.
+    pub fn is_leaf<D: Dim>(self) -> bool {
+        self <= Self::base::<D>()
+    }
+    /// Returns `true` if a node at this layer would be a non-leaf node.
+    pub fn is_non_leaf<D: Dim>(self) -> bool {
+        !self.is_leaf::<D>()
     }
 
     /// Returns the layer of this node's children.

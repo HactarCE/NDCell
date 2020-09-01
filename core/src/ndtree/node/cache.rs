@@ -3,230 +3,207 @@
 //! Reading from and adding to the cache only requires a &NodeCache, but garbage
 //! collection requires a &mut NodeCache.
 
-use dashmap::DashSet;
 use itertools::Itertools;
-use parking_lot::{RwLock, RwLockReadGuard};
 use seahash::SeaHasher;
-use std::collections::HashMap;
 use std::fmt;
-use std::hash::BuildHasherDefault;
-use std::ptr::NonNull;
-use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
-use std::sync::{Arc, Mutex};
+use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
+use std::ops::Deref;
+use std::sync::{Arc, Mutex, Weak};
+use weak_table::WeakHashSet;
 
-use super::{Layer, Node, NodeRef, NodeRefEnum, NodeRepr, RawNode};
+use super::{Layer, NodeRef, NodeRefEnum, NodeRefTrait, RawNode};
 use crate::dim::Dim;
 use crate::ndvec::BigVec;
-use crate::num::BigUint;
 
 /// Fast hasher used for nodes.
 pub type NodeHasher = BuildHasherDefault<SeaHasher>;
 
-type NodeSet = DashSet<Box<RawNode>, NodeHasher>;
-type ArcNodeMap = HashMap<NonNull<RawNode>, Box<AtomicUsize>, NodeHasher>;
+type NodeShard<D> = Mutex<WeakHashSet<Weak<RawNode<D>>, NodeHasher>>;
+// TODO: measure perf with different shard counts
+const SHARD_COUNT: usize = 64;
+
+const CACHE_UNLOCK_ERROR_MSG: &str = "Failed to unlock node cache mutex";
 
 /// Cache of ND-tree nodes for a single simulation.
-#[derive(Debug)]
-pub struct NodeCache<D: Dim> {
-    /// Information about the representation of a node.
-    node_repr: NodeRepr<D>,
-
+pub struct NodeCacheInner<D: Dim> {
     /// Set of canonical instances of nodes.
     ///
-    /// A node must not be deleted from this set if it is any of the following:
-    /// - the child of another node in the set
-    /// - the HashLife result of another node in the set
-    /// - present in `arc_nodes`
-    nodes: RwLock<NodeSet>,
-
-    /// Map of nodes to atomic reference counts. This only includes "owned"
-    /// `ArcNode`s, not references or other non-leaf nodes.
+    /// A node must only be deleted from this set if there are no "strong"
+    /// (`Arc<T>`) references to it, and this set must hold the only "weak"
+    /// reference.
     ///
-    /// If you need access to `nodes` and `arc_nodes` at the same time, always
-    /// acquire `arc_nodes` *before* `nodes` to prevent deadlocks.
-    arc_nodes: Mutex<ArcNodeMap>,
+    /// The set is split into many "shards" to reduce contention (a la
+    /// https://docs.rs/crate/sharded/0.0.5). We use `Mutex` instead of `RwLock`
+    /// because any reader could turn into a writer if the node it's looking for
+    /// is not present.
+    node_shards: Box<[NodeShard<D>]>,
+    /// Cache of empty nodes at each layer. The index of the vector is the layer
+    /// of the node.
+    empty_nodes: Mutex<Vec<Arc<RawNode<D>>>>,
+}
+impl<D: Dim> fmt::Debug for NodeCacheInner<D> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // On nightly, we could `#[derive(Debug)]`. :(
+        write!(f, "node_shards=")?;
+        fmt::Debug::fmt(&self.node_shards[..], f)?;
+        Ok(())
+    }
+}
+impl<D: Dim> Default for NodeCacheInner<D> {
+    fn default() -> Self {
+        // We should be able to `#[derive(Default)]` but `Default` isn't
+        // implemented for arrays longer than 32 elements, because that needs
+        // const generics. :(
+        Self {
+            node_shards: std::iter::repeat_with(|| NodeShard::default())
+                .take(SHARD_COUNT)
+                .collect_vec()
+                .into_boxed_slice(),
+            empty_nodes: Mutex::new(vec![]),
+        }
+    }
+}
+
+/// Atomic reference-counted pointer to ND-tree node cache.
+#[derive(Default, Clone)]
+pub struct NodeCache<D: Dim>(Arc<NodeCacheInner<D>>);
+impl<D: Dim> fmt::Debug for NodeCache<D> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#p}", self.0)
+    }
+}
+impl<D: Dim> Deref for NodeCache<D> {
+    type Target = NodeCacheInner<D>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl<D: Dim> PartialEq for NodeCache<D> {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl<D: Dim> Eq for NodeCache<D> {}
+impl<D: Dim> Hash for NodeCache<D> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::ptr::hash(Arc::as_ptr(&self.0), state)
+    }
 }
 impl<D: Dim> NodeCache<D> {
-    /// Creates a node cache for cells with the given number of states.
-    pub fn with_repr(node_repr: NodeRepr<D>) -> Self {
-        Self {
-            node_repr,
-            nodes: RwLock::new(NodeSet::default()),
-            arc_nodes: Mutex::new(ArcNodeMap::default()),
-        }
-    }
-
-    /// Returns the format of nodes stored in the cache.
-    pub fn node_repr(&self) -> &NodeRepr<D> {
-        &self.node_repr
-    }
-
-    /// Returns a guard which grants access to nodes in the cache.
-    pub fn node_access<'a>(&'a self) -> NodeCacheAccess<'a, D> {
-        NodeCacheAccess {
-            cache: self,
-            nodes: self.nodes.read(),
-        }
-    }
-
-    /// Does a "strong" garbage collection. This invalidates the cache and then
-    /// removes all nodes that are not referenced by an ArcNode or reachable
-    /// from one as children or HashLife results.
-    ///
-    /// (Another thread may compute the result of a node as the HashLife results
-    /// are being invalidated.)
+    /// Does a "strong" garbage collection. This invalidates all HashLife
+    /// results, deletes all unused empty nodes, and then removes all nodes not
+    /// "strongly" referenced.
     pub fn strong_gc(&self) {
         self.invalidate_results();
+        self.clear_unused_empty_nodes();
         self.weak_gc();
     }
     /// Does a "weak" garbage collection. This removes all nodes that are not
-    /// referenced by an ArcNode or reachable from one as children or HashLife
-    /// results.
+    /// "strongly" referenced and have already been dropped but still have an
+    /// entry in the node set.
+    ///
+    /// Another thread may add more (unused) nodes while this method is running,
+    /// but otherwise this operation is idempotent.
     pub fn weak_gc(&self) {
-        // It's very important that no new ArcNodes are handed out during GC,
-        // since we're relying on them to figure out which nodes to keep.
-        // Existing nodes can have their reference count changed, and even be
-        // dropped, as long as no *new* nodes are added.
-        let mut arc_nodes = self.arc_nodes.lock().unwrap();
-
-        // Step #1: Delete ArcNodes with no references.
-        //
-        // We don't have to worry about anyone else modifying the atomic value
-        // while we're reading it, because if the reference count is zero then
-        // obviously no one has a reference to it.
-        arc_nodes.retain(|_k, v| v.load(Relaxed) > 0);
-
-        // Step #2: Mark nodes that are reachable from the ArcNodes.
-        //
-        // We lock the nodes set to prevent anyone adding results to nodes while
-        // we do this, because that might point from a node we've already marked
-        // to keep to a node that we would otherwise throw away.
-        let nodes = self.nodes.write();
-        arc_nodes
-            .keys()
-            .for_each(|ptr| unsafe { ptr.as_ref().mark_gc_keep_recursive(&self.node_repr) });
-
-        // Step #3: Drop all unmarked nodes and clear the marking. This is
-        // really the unsafe part.
-        nodes.retain(|raw_node| {
-            let node_flags = unsafe { raw_node.flags() };
-            // clear_gc() returns true if the node was marked and false if it
-            // wasn't.
-            !node_flags.clear_gc()
-        });
-
-        // All done! It is now safe to drop the guards.
-        drop(nodes);
-        drop(arc_nodes);
+        for shard in self.node_shards.iter() {
+            shard.lock().expect(CACHE_UNLOCK_ERROR_MSG).remove_expired();
+        }
     }
     /// Clears the HashLife results cache from every node.
     ///
     /// Note that another thread may add HashLife results to a node while this
     /// function is running.
     pub fn invalidate_results(&self) {
-        for raw_node in self.nodes.read().iter() {
-            raw_node.set_result(std::ptr::null());
+        for shard in self.node_shards.iter() {
+            for raw_node in shard.lock().expect(CACHE_UNLOCK_ERROR_MSG).iter() {
+                raw_node.set_result(None);
+            }
+        }
+    }
+    /// Clears empty nodes that have no other references.
+    pub fn clear_unused_empty_nodes(&self) {
+        let mut empty_nodes = self.empty_nodes.lock().expect(CACHE_UNLOCK_ERROR_MSG);
+        // Iterate in reverse so that we drop large nodes first (since larger
+        // nodes contain references to smaller ones).
+        while let Some(largest_empty_node) = empty_nodes.last() {
+            if Arc::strong_count(&largest_empty_node) == 1 {
+                // This is the only strong reference ... probably. It's ok if
+                // another thread grabs a reference to this node right now,
+                // because the node will still remain in `node_shards`, and it
+                // will be added back to `empty_nodes` next time someone calls
+                // `get_empty()` looking for it.
+
+                // But chances are that this is the only strong reference, so
+                // dropping it will drop the node and maybe free up some memory.
+                empty_nodes.pop();
+            } else {
+                // Someone else is using this node, and transitively all the
+                // ones below it (except maybe some leaf nodes, but those are
+                // tiny and finite).
+                break;
+            }
         }
     }
 
     /// Asserts that the node is from this cache.
-    fn assert_owns_node<'a>(&self, node: impl Node<'a, D>) {
-        assert!(
-            std::ptr::eq(self, node.cache()),
+    fn assert_owns_node<'n>(&self, node: impl NodeRefTrait<'n, D = D>) {
+        assert_eq!(
+            self,
+            node.cache(),
             "Attempt to operate on a node from a different cache",
         );
     }
-}
-
-/// Shared access to the node cache that allows reading existing nodes and
-/// adding new ones.
-///
-/// All methods that take `Node`s or `RawNode`s panic if the node is from a
-/// different cache.
-pub struct NodeCacheAccess<'cache, D: Dim> {
-    cache: &'cache NodeCache<D>,
-    nodes: RwLockReadGuard<'cache, DashSet<Box<RawNode>, NodeHasher>>,
-}
-impl<D: Dim> fmt::Debug for NodeCacheAccess<'_, D> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NodeCacheAccess")
-    }
-}
-impl<D: Dim> Clone for NodeCacheAccess<'_, D> {
-    fn clone(&self) -> Self {
-        self.cache.node_access()
-    }
-}
-impl<D: Dim> PartialEq for NodeCacheAccess<'_, D> {
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self, other)
-    }
-}
-impl<D: Dim> Eq for NodeCacheAccess<'_, D> {}
-impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
-    /// Returns the format of nodes stored in the cache.
-    pub fn node_repr(&self) -> &'cache NodeRepr<D> {
-        &self.cache.node_repr
-    }
 
     /// Returns the largest possible canonical leaf node containing only state #0.
-    pub fn get_empty_base<'s>(&'s self) -> NodeRef<'s, D> {
-        self.get_empty(self.node_repr().base_layer())
+    pub fn get_empty_base(&self) -> ArcNode<D> {
+        self.get_empty(Layer::base::<D>())
     }
     /// Returns the canonical node at the given layer containing only state #0.
-    pub fn get_empty<'s>(&'s self, layer: Layer) -> NodeRef<'s, D> {
-        // Try to do this in O(1) by just looking for an empty node at the right
-        // layer.
-        self.try_get(&unsafe { RawNode::new_empty_placeholder::<D>(layer) })
-            .unwrap_or_else(|| {
-                // If that fails, we have to actually make a new empty node.
-                if layer <= self.node_repr().base_layer() {
-                    // The node will be a leaf.
-                    self.get_from_cells(
-                        vec![0_u8; layer.num_cells::<D>().unwrap()].into_boxed_slice(),
-                    )
-                } else {
-                    // The node is not a leaf, so recurse to get the empty node
-                    // smaller than it and use that to form this one.
-                    self.join_nodes(std::iter::repeat(self.get_empty(layer.child_layer())))
-                }
-            })
+    pub fn get_empty(&self, layer: Layer) -> ArcNode<D> {
+        let mut empty_nodes = self.empty_nodes.lock().expect(CACHE_UNLOCK_ERROR_MSG);
+        // Add empty nodes until we have enough.
+        while empty_nodes.len() <= layer.to_usize() {
+            let next_layer = Layer(empty_nodes.len() as u32);
+            if next_layer.is_leaf::<D>() {
+                empty_nodes.push(self.get(RawNode::new_empty_leaf(next_layer)).into_raw());
+            } else {
+                let empty_node_children =
+                    vec![Arc::clone(empty_nodes.last().unwrap()); D::BRANCHING_FACTOR];
+                let new_empty_node = self.get(RawNode::new_non_leaf(
+                    empty_node_children.into_boxed_slice(),
+                ));
+                empty_nodes.push(new_empty_node.into_raw());
+            }
+        }
+        let ret = &empty_nodes[layer.to_usize()];
+        debug_assert_eq!(layer, ret.layer());
+        unsafe { NodeRef::new(self, ret) }.into()
     }
-    /// Returns a reference to the canonical instance of the given node if it
-    /// already in the cache; otherwise returns `None`.
-    pub fn try_get<'s, 'n>(&'s self, raw_node: &'n RawNode) -> Option<NodeRef<'s, D>> {
-        let raw_node_ref: dashmap::setref::one::Ref<'s, Box<RawNode>, _> =
-            self.nodes.get(raw_node)?;
-        // Internally, `DashMap` uses `RwLocks` to guard certain parts of the
-        // HashMap, so once we throw away the `DashMap::setref::one::Ref` the
-        // `RwLock` guard is released and the reference to the data inside there
-        // expires. But we know that **as long as there is a read handle on the
-        // whole `NodeSet`, no nodes will be deleted** (or modified in a way
-        // that requires exclusive access). Even if the `DashMap` itself is
-        // resized, the reference to the `RawNode` will remain valid because it
-        // is behind a `Box`. That is why this node can live last as long as the
-        // reference to this `NodeCacheAccess` lives, and why `NodeRef::new` can
-        // safely extend the lifetime to `'s`.
-        Some(unsafe {
-            NodeRef::new(
-                self.cache,
-                self,
-                NonNull::new(&**raw_node_ref as *const _ as *mut _).unwrap(),
-            )
-        })
-    }
-    /// Returns a reference to the canonical instance of the given node, adding
-    /// it to the cache if one does not exist.
-    pub fn get<'s>(&'s self, node: RawNode) -> NodeRef<'s, D> {
-        // This will not overwrite the node already in the cache. (See the test
-        // at the bottom of this file.) This call to Node::copy() is safe
-        // because we are either creating or searching for the canonical
-        // instance of the node -- we aren't going to let anyone else have this
-        // one unless it becomes the canonical instance.
-        self.nodes.insert(Box::new(unsafe { node.copy() }));
 
-        self.try_get(&node)
-            .expect("Node deleted without mutable access to cache")
+    /// Returns the canonical instance of a node, adding it to the cache if one
+    /// does not exist.
+    pub fn get(&self, raw_node: RawNode<D>) -> ArcNode<D> {
+        let mut hash = NodeHasher::default().build_hasher();
+        raw_node.hash(&mut hash);
+        // Hash a little extra, so that the hash here is distinct from the one used within the individual shard.
+        SHARD_COUNT.hash(&mut hash);
+
+        let shard_index = hash.finish() as usize % SHARD_COUNT;
+        let mut shard = self.node_shards[shard_index]
+            .lock()
+            .expect(CACHE_UNLOCK_ERROR_MSG);
+
+        // This is ugly, but there's just no API yet for inserting a key into a
+        // HashSet and immediately getting a reference back.
+        let raw_node = shard.get(&raw_node).unwrap_or_else(|| {
+            let n = Arc::new(raw_node);
+            shard.insert(Arc::clone(&n));
+            let x = shard.get(&n).unwrap();
+            x
+        });
+        unsafe { NodeRef::new(self, &raw_node) }.into()
     }
 
     /// Creates a new node by joining `children` together.
@@ -238,16 +215,15 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
     ///
     /// This method panics in debug mode if the children are not all at the same
     /// layer.
-    pub fn join_nodes<'s, 'n>(
-        &'s self,
-        children: impl IntoIterator<Item = NodeRef<'n, D>>,
-    ) -> NodeRef<'s, D> {
-        let node_repr = self.node_repr();
+    pub fn join_nodes<'n, N: Into<NodeCow<'n, D>>>(
+        &self,
+        children: impl IntoIterator<Item = N>,
+    ) -> ArcNode<D> {
         let children = children
             .into_iter()
-            .inspect(|&node| self.cache.assert_owns_node(node))
-            .map(Node::as_raw)
-            .take(D::BRANCHING_FACTOR)
+            .map(|x| x.into())
+            .inspect(|node| self.assert_owns_node(node))
+            .map(|node| Arc::clone(node.as_raw()))
             .collect_vec()
             .into_boxed_slice();
         assert_eq!(children.len(), D::BRANCHING_FACTOR);
@@ -256,30 +232,29 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
             debug_assert_eq!(child_layer, child.layer());
         }
 
-        if child_layer < node_repr.base_layer() {
+        if child_layer < Layer::base::<D>() {
             // Children are below the base layer, so make a leaf node by
             // combining the cells of the children.
             self.get_from_cells(super::cells::join::<D>(
                 &children
                     .iter()
-                    .map(|child| self.try_get(child).unwrap().as_leaf().unwrap().cells())
+                    .map(|child| child.cell_slice().unwrap())
                     .collect_vec(),
             ))
         } else {
             // Children are at or above the base layer, so just make a non-leaf
             // node pointing to them.
-            self.get(RawNode::new_non_leaf(node_repr, children))
+            self.get(RawNode::new_non_leaf(children))
         }
     }
     /// Creates a node containing the given cells.
-    pub fn get_from_cells<'s>(&'s self, cells: impl Into<Box<[u8]>>) -> NodeRef<'s, D> {
+    pub fn get_from_cells(&self, cells: impl Into<Box<[u8]>>) -> ArcNode<D> {
         let cells = cells.into();
-        let node_repr = self.node_repr();
         let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid cell count");
 
-        if layer <= node_repr.base_layer() {
+        if layer <= Layer::base::<D>() {
             // This node is at or below the base layer, so make a leaf node.
-            self.get(RawNode::new_leaf(node_repr, cells))
+            self.get(RawNode::new_leaf(cells))
         } else {
             // This node is above the base layer, so subdivide the cells into
             // smaller leaf nodes and make this a non-leaf node.
@@ -290,36 +265,56 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
             )
         }
     }
-    /// Subdivides the node into 2^NDIM smaller nodes at one layer lower. If the
-    /// node is only a single cell, returns `Err()` containing that cell state.
-    pub fn subdivide<'s: 'n, 'n>(
+
+    /// Returns one corner of the node at one layer lower. If the node is only a
+    /// single cell, returns `Err()` containing that cell state.
+    ///
+    /// The return value is borrowed if `node` is a non-leaf and owned if `node`
+    /// is a leaf.
+    ///
+    /// This is equivalent to taking one element of the result of `subdivide()`.
+    pub fn get_corner<'s: 'n, 'n>(
         &'s self,
-        node: impl Node<'n, D>,
-    ) -> Result<Vec<NodeRef<'n, D>>, u8> {
-        self.cache.assert_owns_node(node);
+        node: impl NodeRefTrait<'n, D = D>,
+        index: usize,
+    ) -> Result<NodeCow<'n, D>, u8> {
+        self.assert_owns_node(node);
 
         Ok(match node.as_enum() {
-            NodeRefEnum::Leaf(node) => super::cells::subdivide::<D>(node.cells())?
-                .map(|subcube| self.get_from_cells(subcube))
-                .collect(),
-            NodeRefEnum::NonLeaf(node) => node.children().collect(),
+            NodeRefEnum::Leaf(n) => self
+                .get_from_cells(super::cells::get_corner::<D>(n.cells(), index)?)
+                .into(),
+            NodeRefEnum::NonLeaf(n) => n.child_at_index(index).into(),
         })
+    }
+    /// Subdivides the node into 2^NDIM smaller nodes at one layer lower. If the
+    /// node is only a single cell, returns `Err()` containing that cell state.
+    ///
+    /// The return value is borrowed if `node` is a non-leaf and owned if `node`
+    /// is a leaf.
+    pub fn subdivide<'s: 'n, 'n>(
+        &'s self,
+        node: impl NodeRefTrait<'n, D = D>,
+    ) -> Result<Vec<NodeCow<'n, D>>, u8> {
+        (0..D::BRANCHING_FACTOR)
+            .map(|i| self.get_corner(node, i))
+            .try_collect()
     }
     /// Creates a node one layer lower containing the contents of the center of
     /// the node.
     ///
     /// If the node is below `Layer(2)`, returns `Err(())`.
-    pub fn centered_inner<'s, 'n>(&'s self, node: impl Node<'n, D>) -> Result<NodeRef<'s, D>, ()> {
-        self.cache.assert_owns_node(node);
+    pub fn centered_inner<'n>(&self, node: impl NodeRefTrait<'n, D = D>) -> Result<ArcNode<D>, ()> {
+        self.assert_owns_node(node);
 
         Ok(match node.as_enum() {
-            NodeRefEnum::Leaf(node) => {
-                self.get_from_cells(super::cells::shrink_centered::<D>(node.cells())?)
+            NodeRefEnum::Leaf(n) => {
+                self.get_from_cells(super::cells::shrink_centered::<D>(n.cells())?)
             }
-            NodeRefEnum::NonLeaf(node) => {
+            NodeRefEnum::NonLeaf(n) => {
                 let child_index_bitmask = D::BRANCHING_FACTOR - 1;
                 let new_children = self
-                    .subdivide(node)
+                    .subdivide(n)
                     .map_err(|_| ())?
                     .into_iter()
                     .enumerate()
@@ -330,9 +325,9 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
                         let opposite_child_index = child_index ^ child_index_bitmask;
                         // If any grandchild other than the one closest to the
                         // center is non-empty, then we can't shrink any more.
-                        let grandchildren = self.subdivide(child).unwrap();
+                        let mut grandchildren = child.subdivide().unwrap();
                         // Return the grandchild closest to the center.
-                        grandchildren[opposite_child_index]
+                        grandchildren.remove(opposite_child_index).into_arc()
                     });
                 self.join_nodes(new_children)
             }
@@ -344,160 +339,169 @@ impl<'cache, D: Dim> NodeCacheAccess<'cache, D> {
     #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn set_cell<'s, 'n>(
         &'s self,
-        node: impl Node<'n, D>,
+        node: impl NodeRefTrait<'n, D = D>,
         pos: &BigVec<D>,
         cell_state: u8,
-    ) -> NodeRef<'s, D> {
-        self.cache.assert_owns_node(node);
+    ) -> ArcNode<D> {
+        self.assert_owns_node(node);
 
         // Modulo the node length along each axis using bitwise AND.
         match node.as_enum() {
-            NodeRefEnum::Leaf(node) => {
+            NodeRefEnum::Leaf(n) => {
                 // We use modulo_pos() because we have to convert the BigVec to
                 // a UVec and we can't know for sure that it will fit otherwise.
-                let cell_index = node.pos_to_cell_index(node.modulo_pos(pos).to_uvec());
+                let cell_index = n.pos_to_cell_index(n.modulo_pos(pos).to_uvec());
                 // Possible optimization: avoid unpacking cells; just copy the
                 // packed cells and modify the cell there.
-                let mut new_cells = node.cells().to_vec().into_boxed_slice();
+                let mut new_cells = n.cells().to_vec().into_boxed_slice();
                 new_cells[cell_index] = cell_state;
                 self.get_from_cells(new_cells)
             }
-            NodeRefEnum::NonLeaf(node) => {
-                let child_index = node.child_index_with_pos(pos);
-                let new_child = self.set_cell(node.child_at_index(child_index), pos, cell_state);
-                let mut new_children = node.children().collect_vec();
-                new_children[child_index] = new_child;
+            NodeRefEnum::NonLeaf(n) => {
+                let child_index = n.child_index_with_pos(pos);
+                let new_child = self.set_cell(n.child_at_index(child_index), pos, cell_state);
+                let mut new_children = n.children().collect_vec();
+                new_children[child_index] = new_child.as_ref();
                 self.join_nodes(new_children)
             }
         }
-        .as_ref()
     }
 }
 
-/// Shared-ownership access to a node that prevents the node from being
-/// garbage-collected.
-#[derive(Debug)]
+/// Node reference that also holds an `Arc` reference to the cache instead of
+/// borrowing it.
+#[derive(Debug, Clone)]
 pub struct ArcNode<D: Dim> {
-    /// Access to the cache, to make sure the cache doesn't get dropped.
-    cache: Arc<NodeCache<D>>,
-    /// Pointer to the node.
-    node_ptr: NonNull<RawNode>,
-    /// Pointer to the refcount for the node.
-    ref_count_ptr: NonNull<AtomicUsize>,
-}
-impl<D: Dim> Clone for ArcNode<D> {
-    fn clone(&self) -> Self {
-        // Increment the reference count.
-        unsafe { self.ref_count_ptr.as_ref() }.fetch_add(1, Relaxed);
-        Self {
-            cache: Arc::clone(&self.cache),
-            node_ptr: self.node_ptr,
-            ref_count_ptr: self.ref_count_ptr,
-        }
-    }
-}
-impl<D: Dim> Drop for ArcNode<D> {
-    fn drop(&mut self) {
-        // Decrement the reference count.
-        unsafe { self.ref_count_ptr.as_ref() }.fetch_sub(1, Relaxed);
-        // We don't need to worry about actually removing this node from the
-        // arc_nodes map; that's part of garbage collection.
-    }
+    cache: NodeCache<D>,
+    raw_node: Arc<RawNode<D>>,
 }
 impl<D: Dim> PartialEq for ArcNode<D> {
     fn eq(&self, other: &Self) -> bool {
-        self.node_ptr == other.node_ptr
+        Arc::eq(&self.raw_node, &other.raw_node)
     }
 }
 impl<D: Dim> Eq for ArcNode<D> {}
+impl<D: Dim> Hash for ArcNode<D> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.raw_node.hash(state)
+    }
+}
 impl<D: Dim> ArcNode<D> {
-    /// Creates a new reference-counted node from a node reference.
-    pub fn new<'n>(cache: Arc<NodeCache<D>>, node: impl Node<'n, D>) -> Self {
-        let node_ptr = NonNull::from(node.as_raw());
-        let ref_count_ptr = NonNull::from(
-            &**cache
-                // This conflicts with garbage collection, but not normal
-                // reading of the cache, so we take exclusive (write) access to
-                // the arc_nodes map. If DashMap had an atomic "get or insert"
-                // method, we could use that instead of a Mutex<HashMap>, but
-                // whatever. This shouldn't be called too frequently.
-                .arc_nodes
-                .lock()
-                .unwrap()
-                // Increment the reference counter for this node, or insert a
-                // new reference counter with the value 1.
-                .entry(node_ptr)
-                .and_modify(|ref_count| {
-                    ref_count.fetch_add(1, Relaxed);
-                })
-                .or_insert_with(|| Box::new(AtomicUsize::new(1))),
-        );
-        Self {
-            cache,
-            node_ptr,
-            ref_count_ptr,
-        }
+    /// Creates an `ArcNode` from raw parts.
+    ///
+    /// # Saftey
+    ///
+    /// `raw_node` must be a valid node obtained from `cache`.
+    #[inline]
+    pub unsafe fn new(cache: NodeCache<D>, raw_node: Arc<RawNode<D>>) -> Self {
+        Self { cache, raw_node }
     }
 
-    /// Returns the cache that the node is stored in.
-    pub fn cache(&self) -> &Arc<NodeCache<D>> {
+    /// Returns the `RawNode` backing this node.
+    #[inline]
+    pub fn into_raw(self) -> Arc<RawNode<D>> {
+        self.raw_node
+    }
+}
+impl<'node, D: Dim> NodeRefTrait<'node> for &'node ArcNode<D> {
+    type D = D;
+
+    #[inline]
+    fn as_raw(self) -> &'node Arc<RawNode<Self::D>> {
+        &self.raw_node
+    }
+    #[inline]
+    fn as_ref(self) -> NodeRef<'node, Self::D> {
+        unsafe { NodeRef::new(&self.cache, &self.raw_node) }
+    }
+    #[inline]
+    fn as_enum(self) -> NodeRefEnum<'node, Self::D> {
+        self.as_ref().as_enum()
+    }
+    #[inline]
+    fn cache(self) -> &'node NodeCache<Self::D> {
         &self.cache
     }
-
-    /// Returns a reference to the node.
-    pub fn as_ref<'cache>(
-        &self,
-        node_access: &'cache NodeCacheAccess<'cache, D>,
-    ) -> NodeRef<'cache, D> {
-        unsafe { NodeRef::new(node_access.cache, node_access, self.node_ptr) }
-    }
-
-    /// Returns the raw node, which can be used to get basic information such as
-    /// layer and residue.
-    pub fn as_raw(&self) -> &RawNode {
-        unsafe { self.node_ptr.as_ref() }
-    }
-
-    /// Returns the population of the node.
-    pub fn population(&self) -> &BigUint {
-        todo!("Compute population")
+}
+impl<'node, D: Dim, N: NodeRefTrait<'node, D = D>> From<N> for ArcNode<D> {
+    #[inline]
+    fn from(n: N) -> Self {
+        Self {
+            cache: n.cache().clone(),
+            raw_node: Arc::clone(n.as_raw()),
+        }
     }
 }
 
-#[cfg(test)]
-mod tests {
-
-    /// Only the first member of this struct counts for equality and hashing.
-    struct Pair(usize, usize);
-    impl PartialEq for Pair {
-        fn eq(&self, other: &Self) -> bool {
-            self.0 == other.0
+/// `Arc`-on-write ND-tree node smart pointer.
+#[derive(Debug, Clone)]
+pub enum NodeCow<'node, D: Dim> {
+    /// "Owned" `ArcNode`.
+    Arc(ArcNode<D>),
+    /// "Borrowed" `NodeRef`.
+    Ref(NodeRef<'node, D>),
+}
+impl<D: Dim> PartialEq for NodeCow<'_, D> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.as_ref() == other.as_ref()
+    }
+}
+impl<D: Dim> Eq for NodeCow<'_, D> {}
+impl<D: Dim> Hash for NodeCow<'_, D> {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_ref().hash(state)
+    }
+}
+impl<D: Dim> NodeCow<'_, D> {
+    /// Returns the `ArcNode`, or creates one from a `NodeRef`.
+    #[inline]
+    pub fn into_arc(self) -> ArcNode<D> {
+        match self {
+            NodeCow::Arc(n) => n,
+            NodeCow::Ref(n) => n.into(),
         }
     }
-    impl Eq for Pair {}
-    impl std::hash::Hash for Pair {
-        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-            self.0.hash(state);
+}
+impl<'node, D: Dim> NodeRefTrait<'node> for &'node NodeCow<'node, D> {
+    type D = D;
+
+    #[inline]
+    fn as_raw(self) -> &'node Arc<RawNode<Self::D>> {
+        match self {
+            NodeCow::Arc(n) => n.as_raw(),
+            NodeCow::Ref(n) => n.as_raw(),
         }
     }
-
-    /// Tests that inserting an equal key into a DashSet does NOT update the
-    /// key. This isn't documented by Dashmap, but it's important for the
-    /// NodeCache and is true for now because DashSet uses DashMap which
-    /// ultimately delegates to std::collections::HashMap, which does make this
-    /// promise.
-    #[test]
-    fn test_dashset_insert_eq() {
-        let h = dashmap::DashSet::new();
-        // These values should be kept.
-        assert!(h.insert(Pair(10, 4)));
-        assert!(h.insert(Pair(20, 4)));
-        // These values should not be reachable.
-        assert!(!h.insert(Pair(10, 8)));
-        assert!(!h.insert(Pair(20, 8)));
-        // Check that the first two inserts persisted while the second two did
-        // not do anything.
-        assert_eq!(4, h.get(&Pair(10, 0)).unwrap().1);
-        assert_eq!(4, h.get(&Pair(20, 0)).unwrap().1);
+    #[inline]
+    fn as_ref(self) -> NodeRef<'node, Self::D> {
+        match self {
+            NodeCow::Arc(n) => n.as_ref(),
+            NodeCow::Ref(n) => *n,
+        }
+    }
+    #[inline]
+    fn as_enum(self) -> NodeRefEnum<'node, Self::D> {
+        self.as_ref().as_enum()
+    }
+    #[inline]
+    fn cache(self) -> &'node NodeCache<Self::D> {
+        match self {
+            NodeCow::Arc(n) => n.cache(),
+            NodeCow::Ref(n) => n.cache(),
+        }
+    }
+}
+impl<D: Dim> From<ArcNode<D>> for NodeCow<'_, D> {
+    #[inline]
+    fn from(n: ArcNode<D>) -> Self {
+        Self::Arc(n)
+    }
+}
+impl<'node, D: Dim, T: NodeRefTrait<'node, D = D>> From<T> for NodeCow<'node, D> {
+    #[inline]
+    fn from(n: T) -> Self {
+        Self::Ref(n.as_ref())
     }
 }

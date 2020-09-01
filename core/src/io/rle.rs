@@ -12,6 +12,7 @@ use pest::Parser;
 use crate::automaton::{Automaton2D, NdAutomaton};
 use crate::axis::Axis::{X, Y};
 use crate::ndarray::NdArray;
+use crate::ndtree::NodeRefTrait;
 use crate::ndvec::{BigVec2D, NdVec};
 use crate::num::{BigInt, ToPrimitive, Zero};
 
@@ -113,7 +114,7 @@ impl RleEncode for Automaton2D {
             // TODO: Actually use a proper rulestring.
             rule: Some("Life".to_owned()),
         };
-        let cell_array = NdArray::from(self.tree.root().as_ref(&self.tree.node_access()));
+        let cell_array = NdArray::from(self.tree.root().as_ref());
         let mut items: Vec<(usize, RleItem<u8>)> = vec![];
         for mut pos in &cell_array.rect() {
             // Y coordinates increase upwards in NDCell, but downwards in RLE, so
@@ -229,8 +230,7 @@ impl RleEncode for Automaton2D {
         }
         let header = header.ok_or("Missing RLE header")?;
 
-        // TODO: max state count?
-        let mut ret = NdAutomaton::with_state_count(256);
+        let mut ret = NdAutomaton::default();
         let mut pos;
         if let Some(cxrle) = cxrle {
             ret.generations = cxrle.gen;
@@ -244,12 +244,9 @@ impl RleEncode for Automaton2D {
         }
         let x_start = pos[X].clone();
 
-        // TODO: can we get node access from automaton instead of tree?
-        let cache = ret.tree.cache();
-        let node_access = cache.node_access();
         for row in cell_array {
             for cell in row {
-                ret.tree.set_cell(&node_access, &pos, cell);
+                ret.tree.set_cell(&pos, cell);
                 pos[X] += 1;
             }
             pos[X] = x_start.clone();
@@ -400,6 +397,7 @@ fn char_diff(ch1: char, ch2: char) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ndtree::NodeRefTrait;
 
     /// Tests that we can read and write all 256 cell states in RLE format.
     #[test]
@@ -484,14 +482,12 @@ o$3o!
 ",
         )
         .unwrap();
-        let cache = imported.tree.cache();
-        let access = cache.node_access();
         assert_eq!(5, imported.tree.root.population().to_usize().unwrap());
-        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([11, 14])));
-        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([12, 13])));
-        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([10, 12])));
-        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([11, 12])));
-        assert_eq!(1, imported.tree.get_cell(&access, &NdVec::big([12, 12])));
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 14])));
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 13])));
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([10, 12])));
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 12])));
+        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 12])));
         let exported = RleEncode::to_cxrle(&imported);
         // Right now, the RLE writer includes a fair bit of padding around all
         // the edges. In future this might be fixed, and then this hard-coded

@@ -5,7 +5,31 @@ use itertools::Itertools;
 use super::Layer;
 use crate::dim::Dim;
 
-/// Subdivide a power-of-2 hypercube of cells into 2^NDIM hypercubes of half the
+/// Returns a corner hypercube of half the size from a power-of-2 hypercube.
+/// `index` is a number from 0 to 2^NDIM (exclusive) specifying which corner.
+///
+/// # Panics
+///
+/// This function panics if the length of `cells` is not (2^n)^NDIM for some n, or if `index` is greater than 2^NDIM-1.
+pub fn get_corner<'a, D: Dim>(cells: &'a [u8], index: usize) -> Result<Box<[u8]>, u8> {
+    // Return early if there is only one cell.
+    if let [cell] = cells {
+        return Err(*cell);
+    }
+
+    let old_layer = Layer::from_num_cells::<D>(cells.len()).unwrap();
+    let new_layer = old_layer.child_layer();
+
+    let new_rect = new_layer.rect::<D>().unwrap();
+    let base_pos = Layer(1).leaf_pos(index) << new_layer.to_usize();
+    Ok((new_rect + base_pos)
+        .iter()
+        .map(|pos| cells[old_layer.leaf_cell_index(pos)])
+        .collect_vec()
+        .into_boxed_slice())
+}
+
+/// Subdivides a power-of-2 hypercube of cells into 2^NDIM hypercubes of half the
 /// size. If the hypercube contains only one cell, returns `Err()` containing that cell.
 ///
 /// # Panics
@@ -17,21 +41,7 @@ pub fn subdivide<'a, D: Dim>(cells: &'a [u8]) -> Result<impl 'a + Iterator<Item 
         return Err(*cell);
     }
 
-    let old_layer = Layer::from_num_cells::<D>(cells.len()).unwrap();
-    let new_layer = old_layer.child_layer();
-
-    let layer_1_rect = Layer(1).rect::<D>().unwrap();
-    let old_strides = old_layer.leaf_strides();
-    let new_rect = new_layer.rect().unwrap();
-    Ok(layer_1_rect.iter().map(move |outer| {
-        let child_base = outer * new_layer.len().unwrap();
-        let child = (new_rect.clone() + child_base)
-            .iter()
-            .map(|pos| cells[(pos * old_strides.clone()).sum()])
-            .collect_vec();
-        debug_assert_eq!(child.len(), new_layer.num_cells::<D>().unwrap());
-        child.into_boxed_slice()
-    }))
+    Ok((0..D::BRANCHING_FACTOR).map(move |i| get_corner::<D>(cells, i).unwrap()))
 }
 
 /// Creates a power-of-2 hypercube of cells from 2^NDIM hypercubes of half the

@@ -8,7 +8,7 @@ use super::rule::{DummyRule, Rule, TransitionFunction};
 use crate::dim::Dim;
 use crate::ndarray::NdArray;
 use crate::ndrect::{NdRect, URect};
-use crate::ndtree::{ArcNode, Layer, NdTree, Node, NodeRef, NodeRefEnum, RawNode};
+use crate::ndtree::{ArcNode, Layer, NdTree, NodeCow, NodeRef, NodeRefEnum, NodeRefTrait};
 use crate::ndvec::UVec;
 use crate::num::{BigInt, One, Signed, Zero};
 
@@ -29,11 +29,11 @@ impl<D: Dim> Default for Simulation<D> {
 }
 
 impl<D: Dim> Simulation<D> {
-    /// Constructs a new Simulation using the given rule.
+    /// Constructs a `Simulation` using the given rule.
     pub fn from<R: 'static + Rule<D>>(rule: R) -> Self {
         Self::new(Arc::new(rule))
     }
-    /// Constructs a new Simulation using the given rule.
+    /// Constructs a `Simulation` using the given rule.
     pub fn new(rule: Arc<dyn Rule<D>>) -> Self {
         // Determine the minimum layer at which we can simulate one generation
         // of the automaton, using `n / 4 >= r`. (See the documentation for
@@ -78,17 +78,11 @@ impl<D: Dim> Simulation<D> {
         // minimum layer for a node.)
         tree.expand();
         // Now do the actual simulation.
-        let node_access = tree.node_access();
-        let new_root = ArcNode::new(
-            tree.cache(),
-            self.advance_inner_node(
-                tree.root.as_ref(&node_access),
-                step_size,
-                &mut transition_function,
-            ),
-        );
-        drop(node_access);
-        tree.set_root(new_root);
+        tree.set_root(self.advance_inner_node(
+            tree.root.as_ref(),
+            step_size,
+            &mut transition_function,
+        ));
         // Shrink the tree as much as possible to avoid wasted space.
         tree.shrink();
 
@@ -118,18 +112,20 @@ impl<D: Dim> Simulation<D> {
         &mut self,
         node: NodeRef<'a, D>,
         generations: &BigInt,
-        transition_function: &mut TransitionFunction<D>,
-    ) -> NodeRef<'a, D> {
+        transition_function: &mut TransitionFunction<'_, D>,
+    ) -> ArcNode<D> {
         // Make sure we're above the minimum layer.
         assert!(
             node.layer() >= self.min_layer,
             "Cannot advance inner node at layer below minimum simulation layer"
         );
 
-        let ret = if let Some(result) = node.result() {
+        if let Some(result) = node.result() {
             // If the result is already computed, just return that.
             return result;
-        } else if generations.is_zero() {
+        }
+
+        let ret: ArcNode<D> = if generations.is_zero() {
             // Handle the simplest case of just not simulating anything. This is
             // one of the recursive base cases.
             node.centered_inner().unwrap()
@@ -142,8 +138,10 @@ impl<D: Dim> Simulation<D> {
             // cache, just return one of the children of this one (since we know
             // it's empty).
             match node.as_enum() {
-                NodeRefEnum::Leaf(node) => node.subdivide().unwrap()[0],
-                NodeRefEnum::NonLeaf(node) => node.child_at_index(0),
+                NodeRefEnum::Leaf(n) => n.cache().get_empty(n.layer().child_layer()),
+                // It's faster to get a reference to a child than to look up an
+                // empty node.
+                NodeRefEnum::NonLeaf(n) => n.child_at_index(0).into(),
             }
         } else if node.layer() == self.min_layer {
             // If this is the minimum layer, just process each cell
@@ -164,7 +162,7 @@ impl<D: Dim> Simulation<D> {
             //     },
             // )
             todo!("simulate for one generation");
-        } else if node.layer().child_layer() <= node.repr().base_layer() {
+        } else if node.layer().child_layer() <= Layer::base::<D>() {
             // If this node's children are leaf nodes, the node is small enough
             // to process each cell individually. This is the final recursive
             // base case.
@@ -193,7 +191,7 @@ impl<D: Dim> Simulation<D> {
 
             // 1. Make a 4^D array of nodes at layer `L-2` of the original node
             //    at time `0`.
-            let unsimmed_quarter_size_nodes: NdArray<NodeRef<'a, D>, D> = NdArray::from_flat_slice(
+            let unsimmed_quarter_size_nodes: NdArray<NodeCow<'a, D>, D> = NdArray::from_flat_slice(
                 UVec::repeat(4_usize),
                 (0..(D::BRANCHING_FACTOR * D::BRANCHING_FACTOR))
                     .map(|i| node.as_non_leaf().unwrap().grandchild_at_index(i))
@@ -202,15 +200,15 @@ impl<D: Dim> Simulation<D> {
 
             // 2. Combine adjacent nodes at layer `L-2` to make a 3^D array of
             //    nodes at layer `L-1` and time `0`.
-            let unsimmed_half_size_nodes: NdArray<NodeRef<'a, D>, D> = NdArray::from_flat_slice(
+            let unsimmed_half_size_nodes: NdArray<ArcNode<D>, D> = NdArray::from_flat_slice(
                 UVec::repeat(3_usize),
                 URect::<D>::span(UVec::origin(), UVec::repeat(2_usize))
                     .iter()
                     .map(|pos| {
-                        node.cache_access().join_nodes(
+                        node.cache().join_nodes(
                             NdRect::span(pos.clone(), pos + 1)
                                 .iter()
-                                .map(|pos| unsimmed_quarter_size_nodes[pos]),
+                                .map(|pos| unsimmed_quarter_size_nodes[pos].as_ref()),
                         )
                     })
                     .collect_vec(),
@@ -218,9 +216,8 @@ impl<D: Dim> Simulation<D> {
 
             // 3. Simulate each of those nodes to get a new node at layer `L-2`
             //    and time `t/2` (red squares).
-            let half_simmed_quarter_size_nodes: NdArray<NodeRef<'a, D>, D> =
-                unsimmed_half_size_nodes
-                    .map(|&node| self.advance_inner_node(node, &t_inner, transition_function));
+            let half_simmed_quarter_size_nodes: NdArray<ArcNode<D>, D> = unsimmed_half_size_nodes
+                .map(|n| self.advance_inner_node(n.as_ref(), &t_inner, transition_function));
 
             // 4. Combine adjacent nodes from step #3 to make a 2^D array of
             //    nodes at layer `L-1` and time `t/2`.
@@ -228,27 +225,25 @@ impl<D: Dim> Simulation<D> {
                 URect::<D>::span(UVec::origin(), UVec::repeat(1_usize))
                     .iter()
                     .map(|pos| {
-                        node.cache_access().join_nodes(
+                        node.cache().join_nodes(
                             NdRect::span(pos.clone(), pos + 1)
                                 .iter()
-                                .map(|pos| half_simmed_quarter_size_nodes[pos]),
+                                .map(|pos| half_simmed_quarter_size_nodes[pos].as_ref()),
                         )
                     });
 
             // 5. Simulate each of those nodes to get a new node at layer `L-2`
             //    and time `t` (green squares).
             let fully_simmed_quarter_size_nodes = half_simmed_half_size_nodes
-                .map(|node| self.advance_inner_node(node, &t_outer, transition_function));
+                .map(|node| self.advance_inner_node(node.as_ref(), &t_outer, transition_function));
 
             // 6. Combine the nodes from step #5 to make a new node at layer
             //    `L-1` and time `t` (blue square). This is the final result.
-            node.cache_access()
-                .join_nodes(fully_simmed_quarter_size_nodes)
-                .as_ref()
+            node.cache().join_nodes(fully_simmed_quarter_size_nodes)
         };
 
         // Cache that result so we don't have to do all that work next time.
-        node.set_result(Some(ret));
+        node.set_result(Some(ret.as_ref()));
         ret
     }
 }

@@ -5,7 +5,7 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use super::{Layer, Node, NodeCacheAccess, NodeHasher, NodeRef};
+use super::{Layer, NodeCache, NodeCow, NodeHasher, NodeRef, NodeRefTrait};
 use crate::dim::Dim;
 
 /// ND-tree represented as a list of nodes.
@@ -49,66 +49,65 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
         self.root_idx
     }
 
-    /// Constructs a IndexedNdTree from a NodeRef, indexing nodes down to the
-    /// given layer. Use `min_layer = 0` to store the entire NdTree.
-    pub fn from_node<'a>(
-        node_cache: &'a NodeCacheAccess<'a, D>,
-        node: NodeRef<'a, D>,
+    /// Constructs a `IndexedNdTree` from a `Node`, indexing nodes down to the
+    /// given layer. Use `min_layer = 0` to store the entire ND-tree.
+    pub fn from_node<'nodes>(
+        node: NodeRef<'nodes, D>,
         min_layer: Layer,
-        node_to_data: impl Fn(NodeRef<'a, D>) -> T,
+        node_to_data: impl Fn(NodeRef<'_, D>) -> T,
     ) -> Self {
         assert!(node.layer() >= min_layer);
         IndexedNdTreeBuilder {
-            node_cache,
             min_layer,
             nodes: vec![],
-            indexed_nodes: HashMap::default(),
+            node_indices: HashMap::default(),
             node_to_data,
         }
         .build(node)
     }
-    /// Converts this IndexedNdTree back into a NodeRef.
+    /// Converts this IndexedNdTree back into a Node.
     pub fn to_node<'a>(
-        &self,
-        node_cache: &'a NodeCacheAccess<'a, D>,
-        data_to_node: impl Fn(&T) -> NodeRef<'a, D>,
-    ) -> NodeRef<'a, D> {
-        self._to_node(node_cache, data_to_node, self.root_idx)
+        &'a self,
+        node_cache: &'a NodeCache<D>,
+        data_to_node: impl Fn(&'a T) -> NodeCow<'a, D>,
+    ) -> NodeCow<'a, D> {
+        self._to_node(node_cache, &data_to_node, self.root_idx)
     }
     /// Converts a single root node (and its descendants) of this IndexedNdTree
-    /// into a NodeRef.
+    /// into a Node.
     fn _to_node<'a>(
-        &self,
-        node_cache: &'a NodeCacheAccess<'a, D>,
-        data_to_node: impl Fn(&T) -> NodeRef<'a, D>,
+        &'a self,
+        node_cache: &'a NodeCache<D>,
+        data_to_node: &impl Fn(&'a T) -> NodeCow<'a, D>,
         root: usize,
-    ) -> NodeRef<'a, D> {
-        todo!("Test this");
-        match self.nodes[root] {
-            IndexedNdTreeNode::Leaf(data, _) => data_to_node(&data),
-            IndexedNdTreeNode::NonLeaf(indices, _) => node_cache.join_nodes(
-                indices
-                    .iter()
-                    .map(|&index| self._to_node(node_cache, &data_to_node, index)),
-            ),
+    ) -> NodeCow<'a, D> {
+        match &self.nodes[root] {
+            IndexedNdTreeNode::Leaf(data, _) => data_to_node(data),
+            IndexedNdTreeNode::NonLeaf(indices, _) => node_cache
+                .join_nodes(
+                    indices
+                        .iter()
+                        .map(|&index| self._to_node(node_cache, data_to_node, index)),
+                )
+                .into(),
         }
     }
 }
 
 /// Builder for an `IndexedNdTree`.
-struct IndexedNdTreeBuilder<'a, D: Dim, T, F> {
-    node_cache: &'a NodeCacheAccess<'a, D>,
+struct IndexedNdTreeBuilder<'nodes, D: Dim, T, F> {
     min_layer: Layer,
     nodes: Vec<IndexedNdTreeNode<D, T>>,
-    indexed_nodes: HashMap<NodeRef<'a, D>, usize, NodeHasher>,
+    node_indices: HashMap<NodeCow<'nodes, D>, usize, NodeHasher>,
     node_to_data: F,
 }
-impl<'a, D: Dim, T, F: Fn(NodeRef<'a, D>) -> T> IndexedNdTreeBuilder<'a, D, T, F> {
+impl<'nodes, D: Dim, T, F: Fn(NodeRef<'_, D>) -> T> IndexedNdTreeBuilder<'nodes, D, T, F> {
     /// Returns the final `IndexedNdTree`, using the given node as the root.
-    pub fn build(mut self, node: NodeRef<'a, D>) -> IndexedNdTree<D, T> {
-        let root_idx = self.add_node(node);
+    pub fn build(mut self, node: NodeRef<'nodes, D>) -> IndexedNdTree<D, T> {
+        let node_layer = node.layer();
+        let root_idx = self.add_node(node.into());
         IndexedNdTree {
-            max_layer: node.layer() - self.min_layer,
+            max_layer: node_layer - self.min_layer,
             nodes: self.nodes,
             root_idx,
         }
@@ -117,43 +116,40 @@ impl<'a, D: Dim, T, F: Fn(NodeRef<'a, D>) -> T> IndexedNdTreeBuilder<'a, D, T, F
     /// present) and returns its index.
     ///
     /// Panics if `original_node` is layer 0 (single cell).
-    fn add_node(&mut self, original_node: NodeRef<'a, D>) -> usize {
-        if let Some(&node_index) = self.indexed_nodes.get(&original_node) {
+    fn add_node(&mut self, original_node: NodeCow<'nodes, D>) -> usize {
+        if let Some(&node_index) = self.node_indices.get(&original_node) {
             node_index
-        } else if original_node.layer() <= self.min_layer.parent_layer() {
-            // We compare against `min_layer.parent_layer()` because `min_layer`
-            // refers to the minimum layer for *node children*, not *nodes*. For
-            // example, `min_layer == Layer(0)` means the smallest node should
-            // be 2x2 (layer = 1), which contains 2^NDIM cells (layer=0). This
-            // is the recursive base case for `min_layer >= base_layer`.
-            self.push_indexed_node(
-                original_node,
-                IndexedNdTreeNode::Leaf((self.node_to_data)(original_node), PhantomData),
-            )
         } else {
-            // Subdivide this node into 2^NDIM pieces and recurse.
-            let children = self
-                .node_cache
-                .subdivide(original_node)
-                .unwrap()
-                .into_iter()
-                .map(|child| self.add_node(child))
-                .collect_vec()
-                .into_boxed_slice();
-            self.push_indexed_node(
-                original_node,
-                IndexedNdTreeNode::NonLeaf(children, PhantomData),
-            )
+            let indexed_node = if original_node.layer() <= self.min_layer.parent_layer() {
+                // We compare against `min_layer.parent_layer()` because
+                // `min_layer` refers to the minimum layer for *node children*,
+                // not *nodes*. For example, `min_layer == Layer(0)` means the
+                // smallest node should be 2x2 (layer = 1), which contains
+                // 2^NDIM cells (layer=0). This is the recursive base case for
+                // `min_layer >= base_layer`.
+                IndexedNdTreeNode::Leaf((self.node_to_data)(original_node.as_ref()), PhantomData)
+            } else {
+                // Subdivide this node into 2^NDIM pieces and recurse.
+                let children = original_node
+                    .subdivide()
+                    .unwrap()
+                    .into_iter()
+                    .map(|child| self.add_node(child.into_arc().into()))
+                    .collect_vec()
+                    .into_boxed_slice();
+                IndexedNdTreeNode::NonLeaf(children, PhantomData)
+            };
+            self.push_indexed_node(original_node, indexed_node)
         }
     }
     /// Appends an `IndexedNdTreeNode` to the `IndexedNdTree`.
     fn push_indexed_node(
         &mut self,
-        original_node: NodeRef<'a, D>,
+        original_node: NodeCow<'nodes, D>,
         indexed_node: IndexedNdTreeNode<D, T>,
     ) -> usize {
         let new_index = self.nodes.len();
-        self.indexed_nodes.insert(original_node, new_index);
+        self.node_indices.insert(original_node, new_index);
         self.nodes.push(indexed_node);
         new_index
     }
@@ -164,8 +160,7 @@ mod tests {
     use super::*;
     use crate::automaton::Automaton2D;
     use crate::io::rle;
-
-    // TODO: write tests that include different `min_layer`s and `base_layer`s
+    use crate::ndtree::ArcNode;
 
     /// Thoroughly test a single "indexed" quadtree.
     #[test]
@@ -188,9 +183,9 @@ x = 8, y = 8, rule = B3/S23
 ",
         )
         .unwrap();
-        let node_access = automaton.tree.node_access();
-        let node = automaton.tree.root.as_ref(&node_access);
-        assert_eq!(Layer(3), node.layer());
+        let root = &automaton.tree.root;
+        let node_cache = automaton.tree.root.cache();
+        assert_eq!(Layer(3), root.layer());
 
         // The root node is at layer 3 (8x8), and there should be ...
         //  - three unique layer-2 nodes (4x4)
@@ -201,28 +196,40 @@ x = 8, y = 8, rule = B3/S23
         // nodes of layer >= N, and leaving the rest as NdTreeNodes. The number
         // of indexed nodes is indexed_N.nodes.len().
 
-        let indexed_0 = IndexedNdTree::from_node(&node_access, node, Layer(0), |x| x);
+        let indexed_0 = IndexedNdTree::from_node(root.as_ref(), Layer(0), |x| ArcNode::from(x));
         assert_eq!(Layer(3), indexed_0.max_layer);
         // 1+3+2+2 = 6, so there should be a total of eight nodes in this one.
         assert_eq!(6, indexed_0.nodes.len());
-        assert_eq!(node, indexed_0.to_node(&node_access, |&x| x));
+        assert_eq!(
+            *root,
+            indexed_0.to_node(node_cache, |x| x.into()).into_arc()
+        );
 
-        let indexed_1 = IndexedNdTree::from_node(&node_access, node, Layer(1), |x| x);
+        let indexed_1 = IndexedNdTree::from_node(root.as_ref(), Layer(1), |x| ArcNode::from(x));
         assert_eq!(Layer(2), indexed_1.max_layer);
         // 1+3+2 = 6, so there should be a total of eight nodes in this one.
         assert_eq!(4, indexed_1.nodes.len());
-        assert_eq!(node, indexed_1.to_node(&node_access, |&x| x));
+        assert_eq!(
+            *root,
+            indexed_1.to_node(node_cache, |x| x.into()).into_arc()
+        );
 
-        let indexed_2 = IndexedNdTree::from_node(&node_access, node, Layer(2), |x| x);
+        let indexed_2 = IndexedNdTree::from_node(root.as_ref(), Layer(2), |x| ArcNode::from(x));
         assert_eq!(Layer(1), indexed_2.max_layer);
         // 1+3 = 4
         assert_eq!(1, indexed_2.nodes.len());
-        assert_eq!(node, indexed_2.to_node(&node_access, |&x| x));
+        assert_eq!(
+            *root,
+            indexed_2.to_node(node_cache, |x| x.into()).into_arc()
+        );
 
-        let indexed_3 = IndexedNdTree::from_node(&node_access, node, Layer(3), |x| x);
-        assert_eq!(Layer(3), indexed_3.max_layer);
+        let indexed_3 = IndexedNdTree::from_node(root.as_ref(), Layer(3), |x| ArcNode::from(x));
+        assert_eq!(Layer(0), indexed_3.max_layer);
         // 1 = 1
-        assert_eq!(6, indexed_3.nodes.len());
-        assert_eq!(node, indexed_3.to_node(&node_access, |&x| x));
+        assert_eq!(1, indexed_3.nodes.len());
+        assert_eq!(
+            *root,
+            indexed_3.to_node(node_cache, |x| x.into()).into_arc()
+        );
     }
 }

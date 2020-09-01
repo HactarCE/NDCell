@@ -12,9 +12,8 @@ fn assert_ndtree_valid(
     ndtree: &mut NdTree2D,
     cells_to_check: &Vec<IVec2D>,
 ) {
-    let node_access = ndtree.node_access();
     assert_eq!(
-        &BigUint::from(
+        BigUint::from(
             expected_cells
                 .iter()
                 .filter(|(_, &cell_state)| cell_state != 0)
@@ -25,7 +24,7 @@ fn assert_ndtree_valid(
     for pos in cells_to_check {
         assert_eq!(
             *expected_cells.get(pos).unwrap_or(&0),
-            ndtree.get_cell(&node_access, &pos.to_bigvec())
+            ndtree.get_cell(&pos.to_bigvec())
         );
     }
 }
@@ -36,19 +35,25 @@ proptest! {
         ..Default::default()
     })]
 
-    /// Tests set_cell() and get_cell() by comparing against a HashMap.
+    /// Tests `NdTree::set_cell()` and `NdTree::get_cell()` by comparing against
+    /// a HashMap.
     #[test]
     fn test_ndtree_set_get(
-        cells_to_set: Vec<(IVec2D, u8)>,
+        mut cells_to_set: Vec<(IVec2D, u8)>,
         mut cells_to_get: Vec<IVec2D>,
     ) {
-        let mut ndtree = NdTree::with_state_count(256);
+        // Only test a reasonable number of cells in debug mode, otherwise this
+        // takes FOREVER. For a more thorough test, run with `--release`.
+        #[cfg(debug_assertions)]
+        cells_to_set.truncate(5);
+        #[cfg(debug_assertions)]
+        cells_to_get.truncate(5);
+
+        let mut ndtree = NdTree::default();
         let mut hashmap = HashMap::new();
-        let cache = ndtree.cache();
-        let node_access = cache.node_access();
-        for (pos, state) in cells_to_set {
+            for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
-            ndtree.set_cell(&node_access, &pos.to_bigvec(), state);
+            ndtree.set_cell(&pos.to_bigvec(), state);
             cells_to_get.push(pos);
         }
         assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
@@ -65,56 +70,53 @@ proptest! {
         assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
     }
 
-    /// Tests that NdTreeCache automatically caches identical nodes.
-
-    // TODO: does this work consistently now?
-    // #[ignore]
+    /// Tests that identical nodes use the same underlying structure.
     #[test]
     fn test_ndtree_cache(
-        cells_to_set: Vec<(IVec2D, u8)>,
+        mut cells_to_set: Vec<(IVec2D, u8)>,
     ) {
+        // Only test a reasonable number of cells in debug mode, otherwise this
+        // takes FOREVER. For a more thorough test, run with `--release`.
+        #[cfg(debug_assertions)]
+        cells_to_set.truncate(5);
+        #[cfg(not(debug_assertions))]
+        cells_to_set.truncate(20);
+
         prop_assume!(!cells_to_set.is_empty());
-        let mut ndtree = NdTree::with_state_count(256);
-        let cache = ndtree.cache();
-        let node_access = cache.node_access();
-        for (pos, state) in cells_to_set {
-            ndtree.set_cell(&node_access, &(pos - 128).to_bigvec(), state);
-            ndtree.set_cell(&node_access, &(pos + 128).to_bigvec(), state);
+
+        let mut ndtree = NdTree::default();
+            for (pos, state) in cells_to_set {
+            ndtree.set_cell(&(pos - 128).to_bigvec(), state);
+            ndtree.set_cell(&(pos + 128).to_bigvec(), state);
         }
-        let slice = ndtree.slice(&node_access);
+        let slice = ndtree.slice();
         let children = slice.subdivide().unwrap();
-        let subnode1 = &children[0];
-        let subnode2 = &children[children.len() - 1];
+        let subnode1 = &children[0].root;
+        let subnode2 = &children[children.len() - 1].root;
         assert_eq!(subnode1, subnode2);
-        assert!(std::ptr::eq(subnode1.root.as_raw(), subnode2.root.as_raw()));
     }
 
-    /// Tests NdTree::get_slice_containing().
+    /// Tests `NdTree::slice_containing()`.
     #[test]
-    fn test_ndtree_get_slice_containing(
+    fn test_ndtree_slice_containing(
         cells_to_set: Vec<(IVec2D, u8)>,
         center: IVec2D,
         x_radius in 0..20_isize,
         y_radius in 0..20_isize,
     ) {
-        let mut ndtree = NdTree::with_state_count(256);
+        let mut ndtree = NdTree::default();
         let mut hashmap = HashMap::new();
-        let cache = ndtree.cache();
-        let node_access = cache.node_access();
-        for (pos, state) in cells_to_set {
+            for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
-            ndtree.set_cell(&node_access, &pos.to_bigvec(), state);
+            ndtree.set_cell(&pos.to_bigvec(), state);
         }
         let half_diag = NdVec([x_radius, y_radius]);
         let rect = IRect::span(center - half_diag, center + half_diag).to_bigrect();
-        let slice = ndtree.get_slice_containing(&rect);
+        let slice = ndtree.slice_containing(&rect);
         let slice_rect = slice.rect();
+        // Check that the slice contains the rectangle.
         assert!(slice_rect.contains(&rect));
-        assert!(
-            slice.root.layer() == Layer(1)
-            || slice.root.big_len() < rect.len(X) * 2
-            || slice.root.big_len() < rect.len(Y) * 2
-        );
+        // Check that the slice containis the correct cells.
         for (pos, state) in hashmap {
             if slice_rect.contains(&pos.to_bigvec()) {
                 if let Some(cell_state) = slice.get_cell(&pos.to_bigvec()) {
@@ -122,5 +124,12 @@ proptest! {
                 }
             }
         }
+        // Check that the slice is as small as it can be.
+        println!("{:?}, rect={}; should contain {}", slice.root.layer(), slice.rect(), rect);
+        assert!(
+            slice.root.layer().is_leaf::<Dim2D>()
+            || slice.root.big_len() <= (rect.len(X) - 2) * 4
+            || slice.root.big_len() <= (rect.len(Y) - 2) * 4
+        );
     }
 }

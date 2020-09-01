@@ -5,7 +5,7 @@ use std::ops::{Index, IndexMut};
 
 use crate::dim::*;
 use crate::ndrect::URect;
-use crate::ndtree::{Node, NodeRef};
+use crate::ndtree::{NodeRef, NodeRefTrait};
 use crate::ndvec::UVec;
 use crate::num::ToPrimitive;
 
@@ -19,7 +19,7 @@ pub struct NdArray<T, D: Dim> {
 }
 
 impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
-    /// Creates an `NdArray` from the cells in an `ndtree::NodeRef`.
+    /// Creates an `NdArray` from the cells in an `ndtree::Node`.
     fn from(node: NodeRef<'a, D>) -> Self {
         let count = node
             .big_num_cells()
@@ -150,10 +150,11 @@ pub type Array6D<T> = NdArray<T, Dim6D>;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::Arc;
 
+    use super::*;
     use crate::ndrect::{NdRect, URect4D};
-    use crate::ndtree::{NodeCache, NodeRepr};
+    use crate::ndtree::NodeCache;
     use crate::ndvec::{NdVec, UVec4D};
 
     /// Tests `flatten_idx()` and `unflatten_idx()`.
@@ -175,9 +176,9 @@ mod tests {
         }
     }
 
-    /// Tests `NdArray::from::<NodeRef>()`.
+    /// Tests `NdArray::from::<Node>()`.
     #[test]
-    fn test_ndarray_from_noderef() {
+    fn test_ndarray_from_node() {
         // Create a 2D 4x4 node that looks like this:
         //
         // . . . .
@@ -191,10 +192,9 @@ mod tests {
             0, 1, 1, 0, // Y = 2
             0, 0, 0, 0, // Y = 3
         ];
-        let cache = NodeCache::<Dim2D>::with_repr(NodeRepr::with_state_count(2));
-        let node_access = cache.node_access();
-        let node = node_access.get_from_cells(flats_cells);
-        let array = NdArray::from(node);
+        let cache = Arc::new(NodeCache::<Dim2D>::default());
+        let node = cache.get_from_cells(flats_cells);
+        let array = NdArray::from(node.as_ref());
         assert_eq!(*array.data, flats_cells);
         for pos in node.big_rect().iter() {
             assert_eq!(node.cell_at_pos(&pos), array[pos.to_uvec()]);

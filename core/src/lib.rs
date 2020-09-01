@@ -58,7 +58,7 @@ pub mod traits {
     pub use crate::dim::Dim;
     pub use crate::io::rle::RleEncode;
     pub use crate::ndrect::CanContain;
-    pub use crate::ndtree::Node;
+    pub use crate::ndtree::NodeRefTrait;
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};
     pub use crate::projection::NdProjector;
     pub use crate::sim::{AsNdSimulate, NdSimulate};
@@ -76,9 +76,9 @@ pub mod prelude {
     pub use crate::dim::{Dim1D, Dim2D, Dim3D, Dim4D, Dim5D, Dim6D};
     pub use crate::ndrect::aliases::*;
     pub use crate::ndrect::NdRect;
+    pub use crate::ndtree::aliases::*;
     pub use crate::ndtree::{
-        ArcNode, LeafNodeRef, NdTree, NdTreeSlice, NodeCache, NodeCacheAccess, NodeRef,
-        NodeRefEnum, NodeRepr, NonLeafNodeRef,
+        ArcNode, LeafNodeRef, NdTree, NdTreeSlice, NodeCache, NodeRef, NodeRefEnum, NonLeafNodeRef,
     };
     pub use crate::ndvec::aliases::*;
     pub use crate::ndvec::{AnyDimVec, NdVec};

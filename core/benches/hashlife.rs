@@ -35,7 +35,7 @@ fn run_simulation(
     while automaton.generation_count() < &total_steps {
         automaton.step(&step_size);
     }
-    automaton.population().clone()
+    automaton.population()
 }
 
 criterion_group!(benches, criterion_benchmark);

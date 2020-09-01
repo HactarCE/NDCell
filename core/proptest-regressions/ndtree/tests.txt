@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 05025db6fa45b84b686b00bdc607f425604803952af2f0b5164388e8fbad7ce1 # shrinks to cells_to_set = [(NdVec([0, -1]), 1)], mut cells_to_get = []

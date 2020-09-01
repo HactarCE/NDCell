@@ -1,7 +1,6 @@
 //! The functions that apply a rule to each cell in a grid.
 
 use itertools::Itertools;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use super::rule::{DummyRule, Rule, TransitionFunction};
@@ -10,7 +9,7 @@ use crate::ndarray::NdArray;
 use crate::ndrect::{NdRect, URect};
 use crate::ndtree::{ArcNode, Layer, NdTree, NodeCow, NodeRef, NodeRefEnum, NodeRefTrait};
 use crate::ndvec::UVec;
-use crate::num::{BigInt, One, Signed, Zero};
+use crate::num::{BigInt, One, Signed, ToPrimitive, Zero};
 
 // TODO: parallelize using threadpool and crossbeam_channel (call execute threadpool.max_count times with closures that just loop)
 
@@ -50,6 +49,8 @@ impl<D: Dim> Simulation<D> {
 
     /// Advances the given NdTree by the given number of generations.
     pub fn step(&mut self, tree: &mut NdTree<D>, step_size: &BigInt) {
+        // TODO: step size must be a power of 2 (use GCD power of 2 if it is
+        // not)
         assert!(
             step_size.is_positive(),
             "Step size must be a positive integer"
@@ -143,31 +144,33 @@ impl<D: Dim> Simulation<D> {
                 // empty node.
                 NodeRefEnum::NonLeaf(n) => n.child_at_index(0).into(),
             }
-        } else if node.layer() == self.min_layer {
-            // If this is the minimum layer, just process each cell
-            // individually. This another recursive base case.
+        } else if node.layer() == self.min_layer || node.layer().child_layer() <= Layer::base::<D>()
+        {
+            // If this is the minimum layer or the node's children are leaf
+            // nodes, just process each cell individually. This is the final
+            // recursive base case.
+            let generations = generations.to_usize().unwrap();
+            let mut radius = self.rule.radius() * generations;
+            let mut cell_ndarray = NdArray::from(node);
+            let new_len = node.layer().child_layer().len().unwrap();
+            let offset = node.layer().child_layer().child_layer().len().unwrap();
             assert!(
-                generations.is_one(),
-                "Cannot simulate more than 1 generation at minimum layer"
+                radius < offset,
+                "Cannot simulate so many generations at this layer",
             );
-            let old_cell_ndarray = Rc::new(NdArray::from(node));
-            // let base_offset = 1 << (node.layer() as usize - 2);
 
-            // cache.get_small_node_from_cell_fn(
-            //     node.layer() as usize - 1,
-            //     NdVec::origin(),
-            //     &mut |pos| {
-            //         let slice = old_cell_ndarray.clone().offset_slice(-&pos - base_offset);
-            //         transition_function(slice)
-            //     },
-            // )
-            todo!("simulate for one generation");
-        } else if node.layer().child_layer() <= Layer::base::<D>() {
-            // If this node's children are leaf nodes, the node is small enough
-            // to process each cell individually. This is the final recursive
-            // base case.
+            for _ in 0..generations {
+                let new_radius = radius - self.rule.radius();
+                let new_cell_ndarray =
+                    NdArray::from_fn(UVec::repeat(new_len + new_radius * 2), |pos| {
+                        transition_function(&cell_ndarray, pos + offset - new_radius)
+                    });
+                cell_ndarray = new_cell_ndarray;
+                radius = new_radius;
+            }
+            assert_eq!(0, radius);
 
-            todo!("simulate for multiple generations")
+            node.cache().get_from_cells(cell_ndarray.into_flat_slice())
         } else {
             // In the algorithm described below, there are two `t/2`s that must
             // add up to `t` (where `t` is the number of generations to

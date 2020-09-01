@@ -43,17 +43,15 @@ impl Rule<Dim2D> for MooreTotalistic2D {
     fn transition_function(&self) -> TransitionFunction<Dim2D> {
         Box::new(move |nbhd, pos| {
             // Count live neighbors.
-            let nbhd_shape = Rect2D::span(pos - self.radius(), pos + self.radius());
-            let mut live_neighbors = 0;
-            for cell_coords in nbhd_shape.iter() {
-                if nbhd[cell_coords] != 0 {
-                    live_neighbors += 1;
-                }
-            }
+            let nbhd_rect = Rect2D::span(pos - self.radius(), pos + self.radius());
+            let live_neighbors = nbhd_rect
+                .iter()
+                .filter(|&neighbor_pos| nbhd[neighbor_pos] != 0)
+                .count();
             // Index LUT to get next cell state.
-            if nbhd[NdVec::origin()] != 0 {
-                live_neighbors -= 1;
-                self.survival[live_neighbors]
+            if nbhd[pos] != 0 {
+                // Subtract 1 to exclude the center cell.
+                self.survival[live_neighbors - 1]
             } else {
                 self.birth[live_neighbors]
             }

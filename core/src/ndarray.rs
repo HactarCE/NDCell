@@ -70,6 +70,16 @@ impl<T, D: Dim> NdArray<T, D> {
         Self { size, data }
     }
 
+    /// Creates an `NdArray` by evaluating a function for each position.
+    pub fn from_fn(size: UVec<D>, mut f: impl FnMut(UVec<D>) -> T) -> Self {
+        let rect = URect::with_size(UVec::origin(), size.clone());
+        let mut data = Vec::with_capacity(rect.count());
+        for pos in rect.iter() {
+            data.push(f(pos));
+        }
+        Self::from_flat_slice(size, data)
+    }
+
     /// Returns the flat data behind the array.
     #[inline]
     pub fn into_flat_slice(self) -> Box<[T]> {

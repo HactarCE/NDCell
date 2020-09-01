@@ -82,6 +82,7 @@ fn test_cgol() {
     );
     // Simulate it for a much bigger step.
     sim.step(&mut grid, &64.into());
+    println!("Simulated for 64");
     assert_eq!(
         make_cell_coords_set(vec![
             NdVec([20, 20]),
@@ -94,6 +95,7 @@ fn test_cgol() {
     );
     // And an even bigger one.
     sim.step(&mut grid, &1024.into());
+    println!("Simulated for 1024");
     assert_eq!(
         make_cell_coords_set(vec![
             NdVec([276, 276]),

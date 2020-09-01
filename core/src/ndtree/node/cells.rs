@@ -60,11 +60,12 @@ pub fn join<D: Dim>(children: &[&[u8]]) -> Box<[u8]> {
 
     let layer_1_rect = Layer(1).rect::<D>().unwrap();
     let old_len = old_layer.len().unwrap();
+    let new_strides = new_layer.leaf_strides();
     let mut ret = vec![0_u8; children.len() * children[0].len()];
     for (child, offset) in children.iter().zip(&layer_1_rect) {
         let offset = offset * old_len;
         for (&cell, new_pos) in child.iter().zip(&(old_layer.rect().unwrap() + offset)) {
-            ret[(new_pos * new_layer.leaf_strides()).sum()] = cell;
+            ret[(new_pos * new_strides.clone()).sum()] = cell;
         }
     }
     ret.into_boxed_slice()

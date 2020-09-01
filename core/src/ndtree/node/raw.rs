@@ -131,7 +131,9 @@ impl<D: Dim> Hash for RawNode<D> {
         self.layer.hash(state);
         self.residue.hash(state);
         self.cell_slice().hash(state);
-        self.children_slice().hash(state);
+        for child in self.children_slice().into_iter().flatten() {
+            Arc::as_ptr(child).hash(state);
+        }
     }
 }
 

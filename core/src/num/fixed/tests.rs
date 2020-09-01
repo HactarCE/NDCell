@@ -1,4 +1,3 @@
-
 use proptest::prelude::*;
 use std::convert::TryInto;
 

@@ -20,8 +20,10 @@ use std::hash::Hash;
 use std::ops::{AddAssign, MulAssign};
 
 mod fixed;
+mod maybebig;
 
 pub use fixed::FixedPoint;
+pub use maybebig::MaybeBigUint;
 
 /// "Trait alias" for number types that can be used as coordinates.
 pub trait NdVecNum:

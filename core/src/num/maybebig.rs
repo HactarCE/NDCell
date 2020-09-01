@@ -1,0 +1,39 @@
+//! Enumeration of `BigUint` and `usize`, to save space.
+
+use num::BigUint;
+use std::fmt;
+
+/// Either `usize` ("small") or `BigUint` ("big").
+#[derive(Debug)]
+pub enum MaybeBigUint<'a> {
+    /// Number small enough to fit in `usize`.
+    Small(usize),
+    /// Number too large, requiring `BigUint`.
+    Big(&'a BigUint),
+}
+impl fmt::Display for MaybeBigUint<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MaybeBigUint::Small(x) => fmt::Display::fmt(x, f),
+            MaybeBigUint::Big(x) => fmt::Display::fmt(x, f),
+        }
+    }
+}
+impl From<usize> for MaybeBigUint<'_> {
+    fn from(x: usize) -> Self {
+        Self::Small(x)
+    }
+}
+impl<'a> From<&'a BigUint> for MaybeBigUint<'a> {
+    fn from(x: &'a BigUint) -> Self {
+        Self::Big(x)
+    }
+}
+impl<'a> From<MaybeBigUint<'a>> for BigUint {
+    fn from(n: MaybeBigUint<'a>) -> Self {
+        match n {
+            MaybeBigUint::Small(x) => x.into(),
+            MaybeBigUint::Big(x) => x.clone(),
+        }
+    }
+}

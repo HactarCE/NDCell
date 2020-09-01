@@ -1,5 +1,6 @@
 //! N-dimensional rectangles.
 
+use std::fmt;
 use std::ops::{Add, AddAssign, MulAssign, Sub, SubAssign};
 
 pub mod aliases;
@@ -34,6 +35,20 @@ where
     start: NdVec<D, N>,
     /// Size along each axis.
     size: NdVec<D, N>,
+}
+
+impl<D: DimFor<N>, N: NdVecNum + fmt::Display> fmt::Display for NdRect<D, N>
+where
+    NdVec<D, N>: NdRectVec,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NdRect(")?;
+        fmt::Display::fmt(&self.min(), f)?;
+        write!(f, "..")?;
+        fmt::Display::fmt(&self.max(), f)?;
+        write!(f, ")")?;
+        Ok(())
+    }
 }
 
 impl<D: DimFor<N>, N: NdVecNum> Copy for NdRect<D, N> where NdVec<D, N>: NdRectVec + Copy {}

@@ -127,16 +127,14 @@ pub trait NodeRefTrait<'node>: Copy {
     /// Returns the cell at the given position, modulo the node length along
     /// each axis.
     fn cell_at_pos(self, pos: &BigVec<Self::D>) -> u8 {
-        // Modulo the node length along each axis.
-        let pos = self.modulo_pos(pos);
         match self.as_enum() {
             // If this is a leaf node, the position must be small enough to
             // convert to a UVec.
             NodeRefEnum::Leaf(node) => node.cells()[node.pos_to_cell_index(pos.to_uvec())],
             // If this is not a leaf node, delegate to one of the children.
             NodeRefEnum::NonLeaf(node) => node
-                .child_at_index(node.child_index_with_pos(&pos))
-                .cell_at_pos(&pos),
+                .child_at_index(node.child_index_with_pos(pos))
+                .cell_at_pos(pos),
         }
     }
 

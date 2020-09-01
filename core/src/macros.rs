@@ -34,15 +34,7 @@ macro_rules! match_ndim {
             4 => $case4,
             5 => $case5,
             6 => $case6,
-            _ => {
-                #[cfg(debug_assertions)]
-                unreachable!("NDIM greater than 6");
-
-                #[cfg(not(debug_assertions))]
-                unsafe {
-                    std::hint::unreachable_unchecked!();
-                }
-            }
+            _ => unreachable!("NDIM greater than 6"),
         }
     };
 }

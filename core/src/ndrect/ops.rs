@@ -133,7 +133,7 @@ where
 
 // Implement left shift and right shift on anything that an NdVec can be
 // left/right-shifted by.
-impl<D: DimFor<N>, N: NdVecNum, X> Shl<X> for NdRect<D, N>
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> Shl<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + Shl<X, Output = NdVec<D, N>>,
 {
@@ -143,20 +143,21 @@ where
     fn shl(self, operand: X) -> Self {
         Self {
             start: self.start << operand,
-            size: self.size,
+            size: self.size << operand,
         }
     }
 }
-impl<D: DimFor<N>, N: NdVecNum, X> ShlAssign<X> for NdRect<D, N>
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> ShlAssign<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + ShlAssign<X>,
 {
     #[inline]
     fn shl_assign(&mut self, operand: X) {
-        self.start <<= operand
+        self.start <<= operand;
+        self.size <<= operand;
     }
 }
-impl<D: DimFor<N>, N: NdVecNum, X> Shr<X> for NdRect<D, N>
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> Shr<X> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec + Shr<X, Output = NdVec<D, N>>,
 {
@@ -164,18 +165,19 @@ where
 
     #[inline]
     fn shr(self, operand: X) -> Self {
-        Self {
-            start: self.start >> operand,
-            size: self.size,
-        }
+        let max = self.max() >> operand;
+        let min = self.start >> operand;
+        Self::span(min, max)
     }
 }
-impl<D: DimFor<N>, N: NdVecNum, X> ShrAssign<X> for NdRect<D, N>
+impl<D: DimFor<N>, N: NdVecNum, X: Copy> ShrAssign<X> for NdRect<D, N>
 where
-    NdVec<D, N>: NdRectVec + ShrAssign<X>,
+    NdVec<D, N>: NdRectVec + Shr<X, Output = NdVec<D, N>>,
 {
     #[inline]
     fn shr_assign(&mut self, operand: X) {
-        self.start >>= operand
+        let max = self.max() >> operand;
+        let min = self.min() >> operand;
+        *self = Self::span(min, max)
     }
 }

@@ -249,14 +249,14 @@ impl<D: Dim> RawNode<D> {
     /// Returns a pointer to the cell state slice if this is a leaf node, or
     /// null otherwise.
     fn cell_slice_ptr(&self) -> *mut [u8] {
-        std::ptr::slice_from_raw_parts_mut(
-            if self.layer().is_leaf::<D>() {
-                self.slice_ptr.as_ptr()
-            } else {
-                std::ptr::null_mut()
-            },
-            self.layer().num_cells::<D>().unwrap(),
-        )
+        if self.layer().is_leaf::<D>() {
+            std::ptr::slice_from_raw_parts_mut(
+                self.slice_ptr.as_ptr(),
+                self.layer().num_cells::<D>().unwrap(),
+            )
+        } else {
+            std::ptr::slice_from_raw_parts_mut(std::ptr::null_mut(), 0)
+        }
     }
     /// Returns a pointer to the children slice if this is a non-leaf
     /// node, or null otherwise.

@@ -41,9 +41,9 @@ extern crate pest_derive;
 mod io;
 #[macro_use]
 mod macros;
-mod automaton;
+pub mod automaton;
 pub mod axis;
-mod dim;
+pub mod dim;
 pub mod math;
 pub mod ndarray;
 pub mod ndrect;

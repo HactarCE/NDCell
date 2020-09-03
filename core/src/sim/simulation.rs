@@ -59,6 +59,9 @@ impl<D: Dim> Simulation<D> {
         let _node_cache = Arc::clone(tree.cache());
         let node_cache = _node_cache.read();
 
+        // Set the simulation step size. (Invalidate the cache if necessary.)
+        node_cache.set_sim_step_size(step_size);
+
         // Prepare the transition function. (Clone self.rule to avoid a &self
         // reference which would prevent self.advance_inner_node() from taking a
         // &mut self.)

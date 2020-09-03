@@ -14,6 +14,7 @@ use std::sync::{Arc, Weak};
 use super::{CachedNodeRefTrait, Layer, NodeRef, NodeRefEnum, NodeRefTrait, RawNode};
 use crate::dim::Dim;
 use crate::ndvec::BigVec;
+use crate::num::{BigInt, Signed};
 
 /// Fast hasher used for nodes.
 pub type NodeHasher = BuildHasherDefault<SeaHasher>;
@@ -24,6 +25,10 @@ const SHARD_COUNT: usize = 64;
 
 /// Cache of ND-tree nodes for a single simulation.
 pub struct NodeCache<D: Dim> {
+    /// Pointer to the `Arc<RwLock<T>>` of this cache. This value should never
+    /// be dropped until the `NodeCache` is.
+    this: Weak<RwLock<Self>>,
+
     /// Set of canonical instances of nodes.
     ///
     /// A node must only be deleted from this set if there are no "strong"
@@ -37,21 +42,20 @@ pub struct NodeCache<D: Dim> {
     /// because any reader could turn into a writer if the node it's looking for
     /// is not present.
     node_shards: Box<[NodeShard<D>]>,
-
-    /// Cache of pointers to empty nodes at each layer. The index of the vector
-    /// is the layer of the node.
-    empty_nodes: Mutex<Vec<*const RawNode<D>>>,
-
     /// Map of pointers to nodes held by an `ArcNode` to number of references.
     ///
     /// Nodes with a refcount of zero are removed during GC. Nodes with a refcount less than zero
     ///
     /// These must be preserved during garbage collection.
     arc_nodes: Mutex<HashMap<*const RawNode<D>, usize>>,
+    /// Cache of pointers to empty nodes at each layer. The index of the vector
+    /// is the layer of the node.
+    empty_nodes: Mutex<Vec<*const RawNode<D>>>,
 
-    /// Pointer to the `Arc<RwLock<T>>` of this cache. This value should never
-    /// be dropped until the `NodeCache` is.
-    this: Weak<RwLock<Self>>,
+    /// Step size for the simulation.
+    ///
+    /// Results must be invalidated any time this is modified.
+    sim_step_size: Mutex<BigInt>,
 }
 impl<D: Dim> fmt::Debug for NodeCache<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -83,15 +87,18 @@ impl<D: Dim> NodeCache<D> {
     /// Creates an empty node cache.
     pub fn new() -> Arc<RwLock<Self>> {
         let ret = Arc::new(RwLock::new(Self {
+            this: Weak::new(),
+
             node_shards: std::iter::repeat_with(|| NodeShard::default())
                 .take(SHARD_COUNT)
                 .collect_vec()
                 .into_boxed_slice(),
-            empty_nodes: Mutex::new(vec![]),
             arc_nodes: Mutex::new(HashMap::new()),
-            this: Weak::new(),
+            empty_nodes: Mutex::new(vec![]),
+
+            sim_step_size: Mutex::new(BigInt::from(1)),
         }));
-        ret.write().unwrap().this = Arc::downgrade(&ret);
+        ret.write().this = Arc::downgrade(&ret);
         ret
     }
 
@@ -379,6 +386,24 @@ impl<D: Dim> NodeCache<D> {
                 new_children[child_index] = new_child;
                 self.join_nodes(new_children)
             }
+        }
+    }
+
+    /// Sets the simulation step size, invalidating the cache if it has changed.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if the step size is not a positive power of 2.
+    pub fn set_sim_step_size<'cache>(&'cache self, sim_step_size: &BigInt) {
+        let mut current_step_size = self.sim_step_size.lock();
+        if *current_step_size != *sim_step_size {
+            assert!(sim_step_size.is_positive());
+            assert_eq!(
+                *sim_step_size,
+                BigInt::from(1) << sim_step_size.trailing_zeros().unwrap_or(0)
+            );
+            self.invalidate_results();
+            *current_step_size = sim_step_size.clone();
         }
     }
 }

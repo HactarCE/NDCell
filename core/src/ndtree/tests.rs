@@ -45,7 +45,7 @@ proptest! {
     ) {
         let mut ndtree = NdTree::default();
         let _node_cache = Arc::clone(ndtree.cache());
-        let node_cache = _node_cache.read().unwrap();
+        let node_cache = _node_cache.read();
         let mut hashmap = HashMap::new();
             for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
@@ -75,7 +75,7 @@ proptest! {
 
         let mut ndtree = NdTree::default();
         let _node_cache = Arc::clone(ndtree.cache());
-        let node_cache = _node_cache.read().unwrap();
+        let node_cache = _node_cache.read();
         for (pos, state) in cells_to_set {
             ndtree.set_cell(&*node_cache, &(pos - 128).to_bigvec(), state);
             ndtree.set_cell(&*node_cache, &(pos + 128).to_bigvec(), state);
@@ -97,7 +97,7 @@ proptest! {
     ) {
         let mut ndtree = NdTree::default();
         let _node_cache = Arc::clone(ndtree.cache());
-        let node_cache = _node_cache.read().unwrap();
+        let node_cache = _node_cache.read();
         let mut hashmap = HashMap::new();
             for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);

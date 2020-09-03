@@ -10,8 +10,9 @@
 //! documentation for more details.
 
 use itertools::Itertools;
+use parking_lot::RwLock;
 use std::fmt;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 pub mod aliases;
 pub mod indexed;
@@ -55,7 +56,7 @@ where
     for<'a> NdTreeSlice<'a, D>: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let node_cache = self.cache().read().unwrap();
+        let node_cache = self.cache().read();
         fmt::Display::fmt(&self.slice(&*node_cache), f)
     }
 }
@@ -70,7 +71,7 @@ impl<D: Dim> NdTree<D> {
     #[inline]
     pub fn with_cache(node_cache: Arc<RwLock<NodeCache<D>>>) -> Self {
         Self {
-            root: node_cache.read().unwrap().get_empty_base().into(),
+            root: node_cache.read().get_empty_base().into(),
         }
     }
 

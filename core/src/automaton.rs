@@ -166,7 +166,7 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
     }
     fn set_cell(&mut self, pos: &BigVec<P>, state: u8) {
         let _node_cache = Arc::clone(self.automaton.tree.cache());
-        let node_cache = _node_cache.read().unwrap();
+        let node_cache = _node_cache.read();
         self.automaton
             .tree
             .set_cell(&*node_cache, &self.projection.unproject_pos(pos), state);

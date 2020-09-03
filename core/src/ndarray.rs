@@ -219,7 +219,7 @@ mod tests {
             0, 0, 0, 0, // Y = 3
         ];
         let _node_cache = NodeCache::<Dim2D>::new();
-        let node_cache = _node_cache.read().unwrap();
+        let node_cache = _node_cache.read();
         let node = node_cache.get_from_cells(flats_cells);
         let array = NdArray::from(node);
         assert_eq!(*array.data, flats_cells);

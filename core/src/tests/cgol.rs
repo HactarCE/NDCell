@@ -33,7 +33,7 @@ fn make_cell_coords_set<D: Dim>(coords_vec: Vec<IVec<D>>) -> HashSet<BigVec<D>> 
 fn test_cgol() {
     let mut grid = NdTree::default();
     let _node_cache = Arc::clone(grid.cache());
-    let node_cache = _node_cache.read().unwrap();
+    let node_cache = _node_cache.read();
     let rule = crate::sim::rule::LIFE;
     let mut sim = Simulation::from(rule);
 

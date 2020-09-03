@@ -4,11 +4,12 @@
 //! collection requires a &mut NodeCache.
 
 use itertools::Itertools;
+use parking_lot::{Mutex, RwLock};
 use seahash::SeaHasher;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, Weak};
 
 use super::{CachedNodeRefTrait, Layer, NodeRef, NodeRefEnum, NodeRefTrait, RawNode};
 use crate::dim::Dim;
@@ -20,8 +21,6 @@ pub type NodeHasher = BuildHasherDefault<SeaHasher>;
 type NodeShard<D> = Mutex<HashSet<Box<RawNode<D>>, NodeHasher>>;
 // TODO: measure perf with different shard counts
 const SHARD_COUNT: usize = 64;
-
-const CACHE_UNLOCK_ERROR_MSG: &str = "Failed to unlock node cache mutex";
 
 /// Cache of ND-tree nodes for a single simulation.
 pub struct NodeCache<D: Dim> {
@@ -124,38 +123,32 @@ impl<D: Dim> NodeCache<D> {
     pub fn weak_gc(&mut self) {
         // Mark all nodes as unreachable.
         for shard in &mut self.node_shards[..] {
-            for node in &*shard.get_mut().expect(CACHE_UNLOCK_ERROR_MSG) {
+            for node in &*shard.get_mut() {
                 node.mark_gc_unreachable();
             }
         }
 
         // Mark `ArcNode`s and their children/result as reachable.
-        self.arc_nodes
-            .get_mut()
-            .expect(CACHE_UNLOCK_ERROR_MSG)
-            .retain(|&node_ptr, &mut refcount| {
-                let node = unsafe { &*node_ptr };
-                if refcount > 0 {
-                    // If there are outstanding references, keep the node.
-                    node.mark_gc_reachable();
-                    true
-                } else {
-                    // Otherwise, delete it from `arc_nodes`.
-                    false
-                }
-            });
+        self.arc_nodes.get_mut().retain(|&node_ptr, &mut refcount| {
+            let node = unsafe { &*node_ptr };
+            if refcount > 0 {
+                // If there are outstanding references, keep the node.
+                node.mark_gc_reachable();
+                true
+            } else {
+                // Otherwise, delete it from `arc_nodes`.
+                false
+            }
+        });
         // Mark empty nodes as reachable.
-        for &node_ptr in &*self.empty_nodes.get_mut().expect(CACHE_UNLOCK_ERROR_MSG) {
+        for &node_ptr in &*self.empty_nodes.get_mut() {
             let node = unsafe { &*node_ptr };
             node.mark_gc_reachable();
         }
 
         // Delete unreachable nodes.
         for shard in &mut self.node_shards[..] {
-            shard
-                .get_mut()
-                .expect(CACHE_UNLOCK_ERROR_MSG)
-                .retain(|node| node.is_gc_reachable());
+            shard.get_mut().retain(|node| node.is_gc_reachable());
         }
     }
     /// Clears the HashLife results cache from every node.
@@ -164,14 +157,14 @@ impl<D: Dim> NodeCache<D> {
     /// function is running.
     pub fn invalidate_results(&self) {
         for shard in self.node_shards.iter() {
-            for raw_node in shard.lock().expect(CACHE_UNLOCK_ERROR_MSG).iter() {
+            for raw_node in shard.lock().iter() {
                 unsafe { raw_node.set_result(None) };
             }
         }
     }
     /// Clears empty nodes that have no other references.
     pub fn clear_empty_node_cache(&self) {
-        *self.empty_nodes.lock().expect(CACHE_UNLOCK_ERROR_MSG) = vec![];
+        *self.empty_nodes.lock() = vec![];
     }
 
     /// Returns the largest possible canonical leaf node containing only state #0.
@@ -180,7 +173,7 @@ impl<D: Dim> NodeCache<D> {
     }
     /// Returns the canonical node at the given layer containing only state #0.
     pub fn get_empty<'cache>(&'cache self, layer: Layer) -> NodeRef<'cache, D> {
-        let mut empty_nodes = self.empty_nodes.lock().expect(CACHE_UNLOCK_ERROR_MSG);
+        let mut empty_nodes = self.empty_nodes.lock();
         // Add empty nodes until we have enough.
         while empty_nodes.len() <= layer.to_usize() {
             let next_layer = Layer(empty_nodes.len() as u32);
@@ -209,9 +202,7 @@ impl<D: Dim> NodeCache<D> {
         SHARD_COUNT.hash(&mut hash);
 
         let shard_index = hash.finish() as usize % SHARD_COUNT;
-        let mut shard = self.node_shards[shard_index]
-            .lock()
-            .expect(CACHE_UNLOCK_ERROR_MSG);
+        let mut shard = self.node_shards[shard_index].lock();
 
         // This is ugly, but there's just no API yet for inserting a key into a
         // `HashSet` and immediately getting a reference back.
@@ -404,17 +395,15 @@ impl<D: Dim> Drop for ArcNode<D> {
         // Decrement the refcount.
         self.cache
             .read()
-            .unwrap()
             .arc_nodes
             .lock()
-            .expect(CACHE_UNLOCK_ERROR_MSG)
             .entry(self.raw_node_ptr)
             .and_modify(|refcount| *refcount -= 1);
     }
 }
 impl<D: Dim> Clone for ArcNode<D> {
     fn clone(&self) -> Self {
-        unsafe { Self::new(&*self.cache().read().unwrap(), self.raw_node_ptr) }
+        unsafe { Self::new(&*self.cache().read(), self.raw_node_ptr) }
     }
 }
 impl<D: Dim> PartialEq for ArcNode<D> {
@@ -436,7 +425,6 @@ impl<D: Dim> ArcNode<D> {
         cache
             .arc_nodes
             .lock()
-            .expect(CACHE_UNLOCK_ERROR_MSG)
             .entry(raw_node_ptr)
             .and_modify(|refcount| *refcount += 1)
             .or_insert(1);

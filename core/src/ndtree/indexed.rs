@@ -181,7 +181,7 @@ x = 8, y = 8, rule = B3/S23
 ",
         )
         .unwrap();
-        let node_cache = automaton.tree.root.cache().read().unwrap();
+        let node_cache = automaton.tree.root.cache().read();
         let root = automaton.tree.root.as_ref(&*node_cache);
         assert_eq!(Layer(3), root.layer());
 

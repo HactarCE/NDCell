@@ -5,7 +5,7 @@ use crate::ndvec::NdVec;
 #[test]
 fn test_ndtree_node_set_get() {
     let _node_cache = NodeCache::<Dim2D>::new();
-    let node_cache = _node_cache.read().unwrap();
+    let node_cache = _node_cache.read();
     let mut node = node_cache.get_empty(Layer(3));
     // print_node(node);
     let len = node.layer().len().unwrap();

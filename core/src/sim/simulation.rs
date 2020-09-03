@@ -57,7 +57,7 @@ impl<D: Dim> Simulation<D> {
         );
 
         let _node_cache = Arc::clone(tree.cache());
-        let node_cache = _node_cache.read().unwrap();
+        let node_cache = _node_cache.read();
 
         // Prepare the transition function. (Clone self.rule to avoid a &self
         // reference which would prevent self.advance_inner_node() from taking a

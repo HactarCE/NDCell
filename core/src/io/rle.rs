@@ -8,11 +8,11 @@
 #![allow(missing_docs)]
 
 use pest::Parser;
+use std::sync::Arc;
 
 use crate::automaton::{Automaton2D, NdAutomaton};
 use crate::axis::Axis::{X, Y};
 use crate::ndarray::NdArray;
-use crate::ndtree::NodeRefTrait;
 use crate::ndvec::{BigVec2D, NdVec};
 use crate::num::{BigInt, ToPrimitive, Zero};
 
@@ -114,7 +114,8 @@ impl RleEncode for Automaton2D {
             // TODO: Actually use a proper rulestring.
             rule: Some("Life".to_owned()),
         };
-        let cell_array = NdArray::from(self.tree.root().as_ref());
+        let node_cache = self.tree.cache().read().unwrap();
+        let cell_array = NdArray::from(self.tree.root.as_ref(&*node_cache));
         let mut items: Vec<(usize, RleItem<u8>)> = vec![];
         for mut pos in &cell_array.rect() {
             // Y coordinates increase upwards in NDCell, but downwards in RLE, so
@@ -244,9 +245,11 @@ impl RleEncode for Automaton2D {
         }
         let x_start = pos[X].clone();
 
+        let _node_cache = Arc::clone(ret.tree.cache());
+        let node_cache = _node_cache.read().unwrap();
         for row in cell_array {
             for cell in row {
-                ret.tree.set_cell(&pos, cell);
+                ret.tree.set_cell(&*node_cache, &pos, cell);
                 pos[X] += 1;
             }
             pos[X] = x_start.clone();
@@ -482,12 +485,14 @@ o$3o!
 ",
         )
         .unwrap();
-        assert_eq!(5, imported.tree.root.population().to_usize().unwrap());
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 14])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 13])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([10, 12])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 12])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 12])));
+        let tree = &imported.tree;
+        let node_cache = tree.cache().read().unwrap();
+        assert_eq!(5, tree.root.population().to_usize().unwrap());
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([11, 14])));
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([12, 13])));
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([10, 12])));
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([11, 12])));
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([12, 12])));
         let exported = RleEncode::to_cxrle(&imported);
         // Right now, the RLE writer includes a fair bit of padding around all
         // the edges. In future this might be fixed, and then this hard-coded
@@ -502,6 +507,17 @@ x = 32, y = 32, rule = Life
         );
         let reimported: Automaton2D =
             RleEncode::from_rle(&exported).expect("Could not parse RLE output");
-        assert_eq!(imported.tree, reimported.tree);
+        println!("imported\n{}\n", imported.tree.root.as_raw());
+        println!("reimported\n{}\n", reimported.tree.root.as_raw());
+        // `NdTree`s with different caches are considered separate, so we
+        // serialize before comparing.
+        assert_eq!(imported.tree.to_string(), reimported.tree.to_string());
     }
+}
+
+fn h(x: impl std::hash::Hash) -> u64 {
+    use std::hash::Hasher;
+    let mut h = seahash::SeaHasher::default();
+    x.hash(&mut h);
+    h.finish()
 }

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{Layer, LeafNodeRef, NodeCow, NodeRefEnum, NodeRefTrait};
+use super::{CachedNodeRefTrait, Layer, LeafNodeRef, NodeRef, NodeRefEnum, NodeRefTrait};
 use crate::axis::Axis::{X, Y};
 use crate::dim::*;
 use crate::ndrect::{BigRect, CanContain};
@@ -11,9 +11,9 @@ use crate::num::ToPrimitive;
 ///
 /// Note that like an `NdTree`, `NdTreeSlice` cannot be smaller than a base node.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct NdTreeSlice<'node, D: Dim> {
+pub struct NdTreeSlice<'cache, D: Dim> {
     /// Root node.
-    pub root: NodeCow<'node, D>,
+    pub root: NodeRef<'cache, D>,
     /// Position of the lower bound of the root node.
     pub offset: BigVec<D>,
 }
@@ -40,7 +40,7 @@ impl fmt::Display for NdTreeSlice<'_, Dim2D> {
     }
 }
 
-impl<'node, D: Dim> NdTreeSlice<'node, D> {
+impl<'cache, D: Dim> NdTreeSlice<'cache, D> {
     /// Returns the NdRect bounding the slice.
     #[inline]
     pub fn rect(&self) -> BigRect<D> {
@@ -75,7 +75,7 @@ impl<'node, D: Dim> NdTreeSlice<'node, D> {
     /// Subdivides the slice into 2^NDIM slices half the size. If the slice
     /// contains only one cell, returns `Err()` containing that cell and its
     /// position.
-    pub fn subdivide<'a: 'node>(
+    pub fn subdivide<'a: 'cache>(
         &'a self,
     ) -> Result<Vec<NdTreeSlice<'a, D>>, (LeafNodeRef<'a, D>, &'a BigVec<D>)> {
         match self.root.as_enum() {
@@ -94,15 +94,6 @@ impl<'node, D: Dim> NdTreeSlice<'node, D> {
                     })
                     .collect())
             }
-        }
-    }
-
-    /// Converts the root node to an `ArcNode`, making this slice owned.
-    #[inline]
-    pub fn into_arc<'a>(self) -> NdTreeSlice<'a, D> {
-        NdTreeSlice {
-            root: self.root.into_arc().into(),
-            offset: self.offset,
         }
     }
 }

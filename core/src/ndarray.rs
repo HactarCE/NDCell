@@ -5,7 +5,7 @@ use std::ops::{Index, IndexMut};
 
 use crate::dim::*;
 use crate::ndrect::URect;
-use crate::ndtree::{Layer, NodeRef, NodeRefEnum, NodeRefTrait};
+use crate::ndtree::{CachedNodeRefTrait, Layer, NodeRef, NodeRefEnum, NodeRefTrait};
 use crate::ndvec::UVec;
 use crate::num::ToPrimitive;
 
@@ -178,8 +178,6 @@ pub type Array6D<T> = NdArray<T, Dim6D>;
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
     use crate::ndrect::{NdRect, URect4D};
     use crate::ndtree::NodeCache;
@@ -220,9 +218,10 @@ mod tests {
             0, 1, 1, 0, // Y = 2
             0, 0, 0, 0, // Y = 3
         ];
-        let cache = Arc::new(NodeCache::<Dim2D>::default());
-        let node = cache.get_from_cells(flats_cells);
-        let array = NdArray::from(node.as_ref());
+        let _node_cache = NodeCache::<Dim2D>::new();
+        let node_cache = _node_cache.read().unwrap();
+        let node = node_cache.get_from_cells(flats_cells);
+        let array = NdArray::from(node);
         assert_eq!(*array.data, flats_cells);
         for pos in node.big_rect().iter() {
             assert_eq!(node.cell_at_pos(&pos), array[pos.to_uvec()]);

@@ -2,9 +2,8 @@
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
-use super::{ArcNode, Layer, NodeCache, NodeCow, RawNode};
+use super::{Layer, NodeCache, RawNode};
 use crate::dim::Dim;
 use crate::ndrect::{BigRect, URect};
 use crate::ndvec::{BigVec, UVec};
@@ -16,89 +15,12 @@ pub trait NodeRefTrait<'node>: Copy {
     type D: Dim;
 
     /// Returns a reference to the raw node structure.
-    fn as_raw(self) -> &'node Arc<RawNode<Self::D>>;
-    /// Returns a `Node` of the node.
-    fn as_ref(self) -> NodeRef<'node, Self::D>;
-    /// Returns a `NodeRefEnum` of the node.
-    fn as_enum(self) -> NodeRefEnum<'node, Self::D>;
-
-    /// Returns the leaf node wrapped in `Some` if it is a leaf node, or `None`
-    /// if it is not.
-    #[inline]
-    fn as_leaf(self) -> Option<LeafNodeRef<'node, Self::D>> {
-        match self.as_enum() {
-            NodeRefEnum::Leaf(node) => Some(node),
-            NodeRefEnum::NonLeaf(_) => None,
-        }
-    }
-    /// Returns the non-leaf node wrapped in `Some` if it is a non-leaf node, or
-    /// `None` if it is a leaf node.
-    #[inline]
-    fn as_non_leaf(self) -> Option<NonLeafNodeRef<'node, Self::D>> {
-        match self.as_enum() {
-            NodeRefEnum::Leaf(_) => None,
-            NodeRefEnum::NonLeaf(node) => Some(node),
-        }
-    }
-    /// Returns `true` if the node is a leaf node.
-    #[inline]
-    fn is_leaf(self) -> bool {
-        self.as_leaf().is_some()
-    }
-    /// Returns `true` if the node is a non-leaf node.
-    #[inline]
-    fn is_non_leaf(self) -> bool {
-        self.as_non_leaf().is_some()
-    }
-    /// Returns `true` if all cells in the node are state #0.
-    ///
-    /// This is O(1) because each node stores a flag to indicate if it is empty.
-    #[inline]
-    fn is_empty(self) -> bool {
-        self.as_raw().is_empty()
-    }
-
-    /// Returns the cache that the node is stored in.
-    fn cache(self) -> &'node NodeCache<Self::D>;
-    /// Asserts that both nodes are from the same cache.
-    #[inline]
-    fn assert_same_cache<'b>(self, other: impl NodeRefTrait<'b, D = Self::D>) {
-        assert_eq!(
-            self.cache(),
-            other.cache(),
-            "Attempt to operate on nodes from different caches",
-        );
-    }
+    fn as_raw(self) -> &'node RawNode<Self::D>;
 
     /// Returns the layer of the node.
     #[inline]
     fn layer(self) -> Layer {
         self.as_raw().layer()
-    }
-    /// Returns the node one layer below this one that results from simulating
-    /// this node some fixed number of generations, or `None` if that result
-    /// hasn't been computed yet.
-    #[inline]
-    fn result(self) -> Option<ArcNode<Self::D>> {
-        self.as_raw()
-            .result()
-            .as_ref()
-            .map(|res| unsafe { ArcNode::new(self.cache().clone(), Arc::clone(res)) })
-    }
-    /// Atomically sets the result of simulating this node for some fixed number
-    /// of generations.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `result` is from a different node cache.
-    #[inline]
-    fn set_result<'b>(self, result: Option<impl NodeRefTrait<'b, D = Self::D>>) {
-        if let Some(res) = result {
-            // Nodes must not contain pointers to nodes in other caches.
-            self.assert_same_cache(res);
-        }
-        self.as_raw()
-            .set_result(result.map(NodeRefTrait::as_raw).map(Arc::clone));
     }
 
     /// Returns the number of cells along each axis of the node as a `BigInt`.
@@ -124,6 +46,93 @@ pub trait NodeRefTrait<'node>: Copy {
         pos & &(self.big_len() - 1)
     }
 
+    /// Returns the population of the node.
+    #[inline]
+    fn population(self) -> BigUint {
+        self.as_raw().calc_population()
+    }
+}
+
+/// Common functionality for ND-tree nodes that requires shared access to the
+/// node cache.
+pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
+    /// Returns a `NodeRef` of the node.
+    fn as_ref(self) -> NodeRef<'cache, Self::D>;
+    /// Returns a `NodeRefEnum` of the node.
+    fn as_enum(self) -> NodeRefEnum<'cache, Self::D>;
+
+    /// Returns the leaf node wrapped in `Some` if it is a leaf node, or `None`
+    /// if it is not.
+    #[inline]
+    fn as_leaf(self) -> Option<LeafNodeRef<'cache, Self::D>> {
+        match self.as_enum() {
+            NodeRefEnum::Leaf(node) => Some(node),
+            NodeRefEnum::NonLeaf(_) => None,
+        }
+    }
+    /// Returns the non-leaf node wrapped in `Some` if it is a non-leaf node, or
+    /// `None` if it is a leaf node.
+    #[inline]
+    fn as_non_leaf(self) -> Option<NonLeafNodeRef<'cache, Self::D>> {
+        match self.as_enum() {
+            NodeRefEnum::Leaf(_) => None,
+            NodeRefEnum::NonLeaf(node) => Some(node),
+        }
+    }
+    /// Returns `true` if the node is a leaf node.
+    #[inline]
+    fn is_leaf(self) -> bool {
+        self.as_leaf().is_some()
+    }
+    /// Returns `true` if the node is a non-leaf node.
+    #[inline]
+    fn is_non_leaf(self) -> bool {
+        self.as_non_leaf().is_some()
+    }
+    /// Returns `true` if all cells in the node are state #0.
+    ///
+    /// This is O(1) because each node stores a flag to indicate if it is empty.
+    #[inline]
+    fn is_empty(self) -> bool {
+        self.as_raw().is_empty()
+    }
+
+    /// Returns the cache that the node is stored in.
+    fn cache(self) -> &'cache NodeCache<Self::D>;
+    /// Asserts that both nodes are from the same cache.
+    #[inline]
+    fn assert_same_cache<'b>(self, other: impl CachedNodeRefTrait<'b, D = Self::D>) {
+        assert_eq!(
+            self.cache(),
+            other.cache(),
+            "Attempt to operate on nodes from different caches",
+        );
+    }
+
+    /// Returns the node one layer below this one that results from simulating
+    /// this node some fixed number of generations, or `None` if that result
+    /// hasn't been computed yet.
+    #[inline]
+    fn result(self) -> Option<NodeRef<'cache, Self::D>> {
+        self.as_raw()
+            .result()
+            .map(|res| unsafe { NodeRef::new(self.cache(), res) })
+    }
+    /// Atomically sets the result of simulating this node for some fixed number
+    /// of generations.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `result` is from a different node cache.
+    #[inline]
+    fn set_result<'b>(self, result: Option<impl CachedNodeRefTrait<'b, D = Self::D>>) {
+        if let Some(res) = result {
+            // Nodes must not contain pointers to nodes in other caches.
+            self.assert_same_cache(res);
+        }
+        unsafe { self.as_raw().set_result(result.map(NodeRefTrait::as_raw)) };
+    }
+
     /// Returns the cell at the given position, modulo the node length along
     /// each axis.
     fn cell_at_pos(self, pos: &BigVec<Self::D>) -> u8 {
@@ -138,16 +147,6 @@ pub trait NodeRefTrait<'node>: Copy {
         }
     }
 
-    /// Returns the population of the node.
-    #[inline]
-    fn population(self) -> BigUint {
-        // TODO: cache population
-        match self.as_enum() {
-            NodeRefEnum::Leaf(node) => node.cells().iter().filter(|&&x| x != 0).count().into(),
-            NodeRefEnum::NonLeaf(node) => node.children().map(NodeRefTrait::population).sum(),
-        }
-    }
-
     /// Returns one corner of the node at one layer lower. If the node is only a
     /// single cell, returns `Err()` containing that cell state.
     ///
@@ -155,7 +154,7 @@ pub trait NodeRefTrait<'node>: Copy {
     /// is a leaf.
     ///
     /// This is equivalent to taking one element of the result of `subdivide()`.
-    fn get_corner(self, index: usize) -> Result<NodeCow<'node, Self::D>, u8> {
+    fn get_corner(self, index: usize) -> Result<NodeRef<'cache, Self::D>, u8> {
         self.cache().get_corner(self.as_enum(), index)
     }
     /// Subdivides the node into 2^NDIM smaller nodes at one layer lower. If the
@@ -164,63 +163,65 @@ pub trait NodeRefTrait<'node>: Copy {
     /// The return value is borrowed if `node` is a non-leaf and owned if `node`
     /// is a leaf.
     #[inline]
-    fn subdivide(self) -> Result<Vec<NodeCow<'node, Self::D>>, u8> {
+    fn subdivide(self) -> Result<Vec<NodeRef<'cache, Self::D>>, u8> {
         self.cache().subdivide(self.as_enum())
     }
     /// Creates a node one layer lower containing the contents of the center of
     /// the node.
     #[inline]
-    fn centered_inner(self) -> Result<ArcNode<Self::D>, ()> {
+    fn centered_inner(self) -> Result<NodeRef<'cache, Self::D>, ()> {
         self.cache().centered_inner(self.as_enum())
     }
     /// Creates an identical node except with the cell at the given position
     /// (modulo the node length along each axis) modified.
     #[inline]
-    fn set_cell(self, pos: &BigVec<Self::D>, cell_state: u8) -> ArcNode<Self::D> {
+    fn set_cell(self, pos: &BigVec<Self::D>, cell_state: u8) -> NodeRef<'cache, Self::D> {
         self.cache().set_cell(self.as_enum(), pos, cell_state)
     }
 }
 
 /// Enumeration of references to leaf or non-leaf nodes.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum NodeRefEnum<'node, D: Dim> {
+pub enum NodeRefEnum<'cache, D: Dim> {
     /// Leaf node.
-    Leaf(LeafNodeRef<'node, D>),
+    Leaf(LeafNodeRef<'cache, D>),
     /// Non-leaf node.
-    NonLeaf(NonLeafNodeRef<'node, D>),
+    NonLeaf(NonLeafNodeRef<'cache, D>),
 }
-impl<'node, D: Dim> From<LeafNodeRef<'node, D>> for NodeRefEnum<'node, D> {
+impl<'cache, D: Dim> From<LeafNodeRef<'cache, D>> for NodeRefEnum<'cache, D> {
     #[inline]
-    fn from(node: LeafNodeRef<'node, D>) -> Self {
+    fn from(node: LeafNodeRef<'cache, D>) -> Self {
         Self::Leaf(node)
     }
 }
-impl<'node, D: Dim> From<NonLeafNodeRef<'node, D>> for NodeRefEnum<'node, D> {
+impl<'cache, D: Dim> From<NonLeafNodeRef<'cache, D>> for NodeRefEnum<'cache, D> {
     #[inline]
-    fn from(node: NonLeafNodeRef<'node, D>) -> Self {
+    fn from(node: NonLeafNodeRef<'cache, D>) -> Self {
         Self::NonLeaf(node)
     }
 }
-impl<'node, D: Dim> NodeRefTrait<'node> for NodeRefEnum<'node, D> {
+impl<'cache, D: Dim> NodeRefTrait<'cache> for NodeRefEnum<'cache, D> {
     type D = D;
 
     #[inline]
-    fn as_raw(self) -> &'node Arc<RawNode<D>> {
+    fn as_raw(self) -> &'cache RawNode<D> {
         self.as_ref().as_raw()
     }
+}
+impl<'cache, D: Dim> CachedNodeRefTrait<'cache> for NodeRefEnum<'cache, D> {
     #[inline]
-    fn as_ref(self) -> NodeRef<'node, D> {
+    fn as_ref(self) -> NodeRef<'cache, D> {
         match self {
             NodeRefEnum::Leaf(node) => node.as_ref(),
             NodeRefEnum::NonLeaf(node) => node.as_ref(),
         }
     }
     #[inline]
-    fn as_enum(self) -> NodeRefEnum<'node, D> {
+    fn as_enum(self) -> NodeRefEnum<'cache, D> {
         self
     }
     #[inline]
-    fn cache(self) -> &'node NodeCache<D> {
+    fn cache(self) -> &'cache NodeCache<D> {
         self.as_ref().cache()
     }
 }
@@ -229,28 +230,30 @@ impl<'node, D: Dim> NodeRefTrait<'node> for NodeRefEnum<'node, D> {
 ///
 /// Cells are stored in a flattened array in row-major order.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct LeafNodeRef<'node, D: Dim>(NodeRef<'node, D>);
-impl<'node, D: Dim> NodeRefTrait<'node> for LeafNodeRef<'node, D> {
+pub struct LeafNodeRef<'cache, D: Dim>(NodeRef<'cache, D>);
+impl<'cache, D: Dim> NodeRefTrait<'cache> for LeafNodeRef<'cache, D> {
     type D = D;
 
     #[inline]
-    fn as_raw(self) -> &'node Arc<RawNode<D>> {
+    fn as_raw(self) -> &'cache RawNode<D> {
         self.0.as_raw()
     }
+}
+impl<'cache, D: Dim> CachedNodeRefTrait<'cache> for LeafNodeRef<'cache, D> {
     #[inline]
-    fn as_ref(self) -> NodeRef<'node, D> {
+    fn as_ref(self) -> NodeRef<'cache, D> {
         self.0
     }
     #[inline]
-    fn as_enum(self) -> NodeRefEnum<'node, D> {
+    fn as_enum(self) -> NodeRefEnum<'cache, D> {
         self.into()
     }
     #[inline]
-    fn cache(self) -> &'node NodeCache<D> {
+    fn cache(self) -> &'cache NodeCache<D> {
         self.0.cache()
     }
 }
-impl<'node, D: Dim> LeafNodeRef<'node, D> {
+impl<'cache, D: Dim> LeafNodeRef<'cache, D> {
     /// Returns the flattened cell index corresponding to the given position in
     /// a leaf node, modulo the node length along each axis.
     #[inline]
@@ -295,35 +298,37 @@ impl<'node, D: Dim> LeafNodeRef<'node, D> {
     ///
     /// See the documentation at the crate root for more details.
     #[inline]
-    pub fn cells(self) -> &'node [u8] {
+    pub fn cells(self) -> &'cache [u8] {
         self.as_raw().cell_slice().unwrap()
     }
 }
 
 /// Reference to a non-leaf node in a cache.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct NonLeafNodeRef<'node, D: Dim>(NodeRef<'node, D>);
-impl<'node, D: Dim> NodeRefTrait<'node> for NonLeafNodeRef<'node, D> {
+pub struct NonLeafNodeRef<'cache, D: Dim>(NodeRef<'cache, D>);
+impl<'cache, D: Dim> NodeRefTrait<'cache> for NonLeafNodeRef<'cache, D> {
     type D = D;
 
     #[inline]
-    fn as_raw(self) -> &'node Arc<RawNode<D>> {
+    fn as_raw(self) -> &'cache RawNode<D> {
         self.0.as_raw()
     }
+}
+impl<'cache, D: Dim> CachedNodeRefTrait<'cache> for NonLeafNodeRef<'cache, D> {
     #[inline]
-    fn as_ref(self) -> NodeRef<'node, D> {
+    fn as_ref(self) -> NodeRef<'cache, D> {
         self.0
     }
     #[inline]
-    fn as_enum(self) -> NodeRefEnum<'node, D> {
+    fn as_enum(self) -> NodeRefEnum<'cache, D> {
         self.into()
     }
     #[inline]
-    fn cache(self) -> &'node NodeCache<D> {
+    fn cache(self) -> &'cache NodeCache<D> {
         self.0.cache()
     }
 }
-impl<'node, D: Dim> NonLeafNodeRef<'node, D> {
+impl<'cache, D: Dim> NonLeafNodeRef<'cache, D> {
     /// Returns the index of the child containing the given position, module the
     /// node size along each axis.
     #[inline]
@@ -334,27 +339,27 @@ impl<'node, D: Dim> NonLeafNodeRef<'node, D> {
     /// Returns the array of pointers to the node's children, each of which is
     /// one layer below the node.
     #[inline]
-    pub fn raw_children(self) -> &'node [Arc<RawNode<D>>] {
+    pub fn raw_children(self) -> &'cache [&'cache RawNode<D>] {
         self.as_raw().children_slice().unwrap()
     }
     /// Returns an iterator over the node's children, each of which is one layer
     /// below this node.
     #[inline]
-    pub fn children(self) -> impl 'node + Iterator<Item = NodeRef<'node, D>> {
+    pub fn children(self) -> impl 'cache + Iterator<Item = NodeRef<'cache, D>> {
         (0..D::BRANCHING_FACTOR).map(move |i| self.child_at_index(i))
     }
     /// Returns a reference to the child node at the given index.
     ///
     /// Panics if the index is not between 0 and 2^NDIM (exclusive).
     #[inline]
-    pub fn child_at_index(self, index: usize) -> NodeRef<'node, D> {
+    pub fn child_at_index(self, index: usize) -> NodeRef<'cache, D> {
         assert!(index < D::BRANCHING_FACTOR);
-        unsafe { NodeRef::new(self.cache(), &self.raw_children()[index]) }
+        unsafe { NodeRef::new(self.cache(), self.raw_children()[index]) }
     }
     /// Returns a reference to the child node containing the given position,
     /// modulo the node length along each axis.
     #[inline]
-    pub fn child_with_pos(self, pos: &BigVec<D>) -> NodeRef<'node, D> {
+    pub fn child_with_pos(self, pos: &BigVec<D>) -> NodeRef<'cache, D> {
         self.child_at_index(self.layer().non_leaf_child_index(pos))
     }
     /// Returns a reference to the grandchild node at the given index.
@@ -363,7 +368,7 @@ impl<'node, D: Dim> NonLeafNodeRef<'node, D> {
     ///
     /// This method panics if the index is not between 0 and 4^NDIM (exclusive).
     #[inline]
-    pub fn grandchild_at_index(self, index: usize) -> NodeCow<'node, D> {
+    pub fn grandchild_at_index(self, index: usize) -> NodeRef<'cache, D> {
         assert!(index < D::BRANCHING_FACTOR * D::BRANCHING_FACTOR);
         let (child_index, grandchild_index) = split_grandchild_index::<D>(index);
         let child = self.child_at_index(child_index);
@@ -382,9 +387,9 @@ impl<'node, D: Dim> NonLeafNodeRef<'node, D> {
 /// rather than the contents of the node. This relies on only a single
 /// "canonical" instance of each unique node in the cache.
 #[derive(Copy, Clone)]
-pub struct NodeRef<'node, D: Dim> {
-    cache: &'node NodeCache<D>,
-    raw_node: &'node Arc<RawNode<D>>,
+pub struct NodeRef<'cache, D: Dim> {
+    cache: &'cache NodeCache<D>,
+    raw_node: &'cache RawNode<D>,
 }
 impl<D: Dim> fmt::Debug for NodeRef<'_, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -393,29 +398,31 @@ impl<D: Dim> fmt::Debug for NodeRef<'_, D> {
 }
 impl<D: Dim> PartialEq for NodeRef<'_, D> {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.raw_node, &other.raw_node) && self.cache == other.cache
+        std::ptr::eq(self.raw_node, other.raw_node) && self.cache == other.cache
     }
 }
 impl<D: Dim> Eq for NodeRef<'_, D> {}
 impl<D: Dim> Hash for NodeRef<'_, D> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.cache.hash(state);
-        std::ptr::hash(Arc::as_ptr(&self.raw_node), state);
+        std::ptr::hash(self.raw_node, state);
     }
 }
-impl<'node, D: Dim> NodeRefTrait<'node> for NodeRef<'node, D> {
+impl<'cache, D: Dim> NodeRefTrait<'cache> for NodeRef<'cache, D> {
     type D = D;
 
     #[inline]
-    fn as_raw(self) -> &'node Arc<RawNode<D>> {
+    fn as_raw(self) -> &'cache RawNode<D> {
         &self.raw_node
     }
+}
+impl<'cache, D: Dim> CachedNodeRefTrait<'cache> for NodeRef<'cache, D> {
     #[inline]
-    fn as_ref(self) -> NodeRef<'node, D> {
+    fn as_ref(self) -> NodeRef<'cache, D> {
         self
     }
     #[inline]
-    fn as_enum(self) -> NodeRefEnum<'node, D> {
+    fn as_enum(self) -> NodeRefEnum<'cache, D> {
         if self.layer().is_leaf::<D>() {
             LeafNodeRef(self).into()
         } else {
@@ -423,17 +430,19 @@ impl<'node, D: Dim> NodeRefTrait<'node> for NodeRef<'node, D> {
         }
     }
     #[inline]
-    fn cache(self) -> &'node NodeCache<D> {
+    fn cache(self) -> &'cache NodeCache<D> {
         self.cache
     }
 }
-impl<'node, D: Dim> NodeRef<'node, D> {
-    /// Creates a reference to a raw node.
+impl<'cache, D: Dim> NodeRef<'cache, D> {
+    /// Creates a reference to a raw node, extending the lifetime of the node
+    /// reference to the lifetime of the cache reference.
     ///
     /// # Safety
     ///
     /// `raw_node` must be a valid node obtained from `cache`.
-    pub unsafe fn new(cache: &'node NodeCache<D>, raw_node: &'node Arc<RawNode<D>>) -> Self {
+    pub unsafe fn new(cache: &'cache NodeCache<D>, raw_node: &'_ RawNode<D>) -> Self {
+        let raw_node = std::mem::transmute::<&'_ RawNode<D>, &'cache RawNode<D>>(raw_node);
         Self { cache, raw_node }
     }
 }

@@ -62,6 +62,11 @@ impl<T, D: Dim> NdArray<T, D> {
     pub fn into_flat_slice(self) -> Box<[T]> {
         self.data
     }
+    /// Returns the flat data behind the array.
+    #[inline]
+    pub fn as_flat_slice(&self) -> &[T] {
+        &self.data
+    }
 
     /// Returns the size of the array along each axis.
     #[inline]

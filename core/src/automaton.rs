@@ -1,6 +1,6 @@
 use enum_dispatch::enum_dispatch;
 use std::convert::TryInto;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::dim::*;
 use crate::ndtree::{NdTree, NodeRefTrait};
@@ -179,7 +179,7 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
 #[derive(Default, Clone)]
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<D>,
-    pub sim: Arc<Mutex<Simulation<D>>>,
+    pub sim: Arc<Simulation<D>>,
     pub generations: BigInt,
 }
 impl<D: Dim> NdSimulate for NdAutomaton<D> {
@@ -196,14 +196,14 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
         self.generations = generations;
     }
     fn step(&mut self, step_size: &BigInt) {
-        self.sim.lock().unwrap().step(&mut self.tree, step_size);
+        self.sim.step(&mut self.tree, step_size);
         self.generations += step_size;
     }
 }
 impl<D: Dim> NdAutomaton<D> {
     /// Sets the simulation of the automaton.
     pub fn set_sim(&mut self, new_sim: Simulation<D>) {
-        self.sim = Arc::new(Mutex::new(new_sim));
+        self.sim = Arc::new(new_sim);
     }
 }
 

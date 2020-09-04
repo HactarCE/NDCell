@@ -33,6 +33,8 @@ pub use slice::*;
 #[derive(Debug, Clone)]
 pub struct NdTree<D: Dim> {
     /// The root node of this slice.
+    ///
+    /// TODO: make this private and add getter/setter that checks it's larger than 1x1.
     pub root: ArcNode<D>,
 }
 
@@ -73,6 +75,13 @@ impl<D: Dim> NdTree<D> {
         Self {
             root: node_cache.read().get_empty_base().into(),
         }
+    }
+    pub fn from_node<'n>(node: impl CachedNodeRefTrait<'n, D = D>) -> Self {
+        assert!(
+            node.layer() > Layer(0),
+            "Root of ND-tree must be larger than a single cell"
+        );
+        Self { root: node.into() }
     }
 
     /// Sets the root node of the ND-tree.

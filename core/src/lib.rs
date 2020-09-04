@@ -61,6 +61,7 @@ pub mod traits {
     pub use crate::ndtree::{CachedNodeRefTrait, NodeRefTrait};
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};
     pub use crate::projection::NdProjector;
+    pub use crate::sim::rule::Rule;
     pub use crate::sim::{AsNdSimulate, NdSimulate};
 }
 

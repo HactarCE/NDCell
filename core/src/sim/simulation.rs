@@ -15,7 +15,7 @@ use crate::num::{BigInt, One, Signed, ToPrimitive, Zero};
 
 // TODO: consider renaming to Simulator or something else
 
-/// A HashLife simulation of a given automaton that caches simulation results.
+/// A HashLife simulation.
 #[derive(Debug)]
 pub struct Simulation<D: Dim> {
     rule: Arc<dyn Rule<D>>,
@@ -48,7 +48,7 @@ impl<D: Dim> Simulation<D> {
     }
 
     /// Advances the given NdTree by the given number of generations.
-    pub fn step(&mut self, tree: &mut NdTree<D>, step_size: &BigInt) {
+    pub fn step(&self, tree: &mut NdTree<D>, step_size: &BigInt) {
         // TODO: step size must be a power of 2 (use GCD power of 2 if it is
         // not)
         assert!(
@@ -72,7 +72,7 @@ impl<D: Dim> Simulation<D> {
         // following `expansion_distance >= r * t` (rounding `r` and `t` each to
         // the next-highest power of two).
         let radius_log2 = self.rule.radius().next_power_of_two().trailing_zeros();
-        let step_size_log2 = step_size.bits();
+        let step_size_log2 = step_size.trailing_zeros().unwrap_or(0);
         let min_expansion_distance = BigInt::one() << (radius_log2 as u64 + step_size_log2);
         let mut expansion_distance = BigInt::zero();
         while expansion_distance < min_expansion_distance {
@@ -121,7 +121,7 @@ impl<D: Dim> Simulation<D> {
     /// replaced with their next lowest power of two.
     #[must_use = "This method returns a new value instead of mutating its input"]
     fn advance_inner_node<'cache>(
-        &mut self,
+        &self,
         node: NodeRef<'cache, D>,
         generations: &BigInt,
         transition_function: &mut TransitionFunction<'_, D>,
@@ -160,28 +160,46 @@ impl<D: Dim> Simulation<D> {
             // If this is the minimum layer or the node's children are leaf
             // nodes, just process each cell individually. This is the final
             // recursive base case.
-            let generations = generations.to_usize().unwrap();
-            let mut radius = self.rule.radius() * generations;
-            let mut cell_ndarray = NdArray::from(node);
-            let new_len = node.layer().child_layer().len().unwrap();
-            let offset = node.layer().child_layer().child_layer().len().unwrap();
+
+            // We start with a node at layer `L` and time `0` and will end with
+            // a node at layer `L-1` at time `t`, centered on the original node.
+            let l = node.layer();
+            let t = generations.to_usize().unwrap();
+
+            // We're able to do this because the "speed of light" is equal to
+            // `r*t`, where `r` is the maximum Chebyshev radius of a cell's
+            // neighborhood (https://en.wikipedia.org/wiki/Chebyshev_distance)
+            // and `r*t` is less than the "padding" between the edge of the
+            // result node and the original node.
+            let mut rt = self.rule.radius() * t;
             assert!(
-                radius < offset,
-                "Cannot simulate so many generations at this layer",
+                rt < l.len().unwrap() / 4,
+                "Cannot simulate {} generations at {:?} with radius {}",
+                t,
+                l,
+                self.rule.radius(),
             );
 
-            for _ in 0..generations {
-                let new_radius = radius - self.rule.radius();
-                let new_cell_ndarray =
-                    NdArray::from_fn(UVec::repeat(new_len + new_radius * 2), |pos| {
-                        transition_function(&cell_ndarray, pos + offset - new_radius)
-                    });
-                cell_ndarray = new_cell_ndarray;
-                radius = new_radius;
+            let mut cells_ndarray = NdArray::from(node);
+            let mut cells_ndarray_len = l.len().unwrap();
+            // For each timestep ...
+            for _ in 0..t {
+                // `rt` is how much "padding" we need around each edge of the
+                // result in order to simulate remaining generations.
+                rt -= self.rule.radius();
+                let new_cells_ndarray_len = l.child_layer().len().unwrap() + 2 * rt;
+                // Compute the offset between the lowest corner of the current
+                // `cells_ndarray` and the new one.
+                let offset = (cells_ndarray_len - new_cells_ndarray_len) / 2;
+                // Make a new array that is as big as we need.
+                cells_ndarray = NdArray::from_fn(UVec::repeat(new_cells_ndarray_len), |pos| {
+                    transition_function(&cells_ndarray, pos + offset)
+                });
+                cells_ndarray_len = new_cells_ndarray_len;
             }
-            assert_eq!(0, radius);
 
-            node.cache().get_from_cells(cell_ndarray.into_flat_slice())
+            // Finally, make an ND-tree from those cells
+            node.cache().get_from_cells(cells_ndarray.into_flat_slice())
         } else {
             // In the algorithm described below, there are two `t/2`s that must
             // add up to `t` (where `t` is the number of generations to

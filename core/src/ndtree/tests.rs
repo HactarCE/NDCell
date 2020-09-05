@@ -9,7 +9,8 @@ use crate::num::BigUint;
 
 fn assert_ndtree_valid(
     expected_cells: &HashMap<IVec2D, u8>,
-    ndtree: &mut NdTree2D,
+    ndtree: &NdTree2D,
+    node_cache: &NodeCache<Dim2D>,
     cells_to_check: &Vec<IVec2D>,
 ) {
     assert_eq!(
@@ -19,12 +20,12 @@ fn assert_ndtree_valid(
                 .filter(|(_, &cell_state)| cell_state != 0)
                 .count()
         ),
-        ndtree.root().population()
+        ndtree.root.population()
     );
     for pos in cells_to_check {
         assert_eq!(
             *expected_cells.get(pos).unwrap_or(&0),
-            ndtree.get_cell(&pos.to_bigvec())
+            ndtree.get_cell(node_cache, &pos.to_bigvec())
         );
     }
 }
@@ -42,32 +43,27 @@ proptest! {
         mut cells_to_set: Vec<(IVec2D, u8)>,
         mut cells_to_get: Vec<IVec2D>,
     ) {
-        // Only test a reasonable number of cells in debug mode, otherwise this
-        // takes FOREVER. For a more thorough test, run with `--release`.
-        #[cfg(debug_assertions)]
-        cells_to_set.truncate(5);
-        #[cfg(debug_assertions)]
-        cells_to_get.truncate(5);
-
         let mut ndtree = NdTree::default();
+        let _node_cache = Arc::clone(ndtree.cache());
+        let node_cache = _node_cache.read();
         let mut hashmap = HashMap::new();
             for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
-            ndtree.set_cell(&pos.to_bigvec(), state);
+            ndtree.set_cell(&*node_cache, &pos.to_bigvec(), state);
             cells_to_get.push(pos);
         }
-        assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
+        assert_ndtree_valid(&hashmap, &ndtree, &*node_cache, &cells_to_get);
         // Test that expansion preserves population and positions.
         let old_layer = ndtree.layer();
         while ndtree.layer() < Layer(5) {
-            ndtree.expand();
-            assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
+            ndtree.expand(&*node_cache);
+            assert_ndtree_valid(&hashmap, &ndtree, &*node_cache, &cells_to_get);
         }
         // Test that shrinking actually shrinks.
-        ndtree.shrink();
+        ndtree.shrink(&*node_cache);
         assert!(ndtree.layer() <= old_layer);
         // Test that shrinking preserves population and positions.
-        assert_ndtree_valid(&hashmap, &mut ndtree, &cells_to_get);
+        assert_ndtree_valid(&hashmap, &ndtree, &*node_cache, &cells_to_get);
     }
 
     /// Tests that identical nodes use the same underlying structure.
@@ -75,21 +71,16 @@ proptest! {
     fn test_ndtree_cache(
         mut cells_to_set: Vec<(IVec2D, u8)>,
     ) {
-        // Only test a reasonable number of cells in debug mode, otherwise this
-        // takes FOREVER. For a more thorough test, run with `--release`.
-        #[cfg(debug_assertions)]
-        cells_to_set.truncate(5);
-        #[cfg(not(debug_assertions))]
-        cells_to_set.truncate(20);
-
         prop_assume!(!cells_to_set.is_empty());
 
         let mut ndtree = NdTree::default();
-            for (pos, state) in cells_to_set {
-            ndtree.set_cell(&(pos - 128).to_bigvec(), state);
-            ndtree.set_cell(&(pos + 128).to_bigvec(), state);
+        let _node_cache = Arc::clone(ndtree.cache());
+        let node_cache = _node_cache.read();
+        for (pos, state) in cells_to_set {
+            ndtree.set_cell(&*node_cache, &(pos - 128).to_bigvec(), state);
+            ndtree.set_cell(&*node_cache, &(pos + 128).to_bigvec(), state);
         }
-        let slice = ndtree.slice();
+        let slice = ndtree.slice(&*node_cache);
         let children = slice.subdivide().unwrap();
         let subnode1 = &children[0].root;
         let subnode2 = &children[children.len() - 1].root;
@@ -105,14 +96,16 @@ proptest! {
         y_radius in 0..20_isize,
     ) {
         let mut ndtree = NdTree::default();
+        let _node_cache = Arc::clone(ndtree.cache());
+        let node_cache = _node_cache.read();
         let mut hashmap = HashMap::new();
             for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
-            ndtree.set_cell(&pos.to_bigvec(), state);
+            ndtree.set_cell(&*node_cache, &pos.to_bigvec(), state);
         }
         let half_diag = NdVec([x_radius, y_radius]);
         let rect = IRect::span(center - half_diag, center + half_diag).to_bigrect();
-        let slice = ndtree.slice_containing(&rect);
+        let slice = ndtree.slice_containing(&*node_cache, &rect);
         let slice_rect = slice.rect();
         // Check that the slice contains the rectangle.
         assert!(slice_rect.contains(&rect));
@@ -125,7 +118,12 @@ proptest! {
             }
         }
         // Check that the slice is as small as it can be.
-        println!("{:?}, rect={}; should contain {}", slice.root.layer(), slice.rect(), rect);
+        println!(
+            "{:?}, rect={}; should contain {}",
+            slice.root.layer(),
+            slice.rect(),
+            rect,
+        );
         assert!(
             slice.root.layer().is_leaf::<Dim2D>()
             || slice.root.big_len() <= (rect.len(X) - 2) * 4

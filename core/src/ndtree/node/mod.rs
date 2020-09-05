@@ -11,7 +11,12 @@ mod layer;
 mod raw;
 mod refs;
 
-pub use cache::{ArcNode, NodeCache, NodeCow, NodeHasher};
+pub use cache::{ArcNode, NodeCache, NodeHasher};
 pub use layer::Layer;
 pub use raw::RawNode;
-pub use refs::{LeafNodeRef, NodeRef, NodeRefEnum, NodeRefTrait, NonLeafNodeRef};
+pub use refs::{
+    CachedNodeRefTrait, LeafNodeRef, NodeRef, NodeRefEnum, NodeRefTrait, NonLeafNodeRef,
+};
+
+#[cfg(test)]
+mod tests;

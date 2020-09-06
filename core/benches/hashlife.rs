@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use ndcell_core::ndarray::NdArray;
 use ndcell_core::prelude::*;
 use ndcell_core::sim::rule::LIFE;
@@ -20,7 +20,7 @@ $2539bo$2540bo1489$1201bo$1201bo$1202b2o$1204bo$1204bo$1204bo$1204bo
 28b2o$27bo$27bo$27bo$27bo!";
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    bench_sim_2d(c, GGG, "Gosper's Glider Gun", LIFE, 256, 64, 77_usize);
+    bench_sim_2d(c, GGG, "Gosper's Glider Gun", LIFE, 512, 64, 119_usize);
 
     // bench_sim_2d(c, GGG, "Gosper's Glider Gun", LIFE, 65536, 64, 10957_usize);
     // bench_sim_2d(c, GOTTS_DOTS, "Gott's Dots", LIFE, 16384, 64, 25828_usize);

@@ -195,9 +195,9 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
     fn set_generation_count(&mut self, generations: BigInt) {
         self.generations = generations;
     }
-    fn step(&mut self, step_size: &BigInt) {
-        self.sim.step(&mut self.tree, step_size);
-        self.generations += step_size;
+    fn step(&mut self, gens: &BigInt) {
+        self.sim.step(&mut self.tree, gens);
+        self.generations += gens;
     }
 }
 impl<D: Dim> NdAutomaton<D> {

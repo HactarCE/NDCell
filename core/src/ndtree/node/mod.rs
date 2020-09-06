@@ -11,7 +11,7 @@ mod layer;
 mod raw;
 mod refs;
 
-pub use cache::{ArcNode, NodeCache, NodeHasher};
+pub use cache::{ArcNode, HashLifeParams, NodeCache, NodeHasher};
 pub use layer::Layer;
 pub use raw::RawNode;
 pub use refs::{

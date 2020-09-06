@@ -14,7 +14,7 @@ use std::sync::{Arc, Weak};
 use super::{CachedNodeRefTrait, Layer, NodeRef, NodeRefEnum, NodeRefTrait, RawNode};
 use crate::dim::Dim;
 use crate::ndvec::BigVec;
-use crate::num::{BigInt, Signed};
+use crate::num::{BigUint, One, Zero};
 
 /// Fast hasher used for nodes.
 pub type NodeHasher = BuildHasherDefault<SeaHasher>;
@@ -52,10 +52,12 @@ pub struct NodeCache<D: Dim> {
     /// is the layer of the node.
     empty_nodes: Mutex<Vec<*const RawNode<D>>>,
 
-    /// Step size for the simulation.
+    /// Simulation lock.
     ///
-    /// Results must be invalidated any time this is modified.
-    sim_step_size: Mutex<BigInt>,
+    /// Reading or writing HashLife results requires a read handle to this lock,
+    /// and modifying parameters that determine the meaning of those results
+    /// (such as simulation step size) requires a write handle to this lock.
+    sim_lock: RwLock<HashLifeParams<D>>,
 }
 impl<D: Dim> fmt::Debug for NodeCache<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -96,9 +98,18 @@ impl<D: Dim> NodeCache<D> {
             arc_nodes: Mutex::new(HashMap::new()),
             empty_nodes: Mutex::new(vec![]),
 
-            sim_step_size: Mutex::new(BigInt::from(1)),
+            sim_lock: RwLock::new(HashLifeParams {
+                log2_step_size: 0,
+                cache: Weak::new(),
+            }),
         }));
-        ret.write().this = Arc::downgrade(&ret);
+
+        {
+            let mut ret_write = ret.write();
+            ret_write.this = Arc::downgrade(&ret);
+            ret_write.sim_lock.get_mut().cache = Arc::downgrade(&ret);
+        }
+
         ret
     }
 
@@ -389,21 +400,96 @@ impl<D: Dim> NodeCache<D> {
         }
     }
 
-    /// Sets the simulation step size, invalidating the cache if it has changed.
+    /// Returns the simulation lock for this cache.
     ///
-    /// # Panics
+    /// Reading or writing HashLife results requires a read handle to this lock,
+    /// and modifying parameters that determine the meaning of those results
+    /// (such as simulation step size) requires a write handle to this lock.
+    pub fn sim_lock(&self) -> &RwLock<HashLifeParams<D>> {
+        &self.sim_lock
+    }
+}
+
+/// HashLife parameters.
+#[derive(Debug, Clone)]
+pub struct HashLifeParams<D: Dim> {
+    /// Base-2 log of the step size for the simulation.
     ///
-    /// This method panics if the step size is not a positive power of 2.
-    pub fn set_sim_step_size<'cache>(&'cache self, sim_step_size: &BigInt) {
-        let mut current_step_size = self.sim_step_size.lock();
-        if *current_step_size != *sim_step_size {
-            assert!(sim_step_size.is_positive());
-            assert_eq!(
-                *sim_step_size,
-                BigInt::from(1) << sim_step_size.trailing_zeros().unwrap_or(0)
-            );
-            self.invalidate_results();
-            *current_step_size = sim_step_size.clone();
+    /// Results must be invalidated any time this is modified.
+    log2_step_size: u32,
+
+    /// Pointer to the `Arc<RwLock<T>>` of the parent cache. This value should
+    /// never be dropped until the `HashLifeParams` is.
+    cache: Weak<RwLock<NodeCache<D>>>,
+}
+impl<D: Dim> HashLifeParams<D> {
+    /// Returns the simulation step size.
+    #[inline]
+    pub fn step_size(&self) -> BigUint {
+        BigUint::one() << self.log2_step_size
+    }
+    /// Returns the base-2 log of the simulation step size.
+    #[inline]
+    pub fn log2_step_size(&self) -> u32 {
+        self.log2_step_size
+    }
+    /// Sets the base-2 log of the simulation step size, invalidating the cache
+    /// if it has changed.
+    pub fn set_log2_step_size(&mut self, log2_step_size: u32) {
+        if self.log2_step_size != log2_step_size {
+            self.cache.upgrade().unwrap().read().invalidate_results();
+            self.log2_step_size = log2_step_size;
+        }
+    }
+
+    /// Returns the step size for a node at the given layer in a rule with the
+    /// given radius.
+    pub fn big_node_step_size(&self, layer: Layer, rule_radius: usize) -> BigUint {
+        if let Some(pow) = self.log2_node_step_size(layer, rule_radius) {
+            BigUint::one() << pow
+        } else {
+            BigUint::zero()
+        }
+    }
+    /// Returns the step size for a node at the given layer in a rule with the
+    /// given radius, or `None` if it does not fit within a `usize`.
+    pub fn node_step_size(&self, layer: Layer, rule_radius: usize) -> Option<usize> {
+        if let Some(pow) = self.log2_node_step_size(layer, rule_radius) {
+            1_usize.checked_shl(pow)
+        } else {
+            Some(0)
+        }
+    }
+    /// Returns the base-2 log of the step size for a node at the given layer in
+    /// a rule with the given radius, or `None` if even a single generation
+    /// cannot be simulated.
+    pub fn log2_node_step_size(&self, layer: Layer, rule_radius: usize) -> Option<u32> {
+        let log2_rule_radius = rule_radius
+            .next_power_of_two()
+            .max(1) // Treat r=0 rules like r=1.
+            .trailing_zeros();
+        // Compute the maximum number of  generations we could simulate this
+        // node, regardless of the currently configured step size. We start with
+        // the size of the layer, divide by 4 to get the "padding" between the
+        // edge of the node and the edge of its centered inner result, and then
+        // divide by the rule radius (which defines the rule's "speed of light")
+        // to turn distance into time.
+        let log2_layer_max = layer
+            .to_u32()
+            // If the result would be negative, then we can't even simulate a
+            // single generation on this node.
+            .checked_sub(2 + log2_rule_radius)?;
+        Some(std::cmp::min(log2_layer_max, self.log2_step_size))
+    }
+}
+#[cfg(test)]
+impl HashLifeParams<crate::dim::Dim2D> {
+    /// Constructor for testing.
+    #[cfg(test)]
+    pub(super) fn with_log2_step_size(log2_step_size: u32) -> Self {
+        Self {
+            log2_step_size,
+            cache: Weak::new(),
         }
     }
 }

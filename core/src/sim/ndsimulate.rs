@@ -12,7 +12,7 @@ pub trait NdSimulate {
     /// Sets the number of generations that have elapsed in the simulation.
     fn set_generation_count(&mut self, generations: BigInt);
     /// Steps forward in the simulation by the given number of generations.
-    fn step(&mut self, step_size: &BigInt);
+    fn step(&mut self, gens: &BigInt);
 }
 
 /// A proxy trait for NdSimulate.
@@ -43,7 +43,7 @@ where
     fn set_generation_count(&mut self, generations: BigInt) {
         self.as_ndsim_mut().set_generation_count(generations);
     }
-    fn step(&mut self, step_size: &BigInt) {
-        self.as_ndsim_mut().step(step_size);
+    fn step(&mut self, gens: &BigInt) {
+        self.as_ndsim_mut().step(gens);
     }
 }

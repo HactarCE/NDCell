@@ -54,7 +54,7 @@ fn bench_sim_2d(
     let ndarray = {
         let automaton = Automaton2D::from_rle(rle).expect("RLE parsing failed");
         let node_cache = automaton.tree.cache().read();
-        NdArray::from(automaton.tree.root.as_ref(&node_cache))
+        NdArray::from(automaton.tree.root().as_ref(&node_cache))
     };
 
     c.bench_function(
@@ -62,13 +62,11 @@ fn bench_sim_2d(
         |b| {
             b.iter(|| {
                 // Create a new automaton from the array so that the cache is empty.
-                let cache = NodeCache::new();
-                let root = cache
-                    .read()
-                    .get_from_cells(ndarray.clone().into_flat_slice())
-                    .into();
+                let _cache = NodeCache::new();
+                let cache = _cache.read();
+                let root = cache.get_from_cells(ndarray.clone().into_flat_slice());
                 let automaton = Automaton2D {
-                    tree: NdTree { root },
+                    tree: NdTree::from_node(root),
                     sim: Arc::clone(&sim),
                     generations: 0.into(),
                 };

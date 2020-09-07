@@ -115,7 +115,7 @@ impl RleEncode for Automaton2D {
             rule: Some("Life".to_owned()),
         };
         let node_cache = self.tree.cache().read();
-        let cell_array = NdArray::from(self.tree.root.as_ref(&*node_cache));
+        let cell_array = NdArray::from(self.tree.root().as_ref(&*node_cache));
         let mut items: Vec<(usize, RleItem<u8>)> = vec![];
         for mut pos in &cell_array.rect() {
             // Y coordinates increase upwards in NDCell, but downwards in RLE, so
@@ -487,7 +487,7 @@ o$3o!
         .unwrap();
         let tree = &imported.tree;
         let node_cache = tree.cache().read();
-        assert_eq!(5, tree.root.population().to_usize().unwrap());
+        assert_eq!(5, tree.root().population().to_usize().unwrap());
         assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([11, 14])));
         assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([12, 13])));
         assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([10, 12])));
@@ -507,8 +507,8 @@ x = 32, y = 32, rule = Life
         );
         let reimported: Automaton2D =
             RleEncode::from_rle(&exported).expect("Could not parse RLE output");
-        println!("imported\n{}\n", imported.tree.root.as_raw());
-        println!("reimported\n{}\n", reimported.tree.root.as_raw());
+        println!("imported\n{}\n", imported.tree.root().as_raw());
+        println!("reimported\n{}\n", reimported.tree.root().as_raw());
         // `NdTree`s with different caches are considered separate, so we
         // serialize before comparing.
         assert_eq!(imported.tree.to_string(), reimported.tree.to_string());

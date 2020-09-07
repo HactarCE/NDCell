@@ -62,14 +62,14 @@ pub mod traits {
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};
     pub use crate::projection::NdProjector;
     pub use crate::sim::rule::Rule;
-    pub use crate::sim::{AsNdSimulate, NdSimulate};
+    pub use crate::sim::{AsSimulate, Simulate};
 }
 
 pub mod prelude {
     pub use crate::traits::*;
 
     pub use crate::automaton::{
-        Automaton, Automaton1D, Automaton2D, Automaton3D, Automaton4D, Automaton5D, Automaton6D,
+        Automaton1D, Automaton2D, Automaton3D, Automaton4D, Automaton5D, Automaton6D, AutomatonRef,
         ProjectedAutomaton, ProjectedAutomaton1D, ProjectedAutomaton2D, ProjectedAutomaton3D,
         ProjectedAutomaton4D, ProjectedAutomaton5D, ProjectedAutomaton6D,
     };
@@ -84,7 +84,7 @@ pub mod prelude {
     pub use crate::ndvec::aliases::*;
     pub use crate::ndvec::{AnyDimVec, NdVec};
     pub use crate::num::{r64, BigInt, BigUint, R64};
-    pub use crate::sim::Simulation;
+    pub use crate::sim::HashLife;
 
     // TODO: consider including things from crate::automaton
 }

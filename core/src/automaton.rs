@@ -7,7 +7,7 @@ use crate::ndtree::{NdTree, NodeRefTrait};
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, BigUint};
 use crate::projection::{NdProjection, NdProjectionError, NdProjector, ProjectionParams};
-use crate::sim::{AsNdSimulate, NdSimulate, Simulation};
+use crate::sim::{AsSimulate, HashLife, Simulate};
 
 /// ProjectedAutomaton functionality implemented by dispatching to
 /// NdProjectedAutomaton.
@@ -101,8 +101,8 @@ where
         Self::from(NdProjectedAutomaton::from(automaton))
     }
 }
-impl<P: Dim> AsNdSimulate for ProjectedAutomaton<P> {
-    fn as_ndsim(&self) -> &dyn NdSimulate {
+impl<P: Dim> AsSimulate for ProjectedAutomaton<P> {
+    fn as_sim(&self) -> &dyn Simulate {
         match self {
             Self::From1D(inner) => inner,
             Self::From2D(inner) => inner,
@@ -112,7 +112,7 @@ impl<P: Dim> AsNdSimulate for ProjectedAutomaton<P> {
             Self::From6D(inner) => inner,
         }
     }
-    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate {
         match self {
             Self::From1D(inner) => inner,
             Self::From2D(inner) => inner,
@@ -145,11 +145,11 @@ impl<D: Dim> From<NdAutomaton<D>> for NdProjectedAutomaton<D, D> {
         }
     }
 }
-impl<D: Dim, P: Dim> AsNdSimulate for NdProjectedAutomaton<D, P> {
-    fn as_ndsim(&self) -> &dyn NdSimulate {
+impl<D: Dim, P: Dim> AsSimulate for NdProjectedAutomaton<D, P> {
+    fn as_sim(&self) -> &dyn Simulate {
         &self.automaton
     }
-    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate {
         &mut self.automaton
     }
 }
@@ -176,13 +176,13 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
 /// A fully-fledged cellular automaton, including a grid (NdTree), rule
 /// (Simulation), and generation count.
 #[allow(missing_docs)]
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<D>,
-    pub sim: Arc<Simulation<D>>,
+    pub sim: Arc<HashLife<D>>,
     pub generations: BigInt,
 }
-impl<D: Dim> NdSimulate for NdAutomaton<D> {
+impl<D: Dim> Simulate for NdAutomaton<D> {
     fn ndim(&self) -> usize {
         D::NDIM
     }
@@ -202,7 +202,7 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
 }
 impl<D: Dim> NdAutomaton<D> {
     /// Sets the simulation of the automaton.
-    pub fn set_sim(&mut self, new_sim: Simulation<D>) {
+    pub fn set_sim(&mut self, new_sim: HashLife<D>) {
         self.sim = Arc::new(new_sim);
     }
 }

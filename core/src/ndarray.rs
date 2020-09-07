@@ -144,6 +144,7 @@ impl<D: Dim> NdArray<u8, D> {
 
 /// Converts a "flattened" `usize` array index into a `UVec` position for an
 /// `NdArray` with the given size.
+#[allow(unused)]
 fn unflatten_idx<D: Dim>(size: UVec<D>, mut idx: usize) -> UVec<D> {
     let mut ret = UVec::origin();
     assert!(idx < size.product() as usize);

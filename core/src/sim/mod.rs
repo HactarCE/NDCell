@@ -1,8 +1,8 @@
-// TODO: rewrite this file
+//! Rules and simulation algorithms.
 
-mod ndsimulate;
+mod hashlife;
 pub mod rule;
-mod simulation;
+mod simulate;
 
-pub use ndsimulate::{AsNdSimulate, NdSimulate};
-pub use simulation::Simulation;
+pub use hashlife::HashLife;
+pub use simulate::{AsSimulate, Simulate};

@@ -35,7 +35,7 @@ fn test_cgol_glider() {
     let _node_cache = Arc::clone(grid.cache());
     let node_cache = _node_cache.read();
     let rule = crate::sim::rule::LIFE;
-    let sim = Simulation::from(rule);
+    let sim = HashLife::from(rule);
 
     // Make a glider.
     grid.set_cell(&*node_cache, &NdVec::big([3, 3]), 1);
@@ -120,7 +120,7 @@ $26bobo!";
 fn regression_test_cgol_ggg() {
     let mut automaton = Automaton2D::from_rle(GGG).unwrap();
     let rule = crate::sim::rule::LIFE;
-    let sim = Simulation::from(rule);
+    let sim = HashLife::from(rule);
     automaton.set_sim(sim);
     // Step 512 generations.
     for _ in 0..8 {
@@ -133,7 +133,7 @@ fn regression_test_cgol_ggg() {
 fn test_cgol_ggg_non_power_of_2() {
     let mut automaton = Automaton2D::from_rle(GGG).unwrap();
     let rule = crate::sim::rule::LIFE;
-    let sim = Simulation::from(rule);
+    let sim = HashLife::from(rule);
     automaton.set_sim(sim);
     // Step 240 generations.
     for _ in 0..4 {

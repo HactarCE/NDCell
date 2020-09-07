@@ -260,11 +260,11 @@ impl GridViewTrait for GridView2D {
     }
 }
 
-impl AsNdSimulate for GridView2D {
-    fn as_ndsim(&self) -> &dyn NdSimulate {
+impl AsSimulate for GridView2D {
+    fn as_sim(&self) -> &dyn Simulate {
         &self.automaton
     }
-    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate {
         &mut self.automaton
     }
 }

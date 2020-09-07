@@ -1,4 +1,4 @@
-use ndcell_core::NdSimulate;
+use ndcell_core::Simulate;
 
 use imgui::*;
 use num::ToPrimitive;

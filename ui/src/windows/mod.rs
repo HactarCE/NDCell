@@ -1,6 +1,6 @@
 use imgui::*;
 
-use ndcell_core::{Dim, Dim2D, NdSimulate, X, Y};
+use ndcell_core::{Dim, Dim2D, Simulate, X, Y};
 
 mod simulation;
 

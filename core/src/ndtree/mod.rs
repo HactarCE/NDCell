@@ -33,9 +33,7 @@ pub use slice::*;
 #[derive(Debug, Clone)]
 pub struct NdTree<D: Dim> {
     /// The root node of this slice.
-    ///
-    /// TODO: make this private and add getter/setter that checks it's larger than 1x1.
-    pub root: ArcNode<D>,
+    root: ArcNode<D>,
 }
 
 impl<D: Dim> Default for NdTree<D> {
@@ -48,7 +46,7 @@ impl<D: Dim> Default for NdTree<D> {
 impl<D: Dim> PartialEq for NdTree<D> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.root == other.root
+        self.root() == other.root()
     }
 }
 impl<D: Dim> Eq for NdTree<D> {}
@@ -76,14 +74,25 @@ impl<D: Dim> NdTree<D> {
             root: node_cache.read().get_empty_base().into(),
         }
     }
+    /// Creates an ND-tree containing the given node centered on the origin.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the node consists of only a single cell.
+    #[inline]
     pub fn from_node<'n>(node: impl CachedNodeRefTrait<'n, D = D>) -> Self {
         assert!(
             node.layer() > Layer(0),
-            "Root of ND-tree must be larger than a single cell"
+            "Root of ND-tree must be larger than a single cell",
         );
         Self { root: node.into() }
     }
 
+    /// Returns the root node of the ND-tree.
+    #[inline]
+    pub fn root(&self) -> &ArcNode<D> {
+        &self.root
+    }
     /// Sets the root node of the ND-tree.
     ///
     /// # Panics
@@ -94,7 +103,7 @@ impl<D: Dim> NdTree<D> {
         let new_root = new_root.into();
         assert!(
             new_root.layer() > Layer(0),
-            "Root of ND-tree must be larger than a single cell"
+            "Root of ND-tree must be larger than a single cell",
         );
         self.root = new_root;
     }
@@ -102,12 +111,12 @@ impl<D: Dim> NdTree<D> {
     /// Returns the cache for nodes in the ND-tree.
     #[inline]
     pub fn cache(&self) -> &Arc<RwLock<NodeCache<D>>> {
-        self.root.cache()
+        self.root().cache()
     }
     /// Returns the layer of the largest node in the ND-tree.
     #[inline]
     pub fn layer(&self) -> Layer {
-        self.root.layer()
+        self.root().layer()
     }
     /// Returns the length of the grid along one axis.
     #[inline]
@@ -128,7 +137,7 @@ impl<D: Dim> NdTree<D> {
     #[inline]
     pub fn slice<'cache>(&self, cache: &'cache NodeCache<D>) -> NdTreeSlice<'cache, D> {
         NdTreeSlice {
-            root: self.root.as_ref(cache),
+            root: self.root().as_ref(cache),
             offset: self.offset(),
         }
     }
@@ -141,10 +150,10 @@ impl<D: Dim> NdTree<D> {
     /// final result is that the entire tree contains the same contents as
     /// before, but with 25% padding along each edge.
     pub fn expand(&mut self, cache: &NodeCache<D>) {
-        let empty_node = cache.get_empty(self.root.layer().child_layer());
+        let empty_node = cache.get_empty(self.root().layer().child_layer());
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         let new_root = cache.join_nodes(
-            self.root
+            self.root()
                 .as_ref(cache)
                 .subdivide()
                 .unwrap()
@@ -180,7 +189,7 @@ impl<D: Dim> NdTree<D> {
     /// "Zooms in" the grid by a factor of 2.
     fn _shrink(&mut self, cache: &NodeCache<D>) -> Result<(), ()> {
         // Don't shrink past the base layer.
-        let root = self.root.as_ref(cache).as_non_leaf().ok_or(())?;
+        let root = self.root().as_ref(cache).as_non_leaf().ok_or(())?;
 
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         // Fetch the grandchildren of this node that are closest to the center.
@@ -212,7 +221,9 @@ impl<D: Dim> NdTree<D> {
     /// Returns the state of the cell at the given position.
     pub fn get_cell(&self, cache: &NodeCache<D>, pos: &BigVec<D>) -> u8 {
         if self.rect().contains(pos) {
-            self.root.as_ref(cache).cell_at_pos(&(pos - self.offset()))
+            self.root()
+                .as_ref(cache)
+                .cell_at_pos(&(pos - self.offset()))
         } else {
             0
         }

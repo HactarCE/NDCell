@@ -19,11 +19,11 @@ impl GridView3D {
     }
 }
 
-impl AsNdSimulate for GridView3D {
-    fn as_ndsim(&self) -> &dyn NdSimulate {
+impl AsSimulate for GridView3D {
+    fn as_sim(&self) -> &dyn Simulate {
         unimplemented!()
     }
-    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate {
         unimplemented!()
     }
 }

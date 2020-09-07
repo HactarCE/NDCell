@@ -1,8 +1,7 @@
 use num::{BigInt, BigUint};
 
-/// Simulation-related methods whose type signatures are the same for all
-/// automata, regardless of dimensionality.
-pub trait NdSimulate {
+/// Dimension-independent automaton simulation methods.
+pub trait Simulate {
     /// Returns the number of dimensions of the underlying automaton.
     fn ndim(&self) -> usize;
     /// Returns the number of live cells in the simulation.
@@ -15,35 +14,35 @@ pub trait NdSimulate {
     fn step(&mut self, gens: &BigInt);
 }
 
-/// A proxy trait for NdSimulate.
+/// A proxy trait for `Simulate`.
 ///
 /// To avoid a ton of boilerplate re-implementing all of the above methods of
-/// NdSimulate, we intead only have to re-implement these two methods of
-/// IntoNdSimulate.
-pub trait AsNdSimulate {
-    /// Convert to an immutable NdSimulate trait object.
-    fn as_ndsim(&self) -> &dyn NdSimulate;
-    /// Convert to a mutable NdSimulate trait object.
-    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate;
+/// `Simulate`, we intead only have to re-implement these two methods of
+/// `AsSimulate`.
+pub trait AsSimulate {
+    /// Convert to an immutable Simulate trait object.
+    fn as_sim(&self) -> &dyn Simulate;
+    /// Convert to a mutable Simulate trait object.
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate;
 }
 
-impl<T> NdSimulate for T
+impl<T> Simulate for T
 where
-    T: AsNdSimulate,
+    T: AsSimulate,
 {
     fn ndim(&self) -> usize {
-        self.as_ndsim().ndim()
+        self.as_sim().ndim()
     }
     fn population(&self) -> BigUint {
-        self.as_ndsim().population()
+        self.as_sim().population()
     }
     fn generation_count(&self) -> &BigInt {
-        self.as_ndsim().generation_count()
+        self.as_sim().generation_count()
     }
     fn set_generation_count(&mut self, generations: BigInt) {
-        self.as_ndsim_mut().set_generation_count(generations);
+        self.as_sim_mut().set_generation_count(generations);
     }
     fn step(&mut self, gens: &BigInt) {
-        self.as_ndsim_mut().step(gens);
+        self.as_sim_mut().step(gens);
     }
 }

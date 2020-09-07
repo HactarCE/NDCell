@@ -39,7 +39,7 @@ impl Rule<Dim2D> for MooreTotalistic2D {
     fn radius(&self) -> usize {
         1
     }
-    fn transition_function(&self) -> TransitionFunction<Dim2D> {
+    fn transition_function<'a>(&'a self) -> TransitionFunction<'a, Dim2D> {
         Box::new(move |nbhd, pos| {
             // Count live neighbors.
             let nbhd_rect = Rect2D::span(pos - self.radius(), pos + self.radius());

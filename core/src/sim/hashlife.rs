@@ -1,4 +1,4 @@
-//! The functions that apply a rule to each cell in a grid.
+//! HashLife simulation algorithm.
 
 use itertools::Itertools;
 use std::convert::TryInto;
@@ -16,21 +16,22 @@ use crate::num::{BigInt, One, Signed, ToPrimitive, Zero};
 
 // TODO: parallelize using threadpool and crossbeam_channel (call execute threadpool.max_count times with closures that just loop)
 
-// TODO: consider renaming to Simulator or something else
-
-/// A HashLife simulation.
+/// A HashLife simulator for a CA rule.
+///
+/// This struct takes ND-trees and computes their future state after some number
+/// of generations.
 #[derive(Debug)]
-pub struct Simulation<D: Dim> {
+pub struct HashLife<D: Dim> {
     rule: Arc<dyn Rule<D>>,
     min_layer: Layer,
 }
-impl<D: Dim> Default for Simulation<D> {
+impl<D: Dim> Default for HashLife<D> {
     fn default() -> Self {
         Self::new(Arc::new(DummyRule))
     }
 }
 
-impl<D: Dim> Simulation<D> {
+impl<D: Dim> HashLife<D> {
     /// Constructs a `Simulation` using the given rule.
     pub fn from<R: 'static + Rule<D>>(rule: R) -> Self {
         Self::new(Arc::new(rule))
@@ -108,7 +109,7 @@ impl<D: Dim> Simulation<D> {
             tree.expand(&*node_cache);
             // Now do the actual simulation.
             let new_root = self.advance_inner_node(
-                tree.root.as_ref(&*node_cache),
+                tree.root().as_ref(&*node_cache),
                 &sim_params,
                 &mut transition_function,
             );

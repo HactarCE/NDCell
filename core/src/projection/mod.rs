@@ -3,6 +3,7 @@
 // TODO: consider renaming module to 'project' and including ProjectedAutomaton
 
 use std::convert::TryInto;
+use std::fmt;
 
 mod simple;
 mod slice2d;
@@ -17,6 +18,7 @@ pub use slice2d::SliceProjection2D;
 pub use slice3d::SliceProjection3D;
 
 /// A container for any type of NdProjector.
+#[derive(Debug)]
 pub struct NdProjection<D: Dim, P: Dim>(pub Box<dyn NdProjector<D, P>>);
 impl<D: Dim, P: Dim> Clone for NdProjection<D, P> {
     fn clone(&self) -> Self {
@@ -46,7 +48,7 @@ impl<D: Dim, P: Dim> NdProjector<D, P> for NdProjection<D, P> {
 
 /// A method for extracting or constructing a P-dimensional slice from a
 /// D-dimensional automaton.
-pub trait NdProjector<D: Dim, P: Dim>: Send {
+pub trait NdProjector<D: Dim, P: Dim>: fmt::Debug + Send {
     /// Projects a D-dimensional NdTree into a P-dimensional NdTree.
     fn project_tree(&self, tree: &NdTree<D>) -> NdTree<P>;
     /// Unprojects a P-dimensional point back into D-dimensional space.

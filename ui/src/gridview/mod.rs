@@ -21,7 +21,7 @@ use worker::*;
 ///
 /// TODO: Document these methods!
 #[enum_dispatch]
-pub trait GridViewTrait: Sized + NdSimulate + History {
+pub trait GridViewTrait: Sized + Simulate + History {
     fn do_frame(&mut self, config: &Config);
 
     fn enqueue<C: Into<Command>>(&self, command: C);
@@ -134,14 +134,14 @@ impl From<Automaton2D> for GridView {
     }
 }
 
-impl AsNdSimulate for GridView {
-    fn as_ndsim(&self) -> &dyn NdSimulate {
+impl AsSimulate for GridView {
+    fn as_sim(&self) -> &dyn Simulate {
         match self {
             Self::View2D(view2d) => view2d,
             Self::View3D(view3d) => view3d,
         }
     }
-    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate {
         match self {
             Self::View2D(view2d) => view2d,
             Self::View3D(view3d) => view3d,

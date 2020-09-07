@@ -49,7 +49,7 @@ pub trait NodeRefTrait<'node>: Copy {
     /// Returns the population of the node.
     #[inline]
     fn population(self) -> BigUint {
-        self.as_raw().calc_population()
+        self.as_raw().calc_population().into()
     }
 }
 

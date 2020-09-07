@@ -10,6 +10,7 @@
 //! documentation for more details.
 
 use itertools::Itertools;
+use parking_lot::RwLock;
 use std::fmt;
 use std::sync::Arc;
 
@@ -31,7 +32,9 @@ pub use slice::*;
 /// Note that an `NdTree` cannot be smaller than a base node.
 #[derive(Debug, Clone)]
 pub struct NdTree<D: Dim> {
-    /// The root NdTreeNode of this slice.
+    /// The root node of this slice.
+    ///
+    /// TODO: make this private and add getter/setter that checks it's larger than 1x1.
     pub root: ArcNode<D>,
 }
 
@@ -45,7 +48,7 @@ impl<D: Dim> Default for NdTree<D> {
 impl<D: Dim> PartialEq for NdTree<D> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.root() == other.root()
+        self.root == other.root
     }
 }
 impl<D: Dim> Eq for NdTree<D> {}
@@ -55,7 +58,8 @@ where
     for<'a> NdTreeSlice<'a, D>: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.slice(), f)
+        let node_cache = self.cache().read();
+        fmt::Display::fmt(&self.slice(&*node_cache), f)
     }
 }
 
@@ -63,44 +67,47 @@ impl<D: Dim> NdTree<D> {
     /// Creates an empty ND-tree using a new node cache.
     #[inline]
     pub fn new() -> Self {
-        Self::with_cache(&Arc::new(NodeCache::default()))
+        Self::with_cache(NodeCache::new())
     }
     /// Creates an empty ND-tree using the given node cache.
     #[inline]
-    pub fn with_cache(node_cache: &NodeCache<D>) -> Self {
+    pub fn with_cache(node_cache: Arc<RwLock<NodeCache<D>>>) -> Self {
         Self {
-            root: node_cache.get_empty_base(),
+            root: node_cache.read().get_empty_base().into(),
         }
     }
-
-    /// Returns the root node of the ND-tree.
-    #[inline]
-    pub fn root(&self) -> &ArcNode<D> {
-        &self.root
+    pub fn from_node<'n>(node: impl CachedNodeRefTrait<'n, D = D>) -> Self {
+        assert!(
+            node.layer() > Layer(0),
+            "Root of ND-tree must be larger than a single cell"
+        );
+        Self { root: node.into() }
     }
+
     /// Sets the root node of the ND-tree.
     ///
     /// # Panics
     ///
     /// This method panics if the new root consists of only a single cell.
     #[inline]
-    pub fn set_root(&mut self, new_root: ArcNode<D>) {
+    pub fn set_root(&mut self, new_root: impl Into<ArcNode<D>>) {
+        let new_root = new_root.into();
         assert!(
-            new_root.as_raw().layer() > Layer(0),
-            "Root of NdTree must be larger than a single cell"
+            new_root.layer() > Layer(0),
+            "Root of ND-tree must be larger than a single cell"
         );
         self.root = new_root;
     }
 
     /// Returns the cache for nodes in the ND-tree.
     #[inline]
-    pub fn cache(&self) -> &NodeCache<D> {
-        self.root().cache()
+    pub fn cache(&self) -> &Arc<RwLock<NodeCache<D>>> {
+        self.root.cache()
     }
     /// Returns the layer of the largest node in the ND-tree.
     #[inline]
     pub fn layer(&self) -> Layer {
-        self.root().as_raw().layer()
+        self.root.layer()
     }
     /// Returns the length of the grid along one axis.
     #[inline]
@@ -119,9 +126,9 @@ impl<D: Dim> NdTree<D> {
     }
     /// Returns an `NdTreeSlice` view into the grid.
     #[inline]
-    pub fn slice<'a>(&'a self) -> NdTreeSlice<'a, D> {
+    pub fn slice<'cache>(&self, cache: &'cache NodeCache<D>) -> NdTreeSlice<'cache, D> {
         NdTreeSlice {
-            root: self.root().clone().into(),
+            root: self.root.as_ref(cache),
             offset: self.offset(),
         }
     }
@@ -133,43 +140,47 @@ impl<D: Dim> NdTree<D> {
     /// node twice the size containing that old NE child in its SW corner. The
     /// final result is that the entire tree contains the same contents as
     /// before, but with 25% padding along each edge.
-    pub fn expand(&mut self) {
-        let empty_node = self.cache().get_empty(self.root.layer().child_layer());
+    pub fn expand(&mut self, cache: &NodeCache<D>) {
+        let empty_node = cache.get_empty(self.root.layer().child_layer());
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
-        let new_root =
-            self.cache()
-                .join_nodes(self.root.subdivide().unwrap().into_iter().enumerate().map(
-                    |(child_index, subcube)| {
-                        // Invert the bits of the child index to get the index
-                        // of the opposite child.
-                        let opposite_child_index = child_index ^ child_index_bitmask;
-                        // All children of this node will be empty ...
-                        let mut children = vec![empty_node.as_ref(); D::BRANCHING_FACTOR];
-                        // ... except for the opposite child, which will be
-                        // closest to the center of the NdTree.
-                        children[opposite_child_index] = subcube.as_ref();
-                        self.cache().join_nodes(children)
-                    },
-                ));
+        let new_root = cache.join_nodes(
+            self.root
+                .as_ref(cache)
+                .subdivide()
+                .unwrap()
+                .into_iter()
+                .enumerate()
+                .map(|(child_index, subcube)| {
+                    // Invert the bits of the child index to get the index
+                    // of the opposite child.
+                    let opposite_child_index = child_index ^ child_index_bitmask;
+                    // All children of this node will be empty ...
+                    let mut children = vec![empty_node; D::BRANCHING_FACTOR];
+                    // ... except for the opposite child, which will be
+                    // closest to the center of the NdTree.
+                    children[opposite_child_index] = subcube;
+                    cache.join_nodes(children)
+                }),
+        );
         self.set_root(new_root);
     }
     /// "Zooms out" the grid by calling `NdTree::expand()` until the tree
     /// includes the given position.
-    pub fn expand_to(&mut self, pos: &BigVec<D>) {
+    pub fn expand_to(&mut self, cache: &NodeCache<D>, pos: &BigVec<D>) {
         while !self.rect().contains(pos) {
-            self.expand();
+            self.expand(cache);
         }
     }
     /// "Zooms in" the grid as much as possible without losing
     /// non-empty cells. Returns the number of times the tree was shrunk by a
     /// factor of 2.
-    pub fn shrink(&mut self) {
-        while self._shrink().is_ok() {}
+    pub fn shrink(&mut self, cache: &NodeCache<D>) {
+        while self._shrink(cache).is_ok() {}
     }
     /// "Zooms in" the grid by a factor of 2.
-    fn _shrink(&mut self) -> Result<(), ()> {
+    fn _shrink(&mut self, cache: &NodeCache<D>) -> Result<(), ()> {
         // Don't shrink past the base layer.
-        let root = self.root().as_non_leaf().ok_or(())?;
+        let root = self.root.as_ref(cache).as_non_leaf().ok_or(())?;
 
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         // Fetch the grandchildren of this node that are closest to the center.
@@ -193,23 +204,26 @@ impl<D: Dim> NdTree<D> {
                 Ok(grandchildren.remove(opposite_child_index))
             })
             .try_collect()?;
-        let new_root = self.cache().join_nodes(new_children);
+        let new_root = cache.join_nodes(new_children);
         self.set_root(new_root);
         Ok(())
     }
 
     /// Returns the state of the cell at the given position.
-    pub fn get_cell(&self, pos: &BigVec<D>) -> u8 {
+    pub fn get_cell(&self, cache: &NodeCache<D>, pos: &BigVec<D>) -> u8 {
         if self.rect().contains(pos) {
-            self.root.cell_at_pos(&(pos - self.offset()))
+            self.root.as_ref(cache).cell_at_pos(&(pos - self.offset()))
         } else {
             0
         }
     }
     /// Sets the state of the cell at the given position.
-    pub fn set_cell(&mut self, pos: &BigVec<D>, cell_state: u8) {
-        self.expand_to(&pos);
-        let new_root = self.root().set_cell(&(pos - self.offset()), cell_state);
+    pub fn set_cell(&mut self, cache: &NodeCache<D>, pos: &BigVec<D>, cell_state: u8) {
+        self.expand_to(cache, &pos);
+        let new_root = self
+            .root
+            .as_ref(cache)
+            .set_cell(&(pos - self.offset()), cell_state);
         self.set_root(new_root);
     }
 
@@ -220,21 +234,23 @@ impl<D: Dim> NdTree<D> {
     /// centered on an existing node, and thus composed out of smaller existing
     /// nodes. The only guarantee is that the node will be either a leaf node or
     /// less than twice as big as it needs to be.
-    pub fn slice_containing(&self, rect: &BigRect<D>) -> NdTreeSlice<'_, D> {
+    pub fn slice_containing<'cache>(
+        &self,
+        cache: &'cache NodeCache<D>,
+        rect: &BigRect<D>,
+    ) -> NdTreeSlice<'cache, D> {
         // Grow the NdTree until it contains the desired rectangle.
         let mut tmp_ndtree = self.clone();
-        tmp_ndtree.expand_to(&rect.min());
-        tmp_ndtree.expand_to(&rect.max());
-        let mut ret = tmp_ndtree.slice();
+        tmp_ndtree.expand_to(cache, &rect.min());
+        tmp_ndtree.expand_to(cache, &rect.max());
+        let mut ret = tmp_ndtree.slice(cache);
         // "Zoom in" on either a corner, an edge/face, or the center until it
         // can't shrink any more. Each iteration of the loop "zooms in" by a
         // factor of 2.
         'outer: loop {
-            println!("start iter");
             // If the node is a leaf node, don't zoom in any more; this is small
             // enough.
             if ret.root.is_leaf() {
-                println!("end b/c leaf");
                 break 'outer;
             }
             let root = ret.root.as_non_leaf().unwrap();
@@ -245,12 +261,8 @@ impl<D: Dim> NdTree<D> {
             // Get the rectangle of grandchildren of the current root that
             // includes the desired rectangle. Each axis is in the range from 0
             // to 3.
-            println!("rect {}", rect);
-            println!("rect2 {}", (rect.clone() - &ret.offset));
-            println!("grch layer {:?}", grandchild_layer);
             let grandchild_rect: URect<D> =
                 ((rect.clone() - &ret.offset) >> grandchild_layer.to_u32()).to_urect();
-            println!("grch rect {}", grandchild_rect);
             let mut new_min = grandchild_rect.min();
             let mut new_max = grandchild_rect.max();
             for &ax in D::axes() {
@@ -275,13 +287,11 @@ impl<D: Dim> NdTree<D> {
                     }
                     2 => (),
                     _ => {
-                        println!("end b/c big");
                         break 'outer;
                     }
                 }
             }
             let grandchild_square = URect::span(new_min, new_max);
-            println!("grch square {}", grandchild_square);
 
             // Fetch the 2^NDIM nodes that comprise the new node by iterating
             // over the grandchild positions in `grandchild_square`.
@@ -291,9 +301,9 @@ impl<D: Dim> NdTree<D> {
             // Compute the new offset.
             ret.offset += grandchild_square.min().to_bigvec() << grandchild_layer.to_u32();
             // Create the new node.
-            ret.root = self.cache().join_nodes(new_children).into();
+            ret.root = cache.join_nodes(new_children);
         }
-        ret.into_arc()
+        ret
     }
 }
 

@@ -1,6 +1,6 @@
 use enum_dispatch::enum_dispatch;
 use std::convert::TryInto;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::dim::*;
 use crate::ndtree::{NdTree, NodeRefTrait};
@@ -165,9 +165,11 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
         Ok(())
     }
     fn set_cell(&mut self, pos: &BigVec<P>, state: u8) {
+        let _node_cache = Arc::clone(self.automaton.tree.cache());
+        let node_cache = _node_cache.read();
         self.automaton
             .tree
-            .set_cell(&self.projection.unproject_pos(pos), state);
+            .set_cell(&*node_cache, &self.projection.unproject_pos(pos), state);
     }
 }
 
@@ -177,7 +179,7 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
 #[derive(Default, Clone)]
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<D>,
-    pub sim: Arc<Mutex<Simulation<D>>>,
+    pub sim: Arc<Simulation<D>>,
     pub generations: BigInt,
 }
 impl<D: Dim> NdSimulate for NdAutomaton<D> {
@@ -193,15 +195,15 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
     fn set_generation_count(&mut self, generations: BigInt) {
         self.generations = generations;
     }
-    fn step(&mut self, step_size: &BigInt) {
-        self.sim.lock().unwrap().step(&mut self.tree, step_size);
-        self.generations += step_size;
+    fn step(&mut self, gens: &BigInt) {
+        self.sim.step(&mut self.tree, gens);
+        self.generations += gens;
     }
 }
 impl<D: Dim> NdAutomaton<D> {
     /// Sets the simulation of the automaton.
     pub fn set_sim(&mut self, new_sim: Simulation<D>) {
-        self.sim = Arc::new(Mutex::new(new_sim));
+        self.sim = Arc::new(new_sim);
     }
 }
 

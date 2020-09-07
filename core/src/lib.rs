@@ -41,9 +41,9 @@ extern crate pest_derive;
 mod io;
 #[macro_use]
 mod macros;
-mod automaton;
+pub mod automaton;
 pub mod axis;
-mod dim;
+pub mod dim;
 pub mod math;
 pub mod ndarray;
 pub mod ndrect;
@@ -58,9 +58,10 @@ pub mod traits {
     pub use crate::dim::Dim;
     pub use crate::io::rle::RleEncode;
     pub use crate::ndrect::CanContain;
-    pub use crate::ndtree::NodeRefTrait;
+    pub use crate::ndtree::{CachedNodeRefTrait, NodeRefTrait};
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};
     pub use crate::projection::NdProjector;
+    pub use crate::sim::rule::Rule;
     pub use crate::sim::{AsNdSimulate, NdSimulate};
 }
 

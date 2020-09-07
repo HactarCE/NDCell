@@ -2,6 +2,7 @@
 
 use num::BigUint;
 use std::fmt;
+use std::ops::Add;
 
 /// Either `usize` ("small") or `BigUint` ("big").
 #[derive(Debug)]
@@ -34,6 +35,20 @@ impl<'a> From<MaybeBigUint<'a>> for BigUint {
         match n {
             MaybeBigUint::Small(x) => x.into(),
             MaybeBigUint::Big(x) => x.clone(),
+        }
+    }
+}
+impl Add for MaybeBigUint<'_> {
+    type Output = Result<usize, BigUint>;
+
+    fn add(self, other: Self) -> Result<usize, BigUint> {
+        match (self, other) {
+            (Self::Small(a), Self::Small(b)) => {
+                a.checked_add(b).ok_or_else(|| BigUint::from(a) + b)
+            }
+            (Self::Small(a), Self::Big(b)) => Err(b + a),
+            (Self::Big(a), Self::Small(b)) => Err(a + b),
+            (Self::Big(a), Self::Big(b)) => Err(a + b),
         }
     }
 }

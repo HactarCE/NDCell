@@ -3,7 +3,7 @@
 /// # Examples
 ///
 /// ```
-/// # use ndcell_core::{Dim, match_ndim};
+/// # use ndcell_core::{dim::Dim, match_ndim};
 /// fn f<D: Dim>() {
 ///     match_ndim!(match D {
 ///         1 => (/* 1 dimension  */),

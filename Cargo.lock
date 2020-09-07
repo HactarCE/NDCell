@@ -60,12 +60,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arc-swap"
-version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d25d88fd6b8041580a654f9d0c581a047baee2b3efee13275f2fc392fc75034"
-
-[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1046,7 +1040,6 @@ dependencies = [
 name = "ndcell_core"
 version = "0.0.1"
 dependencies = [
- "arc-swap",
  "criterion",
  "enum_dispatch",
  "itertools",
@@ -1058,7 +1051,6 @@ dependencies = [
  "proptest",
  "regex",
  "seahash",
- "weak-table",
 ]
 
 [[package]]
@@ -2125,12 +2117,6 @@ dependencies = [
  "dlib",
  "lazy_static",
 ]
-
-[[package]]
-name = "weak-table"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a8f3bf74f2d43500dea6a8291b6ac943e3465ea9936b94bd017e61b7b21dd01"
 
 [[package]]
 name = "web-sys"

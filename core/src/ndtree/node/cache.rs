@@ -575,3 +575,9 @@ impl<'node, D: Dim> NodeRefTrait<'node> for &'node ArcNode<D> {
         unsafe { &*self.raw_node_ptr }
     }
 }
+
+// Conceptually, the `*const RawNode` held by `ArcNode` is just a reference,
+// with a lifetime dependent on the cache. `&RawNode` is `Send + Sync`, so it's
+// safe to implement `Send` on `ArcNode` as well.
+unsafe impl<D: Dim> Send for ArcNode<D> {}
+unsafe impl<D: Dim> Sync for ArcNode<D> {}

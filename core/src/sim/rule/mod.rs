@@ -14,7 +14,8 @@ pub use totalistic::*;
 
 /// Type alias for a CA transition function that transitions all the cells in an
 /// array by one generation.
-pub type TransitionFunction<'a, D> = Box<dyn 'a + Fn(&NdArray<u8, D>, URect<D>) -> NdArray<u8, D>>;
+pub type TransitionFunction<'a, D> =
+    Box<dyn 'a + FnMut(&NdArray<u8, D>, URect<D>) -> NdArray<u8, D>>;
 
 /// A cellular automaton rule.
 pub trait Rule<D: Dim>: fmt::Debug + Send + Sync {
@@ -42,7 +43,7 @@ impl<D: Dim> Rule<D> for DummyRule {
 /// array of cells.
 pub fn transition_cell_array<D: Dim>(
     rect: URect<D>,
-    single_cell_transition_function: impl Fn(UVec<D>) -> u8,
+    mut single_cell_transition_function: impl FnMut(UVec<D>) -> u8,
 ) -> NdArray<u8, D> {
     NdArray::from_flat_slice(
         rect.size(),

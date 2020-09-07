@@ -11,6 +11,8 @@ use crate::{MAX_NDIM, MAX_PATTERN_SIZE};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Pattern {
     /// Flattened array of cell states.
+    ///
+    /// TODO: use Box<[LangCellState]>
     pub cells: Vec<LangCellState>,
     /// Size and shape of the pattern.
     pub shape: PatternShape,
@@ -242,6 +244,8 @@ impl BitAnd for PatternShape {
 }
 
 /// Bounding box for a pattern, represented as an inculsive range for each axis.
+///
+/// TODO: replace with NdRect
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Bounds(Vec<(isize, isize)>);
 impl Bounds {

@@ -345,17 +345,39 @@ impl<D: Dim> RawNode<D> {
 
     /// Returns the population of the node, computing it if it has not yet been
     /// computed.
-    pub fn calc_population(&self) -> BigUint {
-        // TODO: cache population, and return MaybeBigUint from this method
-        if let Some(cells) = self.cell_slice() {
+    pub fn calc_population<'a>(&'a self) -> MaybeBigUint<'a> {
+        // Return the population if we have already computed it.
+        if let Some(p) = self.population() {
+            return p;
+        }
+
+        let ret = if self.is_empty() {
+            // Empty nodes have no cells, duh.
+            Ok(0)
+        } else if let Some(cells) = self.cell_slice() {
             // Count nonzero cells.
-            cells.iter().filter(|&&x| x != 0).count().into()
+            Ok(cells.iter().filter(|&&x| x != 0).count())
         } else if let Some(children) = self.children_slice() {
-            // Sum child population counts.
-            children.iter().map(|child| child.calc_population()).sum()
+            // Sum child population counts, converting from `usize` to `BigUint`
+            // if necessary.
+            let mut total = Ok(0);
+            for child in children {
+                total = total.as_ref().map_or_else(
+                    |big| MaybeBigUint::Big(big),
+                    |&small| MaybeBigUint::Small(small),
+                ) + child.calc_population();
+            }
+            total
         } else {
             unreachable!()
+        };
+        match ret {
+            Ok(small_pop) => self.set_pop_small(small_pop),
+            Err(big_pop) => self.set_pop_big(big_pop),
         }
+        // Under no circumstance is the population *erased*, so this `.unwrap()`
+        // will never fail.
+        self.population().unwrap()
     }
     /// Returns the population of the node, or `None` if it has not yet been
     /// computed.
@@ -373,11 +395,17 @@ impl<D: Dim> RawNode<D> {
         }
     }
     /// Sets the population of the node if it has not already been computed.
-    pub fn set_pop_small(&self, pop: usize) {
-        self.population.compare_and_swap(0, pop, Relaxed);
+    /// Automatically converts the argument to a `BigUint` if necessary.
+    fn set_pop_small(&self, pop: usize) {
+        let value_to_store = (pop << 1) | 1;
+        if value_to_store >> 1 == pop {
+            self.population.compare_and_swap(0, (pop << 1) | 1, Relaxed);
+        } else {
+            self.set_pop_big(pop.into());
+        }
     }
     /// Sets the population of the node if it has not already been computed.
-    pub fn set_pop_big(&self, pop: BigUint) {
+    fn set_pop_big(&self, pop: BigUint) {
         // Put it on the heap and leak it.
         let new_pop_ptr = Box::leak(Box::new(pop)) as *mut _;
         let old = self

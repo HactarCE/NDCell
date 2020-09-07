@@ -11,7 +11,7 @@ use pest::Parser;
 use std::sync::Arc;
 
 use crate::automaton::{Automaton2D, NdAutomaton};
-use crate::axis::Axis::{X, Y};
+use crate::axis::{X, Y};
 use crate::ndarray::NdArray;
 use crate::ndvec::{BigVec2D, NdVec};
 use crate::num::{BigInt, ToPrimitive, Zero};

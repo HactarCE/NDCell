@@ -1,7 +1,7 @@
 use std::fmt;
 
 use super::{CachedNodeRefTrait, Layer, LeafNodeRef, NodeRef, NodeRefEnum, NodeRefTrait};
-use crate::axis::Axis::{X, Y};
+use crate::axis::{X, Y};
 use crate::dim::*;
 use crate::ndrect::{BigRect, CanContain};
 use crate::ndvec::{BigVec, NdVec};

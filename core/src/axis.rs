@@ -2,6 +2,8 @@
 //!
 //! These are mainly used for indexing specific components in an `NdVec`.
 
+pub use Axis::*;
+
 /// Enumeration of the six dimensions supported by NDCell.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Axis {

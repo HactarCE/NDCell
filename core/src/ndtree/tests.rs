@@ -2,7 +2,7 @@ use proptest::prelude::*;
 use std::collections::HashMap;
 
 use super::*;
-use crate::axis::Axis::{X, Y};
+use crate::axis::{X, Y};
 use crate::ndrect::IRect;
 use crate::ndvec::{IVec2D, NdVec};
 use crate::num::BigUint;

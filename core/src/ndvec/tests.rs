@@ -4,7 +4,7 @@ use proptest::prelude::*;
 
 use super::*;
 
-use crate::axis::Axis::{X, Y, Z};
+use crate::axis::{X, Y, Z};
 use crate::dim::Dim3D;
 
 #[test]

@@ -20,7 +20,17 @@ $2539bo$2540bo1489$1201bo$1201bo$1202b2o$1204bo$1204bo$1204bo$1204bo
 28b2o$27bo$27bo$27bo$27bo!";
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    bench_sim_2d(c, GGG, "Gosper's Glider Gun", LIFE, 512, 64, 119_usize);
+    // bench_sim_2d(c, GGG, "Gosper's Glider Gun", LIFE, 64, 4, 53_usize);
+    bench_sim_2d(c, GOTTS_DOTS, "Gott's Dots", LIFE, 64, 4, 209_usize);
+    // bench_sim_2d(c, CATACRYST, "Catacryst", LIFE, 64, 4, 467_usize);
+
+    bench_sim_2d(c, GGG, "Gosper's Glider Gun", LIFE, 256, 16, 77_usize);
+    // bench_sim_2d(c, GOTTS_DOTS, "Gott's Dots", LIFE, 256, 16, 722_usize);
+    // bench_sim_2d(c, CATACRYST, "Catacryst", LIFE, 256, 16, 941_usize);
+
+    // bench_sim_2d(c, GGG, "Gosper's Glider Gun", LIFE, 1024, 64, 213_usize);
+    // bench_sim_2d(c, GOTTS_DOTS, "Gott's Dots", LIFE, 1024, 64, 1946_usize);
+    // bench_sim_2d(c, CATACRYST, "Catacryst", LIFE, 1024, 64, 2459_usize);
 
     // bench_sim_2d(c, GGG, "Gosper's Glider Gun", LIFE, 65536, 64, 10957_usize);
     // bench_sim_2d(c, GOTTS_DOTS, "Gott's Dots", LIFE, 16384, 64, 25828_usize);

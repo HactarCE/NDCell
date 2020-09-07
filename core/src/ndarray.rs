@@ -159,7 +159,6 @@ fn unflatten_idx<D: Dim>(size: UVec<D>, mut idx: usize) -> UVec<D> {
 fn flatten_idx<D: Dim>(size: UVec<D>, pos: UVec<D>) -> usize {
     let mut ret = 0;
     let mut stride = 1;
-    assert!(pos < size);
     for &ax in D::axes() {
         assert!(pos[ax] < size[ax]);
         ret += pos[ax] * stride;

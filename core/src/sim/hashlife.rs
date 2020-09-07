@@ -210,9 +210,10 @@ impl<D: Dim> HashLife<D> {
                 // `cells_ndarray` and the new one.
                 let offset = (cells_ndarray_len - new_cells_ndarray_len) / 2;
                 // Make a new array that is as big as we need.
-                cells_ndarray = NdArray::from_fn(UVec::repeat(new_cells_ndarray_len), |pos| {
-                    transition_function(&cells_ndarray, pos + offset)
-                });
+                cells_ndarray = transition_function(
+                    &cells_ndarray,
+                    URect::with_size(UVec::repeat(offset), UVec::repeat(new_cells_ndarray_len)),
+                );
                 cells_ndarray_len = new_cells_ndarray_len;
             }
 

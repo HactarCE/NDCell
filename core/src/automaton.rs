@@ -40,7 +40,7 @@ pub type ProjectedAutomaton6D = ProjectedAutomaton<Dim6D>;
 /// given dimensionality.
 #[allow(missing_docs)]
 #[enum_dispatch(NdProjectedAutomatonTrait)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ProjectedAutomaton<P: Dim> {
     From1D(NdProjectedAutomaton<Dim1D, P>),
     From2D(NdProjectedAutomaton<Dim2D, P>),
@@ -127,7 +127,7 @@ impl<P: Dim> AsNdSimulate for ProjectedAutomaton<P> {
 /// A D-dimensional automaton with a projection from a D-dimensional grid to a
 /// P-dimensional one.
 #[allow(missing_docs)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NdProjectedAutomaton<D: Dim, P: Dim> {
     pub automaton: NdAutomaton<D>,
     pub projection: NdProjection<D, P>,
@@ -187,7 +187,7 @@ impl<D: Dim> NdSimulate for NdAutomaton<D> {
         D::NDIM
     }
     fn population(&self) -> BigUint {
-        self.tree.root.population()
+        self.tree.root().population()
     }
     fn generation_count(&self) -> &BigInt {
         &self.generations
@@ -222,7 +222,8 @@ pub type Automaton6D = NdAutomaton<Dim6D>;
 
 /// An immutable reference to a cellular automaton of an unknown dimensionality.
 #[allow(missing_docs)]
-pub enum Automaton<'a> {
+#[derive(Debug)]
+pub enum AutomatonRef<'a> {
     Automaton1D(&'a Automaton1D),
     Automaton2D(&'a Automaton2D),
     Automaton3D(&'a Automaton3D),
@@ -230,7 +231,7 @@ pub enum Automaton<'a> {
     Automaton5D(&'a Automaton5D),
     Automaton6D(&'a Automaton6D),
 }
-impl<'a, P: Dim> From<&'a ProjectedAutomaton<P>> for Automaton<'a> {
+impl<'a, P: Dim> From<&'a ProjectedAutomaton<P>> for AutomatonRef<'a> {
     fn from(projected_automaton: &'a ProjectedAutomaton<P>) -> Self {
         match projected_automaton {
             ProjectedAutomaton::From1D(inner) => Self::Automaton1D(&inner.automaton),
@@ -245,6 +246,7 @@ impl<'a, P: Dim> From<&'a ProjectedAutomaton<P>> for Automaton<'a> {
 
 /// A mutable reference to a cellular automaton of an unknown dimensionality.
 #[allow(missing_docs)]
+#[derive(Debug)]
 pub enum AutomatonMut<'a> {
     Automaton1D(&'a mut Automaton1D),
     Automaton2D(&'a mut Automaton2D),

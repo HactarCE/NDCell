@@ -1,3 +1,5 @@
+//! High-level CA interface.
+
 use enum_dispatch::enum_dispatch;
 use std::convert::TryInto;
 use std::sync::Arc;

@@ -53,6 +53,7 @@ pub mod num;
 pub mod projection;
 pub mod sim;
 
+/// All public traits, for easy importing.
 pub mod traits {
     pub use crate::automaton::NdProjectedAutomatonTrait;
     pub use crate::dim::Dim;
@@ -65,6 +66,7 @@ pub mod traits {
     pub use crate::sim::{AsSimulate, Simulate};
 }
 
+/// Prelude module.
 pub mod prelude {
     pub use crate::traits::*;
 
@@ -85,8 +87,6 @@ pub mod prelude {
     pub use crate::ndvec::{AnyDimVec, NdVec};
     pub use crate::num::{r64, BigInt, BigUint, R64};
     pub use crate::sim::HashLife;
-
-    // TODO: consider including things from crate::automaton
 }
 
 #[cfg(test)]

@@ -33,12 +33,12 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - [x] Implementation
   - [ ] [Documentation][NDCA docs]
 - [ ] Improve performance
-  - [ ] New ND-tree node cache
+  - [x] New ND-tree node cache
     - [ ] Garbage collection
-  - [ ] Lazy population computation
+  - [x] Lazy population computation
   - [ ] Multithreaded simulation
-  - [ ] Reduce `BigInt` allocations
-    - [ ] Precompute HashLife time splits
+  - [x] Reduce `BigInt` allocations
+    - [x] Precompute HashLife time splits
   - [ ] Rewrite RLE export/import
   - [ ] Macrocell export/import
 - [ ] Render 3D
@@ -79,6 +79,7 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - Step N generations with <kbd>Tab</kbd>
   - Run continuously with <kbd>Enter</kbd>
   - Set step size
+  - Double/halve step size with <kbd>+</kbd>/<kbd>-</kbd>
   - Set breakpoint
 - **Custom rules** written in NDCA, a custom JIT-compiled programming language. Documentation in progress at [ndcell.rtfd.io][NDCA docs].
 - **Undo/redo** with <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>

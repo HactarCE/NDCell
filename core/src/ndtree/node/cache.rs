@@ -526,10 +526,14 @@ impl<D: Dim> Clone for ArcNode<D> {
 impl<D: Dim> PartialEq for ArcNode<D> {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self.raw_node_ptr, other.raw_node_ptr)
-            && Arc::ptr_eq(&self.cache, &other.cache)
     }
 }
 impl<D: Dim> Eq for ArcNode<D> {}
+impl<'cache, D: Dim, N: NodeRefTrait<'cache, D = D>> PartialEq<N> for ArcNode<D> {
+    fn eq(&self, other: &N) -> bool {
+        std::ptr::eq(self.raw_node_ptr, other.as_raw())
+    }
+}
 impl<D: Dim> ArcNode<D> {
     /// Creates an `ArcNode` from raw parts.
     ///

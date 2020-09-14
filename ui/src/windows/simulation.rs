@@ -1,7 +1,6 @@
-use ndcell_core::NdSimulate;
-
 use imgui::*;
-use num::ToPrimitive;
+
+use ndcell_core::prelude::*;
 
 use crate::config::Config;
 use crate::gridview::{control::*, GridView, GridViewTrait};

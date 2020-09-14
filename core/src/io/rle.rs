@@ -1,5 +1,5 @@
-//! Code for reading and writing Golly's 2D RLE format, described here:
-//! http://golly.sourceforge.net/Help/formats.html#rle
+//! Support for Golly's 2D ["Extended RLE"
+//! format](http://golly.sourceforge.net/Help/formats.html#rle)
 //!
 //! Note that RLEs always have Y values increasing downwards, while NDCell has Y
 //! values increasing upwards, so RLEs coordinates are reflected over the X
@@ -7,10 +7,14 @@
 
 #![allow(missing_docs)]
 
-use num::{BigInt, ToPrimitive, Zero};
 use pest::Parser;
+use std::sync::Arc;
 
-use super::*;
+use crate::automaton::{Automaton2D, NdAutomaton};
+use crate::axis::{X, Y};
+use crate::ndarray::NdArray;
+use crate::ndvec::{BigVec2D, NdVec};
+use crate::num::{BigInt, ToPrimitive, Zero};
 
 const MAX_LINE_LEN: usize = 70;
 
@@ -98,26 +102,26 @@ impl RleEncode for Automaton2D {
         // distance each direction from the origin, we don't have negate the X
         // position.
         let cxrle = CxrleHeader {
-            pos: self.tree.slice.min(),
+            pos: self.tree.offset().clone(),
             gen: self.generations.clone(),
         };
         format!("{}\n{}", cxrle.to_string(), self.to_rle())
     }
     fn to_rle(&self) -> String {
-        let root = &self.tree.slice.root;
         let header = RleHeader {
-            x: root.len(),
-            y: root.len(),
+            x: self.tree.len(),
+            y: self.tree.len(),
             // TODO: Actually use a proper rulestring.
             rule: Some("Life".to_owned()),
         };
-        let cell_array = NdArray::from(root);
+        let node_cache = self.tree.cache().read();
+        let cell_array = NdArray::from(self.tree.root().as_ref(&*node_cache));
         let mut items: Vec<(usize, RleItem<u8>)> = vec![];
-        for mut pos in cell_array.rect().iter() {
+        for mut pos in &cell_array.rect() {
             // Y coordinates increase upwards in NDCell, but downwards in RLE, so
             // reflect over the Y axis.
-            pos[Y] = root.len().to_usize().unwrap() - pos[Y] - 1;
-            let cell = cell_array[&pos.to_ivec()];
+            pos[Y] = self.tree.len().to_usize().unwrap() - pos[Y] - 1;
+            let cell = cell_array[pos];
             if pos[X] == 0 && pos[Y] != 0 {
                 // We're at the beginning of a new row. Remove trailing
                 // zeros.
@@ -241,9 +245,11 @@ impl RleEncode for Automaton2D {
         }
         let x_start = pos[X].clone();
 
+        let _node_cache = Arc::clone(ret.tree.cache());
+        let node_cache = _node_cache.read();
         for row in cell_array {
             for cell in row {
-                ret.tree.set_cell(&pos, cell);
+                ret.tree.set_cell(&*node_cache, &pos, cell);
                 pos[X] += 1;
             }
             pos[X] = x_start.clone();
@@ -254,25 +260,25 @@ impl RleEncode for Automaton2D {
     }
 }
 
-fn parse_header(pair: TokenPair) -> Result<RleHeader, String> {
+fn parse_header(pair: TokenPair<'_>) -> Result<RleHeader, String> {
     let mut inners = pair.into_inner();
     let x: BigInt = inners
         .next()
         .ok_or("No X value in RLE header")?
         .as_str()
         .parse()
-        .map_err(|_| "Could not parse RLE X value as integer")?;
+        .map_err(|_| "Could not parse RLE X value as a positive integer")?;
     let y: BigInt = inners
         .next()
         .ok_or("No Y value in RLE header")?
         .as_str()
         .parse()
-        .map_err(|_| "Could not parse RLE Y value as integer")?;
+        .map_err(|_| "Could not parse RLE Y value as a positive integer")?;
     let rule: Option<String> = inners.next().map(|inner| inner.as_str().to_owned());
     Ok(RleHeader { x, y, rule })
 }
 
-fn parse_cxrle(pair: TokenPair) -> Result<CxrleHeader, String> {
+fn parse_cxrle(pair: TokenPair<'_>) -> Result<CxrleHeader, String> {
     let mut pos: BigVec2D = NdVec::big([0, 1]);
     let mut gen: BigInt = 0.into();
     for kv_pair in pair.into_inner() {
@@ -302,7 +308,7 @@ fn parse_cxrle(pair: TokenPair) -> Result<CxrleHeader, String> {
     Ok(CxrleHeader { pos, gen })
 }
 
-fn parse_content_item<C: RleCellType>(pair: TokenPair) -> Result<(usize, RleItem<C>), String> {
+fn parse_content_item<C: RleCellType>(pair: TokenPair<'_>) -> Result<(usize, RleItem<C>), String> {
     let mut n: usize = 1;
     let mut item: Option<RleItem<C>> = None;
     for inner in pair.into_inner() {
@@ -394,6 +400,7 @@ fn char_diff(ch1: char, ch2: char) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ndtree::NodeRefTrait;
 
     /// Tests that we can read and write all 256 cell states in RLE format.
     #[test]
@@ -478,12 +485,14 @@ o$3o!
 ",
         )
         .unwrap();
-        assert_eq!(BigInt::from(5), imported.tree.root().population);
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 14])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 13])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([10, 12])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([11, 12])));
-        assert_eq!(1, imported.tree.get_cell(&NdVec::big([12, 12])));
+        let tree = &imported.tree;
+        let node_cache = tree.cache().read();
+        assert_eq!(5, tree.root().population().to_usize().unwrap());
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([11, 14])));
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([12, 13])));
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([10, 12])));
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([11, 12])));
+        assert_eq!(1, tree.get_cell(&*node_cache, &NdVec::big([12, 12])));
         let exported = RleEncode::to_cxrle(&imported);
         // Right now, the RLE writer includes a fair bit of padding around all
         // the edges. In future this might be fixed, and then this hard-coded
@@ -494,10 +503,14 @@ o$3o!
 x = 32, y = 32, rule = Life
 2$27.A$28.A$26.3A!
 ",
-            exported
+            exported,
         );
         let reimported: Automaton2D =
             RleEncode::from_rle(&exported).expect("Could not parse RLE output");
-        assert_eq!(imported.tree, reimported.tree);
+        println!("imported\n{}\n", imported.tree.root().as_raw());
+        println!("reimported\n{}\n", reimported.tree.root().as_raw());
+        // `NdTree`s with different caches are considered separate, so we
+        // serialize before comparing.
+        assert_eq!(imported.tree.to_string(), reimported.tree.to_string());
     }
 }

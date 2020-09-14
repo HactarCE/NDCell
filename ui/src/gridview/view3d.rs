@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use ndcell_core::*;
+use ndcell_core::prelude::*;
 
 use super::control::*;
 use super::worker::*;
@@ -19,11 +19,11 @@ impl GridView3D {
     }
 }
 
-impl AsNdSimulate for GridView3D {
-    fn as_ndsim(&self) -> &dyn NdSimulate {
+impl AsSimulate for GridView3D {
+    fn as_sim(&self) -> &dyn Simulate {
         unimplemented!()
     }
-    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate {
         unimplemented!()
     }
 }
@@ -54,7 +54,7 @@ impl GridViewTrait for GridView3D {
         unimplemented!()
     }
 
-    fn as_automaton<'a>(&'a self) -> Automaton<'a> {
+    fn as_automaton<'a>(&'a self) -> AutomatonRef<'a> {
         unimplemented!()
     }
     fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {

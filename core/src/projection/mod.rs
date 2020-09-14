@@ -1,17 +1,26 @@
-//! Projections that turn an NdTree into one with fewer dimensions.
+//! Projections for `NdTree`s.
 
+// TODO: consider renaming module to 'project' and including ProjectedAutomaton
+
+use parking_lot::RwLock;
 use std::convert::TryInto;
+use std::fmt;
+use std::sync::Arc;
 
 mod simple;
 mod slice2d;
 mod slice3d;
 
-use super::*;
+use crate::axis::Axis;
+use crate::dim::{Dim, Dim2D, Dim3D};
+use crate::ndtree::{NdTree, NodeCache};
+use crate::ndvec::{AnyDimBigVec, BigVec, NdVec};
 pub use simple::SimpleProjection;
 pub use slice2d::SliceProjection2D;
 pub use slice3d::SliceProjection3D;
 
 /// A container for any type of NdProjector.
+#[derive(Debug)]
 pub struct NdProjection<D: Dim, P: Dim>(pub Box<dyn NdProjector<D, P>>);
 impl<D: Dim, P: Dim> Clone for NdProjection<D, P> {
     fn clone(&self) -> Self {
@@ -25,6 +34,9 @@ impl<D: Dim> Default for NdProjection<D, D> {
     }
 }
 impl<D: Dim, P: Dim> NdProjector<D, P> for NdProjection<D, P> {
+    fn projected_cache<'a>(&'a self, tree: &'a NdTree<D>) -> &'a Arc<RwLock<NodeCache<P>>> {
+        self.0.projected_cache(tree)
+    }
     fn project_tree(&self, tree: &NdTree<D>) -> NdTree<P> {
         self.0.project_tree(tree)
     }
@@ -41,7 +53,9 @@ impl<D: Dim, P: Dim> NdProjector<D, P> for NdProjection<D, P> {
 
 /// A method for extracting or constructing a P-dimensional slice from a
 /// D-dimensional automaton.
-pub trait NdProjector<D: Dim, P: Dim>: Send {
+pub trait NdProjector<D: Dim, P: Dim>: fmt::Debug + Send {
+    /// Returns a reference to the node cache used for projected nodes.
+    fn projected_cache<'a>(&'a self, tree: &'a NdTree<D>) -> &'a Arc<RwLock<NodeCache<P>>>;
     /// Projects a D-dimensional NdTree into a P-dimensional NdTree.
     fn project_tree(&self, tree: &NdTree<D>) -> NdTree<P>;
     /// Unprojects a P-dimensional point back into D-dimensional space.
@@ -61,9 +75,9 @@ pub enum ProjectionParams {
     /// A SimpleProjection.
     Simple,
     /// A SliceProjection2D.
-    Slice2D(BigVecEnum, (Axis, Axis)),
+    Slice2D(AnyDimBigVec, (Axis, Axis)),
     /// A SliceProjection3D.
-    Slice3D(BigVecEnum, (Axis, Axis, Axis)),
+    Slice3D(AnyDimBigVec, (Axis, Axis, Axis)),
 }
 impl<'a, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<D, P>>> for ProjectionParams {
     type Error = NdProjectionError;
@@ -71,7 +85,7 @@ impl<'a, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<D, P>>> for ProjectionParam
         // This method is a little Sketchy™; there's a lot of pointer (Box)
         // casting using std::mem::transmute(), using my own runtime value
         // checking instead of Rust's compile-time type checking. Although all
-        // of the "runtime" checks should be compile-time-optiimzed away.
+        // of the "runtime" checks should be compile-time-optimized away.
         match self {
             ProjectionParams::Simple => {
                 // Check that D = P.
@@ -108,83 +122,4 @@ pub enum NdProjectionError {
     WrongCellType,
     WrongNdTreeDim,
     WrongProjectedDim,
-}
-
-/// A BigVec of an unknown dimensionality, for use in ProjectionParams.
-#[allow(missing_docs)]
-#[derive(Debug, Clone)]
-pub enum BigVecEnum {
-    Vec1D(BigVec1D),
-    Vec2D(BigVec2D),
-    Vec3D(BigVec3D),
-    Vec4D(BigVec4D),
-    Vec5D(BigVec5D),
-    Vec6D(BigVec6D),
-}
-impl BigVecEnum {
-    /// Returns the number of dimensions of the BigVec.
-    fn ndim(&self) -> usize {
-        match self {
-            Self::Vec1D(_) => 1,
-            Self::Vec2D(_) => 2,
-            Self::Vec3D(_) => 3,
-            Self::Vec4D(_) => 4,
-            Self::Vec5D(_) => 5,
-            Self::Vec6D(_) => 6,
-        }
-    }
-}
-
-/// Converts an NdVec between arbitrary dimensionalities, as long as those
-/// dimensionalities are the same. Only really useful when passing generic type
-/// parameters.
-///
-/// This function is not marked as unsafe because it performs "runtime" checking
-/// that the initial and final dimensionalities are the same, even though that
-/// "runtime" checking is almost certianly compile-time-optimized away.
-///
-/// If the dimensionalities do not match, panics.
-fn transmute_ndvec<D1: Dim + DimFor<N>, D2: Dim + DimFor<N>, N: NdVecNum>(
-    ndvec: NdVec<D1, N>,
-) -> NdVec<D2, N> {
-    if D1::NDIM == D2::NDIM {
-        unsafe { *std::mem::transmute::<Box<NdVec<D1, N>>, Box<NdVec<D2, N>>>(Box::new(ndvec)) }
-    } else {
-        panic!(
-            "Cannot convert NdVec<_, Dim{}D> into NdVec<_, Dim{}D>",
-            D1::NDIM,
-            D2::NDIM
-        )
-    }
-}
-
-impl<'a, D: Dim> From<BigVec<D>> for BigVecEnum {
-    fn from(inner: BigVec<D>) -> Self {
-        match D::NDIM {
-            1 => Self::Vec1D(transmute_ndvec(inner)),
-            2 => Self::Vec2D(transmute_ndvec(inner)),
-            3 => Self::Vec3D(transmute_ndvec(inner)),
-            4 => Self::Vec4D(transmute_ndvec(inner)),
-            5 => Self::Vec5D(transmute_ndvec(inner)),
-            6 => Self::Vec6D(transmute_ndvec(inner)),
-            _ => unreachable!("Dimensions above 6 are not supported"),
-        }
-    }
-}
-impl<'a, D: Dim> TryInto<BigVec<D>> for BigVecEnum {
-    type Error = ();
-    fn try_into(self) -> Result<BigVec<D>, ()> {
-        if self.ndim() == D::NDIM {
-            Ok(match self {
-                Self::Vec1D(inner) => transmute_ndvec(inner),
-                Self::Vec2D(inner) => transmute_ndvec(inner),
-                Self::Vec3D(inner) => transmute_ndvec(inner),
-                Self::Vec4D(inner) => transmute_ndvec(inner),
-                Self::Vec5D(inner) => transmute_ndvec(inner),
-                Self::Vec6D(inner) => transmute_ndvec(inner),
-            })
-        } else {
-            Err(())
-        }
-    }
 }

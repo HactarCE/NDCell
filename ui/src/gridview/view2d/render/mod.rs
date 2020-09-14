@@ -41,11 +41,8 @@
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface as _};
 use itertools::Itertools;
-use noisy_float::prelude::r64;
-use num::traits::*;
-use num::{BigInt, ToPrimitive, Zero};
 
-use ndcell_core::space::*;
+use ndcell_core::axis::{X, Y};
 
 mod gl_quadtree;
 mod ibos;
@@ -101,26 +98,31 @@ pub struct RenderInProgress<'a> {
     /// Target to render to.
     target: &'a mut glium::Frame,
     /// Node layer of a render cell.
-    render_cell_layer: usize,
+    render_cell_layer: Layer,
     /// Zoom level to draw render cells at.
     render_cell_zoom: Zoom2D,
-    /// Slice of the quadtree that encompasses all visible cells.
-    quadtree_slice: NdTreeSlice<Dim2D>,
-    /// The render cell position within quadtree_slice that is centered on the
+    /// Quadtree encompassing all visible cells.
+    visible_quadtree: NdTreeSlice2D<'a>,
+    /// The render cell position within `visible_quadtree` that is centered on the
     /// screen.
     pos: FVec2D,
-    /// Rectangle of render cells within quadtree_slice that is visible.
+    /// Rectangle of render cells within `visible_quadtree` that is visible.
     visible_rect: IRect2D,
-    /// View matrix converting from quadtree_slice space (1 unit = 1 render
+    /// View matrix converting from `visible_quadtree` space (1 unit = 1 render
     /// cell; (0, 0) = bottom left) to screen space ((-1, -1) = bottom left; (1,
     /// 1) = top right).
     view_matrix: [[f32; 4]; 4],
     /// Cached render data unique to the given GridView.
-    cache: &'a mut RenderCache,
+    render_cache: &'a mut RenderCache,
 }
 impl<'a> RenderInProgress<'a> {
     /// Performs preliminary computations and returns a RenderInProgress.
-    pub fn new(g: &GridView2D, cache: &'a mut RenderCache, target: &'a mut glium::Frame) -> Self {
+    pub fn new(
+        g: &GridView2D,
+        node_cache: &'a NodeCache<Dim2D>,
+        render_cache: &'a mut RenderCache,
+        target: &'a mut glium::Frame,
+    ) -> Self {
         target.clear_depth(0.0);
 
         let (target_w, target_h) = target.get_dimensions();
@@ -133,13 +135,14 @@ impl<'a> RenderInProgress<'a> {
         // Compute the lowest layer that must be visited, which is the layer of
         // a "render cell," a node that is rendered as one unit (one pixel in
         // step #1).
-        let render_cell_layer: usize =
-            std::cmp::max(0, -viewport.zoom.round().power() as isize) as usize;
+        let render_cell_layer: Layer =
+            Layer((-viewport.zoom.round().power()).to_u32().unwrap_or(0));
         // Compute the width of cells represented by each render cell.
-        let render_cell_len: BigInt = BigInt::from(1) << render_cell_layer;
+        let render_cell_len: BigInt = BigInt::from(1) << render_cell_layer.to_u32();
         // The render cell layer is also the power of two we should subtract from
         // the zoom level.
-        let render_cell_zoom = Zoom2D::from_power(viewport.zoom.power() + render_cell_layer as f64);
+        let render_cell_zoom =
+            Zoom2D::from_power(viewport.zoom.power() + render_cell_layer.to_u32() as f64);
         // Now the zoom power should be greater than -1.0 (since -1.0 or
         // anything lower should be handled by having a higher render cell
         // layer).
@@ -149,7 +152,7 @@ impl<'a> RenderInProgress<'a> {
         // of visible cells relative to that node, and a floating-point render
         // cell position relative to that node that will be in the center of the
         // screen.
-        let quadtree_slice: NdTreeSlice<Dim2D>;
+        let visible_quadtree: NdTreeSlice<'a, Dim2D>;
         let visible_rect: IRect2D;
         let mut pos: FVec2D;
         {
@@ -161,24 +164,25 @@ impl<'a> RenderInProgress<'a> {
                 // the screen. Because this number is stored in an f64, which
                 // cannot represent values above around 2^1022, zoom levels past
                 // 2^1000 can overflow this. This is handled by Zoom2D::clamp().
-                let target_cells_size: FVec2D = target_pixels_size.convert() / r64(cell_pixels);
+                let target_cells_size: FVec2D = target_pixels_size / r64(cell_pixels);
                 // Compute the cell vector pointing from the origin to the top
                 // right corner of the screen; i.e. the "half diagonal."
                 let half_diag: FVec2D = target_cells_size / 2.0;
 
                 global_visible_rect =
-                    BigRect2D::centered(viewport.center.int.clone(), &half_diag.ceil().to_bigvec());
+                    BigRect2D::centered(viewport.center.floor().0, &half_diag.ceil().to_bigvec());
             }
 
             // Now fetch the NdTreeSlice containing all of the visible cells.
-            quadtree_slice = g.automaton.projected_tree().get_slice_containing(
+            visible_quadtree = g.automaton.projected_tree().slice_containing(
+                node_cache,
                 // Convert chunk coordinates into normal cell coordinates.
                 &global_visible_rect,
             );
 
             // Subtract the slice offset from global_visible_rect and
             // global_chunk_visible_rect so that they are relative to the slice.
-            let mut tmp_visible_rect = global_visible_rect.clone() - &quadtree_slice.offset;
+            let mut tmp_visible_rect = global_visible_rect - &visible_quadtree.offset;
             // Divide by render_cell_len to get render cells.
             tmp_visible_rect = tmp_visible_rect.div_outward(&render_cell_len);
             // Now it is safe to convert from BigInt to isize.
@@ -187,17 +191,13 @@ impl<'a> RenderInProgress<'a> {
             // Subtract the slice offset from the viewport position and divide
             // by the size of a render cell to get the render cell offset from
             // the lower corner of the slice.
-            let integer_pos =
-                (&viewport.center.int - &quadtree_slice.offset).div_floor(&render_cell_len);
-            pos = integer_pos.to_fvec();
+            pos = ((&viewport.center - visible_quadtree.offset.to_fixedvec())
+                >> render_cell_layer.to_u32())
+            .to_fvec();
+            // TODO: Round to the nearest pixel.
             // Offset by half a pixel if the viewport dimensions are odd, so
             // that cells boundaries always line up with pixel boundaries.
             pos += (target_pixels_size % 2.0) * r64(render_cell_zoom.cells_per_pixel() / 2.0);
-            // viewport.pos.frac is a sub-cell offset, so it only matters when
-            // zoomed in more than 1:1.
-            if viewport.zoom.pixels_per_cell() > 1.0 {
-                pos += viewport.center.frac;
-            }
         }
 
         // Compute the render cell view matrix, used for rendering gridlines.
@@ -234,11 +234,11 @@ impl<'a> RenderInProgress<'a> {
             target,
             render_cell_layer,
             render_cell_zoom,
-            quadtree_slice,
+            visible_quadtree,
             pos,
             visible_rect,
             view_matrix,
-            cache,
+            render_cache,
         }
     }
 
@@ -246,10 +246,10 @@ impl<'a> RenderInProgress<'a> {
     pub fn draw_cells(&mut self) {
         let textures: &mut textures::TextureCache = &mut textures::CACHE.borrow_mut();
         // Steps #1: encode the quadtree as a 1D texture.
-        let gl_quadtree = self.cache.gl_quadtree.from_node(
-            self.quadtree_slice.root.clone(),
+        let gl_quadtree = self.render_cache.gl_quadtree.from_node(
+            self.visible_quadtree.root.into(),
             self.render_cell_layer,
-            Self::branch_pixel_color,
+            Self::node_pixel_color,
         );
         // Step #2: draw at 1 pixel per render cell, including only the cells
         // inside self.visible_rect.
@@ -268,7 +268,7 @@ impl<'a> RenderInProgress<'a> {
                 &shaders::QUADTREE,
                 &uniform! {
                     quadtree_texture: &gl_quadtree.texture,
-                    max_layer: gl_quadtree.max_layer as i32,
+                    layer_count: gl_quadtree.layers as i32,
                     root_idx: gl_quadtree.root_idx as u32,
                 },
                 &glium::DrawParameters::default(),
@@ -334,41 +334,44 @@ impl<'a> RenderInProgress<'a> {
         //     glium::uniforms::MagnifySamplerFilter::Linear,
         // );
     }
-    fn branch_pixel_color(branch: &NdTreeBranch<Dim2D>) -> [u8; 4] {
-        let (r, g, b) = match branch {
-            NdTreeBranch::Leaf(cell_state) => match *cell_state {
+    fn node_pixel_color(node: NodeRef<'_, Dim2D>) -> [u8; 4] {
+        let (r, g, b) = if node.layer() == Layer(0) {
+            let cell_state = node.as_leaf().unwrap().cells()[0];
+            match cell_state {
                 0 => DEAD_COLOR,
                 1 => LIVE_COLOR,
                 i => colorous::TURBO
                     .eval_rational(257 - i as usize, 256)
                     .as_tuple(),
-            },
-            NdTreeBranch::Node(node) => {
-                let ratio = if node.population.is_zero() {
-                    0.0
-                } else if let Some(node_len) = node.len().to_f64() {
-                    let population = node.population.to_f64().unwrap();
-                    (population / 2.0) / node_len.powf(2.0) + 0.5
-                } else {
-                    1.0
-                };
-                let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
-                    + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
-                    .powf(0.5);
-                let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
-                    + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
-                    .powf(0.5);
-                let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
-                    + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
-                    .powf(0.5);
-                (r as u8, g as u8, b as u8)
             }
+        } else {
+            let ratio = if node.is_empty() {
+                0.0
+            } else {
+                // Multiply then divide by 255 to keep some precision.
+                let population_ratio = (node.population() * 255_usize / node.big_num_cells())
+                    .to_f64()
+                    .unwrap()
+                    / 255.0;
+                // Bias so that 50% is the minimum brightness if there is any population.
+                (population_ratio / 2.0) + 0.5
+            };
+            let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
+                + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
+                .powf(0.5);
+            let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
+                + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
+                .powf(0.5);
+            let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
+                + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
+                .powf(0.5);
+            (r as u8, g as u8, b as u8)
         };
         [r, g, b, 255]
     }
 
     /// Returns the coordinates of the cell at the given pixel.
-    pub fn pixel_pos_to_cell_pos(&self, cursor_position: IVec2D) -> FracVec2D {
+    pub fn pixel_pos_to_cell_pos(&self, cursor_position: IVec2D) -> FixedVec2D {
         let mut x = cursor_position[X];
         let mut y = cursor_position[Y];
         // Center the coordinates.
@@ -381,20 +384,18 @@ impl<'a> RenderInProgress<'a> {
         // Convert to float.
         let pixels_from_center = NdVec([r64(x as f64), r64(y as f64)]);
         // Convert to render cell space (relative to slice).
-        let render_cells_from_center = pixels_from_center / self.render_cell_zoom.pixels_per_cell();
+        let render_cells_from_center =
+            pixels_from_center / r64(self.render_cell_zoom.pixels_per_cell());
         // Convert to local cell space (relative to slice).
-        let local_pos =
-            (self.pos + render_cells_from_center) * r64((1 << self.render_cell_layer) as f64);
+        let local_pos = (self.pos + render_cells_from_center).to_fixedvec()
+            << self.render_cell_layer.to_usize();
         // Convert to global cell space.
-        let global_pos = FracVec2D {
-            int: self.quadtree_slice.offset.clone(),
-            frac: local_pos,
-        }
-        .normalized();
-        global_pos
+        local_pos + self.visible_quadtree.offset.to_fixedvec()
     }
 
     /// Draws gridlines at varying opacity and spacing depending on zoom level.
+    ///
+    /// TOOD: support arbitrary exponential base and factor (a*b^n for any a, b)
     pub fn draw_gridlines(&mut self, width: f64) {
         // Compute the minimum pixel spacing between maximum-opacity gridlines.
         let pixel_spacing = MAX_GRIDLINE_SPACING as f64;
@@ -406,7 +407,7 @@ impl<'a> RenderInProgress<'a> {
         let cell_spacing =
             2.0f64.powf((cell_spacing.log2() / spacing_base_log2).ceil() * spacing_base_log2);
         // Convert from cells to render cells.
-        let render_cell_spacing = cell_spacing / 2.0f64.powf(self.render_cell_layer as f64);
+        let render_cell_spacing = cell_spacing / self.render_cell_layer.big_len().to_f64().unwrap();
         let mut spacing = render_cell_spacing as usize;
         // Convert from render cells to pixels.
         let mut pixel_spacing =
@@ -442,12 +443,11 @@ impl<'a> RenderInProgress<'a> {
 
     /// Draws a highlight around the given cell.
     pub fn draw_blue_cursor_highlight(&mut self, cell_position: &BigVec2D, width: f64) {
-        if !self.quadtree_slice.rect().contains(cell_position) {
+        if !self.visible_quadtree.rect().contains(cell_position) {
             return;
         }
-        let cell_pos = cell_position - &self.quadtree_slice.offset;
-        let render_cell_size = BigInt::one() << self.render_cell_layer;
-        let render_cell_pos = cell_pos.div_floor(&render_cell_size);
+        let cell_pos = cell_position - &self.visible_quadtree.offset;
+        let render_cell_pos = cell_pos.div_floor(&self.render_cell_layer.big_len());
 
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
             IRect2D::single_cell(render_cell_pos.to_ivec()),

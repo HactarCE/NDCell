@@ -1,7 +1,6 @@
-use num::BigInt;
+use ndcell_core::prelude::*;
 
 use super::view2d::Zoom2D;
-use ndcell_core::{BigVec2D, FVec2D, FracVec2D};
 
 // TODO: Document all these commands!
 
@@ -48,15 +47,15 @@ pub enum MoveCommand2D {
     PanPixels(FVec2D),
     Zoom {
         power: f64,
-        fixed_point: Option<FracVec2D>,
+        invariant_pos: Option<FixedVec2D>,
     },
-    SetPos(FracVec2D),
+    SetPos(FixedVec2D),
     SetZoom {
         zoom: Zoom2D,
-        fixed_point: Option<FracVec2D>,
+        invariant_pos: Option<FixedVec2D>,
     },
     SnapPos,
-    SnapZoom(Option<FracVec2D>),
+    SnapZoom(Option<FixedVec2D>),
 }
 impl MoveCommand2D {
     pub fn direct(self) -> Command {

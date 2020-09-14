@@ -39,12 +39,12 @@ fn assert_compile_error(source_code: &str, expected: (&str, &str)) {
             expected_err,
             actual_err.pair(),
             "<-- actual\n\nRule source code:\n{}\n\n",
-            source_code
+            source_code,
         )
     }
 }
 
-/// Asserts that the given source code produces the giiven error when attempting
+/// Asserts that the given source code produces the given error when attempting
 /// to compile the function with the given name (or the transition function, if
 /// the function name is None).
 fn assert_fn_compile_error(fn_name: Option<&str>, source_code: &str, expected: (&str, &str)) {
@@ -57,7 +57,7 @@ fn assert_fn_compile_error(fn_name: Option<&str>, source_code: &str, expected: (
             expected_err,
             actual_err.pair(),
             "<-- actual\n\nRule source code:\n{}\n\n",
-            source_code
+            source_code,
         )
     }
 }

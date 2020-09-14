@@ -1,11 +1,12 @@
 use glium::framebuffer::SimpleFrameBuffer;
 use glium::texture::srgb_texture2d::SrgbTexture2d;
-use noisy_float::prelude::r64;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 
+use ndcell_core::ndvec::{FVec2D, NdVec};
+use ndcell_core::num::r64;
+
 use crate::DISPLAY;
-use ndcell_core::{FVec2D, NdVec};
 
 #[derive(Default)]
 pub struct CachedSrgbTexture2d {

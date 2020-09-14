@@ -6,6 +6,9 @@ use super::*;
 pub struct SimpleProjection;
 
 impl<D: Dim> NdProjector<D, D> for SimpleProjection {
+    fn projected_cache<'a>(&'a self, tree: &'a NdTree<D>) -> &'a Arc<RwLock<NodeCache<D>>> {
+        tree.cache()
+    }
     fn project_tree(&self, tree: &NdTree<D>) -> NdTree<D> {
         tree.clone()
     }

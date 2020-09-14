@@ -7,6 +7,9 @@ extern crate lazy_static;
 
 use std::sync::{mpsc, Arc};
 
+use ndcell_core::prelude::{Dim2D, Vec2D};
+use ndcell_core::sim::rule::{Rule, TransitionFunction};
+
 #[macro_use]
 mod utils;
 #[macro_use]
@@ -80,7 +83,7 @@ pub fn compile_blocking(
         .unwrap_or_else(|e| internal_error!("MPSC channel error: {:?}", e))
 }
 
-impl ndcell_core::Rule<ndcell_core::Dim2D> for compiler::CompiledFunction {
+impl Rule<Dim2D> for compiler::CompiledFunction {
     fn radius(&self) -> usize {
         let (min, max) = self.rule_meta().nbhd_shape.bounds().min_and_max();
         min.into_iter()
@@ -89,21 +92,26 @@ impl ndcell_core::Rule<ndcell_core::Dim2D> for compiler::CompiledFunction {
             .max()
             .unwrap()
     }
-    fn transition_function(&self) -> ndcell_core::TransitionFunction<ndcell_core::Dim2D> {
+    fn transition_function(&self) -> TransitionFunction<Dim2D> {
         let mut compiled_func = self.clone();
-        Box::new(move |neighborhood| {
-            let nbhd_pattern = types::Pattern {
-                cells: compiled_func
-                    .rule_meta()
-                    .nbhd_shape
-                    .bounds()
-                    .iter()
-                    .map(|pos| neighborhood[&ndcell_core::Vec2D::from_fn(|ax| pos[ax as usize])])
-                    .collect(),
-                shape: compiled_func.rule_meta().nbhd_shape.clone(),
-                lut: None,
-            };
-            compiled_func.call(&mut [ConstValue::Pattern(nbhd_pattern)]).expect("Runtime error in transition function! And I haven't implemented proper error handling yet! AAAHHH").as_cell_state().unwrap()
+        Box::new(move |nbhd, rect| {
+            ndcell_core::sim::rule::transition_cell_array(rect, |pos| {
+                let nbhd_pattern = types::Pattern {
+                    cells: compiled_func
+                        .rule_meta()
+                        .nbhd_shape
+                        .bounds()
+                        .iter()
+                        .map(|offset| {
+                            let offset = Vec2D::from_fn(|ax| offset[ax as usize]);
+                            nbhd[(pos.to_ivec() + offset).to_uvec()]
+                        })
+                        .collect(),
+                    shape: compiled_func.rule_meta().nbhd_shape.clone(),
+                    lut: None,
+                };
+                compiled_func.call(&mut [ConstValue::Pattern(nbhd_pattern)]).expect("Runtime error in transition function! And I haven't implemented proper error handling yet! AAAHHH").as_cell_state().unwrap()
+            })
         })
     }
 }

@@ -1,10 +1,10 @@
 use log::trace;
-use num::BigInt;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use ndcell_core::NdSimulate;
+use ndcell_core::num::BigInt;
+use ndcell_core::sim::Simulate;
 
 pub enum WorkerRequest {
     Step(BigInt),
@@ -18,13 +18,13 @@ pub struct WorkerResult<T> {
 }
 
 /// A manager for worker threads that compute simulation results concurrently.
-pub struct Worker<T: NdSimulate + Clone + Send> {
+pub struct Worker<T: Simulate + Clone + Send> {
     requests_tx: mpsc::Sender<WorkerRequest>,
     results_rx: mpsc::Receiver<WorkerResult<T>>,
     request_count: usize,
 }
 
-impl<T: 'static + NdSimulate + Clone + Send> Worker<T> {
+impl<T: 'static + Simulate + Clone + Send> Worker<T> {
     pub fn new(mut simulation: T) -> Self {
         let (requests_tx, requests_rx) = mpsc::channel();
         let (results_tx, results_rx) = mpsc::sync_channel(1);

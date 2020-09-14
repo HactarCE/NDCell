@@ -1,6 +1,7 @@
-use crate::DISPLAY;
 use glium::Program;
 use send_wrapper::SendWrapper;
+
+use crate::DISPLAY;
 
 /// Uses lazy_static!() to define a shader that is lazily loaded from the given
 /// filename.

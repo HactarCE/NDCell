@@ -1,10 +1,11 @@
 use log::{trace, warn};
+use parking_lot::{Mutex, RwLock};
 use std::borrow::Cow;
 use std::collections::VecDeque;
-use std::sync::Mutex;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use ndcell_core::*;
+use ndcell_core::prelude::*;
 
 mod render;
 mod viewport;
@@ -59,7 +60,7 @@ pub struct GridView2D {
 impl GridViewTrait for GridView2D {
     fn do_frame(&mut self, config: &Config) {
         // Handle commands.
-        let old_command_queue = std::mem::replace(&mut *self.command_queue.lock().unwrap(), vec![]);
+        let old_command_queue = std::mem::replace(&mut *self.command_queue.lock(), vec![]);
         for command in old_command_queue.into_iter() {
             let was_running = self.is_running;
             match command {
@@ -83,15 +84,19 @@ impl GridViewTrait for GridView2D {
                     };
                     match c {
                         MoveCommand2D::PanPixels(delta) => new_viewport.pan_pixels(delta),
-                        MoveCommand2D::Zoom { power, fixed_point } => {
-                            new_viewport.zoom_by(2.0f64.powf(power), fixed_point)
-                        }
+                        MoveCommand2D::Zoom {
+                            power,
+                            invariant_pos,
+                        } => new_viewport.zoom_by(2.0f64.powf(power), invariant_pos),
                         MoveCommand2D::SetPos(pos) => new_viewport.center = pos,
-                        MoveCommand2D::SetZoom { zoom, fixed_point } => {
-                            new_viewport.zoom_by(zoom / new_viewport.zoom, fixed_point)
-                        }
+                        MoveCommand2D::SetZoom {
+                            zoom,
+                            invariant_pos,
+                        } => new_viewport.zoom_by(zoom / new_viewport.zoom, invariant_pos),
                         MoveCommand2D::SnapPos => new_viewport.snap_pos(),
-                        MoveCommand2D::SnapZoom(fixed_point) => new_viewport.snap_zoom(fixed_point),
+                        MoveCommand2D::SnapZoom(invariant_pos) => {
+                            new_viewport.snap_zoom(invariant_pos)
+                        }
                     };
                     self.viewport = new_viewport;
                     match interpolation {
@@ -111,7 +116,7 @@ impl GridViewTrait for GridView2D {
                     assert!(
                         self.is_drawing,
                         "Attempt to execute draw command before {:?}",
-                        Command::StartDraw
+                        Command::StartDraw,
                     );
                     assert!(
                         !self.is_running,
@@ -134,8 +139,8 @@ impl GridViewTrait for GridView2D {
                         match c {
                             ClipboardCommand::CopyRle => {
                                 let result = match self.as_automaton() {
-                                    Automaton::Automaton2D(automaton) => {
-                                        clipboard_set(rle::RleEncode::to_rle(automaton))
+                                    AutomatonRef::Automaton2D(automaton) => {
+                                        clipboard_set(RleEncode::to_rle(automaton))
                                             .map_err(|_| "Unable to set clipboard contents")
                                     }
                                     _ => Err("Unable to convert non-2D patterns to RLE"),
@@ -146,8 +151,8 @@ impl GridViewTrait for GridView2D {
                             }
                             ClipboardCommand::CopyCxrle => {
                                 let result = match self.as_automaton() {
-                                    Automaton::Automaton2D(automaton) => {
-                                        clipboard_set(rle::RleEncode::to_cxrle(automaton))
+                                    AutomatonRef::Automaton2D(automaton) => {
+                                        clipboard_set(RleEncode::to_cxrle(automaton))
                                             .map_err(|_| "Unable to set clipboard contents")
                                     }
                                     _ => Err("Unable to convert non-2D patterns to RLE"),
@@ -160,7 +165,7 @@ impl GridViewTrait for GridView2D {
                                 self.record();
                                 let result: Result<Automaton2D, _> = clipboard_get()
                                     .map_err(|_| "Unable to access clipboard contents".to_owned())
-                                    .and_then(|s| rle::RleEncode::from_rle(&s));
+                                    .and_then(|s| RleEncode::from_rle(&s));
                                 match result {
                                     Ok(mut new_automaton) => {
                                         new_automaton.set_sim(crate::load_custom_rule());
@@ -181,7 +186,9 @@ impl GridViewTrait for GridView2D {
             let t = match config.ctrl.interpolation_2d {
                 Interpolation2D::None => 1.0,
                 Interpolation2D::Linear { speed } => {
-                    speed / fps / Viewport2D::distance(&self.interpolating_viewport, &self.viewport)
+                    let distance =
+                        Viewport2D::distance(&self.interpolating_viewport, &self.viewport);
+                    speed / fps / distance.to_f64().unwrap_or(f64::MAX)
                 }
                 Interpolation2D::Exponential { decay_constant } => 1.0 / fps / decay_constant,
             };
@@ -224,7 +231,7 @@ impl GridViewTrait for GridView2D {
     }
 
     fn enqueue<C: Into<Command>>(&self, command: C) {
-        self.command_queue.lock().unwrap().push(command.into());
+        self.command_queue.lock().push(command.into());
     }
 
     fn queue_worker_request(&mut self, request: WorkerRequest) {
@@ -252,19 +259,19 @@ impl GridViewTrait for GridView2D {
         self.reset_worker();
     }
 
-    fn as_automaton<'a>(&'a self) -> Automaton<'a> {
-        Automaton::from(&self.automaton)
+    fn as_automaton<'a>(&'a self) -> AutomatonRef<'a> {
+        AutomatonRef::from(&self.automaton)
     }
     fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
         AutomatonMut::from(&mut self.automaton)
     }
 }
 
-impl AsNdSimulate for GridView2D {
-    fn as_ndsim(&self) -> &dyn NdSimulate {
+impl AsSimulate for GridView2D {
+    fn as_sim(&self) -> &dyn Simulate {
         &self.automaton
     }
-    fn as_ndsim_mut(&mut self) -> &mut dyn NdSimulate {
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate {
         &mut self.automaton
     }
 }
@@ -293,7 +300,8 @@ impl RenderGridView for GridView2D {
         params: View2DRenderParams,
     ) -> Cow<View2DRenderResult> {
         let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
-        let mut rip = RenderInProgress::new(self, &mut render_cache, target);
+        let node_cache = self.automaton.projected_cache().read();
+        let mut rip = RenderInProgress::new(self, &*node_cache, &mut render_cache, target);
         rip.draw_cells();
 
         let hover_pos = params.cursor_pos.map(|pos| rip.pixel_pos_to_cell_pos(pos));
@@ -309,7 +317,7 @@ impl RenderGridView for GridView2D {
         rip.draw_gridlines(gridlines_width);
         // Draw crosshairs.
         if let Some(pos) = &draw_pos {
-            rip.draw_blue_cursor_highlight(&pos.int, gridlines_width * 2.0);
+            rip.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0);
         }
 
         self.render_cache = Some(render_cache);
@@ -335,8 +343,11 @@ impl RenderGridView for GridView2D {
 }
 
 impl GridView2D {
-    pub fn get_cell(&self, pos: &BigVec2D) -> u8 {
-        self.automaton.projected_tree().get_cell(pos)
+    pub fn cache(&self) -> &Arc<RwLock<NodeCache<Dim2D>>> {
+        &self.automaton.projected_cache()
+    }
+    pub fn get_cell(&self, cache: &NodeCache<Dim2D>, pos: &BigVec2D) -> u8 {
+        self.automaton.projected_tree().get_cell(cache, pos)
     }
     fn get_worker(&mut self) -> &mut Worker<ProjectedAutomaton2D> {
         if let None = self.worker {
@@ -355,9 +366,9 @@ pub struct View2DRenderParams {
 #[derive(Debug, Clone)]
 pub struct View2DRenderResult {
     /// The cell that the mouse cursor is hovering over.
-    pub hover_pos: Option<FracVec2D>,
+    pub hover_pos: Option<FixedVec2D>,
     /// The cell to draw at if the user draws.
-    pub draw_pos: Option<FracVec2D>,
+    pub draw_pos: Option<FixedVec2D>,
     /// The moment that this render finished.
     pub instant: Instant,
 }

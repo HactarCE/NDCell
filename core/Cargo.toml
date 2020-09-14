@@ -5,14 +5,20 @@ authors = ["HactarCE <6060305+HactarCE@users.noreply.github.com>"]
 edition = "2018"
 
 [dependencies]
-dashmap = "3.11"
 enum_dispatch = "0.3"
+itertools = "0.9"
 noisy_float = "0.1"
 num = "0.3"
+parking_lot = "0.11"
 pest = "2.1"
 pest_derive = "2.1"
 regex = "1"
 seahash = "4.0"
 
 [dev-dependencies]
+criterion = "0.3"
 proptest = "0.10"
+
+[[bench]]
+name = "hashlife"
+harness = false

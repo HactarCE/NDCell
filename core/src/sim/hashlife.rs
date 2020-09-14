@@ -113,7 +113,7 @@ impl<D: Dim> HashLife<D> {
                 &sim_params,
                 &mut transition_function,
             );
-            tree.set_root(new_root);
+            tree.set_root_centered(new_root);
 
             // Shrink the tree as much as possible to avoid wasted space. TODO:
             // is it better to have this inside the loop or outside the loop?

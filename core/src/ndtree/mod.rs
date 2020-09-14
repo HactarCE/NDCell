@@ -34,6 +34,8 @@ pub use slice::*;
 pub struct NdTree<D: Dim> {
     /// The root node of this slice.
     root: ArcNode<D>,
+    /// Position of the lowest corner of the root node.
+    offset: BigVec<D>,
 }
 
 impl<D: Dim> Default for NdTree<D> {
@@ -61,6 +63,15 @@ where
     }
 }
 
+impl<'a, D: Dim> From<NdTreeSlice<'a, D>> for NdTree<D> {
+    fn from(slice: NdTreeSlice<'a, D>) -> Self {
+        Self {
+            root: slice.root.into(),
+            offset: slice.offset,
+        }
+    }
+}
+
 impl<D: Dim> NdTree<D> {
     /// Creates an empty ND-tree using a new node cache.
     #[inline]
@@ -70,9 +81,7 @@ impl<D: Dim> NdTree<D> {
     /// Creates an empty ND-tree using the given node cache.
     #[inline]
     pub fn with_cache(node_cache: Arc<RwLock<NodeCache<D>>>) -> Self {
-        Self {
-            root: node_cache.read().get_empty_base().into(),
-        }
+        Self::from_node_centered(node_cache.read().get_empty_base())
     }
     /// Creates an ND-tree containing the given node centered on the origin.
     ///
@@ -80,12 +89,15 @@ impl<D: Dim> NdTree<D> {
     ///
     /// This function panics if the node consists of only a single cell.
     #[inline]
-    pub fn from_node<'n>(node: impl CachedNodeRefTrait<'n, D = D>) -> Self {
+    pub fn from_node_centered<'n>(node: impl CachedNodeRefTrait<'n, D = D>) -> Self {
         assert!(
             node.layer() > Layer(0),
             "Root of ND-tree must be larger than a single cell",
         );
-        Self { root: node.into() }
+        Self {
+            root: node.into(),
+            offset: BigVec::repeat(-node.layer().child_layer().big_len()),
+        }
     }
 
     /// Returns the root node of the ND-tree.
@@ -93,19 +105,24 @@ impl<D: Dim> NdTree<D> {
     pub fn root(&self) -> &ArcNode<D> {
         &self.root
     }
-    /// Sets the root node of the ND-tree.
+    /// Sets the root node of the ND-tree, maintaining the center position.
     ///
     /// # Panics
     ///
     /// This method panics if the new root consists of only a single cell.
     #[inline]
-    pub fn set_root(&mut self, new_root: impl Into<ArcNode<D>>) {
+    pub fn set_root_centered(&mut self, new_root: impl Into<ArcNode<D>>) {
+        let old_node_layer = self.layer();
         let new_root = new_root.into();
         assert!(
             new_root.layer() > Layer(0),
             "Root of ND-tree must be larger than a single cell",
         );
         self.root = new_root;
+        let new_node_layer = self.layer();
+
+        self.offset += &old_node_layer.child_layer().big_len();
+        self.offset -= &new_node_layer.child_layer().big_len();
     }
 
     /// Returns the cache for nodes in the ND-tree.
@@ -125,8 +142,8 @@ impl<D: Dim> NdTree<D> {
     }
     /// Returns a lower bound for lowest coordinate in the grid.
     #[inline]
-    pub fn offset(&self) -> BigVec<D> {
-        BigVec::repeat(-self.layer().child_layer().big_len())
+    pub fn offset(&self) -> &BigVec<D> {
+        &self.offset
     }
     /// Returns a rectangle encompassing the grid.
     #[inline]
@@ -138,7 +155,7 @@ impl<D: Dim> NdTree<D> {
     pub fn slice<'cache>(&self, cache: &'cache NodeCache<D>) -> NdTreeSlice<'cache, D> {
         NdTreeSlice {
             root: self.root().as_ref(cache),
-            offset: self.offset(),
+            offset: self.offset().clone(),
         }
     }
 
@@ -171,7 +188,7 @@ impl<D: Dim> NdTree<D> {
                     cache.join_nodes(children)
                 }),
         );
-        self.set_root(new_root);
+        self.set_root_centered(new_root);
     }
     /// "Zooms out" the grid by calling `NdTree::expand()` until the tree
     /// includes the given position.
@@ -214,7 +231,7 @@ impl<D: Dim> NdTree<D> {
             })
             .try_collect()?;
         let new_root = cache.join_nodes(new_children);
-        self.set_root(new_root);
+        self.set_root_centered(new_root);
         Ok(())
     }
 
@@ -235,7 +252,7 @@ impl<D: Dim> NdTree<D> {
             .root
             .as_ref(cache)
             .set_cell(&(pos - self.offset()), cell_state);
-        self.set_root(new_root);
+        self.set_root_centered(new_root);
     }
 
     /// Returns an `NdTreeSlice` of the smallest node in the grid containing the

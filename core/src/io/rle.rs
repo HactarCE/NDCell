@@ -102,7 +102,7 @@ impl RleEncode for Automaton2D {
         // distance each direction from the origin, we don't have negate the X
         // position.
         let cxrle = CxrleHeader {
-            pos: self.tree.offset(),
+            pos: self.tree.offset().clone(),
             gen: self.generations.clone(),
         };
         format!("{}\n{}", cxrle.to_string(), self.to_rle())
@@ -503,7 +503,7 @@ o$3o!
 x = 32, y = 32, rule = Life
 2$27.A$28.A$26.3A!
 ",
-            exported
+            exported,
         );
         let reimported: Automaton2D =
             RleEncode::from_rle(&exported).expect("Could not parse RLE output");

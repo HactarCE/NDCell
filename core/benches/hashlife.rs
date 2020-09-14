@@ -69,7 +69,7 @@ fn bench_sim_2d(
                 let cache = _cache.read();
                 let root = cache.get_from_cells(ndarray.clone().into_flat_slice());
                 let automaton = Automaton2D {
-                    tree: NdTree::from_node(root),
+                    tree: NdTree::from_node_centered(root),
                     sim: Arc::clone(&sim),
                     generations: 0.into(),
                 };

@@ -39,7 +39,7 @@ fn assert_compile_error(source_code: &str, expected: (&str, &str)) {
             expected_err,
             actual_err.pair(),
             "<-- actual\n\nRule source code:\n{}\n\n",
-            source_code
+            source_code,
         )
     }
 }
@@ -57,7 +57,7 @@ fn assert_fn_compile_error(fn_name: Option<&str>, source_code: &str, expected: (
             expected_err,
             actual_err.pair(),
             "<-- actual\n\nRule source code:\n{}\n\n",
-            source_code
+            source_code,
         )
     }
 }

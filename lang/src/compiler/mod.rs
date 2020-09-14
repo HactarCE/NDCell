@@ -1213,7 +1213,7 @@ impl Compiler {
             _ => internal_error!(
                 "Cannot convert {} to {}",
                 value.ty(),
-                TypeDesc::CellStateFilter
+                TypeDesc::CellStateFilter,
             ),
         }
     }

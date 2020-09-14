@@ -223,7 +223,7 @@ impl fmt::Display for LangErrorMsg {
                 write!(
                     f,
                     "Number of states must range from 1 to {}",
-                    MAX_STATE_COUNT
+                    MAX_STATE_COUNT,
                 )?;
             }
 

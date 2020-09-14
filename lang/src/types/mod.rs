@@ -307,7 +307,7 @@ macro_rules! typecheck {
     ( $got:expr, [ $( $expected:tt ),+ $(,)? ] ) => {
         $got.typecheck([ $( type_desc!($expected) ),+ ].as_ref())
     };
-    ( $got:expr, $expected:tt ) => {
+    ( $got:expr, $expected:tt $(,)? ) => {
         $got.typecheck(type_desc!($expected))
     };
 }

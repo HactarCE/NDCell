@@ -19,7 +19,7 @@ fn test_square_pattern_indexing() {
             @transition {{
                 become nbhd[{}, {}]
             }}",
-            x, y
+            x, y,
         ));
         assert_fn_result(
             &mut f,
@@ -37,7 +37,7 @@ fn test_square_pattern_indexing() {
             @transition {{
                 become nbhd[{}, {}]
             }}",
-            x, y
+            x, y,
         ));
 
         assert_fn_result(

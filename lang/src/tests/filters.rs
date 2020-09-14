@@ -14,7 +14,7 @@ fn test_cell_state_filter_ops() {
                 if op == 2 {{ return l ^ r }}
                 if op == 3 {{ return ~l }}
             }}",
-            state_count
+            state_count,
         ));
         for (&cell_state1, &cell_state2) in iproduct!(test_values(), test_values()) {
             if cell_state1 as usize >= state_count || cell_state2 as usize >= state_count {
@@ -57,7 +57,7 @@ fn test_cell_state_filter_construct_from_cell_state() {
             @function CellFilter test(Cell state) {{
                 return ~state
             }}",
-            state_count
+            state_count,
         ));
         for &cell_state in test_values() {
             if cell_state as usize >= state_count {
@@ -81,7 +81,7 @@ fn test_cell_state_filter_construct_from_cell_state() {
                 return state1..state2
             }}
             ",
-            state_count
+            state_count,
         ));
         for (&cell_state1, &cell_state2) in iproduct!(test_values(), test_values()) {
             if cell_state1 as usize >= state_count || cell_state2 as usize >= state_count {

@@ -84,7 +84,7 @@ pub fn from_parse_tree(
                             span: binding.expr.span,
                             inner: filter.ty()
                         },
-                        CellStateFilter
+                        CellStateFilter,
                     )?;
                     // Construct the key-value pair for the HashMap.
                     Ok((

@@ -81,11 +81,12 @@ pub mod prelude {
     pub use crate::ndrect::NdRect;
     pub use crate::ndtree::aliases::*;
     pub use crate::ndtree::{
-        ArcNode, LeafNodeRef, NdTree, NdTreeSlice, NodeCache, NodeRef, NodeRefEnum, NonLeafNodeRef,
+        ArcNode, Layer, LeafNodeRef, NdTree, NdTreeSlice, NodeCache, NodeRef, NodeRefEnum,
+        NonLeafNodeRef,
     };
     pub use crate::ndvec::aliases::*;
     pub use crate::ndvec::{AnyDimVec, NdVec};
-    pub use crate::num::{r64, BigInt, BigUint, R64};
+    pub use crate::num::{r64, BigInt, BigUint, FixedPoint, R64};
     pub use crate::sim::HashLife;
 }
 

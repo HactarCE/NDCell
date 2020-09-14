@@ -271,6 +271,15 @@ impl<'a> FrameInProgress<'a> {
                             self.gridview.enqueue(SimCommand::ToggleRunning)
                         }
                         Some(VirtualKeyCode::Escape) => self.gridview.enqueue(SimCommand::Cancel),
+                        Some(VirtualKeyCode::Equals) | Some(VirtualKeyCode::Add) => {
+                            self.config.sim.step_size *= 2;
+                        }
+                        Some(VirtualKeyCode::Minus) | Some(VirtualKeyCode::Subtract) => {
+                            self.config.sim.step_size /= 2;
+                            if self.config.sim.step_size < 1.into() {
+                                self.config.sim.step_size = 1.into();
+                            }
+                        }
                         _ => (),
                     }
                 }

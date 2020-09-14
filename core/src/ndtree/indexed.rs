@@ -11,13 +11,13 @@ use crate::dim::Dim;
 /// ND-tree represented as a list of nodes.
 #[derive(Debug)]
 pub struct IndexedNdTree<D: Dim, T> {
-    /// Layer of the largest node, in the context of this `IndexedNdTree`.
+    /// Number of non-leaf layers.
+    ///
+    /// If all nodes are leaf nodes, this is 0.
     ///
     /// Note that the minimum layer in this IndexedNdTree might represent
     /// multiple cells, such as when rendering zoomed out past 1:1.
-    ///
-    /// TODO: rewrite this comment more clearly
-    max_layer: Layer,
+    layers: usize,
     /// List of all the nodes.
     nodes: Vec<IndexedNdTreeNode<D, T>>,
     /// Index of the root node.
@@ -36,9 +36,9 @@ pub enum IndexedNdTreeNode<D: Dim, T> {
 impl<D: Dim, T> IndexedNdTree<D, T> {
     /// Returns the number of indexed layers; i.e. how many times you have to
     /// follow a pointer (including getting the initial node) to reach a leaf.
-    /// The minimum is 1.
-    pub fn max_layer(&self) -> Layer {
-        self.max_layer
+    /// The minimum is 0.
+    pub fn layers(&self) -> usize {
+        self.layers
     }
     /// Returns the list of nodes.
     pub fn nodes(&self) -> &[IndexedNdTreeNode<D, T>] {
@@ -103,10 +103,9 @@ struct IndexedNdTreeBuilder<'cache, D: Dim, T, F> {
 impl<'cache, D: Dim, T, F: Fn(NodeRef<'cache, D>) -> T> IndexedNdTreeBuilder<'cache, D, T, F> {
     /// Returns the final `IndexedNdTree`, using the given node as the root.
     pub fn build(mut self, node: NodeRef<'cache, D>) -> IndexedNdTree<D, T> {
-        let node_layer = node.layer();
         let root_idx = self.add_node(node);
         IndexedNdTree {
-            max_layer: node_layer - self.min_layer,
+            layers: (node.layer() - self.min_layer).to_usize(),
             nodes: self.nodes,
             root_idx,
         }
@@ -119,13 +118,9 @@ impl<'cache, D: Dim, T, F: Fn(NodeRef<'cache, D>) -> T> IndexedNdTreeBuilder<'ca
         if let Some(&node_index) = self.node_indices.get(&original_node) {
             node_index
         } else {
-            let indexed_node = if original_node.layer() <= self.min_layer.parent_layer() {
-                // We compare against `min_layer.parent_layer()` because
-                // `min_layer` refers to the minimum layer for *node children*,
-                // not *nodes*. For example, `min_layer == Layer(0)` means the
-                // smallest node should be 2x2 (layer = 1), which contains
-                // 2^NDIM cells (layer=0). This is the recursive base case for
-                // `min_layer >= base_layer`.
+            let indexed_node = if original_node.layer() <= self.min_layer {
+                // This is the recursive base case for `min_layer >=
+                // base_layer`.
                 IndexedNdTreeNode::Leaf((self.node_to_data)(original_node), PhantomData)
             } else {
                 // Subdivide this node into 2^NDIM pieces and recurse.
@@ -194,28 +189,48 @@ x = 8, y = 8, rule = B3/S23
         // nodes of layer >= N, and leaving the rest as NdTreeNodes. The number
         // of indexed nodes is indexed_N.nodes.len().
 
+        // 1+3+2+2 = 8, so there should be a total of eight nodes in this one.
         let indexed_0 = IndexedNdTree::from_node(root, Layer(0), |x| x);
-        assert_eq!(Layer(3), indexed_0.max_layer);
-        // 1+3+2+2 = 6, so there should be a total of eight nodes in this one.
-        assert_eq!(6, indexed_0.nodes.len());
+        assert_eq!(3, indexed_0.layers);
+        assert_eq!(8, indexed_0.nodes.len());
         assert_eq!(root, indexed_0.to_node(|&x| x));
+        for n in indexed_0.nodes() {
+            if let IndexedNdTreeNode::Leaf(x, _) = n {
+                assert_eq!(Layer(0), x.layer());
+            }
+        }
 
+        // 1+3+2 = 6, so there should be a total of six nodes in this one.
         let indexed_1 = IndexedNdTree::from_node(root, Layer(1), |x| x);
-        assert_eq!(Layer(2), indexed_1.max_layer);
-        // 1+3+2 = 6, so there should be a total of eight nodes in this one.
-        assert_eq!(4, indexed_1.nodes.len());
+        assert_eq!(2, indexed_1.layers);
+        assert_eq!(6, indexed_1.nodes.len());
         assert_eq!(root, indexed_1.to_node(|&x| x));
+        for n in indexed_1.nodes() {
+            if let IndexedNdTreeNode::Leaf(x, _) = n {
+                assert_eq!(Layer(1), x.layer());
+            }
+        }
 
-        let indexed_2 = IndexedNdTree::from_node(root, Layer(2), |x| x);
-        assert_eq!(Layer(1), indexed_2.max_layer);
         // 1+3 = 4
-        assert_eq!(1, indexed_2.nodes.len());
+        let indexed_2 = IndexedNdTree::from_node(root, Layer(2), |x| x);
+        assert_eq!(1, indexed_2.layers);
+        assert_eq!(4, indexed_2.nodes.len());
         assert_eq!(root, indexed_2.to_node(|&x| x));
+        for n in indexed_2.nodes() {
+            if let IndexedNdTreeNode::Leaf(x, _) = n {
+                assert_eq!(Layer(2), x.layer());
+            }
+        }
 
-        let indexed_3 = IndexedNdTree::from_node(root, Layer(3), |x| x);
-        assert_eq!(Layer(0), indexed_3.max_layer);
         // 1 = 1
+        let indexed_3 = IndexedNdTree::from_node(root, Layer(3), |x| x);
+        assert_eq!(0, indexed_3.layers);
         assert_eq!(1, indexed_3.nodes.len());
         assert_eq!(root, indexed_3.to_node(|&x| x));
+        for n in indexed_3.nodes() {
+            if let IndexedNdTreeNode::Leaf(x, _) = n {
+                assert_eq!(Layer(3), x.layer());
+            }
+        }
     }
 }

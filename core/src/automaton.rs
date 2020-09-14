@@ -1,11 +1,12 @@
 //! High-level CA interface.
 
 use enum_dispatch::enum_dispatch;
+use parking_lot::RwLock;
 use std::convert::TryInto;
 use std::sync::Arc;
 
 use crate::dim::*;
-use crate::ndtree::{NdTree, NodeRefTrait};
+use crate::ndtree::{NdTree, NodeCache, NodeRefTrait};
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, BigUint};
 use crate::projection::{NdProjection, NdProjectionError, NdProjector, ProjectionParams};
@@ -15,6 +16,8 @@ use crate::sim::{AsSimulate, HashLife, Simulate};
 /// NdProjectedAutomaton.
 #[enum_dispatch]
 pub trait NdProjectedAutomatonTrait<P: Dim> {
+    /// Returns a reference to the node cache used for projected nodes.
+    fn projected_cache(&self) -> &Arc<RwLock<NodeCache<P>>>;
     /// Returns the projected NdTree.
     fn projected_tree(&self) -> NdTree<P>;
     /// Returns the ProjectionParams used to create this projection.
@@ -156,6 +159,9 @@ impl<D: Dim, P: Dim> AsSimulate for NdProjectedAutomaton<D, P> {
     }
 }
 impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P> {
+    fn projected_cache(&self) -> &Arc<RwLock<NodeCache<P>>> {
+        self.projection.projected_cache(&self.automaton.tree)
+    }
     fn projected_tree(&self) -> NdTree<P> {
         self.projection.project_tree(&self.automaton.tree)
     }

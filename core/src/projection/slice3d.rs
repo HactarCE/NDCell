@@ -4,6 +4,8 @@ use super::*;
 /// >= 3.
 #[derive(Debug, Clone)]
 pub struct SliceProjection3D<D: Dim> {
+    /// The 3D node cache.
+    cache: Arc<RwLock<NodeCache<Dim3D>>>,
     /// The position at which to slice the NdTree.
     pub slice_pos: BigVec<D>,
     /// The axis displayed horizontally.
@@ -15,6 +17,9 @@ pub struct SliceProjection3D<D: Dim> {
 }
 
 impl<D: Dim> NdProjector<D, Dim3D> for SliceProjection3D<D> {
+    fn projected_cache<'a>(&'a self, _tree: &'a NdTree<D>) -> &'a Arc<RwLock<NodeCache<Dim3D>>> {
+        &self.cache
+    }
     fn project_tree(&self, _tree: &NdTree<D>) -> NdTree<Dim3D> {
         unimplemented!()
     }

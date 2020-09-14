@@ -3,7 +3,7 @@
 use crate::dim::Dim;
 use crate::ndrect::{BigRect, URect};
 use crate::ndvec::{BigVec, UVec};
-use crate::num::{BigInt, One};
+use crate::num::{BigInt, BigUint, One};
 
 // TODO: consider moving `Layer` into `ndtree::node::raw`.
 
@@ -15,7 +15,7 @@ use crate::num::{BigInt, One};
 /// cells. In the case of leaf nodes, those cells are stored in one array (see
 /// the crate's root documentation for more details). Non-leaf nodes contain
 /// pointers to 2^NDIM nodes one layer lower.
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[repr(transparent)]
 pub struct Layer(pub u32);
 impl From<Layer> for u32 {
@@ -136,8 +136,8 @@ impl Layer {
     /// Returns the number of cells along each axis of a node at this layer as a
     /// `BigInt`.
     #[inline]
-    pub fn big_num_cells<D: Dim>(self) -> BigInt {
-        BigInt::one() << (self.to_usize() * D::NDIM)
+    pub fn big_num_cells<D: Dim>(self) -> BigUint {
+        BigUint::one() << (self.to_usize() * D::NDIM)
     }
 
     /// Returns a rectangle the size of a node at this layer with the lower

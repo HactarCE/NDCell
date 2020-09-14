@@ -30,7 +30,7 @@ pub trait NodeRefTrait<'node>: Copy {
     }
     /// Returns the number of cells along each axis of the node as a `BigInt`.
     #[inline]
-    fn big_num_cells(self) -> BigInt {
+    fn big_num_cells(self) -> BigUint {
         self.layer().big_num_cells::<Self::D>()
     }
     /// Returns a rectangle the size of the node with the lower corner at the
@@ -398,7 +398,7 @@ impl<D: Dim> fmt::Debug for NodeRef<'_, D> {
 }
 impl<D: Dim> PartialEq for NodeRef<'_, D> {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self.raw_node, other.raw_node) && self.cache == other.cache
+        std::ptr::eq(self.raw_node, other.raw_node)
     }
 }
 impl<D: Dim> Eq for NodeRef<'_, D> {}
@@ -474,7 +474,7 @@ mod tests {
             let (child_index, grandchild_index) = split_grandchild_index::<Dim3D>(i);
             println!(
                 "{:?}; pos {:?}; ch {:?}; grch {:?}",
-                i, pos, child_index, grandchild_index
+                i, pos, child_index, grandchild_index,
             );
             for &ax in Dim3D::axes() {
                 if pos[ax] < 2 {

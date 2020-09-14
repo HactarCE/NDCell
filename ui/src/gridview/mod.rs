@@ -2,7 +2,7 @@ use enum_dispatch::enum_dispatch;
 use std::borrow::Cow;
 use std::time::Instant;
 
-use ndcell_core::*;
+use ndcell_core::prelude::*;
 
 pub mod control;
 mod view2d;
@@ -82,7 +82,7 @@ pub trait GridViewTrait: Sized + Simulate + History {
     fn start_running(&mut self, config: &Config);
     fn stop_running(&mut self);
 
-    fn as_automaton<'a>(&'a self) -> Automaton<'a>;
+    fn as_automaton<'a>(&'a self) -> AutomatonRef<'a>;
     fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;
 }
 

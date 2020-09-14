@@ -1,6 +1,7 @@
 use imgui::*;
 
-use ndcell_core::{Dim, Dim2D, Simulate, X, Y};
+use ndcell_core::axis::{X, Y};
+use ndcell_core::prelude::*;
 
 mod simulation;
 
@@ -59,7 +60,7 @@ impl MainWindow {
             }
             ui.text("");
             ui.text(format!("Generations = {}", gridview.generation_count()));
-            ui.text(format!("Population = {}", gridview.population_count()));
+            ui.text(format!("Population = {}", gridview.population()));
             ui.text("");
             match &gridview {
                 GridView::View2D(view2d) => {
@@ -77,7 +78,8 @@ impl MainWindow {
                     if let Some(hover_pos) = view2d.nth_render_result(0).hover_pos.as_ref() {
                         ui.text(format!(
                             "Cursor: X = {}, Y = {}",
-                            hover_pos.int[X], hover_pos.int[Y]
+                            hover_pos[X].floor().0,
+                            hover_pos[Y].floor().0,
                         ));
                     } else {
                         ui.text("");

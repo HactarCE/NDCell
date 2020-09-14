@@ -1,4 +1,4 @@
-use num::BigInt;
+use ndcell_core::num::BigInt;
 
 #[derive(Debug, Default)]
 pub struct Config {
@@ -73,4 +73,5 @@ impl Default for SimConfig {
             breakpoint_gen: 0.into(),
         }
     }
+    // TODO: consider adding setter for step_size
 }

@@ -1,10 +1,9 @@
 use glium::VertexBuffer;
-use noisy_float::prelude::r64;
-use num::cast::ToPrimitive;
 use send_wrapper::SendWrapper;
 use std::cell::{RefCell, RefMut};
 
-use ndcell_core::{FRect2D, FVec2D, IRect2D, X, Y};
+use ndcell_core::axis::{X, Y};
+use ndcell_core::prelude::*;
 
 use super::vertices::*;
 use super::CELL_OVERLAY_BATCH_SIZE;

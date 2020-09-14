@@ -1,10 +1,10 @@
 use log::trace;
-use num::BigInt;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use ndcell_core::Simulate;
+use ndcell_core::num::BigInt;
+use ndcell_core::sim::Simulate;
 
 pub enum WorkerRequest {
     Step(BigInt),

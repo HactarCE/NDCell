@@ -1030,8 +1030,7 @@ dependencies = [
  "log",
  "ndcell_core",
  "ndcell_lang",
- "noisy_float",
- "num",
+ "parking_lot 0.11.0",
  "send_wrapper",
  "simple_logger",
 ]

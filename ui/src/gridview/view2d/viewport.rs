@@ -1,13 +1,20 @@
-use noisy_float::prelude::r64;
-use num::traits::*;
-use std::convert::TryInto;
-
 use super::*;
+
+/// Number of pixels to translate that feels equivalent zooming in or out by a
+/// factor of 2.
+///
+/// Pixels are a very small unit compared to zoom powers, and traveling 400
+/// pixels feels about equivalent to zooming in or out by a factor of 2 to me.
+/// (Obviously this depends on DPI and probably window size, but it's a good
+/// enough approximation. Ideally this should be based on the average pixel
+/// motion of the whole screen which shouldn't be hard to derive a formula for
+/// but that would REALLY be over-engineering this.)
+const PIXELS_PER_ZOOM_LEVEL: f64 = 400.0;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Viewport2D {
     /// Cell position that is at the center of the viewport.
-    pub center: FracVec2D,
+    pub center: FixedVec2D,
     /// The zoom level.
     pub zoom: Zoom2D,
 }
@@ -15,57 +22,72 @@ pub struct Viewport2D {
 impl Viewport2D {
     /// Pan the viewport by the given number of pixels along each axis.
     pub fn pan_pixels(&mut self, delta: FVec2D) {
-        self.center.frac += delta * r64(self.zoom.cells_per_pixel());
-        self.center.normalize();
+        self.center += (delta * r64(self.zoom.cells_per_pixel())).to_fixedvec();
     }
     /// Pan the viewport by the given number of cells along each axis.
-    pub fn pan_cells(&mut self, delta: &FracVec2D) {
+    pub fn pan_cells(&mut self, delta: FixedVec2D) {
         self.center += delta;
-        self.center.normalize();
     }
     /// Snap to the nearest integer cell position.
     pub fn snap_pos(&mut self) {
-        self.center.frac = self.center.frac.round();
-        self.center.normalize();
+        self.center = self.center.round().to_fixedvec();
     }
-    /// Snap to the nearest power-of-2 zoom level.
-    pub fn snap_zoom(&mut self, fixed_point: Option<FracVec2D>) {
-        self.zoom_by(self.zoom.round() / self.zoom, fixed_point);
+    /// Snap to the nearest power-of-2 zoom level, keeping one invariant point
+    /// at the same location on the screen.
+    ///
+    /// If `invariant_pos` is `None`, then the center of the viewport is invariant.
+    pub fn snap_zoom(&mut self, invariant: Option<FixedVec2D>) {
+        self.zoom_by(self.zoom.round() / self.zoom, invariant);
         self.zoom = self.zoom.round(); // Fix any potential rounding error.
     }
-    /// Zoom into or out of the given "fixed-point" position by the given
-    /// factor.
-    pub fn zoom_by(&mut self, factor: f64, fixed_point: Option<FracVec2D>) {
+    /// Zoom in or out by the given factor, keeping one invariant point at the
+    /// same location on the screen.
+    ///
+    /// If `invariant_pos` is `None`, then the center of the viewport is invariant.
+    pub fn zoom_by(&mut self, factor: f64, invariant_pos: Option<FixedVec2D>) {
         assert!(
             factor > 0.0,
             "Zoom factor must be a positive number, not {}",
-            factor
+            factor,
         );
-        let fixed_point_offset = fixed_point
-            .map(|pos| (pos - &self.center).to_fvec())
+
+        let cells_per_pixel = self.zoom.cells_per_pixel();
+
+        // Compute cell offset of `invariant_pos` from center of viewport.
+        let invariant_pos_offset = invariant_pos
+            .map(|pos| pos - &self.center)
             .unwrap_or_default();
-        let fixed_point_old_pos_pixel_offset =
-            fixed_point_offset * r64(self.zoom.pixels_per_cell());
+        // Compute pixel offset of `invariant_pos` from the center of viewport
+        // using the original zoom level.
+        let invariant_pos_old_pixel_offset = &invariant_pos_offset / cells_per_pixel;
+
+        // Zoom into the center of the viewport.
         self.zoom = (self.zoom * factor).clamp();
-        let fixed_point_new_pos_pixel_offset =
-            fixed_point_offset * r64(self.zoom.pixels_per_cell());
-        let delta_pixel_offset =
-            fixed_point_new_pos_pixel_offset - fixed_point_old_pos_pixel_offset;
-        self.center.frac += delta_pixel_offset * r64(self.zoom.cells_per_pixel());
-        self.center.normalize();
+
+        let cells_per_pixel = self.zoom.cells_per_pixel();
+
+        // Compute pixel offset of `invariant_pos` from the center of viewport
+        // using the new zoom level.
+        let invariant_pos_new_pixel_offset = &invariant_pos_offset / cells_per_pixel;
+        // Compute the difference between those pixel offsets.
+        let delta_pixel_offset = invariant_pos_new_pixel_offset - invariant_pos_old_pixel_offset;
+        // Apply that offset so that the point goes back to the same pixel
+        // location as before.
+        self.center += delta_pixel_offset * cells_per_pixel;
     }
 
     /// Return the abstract "distance" between two viewports.
-    pub fn distance(a: &Self, b: &Self) -> f64 {
-        // Divide the pixel distance by 400 because pixels are a very small unit
-        // compared to zoom powers, and traveling 400 pixels feels about
-        // equivalent to zooming in or out by a factor of 2 to me. (Obviously
-        // this depends on DPI and probably window size, but it's a good enough
-        // approximation.)
-        let pixel_distance = Self::lerp_total_pixel_delta(a, b).mag().raw() / 400.0;
+    pub fn distance(a: &Self, b: &Self) -> FixedPoint {
+        // Divide by a constant factor to bring translation to zoom into the
+        // same arbitrary units of perceived motion.
+        let pixel_distance: FixedPoint =
+            Self::lerp_total_pixel_delta(a, b).mag() / PIXELS_PER_ZOOM_LEVEL;
         let zoom_distance = a.zoom.power() - b.zoom.power();
         // Use euclidean distance.
-        (pixel_distance.powf(2.0) + zoom_distance.powf(2.0)).sqrt()
+        let squared_pixel_distance = &pixel_distance * &pixel_distance;
+        let squared_zoom_distance: FixedPoint = r64(zoom_distance.powf(2.0)).into();
+        let squared_distance: FixedPoint = squared_pixel_distance + squared_zoom_distance;
+        squared_distance.sqrt()
     }
 
     /// Return a viewport that is some fraction 0.0 <= t <= 1.0 of the distance
@@ -128,27 +150,28 @@ impl Viewport2D {
         // pixels*(2^z). Compute z(T).
         let z1 = a.zoom.power();
         let z_final = ret.zoom.power();
-        let k = ((2.0.powf(-z1) - 2.0.powf(-z_final)) / (-2.0.ln() * (z1 - z_final)))
-            .try_into()
-            .unwrap_or(r64(2.0.powf(-z1)));
+        let mut k = (2.0.powf(-z1) - 2.0.powf(-z_final)) / (-2.0.ln() * (z1 - z_final));
+        if !k.is_finite() {
+            k = 2.0.powf(-z1);
+        }
         // Multiply the total number of pixels to travel by T to get the number
         // of pixels to travel on 0 <= t <= T.
-        let pixels_delta = total_pixels_delta * r64(t);
+        let pixels_delta = &total_pixels_delta * t;
         // Finally, multiply by the new k to get the number of cells to travel
         // on 0 <= t <= T.
         let cells_delta = pixels_delta * k;
 
-        if total_pixels_delta.mag() < 0.01 {
+        if total_pixels_delta.mag() < r64(0.01).into() {
             // If there's less than 1% of a pixel left, snap into position.
             ret.center = b.center.clone();
         } else {
-            ret.pan_cells(&cells_delta.into());
+            ret.pan_cells(cells_delta);
         }
 
         ret
     }
 
-    fn lerp_total_pixel_delta(a: &Self, b: &Self) -> FVec2D {
+    fn lerp_total_pixel_delta(a: &Self, b: &Self) -> FixedVec2D {
         // Read the comments in the first half of lerp() before proceeding.
         //
         // Find the total number of pixels to travel. The zoom power is a linear
@@ -179,11 +202,12 @@ impl Viewport2D {
         // number of cells.
         let z1 = a.zoom.power();
         let z2 = b.zoom.power();
-        let k = (-2.0.ln() * (z1 - z2) / (2.0.powf(-z1) - 2.0.powf(-z2)))
-            .try_into()
-            .unwrap_or(r64(2.0.powf(z1)));
+        let mut k = -2.0.ln() * (z1 - z2) / (2.0.powf(-z1) - 2.0.powf(-z2));
+        if !k.is_finite() {
+            k = 2.0.powf(z1);
+        }
         // Now we can just multiply k by the number of cells to travel get the
         // total number of pixels to travel for the entire interpolation.
-        (b.center.clone() - &a.center).to_fvec() * k
+        (&b.center - &a.center) * k
     }
 }

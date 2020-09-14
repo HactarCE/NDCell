@@ -1,11 +1,12 @@
 use glium::glutin::dpi::{PhysicalPosition, PhysicalSize};
 use glium::glutin::event::*;
-use noisy_float::prelude::r64;
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut, Index};
 use std::time::{Duration, Instant};
 
-use ndcell_core::{FVec2D, IVec2D, NdVec, X, Y};
+use ndcell_core::axis::{X, Y};
+use ndcell_core::ndvec::{FVec2D, FixedVec2D, IVec2D, NdVec};
+use ndcell_core::num::r64;
 
 use crate::config::Config;
 use crate::gridview::{control::*, GridView, GridViewTrait, RenderGridView, Zoom2D};
@@ -170,7 +171,10 @@ impl<'a> FrameInProgress<'a> {
                                 view2d.enqueue(
                                     MoveCommand2D::Zoom {
                                         power: dy,
-                                        fixed_point: view2d.nth_render_result(0).hover_pos.clone(),
+                                        invariant_pos: view2d
+                                            .nth_render_result(0)
+                                            .hover_pos
+                                            .clone(),
                                     }
                                     .decay(),
                                 );
@@ -192,11 +196,9 @@ impl<'a> FrameInProgress<'a> {
                                     if let Some(pos) = view2d.nth_render_result(0).draw_pos.as_ref()
                                     {
                                         // Start drawing.
-                                        self.start_drawing(if view2d.get_cell(&pos.int) == 1 {
-                                            0
-                                        } else {
-                                            1
-                                        });
+                                        let old_cell = view2d
+                                            .get_cell(&*view2d.cache().read(), &pos.floor().0);
+                                        self.start_drawing(if old_cell == 1 { 0 } else { 1 });
                                     }
                                 }
                                 _ => (),
@@ -290,11 +292,11 @@ impl<'a> FrameInProgress<'a> {
                         // Center pattern.
                         Some(VirtualKeyCode::M) => {
                             self.gridview
-                                .enqueue(MoveCommand2D::SetPos(FVec2D::origin().into()).decay());
+                                .enqueue(MoveCommand2D::SetPos(FixedVec2D::origin()).decay());
                             self.gridview.enqueue(
                                 MoveCommand2D::SetZoom {
                                     zoom: Zoom2D::default(),
-                                    fixed_point: None,
+                                    invariant_pos: None,
                                 }
                                 .decay(),
                             );
@@ -324,11 +326,15 @@ impl<'a> FrameInProgress<'a> {
         if let Some(draw_state) = self.draw_cell_state {
             match self.gridview {
                 GridView::View2D(view2d) => {
-                    if let Some(pos1) = view2d.nth_render_result(0).draw_pos.clone() {
-                        if let Some(pos2) = view2d.nth_render_result(1).draw_pos.clone() {
-                            view2d.enqueue(DrawCommand2D::Line(pos1.int, pos2.int, draw_state))
+                    if let Some(pos1) = view2d.nth_render_result(0).draw_pos.as_ref() {
+                        if let Some(pos2) = view2d.nth_render_result(1).draw_pos.as_ref() {
+                            view2d.enqueue(DrawCommand2D::Line(
+                                pos1.floor().0,
+                                pos2.floor().0,
+                                draw_state,
+                            ))
                         } else {
-                            view2d.enqueue(DrawCommand2D::Cell(pos1.int, draw_state));
+                            view2d.enqueue(DrawCommand2D::Cell(pos1.floor().0, draw_state));
                         }
                     } else {
                         self.stop_drawing();
@@ -378,7 +384,7 @@ impl<'a> FrameInProgress<'a> {
                         view2d.enqueue(
                             MoveCommand2D::Zoom {
                                 power: zoom_speed,
-                                fixed_point: None,
+                                invariant_pos: None,
                             }
                             .decay(),
                         );
@@ -389,7 +395,7 @@ impl<'a> FrameInProgress<'a> {
                         view2d.enqueue(
                             MoveCommand2D::Zoom {
                                 power: -zoom_speed,
-                                fixed_point: None,
+                                invariant_pos: None,
                             }
                             .decay(),
                         );

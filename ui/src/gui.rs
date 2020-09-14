@@ -10,7 +10,8 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use ndcell_core::*;
+use ndcell_core::automaton::Automaton2D;
+use ndcell_core::traits::RleEncode;
 
 use super::clipboard_compat::*;
 use super::gridview::*;

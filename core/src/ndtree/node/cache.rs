@@ -410,6 +410,12 @@ impl<D: Dim> NodeCache<D> {
     }
 }
 
+// Conceptually, the `*const RawNode`s held by `NodeCache` are just references,
+// with lifetimes dependent on the cache. `&RawNode` is `Send + Sync`, so it's
+// safe to implement `Send` on `NodeCache` as well.
+unsafe impl<D: Dim> Send for NodeCache<D> {}
+unsafe impl<D: Dim> Sync for NodeCache<D> {}
+
 /// HashLife parameters.
 #[derive(Debug, Clone)]
 pub struct HashLifeParams<D: Dim> {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::prelude::*;
 
-fn get_non_default_set<D: Dim>(slice: NdTreeSlice<'_, D>) -> HashSet<BigVec<D>> {
+fn get_non_default_set<D: Dim>(slice: NdTreeSlice<'_, D>) -> HashSet<IVec<D>> {
     let mut ret = HashSet::new();
     if slice.root.is_empty() {
         return ret;
@@ -15,9 +15,10 @@ fn get_non_default_set<D: Dim>(slice: NdTreeSlice<'_, D>) -> HashSet<BigVec<D>> 
             }
         }
         Err((leaf, pos)) => {
+            let pos = pos.to_ivec();
             for (offset, &cell) in leaf.rect().iter().zip(leaf.cells()) {
                 if cell != 0 {
-                    ret.insert(pos + offset);
+                    ret.insert(&pos + offset.to_ivec());
                 }
             }
         }
@@ -25,8 +26,8 @@ fn get_non_default_set<D: Dim>(slice: NdTreeSlice<'_, D>) -> HashSet<BigVec<D>> 
     ret
 }
 
-fn make_cell_coords_set<D: Dim>(coords_vec: Vec<IVec<D>>) -> HashSet<BigVec<D>> {
-    coords_vec.iter().map(IVec::to_bigvec).collect()
+fn make_cell_coords_set<D: Dim>(coords_vec: Vec<IVec<D>>) -> HashSet<IVec<D>> {
+    coords_vec.iter().cloned().collect()
 }
 
 #[test]

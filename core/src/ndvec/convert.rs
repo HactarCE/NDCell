@@ -2,9 +2,9 @@
 
 use std::convert::TryInto;
 
-use super::{BigVec, FVec, IVec, NdVec, UVec};
+use super::{BigVec, FVec, FixedVec, IVec, NdVec, UVec};
 use crate::dim::{Dim, DimFor};
-use crate::num::{r64, BigInt, FromPrimitive, NdVecNum, ToPrimitive};
+use crate::num::{r64, BigInt, FixedPoint, FromPrimitive, NdVecNum, ToPrimitive};
 
 impl<D1: DimFor<N>, N: NdVecNum> NdVec<D1, N> {
     /// Converts an `NdVec` between arbitrary dimensionalities, as long as those
@@ -32,7 +32,7 @@ impl<D1: DimFor<N>, N: NdVecNum> NdVec<D1, N> {
 }
 
 impl<D: Dim> BigVec<D> {
-    /// Converts this `BigVec` to an `IVec`.
+    /// Converts the `BigVec` to an `IVec`.
     #[inline]
     pub fn to_ivec(&self) -> IVec<D> {
         IVec::from_fn(|ax| {
@@ -41,7 +41,7 @@ impl<D: Dim> BigVec<D> {
                 .expect("Cannot convert this UVec into an IVec")
         })
     }
-    /// Converts this `BigVec` to a `UVec`.
+    /// Converts the `BigVec` to a `UVec`.
     ///
     /// # Panics
     ///
@@ -54,7 +54,7 @@ impl<D: Dim> BigVec<D> {
                 .expect("Cannot convert this IVec into a UVec")
         })
     }
-    /// Converts this `BigVec` to an `FVec`.
+    /// Converts the `BigVec` to an `FVec`.
     ///
     /// # Panics
     ///
@@ -68,10 +68,37 @@ impl<D: Dim> BigVec<D> {
                 .expect("Cannot convert this UVec into an IVec")
         })
     }
+    /// Converts the `BigVec` to a `FixedVec`.
+    #[inline]
+    pub fn to_fixedvec(&self) -> FixedVec<D> {
+        FixedVec::from_fn(|ax| FixedPoint::from(self[ax].clone()))
+    }
+}
+
+impl<D: Dim> From<(&BigVec<D>, FVec<D>)> for FixedVec<D> {
+    fn from((i, f): (&BigVec<D>, FVec<D>)) -> Self {
+        FixedVec::from_fn(|ax| FixedPoint::from((i[ax].clone(), f[ax])))
+    }
+}
+impl<D: Dim> FixedVec<D> {
+    /// Converts the `FixedVec` to an `FVec`.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if any component does not fit in `f64`.
+    #[inline]
+    pub fn to_fvec(&self) -> FVec<D> {
+        FVec::from_fn(|ax| {
+            self[ax]
+                .to_f64()
+                .map(r64)
+                .expect("Cannot convert this FixedVec into an FVec")
+        })
+    }
 }
 
 impl<D: Dim> FVec<D> {
-    /// Converts this `FVec` to an `IVec`.
+    /// Converts the `FVec` to an `IVec`.
     ///
     /// # Panics
     ///
@@ -81,25 +108,30 @@ impl<D: Dim> FVec<D> {
         IVec::from_fn(|ax| {
             self[ax]
                 .to_isize()
-                .expect("Cannot convert this UVec into an IVec")
+                .expect("Cannot convert this FVec into an IVec")
         })
     }
-    /// Converts this `FVec` to a `BigVec`.
+    /// Converts the `FVec` to a `BigVec`.
     #[inline]
     pub fn to_bigvec(&self) -> BigVec<D> {
         // This should not panic, because `R64` only allows finite values (which
         // all have `BigInt` representations).
         BigVec::from_fn(|ax| BigInt::from_f64(self[ax].raw()).unwrap())
     }
+    /// Converts the `FVec` to a `FixedVec`.
+    #[inline]
+    pub fn to_fixedvec(&self) -> FixedVec<D> {
+        FixedVec::from_fn(|ax| self[ax].into())
+    }
 }
 
 impl<D: Dim> IVec<D> {
-    /// Converts this `IVec` into a `BigVec`.
+    /// Converts the `IVec` into a `BigVec`.
     #[inline]
     pub fn to_bigvec(&self) -> BigVec<D> {
         BigVec::from_fn(|ax| self[ax].into())
     }
-    /// Converts this `IVec` to a `UVec`.
+    /// Converts the `IVec` to a `UVec`.
     ///
     /// # Panics
     ///
@@ -112,7 +144,7 @@ impl<D: Dim> IVec<D> {
                 .expect("Cannot convert this IVec into a UVec")
         })
     }
-    /// Converts this `IVec` to an `FVec`.
+    /// Converts the `IVec` to an `FVec`.
     ///
     /// # Panics
     ///
@@ -123,18 +155,18 @@ impl<D: Dim> IVec<D> {
             self[ax]
                 .to_f64()
                 .map(r64)
-                .expect("Cannot convert this UVec into an IVec")
+                .expect("Cannot convert this IVec into an FVec")
         })
     }
 }
 
 impl<D: Dim> UVec<D> {
-    /// Converts this `UVec` to a `BigVec`.
+    /// Converts the `UVec` to a `BigVec`.
     #[inline]
     pub fn to_bigvec(&self) -> BigVec<D> {
         BigVec::from_fn(|ax| self[ax].into())
     }
-    /// Converts this `UVec` to an `IVec`.
+    /// Converts the `UVec` to an `IVec`.
     ///
     /// # Panics
     ///

@@ -2,8 +2,11 @@
 
 use super::*;
 
+#[macro_use]
+mod macros;
+
 mod cmp;
 mod divmod;
 mod float;
-mod scalar;
-mod vector;
+mod int;
+mod signed;

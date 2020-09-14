@@ -27,7 +27,19 @@ pub use maybebig::MaybeBigUint;
 
 /// "Trait alias" for number types that can be used as coordinates.
 pub trait NdVecNum:
-    fmt::Debug + Default + Clone + Eq + Hash + Ord + Send + Num + AddAssign + MulAssign
+    'static
+    + fmt::Debug
+    + Default
+    + Clone
+    + Eq
+    + Hash
+    + Ord
+    + Send
+    + Num
+    + AddAssign
+    + MulAssign
+    + for<'a> AddAssign<&'a Self> // required for `NdRect::sum()`
+    + for<'a> MulAssign<&'a Self> // required for `NdRect::product()`
 {
     /// Minimum size for an `NdRect` using this number type as coordinates.
     /// Integer `NdRect`s have an inclusive minimum and maximium, so this

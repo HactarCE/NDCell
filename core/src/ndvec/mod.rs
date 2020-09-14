@@ -25,7 +25,7 @@ pub use any::AnyDimVec;
 
 use crate::axis::Axis;
 use crate::dim::{Dim, DimFor};
-use crate::num::{BigInt, NdVecNum};
+use crate::num::{r64, BigInt, FixedPoint, NdVecNum};
 
 /// `D`-dimensional vector with coordinates of type `N`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -135,7 +135,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     pub fn sum(&self) -> N {
         let mut ret = N::zero();
         for &ax in D::Dim::axes() {
-            ret += self[ax].clone();
+            ret += &self[ax];
         }
         ret
     }
@@ -144,7 +144,7 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     pub fn product(&self) -> N {
         let mut ret = N::one();
         for &ax in D::Dim::axes() {
-            ret *= self[ax].clone();
+            ret *= &self[ax];
         }
         ret
     }
@@ -175,6 +175,40 @@ impl<D: Dim> BigVec<D> {
     /// Constructs a new BigVec using isize components.
     pub fn big(isize_array: <D as DimFor<isize>>::Array) -> Self {
         NdVec::<D, isize>(isize_array).to_bigvec()
+    }
+}
+
+impl<D: Dim> FixedVec<D> {
+    /// Returns the integer part of the number.
+    #[inline]
+    pub fn trunc(&self) -> BigVec<D> {
+        NdVec::from_fn(|ax| self[ax].trunc())
+    }
+
+    /// Returns the fractional part of the number.
+    #[inline]
+    pub fn fract(&self) -> FVec<D> {
+        NdVec::from_fn(|ax| r64(self[ax].fract()))
+    }
+
+    /// Returns the largest integer less than or equal to the number, along with
+    /// the signed distance to that integer.
+    #[inline]
+    pub fn floor(&self) -> (BigVec<D>, FVec<D>) {
+        (
+            NdVec::from_fn(|ax| self[ax].floor().0),
+            NdVec::from_fn(|ax| r64(self[ax].floor().1)),
+        )
+    }
+
+    /// Returns the smallest integer greater than or equal to the number, along
+    /// with the signed distance to that integer.
+    #[inline]
+    pub fn ceil(&self) -> (BigVec<D>, FVec<D>) {
+        (
+            NdVec::from_fn(|ax| self[ax].ceil().0),
+            NdVec::from_fn(|ax| r64(self[ax].ceil().1)),
+        )
     }
 }
 

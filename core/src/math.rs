@@ -93,7 +93,7 @@ mod tests {
         let f_start: FVec<D> = start.to_fvec();
         let f_end: FVec<D> = end.to_fvec();
 
-        let mut delta = f_end - f_start.clone();
+        let mut delta = f_end - &f_start;
         let longest_axis = delta.max_axis(|_, val| val.abs());
         delta /= delta[longest_axis].abs();
         let mut f_current = f_start.clone();
@@ -103,7 +103,7 @@ mod tests {
         for p in bresenham(big_start, big_end.clone()) {
             println!("integer {}", p);
             println!("float   {}", &f_current);
-            let diff = p.to_fvec() - f_current.clone();
+            let diff = p.to_fvec() - &f_current;
             println!("diff    {}", diff);
             println!();
 
@@ -114,7 +114,7 @@ mod tests {
             max_negative_error =
                 std::cmp::min(max_negative_error, diff[diff.min_axis(|_, val| *val)]);
 
-            f_current += delta.clone();
+            f_current += &delta;
 
             last_point = Some(p);
         }

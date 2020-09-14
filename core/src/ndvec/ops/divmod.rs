@@ -3,7 +3,7 @@
 use std::ops::*;
 
 use super::*;
-use crate::num::{Float, Integer};
+use crate::num::{Integer, R64};
 
 // Implement floored and ceiled euclidean division between an NdVec and a scalar
 // (i.e. divide each coordinate by the scalar). Note that these are not the same
@@ -31,94 +31,163 @@ impl<D: DimFor<N>, N: NdVecNum + Integer> NdVec<D, N> {
 
     /// Integer division that rounds toward zero.
     ///
-    /// This is not implemented using std::ops::Div because most of the time we
-    /// actually want floor division, and I don't want to accidentally use this
-    /// kind of division in the wrong place.
+    /// This is not implemented using `std::ops::Div` because most of the time
+    /// we actually want floor division, and it would be too easy to
+    /// accidentally use this kind of division in the wrong place.
     #[inline]
-    pub fn div_to_zero(&self, other: &N) -> Self {
-        Self::from_fn(|ax| self[ax].clone() / other.clone())
+    pub fn div_to_zero<'a, X: Copy>(&'a self, other: X) -> Self
+    where
+        &'a N: Div<X, Output = N>,
+    {
+        Self::from_fn(|ax| &self[ax] / other)
     }
 
     /// Integer modulo that rounds toward zero.
     ///
-    /// This is not implemented using std::ops::Rem for the same reason as
-    /// div_to_zero().
+    /// This is not implemented using `std::ops::Rem` for the same reason as
+    /// `div_to_zero()`.
     #[inline]
-    pub fn rem_to_zero(&self, other: &N) -> Self {
-        Self::from_fn(|ax| self[ax].clone() % other.clone())
+    pub fn rem_to_zero<'a, X: Copy>(&'a self, other: X) -> Self
+    where
+        &'a N: Rem<X, Output = N>,
+    {
+        Self::from_fn(|ax| &self[ax] % other)
     }
 }
 
 // Implement division and modulo between an NdVec and a scalar (i.e. divide each
-// coordinate by the scalar). This is only implemented for floating point NdVecs
-// because integers will usually want div_floor instead.
-impl<D: DimFor<N>, N: NdVecNum + Float, X> Div<X> for NdVec<D, N>
-where
-    NdVec<D, N>: DivAssign<X>,
-{
-    type Output = Self;
+// coordinate by the scalar). This is only implemented for non-integer NdVecs
+// because integers will usually want `div_floor()` instead.
 
-    #[inline]
-    fn div(self, other: X) -> Self {
-        let mut ret = self;
-        ret /= other;
-        ret
-    }
-}
-impl<'a, D: DimFor<N>, N: NdVecNum + Float, X> Div<X> for &'a NdVec<D, N>
+impl_multi_ndvec_ops!(impl / for FixedPoint);
+impl_multi_ndvec_ops!(impl % for FixedPoint);
+impl_multi_ndvec_ops!(impl / f64 for FixedPoint);
+impl_multi_ndvec_ops!(impl % f64 for FixedPoint);
+
+impl<D: DimFor<R64>, X: Copy> Div<X> for FVec<D>
 where
-    NdVec<D, N>: DivAssign<X>,
+    R64: Div<X, Output = R64>,
 {
-    type Output = NdVec<D, N>;
+    type Output = FVec<D>;
 
     #[inline]
     fn div(self, other: X) -> Self::Output {
-        let mut ret = self.clone();
-        ret /= other;
-        ret
+        NdVec::from_fn(|ax| self[ax] / other)
     }
 }
-impl<D: DimFor<N>, N: NdVecNum + Float, X: Copy> DivAssign<X> for NdVec<D, N>
+impl<'a, D: DimFor<R64>, X: Copy> Div<X> for &'a FVec<D>
 where
-    N: DivAssign<X>,
+    R64: Div<X, Output = R64>,
 {
-    #[inline]
-    fn div_assign(&mut self, other: X) {
-        self.map_fn(|_ax, ret| *ret /= other);
-    }
-}
-impl<D: DimFor<N>, N: NdVecNum + Float, X> Rem<X> for NdVec<D, N>
-where
-    NdVec<D, N>: RemAssign<X>,
-{
-    type Output = Self;
+    type Output = FVec<D>;
 
     #[inline]
-    fn rem(self, other: X) -> Self {
-        let mut ret = self;
-        ret %= other;
-        ret
+    fn div(self, other: X) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] / other)
     }
 }
-impl<'a, D: DimFor<N>, N: NdVecNum + Float, X> Rem<X> for &'a NdVec<D, N>
+impl<D: DimFor<R64>> Div<FVec<D>> for FVec<D> {
+    type Output = FVec<D>;
+
+    #[inline]
+    fn div(self, other: FVec<D>) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] / other[ax])
+    }
+}
+impl<'a, D: DimFor<R64>> Div<FVec<D>> for &'a FVec<D> {
+    type Output = FVec<D>;
+
+    #[inline]
+    fn div(self, other: FVec<D>) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] / other[ax])
+    }
+}
+impl<'a, D: DimFor<R64>> Div<&'a FVec<D>> for FVec<D> {
+    type Output = FVec<D>;
+
+    #[inline]
+    fn div(self, other: &'a FVec<D>) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] / other[ax])
+    }
+}
+impl<'a, D: DimFor<R64>> Div<&'a FVec<D>> for &'a FVec<D> {
+    type Output = FVec<D>;
+
+    #[inline]
+    fn div(self, other: &'a FVec<D>) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] / other[ax])
+    }
+}
+impl<D: DimFor<R64>, X> DivAssign<X> for FVec<D>
 where
-    NdVec<D, N>: RemAssign<X>,
+    Self: Div<X, Output = Self>,
 {
-    type Output = NdVec<D, N>;
+    fn div_assign(&mut self, other: X) {
+        // This clone is actually free because `FVec` is `Copy`.
+        *self = self.clone() / other;
+    }
+}
+
+impl<D: DimFor<R64>, X: Copy> Rem<X> for FVec<D>
+where
+    R64: Rem<X, Output = R64>,
+{
+    type Output = FVec<D>;
 
     #[inline]
     fn rem(self, other: X) -> Self::Output {
-        let mut ret = self.clone();
-        ret %= other;
-        ret
+        NdVec::from_fn(|ax| self[ax] % other)
     }
 }
-impl<D: DimFor<N>, N: NdVecNum + Float, X: Copy> RemAssign<X> for NdVec<D, N>
+impl<'a, D: DimFor<R64>, X: Copy> Rem<X> for &'a FVec<D>
 where
-    N: RemAssign<X>,
+    R64: Rem<X, Output = R64>,
 {
+    type Output = FVec<D>;
+
     #[inline]
+    fn rem(self, other: X) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] % other)
+    }
+}
+impl<D: DimFor<R64>> Rem<FVec<D>> for FVec<D> {
+    type Output = FVec<D>;
+
+    #[inline]
+    fn rem(self, other: FVec<D>) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] % other[ax])
+    }
+}
+impl<'a, D: DimFor<R64>> Rem<FVec<D>> for &'a FVec<D> {
+    type Output = FVec<D>;
+
+    #[inline]
+    fn rem(self, other: FVec<D>) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] % other[ax])
+    }
+}
+impl<'a, D: DimFor<R64>> Rem<&'a FVec<D>> for FVec<D> {
+    type Output = FVec<D>;
+
+    #[inline]
+    fn rem(self, other: &'a FVec<D>) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] % other[ax])
+    }
+}
+impl<'a, D: DimFor<R64>> Rem<&'a FVec<D>> for &'a FVec<D> {
+    type Output = FVec<D>;
+
+    #[inline]
+    fn rem(self, other: &'a FVec<D>) -> Self::Output {
+        NdVec::from_fn(|ax| self[ax] % other[ax])
+    }
+}
+impl<D: DimFor<R64>, X> RemAssign<X> for FVec<D>
+where
+    Self: Rem<X, Output = Self>,
+{
     fn rem_assign(&mut self, other: X) {
-        self.map_fn(|_ax, ret| *ret %= other);
+        // This clone is actually free because `FVec` is `Copy`.
+        *self = self.clone() % other;
     }
 }

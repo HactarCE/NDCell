@@ -7,6 +7,7 @@
 //! in implementing all the things that would be expected if this were its own
 //! crate.
 
+use noisy_float::prelude::R64;
 use num::{BigInt, BigUint, FromPrimitive, Num, One, Signed, ToPrimitive, Zero};
 use std::convert::TryFrom;
 use std::fmt;
@@ -77,6 +78,30 @@ impl FixedPoint {
         }
         (int, fract)
     }
+
+    /// Returns the smallest integer greater than or equal to the number, along
+    /// with the signed distance to that integer.
+    #[inline]
+    pub fn round(&self) -> (BigInt, f64) {
+        let (mut int, mut fract) = self.floor();
+        if fract >= 0.5 {
+            int += 1;
+            fract -= 1.0;
+        }
+        (int, fract)
+    }
+
+    /// Returns the square root.
+    #[inline]
+    pub fn sqrt(&self) -> Self {
+        // If the "real" number is `n`, then we are storing `n * INTEGRAL_ONE`
+        // and we want to return `sqrt(n) * INTEGRAL_ONE`. `(sqrt(n) *
+        // INTEGRAL_ONE)^2 = n * INTEGRAL_ONE^2`, so if we multiply by
+        // `INTEGRAL_ONE` and then use integer square root we will get the
+        // correct answer. Multiplying by `INTEGRAL_ONE` is equivalent to
+        // bitshifting left by `FRACTIONAL_BITS`.
+        Self((&self.0 << FRACTIONAL_BITS).sqrt())
+    }
 }
 
 impl From<BigInt> for FixedPoint {
@@ -101,6 +126,12 @@ impl TryFrom<(BigInt, f64)> for FixedPoint {
         }
     }
 }
+impl From<(BigInt, R64)> for FixedPoint {
+    #[inline]
+    fn from((i, f): (BigInt, R64)) -> Self {
+        Self::try_from((i, f.raw())).unwrap()
+    }
+}
 
 impl TryFrom<f64> for FixedPoint {
     type Error = ();
@@ -108,6 +139,11 @@ impl TryFrom<f64> for FixedPoint {
     #[inline]
     fn try_from(f: f64) -> Result<Self, ()> {
         Self::try_from((BigInt::zero(), f))
+    }
+}
+impl From<R64> for FixedPoint {
+    fn from(f: R64) -> Self {
+        Self::try_from(f.raw()).unwrap()
     }
 }
 
@@ -235,17 +271,33 @@ impl Signed for FixedPoint {
     }
 }
 
-forward_binop!(impl Add for FixedPoint, add);
-forward_binop!(impl Sub for FixedPoint, sub);
-forward_binop!(impl Mul for FixedPoint, mul, >> FRACTIONAL_BITS);
-forward_binop!(impl Div for FixedPoint (<< FRACTIONAL_BITS), div);
-forward_binop!(impl Rem for FixedPoint, rem);
+macro_rules! forward_fixedpoint_ops {
+    ($num:ty) => {
+        forward_binop!(impl Add<$num> for FixedPoint, add);
+        forward_binop!(impl Sub<$num> for FixedPoint, sub);
+        forward_binop!(impl Mul<$num> for FixedPoint, mul, >> FRACTIONAL_BITS);
+        forward_binop!(impl Div<$num> for FixedPoint (<< FRACTIONAL_BITS), div);
+        forward_binop!(impl Rem<$num> for FixedPoint, rem);
 
-forward_assign!(impl AddAssign for FixedPoint, add_assign);
-forward_assign!(impl SubAssign for FixedPoint, sub_assign);
-forward_assign!(impl MulAssign for FixedPoint, mul_assign, >>= FRACTIONAL_BITS);
-forward_assign!(impl DivAssign for FixedPoint (<<= FRACTIONAL_BITS), div_assign);
-forward_assign!(impl RemAssign for FixedPoint, rem_assign);
+        forward_assign!(impl AddAssign<$num> for FixedPoint, add_assign);
+        forward_assign!(impl SubAssign<$num> for FixedPoint, sub_assign);
+        forward_assign!(impl MulAssign<$num> for FixedPoint, mul_assign, >>= FRACTIONAL_BITS);
+        forward_assign!(impl DivAssign<$num> for FixedPoint (<<= FRACTIONAL_BITS), div_assign);
+        forward_assign!(impl RemAssign<$num> for FixedPoint, rem_assign);
+    };
+}
+
+forward_fixedpoint_ops!(FixedPoint);
+forward_fixedpoint_ops!(BigInt);
+forward_fixedpoint_ops!(f64);
+
+forward_binop!(impl BitAnd<FixedPoint> for FixedPoint, bitand);
+forward_binop!(impl BitOr<FixedPoint> for FixedPoint, bitor);
+forward_binop!(impl BitXor<FixedPoint> for FixedPoint, bitxor);
+
+forward_assign!(impl BitAndAssign<FixedPoint> for FixedPoint, bitand_assign);
+forward_assign!(impl BitOrAssign<FixedPoint> for FixedPoint, bitor_assign);
+forward_assign!(impl BitXorAssign<FixedPoint> for FixedPoint, bitxor_assign);
 
 impl Neg for FixedPoint {
     type Output = FixedPoint;
@@ -261,6 +313,70 @@ impl Neg for &FixedPoint {
     #[inline]
     fn neg(self) -> FixedPoint {
         FixedPoint(-&self.0)
+    }
+}
+
+impl<X> Shl<X> for FixedPoint
+where
+    BigInt: Shl<X, Output = BigInt>,
+{
+    type Output = Self;
+
+    #[inline]
+    fn shl(self, rhs: X) -> Self::Output {
+        Self(self.0 << rhs)
+    }
+}
+impl<X> Shr<X> for FixedPoint
+where
+    BigInt: Shr<X, Output = BigInt>,
+{
+    type Output = Self;
+
+    #[inline]
+    fn shr(self, rhs: X) -> Self::Output {
+        Self(self.0 >> rhs)
+    }
+}
+impl<X> ShlAssign<X> for FixedPoint
+where
+    BigInt: ShlAssign<X>,
+{
+    #[inline]
+    fn shl_assign(&mut self, rhs: X) {
+        self.0 <<= rhs
+    }
+}
+impl<X> ShrAssign<X> for FixedPoint
+where
+    BigInt: ShrAssign<X>,
+{
+    #[inline]
+    fn shr_assign(&mut self, rhs: X) {
+        self.0 >>= rhs
+    }
+}
+
+impl<'a, X> Shl<X> for &'a FixedPoint
+where
+    &'a BigInt: Shl<X, Output = BigInt>,
+{
+    type Output = FixedPoint;
+
+    #[inline]
+    fn shl(self, rhs: X) -> Self::Output {
+        FixedPoint(&self.0 << rhs)
+    }
+}
+impl<'a, X> Shr<X> for &'a FixedPoint
+where
+    &'a BigInt: Shr<X, Output = BigInt>,
+{
+    type Output = FixedPoint;
+
+    #[inline]
+    fn shr(self, rhs: X) -> Self::Output {
+        FixedPoint(&self.0 >> rhs)
     }
 }
 

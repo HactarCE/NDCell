@@ -5,11 +5,11 @@ use super::*;
 
 fn test_ndrect_iter_validity<D: Dim>(rect: IRect<D>) {
     // Test that the iterator agrees with `count()`.
-    let cells: Vec<IVec<D>> = rect.clone().into_iter().collect();
+    let cells: Vec<IVec<D>> = rect.iter().collect();
     assert_eq!(rect.count() as usize, cells.len());
     // Test that there are no duplicates.
     {
-        let cell_set: HashSet<IVec<D>> = rect.clone().into_iter().collect();
+        let cell_set: HashSet<IVec<D>> = rect.iter().collect();
         assert_eq!(rect.count() as usize, cell_set.len());
     }
     for pos in cells {

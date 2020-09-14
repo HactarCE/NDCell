@@ -1,7 +1,7 @@
 //! N-dimensional rectangles.
 
 use std::fmt;
-use std::ops::{Add, AddAssign, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 pub mod aliases;
 mod convert;
@@ -16,12 +16,24 @@ pub use aliases::*;
 use iter::NdRectIter;
 
 /// "Trait alias" for types that can be used as vectors in an `NdRect`.
-pub trait NdRectVec:
-    Sized + Add<Self, Output = Self> + Sub<Self, Output = Self> + AddAssign + SubAssign
+pub trait NdRectVec: 'static + Sized
+where
+    Self: Add<Output = Self> + Sub<Output = Self>,
+    Self: for<'a> Add<&'a Self, Output = Self>,
+    Self: for<'a> Sub<&'a Self, Output = Self>,
+    Self: AddAssign + SubAssign,
+    Self: for<'a> AddAssign<&'a Self>,
+    Self: for<'a> SubAssign<&'a Self>,
 {
 }
-impl<T> NdRectVec for T where
-    T: Add<Self, Output = Self> + Sub<Self, Output = Self> + AddAssign + SubAssign
+impl<T: 'static + Sized> NdRectVec for T
+where
+    T: Add<Output = T> + Sub<Output = T>,
+    T: for<'a> Add<&'a T, Output = T>,
+    T: for<'a> Sub<&'a T, Output = T>,
+    T: AddAssign + SubAssign,
+    T: for<'a> AddAssign<&'a T>,
+    T: for<'a> SubAssign<&'a T>,
 {
 }
 
@@ -77,7 +89,7 @@ where
             }
         }
         let mut size = b;
-        size -= a.clone();
+        size -= &a;
         size += NdVec::repeat(N::min_rect_size());
         Self { start: a, size }
     }
@@ -128,7 +140,7 @@ where
     /// Returns the maximum (most positive) corner of the rectangle.
     #[inline]
     pub fn max(&self) -> NdVec<D, N> {
-        self.start.clone() + self.size.clone() - NdVec::repeat(N::min_rect_size())
+        self.start.clone() + &self.size - NdVec::repeat(N::min_rect_size())
     }
 
     /// Returns a vector of the lengths of the rectangle along each axis.
@@ -147,7 +159,7 @@ where
     #[inline]
     pub fn count(&self) -> N
     where
-        N: Integer + MulAssign,
+        N: Integer,
     {
         self.size.product()
     }

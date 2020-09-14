@@ -91,7 +91,7 @@ impl Dim for Dim6D {
 ///
 /// Once generic associated types come along, this can be merged into `Dim`.
 pub trait DimFor<T: Default + Clone + Eq>:
-    fmt::Debug + Default + Copy + Eq + Hash + Sync + private::Sealed
+    'static + fmt::Debug + Default + Copy + Eq + Hash + Sync + private::Sealed
 {
     /// Pure `Dim` type associated with this DimFor (i.e. `Self`).
     type Dim: Dim;

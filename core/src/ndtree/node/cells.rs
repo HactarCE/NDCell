@@ -65,7 +65,7 @@ pub fn join<D: Dim>(children: &[&[u8]]) -> Box<[u8]> {
     for (child, offset) in children.iter().zip(&layer_1_rect) {
         let offset = offset * old_len;
         for (&cell, new_pos) in child.iter().zip(&(old_layer.rect().unwrap() + offset)) {
-            ret[(new_pos * new_strides.clone()).sum()] = cell;
+            ret[(new_pos * &new_strides).sum()] = cell;
         }
     }
     ret.into_boxed_slice()

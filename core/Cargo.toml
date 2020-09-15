@@ -20,5 +20,9 @@ criterion = "0.3"
 proptest = "0.10"
 
 [[bench]]
-name = "hashlife"
+name = "cgol"
+harness = false
+
+[[bench]]
+name = "rle"
 harness = false

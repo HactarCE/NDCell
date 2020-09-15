@@ -35,7 +35,7 @@ impl CachedGlQuadtree {
             return;
         }
         self.cached = Some(GlQuadtree::from_node(
-            node.as_ref(&*node.cache().read()),
+            node.as_ref(&node.cache().read()),
             min_layer,
             pixelator,
         ));

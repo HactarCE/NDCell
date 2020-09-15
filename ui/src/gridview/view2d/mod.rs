@@ -301,7 +301,7 @@ impl RenderGridView for GridView2D {
     ) -> Cow<View2DRenderResult> {
         let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
         let node_cache = self.automaton.projected_cache().read();
-        let mut rip = RenderInProgress::new(self, &*node_cache, &mut render_cache, target);
+        let mut rip = RenderInProgress::new(self, &node_cache, &mut render_cache, target);
         rip.draw_cells();
 
         let hover_pos = params.cursor_pos.map(|pos| rip.pixel_pos_to_cell_pos(pos));

@@ -96,7 +96,7 @@ impl<D: Dim> HashLife<D> {
             let min_expansion_distance = BigInt::one() << (log2_radius + log2_step_size);
             let mut expansion_distance = BigInt::zero();
             while expansion_distance < min_expansion_distance {
-                tree.expand(&*node_cache);
+                tree.expand(&node_cache);
                 expansion_distance += tree.len() >> 2;
             }
 
@@ -106,10 +106,10 @@ impl<D: Dim> HashLife<D> {
             // ensures that we aren't somehow still at layer 1; we need to be at at
             // least layer 2 so that the result can be at layer 1, which is the
             // minimum layer for a node.)
-            tree.expand(&*node_cache);
+            tree.expand(&node_cache);
             // Now do the actual simulation.
             let new_root = self.advance_inner_node(
-                tree.root().as_ref(&*node_cache),
+                tree.root().as_ref(&node_cache),
                 &sim_params,
                 &mut transition_function,
             );
@@ -117,7 +117,7 @@ impl<D: Dim> HashLife<D> {
 
             // Shrink the tree as much as possible to avoid wasted space. TODO:
             // is it better to have this inside the loop or outside the loop?
-            tree.shrink(&*node_cache);
+            tree.shrink(&node_cache);
         }
 
         // TODO: garbage collect at some point

@@ -49,21 +49,21 @@ proptest! {
         let mut hashmap = HashMap::new();
             for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
-            ndtree.set_cell(&*node_cache, &pos.to_bigvec(), state);
+            ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);
             cells_to_get.push(pos);
         }
-        assert_ndtree_valid(&hashmap, &ndtree, &*node_cache, &cells_to_get);
+        assert_ndtree_valid(&hashmap, &ndtree, &node_cache, &cells_to_get);
         // Test that expansion preserves population and positions.
         let old_layer = ndtree.layer();
         while ndtree.layer() < Layer(5) {
-            ndtree.expand(&*node_cache);
-            assert_ndtree_valid(&hashmap, &ndtree, &*node_cache, &cells_to_get);
+            ndtree.expand(&node_cache);
+            assert_ndtree_valid(&hashmap, &ndtree, &node_cache, &cells_to_get);
         }
         // Test that shrinking actually shrinks.
-        ndtree.shrink(&*node_cache);
+        ndtree.shrink(&node_cache);
         assert!(ndtree.layer() <= old_layer);
         // Test that shrinking preserves population and positions.
-        assert_ndtree_valid(&hashmap, &ndtree, &*node_cache, &cells_to_get);
+        assert_ndtree_valid(&hashmap, &ndtree, &node_cache, &cells_to_get);
     }
 
     /// Tests that identical nodes use the same underlying structure.
@@ -77,10 +77,10 @@ proptest! {
         let _node_cache = Arc::clone(ndtree.cache());
         let node_cache = _node_cache.read();
         for (pos, state) in cells_to_set {
-            ndtree.set_cell(&*node_cache, &(pos - 128).to_bigvec(), state);
-            ndtree.set_cell(&*node_cache, &(pos + 128).to_bigvec(), state);
+            ndtree.set_cell(&node_cache, &(pos - 128).to_bigvec(), state);
+            ndtree.set_cell(&node_cache, &(pos + 128).to_bigvec(), state);
         }
-        let slice = ndtree.slice(&*node_cache);
+        let slice = ndtree.slice(&node_cache);
         let children = slice.subdivide().unwrap();
         let subnode1 = &children[0].root;
         let subnode2 = &children[children.len() - 1].root;
@@ -101,11 +101,11 @@ proptest! {
         let mut hashmap = HashMap::new();
             for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
-            ndtree.set_cell(&*node_cache, &pos.to_bigvec(), state);
+            ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);
         }
         let half_diag = NdVec([x_radius, y_radius]);
         let rect = IRect::span(center - half_diag, center + half_diag).to_bigrect();
-        let slice = ndtree.slice_containing(&*node_cache, &rect);
+        let slice = ndtree.slice_containing(&node_cache, &rect);
         let slice_rect = slice.rect();
         // Check that the slice contains the rectangle.
         assert!(slice_rect.contains(&rect));

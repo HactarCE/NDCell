@@ -520,7 +520,7 @@ impl<D: Dim> Drop for ArcNode<D> {
 }
 impl<D: Dim> Clone for ArcNode<D> {
     fn clone(&self) -> Self {
-        unsafe { Self::new(&*self.cache().read(), self.raw_node_ptr) }
+        unsafe { Self::new(&self.cache().read(), self.raw_node_ptr) }
     }
 }
 impl<D: Dim> PartialEq for ArcNode<D> {

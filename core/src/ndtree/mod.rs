@@ -59,7 +59,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let node_cache = self.cache().read();
-        fmt::Display::fmt(&self.slice(&*node_cache), f)
+        fmt::Display::fmt(&self.slice(&node_cache), f)
     }
 }
 

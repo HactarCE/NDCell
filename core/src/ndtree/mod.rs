@@ -58,7 +58,7 @@ where
     for<'a> NdTreeSlice<'a, D>: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let node_cache = self.cache().read();
+        let node_cache = self.cache().read_recursive();
         fmt::Display::fmt(&self.slice(&node_cache), f)
     }
 }
@@ -81,7 +81,7 @@ impl<D: Dim> NdTree<D> {
     /// Creates an empty ND-tree using the given node cache.
     #[inline]
     pub fn with_cache(node_cache: Arc<RwLock<NodeCache<D>>>) -> Self {
-        Self::from_node_centered(node_cache.read().get_empty_base())
+        Self::from_node_centered(node_cache.read_recursive().get_empty_base())
     }
     /// Creates an ND-tree containing the given node centered on the origin.
     ///

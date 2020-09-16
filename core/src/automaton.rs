@@ -6,7 +6,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 
 use crate::dim::*;
-use crate::ndtree::{NdTree, NodeCache, NodeRefTrait};
+use crate::ndtree::{CachedNodeRefTrait, NdTree, NodeCache};
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, BigUint};
 use crate::projection::{NdProjection, NdProjectionError, NdProjector, ProjectionParams};
@@ -174,7 +174,7 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
     }
     fn set_cell(&mut self, pos: &BigVec<P>, state: u8) {
         let _node_cache = Arc::clone(self.automaton.tree.cache());
-        let node_cache = _node_cache.read();
+        let node_cache = _node_cache.read_recursive();
         self.automaton
             .tree
             .set_cell(&node_cache, &self.projection.unproject_pos(pos), state);
@@ -195,7 +195,8 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
         D::NDIM
     }
     fn population(&self) -> BigUint {
-        self.tree.root().population()
+        let node_cache = self.tree.root().cache().read_recursive();
+        self.tree.root().as_ref(&node_cache).population()
     }
     fn generation_count(&self) -> &BigInt {
         &self.generations
@@ -206,6 +207,28 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
     fn step(&mut self, gens: &BigInt) {
         self.sim.step(&mut self.tree, gens);
         self.generations += gens;
+    }
+
+    fn memory_usage(&self) -> usize {
+        self.tree.cache().read_recursive().memory_usage()
+    }
+    fn yield_to_gc(&self) {
+        // TODO: this is an awful hack. Develop a system where threads actually
+        // communicate their intent, or do GC on the simulation thread(s).
+        let _ = self.tree.cache().read();
+    }
+    fn schedule_gc(
+        &self,
+        post_gc: Box<dyn Send + FnOnce(usize, usize, usize)>,
+    ) -> std::thread::JoinHandle<()> {
+        let cache = Arc::clone(self.tree.cache());
+        let ret = std::thread::spawn(move || {
+            let mut cache = cache.write();
+            let (dropped, kept) = cache.strong_gc();
+            let new_memory_usage = cache.memory_usage();
+            post_gc(dropped, kept, new_memory_usage);
+        });
+        ret
     }
 }
 impl<D: Dim> NdAutomaton<D> {

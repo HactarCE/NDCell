@@ -71,7 +71,7 @@ impl<D: Dim> HashLife<D> {
             .expect("Step size too large!");
 
         let _node_cache = Arc::clone(tree.cache());
-        let node_cache = _node_cache.read();
+        let node_cache = _node_cache.read_recursive();
         let mut sim_params = node_cache.sim_lock().write();
 
         // Set the simulation step size. (Invalidate the cache if necessary.)

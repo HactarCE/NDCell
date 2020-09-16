@@ -114,7 +114,7 @@ impl RleEncode for Automaton2D {
             // TODO: Actually use a proper rulestring.
             rule: Some("Life".to_owned()),
         };
-        let node_cache = self.tree.cache().read();
+        let node_cache = self.tree.cache().read_recursive();
         let cell_array = NdArray::from(self.tree.root().as_ref(&node_cache));
         let mut items: Vec<(usize, RleItem<u8>)> = vec![];
         for mut pos in &cell_array.rect() {
@@ -246,7 +246,7 @@ impl RleEncode for Automaton2D {
         let x_start = pos[X].clone();
 
         let _node_cache = Arc::clone(ret.tree.cache());
-        let node_cache = _node_cache.read();
+        let node_cache = _node_cache.read_recursive();
         for row in cell_array {
             for cell in row {
                 ret.tree.set_cell(&node_cache, &pos, cell);

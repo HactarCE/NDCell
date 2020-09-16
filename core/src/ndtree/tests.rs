@@ -20,7 +20,7 @@ fn assert_ndtree_valid(
                 .filter(|(_, &cell_state)| cell_state != 0)
                 .count()
         ),
-        ndtree.root.population()
+        ndtree.root().as_ref(node_cache).population()
     );
     for pos in cells_to_check {
         assert_eq!(

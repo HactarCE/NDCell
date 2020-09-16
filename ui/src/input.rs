@@ -196,8 +196,10 @@ impl<'a> FrameInProgress<'a> {
                                     if let Some(pos) = view2d.nth_render_result(0).draw_pos.as_ref()
                                     {
                                         // Start drawing.
-                                        let old_cell = view2d
-                                            .get_cell(&*view2d.cache().read(), &pos.floor().0);
+                                        let old_cell = view2d.get_cell(
+                                            &view2d.cache().read_recursive(),
+                                            &pos.floor().0,
+                                        );
                                         self.start_drawing(if old_cell == 1 { 0 } else { 1 });
                                     }
                                 }

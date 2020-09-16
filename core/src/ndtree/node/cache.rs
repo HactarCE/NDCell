@@ -443,7 +443,11 @@ impl<D: Dim> HashLifeParams<D> {
     /// if it has changed.
     pub fn set_log2_step_size(&mut self, log2_step_size: u32) {
         if self.log2_step_size != log2_step_size {
-            self.cache.upgrade().unwrap().read().invalidate_results();
+            self.cache
+                .upgrade()
+                .unwrap()
+                .read_recursive()
+                .invalidate_results();
             self.log2_step_size = log2_step_size;
         }
     }
@@ -511,7 +515,7 @@ impl<D: Dim> Drop for ArcNode<D> {
     fn drop(&mut self) {
         // Decrement the refcount.
         self.cache
-            .read()
+            .read_recursive()
             .arc_nodes
             .lock()
             .entry(self.raw_node_ptr)
@@ -520,7 +524,7 @@ impl<D: Dim> Drop for ArcNode<D> {
 }
 impl<D: Dim> Clone for ArcNode<D> {
     fn clone(&self) -> Self {
-        unsafe { Self::new(&self.cache().read(), self.raw_node_ptr) }
+        unsafe { Self::new(&self.cache().read_recursive(), self.raw_node_ptr) }
     }
 }
 impl<D: Dim> PartialEq for ArcNode<D> {

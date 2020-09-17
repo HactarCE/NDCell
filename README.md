@@ -39,7 +39,7 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - [ ] [Documentation][NDCA docs]
 - [ ] Improve performance
   - [x] New ND-tree node cache
-    - [ ] Garbage collection
+    - [x] Garbage collection
   - [x] Lazy population computation
   - [ ] Multithreaded simulation
   - [x] Reduce `BigInt` allocations

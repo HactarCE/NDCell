@@ -26,7 +26,7 @@ impl Default for CtrlConfig {
             base_speed_2: 3.0,
             interpolation_2d: Interpolation2D::default(),
 
-            immersive: true,
+            immersive: false,
         }
     }
 }

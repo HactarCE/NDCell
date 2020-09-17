@@ -24,8 +24,10 @@ The first build may take ~10 minutes or more. Remove `--release` to disable opti
 What you'll need:
 
 * Rustup
-* CMake (if you want to build LLVM from scratch)
-* Visual Studio + Visual Studio Build Tools (if you want to build LLVM from scratch)
+* CMake
+* Visual Studio + Visual Studio Build Tools
+
+Visual Studio is optional if you do not want to build LLVM from source, but the Visual Studio Build Tools are required.
 
 ### Part 1 - Rust setup
 
@@ -33,8 +35,9 @@ What you'll need:
 2. Run `rustup.exe toolchain install stable-x86_64-pc-windows-msvc` to install the MSVC toolchain.
 3. Run `rustup.exe default stable-msvc` to select that toolchain as the default.
 4. Download/install [Build Tools for Visual Studio 2019](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019). (If you're reading this in the future, you can probably use a later version but you may have to adjust later commands if they include `Visual Studio 16 2019`.)
-5. Just install Visual Studio IDE too, because we'll need that later in order to build LLVM.
-6. To check if this all works, try making a new Rust project somewhere with `cargo new name-of-project`, `cd` into it, and run `cargo run`. It should compile and run successfully. If `rustc` can't find things, try rebooting.
+5. Install Visual Studio IDE too, because we'll need that later in order to build LLVM.
+6. Download/install [CMake](https://cmake.org/download/). This is required in order to build [mimalloc](https://github.com/microsoft/mimalloc), which makes NDCell use less memory.
+7. To check if this all works, try making a new Rust project somewhere with `cargo new name-of-project`, `cd` into it, and run `cargo run`. It should compile and run successfully. If `rustc` can't find things, try rebooting.
 
 ### Part 2 - Building LLVM
 
@@ -42,7 +45,7 @@ What you'll need:
 
 Fair warning: I don't do C or C++ development so it's entirely possible that I've botched the build process, but this is what finally worked for me.
 
-1. Download/install [CMake](https://cmake.org/download/). WSL or Cygwin `cmake` might work, but I wouldn't count on it.
+1. Make sure you have CMake installed from the previous steps. WSL or Cygwin `cmake` might work, but I wouldn't count on it.
 2. Download [LLVM](https://releases.llvm.org/download.html) 10.0.0 source code. The precompiled binaries probably won't work, but you can try.
 3. Extract the LLVM source code somewhere, like `C:\LLVM_source_code`. Now you should have a bunch of folders and files directly inside `C:\LLVM_source_code` including `CMakeLists.txt`.
 4. Make a new empty folder, like `C:\LLVM_solution`.

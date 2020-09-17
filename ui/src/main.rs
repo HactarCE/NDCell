@@ -5,6 +5,9 @@
 #![allow(dead_code)]
 #![warn(missing_docs)]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[macro_use]
 extern crate glium;
 #[macro_use]

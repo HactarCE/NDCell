@@ -139,10 +139,10 @@ impl<D: Dim> Drop for RawNode<D> {
     fn drop(&mut self) {
         if self.layer.is_leaf::<D>() {
             // Drop cell slice.
-            unsafe { std::ptr::drop_in_place(self.cell_slice_ptr()) };
+            drop(unsafe { Box::from_raw(self.cell_slice_ptr()) });
         } else {
             // Drop children slice.
-            unsafe { std::ptr::drop_in_place(self.children_slice_ptr()) };
+            drop(unsafe { Box::from_raw(self.children_slice_ptr()) });
         }
 
         let pop = *self.population.get_mut();

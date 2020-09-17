@@ -53,6 +53,9 @@ pub mod num;
 pub mod projection;
 pub mod sim;
 
+/// Fast hasher used for ND-tree nodes.
+type NodeHasher = std::hash::BuildHasherDefault<seahash::SeaHasher>;
+
 /// All public traits, for easy importing.
 pub mod traits {
     pub use crate::automaton::NdProjectedAutomatonTrait;

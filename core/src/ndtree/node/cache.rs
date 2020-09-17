@@ -5,23 +5,18 @@
 
 use itertools::Itertools;
 use parking_lot::{Mutex, RwLock};
-use seahash::SeaHasher;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
-use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
+use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::sync::{Arc, Weak};
 
-use super::{CachedNodeRefTrait, Layer, NodeRef, NodeRefEnum, NodeRefTrait, RawNode};
+use super::{
+    CachedNodeRefTrait, Layer, NodeRef, NodeRefEnum, NodeRefTrait, RawNode, ShardedBoxedSet,
+};
 use crate::dim::Dim;
 use crate::ndvec::BigVec;
 use crate::num::{BigUint, One, Zero};
-
-/// Fast hasher used for nodes.
-pub type NodeHasher = BuildHasherDefault<SeaHasher>;
-
-type NodeShard<D> = Mutex<HashSet<Box<RawNode<D>>, NodeHasher>>;
-// TODO: measure perf with different shard counts
-const SHARD_COUNT: usize = 64;
 
 /// Cache of ND-tree nodes for a single simulation.
 pub struct NodeCache<D: Dim> {
@@ -31,9 +26,11 @@ pub struct NodeCache<D: Dim> {
 
     /// Set of canonical instances of nodes.
     ///
-    /// A node must only be deleted from this set if there are no "strong"
-    /// (`Arc<T>`) references to it, and this set must hold the only "weak"
-    /// reference.
+    /// A node can only be deleted from this set using a `&mut NodeCache` and
+    /// only if it is not reachable from any `ArcNode`.
+    ///
+    /// A node is only deleted from this set if there are no "strong" (`Arc<T>`)
+    /// references to it, and this set holds the only "weak" reference.
     ///
     /// This set holds `Weak<T>` references to nodes, and "owned" `Arc<T>`
     ///
@@ -41,16 +38,24 @@ pub struct NodeCache<D: Dim> {
     /// https://docs.rs/crate/sharded/0.0.5). We use `Mutex` instead of `RwLock`
     /// because any reader could turn into a writer if the node it's looking for
     /// is not present.
-    node_shards: Box<[NodeShard<D>]>,
+    nodes: ShardedBoxedSet<RawNode<D>>,
     /// Map of pointers to nodes held by an `ArcNode` to number of references.
     ///
-    /// Nodes with a refcount of zero are removed during GC. Nodes with a refcount less than zero
+    /// Nodes with a refcount of zero are removed during GC. Nodes with a
+    /// refcount greater than zero are kept.
     ///
-    /// These must be preserved during garbage collection.
+    /// These are preserved during garbage collection.
     arc_nodes: Mutex<HashMap<*const RawNode<D>, usize>>,
     /// Cache of pointers to empty nodes at each layer. The index of the vector
     /// is the layer of the node.
     empty_nodes: Mutex<Vec<*const RawNode<D>>>,
+
+    /// Memory usage counter, in bytes.
+    ///
+    /// This value is updated any time a new node is added to the cache, an
+    /// existing node is removed, or a node's memory usage changes (such as via
+    /// `calc_population()`).
+    pub(super) node_heap_size: AtomicUsize,
 
     /// Simulation lock.
     ///
@@ -91,17 +96,13 @@ impl<D: Dim> NodeCache<D> {
         let ret = Arc::new(RwLock::new(Self {
             this: Weak::new(),
 
-            node_shards: std::iter::repeat_with(|| NodeShard::default())
-                .take(SHARD_COUNT)
-                .collect_vec()
-                .into_boxed_slice(),
+            nodes: ShardedBoxedSet::new(),
             arc_nodes: Mutex::new(HashMap::new()),
             empty_nodes: Mutex::new(vec![]),
 
-            sim_lock: RwLock::new(HashLifeParams {
-                log2_step_size: 0,
-                cache: Weak::new(),
-            }),
+            node_heap_size: AtomicUsize::new(0),
+
+            sim_lock: RwLock::new(HashLifeParams::default()),
         }));
 
         {
@@ -128,25 +129,30 @@ impl<D: Dim> NodeCache<D> {
         self.assert_same_as(node.cache());
     }
 
+    /// Returns the amount of space used by nodes on the heap.
+    pub fn memory_usage(&self) -> usize {
+        self.node_heap_size.load(Relaxed)
+    }
     /// Does a "strong" garbage collection. This invalidates all HashLife
     /// results, deletes all unused empty nodes, and then removes all nodes not
     /// reachable.
-    pub fn strong_gc(&mut self) {
+    ///
+    /// Returns the tuple `(nodes_dropped, nodes_kept)`.
+    pub fn strong_gc(&mut self) -> (usize, usize) {
         self.invalidate_results();
         self.clear_empty_node_cache();
-        self.weak_gc();
+        self.weak_gc()
     }
     /// Does a "weak" garbage collection. This removes all nodes that are not
     /// reachable.
-    pub fn weak_gc(&mut self) {
-        // Mark all nodes as unreachable.
-        for shard in &mut self.node_shards[..] {
-            for node in &*shard.get_mut() {
-                node.mark_gc_unreachable();
-            }
-        }
+    ///
+    /// Returns the tuple `(nodes_dropped, nodes_kept)`.
+    pub fn weak_gc(&mut self) -> (usize, usize) {
+        // Mark all nodes as unreachable ("innocent until proven guilty").
+        self.nodes.for_each(RawNode::mark_gc_unreachable);
 
-        // Mark `ArcNode`s and their children/result as reachable.
+        // Mark `ArcNode`s and their children/results as reachable. This
+        // includes `self.empty_nodes` because they are all `ArcNodes`.
         self.arc_nodes.get_mut().retain(|&node_ptr, &mut refcount| {
             let node = unsafe { &*node_ptr };
             if refcount > 0 {
@@ -158,27 +164,35 @@ impl<D: Dim> NodeCache<D> {
                 false
             }
         });
-        // Mark empty nodes as reachable.
-        for &node_ptr in &*self.empty_nodes.get_mut() {
-            let node = unsafe { &*node_ptr };
-            node.mark_gc_reachable();
-        }
+
+        let mut bytes_dropped = 0;
+        let mut nodes_dropped = 0;
+        let mut nodes_kept = 0;
 
         // Delete unreachable nodes.
-        for shard in &mut self.node_shards[..] {
-            shard.get_mut().retain(|node| node.is_gc_reachable());
-        }
+        self.nodes.retain(true, |node| {
+            if node.is_gc_reachable() {
+                // Keep the node.
+                nodes_kept += 1;
+                true
+            } else {
+                // If the node is not reachable, we're going to throw it away.
+                // Subtract its heap size from the counter.
+                bytes_dropped += node.heap_size();
+                nodes_dropped += 1;
+                false
+            }
+        });
+
+        self.node_heap_size.fetch_sub(bytes_dropped, Relaxed);
+        (nodes_dropped, nodes_kept)
     }
     /// Clears the HashLife results cache from every node.
     ///
     /// Note that another thread may add HashLife results to a node while this
     /// function is running.
     pub fn invalidate_results(&self) {
-        for shard in self.node_shards.iter() {
-            for raw_node in shard.lock().iter() {
-                unsafe { raw_node.set_result(None) };
-            }
-        }
+        self.nodes.for_each(|node| unsafe { node.set_result(None) });
     }
     /// Clears empty nodes that have no other references.
     pub fn clear_empty_node_cache(&self) {
@@ -198,11 +212,9 @@ impl<D: Dim> NodeCache<D> {
             if next_layer.is_leaf::<D>() {
                 empty_nodes.push(self.get(RawNode::new_empty_leaf(next_layer)).as_raw());
             } else {
-                let empty_node_children =
-                    vec![unsafe { &**empty_nodes.last().unwrap() }; D::BRANCHING_FACTOR]
-                        .into_boxed_slice();
-                let new_empty_node =
-                    self.get(unsafe { RawNode::new_non_leaf(empty_node_children) });
+                let empty_child = unsafe { NodeRef::new(self, &**empty_nodes.last().unwrap()) };
+                let empty_children = vec![empty_child; D::BRANCHING_FACTOR];
+                let new_empty_node = self.join_nodes(empty_children);
                 empty_nodes.push(new_empty_node.as_raw());
             }
         }
@@ -214,27 +226,12 @@ impl<D: Dim> NodeCache<D> {
     /// Returns the canonical instance of a node, adding it to the cache if one
     /// does not exist.
     pub fn get<'cache>(&'cache self, raw_node: RawNode<D>) -> NodeRef<'cache, D> {
-        let mut hash = NodeHasher::default().build_hasher();
-        raw_node.hash(&mut hash);
-        // Hash a little extra, so that the hash here is distinct from the one used within the individual shard.
-        SHARD_COUNT.hash(&mut hash);
-
-        let shard_index = hash.finish() as usize % SHARD_COUNT;
-        let mut shard = self.node_shards[shard_index].lock();
-
-        // This is ugly, but there's just no API yet for inserting a key into a
-        // `HashSet` and immediately getting a reference back.
-        shard
-            .get(&raw_node)
-            .map(|n| unsafe { NodeRef::new(self, &**n) })
-            .unwrap_or_else(|| {
-                // Pin it on the heap before you take a reference to it!
-                let raw_node = Box::new(raw_node);
-                let ret = unsafe { NodeRef::new(self, &*raw_node) };
-                // We should be inserting the node for the first time.
-                assert!(shard.insert(raw_node));
-                ret
-            })
+        let (ret, already_present) = self.nodes.get_or_insert(raw_node);
+        if !already_present {
+            // Record the heap usage of this node.
+            self.node_heap_size.fetch_add(ret.heap_size(), Relaxed);
+        }
+        unsafe { NodeRef::new(self, ret) }
     }
 
     /// Creates a new node by joining `children` together.
@@ -417,7 +414,7 @@ unsafe impl<D: Dim> Send for NodeCache<D> {}
 unsafe impl<D: Dim> Sync for NodeCache<D> {}
 
 /// HashLife parameters.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct HashLifeParams<D: Dim> {
     /// Base-2 log of the step size for the simulation.
     ///

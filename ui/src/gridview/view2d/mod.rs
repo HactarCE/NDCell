@@ -1,8 +1,8 @@
-use log::{trace, warn};
+use log::{debug, trace, warn};
 use parking_lot::{Mutex, RwLock};
 use std::borrow::Cow;
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
 use ndcell_core::prelude::*;
@@ -47,6 +47,8 @@ pub struct GridView2D {
     pub is_waiting: bool,
     /// Communication channel with the simulation worker thread.
     worker: Option<Worker<ProjectedAutomaton2D>>,
+    /// Communication channel with the garbage collection thread.
+    gc_channel: Option<mpsc::Receiver<()>>,
     /// The last several render results, with the most recent at the front.
     render_results: VecDeque<View2DRenderResult>,
     /// The last simulation time.
@@ -177,6 +179,9 @@ impl GridViewTrait for GridView2D {
                         }
                     }
                 }
+                Command::GarbageCollect => {
+                    self.schedule_gc();
+                }
             }
         }
 
@@ -226,6 +231,18 @@ impl GridViewTrait for GridView2D {
                         self.last_sim_times.pop_front();
                     }
                 }
+            }
+        }
+
+        // Collect garbage if memory usage has gotten too high.
+        if !self.gc_in_progress() {
+            if self.automaton.memory_usage() > config.sim.max_memory {
+                trace!(
+                    "Memory usage reached {} bytes; max is {}",
+                    self.automaton.memory_usage(),
+                    config.sim.max_memory
+                );
+                self.schedule_gc();
             }
         }
     }
@@ -348,6 +365,46 @@ impl GridView2D {
     }
     pub fn get_cell(&self, cache: &NodeCache<Dim2D>, pos: &BigVec2D) -> u8 {
         self.automaton.projected_tree().get_cell(cache, pos)
+    }
+
+    pub fn gc_in_progress(&mut self) -> bool {
+        if let Some(chan) = &self.gc_channel {
+            match chan.try_recv() {
+                Ok(_) => {
+                    drop(chan);
+                    self.gc_channel = None;
+                    false
+                }
+                Err(mpsc::TryRecvError::Disconnected) => panic!("GC thread panicked"),
+                Err(mpsc::TryRecvError::Empty) => {
+                    // There is already a GC in progress.
+                    true
+                }
+            }
+        } else {
+            false
+        }
+    }
+    pub fn schedule_gc(&mut self) {
+        let old_memory_usage = self.automaton.memory_usage();
+        let (tx, rx) = mpsc::channel();
+        self.gc_channel = Some(rx);
+        trace!("Spawning GC thread ...");
+        self.automaton.schedule_gc(Box::new(
+            move |nodes_dropped, nodes_kept, new_memory_usage| {
+                let total_nodes = nodes_dropped + nodes_kept;
+                let percent_dropped = nodes_dropped * 100 / total_nodes;
+                let memory_saved = old_memory_usage - new_memory_usage;
+                let percent_memory_saved = memory_saved * 100 / old_memory_usage;
+                debug!(
+                    "Dropped {} out of {} nodes ({}%), saving {} bytes ({}%)",
+                    nodes_dropped, total_nodes, percent_dropped, memory_saved, percent_memory_saved,
+                );
+                // Notify the main thread that we are done with GC. If the main
+                // thread isn't listening, then that's ok.
+                let _ = tx.send(());
+            },
+        ));
     }
     fn get_worker(&mut self) -> &mut Worker<ProjectedAutomaton2D> {
         if let None = self.worker {

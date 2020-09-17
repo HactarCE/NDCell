@@ -13,6 +13,7 @@ pub enum Command {
     EndDraw,
     Draw2D(DrawCommand2D),
     Clipboard(ClipboardCommand),
+    GarbageCollect,
 }
 
 #[derive(Debug, Clone)]

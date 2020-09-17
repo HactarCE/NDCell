@@ -12,6 +12,18 @@ pub trait Simulate {
     fn set_generation_count(&mut self, generations: BigInt);
     /// Steps forward in the simulation by the given number of generations.
     fn step(&mut self, gens: &BigInt);
+
+    /// Returns memory usage.
+    fn memory_usage(&self) -> usize;
+    /// Block if the GC thread is waiting and the `RwLock` has decided it's been
+    /// waiting long enough.
+    fn yield_to_gc(&self);
+    /// Spawns a garbage collection thread that collects garbage and then runs a
+    /// closure with the arguments `nodes_dropped`, `nodes_kept`, and `new_memory_usage`.
+    fn schedule_gc(
+        &self,
+        post_gc: Box<dyn Send + FnOnce(usize, usize, usize)>,
+    ) -> std::thread::JoinHandle<()>;
 }
 
 /// A proxy trait for `Simulate`.
@@ -44,5 +56,18 @@ where
     }
     fn step(&mut self, gens: &BigInt) {
         self.as_sim_mut().step(gens);
+    }
+
+    fn memory_usage(&self) -> usize {
+        self.as_sim().memory_usage()
+    }
+    fn yield_to_gc(&self) {
+        self.as_sim().yield_to_gc();
+    }
+    fn schedule_gc(
+        &self,
+        post_gc: Box<dyn Send + FnOnce(usize, usize, usize)>,
+    ) -> std::thread::JoinHandle<()> {
+        self.as_sim().schedule_gc(post_gc)
     }
 }

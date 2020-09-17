@@ -2,6 +2,7 @@
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::sync::atomic::Ordering::Relaxed;
 
 use super::{Layer, NodeCache, RawNode};
 use crate::dim::Dim;
@@ -44,12 +45,6 @@ pub trait NodeRefTrait<'node>: Copy {
     #[inline]
     fn modulo_pos(self, pos: &BigVec<Self::D>) -> BigVec<Self::D> {
         pos & &(self.big_len() - 1)
-    }
-
-    /// Returns the population of the node.
-    #[inline]
-    fn population(self) -> BigUint {
-        self.as_raw().calc_population().into()
     }
 }
 
@@ -177,6 +172,23 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     #[inline]
     fn set_cell(self, pos: &BigVec<Self::D>, cell_state: u8) -> NodeRef<'cache, Self::D> {
         self.cache().set_cell(self.as_enum(), pos, cell_state)
+    }
+
+    /// Returns the population of the node.
+    #[inline]
+    fn population(self) -> BigUint {
+        // Record the difference in memory usage.
+        let old_heap_size = self.as_raw().heap_size();
+        let ret = self.as_raw().calc_population().into();
+        let new_heap_size = self.as_raw().heap_size();
+        // If the heap size didn't change, don't touch the atomic variable.
+        if old_heap_size != new_heap_size {
+            // += new_heap_size - old_heap_size
+            self.cache()
+                .node_heap_size
+                .fetch_add(new_heap_size.wrapping_sub(old_heap_size), Relaxed);
+        }
+        ret
     }
 }
 

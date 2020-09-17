@@ -48,6 +48,9 @@ impl<T: 'static + Simulate + Clone + Send> Worker<T> {
                 }
                 let mut record = true;
                 loop {
+                    // Be kind; give GC a chance to do its thing if necessary.
+                    simulation.yield_to_gc();
+
                     let t1 = Instant::now();
                     simulation.step(&step_size);
                     let t2 = Instant::now();

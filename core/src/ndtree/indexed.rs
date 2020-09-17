@@ -5,8 +5,9 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use super::{CachedNodeRefTrait, Layer, NodeHasher, NodeRef, NodeRefTrait};
+use super::{CachedNodeRefTrait, Layer, NodeRef, NodeRefTrait};
 use crate::dim::Dim;
+use crate::NodeHasher;
 
 /// ND-tree represented as a list of nodes.
 #[derive(Debug)]

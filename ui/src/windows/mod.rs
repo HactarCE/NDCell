@@ -87,6 +87,19 @@ impl MainWindow {
                 }
                 _ => unimplemented!(),
             };
+            const MEBIBYTE: usize = 1024 * 1024;
+            ui.text(format!(
+                "Estimated RAM usage = {}/{} MiB",
+                gridview.memory_usage().div_ceil(&MEBIBYTE),
+                config.sim.max_memory.div_ceil(&MEBIBYTE),
+            ));
+            if ui.button(
+                im_str!("Trigger garbage collection"),
+                [ui.window_content_region_width(), 30.0],
+            ) {
+                gridview.enqueue(Command::GarbageCollect)
+            }
+            ui.text("");
             ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
         });
         self.simulation.build(ui, config, gridview)

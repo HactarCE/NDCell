@@ -12,6 +12,10 @@ use super::Layer;
 use crate::dim::Dim;
 use crate::num::{BigUint, MaybeBigUint};
 
+/// Estimated overhead from the set data structure that stores nodes and from
+/// slop in the allocator.
+const RAW_NODE_MEMORY_OVERHEAD: usize = 3 * std::mem::size_of::<usize>();
+
 /// Owned ND-tree node.
 ///
 /// Several methods of `RawNode` are `unsafe`, and it's usually better to use a
@@ -37,7 +41,7 @@ use crate::num::{BigUint, MaybeBigUint};
 /// - padding - 1 byte
 ///
 /// Total: 32 bytes, which exactly matches one of jemalloc's size classes, so no
-/// space is wasted (except for the two padding bytes at the end).
+/// space is wasted (except for the one padding byte at the end).
 ///
 /// ## 32-bit
 ///
@@ -334,7 +338,7 @@ impl<D: Dim> RawNode<D> {
     /// `result_ptr` must reside in the same cache as this node, so that it will
     /// not be dropped as long as this node has a pointer to it.
     #[inline]
-    pub unsafe fn set_result(&self, result_ptr: Option<&RawNode<D>>) {
+    pub(super) unsafe fn set_result(&self, result_ptr: Option<&RawNode<D>>) {
         self.result_ptr.store(
             result_ptr
                 .map(|r| r as *const _ as *mut _)
@@ -345,7 +349,7 @@ impl<D: Dim> RawNode<D> {
 
     /// Returns the population of the node, computing it if it has not yet been
     /// computed.
-    pub fn calc_population<'a>(&'a self) -> MaybeBigUint<'a> {
+    pub(super) fn calc_population<'a>(&'a self) -> MaybeBigUint<'a> {
         // Return the population if we have already computed it.
         if let Some(p) = self.population() {
             return p;
@@ -407,7 +411,7 @@ impl<D: Dim> RawNode<D> {
     /// Sets the population of the node if it has not already been computed.
     fn set_pop_big(&self, pop: BigUint) {
         // Put it on the heap and leak it.
-        let new_pop_ptr = Box::leak(Box::new(pop)) as *mut _;
+        let new_pop_ptr = Box::into_raw(Box::new(pop));
         let old = self
             .population
             .compare_and_swap(0, new_pop_ptr as usize, Relaxed);
@@ -416,6 +420,31 @@ impl<D: Dim> RawNode<D> {
             // it's not in `self.population`.
             unsafe { std::ptr::drop_in_place(new_pop_ptr) };
         }
+    }
+
+    /// Returns an estimate for the amount of space on the heap used by this
+    /// node.
+    ///
+    /// This does not take into account jemalloc's size classes.
+    pub fn heap_size(&self) -> usize {
+        std::mem::size_of::<Self>()
+            // Heap size of cells or children.
+            + self.cell_slice().map(std::mem::size_of_val).unwrap_or(0)
+            + self
+                .children_slice()
+                .map(std::mem::size_of_val)
+                .unwrap_or(0)
+            // Heap size of population.
+            + if let Some(MaybeBigUint::Big(i)) = self.population() {
+                std::mem::size_of::<BigUint>()
+                // Ceiling division; assume that `BigUint` allocates 64 bits at
+                // a time.
+                + ((i.bits() - 1) / 64 + 1 * 8) as usize
+            } else {
+                0
+            }
+        // Estimate the overhead of storing this node in the cache.
+        +RAW_NODE_MEMORY_OVERHEAD
     }
 
     /// Marks the node as unreachable during garbage collection.
@@ -449,16 +478,27 @@ impl<D: Dim> RawNode<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dim::Dim2D;
+    use crate::dim::Dim3D;
 
+    #[cfg(target_pointer_width = "64")]
     #[test]
     fn test_sizeof_raw_node() {
         // Verify my guesses about `RawNode` size.
+        assert_eq!(32, std::mem::size_of::<RawNode<Dim3D>>());
 
-        #[cfg(target_pointer_width = "64")]
-        assert_eq!(32, std::mem::size_of::<RawNode<Dim2D>>());
+        // Test cells slice.
+        let l = Layer(2);
+        let r1 = RawNode::<Dim3D>::new_empty_leaf(l);
+        assert_eq!(
+            RAW_NODE_MEMORY_OVERHEAD + 32 + l.num_cells::<Dim3D>().unwrap(),
+            r1.heap_size()
+        );
 
-        #[cfg(target_pointer_width = "32")]
-        assert_eq!(20, std::mem::size_of::<RawNode<Dim2D>>());
+        // Test children slice.
+        let r2 = unsafe { RawNode::new_non_leaf(vec![&r1; 8].into_boxed_slice()) };
+        assert_eq!(
+            RAW_NODE_MEMORY_OVERHEAD + 32 + 8 * std::mem::size_of::<usize>(),
+            r2.heap_size()
+        );
     }
 }

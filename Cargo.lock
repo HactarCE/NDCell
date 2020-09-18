@@ -715,21 +715,19 @@ dependencies = [
 [[package]]
 name = "imgui"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fdb2bcc7e498e78137ce28705ae836d69e36ee2eac89d0d926cfabfcf550570"
+source = "git+https://github.com/luke-titley/imgui-docking-rs?branch=docking#4a9b71ac92d5cef493751b98542528253039071c"
 dependencies = [
  "bitflags",
  "glium",
  "imgui-sys",
  "lazy_static",
- "parking_lot 0.10.2",
+ "parking_lot 0.11.0",
 ]
 
 [[package]]
 name = "imgui-glium-renderer"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c73e47cb3db3e354e3977265b14d7e6ff8b55a83f06ab6c7d04b4d441d64f586"
+source = "git+https://github.com/luke-titley/imgui-docking-rs?branch=docking#4a9b71ac92d5cef493751b98542528253039071c"
 dependencies = [
  "glium",
  "imgui",
@@ -738,8 +736,7 @@ dependencies = [
 [[package]]
 name = "imgui-sys"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72be9671d64dd0ed26bb708cd10060a431262ac90ae70cf7c5912feefe6849da"
+source = "git+https://github.com/luke-titley/imgui-docking-rs?branch=docking#4a9b71ac92d5cef493751b98542528253039071c"
 dependencies = [
  "cc",
 ]
@@ -747,8 +744,7 @@ dependencies = [
 [[package]]
 name = "imgui-winit-support"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f98171c35263e3eb0dfb66cb876e3efdb788d777c1b613c7d2592303d1276bb5"
+source = "git+https://github.com/luke-titley/imgui-docking-rs?branch=docking#4a9b71ac92d5cef493751b98542528253039071c"
 dependencies = [
  "imgui",
  "winit",

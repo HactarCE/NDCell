@@ -89,12 +89,12 @@ impl GridViewTrait for GridView2D {
                         MoveCommand2D::Zoom {
                             power,
                             invariant_pos,
-                        } => new_viewport.zoom_by(2.0_f64.powf(power), invariant_pos),
+                        } => new_viewport.zoom_by_factor(2.0_f64.powf(power), invariant_pos),
                         MoveCommand2D::SetPos(pos) => new_viewport.center = pos,
                         MoveCommand2D::SetZoom {
                             zoom,
                             invariant_pos,
-                        } => new_viewport.zoom_by(zoom / new_viewport.zoom, invariant_pos),
+                        } => new_viewport.zoom_by_factor(zoom / new_viewport.zoom, invariant_pos),
                         MoveCommand2D::SnapPos => new_viewport.snap_pos(),
                         MoveCommand2D::SnapZoom(invariant_pos) => {
                             new_viewport.snap_zoom(invariant_pos)

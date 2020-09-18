@@ -1,6 +1,8 @@
 use std::fmt;
 use std::ops::*;
 
+use ndcell_core::num::{r64, FixedPoint};
+
 /// The zoom level of the 2D viewport, represented as a base-2 logarithm of the
 /// width of each individual cell in pixels.
 ///
@@ -79,11 +81,13 @@ impl Zoom2D {
 
     /// Construct a Zoom2D with the given zoom power (e.g. -2.0 = 4:1 zoom).
     pub fn from_power(power: f64) -> Self {
+        assert!(power.is_finite());
         Self(power)
     }
     /// Construct a Zoom2D with the given zoom factor (e.g. 0.25 = 4:1 zoom).
     /// The zoom factor must be greater than 0.
     pub fn from_factor(factor: f64) -> Self {
+        assert!(factor.is_finite());
         Self(factor.log2())
     }
 
@@ -104,17 +108,25 @@ impl Zoom2D {
     }
     /// Returns the zoom factor (e.g. 0.25 = 4:1 zoom).
     pub fn factor(self) -> f64 {
-        2.0f64.powf(self.power())
+        2.0_f64.powf(self.power())
     }
     /// Returns the width of pixels per cell, which is equivalent to the zoom
     /// factor.
     pub fn pixels_per_cell(self) -> f64 {
         2.0_f64.powf(self.power())
     }
+    /// Converts a number of cells to a number of pixels.
+    pub fn cells_to_pixels<X: Div<FixedPoint>>(self, cells: X) -> X::Output {
+        cells / FixedPoint::from(r64(-self.power())).exp_base2()
+    }
     /// Returns the width of cells per pixel, which is equivalent to the
     /// reciprocal of the zoom factor.
     pub fn cells_per_pixel(self) -> f64 {
         2.0_f64.powf(-self.power())
+    }
+    /// Converts a number of pixels to a numer of cells.
+    pub fn pixels_to_cells<X: Mul<FixedPoint>>(self, pixels: X) -> X::Output {
+        pixels * FixedPoint::from(r64(-self.power())).exp_base2()
     }
     /// Returns the Zoom2D for the nearest power of 2.
     pub fn round(self) -> Self {

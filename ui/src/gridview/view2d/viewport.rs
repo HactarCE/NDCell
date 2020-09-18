@@ -36,52 +36,59 @@ impl Viewport2D {
     /// at the same location on the screen.
     ///
     /// If `invariant_pos` is `None`, then the center of the viewport is invariant.
-    pub fn snap_zoom(&mut self, invariant: Option<FixedVec2D>) {
-        self.zoom_by(self.zoom.round() / self.zoom, invariant);
+    pub fn snap_zoom(&mut self, invariant_pos: Option<FixedVec2D>) {
+        self.zoom_by_factor(self.zoom.round() / self.zoom, invariant_pos);
         self.zoom = self.zoom.round(); // Fix any potential rounding error.
     }
     /// Zoom in or out by the given factor, keeping one invariant point at the
     /// same location on the screen.
     ///
-    /// If `invariant_pos` is `None`, then the center of the viewport is invariant.
-    pub fn zoom_by(&mut self, factor: f64, invariant_pos: Option<FixedVec2D>) {
+    /// If `invariant_pos` is `None`, then the center of the viewport is
+    /// invariant.
+    pub fn zoom_by_factor(&mut self, factor: f64, invariant_pos: Option<FixedVec2D>) {
         assert!(
             factor > 0.0,
             "Zoom factor must be a positive number, not {}",
             factor,
         );
-
-        let cells_per_pixel = self.zoom.cells_per_pixel();
-
+        self.zoom_by_power(factor.log2(), invariant_pos)
+    }
+    /// Zoom in or out by the given power, keeping one invariant point at the
+    /// same location on the screen.
+    ///
+    /// If `invariant_pos` is `None`, then the center of the viewport is
+    /// invariant.
+    pub fn zoom_by_power(&mut self, power: f64, invariant_pos: Option<FixedVec2D>) {
         // Compute cell offset of `invariant_pos` from center of viewport.
         let invariant_pos_offset = invariant_pos
             .map(|pos| pos - &self.center)
             .unwrap_or_default();
         // Compute pixel offset of `invariant_pos` from the center of viewport
         // using the original zoom level.
-        let invariant_pos_old_pixel_offset = &invariant_pos_offset / cells_per_pixel;
+        let invariant_pos_old_pixel_offset = self.zoom.cells_to_pixels(&invariant_pos_offset);
 
         // Zoom into the center of the viewport.
-        self.zoom = (self.zoom * factor).clamp();
-
-        let cells_per_pixel = self.zoom.cells_per_pixel();
+        self.zoom = Zoom2D::from_power(self.zoom.power() + power).clamp();
 
         // Compute pixel offset of `invariant_pos` from the center of viewport
         // using the new zoom level.
-        let invariant_pos_new_pixel_offset = &invariant_pos_offset / cells_per_pixel;
+        let invariant_pos_new_pixel_offset = self.zoom.cells_to_pixels(&invariant_pos_offset);
         // Compute the difference between those pixel offsets.
         let delta_pixel_offset = invariant_pos_new_pixel_offset - invariant_pos_old_pixel_offset;
         // Apply that offset so that the point goes back to the same pixel
         // location as before.
-        self.center += delta_pixel_offset * cells_per_pixel;
+        self.center += self.zoom.pixels_to_cells(delta_pixel_offset);
     }
 
     /// Return the abstract "distance" between two viewports.
     pub fn distance(a: &Self, b: &Self) -> FixedPoint {
+        let avg_zoom = Self::average_lerped_zoom(a.zoom, b.zoom);
+        let avg_zoom_factor = FixedPoint::from(r64(avg_zoom.power())).exp_base2();
+        let total_cells_delta = (&b.center - &a.center).mag();
+        let total_pixels_delta = total_cells_delta * avg_zoom_factor;
         // Divide by a constant factor to bring translation to zoom into the
         // same arbitrary units of perceived motion.
-        let pixel_distance: FixedPoint =
-            Self::lerp_total_pixel_delta(a, b).mag() / PIXELS_PER_ZOOM_LEVEL;
+        let pixel_distance: FixedPoint = total_pixels_delta / PIXELS_PER_ZOOM_LEVEL;
         let zoom_distance = a.zoom.power() - b.zoom.power();
         // Use euclidean distance.
         let squared_pixel_distance = &pixel_distance * &pixel_distance;
@@ -129,37 +136,26 @@ impl Viewport2D {
             // zoom level.
             ret.zoom = b.zoom;
         } else {
-            ret.zoom_by(delta_zoom_factor.powf(t), None);
+            ret.zoom_by_factor(delta_zoom_factor.powf(t), None);
         }
 
-        // Read the comments in lerp_total_pixel_delta() before proceeding.
-        let total_pixels_delta = Self::lerp_total_pixel_delta(a, b);
+        // Read the comments in `average_lerped_zoom()` before proceeding.
+        let avg_zoom = Self::average_lerped_zoom(a.zoom, b.zoom);
+        let total_pixels_delta = avg_zoom.cells_to_pixels(&b.center - &a.center);
 
         // Now that we know the number of pixels to travel in the whole timestep
         // of 0 <= t <= 1, we have to figure out how many cells to travel during
         // 0 <= t <= T, where T is the "destination" time (argument to this
-        // function). We can use the same integral we calculated in
-        // lerp_total_pixel_delta (solved for the number of cells), but using
-        // z(T) instead of z₂:
-        //
-        //           pixels * ( 2^(-z₁) - 2^(-z(T)) )
-        // cells = - --------------------------------
-        //                  ln(2) * (z₁ - z(T))
-        //
-        // Once again this equation is undefined if z₁ = z₂, but the limit is
-        // pixels*(2^z). Compute z(T).
-        let z1 = a.zoom.power();
-        let z_final = ret.zoom.power();
-        let mut k = (2.0.powf(-z1) - 2.0.powf(-z_final)) / (-2.0.ln() * (z1 - z_final));
-        if !k.is_finite() {
-            k = 2.0.powf(-z1);
-        }
+        // function). We can compute the average zoom level of this smaller
+        // interpolation, just ranging from 0 to T, using the same equation as
+        // in `average_lerped_zoom` but using z(T) instead of z₂.
+        let zt = Self::average_lerped_zoom(a.zoom, ret.zoom);
         // Multiply the total number of pixels to travel by T to get the number
         // of pixels to travel on 0 <= t <= T.
         let pixels_delta = &total_pixels_delta * t;
-        // Finally, multiply by the new k to get the number of cells to travel
+        // Finally, divide by the new zoom factor to get the number of cells to travel
         // on 0 <= t <= T.
-        let cells_delta = pixels_delta * k;
+        let cells_delta = zt.pixels_to_cells(pixels_delta);
 
         if total_pixels_delta.mag() < r64(0.01).into() {
             // If there's less than 1% of a pixel left, snap into position.
@@ -171,43 +167,60 @@ impl Viewport2D {
         ret
     }
 
-    fn lerp_total_pixel_delta(a: &Self, b: &Self) -> FixedVec2D {
+    /// Returns the "average" zoom level between the two viewports, averaging
+    /// zoom factor with respect to time during a linear interpolation.
+    ///
+    /// Read source comments to see how this is relevant.
+    fn average_lerped_zoom(z1: Zoom2D, z2: Zoom2D) -> Zoom2D {
+        let z1 = r64(z1.power());
+        let z2 = r64(z2.power());
         // Read the comments in the first half of lerp() before proceeding.
         //
-        // Find the total number of pixels to travel. The zoom power is a linear
-        // function z(t) = z₁ + (z₂ - z₁) t for 0 <= t <= 1, where z₁ and z₂ are
-        // the inital and final zoom powers respectively. The number of pixels
-        // to travel P is a constant value for that range as well. The number of
-        // cells per pixel is 1/(2^z(t)), so the total number of cells to travel
-        // is the integral of pixels/(2^z(t)) dt from t=0 to t=1. That integral
-        // comes out to the following:
+        // We want to find the total number of pixels to travel. The zoom power
+        // is a linear function z(t) = z₁ + (z₂ - z₁) t for 0 <= t <= 1, where
+        // z₁ and z₂ are the inital and final zoom powers respectively. The
+        // number of pixels to travel P is a constant value for that range as
+        // well. The number of cells per pixel is 1/(2^z(t)), so the total
+        // number of cells to travel is the integral of pixels/(2^z(t)) dt from
+        // t=0 to t=1. That integral comes out to the following:
         //
         //           pixels * ( 2^(-z₁) - 2^(-z₂) )
         // cells = - ------------------------------
         //                 ln(2) * (z₁ - z₂)
         //
         // (Note the negative sign in front!) We know how many cells to travel;
-        // that's just b.pos - a.pos. So to find P, the total number of pixels,
-        // we solve the above equation for P:
+        // that's just b.pos - a.pos. We could solve the above equation for the
+        // number of pixels, but instead let's solve it for the ratio of pixels
+        // to cells:
         //
-        //            cells * ln(2) * (z₁ - z₂)
-        // pixels = - -------------------------
-        //                2^(-z₁) - 2^(-z₂)
+        // pixels     ln(2) * (z₁ - z₂)
+        // ------ = - -----------------
+        // cells      2^(-z₁) - 2^(-z₂)
         //
-        // This equation is undefined at z₁ = z₂, but the limit is just
-        // cells/(2^z), so we'll use that if the floating-point expression
-        // fails.
+        // This gives us a sort of "average zoom factor." But zoom factors get
+        // very small when zoomed out, so the reciprocal will be more precise:
+        //
+        //        1            2^(-z₁) - 2^(-z₂)
+        // --------------- = - -----------------
+        // avg zoom factor     ln(2) * (z₁ - z₂)
+        //
+        // This equation is undefined at z₁ = z₂, but the limit is just 2^(-z),
+        // so we'll use that if z₁ = z₂.
 
-        // Compute k, the whole right-hand side of that equation except the
-        // number of cells.
-        let z1 = a.zoom.power();
-        let z2 = b.zoom.power();
-        let mut k = -2.0.ln() * (z1 - z2) / (2.0.powf(-z1) - 2.0.powf(-z2));
-        if !k.is_finite() {
-            k = 2.0.powf(z1);
-        }
-        // Now we can just multiply k by the number of cells to travel get the
-        // total number of pixels to travel for the entire interpolation.
-        (&b.center - &a.center) * k
+        // Use fixed-point numbers for better precision.
+        let z1_fixp = FixedPoint::from(z1);
+        let z2_fixp = FixedPoint::from(z2);
+
+        let recip_avg_zoom_factor = if z1_fixp == z2_fixp {
+            (-z1_fixp).exp_base2()
+        } else {
+            let numerator = (-z1_fixp).exp_base2() - (-z2_fixp).exp_base2();
+            let denominator = r64(2.0).ln() * (z1 - z2);
+            -numerator / FixedPoint::from(denominator)
+        };
+
+        // Take the base-2 logarithm and then negate to get the zoom power.
+        let avg_zoom_power = -recip_avg_zoom_factor.log2();
+        Zoom2D::from_power(avg_zoom_power)
     }
 }

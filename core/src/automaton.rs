@@ -8,9 +8,10 @@ use std::sync::Arc;
 use crate::dim::*;
 use crate::ndtree::{CachedNodeRefTrait, NdTree, NodeCache};
 use crate::ndvec::BigVec;
-use crate::num::{BigInt, BigUint};
+use crate::num::{BigInt, BigUint, Zero};
 use crate::projection::{NdProjection, NdProjectionError, NdProjector, ProjectionParams};
-use crate::sim::{AsSimulate, HashLife, Simulate};
+use crate::sim::rule::{DummyRule, Rule};
+use crate::sim::{hashlife, AsSimulate, Simulate};
 
 /// ProjectedAutomaton functionality implemented by dispatching to
 /// NdProjectedAutomaton.
@@ -184,11 +185,20 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
 /// A fully-fledged cellular automaton, including a grid (NdTree), rule
 /// (Simulation), and generation count.
 #[allow(missing_docs)]
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<D>,
-    pub sim: Arc<HashLife<D>>,
+    pub rule: Arc<dyn Rule<D>>,
     pub generations: BigInt,
+}
+impl<D: Dim> Default for NdAutomaton<D> {
+    fn default() -> Self {
+        Self {
+            tree: NdTree::default(),
+            rule: Arc::new(DummyRule),
+            generations: BigInt::zero(),
+        }
+    }
 }
 impl<D: Dim> Simulate for NdAutomaton<D> {
     fn ndim(&self) -> usize {
@@ -205,7 +215,7 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
         self.generations = generations;
     }
     fn step(&mut self, gens: &BigInt) {
-        self.sim.step(&mut self.tree, gens);
+        hashlife::step(&mut self.tree, &*self.rule, gens);
         self.generations += gens;
     }
 
@@ -232,9 +242,9 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
     }
 }
 impl<D: Dim> NdAutomaton<D> {
-    /// Sets the simulation of the automaton.
-    pub fn set_sim(&mut self, new_sim: HashLife<D>) {
-        self.sim = Arc::new(new_sim);
+    /// Sets the rule of the automaton.
+    pub fn set_rule(&mut self, new_rule: impl 'static + Rule<D>) {
+        self.rule = Arc::new(new_rule);
     }
 }
 

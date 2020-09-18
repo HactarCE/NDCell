@@ -41,7 +41,7 @@ fn make_default_gridview() -> GridView {
         Default::default()
     });
 
-    automaton.set_sim(crate::load_custom_rule());
+    automaton.rule = crate::load_custom_rule();
 
     GridView::from(automaton)
 }

@@ -36,7 +36,6 @@ fn test_cgol_glider() {
     let _node_cache = Arc::clone(grid.cache());
     let node_cache = _node_cache.read();
     let rule = crate::sim::rule::LIFE;
-    let sim = HashLife::from(rule);
 
     // Make a glider.
     grid.set_cell(&node_cache, &NdVec::big([3, 3]), 1);
@@ -58,7 +57,7 @@ fn test_cgol_glider() {
         get_non_default_set(grid.slice(&node_cache))
     );
     // Simulate it for a few steps.
-    sim.step(&mut grid, &1.into());
+    hashlife::step(&mut grid, &rule, &1.into());
     println!("{}", grid);
     println!();
     assert_eq!(
@@ -71,7 +70,7 @@ fn test_cgol_glider() {
         ]),
         get_non_default_set(grid.slice(&node_cache))
     );
-    sim.step(&mut grid, &1.into());
+    hashlife::step(&mut grid, &rule, &1.into());
     println!("{}", grid);
     println!();
     assert_eq!(
@@ -85,7 +84,7 @@ fn test_cgol_glider() {
         get_non_default_set(grid.slice(&node_cache))
     );
     // Simulate it for a much bigger step.
-    sim.step(&mut grid, &64.into());
+    hashlife::step(&mut grid, &rule, &64.into());
     println!("Simulated for 64");
     assert_eq!(
         make_cell_coords_set(vec![
@@ -98,7 +97,7 @@ fn test_cgol_glider() {
         get_non_default_set(grid.slice(&node_cache))
     );
     // And an even bigger one.
-    sim.step(&mut grid, &1024.into());
+    hashlife::step(&mut grid, &rule, &1024.into());
     println!("Simulated for 1024");
     assert_eq!(
         make_cell_coords_set(vec![
@@ -120,9 +119,7 @@ $26bobo!";
 #[test]
 fn regression_test_cgol_ggg() {
     let mut automaton = Automaton2D::from_rle(GGG).unwrap();
-    let rule = crate::sim::rule::LIFE;
-    let sim = HashLife::from(rule);
-    automaton.set_sim(sim);
+    automaton.set_rule(crate::sim::rule::LIFE);
     // Step 512 generations.
     for _ in 0..8 {
         automaton.step(&64.into());
@@ -133,9 +130,7 @@ fn regression_test_cgol_ggg() {
 #[test]
 fn test_cgol_ggg_non_power_of_2() {
     let mut automaton = Automaton2D::from_rle(GGG).unwrap();
-    let rule = crate::sim::rule::LIFE;
-    let sim = HashLife::from(rule);
-    automaton.set_sim(sim);
+    automaton.set_rule(crate::sim::rule::LIFE);
     // Step 240 generations.
     for _ in 0..4 {
         automaton.step(&60.into());

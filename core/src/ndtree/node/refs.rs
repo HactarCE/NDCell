@@ -4,7 +4,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::Ordering::Relaxed;
 
-use super::{Layer, NodeCache, RawNode};
+use super::{Layer, NodeCache, RawNode, SimCacheGuard};
 use crate::dim::Dim;
 use crate::ndrect::{BigRect, URect};
 use crate::ndvec::{BigVec, UVec};
@@ -108,7 +108,8 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     /// this node some fixed number of generations, or `None` if that result
     /// hasn't been computed yet.
     #[inline]
-    fn result(self) -> Option<NodeRef<'cache, Self::D>> {
+    fn result(self, guard: &SimCacheGuard<'_, Self::D>) -> Option<NodeRef<'cache, Self::D>> {
+        guard.cache().assert_owns_node(self);
         self.as_raw()
             .result()
             .map(|res| unsafe { NodeRef::new(self.cache(), res) })

@@ -10,14 +10,16 @@ pub mod cells;
 mod layer;
 mod raw;
 mod refs;
+mod result;
 mod set;
 
-pub use cache::{ArcNode, HashLifeParams, NodeCache};
+pub use cache::{ArcNode, NodeCache, SimCacheGuard};
 pub use layer::Layer;
 pub use raw::RawNode;
 pub use refs::{
     CachedNodeRefTrait, LeafNodeRef, NodeRef, NodeRefEnum, NodeRefTrait, NonLeafNodeRef,
 };
+pub use result::HashLifeResultParams;
 use set::ShardedBoxedSet;
 
 #[cfg(test)]

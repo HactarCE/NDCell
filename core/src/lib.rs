@@ -90,7 +90,7 @@ pub mod prelude {
     pub use crate::ndvec::aliases::*;
     pub use crate::ndvec::{AnyDimVec, NdVec};
     pub use crate::num::{r64, BigInt, BigUint, FixedPoint, R64};
-    pub use crate::sim::HashLife;
+    pub use crate::sim::hashlife;
 }
 
 #[cfg(test)]

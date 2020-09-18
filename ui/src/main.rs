@@ -14,9 +14,9 @@ extern crate glium;
 extern crate lazy_static;
 
 use log::{debug, info};
+use std::sync::Arc;
 
-use ndcell_core::dim::Dim2D;
-use ndcell_core::sim::HashLife;
+use ndcell_core::prelude::{Dim2D, Rule};
 
 mod clipboard_compat;
 mod config;
@@ -38,20 +38,19 @@ fn main() {
     gui::show_gui();
 }
 
-fn load_custom_rule() -> HashLife<Dim2D> {
+fn load_custom_rule() -> Arc<dyn Rule<Dim2D>> {
     use std::fs::File;
     use std::io::Read;
-    use std::sync::Arc;
 
     File::open("rule.ndca")
-        .map(|mut file| {
+        .map(|mut file| -> Arc<dyn Rule<Dim2D>> {
             let mut source_code = String::new();
             file.read_to_string(&mut source_code)
                 .expect("Error reading file");
-            HashLife::from(
+            Arc::new(
                 ndcell_lang::compile_blocking(Arc::new(source_code), None)
                     .expect("Error compiling rule"),
             )
         })
-        .unwrap_or_else(|_| HashLife::from(ndcell_core::sim::rule::LIFE))
+        .unwrap_or_else(|_| Arc::new(ndcell_core::sim::rule::LIFE))
 }

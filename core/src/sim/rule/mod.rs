@@ -3,6 +3,7 @@
 
 use core::fmt;
 use itertools::Itertools;
+use std::sync::Arc;
 
 mod totalistic;
 
@@ -25,6 +26,13 @@ pub trait Rule<D: Dim>: fmt::Debug + Send + Sync {
     /// Returns a function that computes a cell's next state, given its
     /// neighborhood.
     fn transition_function<'a>(&'a self) -> TransitionFunction<'a, D>;
+    /// Returns the rule as an `Arc<dyn Rule>`.
+    fn into_arc(self) -> Arc<dyn Rule<D>>
+    where
+        Self: 'static + Sized,
+    {
+        Arc::new(self)
+    }
 }
 
 /// A basic rule that never changes any cell states.

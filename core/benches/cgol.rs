@@ -33,7 +33,7 @@ fn bench_sim_2d(
     let gens = gens.into();
     let step_size = step_size.into();
     let expected_pop = expected_pop.into();
-    let sim = Arc::new(HashLife::from(rule));
+    let rule = rule.into_arc();
 
     let ndarray = {
         let automaton = Automaton2D::from_rle(pattern.rle).expect("RLE parsing failed");
@@ -51,7 +51,7 @@ fn bench_sim_2d(
                 let root = cache.get_from_cells(ndarray.clone().into_flat_slice());
                 let automaton = Automaton2D {
                     tree: NdTree::from_node_centered(root),
-                    sim: Arc::clone(&sim),
+                    rule: Arc::clone(&rule),
                     generations: 0.into(),
                 };
                 assert_eq!(expected_pop, run_simulation(automaton, &gens, &step_size))

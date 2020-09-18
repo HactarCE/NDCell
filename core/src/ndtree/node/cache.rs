@@ -4,7 +4,7 @@
 //! collection requires a &mut NodeCache.
 
 use itertools::Itertools;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -12,11 +12,11 @@ use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::sync::{Arc, Weak};
 
 use super::{
-    CachedNodeRefTrait, Layer, NodeRef, NodeRefEnum, NodeRefTrait, RawNode, ShardedBoxedSet,
+    CachedNodeRefTrait, HashLifeResultParams, Layer, NodeRef, NodeRefEnum, NodeRefTrait, RawNode,
+    ShardedBoxedSet,
 };
 use crate::dim::Dim;
 use crate::ndvec::BigVec;
-use crate::num::{BigUint, One, Zero};
 
 /// Cache of ND-tree nodes for a single simulation.
 pub struct NodeCache<D: Dim> {
@@ -61,8 +61,9 @@ pub struct NodeCache<D: Dim> {
     ///
     /// Reading or writing HashLife results requires a read handle to this lock,
     /// and modifying parameters that determine the meaning of those results
-    /// (such as simulation step size) requires a write handle to this lock.
-    sim_lock: RwLock<HashLifeParams<D>>,
+    /// (such as simulation step size) requires a write handle to this lock, and
+    /// modifying this value may invalidate some or all results.
+    sim_lock: RwLock<HashLifeResultParams>,
 }
 impl<D: Dim> fmt::Debug for NodeCache<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -102,13 +103,12 @@ impl<D: Dim> NodeCache<D> {
 
             node_heap_size: AtomicUsize::new(0),
 
-            sim_lock: RwLock::new(HashLifeParams::default()),
+            sim_lock: RwLock::new(HashLifeResultParams::default()),
         }));
 
         {
             let mut ret_write = ret.write();
             ret_write.this = Arc::downgrade(&ret);
-            ret_write.sim_lock.get_mut().cache = Arc::downgrade(&ret);
         }
 
         ret
@@ -125,7 +125,7 @@ impl<D: Dim> NodeCache<D> {
         );
     }
     /// Asserts that the node is from this cache.
-    fn assert_owns_node<'cache>(&self, node: impl CachedNodeRefTrait<'cache, D = D>) {
+    pub(super) fn assert_owns_node<'cache>(&self, node: impl CachedNodeRefTrait<'cache, D = D>) {
         self.assert_same_as(node.cache());
     }
 
@@ -193,6 +193,18 @@ impl<D: Dim> NodeCache<D> {
     /// function is running.
     pub fn invalidate_results(&self) {
         self.nodes.for_each(|node| unsafe { node.set_result(None) });
+    }
+    /// Clears the HashLife results cache from every node above a particular
+    /// layer.
+    ///
+    /// Note that another thread may add HashLife results to a node while this
+    /// function is running.
+    pub fn invalidate_results_above(&self, layer: Layer) {
+        self.nodes.for_each(|node| {
+            if node.layer() > layer {
+                unsafe { node.set_result(None) }
+            }
+        });
     }
     /// Clears empty nodes that have no other references.
     pub fn clear_empty_node_cache(&self) {
@@ -397,13 +409,74 @@ impl<D: Dim> NodeCache<D> {
         }
     }
 
-    /// Returns the simulation lock for this cache.
+    /// Returns the simulation lock, invalidating the results cache partially or
+    /// fully if necessary.
     ///
-    /// Reading or writing HashLife results requires a read handle to this lock,
-    /// and modifying parameters that determine the meaning of those results
-    /// (such as simulation step size) requires a write handle to this lock.
-    pub fn sim_lock(&self) -> &RwLock<HashLifeParams<D>> {
-        &self.sim_lock
+    /// This method blocks if other parameters are being used for simulation at
+    /// the same time.
+    pub fn sim_with<'cache>(
+        &'cache self,
+        params: HashLifeResultParams,
+    ) -> SimCacheGuard<'cache, D> {
+        let lock = self.sim_lock.upgradable_read();
+        let old_params = *lock;
+        let lock = if old_params != params {
+            let mut lock = RwLockUpgradableReadGuard::upgrade(lock);
+            self.set_sim_params(params, &mut lock);
+            RwLockWriteGuard::downgrade(lock)
+        } else {
+            RwLockUpgradableReadGuard::downgrade(lock)
+        };
+        SimCacheGuard {
+            cache: self,
+            sim_lock: lock,
+        }
+    }
+
+    /// Returns the simulation lock, invalidating the results cache partially or
+    /// fully if necessary.
+    ///
+    /// If the lock cannot be acquired, returns `Err` containing the current parameters.
+    pub fn try_sim_with<'cache>(
+        &'cache self,
+        params: HashLifeResultParams,
+    ) -> Option<SimCacheGuard<'cache, D>> {
+        let lock = self.sim_lock.try_upgradable_read()?;
+        let old_params = *lock;
+        let lock = if old_params != params {
+            let mut lock = RwLockUpgradableReadGuard::try_upgrade(lock).ok()?;
+            self.set_sim_params(params, &mut lock);
+            RwLockWriteGuard::downgrade(lock)
+        } else {
+            RwLockUpgradableReadGuard::downgrade(lock)
+        };
+        Some(SimCacheGuard {
+            cache: self,
+            sim_lock: lock,
+        })
+    }
+
+    /// Sets the simulation parameters.
+    fn set_sim_params<'guard>(
+        &self,
+        params: HashLifeResultParams,
+        sim_lock: &mut RwLockWriteGuard<'guard, HashLifeResultParams>,
+    ) {
+        let old_params = **sim_lock;
+        **sim_lock = params;
+        // If the radius changes, that means the rule has changed, and the cache
+        // should have been invalidated by whoever changed the rule. The only
+        // thing we need to worry about here is the `log2_node_step_size` for
+        // each node, which depends only on `sim_base_layer`. (See the
+        // `HashLifeResultParams` documentation.)
+        let old_base_layer = old_params.sim_base_layer();
+        let new_base_layer = params.sim_base_layer();
+        if old_base_layer != new_base_layer {
+            // Nodes at or below the base layer are simulated for the full
+            // amount possible, and the rule radius (presumably) hasn't changed
+            // so that's still the same.
+            self.invalidate_results_above(std::cmp::min(old_base_layer, new_base_layer))
+        }
     }
 }
 
@@ -412,94 +485,6 @@ impl<D: Dim> NodeCache<D> {
 // safe to implement `Send` on `NodeCache` as well.
 unsafe impl<D: Dim> Send for NodeCache<D> {}
 unsafe impl<D: Dim> Sync for NodeCache<D> {}
-
-/// HashLife parameters.
-#[derive(Debug, Default, Clone)]
-pub struct HashLifeParams<D: Dim> {
-    /// Base-2 log of the step size for the simulation.
-    ///
-    /// Results must be invalidated any time this is modified.
-    log2_step_size: u32,
-
-    /// Pointer to the `Arc<RwLock<T>>` of the parent cache. This value should
-    /// never be dropped until the `HashLifeParams` is.
-    cache: Weak<RwLock<NodeCache<D>>>,
-}
-impl<D: Dim> HashLifeParams<D> {
-    /// Returns the simulation step size.
-    #[inline]
-    pub fn step_size(&self) -> BigUint {
-        BigUint::one() << self.log2_step_size
-    }
-    /// Returns the base-2 log of the simulation step size.
-    #[inline]
-    pub fn log2_step_size(&self) -> u32 {
-        self.log2_step_size
-    }
-    /// Sets the base-2 log of the simulation step size, invalidating the cache
-    /// if it has changed.
-    pub fn set_log2_step_size(&mut self, log2_step_size: u32) {
-        if self.log2_step_size != log2_step_size {
-            self.cache
-                .upgrade()
-                .unwrap()
-                .read_recursive()
-                .invalidate_results();
-            self.log2_step_size = log2_step_size;
-        }
-    }
-
-    /// Returns the step size for a node at the given layer in a rule with the
-    /// given radius.
-    pub fn big_node_step_size(&self, layer: Layer, rule_radius: usize) -> BigUint {
-        if let Some(pow) = self.log2_node_step_size(layer, rule_radius) {
-            BigUint::one() << pow
-        } else {
-            BigUint::zero()
-        }
-    }
-    /// Returns the step size for a node at the given layer in a rule with the
-    /// given radius, or `None` if it does not fit within a `usize`.
-    pub fn node_step_size(&self, layer: Layer, rule_radius: usize) -> Option<usize> {
-        if let Some(pow) = self.log2_node_step_size(layer, rule_radius) {
-            1_usize.checked_shl(pow)
-        } else {
-            Some(0)
-        }
-    }
-    /// Returns the base-2 log of the step size for a node at the given layer in
-    /// a rule with the given radius, or `None` if even a single generation
-    /// cannot be simulated.
-    pub fn log2_node_step_size(&self, layer: Layer, rule_radius: usize) -> Option<u32> {
-        let log2_rule_radius = rule_radius
-            .next_power_of_two()
-            .max(1) // Treat r=0 rules like r=1.
-            .trailing_zeros();
-        // Compute the maximum number of  generations we could simulate this
-        // node, regardless of the currently configured step size. We start with
-        // the size of the layer, divide by 4 to get the "padding" between the
-        // edge of the node and the edge of its centered inner result, and then
-        // divide by the rule radius (which defines the rule's "speed of light")
-        // to turn distance into time.
-        let log2_layer_max = layer
-            .to_u32()
-            // If the result would be negative, then we can't even simulate a
-            // single generation on this node.
-            .checked_sub(2 + log2_rule_radius)?;
-        Some(std::cmp::min(log2_layer_max, self.log2_step_size))
-    }
-}
-#[cfg(test)]
-impl HashLifeParams<crate::dim::Dim2D> {
-    /// Constructor for testing.
-    #[cfg(test)]
-    pub(super) fn with_log2_step_size(log2_step_size: u32) -> Self {
-        Self {
-            log2_step_size,
-            cache: Weak::new(),
-        }
-    }
-}
 
 /// Node reference that also holds an `Arc` reference to the cache instead of
 /// borrowing it.
@@ -592,3 +577,21 @@ impl<'node, D: Dim> NodeRefTrait<'node> for &'node ArcNode<D> {
 // safe to implement `Send` on `ArcNode` as well.
 unsafe impl<D: Dim> Send for ArcNode<D> {}
 unsafe impl<D: Dim> Sync for ArcNode<D> {}
+
+/// RAII wrapper around simulation results cache.
+#[derive(Debug)]
+pub struct SimCacheGuard<'cache, D: Dim> {
+    cache: &'cache NodeCache<D>,
+    /// Guard to make sure that no one else modifies the parameters.
+    sim_lock: RwLockReadGuard<'cache, HashLifeResultParams>,
+}
+impl<'cache, D: Dim> SimCacheGuard<'cache, D> {
+    /// Returns the cache that this guard gives access to.
+    pub fn cache(&self) -> &'cache NodeCache<D> {
+        self.cache
+    }
+    /// Returns the parameters defining simulation results.
+    pub fn params(&self) -> &HashLifeResultParams {
+        &*self.sim_lock
+    }
+}

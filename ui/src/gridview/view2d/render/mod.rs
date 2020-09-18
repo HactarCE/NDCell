@@ -320,7 +320,7 @@ impl<'a> RenderInProgress<'a> {
                 &shaders::BLIT,
                 &uniform! {
                     src_texture: scaled_cells_texture.sampled(),
-                    alpha: 1.0f32,
+                    alpha: 1.0_f32,
                 },
                 &glium::DrawParameters::default(),
             )
@@ -405,7 +405,7 @@ impl<'a> RenderInProgress<'a> {
         // Round up to the nearest power of GRIDLINE_SPACING_BASE.
         let spacing_base_log2 = (GRIDLINE_SPACING_BASE as f64).log2();
         let cell_spacing =
-            2.0f64.powf((cell_spacing.log2() / spacing_base_log2).ceil() * spacing_base_log2);
+            2.0_f64.powf((cell_spacing.log2() / spacing_base_log2).ceil() * spacing_base_log2);
         // Convert from cells to render cells.
         let render_cell_spacing = cell_spacing / self.render_cell_layer.big_len().to_f64().unwrap();
         let mut spacing = render_cell_spacing as usize;

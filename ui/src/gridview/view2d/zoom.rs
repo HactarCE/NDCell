@@ -3,6 +3,8 @@ use std::ops::*;
 
 /// The zoom level of the 2D viewport, represented as a base-2 logarithm of the
 /// width of each individual cell in pixels.
+///
+/// TODO: consider using R64 here instead of f64.
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct Zoom2D(f64);
 
@@ -16,10 +18,10 @@ impl fmt::Display for Zoom2D {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.0 > 0.0 {
             // Zoomed in
-            write!(f, "1:{}", 2.0f64.powf(self.0).round())
+            write!(f, "1:{}", 2.0_f64.powf(self.0).round())
         } else if self.0 >= -8.0 {
             // Zoomed out a bit
-            write!(f, "{}:1", 2.0f64.powf(-self.0).round())
+            write!(f, "{}:1", 2.0_f64.powf(-self.0).round())
         } else {
             // Zoomed out a lot
             write!(f, "2^{}:1", -self.0.round())
@@ -57,7 +59,7 @@ impl DivAssign<f64> for Zoom2D {
 impl Div<Zoom2D> for Zoom2D {
     type Output = f64;
     fn div(self, other: Self) -> f64 {
-        2.0f64.powf(self.0 - other.0)
+        2.0_f64.powf(self.0 - other.0)
     }
 }
 
@@ -107,12 +109,12 @@ impl Zoom2D {
     /// Returns the width of pixels per cell, which is equivalent to the zoom
     /// factor.
     pub fn pixels_per_cell(self) -> f64 {
-        2.0f64.powf(self.power())
+        2.0_f64.powf(self.power())
     }
     /// Returns the width of cells per pixel, which is equivalent to the
     /// reciprocal of the zoom factor.
     pub fn cells_per_pixel(self) -> f64 {
-        2.0f64.powf(-self.power())
+        2.0_f64.powf(-self.power())
     }
     /// Returns the Zoom2D for the nearest power of 2.
     pub fn round(self) -> Self {

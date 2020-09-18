@@ -57,5 +57,14 @@ proptest! {
 
         assert_approx_eq!(leeway_factor, -a, -&fa);
         assert_approx_eq!(leeway_factor, -b, -&fb);
+
+        if a.abs() < 30.0 {
+            assert_approx_eq!(leeway_factor, 2.0_f64.powf(a), fa.exp_base2());
+        }
+        if let Some(result) = FixedPoint::from_f64(fa.log2()) {
+            assert_approx_eq!(leeway_factor, a.log2(), result);
+        } else {
+            assert!(!a.log2().is_finite())
+        }
     }
 }

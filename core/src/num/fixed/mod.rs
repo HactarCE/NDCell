@@ -102,6 +102,35 @@ impl FixedPoint {
         // bitshifting left by `FRACTIONAL_BITS`.
         Self((&self.0 << FRACTIONAL_BITS).sqrt())
     }
+
+    /// Returns `2^n`. Works best with `n > 1`.
+    #[inline]
+    pub fn exp_base2(&self) -> Self {
+        // Split into integer and fraction.
+        let (i, f) = self.floor();
+        // Exponentiate separately and multiply.
+        let ret = Self::from_f64(2.0_f64.powf(f)).unwrap();
+        match i.sign() {
+            num::bigint::Sign::Minus => ret >> (-i).to_usize().expect("overflow"),
+            num::bigint::Sign::NoSign => ret,
+            num::bigint::Sign::Plus => ret << i.to_usize().expect("overflow"),
+        }
+    }
+
+    /// Returns the base-2 logarithm, or `NaN` if the number is negative.
+    #[inline]
+    pub fn log2(&self) -> f64 {
+        // Use the number of bits in the number as a rough approximation.
+        let i = self
+            .0
+            .bits()
+            .checked_sub(FRACTIONAL_BITS as u64)
+            .unwrap_or(0);
+        // Divide by 2^i to get a number that's close to 1 or smaller.
+        let f = (self >> i).to_f64().unwrap();
+        // Delegate to floating-point implementation for the rest.
+        i as f64 + f.log2()
+    }
 }
 
 impl From<BigInt> for FixedPoint {
@@ -116,7 +145,7 @@ impl TryFrom<(BigInt, f64)> for FixedPoint {
 
     #[inline]
     fn try_from((mut i, f): (BigInt, f64)) -> Result<Self, ()> {
-        i += BigInt::from_f64(f.trunc()).unwrap();
+        i += BigInt::from_f64(f.trunc()).ok_or(())?;
         let i_shifted = i << FRACTIONAL_BITS;
         let f_shifted = BigInt::from_f64(f.fract().abs() * INTEGRAL_ONE as f64).ok_or(())?;
         if f.is_sign_negative() {

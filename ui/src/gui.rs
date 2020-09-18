@@ -1,6 +1,7 @@
 use glium::glutin::event::{Event, StartCause, WindowEvent};
 use glium::glutin::event_loop::{ControlFlow, EventLoop};
 use glium::glutin::{window::WindowBuilder, ContextBuilder};
+use glium::Surface;
 use imgui::{Context, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
@@ -154,28 +155,28 @@ pub fn show_gui() -> ! {
                 gridview.do_frame(&config);
 
                 let mut target = display.draw();
+                if target.get_dimensions() != (0, 0) {
+                    // Render the gridview.
+                    match &mut gridview {
+                        GridView::View2D(view2d) => {
+                            view2d.render(
+                                &config,
+                                &mut target,
+                                View2DRenderParams {
+                                    cursor_pos: input_state.cursor_pos(),
+                                },
+                            );
+                        }
+                        GridView::View3D(_view3d) => (),
+                    };
 
-                // Render the gridview.
-                match &mut gridview {
-                    GridView::View2D(view2d) => {
-                        view2d.render(
-                            &config,
-                            &mut target,
-                            View2DRenderParams {
-                                cursor_pos: input_state.cursor_pos(),
-                            },
-                        );
-                    }
-                    GridView::View3D(_view3d) => (),
-                };
-
-                // Render imgui.
-                platform.prepare_render(&ui, gl_window.window());
-                let draw_data = ui.render();
-                renderer
-                    .render(&mut target, draw_data)
-                    .expect("Rendering failed");
-
+                    // Render imgui.
+                    platform.prepare_render(&ui, gl_window.window());
+                    let draw_data = ui.render();
+                    renderer
+                        .render(&mut target, draw_data)
+                        .expect("Rendering failed");
+                }
                 // Put it all on the screen.
                 target.finish().expect("Failed to swap buffers");
             }

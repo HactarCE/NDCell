@@ -126,6 +126,8 @@ impl<'a> RenderInProgress<'a> {
         target.clear_depth(0.0);
 
         let (target_w, target_h) = target.get_dimensions();
+        assert_ne!(target_w, 0, "Target has zero width!");
+        assert_ne!(target_h, 0, "Target has zero height!");
         let target_pixels_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let viewport = g.interpolating_viewport.clone();
 

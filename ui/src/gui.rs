@@ -65,10 +65,9 @@ pub fn show_gui() -> ! {
     let mut platform = WinitPlatform::init(&mut imgui);
     let gl_window = display.gl_window();
     let window = gl_window.window();
-    // Using any other HiDpiMode::Default or HiDpiMode::Rounded makes window
-    // borders and other things fuzzy for me (DPI = 1.5 in my setup) and
-    // scaling can otherwise be accomplished by changing the font size, with
-    // a MUCH crisper result.
+    // Imgui can't handle mixed DPI, so let's just scale using font size which
+    // gives a better and more reliable result. TODO: make this
+    // user-configurable. TODO: also scale all buttons etc
     platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
     config.gfx.dpi = platform.hidpi_factor(); // Fetch the DPI we want.
     platform.attach_window(imgui.io_mut(), window, HiDpiMode::Locked(1.0));

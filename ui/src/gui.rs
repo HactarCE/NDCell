@@ -73,7 +73,7 @@ pub fn show_gui() -> ! {
     platform.attach_window(imgui.io_mut(), window, HiDpiMode::Locked(1.0));
 
     // Initialize imgui fonts.
-    let font_size = 16.0 * config.gfx.dpi as f32;
+    let font_size = 17.0 * config.gfx.dpi as f32;
     imgui.fonts().add_font(&[FontSource::TtfData {
         data: include_bytes!("../resources/font/NotoSans-Regular.ttf"),
         size_pixels: font_size,
@@ -82,6 +82,10 @@ pub fn show_gui() -> ! {
 
     // Initialize imgui renderer.
     let mut renderer = Renderer::init(&mut imgui, display).expect("Failed to initialize renderer");
+
+    // Enable docking.
+    imgui.io_mut().config_flags |= imgui::ConfigFlags::DOCKING_ENABLE;
+    imgui.io_mut().docking_with_shift = false;
 
     // Main loop
     let mut last_frame_time = Instant::now();
@@ -122,7 +126,8 @@ pub fn show_gui() -> ! {
                 platform
                     .prepare_frame(imgui_io, gl_window.window())
                     .expect("Failed to start frame");
-                last_frame_time = imgui_io.update_delta_time(last_frame_time);
+                imgui_io.update_delta_time(current_time - last_frame_time);
+                last_frame_time = current_time;
 
                 // Prep the gridview for event handling.
                 let mut input_frame = input_state.frame(&mut config, &gridview, &imgui_io);

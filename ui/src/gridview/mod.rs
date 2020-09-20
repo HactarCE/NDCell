@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::history::History;
 pub use control::*;
 pub use view2d::{GridView2D, View2DRenderParams, View2DRenderResult, Viewport2D, Zoom2D};
-pub use view3d::GridView3D;
+pub use view3d::{GridView3D, View3DRenderParams};
 use worker::*;
 
 /// Methods implemented by GridView by dispatching to the GridView2D or
@@ -84,6 +84,10 @@ pub trait GridViewTrait: Sized + Simulate + History {
 
     fn as_automaton<'a>(&'a self) -> AutomatonRef<'a>;
     fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;
+
+    fn as_history(&mut self) -> &mut dyn History {
+        self
+    }
 }
 
 pub trait RenderGridView: GridViewTrait {
@@ -172,16 +176,11 @@ impl History for GridView {
 }
 
 impl GridView {
-    fn as_history(&mut self) -> &mut dyn History {
-        match self {
-            Self::View2D(view2d) => view2d,
-            Self::View3D(view3d) => view3d,
-        }
-    }
+    // TODO: document this, also revise documentation on the trait method
     pub fn fps(&self, config: &Config) -> f64 {
         match self {
             Self::View2D(view2d) => view2d.fps(config),
-            Self::View3D(_) => todo!("3D FPS"),
+            Self::View3D(view3d) => view3d.fps(config),
         }
     }
 }

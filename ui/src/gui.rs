@@ -37,14 +37,16 @@ $26bobo!
 ";
 
 fn make_default_gridview() -> GridView {
-    let mut automaton = Automaton2D::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE).unwrap_or_else(|_| {
-        warn!("Unable to parse default pattern; using empty pattern instead");
-        Default::default()
-    });
+    // let mut automaton = Automaton2D::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE).unwrap_or_else(|_| {
+    //     warn!("Unable to parse default pattern; using empty pattern instead");
+    //     Default::default()
+    // });
 
-    automaton.rule = crate::load_custom_rule();
+    // automaton.rule = crate::load_custom_rule();
 
-    GridView::from(automaton)
+    // GridView::from(automaton)
+
+    GridView::View3D(GridView3D::default())
 }
 
 /// Display the main application window.
@@ -166,7 +168,15 @@ pub fn show_gui() -> ! {
                                 },
                             );
                         }
-                        GridView::View3D(_view3d) => (),
+                        GridView::View3D(view3d) => {
+                            view3d.render(
+                                &config,
+                                &mut target,
+                                View3DRenderParams {
+                                    cursor_pos: input_state.cursor_pos(),
+                                },
+                            );
+                        }
                     };
 
                     // Render imgui.

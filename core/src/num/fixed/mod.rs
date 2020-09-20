@@ -105,7 +105,7 @@ impl FixedPoint {
 
     /// Returns `2^n`. Works best with `n > 1`.
     #[inline]
-    pub fn exp_base2(&self) -> Self {
+    pub fn exp2(&self) -> Self {
         // Split into integer and fraction.
         let (i, f) = self.floor();
         // Exponentiate separately and multiply.

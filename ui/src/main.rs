@@ -9,6 +9,8 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[macro_use]
+extern crate anyhow;
+#[macro_use]
 extern crate glium;
 #[macro_use]
 extern crate lazy_static;

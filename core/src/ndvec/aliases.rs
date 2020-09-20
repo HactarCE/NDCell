@@ -30,6 +30,8 @@ pub type UVec<D> = NdVec<D, usize>;
 
 /// Vector with any dimensionality and `BigInt` coordinates.
 pub type AnyDimBigVec = AnyDimVec<BigInt>;
+/// Vector with any dimensionality and `FixedPoint` coordinates.
+pub type AnyDimFixedVec = AnyDimVec<FixedPoint>;
 /// Vector with any dimensionality and `R64` coordinates.
 pub type AnyDimFVec = AnyDimVec<R64>;
 /// Vector with any dimensionality and `isize` coordinates.

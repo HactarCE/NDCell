@@ -45,7 +45,7 @@ impl<D: Dim> BigVec<D> {
     ///
     /// # Panics
     ///
-    /// This method panics if any component does not fit in `usize`.
+    /// This method panics if any component does not fit in a `usize`.
     #[inline]
     pub fn to_uvec(&self) -> UVec<D> {
         UVec::from_fn(|ax| {
@@ -58,7 +58,7 @@ impl<D: Dim> BigVec<D> {
     ///
     /// # Panics
     ///
-    /// This method panics if any component does not fit in `f64`.
+    /// This method panics if any component does not fit in an `f64`.
     #[inline]
     pub fn to_fvec(&self) -> FVec<D> {
         FVec::from_fn(|ax| {
@@ -85,7 +85,7 @@ impl<D: Dim> FixedVec<D> {
     ///
     /// # Panics
     ///
-    /// This method panics if any component does not fit in `f64`.
+    /// This method panics if any component does not fit in an `f64`.
     #[inline]
     pub fn to_fvec(&self) -> FVec<D> {
         FVec::from_fn(|ax| {
@@ -102,7 +102,7 @@ impl<D: Dim> FVec<D> {
     ///
     /// # Panics
     ///
-    /// This method panics if any component does not fit in `isize`.
+    /// This method panics if any component does not fit in an `isize`.
     #[inline]
     pub fn to_ivec(&self) -> IVec<D> {
         IVec::from_fn(|ax| {
@@ -135,7 +135,7 @@ impl<D: Dim> IVec<D> {
     ///
     /// # Panics
     ///
-    /// This method panics if any component does not fit in `usize`.
+    /// This method panics if any component does not fit in a `usize`.
     #[inline]
     pub fn to_uvec(&self) -> UVec<D> {
         UVec::from_fn(|ax| {
@@ -148,7 +148,7 @@ impl<D: Dim> IVec<D> {
     ///
     /// # Panics
     ///
-    /// This method panics if any component does not fit in `f64`.
+    /// This method panics if any component does not fit in an `f64`.
     #[inline]
     pub fn to_fvec(&self) -> FVec<D> {
         FVec::from_fn(|ax| {
@@ -170,7 +170,7 @@ impl<D: Dim> UVec<D> {
     ///
     /// # Panics
     ///
-    /// This method panics if any component does not fit in `isize`.
+    /// This method panics if any component does not fit in an `isize`.
     #[inline]
     pub fn to_ivec(&self) -> IVec<D> {
         IVec::from_fn(|ax| {

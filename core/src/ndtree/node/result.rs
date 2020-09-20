@@ -77,7 +77,7 @@ impl HashLifeResultParams {
         }
     }
     /// Returns the step size for a node at the given layer, or `None` if it
-    /// does not fit within a `usize`.
+    /// does not fit in a `usize`.
     #[inline]
     pub fn node_step_size(&self, layer: Layer) -> Option<usize> {
         if let Some(pow) = self.log2_node_step_size(layer) {

@@ -47,6 +47,14 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - [ ] Rewrite RLE export/import
   - [ ] Macrocell export/import
 - [ ] Render 3D
+  - [ ] Cubes
+  - [ ] Lighting
+  - [ ] Gridlines
+  - [ ] Improve performance
+    - [ ] Limit visibility / implement render cells
+    - [ ] Reduce detail on distant octree nodes
+    - [ ] Hide occluded faces
+    - [ ] Merge adjacent faces
 - [ ] Basic editing in 3D
 - [ ] Improve UI
   - [ ] Better error reporting

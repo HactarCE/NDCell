@@ -131,6 +131,11 @@ impl<D: Dim> IVec<D> {
     pub fn to_bigvec(&self) -> BigVec<D> {
         BigVec::from_fn(|ax| self[ax].into())
     }
+    /// Converts the `IVec` into a `FixedVec`.
+    #[inline]
+    pub fn to_fixedvec(&self) -> FixedVec<D> {
+        self.to_bigvec().to_fixedvec()
+    }
     /// Converts the `IVec` to a `UVec`.
     ///
     /// # Panics

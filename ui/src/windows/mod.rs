@@ -1,6 +1,6 @@
 use imgui::*;
 
-use ndcell_core::axis::{X, Y};
+use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
 mod simulation;
@@ -65,6 +65,7 @@ impl MainWindow {
             match &gridview {
                 GridView::View2D(view2d) => {
                     let cam = view2d.camera();
+                    ui.text("2D");
                     ui.text(format!("Scale = {}", cam.scale()));
                     for &ax in Dim2D::axes() {
                         let value = &cam.pos()[ax];
@@ -86,9 +87,30 @@ impl MainWindow {
                         ui.text("");
                     }
                 }
-                GridView::View3D(_view3d) => {
-                    ui.text("Oohh, 3D. Very cool!");
-                    ui.text("");
+                GridView::View3D(view3d) => {
+                    let cam = view3d.camera();
+                    ui.text("3D");
+                    ui.text(format!("Scale = {}", cam.scale()));
+                    for &ax in Dim3D::axes() {
+                        let value = &cam.pos()[ax];
+                        if format!("{:.1}", value).ends_with("0") {
+                            ui.text(format!("{} = {:.0}", ax.name(), value));
+                        } else {
+                            ui.text(format!("{} = {:.1}", ax.name(), value));
+                        }
+                    }
+                    if let Some(AnyDimVec::Vec3D(hover_pos)) =
+                        view3d.nth_render_result(0).hover_pos.as_ref()
+                    {
+                        ui.text(format!(
+                            "Cursor: X = {}, Y = {}, Z = {}",
+                            hover_pos[X].floor().0,
+                            hover_pos[Y].floor().0,
+                            hover_pos[Z].floor().0,
+                        ));
+                    } else {
+                        ui.text("");
+                    }
                 }
             };
             const MEBIBYTE: usize = 1024 * 1024;

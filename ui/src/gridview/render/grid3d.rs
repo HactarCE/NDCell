@@ -5,10 +5,11 @@
 
 use anyhow::{Context, Result};
 use cgmath::prelude::*;
-use cgmath::{Deg, Matrix4};
+use cgmath::{Basis3, Deg, Matrix4};
 use glium::index::PrimitiveType;
 use glium::Surface;
 
+use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
 use super::consts::*;
@@ -57,22 +58,28 @@ impl<'a> RenderInProgress<'a> {
         };
 
         let camera = g.camera();
+        let world_translation = -cgmath::vec3(
+            camera.pos()[X].to_f32().context("3D cell translation")?,
+            camera.pos()[Y].to_f32().context("3D cell translation")?,
+            camera.pos()[Z].to_f32().context("3D cell translation")?,
+        );
         let view_matrix = cgmath::Decomposed {
             scale: camera
                 .scale()
                 .factor()
                 .to_f32()
                 .context("Converting scale factor to f32")?,
-            rot: cgmath::Basis3::from_angle_x(camera.pitch())
-                * cgmath::Basis3::from_angle_y(camera.yaw()),
-            disp: cgmath::Vector3::new(0.0, 0.0, -Camera3D::DISTANCE_TO_PIVOT as f32),
+            rot: Basis3::from(camera.orientation()),
+            disp: cgmath::vec3(0.0, 0.0, -Camera3D::DISTANCE_TO_PIVOT as f32),
         };
 
         Ok(Self {
             octree: g.automaton.projected_tree(),
             camera,
             target,
-            matrix: Matrix4::from(perspective_matrix) * Matrix4::from(view_matrix),
+            matrix: Matrix4::from(perspective_matrix)
+                * Matrix4::from(view_matrix)
+                * Matrix4::from_translation(world_translation),
         })
     }
 

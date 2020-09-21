@@ -63,20 +63,21 @@ impl GridViewTrait for GridView2D {
                     };
                     match c {
                         MoveCommand2D::PanPixels(delta) => new_viewport.pan_pixels(delta),
-                        MoveCommand2D::Scale {
-                            log2_factor,
-                            invariant_pos,
-                        } => new_viewport.scale_by_factor(log2_factor.exp2(), invariant_pos),
                         MoveCommand2D::SetPos(pos) => new_viewport.set_pos(pos),
-                        MoveCommand2D::SetScale {
-                            scale,
-                            invariant_pos,
-                        } => new_viewport.scale_to(scale, invariant_pos),
                         MoveCommand2D::SnapPos => {
                             if config.ctrl.snap_pos {
                                 new_viewport.snap_pos()
                             }
                         }
+
+                        MoveCommand2D::Scale {
+                            log2_factor,
+                            invariant_pos,
+                        } => new_viewport.scale_by_factor(log2_factor.exp2(), invariant_pos),
+                        MoveCommand2D::SetScale {
+                            scale,
+                            invariant_pos,
+                        } => new_viewport.scale_to(scale, invariant_pos),
                         MoveCommand2D::SnapScale { invariant_pos } => {
                             if config.ctrl.snap_scale {
                                 new_viewport.snap_scale(invariant_pos)

@@ -151,7 +151,6 @@ impl<'a> FrameInProgress<'a> {
                             delta[X] = -delta[X]; // TODO: why invert X? explain.
                             match self.gridview {
                                 GridView::View2D(view2d) => {
-                                    // Pan both viewports so that the viewport stays matched with the cursor.
                                     view2d.enqueue(
                                         MoveCommand2D::PanPixels(delta.to_fixedvec()).direct(),
                                     );
@@ -171,26 +170,25 @@ impl<'a> FrameInProgress<'a> {
                                 (x, y)
                             }
                         };
-                        match self.gridview {
-                            GridView::View2D(view2d) => {
-                                view2d.enqueue(
-                                    MoveCommand2D::Scale {
-                                        log2_factor: r64(dy),
-                                        invariant_pos: view2d
-                                            .nth_render_result(0)
-                                            .hover_pos
-                                            .clone()
-                                            .and_then(|v| v.try_into().ok())
-                                            .clone(),
-                                    }
-                                    .decay(),
-                                );
-                                // TODO magic numbers ick
-                                self.time_to_snap_scale =
-                                    Some(Instant::now() + Duration::from_millis(200));
+                        self.gridview.enqueue(match self.gridview {
+                            GridView::View2D(view2d) => MoveCommand2D::Scale {
+                                log2_factor: r64(dy),
+                                invariant_pos: view2d
+                                    .nth_render_result(0)
+                                    .hover_pos
+                                    .clone()
+                                    .and_then(|v| v.try_into().ok())
+                                    .clone(),
                             }
-                            _ => (),
-                        }
+                            .decay(),
+                            GridView::View3D(_view3d) => MoveCommand3D::Scale {
+                                log2_factor: r64(dy),
+                                invariant_pos: None,
+                            }
+                            .decay(),
+                        });
+                        // TODO magic numbers ick
+                        self.time_to_snap_scale = Some(Instant::now() + Duration::from_millis(200));
                     }
                     WindowEvent::MouseInput {
                         button: MouseButton::Left,

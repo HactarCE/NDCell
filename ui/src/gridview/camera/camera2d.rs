@@ -85,13 +85,7 @@ impl Camera<Dim2D> for Camera2D {
         // Finally, divide by the new scale factor to get the number of cells to
         // travel on 0 <= t <= T.
         let cells_delta = zt.pixels_to_cells(pixels_delta);
-
-        if total_pixels_delta.mag() < r64(0.01).into() {
-            // If there's less than 1% of a pixel left, snap into position.
-            ret.center = b.center.clone();
-        } else {
-            ret.pan_cells(cells_delta);
-        }
+        ret.center += cells_delta;
 
         ret
     }

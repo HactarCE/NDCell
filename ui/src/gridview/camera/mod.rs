@@ -140,16 +140,17 @@ pub trait Camera<D: Dim>: Default + Clone + PartialEq {
 fn average_lerped_scale(s1: Scale, s2: Scale) -> Scale {
     let s1 = s1.log2_factor();
     let s2 = s2.log2_factor();
-    // Read the comments in the first half of `lerp()` before proceeding.
+    // Read the comments in the first half of `Camera2D::lerp()` before
+    // proceeding.
     //
-    // We want to find the total number of pixels to travel. The logarithm
-    // of the scale factor is a linear function of time s(t) = s₁ + (s₂ -
-    // s₁) * t for 0 <= t <= 1, where s₁ and s₂ are the logarithms of the
-    // inital and final scales respectively. The number of pixels to travel
-    // is a constant value for that range as well. The number of cells per
-    // pixel is 1/(2^s(t)), so the total number of cells to travel is the
-    // integral of pixels/(2^s(t)) dt from t=0 to t=1. That integral comes
-    // out to the following:
+    // We want to find the total number of pixels to travel. The logarithm of
+    // the scale factor is a linear function of time s(t) = s₁ + (s₂ - s₁) * t
+    // for 0 <= t <= 1, where s₁ and s₂ are the logarithms of the inital and
+    // final scales respectively. The number of pixels to travel is a constant
+    // value for that range as well. The number of cells per pixel is
+    // 1/(2^s(t)), so the total number of cells to travel is the integral of
+    // pixels/(2^s(t)) dt from t=0 to t=1. That integral comes out to the
+    // following:
     //
     //           pixels * ( 2^(-s₁) - 2^(-s₂) )
     // cells = - ------------------------------
@@ -157,8 +158,8 @@ fn average_lerped_scale(s1: Scale, s2: Scale) -> Scale {
     //
     // (Note the negative sign in front.) We know how many cells to travel;
     // that's just b.pos - a.pos. We could solve the above equation for the
-    // number of pixels, but instead let's solve it for the ratio of pixels
-    // to cells:
+    // number of pixels, but instead let's solve it for the ratio of pixels to
+    // cells:
     //
     // pixels     ln(2) * (s₁ - s₂)
     // ------ = - -----------------
@@ -184,8 +185,8 @@ fn average_lerped_scale(s1: Scale, s2: Scale) -> Scale {
         -numerator / denominator
     };
 
-    // Take the base-2 logarithm and then negate to get the base-2 logarithm
-    // of the scale factor.
+    // Take the base-2 logarithm and then negate to get the base-2 logarithm of
+    // the scale factor.
     let avg_log2_scale_factor = r64(-recip_avg_scale_factor.log2());
     Scale::from_log2_factor(avg_log2_scale_factor)
 }

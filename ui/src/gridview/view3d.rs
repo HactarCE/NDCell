@@ -10,7 +10,7 @@ use ndcell_core::prelude::*;
 use super::commands::*;
 use super::render::grid3d::{RenderCache, RenderInProgress};
 use super::worker::*;
-use super::{Camera3D, GridViewCommon, GridViewTrait, Interpolator, RenderResult};
+use super::{Camera, Camera3D, GridViewCommon, GridViewTrait, Interpolator, RenderResult};
 use crate::config::Config;
 use crate::history::HistoryManager;
 
@@ -51,10 +51,51 @@ impl AsMut<GridViewCommon> for GridView3D {
 
 impl GridViewTrait for GridView3D {
     fn do_move_command(&mut self, command: MoveCommand, config: &Config) -> Result<()> {
-        Err(anyhow!("unimplemented"))
+        match command {
+            MoveCommand::Move2D(_, _) => warn!("Ignoring {:?} in GridView3D", command),
+            MoveCommand::Move3D(c, interpolation) => {
+                let mut new_viewport = match interpolation {
+                    Interpolation::Direct => self.camera().clone(),
+                    Interpolation::Decay => self.camera_interpolator.target.clone(),
+                };
+
+                match c {
+                    MoveCommand3D::PanPixels { start, end } => {}
+                    MoveCommand3D::SetPos(_) => {}
+                    MoveCommand3D::SnapPos => {}
+
+                    MoveCommand3D::RotPixels(_) => {}
+                    MoveCommand3D::SetPitch(_) => {}
+                    MoveCommand3D::SetYaw(_) => {}
+
+                    MoveCommand3D::Scale {
+                        log2_factor,
+                        invariant_pos,
+                    } => new_viewport.scale_by_factor(log2_factor.exp2(), invariant_pos),
+                    MoveCommand3D::SetScale {
+                        scale,
+                        invariant_pos,
+                    } => new_viewport.scale_to(scale, invariant_pos),
+                    MoveCommand3D::SnapScale { invariant_pos } => {
+                        if config.ctrl.snap_scale {
+                            new_viewport.snap_scale(invariant_pos)
+                        }
+                    }
+                }
+                self.camera_interpolator.target = new_viewport;
+                match interpolation {
+                    Interpolation::Direct => {
+                        self.camera_interpolator.current = self.camera_interpolator.target.clone();
+                    }
+                    Interpolation::Decay => (),
+                };
+            }
+        }
+        Ok(())
     }
     fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()> {
-        Err(anyhow!("unimplemented"))
+        // Err(anyhow!("unimplemented"))
+        Ok(())
     }
     fn do_clipboard_command(&mut self, command: ClipboardCommand, config: &Config) -> Result<()> {
         Err(anyhow!("unimplemented"))

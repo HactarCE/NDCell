@@ -53,16 +53,17 @@ impl From<MoveCommand> for Command {
 #[derive(Debug, Clone)]
 pub enum MoveCommand2D {
     PanPixels(FixedVec2D),
+    SetPos(FixedVec2D),
+    SnapPos,
+
     Scale {
         log2_factor: R64,
         invariant_pos: Option<FixedVec2D>,
     },
-    SetPos(FixedVec2D),
     SetScale {
         scale: Scale,
         invariant_pos: Option<FixedVec2D>,
     },
-    SnapPos,
     SnapScale {
         invariant_pos: Option<FixedVec2D>,
     },
@@ -77,7 +78,30 @@ impl MoveCommand2D {
 }
 
 #[derive(Debug, Clone)]
-pub enum MoveCommand3D {}
+pub enum MoveCommand3D {
+    PanPixels {
+        start: FVec2D,
+        end: FVec2D,
+    },
+    SetPos(FixedVec3D),
+    SnapPos,
+
+    RotPixels(FixedVec2D),
+    SetPitch(f64),
+    SetYaw(f64),
+
+    Scale {
+        log2_factor: R64,
+        invariant_pos: Option<FixedVec3D>,
+    },
+    SetScale {
+        scale: Scale,
+        invariant_pos: Option<FixedVec3D>,
+    },
+    SnapScale {
+        invariant_pos: Option<FixedVec3D>,
+    },
+}
 impl MoveCommand3D {
     pub fn direct(self) -> MoveCommand {
         MoveCommand::Move3D(self, Interpolation::Direct)

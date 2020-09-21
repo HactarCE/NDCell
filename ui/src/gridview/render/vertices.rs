@@ -1,3 +1,5 @@
+//! OpenGL vertex types.
+
 use glium::implement_vertex;
 
 /// A vertex containing a 2D floating-point position and a 2D texture position.

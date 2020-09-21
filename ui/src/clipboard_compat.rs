@@ -1,6 +1,5 @@
 //! Implementation of imgui::ClipboardBackend using the clipboard crate.
 
-use clipboard;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use imgui;
 use log::warn;

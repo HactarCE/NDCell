@@ -28,23 +28,23 @@ impl MainWindow {
             ui.text_colored(fps_color(fps), format!("Framerate = {} FPS", fps));
             if let GridView::View2D(view2d) = gridview {
                 let total_update_ms: f64 = view2d
-                    .last_sim_times
+                    .last_sim_times()
                     .iter()
                     .map(|duration| duration.as_secs_f64())
                     .sum();
                 if total_update_ms == 0.0 {
                     ui.text("");
                 } else {
-                    let avg_update_ms = total_update_ms / view2d.last_sim_times.len() as f64;
+                    let avg_update_ms = total_update_ms / view2d.last_sim_times().len() as f64;
                     let ups = (1.0 / avg_update_ms) as usize;
                     ui.text_colored(fps_color(ups), format!("Max sim speed = {} UPS", ups));
                 }
-                if view2d.is_drawing {
+                if view2d.is_drawing() {
                     ui.text_colored(BLUE, "DRAWING");
-                } else if view2d.is_waiting || view2d.is_running {
+                } else if view2d.is_waiting() || view2d.is_running() {
                     ui.text_colored(
-                        if view2d.is_running {
-                            if view2d.is_waiting {
+                        if view2d.is_running() {
+                            if view2d.is_waiting() {
                                 RED
                             } else {
                                 GREEN
@@ -64,18 +64,19 @@ impl MainWindow {
             ui.text("");
             match &gridview {
                 GridView::View2D(view2d) => {
-                    let Viewport2D { center, zoom } = &view2d.viewport;
-                    ui.text(format!("Zoom = {}", zoom));
-                    let center_fvec = center.to_fvec();
+                    let cam = view2d.camera();
+                    ui.text(format!("Scale = {}", cam.scale()));
                     for &ax in Dim2D::axes() {
-                        let value = center_fvec[ax];
+                        let value = &cam.pos()[ax];
                         if format!("{:.1}", value).ends_with("0") {
                             ui.text(format!("{} = {:.0}", ax.name(), value));
                         } else {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
                         }
                     }
-                    if let Some(hover_pos) = view2d.nth_render_result(0).hover_pos.as_ref() {
+                    if let Some(AnyDimVec::Vec2D(hover_pos)) =
+                        view2d.nth_render_result(0).hover_pos.as_ref()
+                    {
                         ui.text(format!(
                             "Cursor: X = {}, Y = {}",
                             hover_pos[X].floor().0,
@@ -85,7 +86,10 @@ impl MainWindow {
                         ui.text("");
                     }
                 }
-                _ => unimplemented!(),
+                GridView::View3D(_view3d) => {
+                    ui.text("Oohh, 3D. Very cool!");
+                    ui.text("");
+                }
             };
             const MEBIBYTE: usize = 1024 * 1024;
             ui.text(format!(

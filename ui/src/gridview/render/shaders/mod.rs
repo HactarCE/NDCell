@@ -1,3 +1,5 @@
+//! GLSL shader programs.
+
 use glium::Program;
 use send_wrapper::SendWrapper;
 

@@ -10,10 +10,12 @@ pub struct Config {
 #[derive(Debug)]
 pub struct CtrlConfig {
     pub move_speed: f64,
-    pub zoom_speed: f64,
+    pub scale_speed: f64,
     pub base_speed_1: f64,
     pub base_speed_2: f64,
-    pub interpolation_2d: Interpolation2D,
+    pub snap_pos: bool,
+    pub snap_scale: bool,
+    pub interpolation: Interpolation,
 
     pub immersive: bool,
 }
@@ -21,10 +23,12 @@ impl Default for CtrlConfig {
     fn default() -> Self {
         Self {
             move_speed: 1000.0,
-            zoom_speed: 4.0,
+            scale_speed: 4.0,
             base_speed_1: 1.0,
             base_speed_2: 3.0,
-            interpolation_2d: Interpolation2D::default(),
+            snap_pos: false,
+            snap_scale: false,
+            interpolation: Interpolation::default(),
 
             immersive: false,
         }
@@ -32,12 +36,12 @@ impl Default for CtrlConfig {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum Interpolation2D {
+pub enum Interpolation {
     None,
     Linear { speed: f64 },
     Exponential { decay_constant: f64 },
 }
-impl Default for Interpolation2D {
+impl Default for Interpolation {
     fn default() -> Self {
         Self::Exponential {
             decay_constant: 0.08,
@@ -48,13 +52,13 @@ impl Default for Interpolation2D {
 #[derive(Debug)]
 pub struct GfxConfig {
     pub fps: f64,
-    pub dpi: f64,
+    pub font_size: f32,
 }
 impl Default for GfxConfig {
     fn default() -> Self {
         Self {
             fps: 60.0,
-            dpi: 1.0,
+            font_size: 16.0,
         }
     }
 }

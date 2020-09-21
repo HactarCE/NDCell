@@ -3,14 +3,19 @@
 //! Currently, only solid colors are supported, however I plan to add custom
 //! models and maybe textures in the future.
 
+use anyhow::{Context, Result};
 use cgmath::prelude::*;
 use cgmath::{Deg, Matrix4};
 use glium::index::PrimitiveType;
 use glium::Surface;
 
-mod shaders;
+use ndcell_core::prelude::*;
 
-use super::*;
+use super::consts::*;
+use super::gl_quadtree::CachedGlQuadtree;
+use super::vertices::RgbaVertex;
+use super::{ibos, shaders, textures, vbos};
+use crate::gridview::*;
 use crate::DISPLAY;
 
 /// Number of cubes to render in each render batch.
@@ -40,7 +45,7 @@ impl<'a> RenderInProgress<'a> {
         g: &'a GridView3D,
         _node_cache: &'a NodeCache<Dim3D>,
         target: &'a mut glium::Frame,
-    ) -> Self {
+    ) -> Result<Self> {
         target.clear_depth(f32::INFINITY);
         let (target_w, target_h) = target.get_dimensions();
         let aspect_ratio = target_w as f32 / target_h as f32;
@@ -51,21 +56,24 @@ impl<'a> RenderInProgress<'a> {
             far: FAR_PLANE,
         };
 
-        let camera = &g.camera;
-        // let view_matrix = Matrix4::from_translation(cgmath::Vector3::new(0.0, 0.0, -5.0));
+        let camera = g.camera();
         let view_matrix = cgmath::Decomposed {
-            scale: 1.0,
+            scale: camera
+                .scale()
+                .factor()
+                .to_f32()
+                .context("Converting scale factor to f32")?,
             rot: cgmath::Basis3::from_angle_x(camera.pitch())
                 * cgmath::Basis3::from_angle_y(camera.yaw()),
-            disp: cgmath::Vector3::new(0.0, 0.0, -camera.log2_distance.exp2() as f32),
+            disp: cgmath::Vector3::new(0.0, 0.0, -Camera3D::DISTANCE_TO_PIVOT as f32),
         };
 
-        Self {
+        Ok(Self {
             octree: g.automaton.projected_tree(),
             camera,
             target,
             matrix: Matrix4::from(perspective_matrix) * Matrix4::from(view_matrix),
-        }
+        })
     }
 
     pub fn draw_cells(&mut self) {

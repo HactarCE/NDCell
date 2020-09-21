@@ -1,91 +1,55 @@
-//! The data structures and routines related to rendering 2D square cells.
+//! 2D grid rendering.
 //!
 //! Currently, only solid colors are supported, however I plan to add icons in
 //! the future.
 //!
-//! Not including preliminary computations, there are four main stages to
-//! rendering:
+//! Not including preliminary computations and extra effects like gridlines,
+//! there are four main stages to rendering a grid of cells:
 //!
-//! 1. Create an indexed quadtree of render cells encoded in a 1D OpenGL
-//!    texture. (A "render cell" is a node of the quadtree which is rendered as
-//!    single unit; this is a single cell when zoomed in, but may be larger when
-//!    zoomed out.)
-//! 2. Render the visible portion of that quadtree into an OepnGL texture.
-//!    Render that pixel data into the corresponding section of an OpenGL
-//!    texture, where each pixel represents one cell.
-//! 3. Resize that texture to the next-highest power-of-2 zoom factor using
-//!    nearest-neighbor sampling. For example, if the zoom factor is 2.4 (i.e.
+//! 1. Create an indexed quadtree of render cells encoded in an OpenGL texture.
+//!    (A "render cell" is a node of the quadtree which is rendered as single
+//!    square; this is one cell when zoomed in, but may be larger when zoomed
+//!    out.)
+//! 2. Render the visible portion of that quadtree into an OpenGL texture, where
+//!    each pixel represents one cell.
+//! 3. Resize that texture to the next-highest power-of-2 scale using
+//!    nearest-neighbor sampling. For example, if the scale factor is 2.4 (i.e.
 //!    each cell takes up a square 2.4 pixels wide), resize the texture by a
 //!    factor of 4.
 //! 4. Blit that texture onto the screen at the appropriate position using
 //!    linear sampling, which accounts for the remaining scaling.
 //!
 //! We resize the texture twice to get the best of both nearest-neighbor scaling
-//! and linear scaling: if only nearest-neighbor were used, cells at non-integer
-//! zoom factors would look unbalanced; some cells would be larger and some
-//! would be smaller, and many would be slightly rectangular instead of square.
-//! This happens in LifeViewer. If only linear scaling were used, then cells
-//! would appear blurry when zoomed in. (Anyone who has made pixel art is
-//! probably familiar with this issue.) Performing nearest-neighbor scaling for
-//! the potentially large integer factor and then linear scaling for the
-//! relatively small remaining factor yields a much nicer result that
-//! imperceptibly blends between different zoom levels.
+//! and linear scaling: if we only used nearest-neighbor, cells at non-integer
+//! scale factors would look uneven; some cells would be larger and some would
+//! be smaller, and many would be slightly rectangular instead of square. (You
+//! can see this effect using the default configuration in LifeViewer.) If we
+//! only used linear scaling, then cells would appear blurry when zoomed in.
+//! (This is a common problem when resizing pixel art.) Performing
+//! nearest-neighbor scaling for the potentially large integer factor and then
+//! linear scaling for the relatively small remaining factor yields a much nicer
+//! result that imperceptibly blends between different scale factors.
+//!
+//! TODO: Write custom vertex shader that can do pretty resizing in one step.
 //!
 //! It's worth noting that translation is always rounded to the nearest pixel,
-//! so at any integer zoom factor, cell boundaries are always between pixels.
-//! This is a major factor in contributing to a crisp image, and ensures that
-//! gridlines need no anti-aliasing (which is very good, since anti-aliasing
-//! lines is not at all trivial in OpenGL!). At non-integer zoom factors,
-//! however, this is not guaranteed.
+//! so at any integer scale factor, cell boundaries are always between pixels. At
+//! non-integer scale factors, however, this is not guaranteed.
 
+use anyhow::{Context, Result};
+use cgmath::Matrix4;
 use glium::index::PrimitiveType;
-use glium::{uniform, Surface as _};
+use glium::{uniform, Surface};
 use itertools::Itertools;
 
 use ndcell_core::axis::{X, Y};
+use ndcell_core::prelude::*;
 
-mod gl_quadtree;
-mod ibos;
-mod shaders;
-mod textures;
-mod vbos;
-mod vertices;
-
-use super::*;
-use gl_quadtree::CachedGlQuadtree;
-use vertices::*;
-
-/// Exponential base to use when fading out gridlines. 16 = 16 small gridlines
-/// between each large gridline.
-pub const GRIDLINE_SPACING_BASE: usize = 16;
-/// Minimum number of pixels between gridlines.
-pub const MIN_GRIDLINE_SPACING: usize = 4;
-/// Minimum number of pixels between gridlines with full opacity.
-pub const MAX_GRIDLINE_SPACING: usize = 256;
-// Maximum opacity of gridlines when zoomed out beyond one cell per pixel.
-pub const ZOOMED_OUT_MAX_GRID_ALPHA: f64 = 0.75;
-
-/// Color of the grid. This will be configurable in the future.
-const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
-/// Color given to the highlighted cell. This will be configurable in the
-/// future.
-const GRID_HIGHLIGHT_COLOR: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
-/// Color for dead cells. This will be configurable in the future.
-const DEAD_COLOR: (u8, u8, u8) = (0, 0, 0);
-/// Color for live cells. This will be configurable in the future.
-const LIVE_COLOR: (u8, u8, u8) = (255, 255, 255);
-
-/// Number of cell overlay rectangles in each render batch.
-const CELL_OVERLAY_BATCH_SIZE: usize = 256;
-
-/// Depth at which to render gridlines.
-const GRIDLINE_DEPTH: f32 = 0.1;
-/// Depth at which to render highlight/crosshairs.
-const CURSOR_DEPTH: f32 = 0.2;
-
-/// A small offset used to force correct Z order or align things at the
-/// sub-pixel scale.
-const TINY_OFFSET: f32 = 1.0 / 16.0;
+use super::consts::*;
+use super::gl_quadtree::CachedGlQuadtree;
+use super::vertices::RgbaVertex;
+use super::{ibos, shaders, textures, vbos};
+use crate::gridview::*;
 
 #[derive(Default)]
 pub struct RenderCache {
@@ -93,14 +57,14 @@ pub struct RenderCache {
 }
 
 pub struct RenderInProgress<'a> {
-    /// Viewport to use when rendering.
-    viewport: Viewport2D,
+    /// Camera to render the grid from.
+    camera: Camera2D,
     /// Target to render to.
     target: &'a mut glium::Frame,
     /// Node layer of a render cell.
     render_cell_layer: Layer,
-    /// Zoom level to draw render cells at.
-    render_cell_zoom: Zoom2D,
+    /// Scale to draw render cells at.
+    render_cell_scale: Scale,
     /// Quadtree encompassing all visible cells.
     visible_quadtree: NdTreeSlice2D<'a>,
     /// The render cell position within `visible_quadtree` that is centered on the
@@ -111,150 +75,157 @@ pub struct RenderInProgress<'a> {
     /// View matrix converting from `visible_quadtree` space (1 unit = 1 render
     /// cell; (0, 0) = bottom left) to screen space ((-1, -1) = bottom left; (1,
     /// 1) = top right).
-    view_matrix: [[f32; 4]; 4],
-    /// Cached render data unique to the given GridView.
+    view_matrix: Matrix4<f32>,
+    /// Cached render data maintained by the `GridView2D`.
     render_cache: &'a mut RenderCache,
 }
 impl<'a> RenderInProgress<'a> {
-    /// Performs preliminary computations and returns a RenderInProgress.
+    /// Creates a `RenderInProgress` for a gridview.
     pub fn new(
         g: &GridView2D,
         node_cache: &'a NodeCache<Dim2D>,
         render_cache: &'a mut RenderCache,
         target: &'a mut glium::Frame,
-    ) -> Self {
+    ) -> Result<Self> {
         target.clear_depth(0.0);
 
         let (target_w, target_h) = target.get_dimensions();
-        assert_ne!(target_w, 0, "Target has zero width!");
-        assert_ne!(target_h, 0, "Target has zero height!");
+        if target_w < 5 || target_h < 5 {
+            return Err(anyhow!(
+                "2D grid render target too small: ({}, {})",
+                target_w,
+                target_h,
+            ));
+        }
         let target_pixels_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
-        let viewport = g.interpolating_viewport.clone();
+        let camera = g.camera().clone();
 
-        // Compute the width of pixels for each individual cell.
-        let cell_pixels: f64 = viewport.zoom.pixels_per_cell();
-
-        // Compute the lowest layer that must be visited, which is the layer of
-        // a "render cell," a node that is rendered as one unit (one pixel in
-        // step #1).
-        let render_cell_layer: Layer =
-            Layer((-viewport.zoom.round().power()).to_u32().unwrap_or(0));
+        // Determine the lowest layer of the quadtree that we must visited,
+        // which is the layer of a "render cell," a quadtree node that is
+        // rendered as one unit (one pixel in step #1).
+        let render_cell_layer: Layer = Layer(
+            (-camera.scale().round().log2_factor())
+                .to_u32()
+                .unwrap_or(0),
+        );
         // Compute the width of cells represented by each render cell.
         let render_cell_len: BigInt = BigInt::from(1) << render_cell_layer.to_u32();
-        // The render cell layer is also the power of two we should subtract from
-        // the zoom level.
-        let render_cell_zoom =
-            Zoom2D::from_power(viewport.zoom.power() + render_cell_layer.to_u32() as f64);
-        // Now the zoom power should be greater than -1.0 (since -1.0 or
+        // Compute the scaling to use for render cells by the scale factor by
+        // the size of a render cell -- except it's addition, because we're
+        // actually using logarithms.
+        let render_cell_scale = Scale::from_log2_factor(
+            camera.scale().log2_factor() + render_cell_layer.to_u32() as f64,
+        );
+        // Now the scale factor should be greater than 1/2 (since 1/2 or
         // anything lower should be handled by having a higher render cell
-        // layer).
-        assert!(render_cell_zoom.power() > -1.0);
+        // layer). log₂(1/2) = -1.
+        assert!(render_cell_scale.log2_factor() > -1.0);
 
-        // Get an NdCachedNode that covers the entire visible area, a rectangle
-        // of visible cells relative to that node, and a floating-point render
-        // cell position relative to that node that will be in the center of the
-        // screen.
-        let visible_quadtree: NdTreeSlice<'a, Dim2D>;
+        // Get a smaller slice of the grid that covers the entire visible area,
+        // a rectangle of visible render cells relative to that node, and a
+        // floating-point render cell position relative to that node that will
+        // be in the center of the screen.
+        let visible_quadtree: NdTreeSlice2D<'a>;
         let visible_rect: IRect2D;
         let mut pos: FVec2D;
         {
-            // Before computing the rectangles relative to the slice, get the
-            // rectangles in global space.
+            // Find the global rectangle of visible cells.
             let global_visible_rect: BigRect2D;
             {
                 // Compute the width and height of individual cells that fit on
-                // the screen. Because this number is stored in an f64, which
-                // cannot represent values above around 2^1022, zoom levels past
-                // 2^1000 can overflow this. This is handled by Zoom2D::clamp().
-                let target_cells_size: FVec2D = target_pixels_size / r64(cell_pixels);
+                // the screen.
+                let target_cells_size: FixedVec2D = camera
+                    .scale()
+                    .pixels_to_cells(target_pixels_size.to_fixedvec());
                 // Compute the cell vector pointing from the origin to the top
                 // right corner of the screen; i.e. the "half diagonal."
-                let half_diag: FVec2D = target_cells_size / 2.0;
+                let half_diag: FixedVec2D = target_cells_size / 2.0;
 
                 global_visible_rect =
-                    BigRect2D::centered(viewport.center.floor().0, &half_diag.ceil().to_bigvec());
+                    BigRect2D::centered(camera.pos().floor().0, &half_diag.ceil().0);
             }
 
-            // Now fetch the NdTreeSlice containing all of the visible cells.
-            visible_quadtree = g.automaton.projected_tree().slice_containing(
-                node_cache,
-                // Convert chunk coordinates into normal cell coordinates.
-                &global_visible_rect,
-            );
+            // Now fetch the `NdTreeSlice` containing all of the visible cells.
+            visible_quadtree = g
+                .automaton
+                .projected_tree()
+                .slice_containing(node_cache, &global_visible_rect);
 
-            // Subtract the slice offset from global_visible_rect and
-            // global_chunk_visible_rect so that they are relative to the slice.
+            // Subtract the slice offset from `global_visible_rect` and
+            // `global_visible_rect` to get the rectangle of visible cells
+            // within the slice.
             let mut tmp_visible_rect = global_visible_rect - &visible_quadtree.offset;
-            // Divide by render_cell_len to get render cells.
+            // Divide by `render_cell_len` to get render cells.
             tmp_visible_rect = tmp_visible_rect.div_outward(&render_cell_len);
-            // Now it is safe to convert from BigInt to isize.
+            // Now it is safe to convert from `BigInt` to `isize`, because the
+            // number of visible render cells must be reasonable.
             visible_rect = tmp_visible_rect.to_irect();
 
-            // Subtract the slice offset from the viewport position and divide
-            // by the size of a render cell to get the render cell offset from
-            // the lower corner of the slice.
-            pos = ((&viewport.center - visible_quadtree.offset.to_fixedvec())
+            // Subtract the slice offset from the camera position and divide by
+            // the size of a render cell to get the render cell offset from the
+            // lower corner of the slice.
+            pos = ((camera.pos() - visible_quadtree.offset.to_fixedvec())
                 >> render_cell_layer.to_u32())
             .to_fvec();
-            // TODO: Round to the nearest pixel.
-            // Offset by half a pixel if the viewport dimensions are odd, so
-            // that cells boundaries always line up with pixel boundaries.
-            pos += (target_pixels_size % 2.0) * r64(render_cell_zoom.cells_per_pixel() / 2.0);
+            // TODO: uncomment this
+            // // Round to the nearest pixel.
+            // pos = (pos * render_cell_scale.pixels_per_cell()).round()
+            //     * render_cell_scale.cells_per_pixel();
+            // Offset by half a pixel if the target dimensions are odd, so that
+            // cells boundaries always line up with pixel boundaries.
+            pos += (target_pixels_size % 2.0) * render_cell_scale.cells_per_pixel() / 2.0;
         }
 
-        // Compute the render cell view matrix, used for rendering gridlines.
-        let view_matrix: [[f32; 4]; 4];
+        // Compute the render cell view matrix, used for rendering gridlines and
+        // determining cursor position.
+        let view_matrix: Matrix4<f32>;
         {
-            // Determine the scale factor. (Multiply by 2 at the end because the
-            // OpenGL screen space ranges from -1 to +1.)
-            let pixels_per_cell = r64(render_cell_zoom.pixels_per_cell());
-            let scale = FVec2D::repeat(pixels_per_cell) / target_pixels_size * r64(2.0);
+            // Compute the scale factor for the view matrix. Multiply by 2
+            // because the OpenGL screen space ranges from -1 to +1.
+            let pixels_per_render_cell = render_cell_scale.pixels_per_cell();
+            let scale = FVec2D::repeat(pixels_per_render_cell) * r64(2.0) / target_pixels_size;
 
-            // Determine the offset.
+            // Determine the translation offset for the view matrix.
             let mut offset = pos;
-            // Offset by a *tiny* amount so that gridlines round towards the
-            // cell to their top-left instead of rounding whichever way OpenGL
-            // picks.
-            offset -= r64(TINY_OFFSET as f64 * render_cell_zoom.cells_per_pixel() / 2.0);
-            // Convert offset from render-cell-space to screen-space.
-            offset *= scale;
+            // Offset by a tiny fraction of a pixel so that gridlines round to
+            // the top-right instead of rounding whichever way OpenGL picks.
+            offset -= r64(TINY_OFFSET as f64) * render_cell_scale.cells_per_pixel();
 
-            let x_scale = scale[X].to_f32().unwrap();
-            let y_scale = scale[Y].to_f32().unwrap();
-            let x_offset = offset[X].to_f32().unwrap();
-            let y_offset = offset[Y].to_f32().unwrap();
-            view_matrix = [
-                [x_scale, 0.0, 0.0, 0.0],
-                [0.0, y_scale, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [-x_offset, -y_offset, 0.0, 1.0],
-            ];
+            // The offset is in units of render cells, not screen space units,
+            // so we apply the translation before scaling, contrary to the usual
+            // scale-rotate-translate order in computer graphics.
+            let scale_x = scale[X].to_f32().context("scale[X].to_f32()")?;
+            let scale_y = scale[Y].to_f32().context("scale[Y].to_f32()")?;
+            let offset_x = offset[X].to_f32().context("offset[X].to_f32()")?;
+            let offset_y = offset[Y].to_f32().context("offset[Y].to_f32()")?;
+            view_matrix = Matrix4::from_nonuniform_scale(scale_x, scale_y, 1.0)
+                * Matrix4::from_translation(-cgmath::Vector3::new(offset_x, offset_y, 0.0));
         }
 
-        Self {
-            viewport,
+        Ok(Self {
+            camera,
             target,
             render_cell_layer,
-            render_cell_zoom,
+            render_cell_scale,
             visible_quadtree,
             pos,
             visible_rect,
             view_matrix,
             render_cache,
-        }
+        })
     }
 
     /// Draw the cells that appear in the viewport.
-    pub fn draw_cells(&mut self) {
+    pub fn draw_cells(&mut self) -> Result<()> {
         let textures: &mut textures::TextureCache = &mut textures::CACHE.borrow_mut();
-        // Steps #1: encode the quadtree as a 1D texture.
+        // Steps #1: encode the quadtree as a texture.
         let gl_quadtree = self.render_cache.gl_quadtree.from_node(
             self.visible_quadtree.root.into(),
             self.render_cell_layer,
             Self::node_pixel_color,
-        );
+        )?;
         // Step #2: draw at 1 pixel per render cell, including only the cells
-        // inside self.visible_rect.
+        // inside `self.visible_rect`.
         let unscaled_cells_w = self.visible_rect.len(X) as u32;
         let unscaled_cells_h = self.visible_rect.len(Y) as u32;
         let (_tex, mut unscaled_cells_fbo, unscaled_cells_texture_fract) = textures
@@ -275,16 +246,16 @@ impl<'a> RenderInProgress<'a> {
                 },
                 &glium::DrawParameters::default(),
             )
-            .expect("Failed to draw cells");
+            .context("unscaled_cells_fbo.draw()")?;
 
         // Step #3: resize that texture by an integer factor.
         // Compute the width of pixels for each render cell.
-        let pixels_per_render_cell = self.render_cell_zoom.pixels_per_cell();
-        let integer_scale_factor = pixels_per_render_cell.round();
+        let pixels_per_render_cell = self.render_cell_scale.pixels_per_cell();
+        let integer_scale_factor = pixels_per_render_cell.round().to_u32().unwrap();
         let visible_cells_w = self.visible_rect.len(X) as u32;
         let visible_cells_h = self.visible_rect.len(Y) as u32;
-        let scaled_cells_w = visible_cells_w * integer_scale_factor as u32;
-        let scaled_cells_h = visible_cells_h * integer_scale_factor as u32;
+        let scaled_cells_w = visible_cells_w * integer_scale_factor;
+        let scaled_cells_h = visible_cells_h * integer_scale_factor;
         let (scaled_cells_texture, scaled_cells_fbo, scaled_cells_texture_fract) = textures
             .scaled_cells
             .at_min_size(scaled_cells_w, scaled_cells_h);
@@ -308,7 +279,7 @@ impl<'a> RenderInProgress<'a> {
         // Step #4: render that onto the screen.
         let (target_w, target_h) = self.target.get_dimensions();
         let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
-        let render_cells_size = target_size / r64(self.render_cell_zoom.pixels_per_cell());
+        let render_cells_size = target_size / self.render_cell_scale.pixels_per_cell();
         let render_cells_center = self.pos - self.visible_rect.min().to_fvec();
         let mut render_cells_frect =
             FRect2D::centered(render_cells_center, render_cells_size / 2.0);
@@ -326,7 +297,7 @@ impl<'a> RenderInProgress<'a> {
                 },
                 &glium::DrawParameters::default(),
             )
-            .expect("Failed to draw cells");
+            .context("Drawing cells to target")?;
 
         // // Draw a 1:1 "minimap" in the corner
         // self.target.blit_from_simple_framebuffer(
@@ -335,45 +306,14 @@ impl<'a> RenderInProgress<'a> {
         //     &entire_blit_target(&unscaled_cells_fbo),
         //     glium::uniforms::MagnifySamplerFilter::Linear,
         // );
-    }
-    fn node_pixel_color(node: NodeRef<'_, Dim2D>) -> [u8; 4] {
-        let (r, g, b) = if node.layer() == Layer(0) {
-            let cell_state = node.as_leaf().unwrap().cells()[0];
-            match cell_state {
-                0 => DEAD_COLOR,
-                1 => LIVE_COLOR,
-                i => colorous::TURBO
-                    .eval_rational(257 - i as usize, 256)
-                    .as_tuple(),
-            }
-        } else {
-            let ratio = if node.is_empty() {
-                0.0
-            } else {
-                // Multiply then divide by 255 to keep some precision.
-                let population_ratio = (node.population() * 255_usize / node.big_num_cells())
-                    .to_f64()
-                    .unwrap()
-                    / 255.0;
-                // Bias so that 50% is the minimum brightness if there is any population.
-                (population_ratio / 2.0) + 0.5
-            };
-            let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
-                + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
-                .powf(0.5);
-            let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
-                + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
-                .powf(0.5);
-            let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
-                + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
-                .powf(0.5);
-            (r as u8, g as u8, b as u8)
-        };
-        [r, g, b, 255]
+
+        Ok(())
     }
 
     /// Returns the coordinates of the cell at the given pixel.
     pub fn pixel_pos_to_cell_pos(&self, cursor_position: IVec2D) -> FixedVec2D {
+        // TODO: replace with view matrix, duh
+
         let mut x = cursor_position[X];
         let mut y = cursor_position[Y];
         // Center the coordinates.
@@ -387,7 +327,7 @@ impl<'a> RenderInProgress<'a> {
         let pixels_from_center = NdVec([r64(x as f64), r64(y as f64)]);
         // Convert to render cell space (relative to slice).
         let render_cells_from_center =
-            pixels_from_center / r64(self.render_cell_zoom.pixels_per_cell());
+            pixels_from_center / self.render_cell_scale.pixels_per_cell();
         // Convert to local cell space (relative to slice).
         let local_pos = (self.pos + render_cells_from_center).to_fixedvec()
             << self.render_cell_layer.to_usize();
@@ -395,30 +335,28 @@ impl<'a> RenderInProgress<'a> {
         local_pos + self.visible_quadtree.offset.to_fixedvec()
     }
 
-    /// Draws gridlines at varying opacity and spacing depending on zoom level.
+    /// Draws gridlines at varying opacity and spacing depending on scaling.
     ///
     /// TOOD: support arbitrary exponential base and factor (a*b^n for any a, b)
-    pub fn draw_gridlines(&mut self, width: f64) {
+    pub fn draw_gridlines(&mut self, width: f64) -> Result<()> {
         // Compute the minimum pixel spacing between maximum-opacity gridlines.
-        let pixel_spacing = MAX_GRIDLINE_SPACING as f64;
+        let log2_max_pixel_spacing = r64(MAX_GRIDLINE_SPACING).log2();
         // Compute the cell spacing between the gridlines that will be drawn
         // with the maximum opacity.
-        let cell_spacing = pixel_spacing / self.viewport.zoom.factor();
+        let log2_cell_spacing = log2_max_pixel_spacing - self.camera.scale().log2_factor();
         // Round up to the nearest power of GRIDLINE_SPACING_BASE.
-        let spacing_base_log2 = (GRIDLINE_SPACING_BASE as f64).log2();
-        let cell_spacing =
-            2.0_f64.powf((cell_spacing.log2() / spacing_base_log2).ceil() * spacing_base_log2);
+        let log2_spacing_base = (GRIDLINE_SPACING_BASE as f64).log2();
+        let log2_cell_spacing = (log2_cell_spacing / log2_spacing_base).ceil() * log2_spacing_base;
         // Convert from cells to render cells.
-        let render_cell_spacing = cell_spacing / self.render_cell_layer.big_len().to_f64().unwrap();
-        let mut spacing = render_cell_spacing as usize;
+        let log2_render_cell_spacing = log2_cell_spacing - self.render_cell_layer.to_u32() as f64;
+        let mut spacing = log2_render_cell_spacing.exp2().raw() as usize;
         // Convert from render cells to pixels.
-        let mut pixel_spacing =
-            render_cell_spacing as f64 * self.render_cell_zoom.pixels_per_cell();
+        let mut pixel_spacing = spacing as f64 * self.render_cell_scale.pixels_per_cell().raw();
 
-        while spacing > 0 && pixel_spacing > MIN_GRIDLINE_SPACING as f64 {
+        while spacing > 0 && pixel_spacing > MIN_GRIDLINE_SPACING {
             // Compute grid color, including alpha.
             let mut color = GRID_COLOR;
-            let alpha = gridline_alpha(pixel_spacing, self.viewport.zoom) as f32;
+            let alpha = gridline_alpha(pixel_spacing, self.camera.scale()) as f32;
             color[3] *= alpha;
             // Draw gridlines with the given spacing.
             let offset = (-self.visible_rect.min()).mod_floor(&(spacing as isize));
@@ -436,17 +374,24 @@ impl<'a> RenderInProgress<'a> {
                     width,
                     color,
                 ),
-            );
+            )
+            .context("Drawing gridlines")?;
             // Decrease the spacing.
             spacing /= GRIDLINE_SPACING_BASE;
             pixel_spacing /= GRIDLINE_SPACING_BASE as f64;
         }
+        Ok(())
     }
 
     /// Draws a highlight around the given cell.
-    pub fn draw_blue_cursor_highlight(&mut self, cell_position: &BigVec2D, width: f64) {
+    pub fn draw_blue_cursor_highlight(
+        &mut self,
+        cell_position: &BigVec2D,
+        width: f64,
+    ) -> Result<()> {
         if !self.visible_quadtree.rect().contains(cell_position) {
-            return;
+            warn!("Cursor position is outside visible rectangle");
+            return Ok(());
         }
         let cell_pos = cell_position - &self.visible_quadtree.offset;
         let render_cell_pos = cell_pos.div_floor(&self.render_cell_layer.big_len());
@@ -460,7 +405,9 @@ impl<'a> RenderInProgress<'a> {
                 fill: true,
                 crosshairs: true,
             },
-        ));
+        ))
+        .context("Drawing blue cursor highlight")?;
+        Ok(())
     }
 
     /// Generates a cell overlay to outline the given cell rectangle, with
@@ -489,7 +436,7 @@ impl<'a> RenderInProgress<'a> {
         // If there are more than 1.5 pixels per render cell, the upper boundary
         // should be *between* cells (+1). If there are fewer, the upper
         // boundary should be *on* the cell (+0).
-        let pixels_per_cell = self.render_cell_zoom.pixels_per_cell();
+        let pixels_per_cell = self.render_cell_scale.pixels_per_cell();
         let a = rect.min();
         let b = rect.max() + (pixels_per_cell > 1.5) as isize;
         let NdVec([ax, ay]) = a;
@@ -675,7 +622,7 @@ impl<'a> RenderInProgress<'a> {
     }
 
     /// Draws a cell overlay.
-    fn draw_cell_overlay_rects(&mut self, rects: &[CellOverlayRect]) {
+    fn draw_cell_overlay_rects(&mut self, rects: &[CellOverlayRect]) -> Result<()> {
         // Draw the gridlines in batches, because the VBO might not be able to
         // hold all the points at once.
         for rect_batch in rects
@@ -688,7 +635,7 @@ impl<'a> RenderInProgress<'a> {
             // Generate vertices.
             let verts = rect_batch
                 .iter()
-                .flat_map(|&rect| rect.verts(self.render_cell_zoom).to_vec())
+                .flat_map(|&rect| rect.verts(self.render_cell_scale).to_vec())
                 .collect_vec();
             // Put the data in a slice of the VBO.
             let gridlines_vbo = vbos::gridlines();
@@ -700,7 +647,7 @@ impl<'a> RenderInProgress<'a> {
                     vbo_slice,
                     &ibos::rect_indices(count),
                     &shaders::POINTS,
-                    &uniform! { matrix: self.view_matrix },
+                    &uniform! { matrix: self.raw_view_matrix() },
                     &glium::DrawParameters {
                         blend: glium::Blend::alpha_blending(),
                         depth: glium::Depth {
@@ -711,18 +658,67 @@ impl<'a> RenderInProgress<'a> {
                         ..Default::default()
                     },
                 )
-                .expect("Failed to draw cell-aligned rectangles");
+                .context("Drawing cell-aligned rectangles")?;
         }
+        Ok(())
+    }
+
+    /// Returns the color for a pixel representing the given node.
+    fn node_pixel_color(node: NodeRef<'_, Dim2D>) -> [u8; 4] {
+        let (r, g, b) = if node.layer() == Layer(0) {
+            let cell_state = node.as_leaf().unwrap().cells()[0];
+            match cell_state {
+                0 => DEAD_COLOR,
+                1 => LIVE_COLOR,
+                i => colorous::TURBO
+                    .eval_rational(257 - i as usize, 256)
+                    .as_tuple(),
+            }
+        } else {
+            let ratio = if node.is_empty() {
+                0.0
+            } else {
+                // Multiply then divide by 255 to keep some precision.
+                let population_ratio = (node.population() * 255_usize / node.big_num_cells())
+                    .to_f64()
+                    .unwrap()
+                    / 255.0;
+                // Bias so that 50% is the minimum brightness if there is any population.
+                (population_ratio / 2.0) + 0.5
+            };
+            let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
+                + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
+                .powf(0.5);
+            let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
+                + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
+                .powf(0.5);
+            let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
+                + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
+                .powf(0.5);
+            (r as u8, g as u8, b as u8)
+        };
+        [r, g, b, 255]
+    }
+
+    /// Returns the raw view matrix for passing to GLSL.
+    fn raw_view_matrix(&self) -> [[f32; 4]; 4] {
+        self.view_matrix.into()
     }
 }
 
-fn gridline_alpha(pixel_spacing: f64, zoom: Zoom2D) -> f64 {
+fn gridline_alpha(pixel_spacing: f64, scale: Scale) -> f64 {
     // Fade maximum grid alpha as zooming out beyond 1 cell per pixel.
-    let max_alpha = clamped_interpolate(zoom.power(), 0.0, 1.0, ZOOMED_OUT_MAX_GRID_ALPHA, 1.0);
+    let max_alpha = clamped_interpolate(
+        scale.log2_factor().raw(),
+        0.0,
+        1.0,
+        ZOOMED_OUT_MAX_GRID_ALPHA,
+        1.0,
+    );
     let alpha = clamped_interpolate(
         pixel_spacing.log2(),
-        (MIN_GRIDLINE_SPACING as f64).log2(),
-        (MAX_GRIDLINE_SPACING as f64).log2(),
+        (MIN_GRIDLINE_SPACING).log2(),
+        (MAX_GRIDLINE_SPACING).log2(),
         0.0,
         1.0,
     );
@@ -775,7 +771,7 @@ impl CellOverlayRect {
             line_params: None,
         }
     }
-    fn verts(self, render_cell_zoom: Zoom2D) -> [RgbaVertex; 4] {
+    fn verts(self, render_cell_scale: Scale) -> [RgbaVertex; 4] {
         let mut a = self.start.to_fvec();
         let mut b = self.end.to_fvec();
         let mut colors = [
@@ -792,8 +788,8 @@ impl CellOverlayRect {
         {
             let width = width.round().max(1.0);
             // At this point, the rectangle should have zero width.
-            let cells_per_pixel = render_cell_zoom.cells_per_pixel();
-            let offset = FVec::repeat(r64(cells_per_pixel * width / 2.0)) * (b - a).signum();
+            let cells_per_pixel = render_cell_scale.cells_per_pixel();
+            let offset = FVec::repeat(cells_per_pixel * width / 2.0) * (b - a).signum();
             // Expand it in all directions, so now it has the correct width and
             // includes its endpoints.
             a -= offset;

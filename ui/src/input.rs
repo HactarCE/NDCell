@@ -1,15 +1,17 @@
 use glium::glutin::dpi::{PhysicalPosition, PhysicalSize};
 use glium::glutin::event::*;
+use imgui_winit_support::WinitPlatform;
 use std::collections::HashSet;
+use std::convert::TryInto;
 use std::ops::{Deref, DerefMut, Index};
 use std::time::{Duration, Instant};
 
 use ndcell_core::axis::{X, Y};
-use ndcell_core::ndvec::{FVec2D, FixedVec2D, IVec2D, NdVec};
-use ndcell_core::num::r64;
+use ndcell_core::prelude::*;
 
 use crate::config::Config;
-use crate::gridview::{control::*, GridView, GridViewTrait, RenderGridView, Zoom2D};
+use crate::gridview::commands::*;
+use crate::gridview::{GridView, GridViewTrait, Scale};
 
 const FALSE_REF: &bool = &false;
 const TRUE_REF: &bool = &true;
@@ -52,8 +54,8 @@ pub struct State {
     cursor_pos: Option<IVec2D>,
     /// The cursor position on the last frame.
     last_cursor_pos: Option<IVec2D>,
-    /// The next time that the zoom should snap to the nearest power of 2.
-    time_to_snap_zoom: Option<Instant>,
+    /// The next time that the scale should snap to the nearest power of 2.
+    time_to_snap_scale: Option<Instant>,
     /// The cell state being used in the current drawing operation.
     draw_cell_state: Option<u8>,
 
@@ -71,6 +73,7 @@ impl State {
         config: &'a mut Config,
         gridview: &'a GridView,
         imgui_io: &imgui::Io,
+        platform: &WinitPlatform,
     ) -> FrameInProgress<'a> {
         FrameInProgress {
             state: self,
@@ -78,6 +81,7 @@ impl State {
             gridview,
             has_keyboard: !imgui_io.want_capture_keyboard,
             has_mouse: !imgui_io.want_capture_mouse,
+            dpi: platform.hidpi_factor(),
         }
     }
 }
@@ -92,6 +96,8 @@ pub struct FrameInProgress<'a> {
     has_keyboard: bool,
     /// Whether to handle mouse input (false if it is captured by imgui).
     has_mouse: bool,
+    /// HiDPI factor.
+    dpi: f64,
 }
 impl<'a> Deref for FrameInProgress<'a> {
     type Target = State;
@@ -106,11 +112,11 @@ impl<'a> DerefMut for FrameInProgress<'a> {
 }
 impl<'a> FrameInProgress<'a> {
     fn start_drawing(&mut self, draw_cell_state: u8) {
-        self.gridview.enqueue(Command::StartDraw);
+        self.gridview.enqueue(DrawCommand::Start);
         self.draw_cell_state = Some(draw_cell_state);
     }
     fn stop_drawing(&mut self) {
-        self.gridview.enqueue(Command::EndDraw);
+        self.gridview.enqueue(DrawCommand::End);
         self.draw_cell_state = None;
     }
 
@@ -147,13 +153,12 @@ impl<'a> FrameInProgress<'a> {
                                 GridView::View2D(view2d) => {
                                     // Pan both viewports so that the viewport stays matched with the cursor.
                                     view2d.enqueue(
-                                        MoveCommand2D::PanPixels(delta.to_fvec()).direct(),
+                                        MoveCommand2D::PanPixels(delta.to_fixedvec()).direct(),
                                     );
                                 }
                                 _ => (),
                             }
                             // TODO: implement velocity when letting go
-                            // TODO: zoom in/out relative to cursor position when holding RMB
                         }
                         self.cursor_pos = Some(new_pos);
                     }
@@ -162,24 +167,26 @@ impl<'a> FrameInProgress<'a> {
                             MouseScrollDelta::LineDelta(x, y) => (*x as f64, *y as f64),
                             MouseScrollDelta::PixelDelta(logical_position) => {
                                 let PhysicalPosition { x, y } =
-                                    logical_position.to_physical(self.config.gfx.dpi);
+                                    logical_position.to_physical(self.dpi);
                                 (x, y)
                             }
                         };
                         match self.gridview {
                             GridView::View2D(view2d) => {
                                 view2d.enqueue(
-                                    MoveCommand2D::Zoom {
-                                        power: dy,
+                                    MoveCommand2D::Scale {
+                                        log2_factor: r64(dy),
                                         invariant_pos: view2d
                                             .nth_render_result(0)
                                             .hover_pos
+                                            .clone()
+                                            .and_then(|v| v.try_into().ok())
                                             .clone(),
                                     }
                                     .decay(),
                                 );
                                 // TODO magic numbers ick
-                                self.time_to_snap_zoom =
+                                self.time_to_snap_scale =
                                     Some(Instant::now() + Duration::from_millis(200));
                             }
                             _ => (),
@@ -193,7 +200,8 @@ impl<'a> FrameInProgress<'a> {
                         ElementState::Pressed => {
                             match self.gridview {
                                 GridView::View2D(view2d) => {
-                                    if let Some(pos) = view2d.nth_render_result(0).draw_pos.as_ref()
+                                    if let Some(AnyDimVec::Vec2D(pos)) =
+                                        view2d.nth_render_result(0).draw_pos.as_ref()
                                     {
                                         // Start drawing.
                                         let old_cell = view2d.get_cell(
@@ -223,8 +231,10 @@ impl<'a> FrameInProgress<'a> {
                             if let Some(old_size) = self.state.window_size {
                                 let dw = r64((size.width as f64 - old_size.width as f64) / 2.0);
                                 let dh = r64((size.height as f64 - old_size.height as f64) / 2.0);
-                                self.gridview
-                                    .enqueue(MoveCommand2D::PanPixels(NdVec([dw, -dh])).direct());
+                                let delta: FVec2D = NdVec([dw, -dh]);
+                                self.gridview.enqueue(
+                                    MoveCommand2D::PanPixels(delta.to_fixedvec()).direct(),
+                                );
                             }
                             self.state.window_size = Some(*size);
                         }
@@ -234,8 +244,10 @@ impl<'a> FrameInProgress<'a> {
                             if let Some(old_position) = self.state.window_position {
                                 let dx = r64((position.x - old_position.x) as f64);
                                 let dy = r64((position.y - old_position.y) as f64);
-                                self.gridview
-                                    .enqueue(MoveCommand2D::PanPixels(NdVec([dx, -dy])).direct());
+                                let delta: FVec2D = NdVec([dx, -dy]);
+                                self.gridview.enqueue(
+                                    MoveCommand2D::PanPixels(delta.to_fixedvec()).direct(),
+                                );
                             }
                             self.state.window_position = Some(*position);
                         }
@@ -305,8 +317,8 @@ impl<'a> FrameInProgress<'a> {
                             self.gridview
                                 .enqueue(MoveCommand2D::SetPos(FixedVec2D::origin()).decay());
                             self.gridview.enqueue(
-                                MoveCommand2D::SetZoom {
-                                    zoom: Zoom2D::default(),
+                                MoveCommand2D::SetScale {
+                                    scale: Scale::default(),
                                     invariant_pos: None,
                                 }
                                 .decay(),
@@ -337,8 +349,12 @@ impl<'a> FrameInProgress<'a> {
         if let Some(draw_state) = self.draw_cell_state {
             match self.gridview {
                 GridView::View2D(view2d) => {
-                    if let Some(pos1) = view2d.nth_render_result(0).draw_pos.as_ref() {
-                        if let Some(pos2) = view2d.nth_render_result(1).draw_pos.as_ref() {
+                    if let Some(AnyDimVec::Vec2D(pos1)) =
+                        view2d.nth_render_result(0).draw_pos.as_ref()
+                    {
+                        if let Some(AnyDimVec::Vec2D(pos2)) =
+                            view2d.nth_render_result(1).draw_pos.as_ref()
+                        {
                             view2d.enqueue(DrawCommand2D::Line(
                                 pos1.floor().0,
                                 pos2.floor().0,
@@ -356,7 +372,7 @@ impl<'a> FrameInProgress<'a> {
         }
 
         let mut moved = false;
-        let mut zoomed = false;
+        let mut scaled = false;
 
         let speed_per_second = if self.modifiers.shift() {
             self.config.ctrl.base_speed_2
@@ -364,8 +380,8 @@ impl<'a> FrameInProgress<'a> {
             self.config.ctrl.base_speed_1
         };
         let speed = speed_per_second / self.gridview.fps(&self.config);
-        let move_speed = r64(self.config.ctrl.move_speed * speed * self.config.gfx.dpi);
-        let zoom_speed = self.config.ctrl.zoom_speed * speed;
+        let move_speed = r64(self.config.ctrl.move_speed * speed * self.dpi);
+        let scale_speed = r64(self.config.ctrl.scale_speed * speed);
         match self.gridview {
             GridView::View2D(view2d) => {
                 if self.has_keyboard && !self.modifiers.intersects(CTRL | ALT | LOGO) {
@@ -387,44 +403,49 @@ impl<'a> FrameInProgress<'a> {
                         pan[Y] -= move_speed;
                     }
                     if !pan.is_zero() {
-                        view2d.enqueue(MoveCommand2D::PanPixels(pan).decay());
+                        view2d.enqueue(MoveCommand2D::PanPixels(pan.to_fixedvec()).decay());
                         moved = true;
                     }
                     // 'Q' or page up => zoom in.
                     if self.keys[sc::Q] || self.keys[VirtualKeyCode::PageUp] {
                         view2d.enqueue(
-                            MoveCommand2D::Zoom {
-                                power: zoom_speed,
+                            MoveCommand2D::Scale {
+                                log2_factor: scale_speed,
                                 invariant_pos: None,
                             }
                             .decay(),
                         );
-                        zoomed = true;
+                        scaled = true;
                     }
                     // 'Z' or page down => zoom out.
                     if self.keys[sc::Z] || self.keys[VirtualKeyCode::PageDown] {
                         view2d.enqueue(
-                            MoveCommand2D::Zoom {
-                                power: -zoom_speed,
+                            MoveCommand2D::Scale {
+                                log2_factor: -scale_speed,
                                 invariant_pos: None,
                             }
                             .decay(),
                         );
-                        zoomed = true;
+                        scaled = true;
                     }
                 }
                 if !moved && !self.rmb_held {
                     // Snap to the nearest position.
                     view2d.enqueue(MoveCommand2D::SnapPos.decay());
                 }
-                if zoomed {
-                    self.time_to_snap_zoom = Some(Instant::now() + Duration::from_millis(10));
+                if scaled {
+                    self.time_to_snap_scale = Some(Instant::now() + Duration::from_millis(10));
                 }
-                if self.time_to_snap_zoom.is_none()
-                    || (Instant::now() >= self.time_to_snap_zoom.unwrap())
+                if self.time_to_snap_scale.is_none()
+                    || (Instant::now() >= self.time_to_snap_scale.unwrap())
                 {
-                    // Snap to the nearest zoom level.
-                    view2d.enqueue(MoveCommand2D::SnapZoom(None).decay());
+                    // Snap to the nearest power-of-2 scela.
+                    view2d.enqueue(
+                        MoveCommand2D::SnapScale {
+                            invariant_pos: None,
+                        }
+                        .decay(),
+                    );
                 }
             }
             GridView::View3D(_) => (),

@@ -67,15 +67,11 @@ pub fn show_gui() -> ! {
     let mut platform = WinitPlatform::init(&mut imgui);
     let gl_window = display.gl_window();
     let window = gl_window.window();
-    // Imgui can't handle mixed DPI, so let's just scale using font size which
-    // gives a better and more reliable result. TODO: make this
-    // user-configurable. TODO: also scale all buttons etc
+    // Imgui DPI handling is a mess.
     platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
-    config.gfx.dpi = platform.hidpi_factor(); // Fetch the DPI we want.
-    platform.attach_window(imgui.io_mut(), window, HiDpiMode::Locked(1.0));
 
     // Initialize imgui fonts.
-    let font_size = 16.0 * config.gfx.dpi as f32;
+    let font_size = config.gfx.font_size as f32;
     imgui.fonts().add_font(&[FontSource::TtfData {
         data: include_bytes!("../resources/font/NotoSans-Regular.ttf"),
         size_pixels: font_size,
@@ -127,7 +123,8 @@ pub fn show_gui() -> ! {
                 last_frame_time = imgui_io.update_delta_time(last_frame_time);
 
                 // Prep the gridview for event handling.
-                let mut input_frame = input_state.frame(&mut config, &gridview, &imgui_io);
+                let mut input_frame =
+                    input_state.frame(&mut config, &gridview, &imgui_io, &platform);
 
                 for ev in events_buffer.drain(..) {
                     // Let imgui handle events.
@@ -153,31 +150,20 @@ pub fn show_gui() -> ! {
                 main_window.build(&ui, &mut config, &gridview);
 
                 // Update the viewport and run the simulation if necessary.
-                gridview.do_frame(&config);
+                gridview.do_frame(&config).expect("Unhandled exception!");
 
                 let mut target = display.draw();
                 if target.get_dimensions() != (0, 0) {
                     // Render the gridview.
-                    match &mut gridview {
-                        GridView::View2D(view2d) => {
-                            view2d.render(
-                                &config,
-                                &mut target,
-                                View2DRenderParams {
-                                    cursor_pos: input_state.cursor_pos(),
-                                },
-                            );
-                        }
-                        GridView::View3D(view3d) => {
-                            view3d.render(
-                                &config,
-                                &mut target,
-                                View3DRenderParams {
-                                    cursor_pos: input_state.cursor_pos(),
-                                },
-                            );
-                        }
-                    };
+                    gridview
+                        .render(
+                            &config,
+                            &mut target,
+                            RenderParams {
+                                cursor_pos: input_state.cursor_pos(),
+                            },
+                        )
+                        .expect("Unhandled exception!");
 
                     // Render imgui.
                     platform.prepare_render(&ui, gl_window.window());

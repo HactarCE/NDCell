@@ -1,8 +1,10 @@
+//! OpenGL index buffer objects.
+
 use glium::index::{IndexBuffer, IndexBufferSlice, PrimitiveType};
 use itertools::Itertools;
 use send_wrapper::SendWrapper;
 
-use super::CELL_OVERLAY_BATCH_SIZE;
+use super::consts::CELL_OVERLAY_BATCH_SIZE;
 use crate::DISPLAY;
 
 lazy_static! {

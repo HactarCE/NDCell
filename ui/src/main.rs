@@ -2,14 +2,12 @@
 //!
 //! This module contains everything needed to display NDCell's UI.
 
-#![allow(dead_code)]
+#![allow(dead_code)] // TODO: remove this line
 #![warn(missing_docs)]
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[macro_use]
-extern crate anyhow;
 #[macro_use]
 extern crate glium;
 #[macro_use]

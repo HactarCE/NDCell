@@ -1,3 +1,5 @@
+//! OpenGL textures.
+
 use glium::framebuffer::SimpleFrameBuffer;
 use glium::texture::srgb_texture2d::SrgbTexture2d;
 use send_wrapper::SendWrapper;

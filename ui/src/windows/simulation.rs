@@ -3,7 +3,8 @@ use imgui::*;
 use ndcell_core::prelude::*;
 
 use crate::config::Config;
-use crate::gridview::{control::*, GridView, GridViewTrait};
+use crate::gridview::commands::*;
+use crate::gridview::{GridView, GridViewTrait};
 
 #[derive(Debug, Default)]
 pub struct SimulationWindow {

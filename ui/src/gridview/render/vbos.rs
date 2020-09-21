@@ -1,3 +1,5 @@
+//! OpenGL vertex buffer objects.
+
 use glium::VertexBuffer;
 use send_wrapper::SendWrapper;
 use std::cell::{RefCell, RefMut};
@@ -5,8 +7,8 @@ use std::cell::{RefCell, RefMut};
 use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
 
+use super::consts::CELL_OVERLAY_BATCH_SIZE;
 use super::vertices::*;
-use super::CELL_OVERLAY_BATCH_SIZE;
 use crate::DISPLAY;
 
 type StaticVbo<T> = SendWrapper<RefCell<VertexBuffer<T>>>;

@@ -11,7 +11,10 @@ pub struct Config {
 pub struct CtrlConfig {
     pub move_speed_2d: f64,
     pub move_speed_3d: f64,
-    pub scale_speed: f64,
+    pub scale_speed_2d: f64,
+    pub scale_speed_3d: f64,
+    pub scroll_speed_2d: f64,
+    pub scroll_speed_3d: f64,
     pub base_speed_1: f64,
     pub base_speed_2: f64,
 
@@ -32,14 +35,17 @@ impl Default for CtrlConfig {
         Self {
             move_speed_2d: 1000.0,
             move_speed_3d: 250.0,
-            scale_speed: 4.0,
+            scale_speed_2d: 4.0,
+            scale_speed_3d: 2.0,
+            scroll_speed_2d: 1.0,
+            scroll_speed_3d: 0.5,
             base_speed_1: 1.0,
             base_speed_2: 3.0,
 
             snap_pos_2d: true,
             snap_scale_2d: true,
             snap_pos_3d: true,
-            snap_scale_3d: true,
+            snap_scale_3d: false,
 
             up_axis_3d: UpAxis3D::default(),
             fwd_axis_3d: ForwardAxis3D::default(),

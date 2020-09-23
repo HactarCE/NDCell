@@ -172,7 +172,7 @@ impl<'a> FrameInProgress<'a> {
                         };
                         self.gridview.enqueue(match self.gridview {
                             GridView::View2D(view2d) => MoveCommand2D::Scale {
-                                log2_factor: r64(dy),
+                                log2_factor: r64(dy * self.config.ctrl.scroll_speed_2d),
                                 invariant_pos: view2d
                                     .nth_render_result(0)
                                     .hover_pos
@@ -182,7 +182,7 @@ impl<'a> FrameInProgress<'a> {
                             }
                             .decay(),
                             GridView::View3D(_view3d) => MoveCommand3D::Scale {
-                                log2_factor: r64(dy),
+                                log2_factor: r64(dy * self.config.ctrl.scroll_speed_3d),
                                 invariant_pos: None,
                             }
                             .decay(),
@@ -377,10 +377,10 @@ impl<'a> FrameInProgress<'a> {
             self.config.ctrl.base_speed_1
         };
         let speed = speed_per_second / self.gridview.fps(&self.config);
-        let scale_speed = r64(self.config.ctrl.scale_speed * speed);
         if self.has_keyboard && !self.modifiers.intersects(CTRL | ALT | LOGO) {
             match self.gridview {
                 GridView::View2D(view2d) => {
+                    let scale_speed = r64(self.config.ctrl.scale_speed_2d * speed);
                     let move_speed = r64(self.config.ctrl.move_speed_2d * speed * self.dpi);
                     let mut pan = FVec2D::origin();
                     // 'A' or left arrow => pan west.

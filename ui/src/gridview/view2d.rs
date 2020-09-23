@@ -53,49 +53,61 @@ impl AsMut<GridViewCommon> for GridView2D {
 }
 
 impl GridViewTrait for GridView2D {
-    fn do_move_command(&mut self, command: MoveCommand, config: &Config) -> Result<()> {
-        {
-            match command {
-                MoveCommand::Move2D(c, interpolation) => {
-                    let mut new_viewport = match interpolation {
-                        Interpolation::Direct => self.camera().clone(),
-                        Interpolation::Decay => self.camera_interpolator.target.clone(),
-                    };
-                    match c {
-                        MoveCommand2D::PanPixels(delta) => new_viewport.pan_pixels(delta),
-                        MoveCommand2D::SetPos(pos) => new_viewport.set_pos(pos),
-                        MoveCommand2D::SnapPos => {
-                            if config.ctrl.snap_pos {
-                                new_viewport.snap_pos()
-                            }
-                        }
+    fn do_move_command(
+        &mut self,
+        command: MoveCommand,
+        interpolation: Interpolation,
+        config: &Config,
+    ) -> Result<()> {
+        let mut new_viewport = match interpolation {
+            Interpolation::Direct => self.camera().clone(),
+            Interpolation::Decay => self.camera_interpolator.target.clone(),
+        };
 
-                        MoveCommand2D::Scale {
-                            log2_factor,
-                            invariant_pos,
-                        } => new_viewport.scale_by_factor(log2_factor.exp2(), invariant_pos),
-                        MoveCommand2D::SetScale {
-                            scale,
-                            invariant_pos,
-                        } => new_viewport.scale_to(scale, invariant_pos),
-                        MoveCommand2D::SnapScale { invariant_pos } => {
-                            if config.ctrl.snap_scale {
-                                new_viewport.snap_scale(invariant_pos)
-                            }
-                        }
-                    };
-                    self.camera_interpolator.target = new_viewport;
-                    match interpolation {
-                        Interpolation::Direct => {
-                            self.camera_interpolator.current =
-                                self.camera_interpolator.target.clone();
-                        }
-                        Interpolation::Decay => (),
-                    };
+        match command {
+            MoveCommand::SnapPos => {
+                if config.ctrl.snap_pos_2d {
+                    new_viewport.snap_pos()
                 }
-                MoveCommand::Move3D(_, _) => warn!("Ignoring {:?} in GridView2D", command),
             }
+
+            MoveCommand::Scale { log2_factor } => {
+                new_viewport.scale_by_log2_factor(log2_factor, None)
+            }
+            MoveCommand::SetScale { scale } => new_viewport.scale_to(scale, None),
+            MoveCommand::SnapScale => new_viewport.snap_scale(None),
+
+            MoveCommand::Move2D(c) => {
+                match c {
+                    MoveCommand2D::PanPixels(delta) => new_viewport.pan_pixels(delta),
+                    MoveCommand2D::SetPos(pos) => new_viewport.set_pos(pos),
+
+                    MoveCommand2D::Scale {
+                        log2_factor,
+                        invariant_pos,
+                    } => new_viewport.scale_by_factor(log2_factor.exp2(), invariant_pos),
+                    MoveCommand2D::SetScale {
+                        scale,
+                        invariant_pos,
+                    } => new_viewport.scale_to(scale, invariant_pos),
+                    MoveCommand2D::SnapScale { invariant_pos } => {
+                        if config.ctrl.snap_scale_2d {
+                            new_viewport.snap_scale(invariant_pos)
+                        }
+                    }
+                };
+            }
+
+            MoveCommand::Move3D(_) => warn!("Ignoring {:?} in GridView2D", command),
         }
+
+        self.camera_interpolator.target = new_viewport;
+        match interpolation {
+            Interpolation::Direct => {
+                self.camera_interpolator.current = self.camera_interpolator.target.clone();
+            }
+            Interpolation::Decay => (),
+        };
         Ok(())
     }
     fn do_draw_command(&mut self, command: DrawCommand, _config: &Config) -> Result<()> {

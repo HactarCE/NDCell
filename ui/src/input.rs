@@ -315,9 +315,8 @@ impl<'a> FrameInProgress<'a> {
                             self.gridview
                                 .enqueue(MoveCommand2D::SetPos(FixedVec2D::origin()).decay());
                             self.gridview.enqueue(
-                                MoveCommand2D::SetScale {
+                                MoveCommand::SetScale {
                                     scale: Scale::default(),
-                                    invariant_pos: None,
                                 }
                                 .decay(),
                             );
@@ -429,7 +428,7 @@ impl<'a> FrameInProgress<'a> {
                 }
                 if !moved && !self.rmb_held {
                     // Snap to the nearest position.
-                    view2d.enqueue(MoveCommand2D::SnapPos.decay());
+                    view2d.enqueue(MoveCommand::SnapPos.decay());
                 }
                 if scaled {
                     self.time_to_snap_scale = Some(Instant::now() + Duration::from_millis(10));

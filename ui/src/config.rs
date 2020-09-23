@@ -13,8 +13,12 @@ pub struct CtrlConfig {
     pub scale_speed: f64,
     pub base_speed_1: f64,
     pub base_speed_2: f64,
-    pub snap_pos: bool,
-    pub snap_scale: bool,
+
+    pub snap_pos_2d: bool,
+    pub snap_scale_2d: bool,
+    pub snap_pos_3d: bool,
+    pub snap_scale_3d: bool,
+
     pub interpolation: Interpolation,
 
     pub immersive: bool,
@@ -26,8 +30,12 @@ impl Default for CtrlConfig {
             scale_speed: 4.0,
             base_speed_1: 1.0,
             base_speed_2: 3.0,
-            snap_pos: false,
-            snap_scale: false,
+
+            snap_pos_2d: true,
+            snap_scale_2d: true,
+            snap_pos_3d: true,
+            snap_scale_3d: true,
+
             interpolation: Interpolation::default(),
 
             immersive: false,

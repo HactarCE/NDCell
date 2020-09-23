@@ -6,7 +6,7 @@ use super::camera::Scale;
 pub enum Command {
     Sim(SimCommand),
     History(HistoryCommand),
-    Move(MoveCommand),
+    Move(MoveCommand, Interpolation),
     Draw(DrawCommand),
     Clipboard(ClipboardCommand),
     GarbageCollect,
@@ -41,12 +41,21 @@ impl From<HistoryCommand> for Command {
 
 #[derive(Debug, Clone)]
 pub enum MoveCommand {
-    Move2D(MoveCommand2D, Interpolation),
-    Move3D(MoveCommand3D, Interpolation),
+    SnapPos,
+
+    Scale { log2_factor: R64 },
+    SetScale { scale: Scale },
+    SnapScale,
+
+    Move2D(MoveCommand2D),
+    Move3D(MoveCommand3D),
 }
-impl From<MoveCommand> for Command {
-    fn from(c: MoveCommand) -> Self {
-        Self::Move(c)
+impl MoveCommand {
+    pub fn direct(self) -> Command {
+        Command::Move(self, Interpolation::Direct)
+    }
+    pub fn decay(self) -> Command {
+        Command::Move(self, Interpolation::Decay)
     }
 }
 
@@ -54,7 +63,6 @@ impl From<MoveCommand> for Command {
 pub enum MoveCommand2D {
     PanPixels(FixedVec2D),
     SetPos(FixedVec2D),
-    SnapPos,
 
     Scale {
         log2_factor: R64,
@@ -69,11 +77,11 @@ pub enum MoveCommand2D {
     },
 }
 impl MoveCommand2D {
-    pub fn direct(self) -> MoveCommand {
-        MoveCommand::Move2D(self, Interpolation::Direct)
+    pub fn direct(self) -> Command {
+        MoveCommand::Move2D(self).direct()
     }
-    pub fn decay(self) -> MoveCommand {
-        MoveCommand::Move2D(self, Interpolation::Decay)
+    pub fn decay(self) -> Command {
+        MoveCommand::Move2D(self).decay()
     }
 }
 
@@ -84,7 +92,6 @@ pub enum MoveCommand3D {
         end: FVec2D,
     },
     SetPos(FixedVec3D),
-    SnapPos,
 
     RotPixels(FixedVec2D),
     SetPitch(f64),
@@ -103,11 +110,11 @@ pub enum MoveCommand3D {
     },
 }
 impl MoveCommand3D {
-    pub fn direct(self) -> MoveCommand {
-        MoveCommand::Move3D(self, Interpolation::Direct)
+    pub fn direct(self) -> Command {
+        MoveCommand::Move3D(self).direct()
     }
-    pub fn decay(self) -> MoveCommand {
-        MoveCommand::Move3D(self, Interpolation::Decay)
+    pub fn decay(self) -> Command {
+        MoveCommand::Move3D(self).decay()
     }
 }
 

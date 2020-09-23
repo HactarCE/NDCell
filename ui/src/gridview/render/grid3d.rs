@@ -25,9 +25,9 @@ const CUBE_BATCH_SIZE: usize = 256;
 /// Vertical field-of-view.
 const FOV: Deg<f32> = Deg(60.0);
 /// Near clipping plane.
-const NEAR_PLANE: f32 = 1.0 / 256.0;
+const NEAR_PLANE: f32 = 1.0;
 /// Far clipping plane.
-const FAR_PLANE: f32 = 1024.0;
+const FAR_PLANE: f32 = 65536.0;
 
 #[derive(Default)]
 pub struct RenderCache {}

@@ -6,7 +6,7 @@ use std::convert::TryInto;
 use std::ops::{Deref, DerefMut, Index};
 use std::time::{Duration, Instant};
 
-use ndcell_core::axis::{X, Y};
+use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
 use crate::config::Config;
@@ -377,17 +377,17 @@ impl<'a> FrameInProgress<'a> {
             self.config.ctrl.base_speed_1
         };
         let speed = speed_per_second / self.gridview.fps(&self.config);
-        let move_speed = r64(self.config.ctrl.move_speed * speed * self.dpi);
         let scale_speed = r64(self.config.ctrl.scale_speed * speed);
-        match self.gridview {
-            GridView::View2D(view2d) => {
-                if self.has_keyboard && !self.modifiers.intersects(CTRL | ALT | LOGO) {
+        if self.has_keyboard && !self.modifiers.intersects(CTRL | ALT | LOGO) {
+            match self.gridview {
+                GridView::View2D(view2d) => {
+                    let move_speed = r64(self.config.ctrl.move_speed_2d * speed * self.dpi);
                     let mut pan = FVec2D::origin();
                     // 'A' or left arrow => pan west.
                     if self.keys[sc::A] || self.keys[VirtualKeyCode::Left] {
                         pan[X] -= move_speed;
                     }
-                    // 'D' or right arrow => pan west.
+                    // 'D' or right arrow => pan east.
                     if self.keys[sc::D] || self.keys[VirtualKeyCode::Right] {
                         pan[X] += move_speed;
                     }
@@ -395,7 +395,7 @@ impl<'a> FrameInProgress<'a> {
                     if self.keys[sc::W] || self.keys[VirtualKeyCode::Up] {
                         pan[Y] += move_speed;
                     }
-                    // 'S' or down arrow => pan down.
+                    // 'S' or down arrow => pan south.
                     if self.keys[sc::S] || self.keys[VirtualKeyCode::Down] {
                         pan[Y] -= move_speed;
                     }
@@ -426,26 +426,52 @@ impl<'a> FrameInProgress<'a> {
                         scaled = true;
                     }
                 }
-                if !moved && !self.rmb_held {
-                    // Snap to the nearest position.
-                    view2d.enqueue(MoveCommand::SnapPos.decay());
-                }
-                if scaled {
-                    self.time_to_snap_scale = Some(Instant::now() + Duration::from_millis(10));
-                }
-                if self.time_to_snap_scale.is_none()
-                    || (Instant::now() >= self.time_to_snap_scale.unwrap())
-                {
-                    // Snap to the nearest power-of-2 scela.
-                    view2d.enqueue(
-                        MoveCommand2D::SnapScale {
-                            invariant_pos: None,
-                        }
-                        .decay(),
-                    );
+
+                GridView::View3D(view3d) => {
+                    let move_speed = r64(self.config.ctrl.move_speed_3d * speed * self.dpi);
+                    let mut move_vec = FVec3D::origin();
+                    // 'A' or left arrow => move left.
+                    if self.keys[sc::A] || self.keys[VirtualKeyCode::Left] {
+                        move_vec[X] -= move_speed;
+                    }
+                    // 'D' or right arrow => move right.
+                    if self.keys[sc::D] || self.keys[VirtualKeyCode::Right] {
+                        move_vec[X] += move_speed;
+                    }
+                    // 'W' or up arrow => move forward.
+                    if self.keys[sc::W] || self.keys[VirtualKeyCode::Up] {
+                        move_vec[Z] -= move_speed;
+                    }
+                    // 'S' or down arrow => move backward.
+                    if self.keys[sc::S] || self.keys[VirtualKeyCode::Down] {
+                        move_vec[Z] += move_speed;
+                    }
+                    // 'Q' or page up => move up.
+                    if self.keys[sc::Q] || self.keys[VirtualKeyCode::PageUp] {
+                        move_vec[Y] += move_speed;
+                    }
+                    // 'Z' or page down => move down.
+                    if self.keys[sc::Z] || self.keys[VirtualKeyCode::PageDown] {
+                        move_vec[Y] -= move_speed;
+                    }
+                    if !move_vec.is_zero() {
+                        view3d.enqueue(MoveCommand3D::MovePixels(move_vec.to_fixedvec()).decay());
+                        moved = true;
+                    }
                 }
             }
-            GridView::View3D(_) => (),
+        }
+        if !moved && !self.rmb_held {
+            // Snap to the nearest position.
+            self.gridview.enqueue(MoveCommand::SnapPos.decay());
+        }
+        if scaled {
+            self.time_to_snap_scale = Some(Instant::now() + Duration::from_millis(10));
+        }
+        if self.time_to_snap_scale.is_none() || (Instant::now() >= self.time_to_snap_scale.unwrap())
+        {
+            // Snap to the nearest power-of-2 scela.
+            self.gridview.enqueue(MoveCommand::SnapScale.decay());
         }
         self.last_cursor_pos = self.cursor_pos;
     }

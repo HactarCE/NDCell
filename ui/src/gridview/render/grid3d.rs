@@ -84,7 +84,15 @@ impl<'a> RenderInProgress<'a> {
     }
 
     pub fn draw_cells(&mut self) {
-        let matrix: [[f32; 4]; 4] = self.matrix.into();
+        let rainbow_cube_matrix: [[f32; 4]; 4] = self.matrix.into();
+        let cam_pos = self.camera.pos().round();
+        let selection_cube_matrix: [[f32; 4]; 4] = (self.matrix
+            * Matrix4::from_translation(cgmath::vec3(
+                cam_pos[X].to_f32().unwrap(),
+                cam_pos[Y].to_f32().unwrap(),
+                cam_pos[Z].to_f32().unwrap(),
+            )))
+        .into();
 
         #[derive(Debug, Copy, Clone)]
         struct Vert {
@@ -93,7 +101,7 @@ impl<'a> RenderInProgress<'a> {
         };
         implement_vertex!(Vert, pos, color);
 
-        let cube: Vec<_> = vec![
+        let rainbow_cube_verts: Vec<_> = vec![
             ([0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]),
             ([0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]),
             ([0.0, 1.0, 0.0], [0.0, 1.0, 0.0, 1.0]),
@@ -107,7 +115,21 @@ impl<'a> RenderInProgress<'a> {
         .map(|(pos, color)| Vert { pos, color })
         .collect();
 
-        let cube_vbo = glium::VertexBuffer::new(&**DISPLAY, &cube).unwrap();
+        let selection_cube_verts: Vec<_> = vec![
+            ([-0.1, -0.1, -0.1], [1.0, 1.0, 1.0, 0.5]),
+            ([-0.1, -0.1, 1.1], [1.0, 1.0, 1.0, 0.5]),
+            ([-0.1, 1.1, -0.1], [1.0, 1.0, 1.0, 0.5]),
+            ([-0.1, 1.1, 1.1], [1.0, 1.0, 1.0, 0.5]),
+            ([1.1, -0.1, -0.1], [1.0, 1.0, 1.0, 0.5]),
+            ([1.1, -0.1, 1.1], [1.0, 1.0, 1.0, 0.5]),
+            ([1.1, 1.1, -0.1], [1.0, 1.0, 1.0, 0.5]),
+            ([1.1, 1.1, 1.1], [1.0, 1.0, 1.0, 0.5]),
+        ]
+        .into_iter()
+        .map(|(pos, color)| Vert { pos, color })
+        .collect();
+
+        let cube_vbo = glium::VertexBuffer::new(&**DISPLAY, &rainbow_cube_verts).unwrap();
         let cube_ibo = glium::IndexBuffer::new(
             &**DISPLAY,
             PrimitiveType::TrianglesList,
@@ -128,9 +150,31 @@ impl<'a> RenderInProgress<'a> {
                 &cube_ibo,
                 &shaders::POINTS,
                 &uniform! {
-                    matrix: matrix,
+                    matrix: rainbow_cube_matrix,
                 },
                 &glium::DrawParameters {
+                    smooth: Some(glium::Smooth::Nicest),
+                    depth: glium::Depth {
+                        test: glium::DepthTest::IfLessOrEqual,
+                        write: true,
+                        ..glium::Depth::default()
+                    },
+                    ..Default::default()
+                },
+            )
+            .expect("Failed to draw cube");
+
+        cube_vbo.write(&selection_cube_verts);
+        self.target
+            .draw(
+                &cube_vbo,
+                &cube_ibo,
+                &shaders::POINTS,
+                &uniform! {
+                    matrix: selection_cube_matrix,
+                },
+                &glium::DrawParameters {
+                    blend: glium::Blend::alpha_blending(),
                     smooth: Some(glium::Smooth::Nicest),
                     depth: glium::Depth {
                         test: glium::DepthTest::IfLessOrEqual,

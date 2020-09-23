@@ -54,6 +54,13 @@ impl<D: Dim> FVec<D> {
     pub fn mag(&self) -> R64 {
         self.powf(r64(2.0)).sum().powf(r64(0.5))
     }
+
+    /// Returns the normalized vector.
+    #[inline]
+    #[must_use = "This method returns a new value instead of mutating its input"]
+    pub fn normalized(&self) -> Self {
+        self / self.mag()
+    }
 }
 
 impl<D: DimFor<R64>> Add<R64> for FVec<D> {

@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
+use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
 use super::commands::*;
@@ -81,6 +82,9 @@ impl GridViewTrait for GridView3D {
 
             MoveCommand::Move3D(c) => match c {
                 MoveCommand3D::PanPixels { start, end } => {}
+                MoveCommand3D::MovePixels(delta) => {
+                    new_viewport.move_pivot_by_pixels(delta, config)
+                }
                 MoveCommand3D::SetPos(_) => {}
 
                 MoveCommand3D::RotPixels(_) => {}

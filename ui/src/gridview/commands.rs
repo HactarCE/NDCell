@@ -91,6 +91,7 @@ pub enum MoveCommand3D {
         start: FVec2D,
         end: FVec2D,
     },
+    MovePixels(FixedVec3D),
     SetPos(FixedVec3D),
 
     RotPixels(FixedVec2D),

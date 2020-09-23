@@ -312,8 +312,14 @@ impl<'a> FrameInProgress<'a> {
                         Some(VirtualKeyCode::V) => self.gridview.enqueue(ClipboardCommand::Paste),
                         // Center pattern.
                         Some(VirtualKeyCode::M) => {
-                            self.gridview
-                                .enqueue(MoveCommand2D::SetPos(FixedVec2D::origin()).decay());
+                            self.gridview.enqueue(match self.gridview {
+                                GridView::View2D(_) => {
+                                    MoveCommand2D::SetPos(FixedVec2D::origin()).decay()
+                                }
+                                GridView::View3D(_) => {
+                                    MoveCommand3D::SetPos(FixedVec3D::origin()).decay()
+                                }
+                            });
                             self.gridview.enqueue(
                                 MoveCommand::SetScale {
                                     scale: Scale::default(),

@@ -85,7 +85,7 @@ impl GridViewTrait for GridView3D {
                 MoveCommand3D::MovePixels(delta) => {
                     new_viewport.move_pivot_by_pixels(delta, config)
                 }
-                MoveCommand3D::SetPos(_) => {}
+                MoveCommand3D::SetPos(pos) => new_viewport.set_pos(pos),
 
                 MoveCommand3D::RotPixels(_) => {}
                 MoveCommand3D::SetPitch(_) => {}

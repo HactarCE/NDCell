@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Context, Result};
+use cgmath::prelude::*;
 use cgmath::{Deg, Euler, Matrix3, Quaternion, Rad};
+use log::warn;
 
+use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
 use super::{Camera, CellTransform, CellTransform3D, Scale};
@@ -44,11 +47,23 @@ impl Camera3D {
     }
     /// Returns the orientation of the camera.
     pub fn set_orientation(&mut self, orientation: impl Into<Euler<Rad<f32>>>) {
-        self.orientation = orientation.into()
+        self.orientation = orientation.into();
+        // Clamp pitch to -90..+90.
+        self.orientation.x = self.orientation.x.normalize_signed();
+        if self.orientation.x > Rad::turn_div_4() {
+            self.orientation.x = Rad::turn_div_4();
+        }
+        if self.orientation.x < -Rad::turn_div_4() {
+            self.orientation.x = -Rad::turn_div_4();
+        }
+        // Clamp yaw to 0..360.
+        self.orientation.y = self.orientation.y.normalize();
+        // Set roll to 0.
+        self.orientation.z = Rad(0.0);
     }
     /// Returns the unit vector along which the camera is looking.
     pub fn look_vector(&self) -> FVec3D {
-        fvec3d_from_euler(Axis::Z, self.orientation())
+        fvec3d_from_euler(Z, self.orientation())
     }
     /// Returns the real position of the camera (not the pivot).
     pub fn camera_pos(&self) -> FixedVec3D {
@@ -68,7 +83,7 @@ impl Camera3D {
             ForwardAxis3D::Camera | ForwardAxis3D::Aligned => self.orientation(),
             ForwardAxis3D::Flat | ForwardAxis3D::FlatAligned => self.flat_orientation(),
         };
-        let look = fvec3d_from_euler(Axis::Z, rot);
+        let look = fvec3d_from_euler(Z, rot);
         match config {
             ForwardAxis3D::Camera | ForwardAxis3D::Flat => look,
             ForwardAxis3D::Aligned | ForwardAxis3D::FlatAligned => {
@@ -80,13 +95,13 @@ impl Camera3D {
     /// Returns the unit vector for upward motion.
     pub fn up_vector(&self, config: UpAxis3D) -> FVec3D {
         match config {
-            UpAxis3D::Camera => fvec3d_from_euler(Axis::Y, self.orientation()),
-            UpAxis3D::Fixed => FVec3D::unit(Axis::Y),
+            UpAxis3D::Camera => fvec3d_from_euler(Y, self.orientation()),
+            UpAxis3D::Fixed => FVec3D::unit(Y),
         }
     }
     /// Returns the unit vector for sideways motion.
     pub fn right_vector(&self, config: ForwardAxis3D) -> FVec3D {
-        let look = fvec3d_from_euler(Axis::X, self.orientation());
+        let look = fvec3d_from_euler(X, self.orientation());
         match config {
             ForwardAxis3D::Camera | ForwardAxis3D::Flat => look,
             ForwardAxis3D::Aligned | ForwardAxis3D::FlatAligned => {
@@ -102,9 +117,9 @@ impl Camera3D {
         let up = self.up_vector(config.ctrl.up_axis_3d);
         let fwd = self.forward_vector(config.ctrl.fwd_axis_3d);
         println!("{:?}, {:?}, {:?}", right, up, fwd);
-        self.pivot += right.to_fixedvec() * &delta[Axis::X];
-        self.pivot += up.to_fixedvec() * &delta[Axis::Y];
-        self.pivot += fwd.to_fixedvec() * &delta[Axis::Z];
+        self.pivot += right.to_fixedvec() * &delta[X];
+        self.pivot += up.to_fixedvec() * &delta[Y];
+        self.pivot += fwd.to_fixedvec() * &delta[Z];
     }
 }
 
@@ -115,7 +130,7 @@ impl Camera<Dim3D> for Camera3D {
     fn set_pos(&mut self, pos: FixedVec<Dim3D>) {
         self.pivot = pos
     }
-    fn snap_pos(&mut self, config: &Config) {
+    fn snap_pos(&mut self, _config: &Config) {
         self.pivot = self.pivot.floor().0.to_fixedvec() + 0.5;
     }
 
@@ -158,12 +173,67 @@ impl Camera<Dim3D> for Camera3D {
         config: &Config,
         cell_transform: &CellTransform,
     ) -> Result<()> {
-        let cell_transform = cell_transform
-            .as_3d()
-            .ok_or(anyhow!("Missing or mistyped 3D cell transform"));
+        match command {
+            MoveCommand::GoTo3D {
+                mut x,
+                mut y,
+                mut z,
+                yaw,
+                pitch,
+                relative,
+                scaled,
+            } => {
+                if scaled {
+                    x = x.map(|x| self.scale.pixels_to_cells(x));
+                    y = y.map(|y| self.scale.pixels_to_cells(y));
+                    z = z.map(|y| self.scale.pixels_to_cells(y));
+                }
+                if relative {
+                    self.pivot[X] += x.unwrap_or_default();
+                    self.pivot[Y] += y.unwrap_or_default();
+                    self.pivot[Z] += z.unwrap_or_default();
+                    self.set_orientation(Euler::new(
+                        self.orientation().x + pitch.unwrap_or(Rad(0.0)),
+                        self.orientation().y + yaw.unwrap_or(Rad(0.0)),
+                        Rad(0.0),
+                    ));
+                } else {
+                    if let Some(x) = x {
+                        self.pivot[X] = x;
+                    }
+                    if let Some(y) = y {
+                        self.pivot[Y] = y;
+                    }
+                    if let Some(z) = z {
+                        self.pivot[Z] = z;
+                    }
+                    self.set_orientation(Euler::new(
+                        pitch.unwrap_or(self.orientation().x),
+                        yaw.unwrap_or(self.orientation().y),
+                        Rad(0.0),
+                    ));
+                }
+            }
+            MoveCommand::GoToScale(scale) => {
+                self.set_scale(scale);
+            }
 
-        todo!()
+            MoveCommand::Pan { start, end } => {}
+            MoveCommand::Orbit { start, end } => {}
+            MoveCommand::Scale {
+                log2_factor,
+                invariant_pos: _,
+            } => {
+                self.scale_by_log2_factor(r64(log2_factor), None);
+            }
 
+            MoveCommand::SnapPos => self.snap_pos(config),
+            MoveCommand::SnapScale { invariant_pos: _ } => self.snap_scale(None),
+
+            MoveCommand::GoTo2D { .. } => warn!("Ignoring {:?} in Camera3D", command),
+        }
+
+        Ok(())
         // match command {
         //     MoveCommand::SnapPos => {
         //         if config.ctrl.snap_pos_3d {
@@ -213,9 +283,9 @@ impl Camera<Dim3D> for Camera3D {
 
 fn fvec3d_from_euler(axis: Axis, euler: impl Into<Euler<Rad<f32>>>) -> FVec3D {
     let unit_vec = match axis {
-        Axis::X => cgmath::Vector3::unit_x(),
-        Axis::Y => cgmath::Vector3::unit_y(),
-        Axis::Z => cgmath::Vector3::unit_z(),
+        X => cgmath::Vector3::unit_x(),
+        Y => cgmath::Vector3::unit_y(),
+        Z => cgmath::Vector3::unit_z(),
         _ => panic!("Invalid 3D axis"),
     };
     let v = Matrix3::from(euler.into()) * unit_vec;

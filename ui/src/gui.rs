@@ -36,17 +36,22 @@ x = 47, y = 14, rule = Life
 $26bobo!
 ";
 
+const DEFAULT_3D: bool = true;
+
 fn make_default_gridview() -> GridView {
-    let mut automaton = Automaton2D::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE).unwrap_or_else(|_| {
-        warn!("Unable to parse default pattern; using empty pattern instead");
-        Default::default()
-    });
+    if DEFAULT_3D {
+        GridView::View3D(GridView3D::default())
+    } else {
+        let mut automaton =
+            Automaton2D::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE).unwrap_or_else(|_| {
+                warn!("Unable to parse default pattern; using empty pattern instead");
+                Default::default()
+            });
 
-    automaton.rule = crate::load_custom_rule();
+        automaton.rule = crate::load_custom_rule();
 
-    GridView::from(automaton)
-
-    // GridView::View3D(GridView3D::default())
+        GridView::from(automaton)
+    }
 }
 
 /// Display the main application window.

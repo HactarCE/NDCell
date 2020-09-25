@@ -85,7 +85,7 @@ impl<'a> RenderInProgress<'a> {
 
     pub fn draw_cells(&mut self) {
         let rainbow_cube_matrix: [[f32; 4]; 4] = self.matrix.into();
-        let cam_pos = self.camera.pos().round();
+        let cam_pos = self.camera.pos().floor().0;
         let selection_cube_matrix: [[f32; 4]; 4] = (self.matrix
             * Matrix4::from_translation(cgmath::vec3(
                 cam_pos[X].to_f32().unwrap(),

@@ -461,8 +461,8 @@ impl<'a> FrameInProgress<'a> {
                         + if move_right { move_speed } else { 0.0 };
                     let y = if move_down { -move_speed } else { 0.0 }
                         + if move_up { move_speed } else { 0.0 };
-                    let z = if move_back { -move_speed } else { 0.0 }
-                        + if move_fwd { move_speed } else { 0.0 };
+                    let z = if move_fwd { -move_speed } else { 0.0 }
+                        + if move_back { move_speed } else { 0.0 };
                     if (x, y, z) != (0.0, 0.0, 0.0) {
                         view3d.enqueue(MoveCommand::GoTo3D {
                             x: Some(r64(x).into()),
@@ -478,21 +478,29 @@ impl<'a> FrameInProgress<'a> {
                 }
             }
         }
-        if !moved {
+        if !moved
+            && ((self.gridview.is_2d() && self.config.ctrl.snap_pos_2d)
+                || (self.gridview.is_3d() && self.config.ctrl.snap_pos_3d))
+        {
             // Snap to the nearest position.
             self.gridview.enqueue(MoveCommand::SnapPos);
         }
         if scaled {
             self.scale_snap_cooldown = Some(Instant::now() + Duration::from_millis(10));
         }
-        if self.scale_snap_cooldown.is_none()
-            || (Instant::now() >= self.scale_snap_cooldown.unwrap())
+
+        let time_to_snap_scale = self.scale_snap_cooldown.is_none()
+            || (Instant::now() >= self.scale_snap_cooldown.unwrap());
+        if time_to_snap_scale
+            && ((self.gridview.is_2d() && self.config.ctrl.snap_scale_2d)
+                || (self.gridview.is_3d() && self.config.ctrl.snap_scale_3d))
         {
             // Snap to the nearest power-of-2 scale.
             self.gridview.enqueue(MoveCommand::SnapScale {
                 invariant_pos: None,
             });
         }
+
         self.last_cursor_pos = self.cursor_pos;
     }
 }

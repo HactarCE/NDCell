@@ -24,6 +24,7 @@ pub struct CtrlConfig {
     pub snap_pos_3d: bool,
     pub snap_scale_2d: bool,
     pub snap_scale_3d: bool,
+    pub snap_center_2d: bool,
 
     pub up_axis_3d: UpAxis3D,
     pub fwd_axis_3d: ForwardAxis3D,
@@ -47,6 +48,7 @@ impl Default for CtrlConfig {
             snap_pos_3d: true,
             snap_scale_2d: true,
             snap_scale_3d: false,
+            snap_center_2d: false,
 
             up_axis_3d: UpAxis3D::default(),
             fwd_axis_3d: ForwardAxis3D::default(),

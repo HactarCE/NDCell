@@ -16,19 +16,19 @@ pub struct Camera2D {
     scale: Scale,
 }
 
-impl Camera2D {
-    /// Snap to the nearest integer cell position.
-    pub fn snap_pos(&mut self) {
-        self.center = self.center.round().to_fixedvec();
-    }
-}
-
 impl Camera<Dim2D> for Camera2D {
     fn pos(&self) -> &FixedVec<Dim2D> {
         &self.center
     }
     fn set_pos(&mut self, pos: FixedVec<Dim2D>) {
         self.center = pos;
+    }
+    fn snap_pos(&mut self, config: &Config) {
+        if config.ctrl.snap_center_2d {
+            self.center = self.center.floor().0.to_fixedvec() + 0.5;
+        } else {
+            self.center = self.center.round().to_fixedvec();
+        }
     }
 
     fn scale(&self) -> Scale {
@@ -91,7 +91,7 @@ impl Camera<Dim2D> for Camera2D {
     fn do_move_command(
         &mut self,
         command: MoveCommand,
-        _config: &Config,
+        config: &Config,
         cell_transform: &CellTransform,
     ) -> Result<()> {
         match command {
@@ -134,7 +134,7 @@ impl Camera<Dim2D> for Camera2D {
                 );
             }
             MoveCommand::SnapPos => {
-                self.snap_pos();
+                self.snap_pos(config);
             }
             MoveCommand::SnapScale { invariant_pos } => {
                 self.snap_scale(

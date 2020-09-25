@@ -115,6 +115,9 @@ impl Camera<Dim3D> for Camera3D {
     fn set_pos(&mut self, pos: FixedVec<Dim3D>) {
         self.pivot = pos
     }
+    fn snap_pos(&mut self, config: &Config) {
+        self.pivot = self.pivot.floor().0.to_fixedvec() + 0.5;
+    }
 
     fn scale(&self) -> Scale {
         self.scale

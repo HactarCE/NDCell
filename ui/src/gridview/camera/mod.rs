@@ -35,9 +35,7 @@ pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
     /// Sets the position the camera is looking at/from.
     fn set_pos(&mut self, pos: FixedVec<D>);
     /// Snap to the nearest integer cell position.
-    fn snap_pos(&mut self) {
-        self.set_pos(self.pos().round().to_fixedvec());
-    }
+    fn snap_pos(&mut self, config: &Config);
 
     /// Returns the scale of the camera.
     fn scale(&self) -> Scale;

@@ -90,15 +90,11 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
     ) -> Result<()> {
         let needs_interpolation = command.is_interpolating();
         if !needs_interpolation {
-            // Cancel the current interpolation.
-            self.target = self.current.clone();
+            self.current
+                .do_move_command(command.clone(), config, cell_transform)?;
         }
         self.target
             .do_move_command(command, config, cell_transform)?;
-        if !needs_interpolation {
-            // Teleport to the target.
-            self.current = self.target.clone();
-        }
         Ok(())
     }
 }

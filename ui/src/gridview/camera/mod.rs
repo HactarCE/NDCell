@@ -28,6 +28,12 @@ pub use transform::{CellTransform, CellTransform2D, CellTransform3D, NdCellTrans
 /// you're curious: https://www.desmos.com/calculator/1yxv7mglnj.
 const PIXELS_PER_2X_SCALE: f64 = 400.0;
 
+/// Number of degrees to rotate that feels equivalent to scaling by a factor of
+/// 2.
+///
+/// This one is completely arbitrary.
+const ROT_DEGREES_PER_2X_SCALE: f64 = PIXELS_PER_2X_SCALE;
+
 /// Common functionality for 2D and 3D cameras.
 pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
     /// Returns the position the camera is looking at/from.
@@ -115,11 +121,17 @@ pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
         // same arbitrary units of optical flow.
         let panning_distance = total_pixels_delta / FixedPoint::from(r64(PIXELS_PER_2X_SCALE));
         let scale_distance = a.scale().log2_factor() - b.scale().log2_factor();
+        let extra_distance = Self::_extra_distance_dimension(a, b);
         // Use euclidean distance.
         let squared_panning_distance = &panning_distance * &panning_distance;
         let squared_scale_distance: FixedPoint = (scale_distance * scale_distance).into();
-        let squared_distance: FixedPoint = squared_panning_distance + squared_scale_distance;
+        let squared_extra_distance = &extra_distance * &extra_distance;
+        let squared_distance: FixedPoint =
+            squared_panning_distance + squared_scale_distance + squared_extra_distance;
         squared_distance.sqrt()
+    }
+    fn _extra_distance_dimension(_a: &Self, _b: &Self) -> FixedPoint {
+        FixedPoint::zero()
     }
 
     /// Returns a camera that is some fraction 0.0 <= t <= 1.0 of the distance

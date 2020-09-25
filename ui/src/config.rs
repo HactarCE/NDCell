@@ -17,6 +17,7 @@ pub struct CtrlConfig {
     pub discrete_scale_speed_3d: f64,
     pub smooth_scroll_speed_2d: f64,
     pub smooth_scroll_speed_3d: f64,
+    pub mouse_orbit_speed: f64,
     // TODO: make speed_modifier an attribute of the keybind
     pub speed_modifier: f64,
 
@@ -42,6 +43,7 @@ impl Default for CtrlConfig {
             discrete_scale_speed_3d: 0.5,
             smooth_scroll_speed_2d: 1.0,
             smooth_scroll_speed_3d: 0.5,
+            mouse_orbit_speed: 0.75,
             speed_modifier: 3.0,
 
             snap_pos_2d: true,
@@ -107,12 +109,14 @@ impl Default for ForwardAxis3D {
 
 #[derive(Debug)]
 pub struct GfxConfig {
+    pub dpi: f64,
     pub fps: f64,
     pub font_size: f32,
 }
 impl Default for GfxConfig {
     fn default() -> Self {
         Self {
+            dpi: 1.0,
             fps: 60.0,
             font_size: 16.0,
         }

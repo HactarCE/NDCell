@@ -70,7 +70,7 @@ impl<'a> RenderInProgress<'a> {
                 .to_f32()
                 .context("Converting scale factor to f32")?,
             rot: Basis3::from(camera.orientation()),
-            disp: cgmath::vec3(0.0, 0.0, -Camera3D::DISTANCE_TO_PIVOT as f32),
+            disp: cgmath::vec3(0.0, 0.0, Camera3D::DISTANCE_TO_PIVOT as f32),
         };
 
         Ok(Self {
@@ -78,6 +78,8 @@ impl<'a> RenderInProgress<'a> {
             camera,
             target,
             matrix: Matrix4::from(perspective_matrix)
+                // Invert Z axis, so that +Z is forward.
+                * Matrix4::from_nonuniform_scale(1.0, 1.0, -1.0)
                 * Matrix4::from(view_matrix)
                 * Matrix4::from_translation(world_translation),
         })
@@ -134,11 +136,11 @@ impl<'a> RenderInProgress<'a> {
             &**DISPLAY,
             PrimitiveType::TrianglesList,
             &[
-                0, 1, 2, 3, 2, 1, // x-
+                1, 2, 3, 2, 1, 0, // x-
                 7, 6, 5, 4, 5, 6, // x+
                 0, 1, 4, 5, 4, 1, // y-
-                7, 6, 3, 2, 3, 6, // y+
-                0, 2, 4, 6, 4, 2, // z-
+                6, 3, 2, 3, 6, 7, // y+
+                2, 4, 6, 4, 2, 0, // z-
                 7, 5, 3, 1, 3, 5_u16, // z+
             ],
         )
@@ -153,12 +155,13 @@ impl<'a> RenderInProgress<'a> {
                     matrix: rainbow_cube_matrix,
                 },
                 &glium::DrawParameters {
-                    smooth: Some(glium::Smooth::Nicest),
                     depth: glium::Depth {
                         test: glium::DepthTest::IfLessOrEqual,
                         write: true,
                         ..glium::Depth::default()
                     },
+                    backface_culling: glium::BackfaceCullingMode::CullClockwise,
+                    smooth: Some(glium::Smooth::Nicest),
                     ..Default::default()
                 },
             )
@@ -174,13 +177,14 @@ impl<'a> RenderInProgress<'a> {
                     matrix: selection_cube_matrix,
                 },
                 &glium::DrawParameters {
-                    blend: glium::Blend::alpha_blending(),
-                    smooth: Some(glium::Smooth::Nicest),
                     depth: glium::Depth {
                         test: glium::DepthTest::IfLessOrEqual,
                         write: true,
                         ..glium::Depth::default()
                     },
+                    blend: glium::Blend::alpha_blending(),
+                    backface_culling: glium::BackfaceCullingMode::CullClockwise,
+                    smooth: Some(glium::Smooth::Nicest),
                     ..Default::default()
                 },
             )

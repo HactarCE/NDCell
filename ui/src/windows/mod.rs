@@ -99,6 +99,8 @@ impl MainWindow {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
                         }
                     }
+                    ui.text(format!("Pitch = {:.2?}°", cam.pitch().0));
+                    ui.text(format!("Yaw = {:.2?}°", cam.yaw().0));
                     if let Some(AnyDimVec::Vec3D(hover_pos)) =
                         view3d.nth_render_result(0).hover_pos.as_ref()
                     {

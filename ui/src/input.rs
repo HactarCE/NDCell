@@ -340,6 +340,8 @@ impl<'a> FrameInProgress<'a> {
     }
 
     pub fn finish(mut self) {
+        self.config.gfx.dpi = self.dpi;
+
         if let Some(draw_state) = self.draw_cell_state {
             match self.gridview {
                 GridView::View2D(view2d) => {
@@ -461,8 +463,8 @@ impl<'a> FrameInProgress<'a> {
                         + if move_right { move_speed } else { 0.0 };
                     let y = if move_down { -move_speed } else { 0.0 }
                         + if move_up { move_speed } else { 0.0 };
-                    let z = if move_fwd { -move_speed } else { 0.0 }
-                        + if move_back { move_speed } else { 0.0 };
+                    let z = if move_back { -move_speed } else { 0.0 }
+                        + if move_fwd { move_speed } else { 0.0 };
                     if (x, y, z) != (0.0, 0.0, 0.0) {
                         view3d.enqueue(MoveCommand::GoTo3D {
                             x: Some(r64(x).into()),

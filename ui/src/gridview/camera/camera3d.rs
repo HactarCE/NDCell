@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use cgmath::prelude::*;
-use cgmath::{Deg, Euler, Matrix3, Quaternion, Rad};
+use cgmath::{Basis3, Deg, Euler, Matrix3, Rad};
 use log::warn;
 
 use ndcell_core::axis::{X, Y, Z};
@@ -14,8 +14,10 @@ use crate::gridview::commands::MoveCommand;
 pub struct Camera3D {
     /// Scale.
     scale: Scale,
-    /// Rotation.
-    orientation: Euler<Rad<f32>>,
+    /// Yaw (-180..+180).
+    yaw: Deg<f32>,
+    /// Pitch (-90..+90).
+    pitch: Deg<f32>,
     /// Translation.
     pivot: FixedVec3D,
 }
@@ -24,11 +26,8 @@ impl Default for Camera3D {
     fn default() -> Self {
         Self {
             scale: Scale::default(),
-            orientation: Euler::new(
-                Self::DEFAULT_PITCH.into(),
-                Self::DEFAULT_YAW.into(),
-                Deg(0.0).into(),
-            ),
+            yaw: Self::DEFAULT_YAW,
+            pitch: Self::DEFAULT_PITCH,
             pivot: FixedVec3D::repeat(r64(0.5).into()),
         }
     }
@@ -38,43 +37,52 @@ impl Camera3D {
     /// Number of scaled units away from the pivot to position the camera.
     pub const DISTANCE_TO_PIVOT: f64 = 512.0;
 
-    pub const DEFAULT_PITCH: Deg<f32> = Deg(30.0);
+    pub const DEFAULT_PITCH: Deg<f32> = Deg(-30.0);
     pub const DEFAULT_YAW: Deg<f32> = Deg(20.0);
 
-    /// Returns the orientation of the camera.
-    pub fn orientation(&self) -> Euler<Rad<f32>> {
-        self.orientation
+    /// Returns the yaw of the camera.
+    pub fn yaw(&self) -> Deg<f32> {
+        self.yaw
     }
-    /// Returns the orientation of the camera.
-    pub fn set_orientation(&mut self, orientation: impl Into<Euler<Rad<f32>>>) {
-        self.orientation = orientation.into();
+    /// Sets the yaw of the camera.
+    pub fn set_yaw(&mut self, yaw: Deg<f32>) {
+        // Clamp yaw to -180..+180.
+        self.yaw = yaw.normalize_signed();
+    }
+    /// Returns the pitch of the camera.
+    pub fn pitch(&self) -> Deg<f32> {
+        self.pitch
+    }
+    /// Sets the pitch of the camera.
+    pub fn set_pitch(&mut self, pitch: Deg<f32>) {
         // Clamp pitch to -90..+90.
-        self.orientation.x = self.orientation.x.normalize_signed();
-        if self.orientation.x > Rad::turn_div_4() {
-            self.orientation.x = Rad::turn_div_4();
+        self.pitch = pitch.normalize_signed();
+        if self.pitch > Deg(90.0) {
+            self.pitch = Deg(90.0);
         }
-        if self.orientation.x < -Rad::turn_div_4() {
-            self.orientation.x = -Rad::turn_div_4();
+        if self.pitch < Deg(-90.0) {
+            self.pitch = Deg(-90.0);
         }
-        // Clamp yaw to 0..360.
-        self.orientation.y = self.orientation.y.normalize();
-        // Set roll to 0.
-        self.orientation.z = Rad(0.0);
     }
+
+    /// Returns the orientation of the camera.
+    pub fn orientation(&self) -> Basis3<f32> {
+        Basis3::from_angle_x(self.pitch) * Basis3::from_angle_y(self.yaw)
+    }
+    /// Returns the orientation of the camera projected to the horizontal plane.
+    fn flat_orientation(&self) -> Basis3<f32> {
+        // Pitch = 0; only apply yaw
+        Basis3::from_angle_y(self.yaw)
+    }
+
     /// Returns the unit vector along which the camera is looking.
     pub fn look_vector(&self) -> FVec3D {
-        fvec3d_from_euler(Z, self.orientation())
+        fvec3d_from_basis3(Z, self.orientation())
     }
     /// Returns the real position of the camera (not the pivot).
     pub fn camera_pos(&self) -> FixedVec3D {
         let distance = self.scale.factor() * FixedPoint::from(r64(Self::DISTANCE_TO_PIVOT));
         &self.pivot + self.look_vector().to_fixedvec() * &distance
-    }
-
-    fn flat_orientation(&self) -> Euler<Rad<f32>> {
-        let mut rot = self.orientation();
-        rot.x = Rad(0.0); // pitch = 0
-        rot
     }
 
     /// Returns the unit vector for forward motion.
@@ -83,7 +91,7 @@ impl Camera3D {
             ForwardAxis3D::Camera | ForwardAxis3D::Aligned => self.orientation(),
             ForwardAxis3D::Flat | ForwardAxis3D::FlatAligned => self.flat_orientation(),
         };
-        let look = fvec3d_from_euler(Z, rot);
+        let look = fvec3d_from_basis3(Z, rot);
         match config {
             ForwardAxis3D::Camera | ForwardAxis3D::Flat => look,
             ForwardAxis3D::Aligned | ForwardAxis3D::FlatAligned => {
@@ -95,13 +103,13 @@ impl Camera3D {
     /// Returns the unit vector for upward motion.
     pub fn up_vector(&self, config: UpAxis3D) -> FVec3D {
         match config {
-            UpAxis3D::Camera => fvec3d_from_euler(Y, self.orientation()),
+            UpAxis3D::Camera => fvec3d_from_basis3(Y, self.orientation()),
             UpAxis3D::Fixed => FVec3D::unit(Y),
         }
     }
     /// Returns the unit vector for sideways motion.
     pub fn right_vector(&self, config: ForwardAxis3D) -> FVec3D {
-        let look = fvec3d_from_euler(X, self.orientation());
+        let look = fvec3d_from_basis3(X, self.orientation());
         match config {
             ForwardAxis3D::Camera | ForwardAxis3D::Flat => look,
             ForwardAxis3D::Aligned | ForwardAxis3D::FlatAligned => {
@@ -109,17 +117,6 @@ impl Camera3D {
                 FVec3D::unit(ax) * look[ax].signum()
             }
         }
-    }
-
-    pub fn move_pivot_by_pixels(&mut self, mut delta: FixedVec3D, config: &Config) {
-        delta = self.scale().pixels_to_cells(delta);
-        let right = self.right_vector(config.ctrl.fwd_axis_3d);
-        let up = self.up_vector(config.ctrl.up_axis_3d);
-        let fwd = self.forward_vector(config.ctrl.fwd_axis_3d);
-        println!("{:?}, {:?}, {:?}", right, up, fwd);
-        self.pivot += right.to_fixedvec() * &delta[X];
-        self.pivot += up.to_fixedvec() * &delta[Y];
-        self.pivot += fwd.to_fixedvec() * &delta[Z];
     }
 }
 
@@ -141,6 +138,16 @@ impl Camera<Dim3D> for Camera3D {
         self.scale = scale.clamp();
     }
 
+    fn _extra_distance_dimension(a: &Self, b: &Self) -> FixedPoint {
+        let pitch_diff = (a.pitch() - b.pitch()).normalize_signed().0;
+        let yaw_diff = (a.yaw() - b.yaw()).normalize_signed().0;
+        let squared_pitch = pitch_diff * pitch_diff;
+        let squared_yaw = yaw_diff * yaw_diff;
+        FixedPoint::from(r64(
+            super::ROT_DEGREES_PER_2X_SCALE * (squared_pitch + squared_yaw).sqrt() as f64
+        ))
+    }
+
     fn lerp(a: &Self, b: &Self, t: R64) -> Self {
         let mut ret = a.clone();
 
@@ -158,11 +165,16 @@ impl Camera<Dim3D> for Camera3D {
         let cells_delta = zt.pixels_to_cells(pixels_delta);
         ret.pivot += cells_delta;
 
-        // Interpolate rotation by converting to quaternions, doing spherical
-        // interpolation, and then converting back to euler angles.
-        let ori_a = Quaternion::from(a.orientation);
-        let ori_b = Quaternion::from(b.orientation);
-        ret.set_orientation(Quaternion::slerp(ori_a, ori_b, t.raw() as f32));
+        // Interpolate using Euler angles, not proper spherical interpolation.
+        // This way there's never any roll.
+        let yaw_a = a.yaw();
+        let yaw_b = b.yaw();
+        let yaw_diff = (yaw_b - yaw_a).normalize_signed();
+        ret.set_yaw(yaw_a + yaw_diff * t.raw() as f32);
+        let pitch_a = a.pitch();
+        let pitch_b = b.pitch();
+        let pitch_diff = pitch_b - pitch_a;
+        ret.set_pitch(pitch_a + pitch_diff * t.raw() as f32);
 
         ret
     }
@@ -189,14 +201,14 @@ impl Camera<Dim3D> for Camera3D {
                     z = z.map(|y| self.scale.pixels_to_cells(y));
                 }
                 if relative {
-                    self.pivot[X] += x.unwrap_or_default();
-                    self.pivot[Y] += y.unwrap_or_default();
-                    self.pivot[Z] += z.unwrap_or_default();
-                    self.set_orientation(Euler::new(
-                        self.orientation().x + pitch.unwrap_or(Rad(0.0)),
-                        self.orientation().y + yaw.unwrap_or(Rad(0.0)),
-                        Rad(0.0),
-                    ));
+                    let right = self.right_vector(config.ctrl.fwd_axis_3d);
+                    let up = self.up_vector(config.ctrl.up_axis_3d);
+                    let fwd = self.forward_vector(config.ctrl.fwd_axis_3d);
+                    self.pivot += right.to_fixedvec() * x.unwrap_or_default();
+                    self.pivot += up.to_fixedvec() * y.unwrap_or_default();
+                    self.pivot += fwd.to_fixedvec() * z.unwrap_or_default();
+                    self.set_yaw(self.yaw() + pitch.unwrap_or(Deg(0.0)));
+                    self.set_pitch(self.pitch() + yaw.unwrap_or(Deg(0.0)));
                 } else {
                     if let Some(x) = x {
                         self.pivot[X] = x;
@@ -207,11 +219,12 @@ impl Camera<Dim3D> for Camera3D {
                     if let Some(z) = z {
                         self.pivot[Z] = z;
                     }
-                    self.set_orientation(Euler::new(
-                        pitch.unwrap_or(self.orientation().x),
-                        yaw.unwrap_or(self.orientation().y),
-                        Rad(0.0),
-                    ));
+                    if let Some(yaw) = yaw {
+                        self.set_yaw(yaw);
+                    }
+                    if let Some(pitch) = pitch {
+                        self.set_pitch(pitch);
+                    }
                 }
             }
             MoveCommand::GoToScale(scale) => {
@@ -219,7 +232,11 @@ impl Camera<Dim3D> for Camera3D {
             }
 
             MoveCommand::Pan { start, end } => {}
-            MoveCommand::Orbit { start, end } => {}
+            MoveCommand::Orbit { start, end } => {
+                let delta = (start - end) * r64(config.ctrl.mouse_orbit_speed / config.gfx.dpi);
+                self.set_yaw(self.yaw() + Deg(delta[X].raw() as f32));
+                self.set_pitch(self.pitch() + Deg(delta[Y].raw() as f32));
+            }
             MoveCommand::Scale {
                 log2_factor,
                 invariant_pos: _,
@@ -281,13 +298,13 @@ impl Camera<Dim3D> for Camera3D {
     }
 }
 
-fn fvec3d_from_euler(axis: Axis, euler: impl Into<Euler<Rad<f32>>>) -> FVec3D {
+fn fvec3d_from_basis3(axis: Axis, rot: impl Rotation3<f32>) -> FVec3D {
     let unit_vec = match axis {
         X => cgmath::Vector3::unit_x(),
         Y => cgmath::Vector3::unit_y(),
         Z => cgmath::Vector3::unit_z(),
         _ => panic!("Invalid 3D axis"),
     };
-    let v = Matrix3::from(euler.into()) * unit_vec;
+    let v = rot.invert().rotate_vector(unit_vec);
     NdVec([r64(v.x as f64), r64(v.y as f64), r64(v.z as f64)])
 }

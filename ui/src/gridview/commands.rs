@@ -1,4 +1,4 @@
-use cgmath::Rad;
+use cgmath::Deg;
 
 use ndcell_core::prelude::*;
 
@@ -53,8 +53,8 @@ pub enum MoveCommand {
         x: Option<FixedPoint>,
         y: Option<FixedPoint>,
         z: Option<FixedPoint>,
-        yaw: Option<Rad<f32>>,
-        pitch: Option<Rad<f32>>,
+        yaw: Option<Deg<f32>>,
+        pitch: Option<Deg<f32>>,
         relative: bool,
         scaled: bool,
     },

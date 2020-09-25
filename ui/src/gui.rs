@@ -37,16 +37,16 @@ $26bobo!
 ";
 
 fn make_default_gridview() -> GridView {
-    // let mut automaton = Automaton2D::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE).unwrap_or_else(|_| {
-    //     warn!("Unable to parse default pattern; using empty pattern instead");
-    //     Default::default()
-    // });
+    let mut automaton = Automaton2D::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE).unwrap_or_else(|_| {
+        warn!("Unable to parse default pattern; using empty pattern instead");
+        Default::default()
+    });
 
-    // automaton.rule = crate::load_custom_rule();
+    automaton.rule = crate::load_custom_rule();
 
-    // GridView::from(automaton)
+    GridView::from(automaton)
 
-    GridView::View3D(GridView3D::default())
+    // GridView::View3D(GridView3D::default())
 }
 
 /// Display the main application window.
@@ -149,7 +149,7 @@ pub fn show_gui() -> ! {
                 let ui = imgui.frame();
                 main_window.build(&ui, &mut config, &gridview);
 
-                // Update the viewport and run the simulation if necessary.
+                // Update the camera and run the simulation if necessary.
                 gridview.do_frame(&config).expect("Unhandled exception!");
 
                 let mut target = display.draw();

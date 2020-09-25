@@ -3,6 +3,7 @@ use log::{trace, warn};
 use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::sync::Arc;
+use std::time::Instant;
 
 use ndcell_core::prelude::*;
 
@@ -53,63 +54,6 @@ impl AsMut<GridViewCommon> for GridView2D {
 }
 
 impl GridViewTrait for GridView2D {
-    fn do_move_command(
-        &mut self,
-        command: MoveCommand,
-        interpolation: Interpolation,
-        config: &Config,
-    ) -> Result<()> {
-        let mut new_viewport = match interpolation {
-            Interpolation::Direct => self.camera().clone(),
-            Interpolation::Decay => self.camera_interpolator.target.clone(),
-        };
-
-        match command {
-            MoveCommand::SnapPos => {
-                if config.ctrl.snap_pos_2d {
-                    new_viewport.snap_pos()
-                }
-            }
-
-            MoveCommand::Scale { log2_factor } => {
-                new_viewport.scale_by_log2_factor(log2_factor, None)
-            }
-            MoveCommand::SetScale { scale } => new_viewport.scale_to(scale, None),
-            MoveCommand::SnapScale => new_viewport.snap_scale(None),
-
-            MoveCommand::Move2D(c) => {
-                match c {
-                    MoveCommand2D::PanPixels(delta) => new_viewport.pan_pixels(delta),
-                    MoveCommand2D::SetPos(pos) => new_viewport.set_pos(pos),
-
-                    MoveCommand2D::Scale {
-                        log2_factor,
-                        invariant_pos,
-                    } => new_viewport.scale_by_factor(log2_factor.exp2(), invariant_pos),
-                    MoveCommand2D::SetScale {
-                        scale,
-                        invariant_pos,
-                    } => new_viewport.scale_to(scale, invariant_pos),
-                    MoveCommand2D::SnapScale { invariant_pos } => {
-                        if config.ctrl.snap_scale_2d {
-                            new_viewport.snap_scale(invariant_pos)
-                        }
-                    }
-                };
-            }
-
-            MoveCommand::Move3D(_) => warn!("Ignoring {:?} in GridView2D", command),
-        }
-
-        self.camera_interpolator.target = new_viewport;
-        match interpolation {
-            Interpolation::Direct => {
-                self.camera_interpolator.current = self.camera_interpolator.target.clone();
-            }
-            Interpolation::Decay => (),
-        };
-        Ok(())
-    }
     fn do_draw_command(&mut self, command: DrawCommand, _config: &Config) -> Result<()> {
         match command {
             DrawCommand::Start => {
@@ -247,7 +191,9 @@ impl GridViewTrait for GridView2D {
         let mut rip = RenderInProgress::new(self, &node_cache, &mut render_cache, target)?;
         rip.draw_cells()?;
 
-        let hover_pos = params.cursor_pos.map(|pos| rip.pixel_pos_to_cell_pos(pos));
+        let hover_pos = params
+            .cursor_pos
+            .and_then(|pos| rip.cell_transform().pixel_to_global_cell(pos));
         // Only allow drawing at 1:1 or bigger.
         let draw_pos = if self.camera().scale().log2_factor() >= 0.0 {
             hover_pos.clone()
@@ -266,12 +212,14 @@ impl GridViewTrait for GridView2D {
             rip.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0)?;
         }
 
+        let cell_transform = rip.cell_transform().clone();
         drop(node_cache);
         self.render_cache = Some(render_cache);
         Ok(self.push_render_result(RenderResult {
             hover_pos: hover_pos.map(|v| v.into()),
             draw_pos: draw_pos.map(|v| v.into()),
-            ..Default::default()
+            cell_transform: cell_transform.into(),
+            instant: Instant::now(),
         }))
     }
 }

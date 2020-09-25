@@ -2,11 +2,9 @@ use glium::glutin::dpi::{PhysicalPosition, PhysicalSize};
 use glium::glutin::event::*;
 use imgui_winit_support::WinitPlatform;
 use std::collections::HashSet;
-use std::convert::TryInto;
 use std::ops::{Deref, DerefMut, Index};
 use std::time::{Duration, Instant};
 
-use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
 use crate::config::Config;
@@ -20,6 +18,10 @@ const SHIFT: ModifiersState = ModifiersState::SHIFT;
 const CTRL: ModifiersState = ModifiersState::CTRL;
 const ALT: ModifiersState = ModifiersState::ALT;
 const LOGO: ModifiersState = ModifiersState::LOGO;
+
+/// Cooldown time between the user changing the scale factor and the scale
+/// factor snapping to the nearest power-of-2 factor.
+const SCALE_SNAP_COOLDOWN: Duration = Duration::from_millis(200);
 
 // Define keyboard scancodes. OSX scancodes are from
 // https://eastmanreference.com/complete-list-of-applescript-key-codes
@@ -44,18 +46,28 @@ mod sc {
 
 #[derive(Debug, Default)]
 pub struct State {
-    /// A record of which keys are pressed.
+    /// Set of pressed keys.
     keys: KeysPressed,
-    /// A record of which modifiers are pressed.
+    /// Set of pressed modifiers.
     modifiers: ModifiersState,
-    /// Whether the right mouse button is held.
+
+    /// Whether the left mouse button is pressed.
+    lmb_held: bool,
+    /// Whether the right mouse button is pressed.
     rmb_held: bool,
-    /// The pixel position of the mouse cursor from the top left of the window.
-    cursor_pos: Option<IVec2D>,
-    /// The cursor position on the last frame.
-    last_cursor_pos: Option<IVec2D>,
-    /// The next time that the scale should snap to the nearest power of 2.
-    time_to_snap_scale: Option<Instant>,
+    /// Whether the middle mouse button is pressed.
+    mmb_held: bool,
+
+    /// Current pixel position of the mouse cursor (relative to top left).
+    cursor_pos: Option<FVec2D>,
+    /// Pixel position of the mouse cursor on the last frame (relative to top left).
+    last_cursor_pos: Option<FVec2D>,
+
+    /// Cooldown until scale snap.
+    scale_snap_cooldown: Option<Instant>,
+    /// Cooldown until position snap.
+    move_snap_cooldown: Option<Instant>,
+
     /// The cell state being used in the current drawing operation.
     draw_cell_state: Option<u8>,
 
@@ -65,8 +77,16 @@ pub struct State {
     window_position: Option<PhysicalPosition<i32>>,
 }
 impl State {
-    pub fn cursor_pos(&self) -> Option<IVec2D> {
+    pub fn cursor_pos(&self) -> Option<FVec2D> {
         self.cursor_pos
+    }
+    pub fn mouse_buttton_held(&self) -> Option<MouseButton> {
+        match (self.lmb_held, self.rmb_held, self.mmb_held) {
+            (true, false, false) => Some(MouseButton::Left),
+            (false, true, false) => Some(MouseButton::Right),
+            (false, false, true) => Some(MouseButton::Middle),
+            _ => None,
+        }
     }
     pub fn frame<'a>(
         &'a mut self,
@@ -143,23 +163,12 @@ impl<'a> FrameInProgress<'a> {
                     WindowEvent::CursorMoved {
                         position: PhysicalPosition { x, y },
                         ..
-                    } if self.has_mouse => {
-                        let new_pos = NdVec([x.round() as isize, y.round() as isize]);
-
-                        if let (true, Some(old_pos)) = (self.rmb_held, self.cursor_pos) {
-                            let mut delta = new_pos - old_pos;
-                            delta[X] = -delta[X]; // TODO: why invert X? explain.
-                            match self.gridview {
-                                GridView::View2D(view2d) => {
-                                    view2d.enqueue(
-                                        MoveCommand2D::PanPixels(delta.to_fixedvec()).direct(),
-                                    );
-                                }
-                                _ => (),
+                    } => {
+                        if self.has_mouse {
+                            if let (Some(x), Some(y)) = (R64::try_new(*x), R64::try_new(*y)) {
+                                self.state.cursor_pos = Some(NdVec([x, y]));
                             }
-                            // TODO: implement velocity when letting go
                         }
-                        self.cursor_pos = Some(new_pos);
                     }
                     WindowEvent::MouseWheel { delta, .. } if self.has_mouse => {
                         let (_dx, dy) = match delta {
@@ -170,25 +179,25 @@ impl<'a> FrameInProgress<'a> {
                                 (x, y)
                             }
                         };
-                        self.gridview.enqueue(match self.gridview {
-                            GridView::View2D(view2d) => MoveCommand2D::Scale {
-                                log2_factor: r64(dy * self.config.ctrl.scroll_speed_2d),
-                                invariant_pos: view2d
-                                    .nth_render_result(0)
-                                    .hover_pos
-                                    .clone()
-                                    .and_then(|v| v.try_into().ok())
-                                    .clone(),
+                        let speed = match (&self.gridview, delta) {
+                            (GridView::View2D(_), MouseScrollDelta::LineDelta(_, _)) => {
+                                self.config.ctrl.discrete_scale_speed_2d
                             }
-                            .decay(),
-                            GridView::View3D(_view3d) => MoveCommand3D::Scale {
-                                log2_factor: r64(dy * self.config.ctrl.scroll_speed_3d),
-                                invariant_pos: None,
+                            (GridView::View2D(_), MouseScrollDelta::PixelDelta(_)) => {
+                                self.config.ctrl.smooth_scroll_speed_2d
                             }
-                            .decay(),
+                            (GridView::View3D(_), MouseScrollDelta::LineDelta(_, _)) => {
+                                self.config.ctrl.discrete_scale_speed_3d
+                            }
+                            (GridView::View3D(_), MouseScrollDelta::PixelDelta(_)) => {
+                                self.config.ctrl.smooth_scroll_speed_3d
+                            }
+                        };
+                        self.gridview.enqueue(MoveCommand::Scale {
+                            log2_factor: dy * speed,
+                            invariant_pos: self.cursor_pos,
                         });
-                        // TODO magic numbers ick
-                        self.time_to_snap_scale = Some(Instant::now() + Duration::from_millis(200));
+                        self.scale_snap_cooldown = Some(Instant::now() + SCALE_SNAP_COOLDOWN);
                     }
                     WindowEvent::MouseInput {
                         button: MouseButton::Left,
@@ -216,45 +225,22 @@ impl<'a> FrameInProgress<'a> {
                             self.stop_drawing();
                         }
                     },
-                    WindowEvent::MouseInput {
-                        button: MouseButton::Right,
-                        state,
-                        ..
-                    } if self.has_mouse => {
-                        self.rmb_held = *state == ElementState::Pressed;
+                    WindowEvent::MouseInput { button, state, .. } if self.has_mouse => {
+                        let pressed = *state == ElementState::Pressed;
+                        match button {
+                            MouseButton::Left => self.lmb_held = pressed,
+                            MouseButton::Right => self.rmb_held = pressed,
+                            MouseButton::Middle => self.mmb_held = pressed,
+                            MouseButton::Other(_) => (),
+                        };
                     }
 
-                    WindowEvent::Resized(size) => {
-                        if self.config.ctrl.immersive {
-                            if let Some(old_size) = self.state.window_size {
-                                let dw = r64((size.width as f64 - old_size.width as f64) / 2.0);
-                                let dh = r64((size.height as f64 - old_size.height as f64) / 2.0);
-                                let delta: FVec2D = NdVec([dw, -dh]);
-                                self.gridview.enqueue(
-                                    MoveCommand2D::PanPixels(delta.to_fixedvec()).direct(),
-                                );
-                            }
-                            self.state.window_size = Some(*size);
-                        }
-                    }
-                    WindowEvent::Moved(position) => {
-                        if self.config.ctrl.immersive {
-                            if let Some(old_position) = self.state.window_position {
-                                let dx = r64((position.x - old_position.x) as f64);
-                                let dy = r64((position.y - old_position.y) as f64);
-                                let delta: FVec2D = NdVec([dx, -dy]);
-                                self.gridview.enqueue(
-                                    MoveCommand2D::PanPixels(delta.to_fixedvec()).direct(),
-                                );
-                            }
-                            self.state.window_position = Some(*position);
-                        }
-                    }
-
+                    // Ignore other `WindowEvent`s.
                     _ => (),
                 }
             }
-            // Ignore non-WindowEvents.
+
+            // Ignore non-`WindowEvent`s.
             _ => (),
         }
     }
@@ -313,19 +299,24 @@ impl<'a> FrameInProgress<'a> {
                         // Center pattern.
                         Some(VirtualKeyCode::M) => {
                             self.gridview.enqueue(match self.gridview {
-                                GridView::View2D(_) => {
-                                    MoveCommand2D::SetPos(FixedVec2D::origin()).decay()
-                                }
-                                GridView::View3D(_) => {
-                                    MoveCommand3D::SetPos(FixedVec3D::origin()).decay()
-                                }
+                                GridView::View2D(_) => MoveCommand::GoTo2D {
+                                    x: Some(r64(0.0).into()),
+                                    y: Some(r64(0.0).into()),
+                                    relative: false,
+                                    scaled: false,
+                                },
+                                GridView::View3D(_) => MoveCommand::GoTo3D {
+                                    x: Some(r64(0.0).into()),
+                                    y: Some(r64(0.0).into()),
+                                    z: Some(r64(0.0).into()),
+                                    yaw: Some(crate::gridview::Camera3D::DEFAULT_YAW.into()),
+                                    pitch: Some(crate::gridview::Camera3D::DEFAULT_PITCH.into()),
+                                    relative: false,
+                                    scaled: false,
+                                },
                             });
-                            self.gridview.enqueue(
-                                MoveCommand::SetScale {
-                                    scale: Scale::default(),
-                                }
-                                .decay(),
-                            );
+                            self.gridview
+                                .enqueue(MoveCommand::GoToScale(Scale::default()));
                         }
                         _ => (),
                     }
@@ -377,107 +368,130 @@ impl<'a> FrameInProgress<'a> {
         let mut moved = false;
         let mut scaled = false;
 
+        if let (Some(start), Some(end)) = (self.state.last_cursor_pos, self.state.cursor_pos) {
+            match self.state.mouse_buttton_held() {
+                Some(MouseButton::Left) => {}
+                Some(MouseButton::Right) => {
+                    moved = true;
+                    if self.gridview.is_2d() {
+                        self.gridview.enqueue(MoveCommand::Pan { start, end });
+                    } else if self.modifiers.shift() {
+                        self.gridview.enqueue(MoveCommand::Pan { start, end });
+                    } else {
+                        self.gridview.enqueue(MoveCommand::Orbit { start, end });
+                    };
+                }
+                Some(MouseButton::Middle) => {
+                    if self.gridview.is_3d() {
+                        self.gridview.enqueue(MoveCommand::Pan { start, end });
+                    }
+                }
+                _ => {}
+            }
+        }
+
         let speed_per_second = if self.modifiers.shift() {
-            self.config.ctrl.base_speed_2
+            self.config.ctrl.speed_modifier
         } else {
-            self.config.ctrl.base_speed_1
+            1.0
         };
         let speed = speed_per_second / self.gridview.fps(&self.config);
+
+        // 'A' or left arrow => pan west.
+        let pan_left = self.keys[sc::A] || self.keys[VirtualKeyCode::Left];
+        // 'D' or right arrow => pan east.
+        let pan_right = self.keys[sc::D] || self.keys[VirtualKeyCode::Right];
+        // 'W' or up arrow => pan north (2D) / forward (3D).
+        let pan_north = self.keys[sc::W] || self.keys[VirtualKeyCode::Up];
+        // 'S' or down arrow => pan south (2D) / backward (3D).
+        let pan_south = self.keys[sc::S] || self.keys[VirtualKeyCode::Down];
+
+        // 'Q' or page up => zoom in (2D).
+        let zoom_in =
+            self.gridview.is_2d() && (self.keys[sc::Q] || self.keys[VirtualKeyCode::PageUp]);
+        // 'Z' or page down => zoom out (2D).
+        let zoom_out =
+            self.gridview.is_2d() && (self.keys[sc::Z] || self.keys[VirtualKeyCode::PageDown]);
+
+        let move_left = pan_left;
+        let move_right = pan_right;
+        let move_fwd = pan_north;
+        let move_back = pan_south;
+        // 'Q' or page up => move up (3D).
+        let move_up =
+            self.gridview.is_3d() && (self.keys[sc::Q] || self.keys[VirtualKeyCode::PageUp]);
+        // 'Z' or page down => move down (3D).
+        let move_down =
+            self.gridview.is_3d() && (self.keys[sc::Z] || self.keys[VirtualKeyCode::PageDown]);
+
         if self.has_keyboard && !self.modifiers.intersects(CTRL | ALT | LOGO) {
             match self.gridview {
                 GridView::View2D(view2d) => {
-                    let scale_speed = r64(self.config.ctrl.scale_speed_2d * speed);
-                    let move_speed = r64(self.config.ctrl.move_speed_2d * speed * self.dpi);
-                    let mut pan = FVec2D::origin();
-                    // 'A' or left arrow => pan west.
-                    if self.keys[sc::A] || self.keys[VirtualKeyCode::Left] {
-                        pan[X] -= move_speed;
-                    }
-                    // 'D' or right arrow => pan east.
-                    if self.keys[sc::D] || self.keys[VirtualKeyCode::Right] {
-                        pan[X] += move_speed;
-                    }
-                    // 'W' or up arrow => pan north.
-                    if self.keys[sc::W] || self.keys[VirtualKeyCode::Up] {
-                        pan[Y] += move_speed;
-                    }
-                    // 'S' or down arrow => pan south.
-                    if self.keys[sc::S] || self.keys[VirtualKeyCode::Down] {
-                        pan[Y] -= move_speed;
-                    }
-                    if !pan.is_zero() {
-                        view2d.enqueue(MoveCommand2D::PanPixels(pan.to_fixedvec()).decay());
+                    let move_speed = self.config.ctrl.keybd_move_speed_2d * speed * self.dpi;
+                    let pan_x = if pan_left { -move_speed } else { 0.0 }
+                        + if pan_right { move_speed } else { 0.0 };
+                    let pan_y = if pan_south { -move_speed } else { 0.0 }
+                        + if pan_north { move_speed } else { 0.0 };
+                    if (pan_x, pan_y) != (0.0, 0.0) {
+                        view2d.enqueue(MoveCommand::GoTo2D {
+                            x: Some(r64(pan_x).into()),
+                            y: Some(r64(pan_y).into()),
+                            relative: true,
+                            scaled: true,
+                        });
                         moved = true;
                     }
-                    // 'Q' or page up => zoom in.
-                    if self.keys[sc::Q] || self.keys[VirtualKeyCode::PageUp] {
-                        view2d.enqueue(
-                            MoveCommand2D::Scale {
-                                log2_factor: scale_speed,
-                                invariant_pos: None,
-                            }
-                            .decay(),
-                        );
-                        scaled = true;
-                    }
-                    // 'Z' or page down => zoom out.
-                    if self.keys[sc::Z] || self.keys[VirtualKeyCode::PageDown] {
-                        view2d.enqueue(
-                            MoveCommand2D::Scale {
-                                log2_factor: -scale_speed,
-                                invariant_pos: None,
-                            }
-                            .decay(),
-                        );
+
+                    let scale_speed = self.config.ctrl.keybd_scale_speed_2d * speed;
+                    let log2_factor = if zoom_in { scale_speed } else { 0.0 }
+                        + if zoom_out { -scale_speed } else { 0.0 };
+                    if log2_factor != 0.0 {
+                        let invariant_pos = None;
+                        view2d.enqueue(MoveCommand::Scale {
+                            log2_factor,
+                            invariant_pos,
+                        });
                         scaled = true;
                     }
                 }
 
                 GridView::View3D(view3d) => {
-                    let move_speed = r64(self.config.ctrl.move_speed_3d * speed * self.dpi);
-                    let mut move_vec = FVec3D::origin();
-                    // 'A' or left arrow => move left.
-                    if self.keys[sc::A] || self.keys[VirtualKeyCode::Left] {
-                        move_vec[X] -= move_speed;
-                    }
-                    // 'D' or right arrow => move right.
-                    if self.keys[sc::D] || self.keys[VirtualKeyCode::Right] {
-                        move_vec[X] += move_speed;
-                    }
-                    // 'W' or up arrow => move forward.
-                    if self.keys[sc::W] || self.keys[VirtualKeyCode::Up] {
-                        move_vec[Z] -= move_speed;
-                    }
-                    // 'S' or down arrow => move backward.
-                    if self.keys[sc::S] || self.keys[VirtualKeyCode::Down] {
-                        move_vec[Z] += move_speed;
-                    }
-                    // 'Q' or page up => move up.
-                    if self.keys[sc::Q] || self.keys[VirtualKeyCode::PageUp] {
-                        move_vec[Y] += move_speed;
-                    }
-                    // 'Z' or page down => move down.
-                    if self.keys[sc::Z] || self.keys[VirtualKeyCode::PageDown] {
-                        move_vec[Y] -= move_speed;
-                    }
-                    if !move_vec.is_zero() {
-                        view3d.enqueue(MoveCommand3D::MovePixels(move_vec.to_fixedvec()).decay());
+                    let move_speed = self.config.ctrl.keybd_move_speed_3d * speed * self.dpi;
+                    let x = if move_left { -move_speed } else { 0.0 }
+                        + if move_right { move_speed } else { 0.0 };
+                    let y = if move_down { -move_speed } else { 0.0 }
+                        + if move_up { move_speed } else { 0.0 };
+                    let z = if move_back { -move_speed } else { 0.0 }
+                        + if move_fwd { move_speed } else { 0.0 };
+                    if (x, y, z) != (0.0, 0.0, 0.0) {
+                        view3d.enqueue(MoveCommand::GoTo3D {
+                            x: Some(r64(x).into()),
+                            y: Some(r64(y).into()),
+                            z: Some(r64(z).into()),
+                            yaw: None,
+                            pitch: None,
+                            relative: true,
+                            scaled: true,
+                        });
                         moved = true;
                     }
                 }
             }
         }
-        if !moved && !self.rmb_held {
+        if !moved {
             // Snap to the nearest position.
-            self.gridview.enqueue(MoveCommand::SnapPos.decay());
+            self.gridview.enqueue(MoveCommand::SnapPos);
         }
         if scaled {
-            self.time_to_snap_scale = Some(Instant::now() + Duration::from_millis(10));
+            self.scale_snap_cooldown = Some(Instant::now() + Duration::from_millis(10));
         }
-        if self.time_to_snap_scale.is_none() || (Instant::now() >= self.time_to_snap_scale.unwrap())
+        if self.scale_snap_cooldown.is_none()
+            || (Instant::now() >= self.scale_snap_cooldown.unwrap())
         {
-            // Snap to the nearest power-of-2 scela.
-            self.gridview.enqueue(MoveCommand::SnapScale.decay());
+            // Snap to the nearest power-of-2 scale.
+            self.gridview.enqueue(MoveCommand::SnapScale {
+                invariant_pos: None,
+            });
         }
         self.last_cursor_pos = self.cursor_pos;
     }

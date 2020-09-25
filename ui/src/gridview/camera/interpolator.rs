@@ -1,16 +1,18 @@
 //! Camera interpolation.
 
+use anyhow::Result;
 use std::marker::PhantomData;
 
 use ndcell_core::dim::Dim;
 use ndcell_core::num::{r64, ToPrimitive};
 
-use super::Camera;
-use crate::config::Interpolation;
+use super::{Camera, CellTransform};
+use crate::config::{Config, Interpolation};
+use crate::gridview::commands::MoveCommand;
 
 /// Distance beneath which to "snap" to the target, for interpolation strategies
 /// like exponential decay that never actually reach their target.
-const DISTANCE_THRESHOLD: f64 = 0.1;
+const DISTANCE_THRESHOLD: f64 = 0.001;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Interpolator<D: Dim, C: Camera<D>> {
@@ -32,7 +34,7 @@ impl<D: Dim, C: Camera<D>> From<C> for Interpolator<D, C> {
 
 /// Stateful interpolation.
 ///
-/// This abstracts away dimensionality, so it can be used as a traiit object.
+/// This abstracts away dimensionality, so it can be used as a trait object.
 pub trait Interpolate {
     /// Returns the distance between the current state and the target state.
     fn distance(&self) -> f64;
@@ -41,6 +43,14 @@ pub trait Interpolate {
     ///
     /// Returns `true` if the target has been reached, or `false` otherwise.
     fn advance(&mut self, fps: f64, interpolation: Interpolation) -> bool;
+
+    /// Executes a movement command, interpolating if necessary.
+    fn do_move_command(
+        &mut self,
+        command: MoveCommand,
+        config: &Config,
+        cell_transform: &CellTransform,
+    ) -> Result<()>;
 }
 impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
     fn distance(&self) -> f64 {
@@ -50,7 +60,10 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
     }
 
     fn advance(&mut self, fps: f64, interpolation: Interpolation) -> bool {
-        if self.current == self.target || self.distance() < DISTANCE_THRESHOLD {
+        if self.current == self.target {
+            true
+        } else if self.distance() < DISTANCE_THRESHOLD {
+            self.current = self.target.clone();
             true
         } else {
             let t = match interpolation {
@@ -67,5 +80,25 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
             );
             false
         }
+    }
+
+    fn do_move_command(
+        &mut self,
+        command: MoveCommand,
+        config: &Config,
+        cell_transform: &CellTransform,
+    ) -> Result<()> {
+        let needs_interpolation = command.is_interpolating();
+        if !needs_interpolation {
+            // Cancel the current interpolation.
+            self.target = self.current.clone();
+        }
+        self.target
+            .do_move_command(command, config, cell_transform)?;
+        if !needs_interpolation {
+            // Teleport to the target.
+            self.current = self.target.clone();
+        }
+        Ok(())
     }
 }

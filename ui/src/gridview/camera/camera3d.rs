@@ -1,9 +1,11 @@
+use anyhow::{anyhow, Context, Result};
 use cgmath::{Deg, Euler, Matrix3, Quaternion, Rad};
 
 use ndcell_core::prelude::*;
 
-use super::{Camera, Scale};
-use crate::config::{Config, ForwardAxis3D, UpAxis3D};
+use super::{Camera, CellTransform, CellTransform3D, Scale};
+use crate::config::{Config, CtrlConfig, ForwardAxis3D, Interpolation, UpAxis3D};
+use crate::gridview::commands::MoveCommand;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Camera3D {
@@ -19,7 +21,11 @@ impl Default for Camera3D {
     fn default() -> Self {
         Self {
             scale: Scale::default(),
-            orientation: Euler::new(Deg(30.0).into(), Deg(20.0).into(), Deg(0.0).into()),
+            orientation: Euler::new(
+                Self::DEFAULT_PITCH.into(),
+                Self::DEFAULT_YAW.into(),
+                Deg(0.0).into(),
+            ),
             pivot: FixedVec3D::repeat(r64(0.5).into()),
         }
     }
@@ -28,6 +34,9 @@ impl Default for Camera3D {
 impl Camera3D {
     /// Number of scaled units away from the pivot to position the camera.
     pub const DISTANCE_TO_PIVOT: f64 = 512.0;
+
+    pub const DEFAULT_PITCH: Deg<f32> = Deg(30.0);
+    pub const DEFAULT_YAW: Deg<f32> = Deg(20.0);
 
     /// Returns the orientation of the camera.
     pub fn orientation(&self) -> Euler<Rad<f32>> {
@@ -138,6 +147,64 @@ impl Camera<Dim3D> for Camera3D {
         ret.set_orientation(Quaternion::slerp(ori_a, ori_b, t.raw() as f32));
 
         ret
+    }
+
+    fn do_move_command(
+        &mut self,
+        command: MoveCommand,
+        config: &Config,
+        cell_transform: &CellTransform,
+    ) -> Result<()> {
+        let cell_transform = cell_transform
+            .as_3d()
+            .ok_or(anyhow!("Missing or mistyped 3D cell transform"));
+
+        todo!()
+
+        // match command {
+        //     MoveCommand::SnapPos => {
+        //         if config.ctrl.snap_pos_3d {
+        //             new_viewport.snap_pos()
+        //         }
+        //     }
+        //     MoveCommand::Scale { log2_factor } => {
+        //         new_viewport.scale_by_log2_factor(log2_factor, None)
+        //     }
+        //     MoveCommand::SetScale { scale } => new_viewport.scale_to(scale, None),
+        //     MoveCommand::SnapScale => {
+        //         if config.ctrl.snap_scale_3d {
+        //             new_viewport.snap_scale(None)
+        //         }
+        //     }
+
+        //     MoveCommand::Move2D(_) => warn!("Ignoring {:?} in GridView3D", command),
+
+        //     MoveCommand::Move3D(c) => match c {
+        //         MoveCommand3D::PanPixels { start, end } => {}
+        //         MoveCommand3D::MovePixels(delta) => {
+        //             new_viewport.move_pivot_by_pixels(delta, config)
+        //         }
+        //         MoveCommand3D::SetPos(pos) => new_viewport.set_pos(pos),
+
+        //         MoveCommand3D::RotPixels(_) => {}
+        //         MoveCommand3D::SetPitch(_) => {}
+        //         MoveCommand3D::SetYaw(_) => {}
+
+        //         MoveCommand3D::Scale {
+        //             log2_factor,
+        //             invariant_pos,
+        //         } => new_viewport.scale_by_factor(log2_factor.exp2(), invariant_pos),
+        //         MoveCommand3D::SetScale {
+        //             scale,
+        //             invariant_pos,
+        //         } => new_viewport.scale_to(scale, invariant_pos),
+        //         MoveCommand3D::SnapScale { invariant_pos } => {
+        //             if config.ctrl.snap_scale_3d {
+        //                 new_viewport.snap_scale(invariant_pos)
+        //             }
+        //         }
+        //     },
+        // }
     }
 }
 

@@ -1,3 +1,5 @@
+use cgmath::Rad;
+
 use ndcell_core::prelude::*;
 
 use super::camera::Scale;
@@ -6,7 +8,7 @@ use super::camera::Scale;
 pub enum Command {
     Sim(SimCommand),
     History(HistoryCommand),
-    Move(MoveCommand, Interpolation),
+    Move(MoveCommand),
     Draw(DrawCommand),
     Clipboard(ClipboardCommand),
     GarbageCollect,
@@ -41,81 +43,68 @@ impl From<HistoryCommand> for Command {
 
 #[derive(Debug, Clone)]
 pub enum MoveCommand {
-    SnapPos,
-
-    Scale { log2_factor: R64 },
-    SetScale { scale: Scale },
-    SnapScale,
-
-    Move2D(MoveCommand2D),
-    Move3D(MoveCommand3D),
-}
-impl MoveCommand {
-    pub fn direct(self) -> Command {
-        Command::Move(self, Interpolation::Direct)
-    }
-    pub fn decay(self) -> Command {
-        Command::Move(self, Interpolation::Decay)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum MoveCommand2D {
-    PanPixels(FixedVec2D),
-    SetPos(FixedVec2D),
-
-    Scale {
-        log2_factor: R64,
-        invariant_pos: Option<FixedVec2D>,
+    GoTo2D {
+        x: Option<FixedPoint>,
+        y: Option<FixedPoint>,
+        relative: bool,
+        scaled: bool,
     },
-    SetScale {
-        scale: Scale,
-        invariant_pos: Option<FixedVec2D>,
+    GoTo3D {
+        x: Option<FixedPoint>,
+        y: Option<FixedPoint>,
+        z: Option<FixedPoint>,
+        yaw: Option<Rad<f32>>,
+        pitch: Option<Rad<f32>>,
+        relative: bool,
+        scaled: bool,
     },
-    SnapScale {
-        invariant_pos: Option<FixedVec2D>,
-    },
-}
-impl MoveCommand2D {
-    pub fn direct(self) -> Command {
-        MoveCommand::Move2D(self).direct()
-    }
-    pub fn decay(self) -> Command {
-        MoveCommand::Move2D(self).decay()
-    }
-}
+    GoToScale(Scale),
 
-#[derive(Debug, Clone)]
-pub enum MoveCommand3D {
-    PanPixels {
+    Pan {
+        /// Cursor pixel position before event.
         start: FVec2D,
+        /// Cursor pixel position after event.
         end: FVec2D,
     },
-    MovePixels(FixedVec3D),
-    SetPos(FixedVec3D),
-
-    RotPixels(FixedVec2D),
-    SetPitch(f64),
-    SetYaw(f64),
-
+    Orbit {
+        /// Cursor pixel position before event.
+        start: FVec2D,
+        /// Cursor pixel position after event.
+        end: FVec2D,
+    },
     Scale {
-        log2_factor: R64,
-        invariant_pos: Option<FixedVec3D>,
+        /// Base-2 logarithm of the relative scale factor.
+        log2_factor: f64,
+        /// Optional invariant position.
+        invariant_pos: Option<FVec2D>,
     },
-    SetScale {
-        scale: Scale,
-        invariant_pos: Option<FixedVec3D>,
-    },
+
+    /// Snap camera to the nearest integer cell position.
+    SnapPos,
+    /// Snap camera to the nearest power-of-2 scale factor.
     SnapScale {
-        invariant_pos: Option<FixedVec3D>,
+        /// Optional invariant position.
+        invariant_pos: Option<FVec2D>,
     },
 }
-impl MoveCommand3D {
-    pub fn direct(self) -> Command {
-        MoveCommand::Move3D(self).direct()
+impl From<MoveCommand> for Command {
+    fn from(c: MoveCommand) -> Self {
+        Self::Move(c)
     }
-    pub fn decay(self) -> Command {
-        MoveCommand::Move3D(self).decay()
+}
+impl MoveCommand {
+    /// Returns whether to interpolate the camera as it undergoes this movement.
+    pub fn is_interpolating(&self) -> bool {
+        match self {
+            Self::GoTo2D { .. } => true,
+            Self::GoTo3D { .. } => true,
+            Self::GoToScale(_) => true,
+            Self::Pan { .. } => false,
+            Self::Orbit { .. } => false,
+            Self::Scale { .. } => true,
+            Self::SnapPos => true,
+            Self::SnapScale { .. } => true,
+        }
     }
 }
 

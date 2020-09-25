@@ -1,16 +1,20 @@
+use anyhow::Result;
+
 use ndcell_core::prelude::*;
 
 mod camera2d;
 mod camera3d;
 mod interpolator;
 mod scale;
+mod transform;
 
+use super::commands::MoveCommand;
+use crate::config::Config;
 pub use camera2d::Camera2D;
 pub use camera3d::Camera3D;
 pub use interpolator::{Interpolate, Interpolator};
 pub use scale::Scale;
-
-// TODO: search for "viewport" and replace with "camera"
+pub use transform::{CellTransform, CellTransform2D, CellTransform3D, NdCellTransform};
 
 /// Number of pixels to pan that feels equivalent to scaling by a factor of 2.
 ///
@@ -18,14 +22,14 @@ pub use scale::Scale;
 /// panning 400 pixels feels about equivalent to scaling by a factor of 2 to me.
 ///
 /// Obviously this depends on DPI and/or window size, but deriving an absolute
-/// formula for it is an absolute nightmare of calculus. All that matters is
-/// it's vaguely proportional to the size of the window, so at some point in the
-/// future this could be changed to something like sqrt(h²+w²) / 5. Here's a
-/// Desmos link if you're curious: https://www.desmos.com/calculator/1yxv7mglnj.
+/// formula for it is a nightmare of calculus. All that matters is it's vaguely
+/// proportional to the size of the window, so at some point in the future this
+/// could be changed to something like sqrt(h²+w²) / 5. Here's a Desmos link if
+/// you're curious: https://www.desmos.com/calculator/1yxv7mglnj.
 const PIXELS_PER_2X_SCALE: f64 = 400.0;
 
 /// Common functionality for 2D and 3D cameras.
-pub trait Camera<D: Dim>: Default + Clone + PartialEq {
+pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
     /// Returns the position the camera is looking at/from.
     fn pos(&self) -> &FixedVec<D>;
     /// Sets the position the camera is looking at/from.
@@ -115,7 +119,7 @@ pub trait Camera<D: Dim>: Default + Clone + PartialEq {
         let scale_distance = a.scale().log2_factor() - b.scale().log2_factor();
         // Use euclidean distance.
         let squared_panning_distance = &panning_distance * &panning_distance;
-        let squared_scale_distance: FixedPoint = scale_distance.exp2().into();
+        let squared_scale_distance: FixedPoint = (scale_distance * scale_distance).into();
         let squared_distance: FixedPoint = squared_panning_distance + squared_scale_distance;
         squared_distance.sqrt()
     }
@@ -130,6 +134,14 @@ pub trait Camera<D: Dim>: Default + Clone + PartialEq {
     /// interpolates scale factor logarithmically.
     #[must_use = "This method returns a new value instead of mutating its input"]
     fn lerp(a: &Self, b: &Self, t: R64) -> Self;
+
+    /// Executes a movement command.
+    fn do_move_command(
+        &mut self,
+        command: MoveCommand,
+        config: &Config,
+        cell_transform: &CellTransform,
+    ) -> Result<()>;
 }
 
 /// Returns the "average" scale between the two cameras, averaging scale

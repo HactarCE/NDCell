@@ -72,10 +72,10 @@ pub struct RenderInProgress<'a> {
     pos: FVec2D,
     /// Rectangle of render cells within `visible_quadtree` that is visible.
     visible_rect: IRect2D,
-    /// View matrix converting from `visible_quadtree` space (1 unit = 1 render
-    /// cell; (0, 0) = bottom left) to screen space ((-1, -1) = bottom left; (1,
-    /// 1) = top right).
-    view_matrix: Matrix4<f32>,
+    /// Transform from `visible_quadtree` space (1 unit = 1 render cell; (0, 0)
+    /// = bottom left) to screen space ((-1, -1) = bottom left; (1, 1) = top
+    /// right) and pixel space (1 unit = 1 pixel; (0, 0) = top left).
+    transform: CellTransform2D,
     /// Cached render data maintained by the `GridView2D`.
     render_cache: &'a mut RenderCache,
 }
@@ -178,7 +178,7 @@ impl<'a> RenderInProgress<'a> {
 
         // Compute the render cell view matrix, used for rendering gridlines and
         // determining cursor position.
-        let view_matrix: Matrix4<f32>;
+        let render_cell_view_matrix: Matrix4<f32>;
         {
             // Compute the scale factor for the view matrix. Multiply by 2
             // because the OpenGL screen space ranges from -1 to +1.
@@ -198,9 +198,16 @@ impl<'a> RenderInProgress<'a> {
             let scale_y = scale[Y].to_f32().context("scale[Y].to_f32()")?;
             let offset_x = offset[X].to_f32().context("offset[X].to_f32()")?;
             let offset_y = offset[Y].to_f32().context("offset[Y].to_f32()")?;
-            view_matrix = Matrix4::from_nonuniform_scale(scale_x, scale_y, 1.0)
+            render_cell_view_matrix = Matrix4::from_nonuniform_scale(scale_x, scale_y, 1.0)
                 * Matrix4::from_translation(-cgmath::Vector3::new(offset_x, offset_y, 0.0));
         }
+
+        let transform = CellTransform2D::new(
+            visible_quadtree.offset.clone(),
+            render_cell_layer,
+            render_cell_view_matrix,
+            target.get_dimensions(),
+        );
 
         Ok(Self {
             camera,
@@ -210,9 +217,13 @@ impl<'a> RenderInProgress<'a> {
             visible_quadtree,
             pos,
             visible_rect,
-            view_matrix,
+            transform,
             render_cache,
         })
+    }
+
+    pub fn cell_transform(&self) -> &CellTransform2D {
+        &self.transform
     }
 
     /// Draw the cells that appear in the viewport.
@@ -310,31 +321,6 @@ impl<'a> RenderInProgress<'a> {
         Ok(())
     }
 
-    /// Returns the coordinates of the cell at the given pixel.
-    pub fn pixel_pos_to_cell_pos(&self, cursor_position: IVec2D) -> FixedVec2D {
-        // TODO: replace with view matrix, duh
-
-        let mut x = cursor_position[X];
-        let mut y = cursor_position[Y];
-        // Center the coordinates.
-        let (target_w, target_h) = self.target.get_dimensions();
-        x -= target_w as isize / 2;
-        y -= target_h as isize / 2;
-        // Glutin measures window coordinates from the top-left corner, but we
-        // want the Y coordinate increasing upwards.
-        y = -y;
-        // Convert to float.
-        let pixels_from_center = NdVec([r64(x as f64), r64(y as f64)]);
-        // Convert to render cell space (relative to slice).
-        let render_cells_from_center =
-            pixels_from_center / self.render_cell_scale.pixels_per_cell();
-        // Convert to local cell space (relative to slice).
-        let local_pos = (self.pos + render_cells_from_center).to_fixedvec()
-            << self.render_cell_layer.to_usize();
-        // Convert to global cell space.
-        local_pos + self.visible_quadtree.offset.to_fixedvec()
-    }
-
     /// Draws gridlines at varying opacity and spacing depending on scaling.
     ///
     /// TOOD: support arbitrary exponential base and factor (a*b^n for any a, b)
@@ -390,7 +376,10 @@ impl<'a> RenderInProgress<'a> {
         width: f64,
     ) -> Result<()> {
         if !self.visible_quadtree.rect().contains(cell_position) {
-            warn!("Cursor position is outside visible rectangle");
+            warn!(
+                "Cursor position is outside visible rectangle: {:?}",
+                cell_position
+            );
             return Ok(());
         }
         let cell_pos = cell_position - &self.visible_quadtree.offset;
@@ -647,7 +636,7 @@ impl<'a> RenderInProgress<'a> {
                     vbo_slice,
                     &ibos::rect_indices(count),
                     &shaders::POINTS,
-                    &uniform! { matrix: self.raw_view_matrix() },
+                    &uniform! { matrix: self.transform.gl_render_cell_transform() },
                     &glium::DrawParameters {
                         blend: glium::Blend::alpha_blending(),
                         depth: glium::Depth {
@@ -698,11 +687,6 @@ impl<'a> RenderInProgress<'a> {
             (r as u8, g as u8, b as u8)
         };
         [r, g, b, 255]
-    }
-
-    /// Returns the raw view matrix for passing to GLSL.
-    fn raw_view_matrix(&self) -> [[f32; 4]; 4] {
-        self.view_matrix.into()
     }
 }
 

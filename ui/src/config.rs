@@ -9,50 +9,49 @@ pub struct Config {
 
 #[derive(Debug)]
 pub struct CtrlConfig {
-    pub move_speed_2d: f64,
-    pub move_speed_3d: f64,
-    pub scale_speed_2d: f64,
-    pub scale_speed_3d: f64,
-    pub scroll_speed_2d: f64,
-    pub scroll_speed_3d: f64,
-    pub base_speed_1: f64,
-    pub base_speed_2: f64,
+    pub keybd_move_speed_2d: f64,
+    pub keybd_move_speed_3d: f64,
+    pub keybd_scale_speed_2d: f64,
+    pub keybd_scale_speed_3d: f64,
+    pub discrete_scale_speed_2d: f64,
+    pub discrete_scale_speed_3d: f64,
+    pub smooth_scroll_speed_2d: f64,
+    pub smooth_scroll_speed_3d: f64,
+    // TODO: make speed_modifier an attribute of the keybind
+    pub speed_modifier: f64,
 
     pub snap_pos_2d: bool,
-    pub snap_scale_2d: bool,
     pub snap_pos_3d: bool,
+    pub snap_scale_2d: bool,
     pub snap_scale_3d: bool,
 
     pub up_axis_3d: UpAxis3D,
     pub fwd_axis_3d: ForwardAxis3D,
 
     pub interpolation: Interpolation,
-
-    pub immersive: bool,
 }
 impl Default for CtrlConfig {
     fn default() -> Self {
         Self {
-            move_speed_2d: 1000.0,
-            move_speed_3d: 250.0,
-            scale_speed_2d: 4.0,
-            scale_speed_3d: 2.0,
-            scroll_speed_2d: 1.0,
-            scroll_speed_3d: 0.5,
-            base_speed_1: 1.0,
-            base_speed_2: 3.0,
+            keybd_move_speed_2d: 1000.0,
+            keybd_move_speed_3d: 250.0,
+            keybd_scale_speed_2d: 4.0,
+            keybd_scale_speed_3d: 2.0,
+            discrete_scale_speed_2d: 1.0,
+            discrete_scale_speed_3d: 0.5,
+            smooth_scroll_speed_2d: 1.0,
+            smooth_scroll_speed_3d: 0.5,
+            speed_modifier: 3.0,
 
             snap_pos_2d: true,
-            snap_scale_2d: true,
             snap_pos_3d: true,
+            snap_scale_2d: true,
             snap_scale_3d: false,
 
             up_axis_3d: UpAxis3D::default(),
             fwd_axis_3d: ForwardAxis3D::default(),
 
             interpolation: Interpolation::default(),
-
-            immersive: false,
         }
     }
 }

@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use enum_dispatch::enum_dispatch;
 use log::{debug, trace, warn};
 use parking_lot::Mutex;
@@ -148,7 +148,7 @@ pub trait GridViewTrait:
         match command {
             Command::Sim(c) => self.do_sim_command(c, config),
             Command::History(c) => self.do_history_command(c, config),
-            Command::Move(c, interpolation) => self.do_move_command(c, interpolation, config),
+            Command::Move(c) => self.do_move_command(c, config),
             Command::Draw(c) => self.do_draw_command(c, config),
             Command::Clipboard(c) => self.do_clipboard_command(c, config),
             Command::GarbageCollect => Ok(self.schedule_gc()),
@@ -211,13 +211,13 @@ pub trait GridViewTrait:
         }
         Ok(())
     }
-    /// Executes a `Move2Command`.
-    fn do_move_command(
-        &mut self,
-        command: MoveCommand,
-        interpolation: Interpolation,
-        config: &Config,
-    ) -> Result<()>;
+    /// Executes a `Move` command.
+    fn do_move_command(&mut self, command: MoveCommand, config: &Config) -> Result<()> {
+        let cell_transform = self.nth_render_result(0).cell_transform.clone();
+        self.camera_interpolator()
+            .do_move_command(command, config, &cell_transform)
+            .context("Executing move command")
+    }
     /// Executes a `Draw` command.
     fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()>;
     /// Executes a `Clipboard` command.
@@ -360,6 +360,22 @@ impl GridView {
             Self::View3D(view3d) => view3d,
         }
     }
+
+    /// Returns whether the `GridView` is 2D.
+    pub fn is_2d(&self) -> bool {
+        match self {
+            GridView::View2D(_) => true,
+            GridView::View3D(_) => false,
+        }
+    }
+
+    /// Returns whether the `GridView` is 3D.
+    pub fn is_3d(&self) -> bool {
+        match self {
+            GridView::View2D(_) => false,
+            GridView::View3D(_) => true,
+        }
+    }
 }
 
 impl AsSimulate for GridView {
@@ -404,7 +420,7 @@ impl History for GridView {
 pub struct RenderParams {
     /// The pixel position of the mouse cursor from the top left of the area
     /// where the gridview is being drawn.
-    pub cursor_pos: Option<IVec2D>,
+    pub cursor_pos: Option<FVec2D>,
 }
 
 /// Information computed during the render.
@@ -415,6 +431,8 @@ pub struct RenderResult {
     pub hover_pos: Option<AnyDimFixedVec>,
     /// The cell in the projected ND-tree to draw at if the user draws.
     pub draw_pos: Option<AnyDimFixedVec>,
+    /// Transformation from cells to screen pixels.
+    pub cell_transform: CellTransform,
     /// The moment that this render finished.
     pub instant: Instant,
 }
@@ -423,6 +441,7 @@ impl Default for RenderResult {
         Self {
             hover_pos: None,
             draw_pos: None,
+            cell_transform: CellTransform::None,
             instant: Instant::now(),
         }
     }

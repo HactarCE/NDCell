@@ -1,6 +1,12 @@
+use anyhow::{Context, Result};
+use log::warn;
+
+use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
 
-use super::{Camera, Scale};
+use super::{Camera, CellTransform, Scale};
+use crate::config::Config;
+use crate::gridview::commands::MoveCommand;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Camera2D {
@@ -11,14 +17,6 @@ pub struct Camera2D {
 }
 
 impl Camera2D {
-    /// Pan the camera by the given number of pixels along each axis.
-    pub fn pan_pixels(&mut self, delta: FixedVec2D) {
-        self.center += self.scale.pixels_to_cells(delta);
-    }
-    /// Pan the camera by the given number of cells along each axis.
-    pub fn pan_cells(&mut self, delta: FixedVec2D) {
-        self.center += delta;
-    }
     /// Snap to the nearest integer cell position.
     pub fn snap_pos(&mut self) {
         self.center = self.center.round().to_fixedvec();
@@ -88,5 +86,67 @@ impl Camera<Dim2D> for Camera2D {
         ret.center += cells_delta;
 
         ret
+    }
+
+    fn do_move_command(
+        &mut self,
+        command: MoveCommand,
+        _config: &Config,
+        cell_transform: &CellTransform,
+    ) -> Result<()> {
+        match command {
+            MoveCommand::GoTo2D {
+                mut x,
+                mut y,
+                relative,
+                scaled,
+            } => {
+                if scaled {
+                    x = x.map(|x| self.scale.pixels_to_cells(x));
+                    y = y.map(|y| self.scale.pixels_to_cells(y));
+                }
+                if relative {
+                    self.center[X] += x.unwrap_or_default();
+                    self.center[Y] += y.unwrap_or_default();
+                } else {
+                    if let Some(x) = x {
+                        self.center[X] = x;
+                    }
+                    if let Some(y) = y {
+                        self.center[Y] = y;
+                    }
+                }
+            }
+            MoveCommand::GoToScale(scale) => {
+                self.set_scale(scale);
+            }
+            MoveCommand::Pan { start, end } => {
+                let delta = (start - end) * NdVec([r64(1.0), r64(-1.0)]);
+                self.center += self.scale.pixels_to_cells(delta.to_fixedvec());
+            }
+            MoveCommand::Scale {
+                log2_factor,
+                invariant_pos,
+            } => {
+                self.scale_by_log2_factor(
+                    R64::try_new(log2_factor).context("Invalid scale factor")?,
+                    invariant_pos.and_then(|pixel_pos| cell_transform.pixel_to_cell_2d(pixel_pos)),
+                );
+            }
+            MoveCommand::SnapPos => {
+                self.snap_pos();
+            }
+            MoveCommand::SnapScale { invariant_pos } => {
+                self.snap_scale(
+                    invariant_pos.and_then(|pixel_pos| cell_transform.pixel_to_cell_2d(pixel_pos)),
+                );
+            }
+
+            MoveCommand::GoTo3D { .. } | MoveCommand::Orbit { .. } => {
+                warn!("Ignoring {:?} in Camera2D", command)
+            }
+        }
+
+        Ok(())
     }
 }

@@ -112,12 +112,14 @@ impl GridViewTrait for GridView3D {
         //     rip.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0);
         // }
 
+        let cell_transform = rip.cell_transform().clone();
         drop(node_cache);
         // self.render_cache = Some(render_cache);
         Ok(self.push_render_result(RenderResult {
-            // hover_pos,
-            // draw_pos,
-            ..Default::default()
+            hover_pos: None,
+            draw_pos: None,
+            cell_transform: cell_transform.into(),
+            instant: Instant::now(),
         }))
     }
 }

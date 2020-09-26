@@ -47,7 +47,7 @@ impl Default for CtrlConfig {
             speed_modifier: 3.0,
 
             snap_pos_2d: true,
-            snap_pos_3d: true,
+            snap_pos_3d: false,
             snap_scale_2d: true,
             snap_scale_3d: false,
             snap_center_2d: false,

@@ -1,13 +1,13 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use cgmath::prelude::*;
-use cgmath::{Basis3, Deg, Euler, Matrix3, Rad};
+use cgmath::{Basis3, Deg};
 use log::warn;
 
 use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
-use super::{Camera, CellTransform, CellTransform3D, Scale};
-use crate::config::{Config, CtrlConfig, ForwardAxis3D, Interpolation, UpAxis3D};
+use super::{Camera, CellTransform, Scale};
+use crate::config::{Config, ForwardAxis3D, UpAxis3D};
 use crate::gridview::commands::MoveCommand;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -196,9 +196,9 @@ impl Camera<Dim3D> for Camera3D {
                 scaled,
             } => {
                 if scaled {
-                    x = x.map(|x| self.scale.pixels_to_cells(x));
-                    y = y.map(|y| self.scale.pixels_to_cells(y));
-                    z = z.map(|y| self.scale.pixels_to_cells(y));
+                    x = x.map(|x| self.scale.units_to_cells(x));
+                    y = y.map(|y| self.scale.units_to_cells(y));
+                    z = z.map(|y| self.scale.units_to_cells(y));
                 }
                 if relative {
                     let right = self.right_vector(config.ctrl.fwd_axis_3d);
@@ -231,7 +231,14 @@ impl Camera<Dim3D> for Camera3D {
                 self.set_scale(scale);
             }
 
-            MoveCommand::Pan { start, end } => {}
+            MoveCommand::Pan { start, end } => {
+                let z = Self::DISTANCE_TO_PIVOT as f32;
+                let start = cell_transform.pixel_to_cell_3d(start, z);
+                let end = cell_transform.pixel_to_cell_3d(end, z);
+                if let (Some(start), Some(end)) = (start, end) {
+                    self.pivot += start - end;
+                }
+            }
             MoveCommand::Orbit { start, end } => {
                 let delta = (start - end) * r64(config.ctrl.mouse_orbit_speed / config.gfx.dpi);
                 self.set_yaw(self.yaw() + Deg(delta[X].raw() as f32));
@@ -251,50 +258,6 @@ impl Camera<Dim3D> for Camera3D {
         }
 
         Ok(())
-        // match command {
-        //     MoveCommand::SnapPos => {
-        //         if config.ctrl.snap_pos_3d {
-        //             new_viewport.snap_pos()
-        //         }
-        //     }
-        //     MoveCommand::Scale { log2_factor } => {
-        //         new_viewport.scale_by_log2_factor(log2_factor, None)
-        //     }
-        //     MoveCommand::SetScale { scale } => new_viewport.scale_to(scale, None),
-        //     MoveCommand::SnapScale => {
-        //         if config.ctrl.snap_scale_3d {
-        //             new_viewport.snap_scale(None)
-        //         }
-        //     }
-
-        //     MoveCommand::Move2D(_) => warn!("Ignoring {:?} in GridView3D", command),
-
-        //     MoveCommand::Move3D(c) => match c {
-        //         MoveCommand3D::PanPixels { start, end } => {}
-        //         MoveCommand3D::MovePixels(delta) => {
-        //             new_viewport.move_pivot_by_pixels(delta, config)
-        //         }
-        //         MoveCommand3D::SetPos(pos) => new_viewport.set_pos(pos),
-
-        //         MoveCommand3D::RotPixels(_) => {}
-        //         MoveCommand3D::SetPitch(_) => {}
-        //         MoveCommand3D::SetYaw(_) => {}
-
-        //         MoveCommand3D::Scale {
-        //             log2_factor,
-        //             invariant_pos,
-        //         } => new_viewport.scale_by_factor(log2_factor.exp2(), invariant_pos),
-        //         MoveCommand3D::SetScale {
-        //             scale,
-        //             invariant_pos,
-        //         } => new_viewport.scale_to(scale, invariant_pos),
-        //         MoveCommand3D::SnapScale { invariant_pos } => {
-        //             if config.ctrl.snap_scale_3d {
-        //                 new_viewport.snap_scale(invariant_pos)
-        //             }
-        //         }
-        //     },
-        // }
     }
 }
 

@@ -374,11 +374,12 @@ impl<'a> FrameInProgress<'a> {
             match self.state.mouse_buttton_held() {
                 Some(MouseButton::Left) => {}
                 Some(MouseButton::Right) => {
-                    moved = true;
                     if self.gridview.is_2d() {
                         self.gridview.enqueue(MoveCommand::Pan { start, end });
+                        moved = true;
                     } else if self.modifiers.shift() {
                         self.gridview.enqueue(MoveCommand::Pan { start, end });
+                        moved = true;
                     } else {
                         self.gridview.enqueue(MoveCommand::Orbit { start, end });
                     };
@@ -386,6 +387,7 @@ impl<'a> FrameInProgress<'a> {
                 Some(MouseButton::Middle) => {
                     if self.gridview.is_3d() {
                         self.gridview.enqueue(MoveCommand::Pan { start, end });
+                        moved = true;
                     }
                 }
                 _ => {}

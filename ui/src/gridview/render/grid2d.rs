@@ -136,7 +136,7 @@ impl<'a> RenderInProgress<'a> {
                 // the screen.
                 let target_cells_size: FixedVec2D = camera
                     .scale()
-                    .pixels_to_cells(target_pixels_size.to_fixedvec());
+                    .units_to_cells(target_pixels_size.to_fixedvec());
                 // Compute the cell vector pointing from the origin to the top
                 // right corner of the screen; i.e. the "half diagonal."
                 let half_diag: FixedVec2D = target_cells_size / 2.0;
@@ -173,23 +173,22 @@ impl<'a> RenderInProgress<'a> {
             //     * render_cell_scale.cells_per_pixel();
             // Offset by half a pixel if the target dimensions are odd, so that
             // cells boundaries always line up with pixel boundaries.
-            pos += (target_pixels_size % 2.0) * render_cell_scale.cells_per_pixel() / 2.0;
+            pos += (target_pixels_size % 2.0) * render_cell_scale.cells_per_unit() / 2.0;
         }
 
-        // Compute the render cell view matrix, used for rendering gridlines and
-        // determining cursor position.
-        let render_cell_view_matrix: Matrix4<f32>;
+        // Compute the render cell transform; see `NdCellTransform` docs.
+        let render_cell_transform: Matrix4<f32>;
         {
             // Compute the scale factor for the view matrix. Multiply by 2
             // because the OpenGL screen space ranges from -1 to +1.
-            let pixels_per_render_cell = render_cell_scale.pixels_per_cell();
-            let scale = FVec2D::repeat(pixels_per_render_cell) * r64(2.0) / target_pixels_size;
+            let pixels_per_render_cell = render_cell_scale.units_per_cell();
+            let scale = FVec2D::repeat(pixels_per_render_cell);
 
             // Determine the translation offset for the view matrix.
             let mut offset = pos;
             // Offset by a tiny fraction of a pixel so that gridlines round to
             // the top-right instead of rounding whichever way OpenGL picks.
-            offset -= r64(TINY_OFFSET as f64) * render_cell_scale.cells_per_pixel();
+            offset -= r64(TINY_OFFSET as f64) * render_cell_scale.cells_per_unit();
 
             // The offset is in units of render cells, not screen space units,
             // so we apply the translation before scaling, contrary to the usual
@@ -198,15 +197,15 @@ impl<'a> RenderInProgress<'a> {
             let scale_y = scale[Y].to_f32().context("scale[Y].to_f32()")?;
             let offset_x = offset[X].to_f32().context("offset[X].to_f32()")?;
             let offset_y = offset[Y].to_f32().context("offset[Y].to_f32()")?;
-            render_cell_view_matrix = Matrix4::from_nonuniform_scale(scale_x, scale_y, 1.0)
+            render_cell_transform = Matrix4::from_nonuniform_scale(scale_x, scale_y, 1.0)
                 * Matrix4::from_translation(-cgmath::Vector3::new(offset_x, offset_y, 0.0));
         }
 
-        let transform = CellTransform2D::new(
+        let transform = CellTransform2D::new_ortho(
             visible_quadtree.offset.clone(),
             render_cell_layer,
-            render_cell_view_matrix,
-            target.get_dimensions(),
+            render_cell_transform,
+            (target_w as f32, target_h as f32),
         );
 
         Ok(Self {
@@ -261,7 +260,7 @@ impl<'a> RenderInProgress<'a> {
 
         // Step #3: resize that texture by an integer factor.
         // Compute the width of pixels for each render cell.
-        let pixels_per_render_cell = self.render_cell_scale.pixels_per_cell();
+        let pixels_per_render_cell = self.render_cell_scale.units_per_cell();
         let integer_scale_factor = pixels_per_render_cell.round().to_u32().unwrap();
         let visible_cells_w = self.visible_rect.len(X) as u32;
         let visible_cells_h = self.visible_rect.len(Y) as u32;
@@ -290,7 +289,7 @@ impl<'a> RenderInProgress<'a> {
         // Step #4: render that onto the screen.
         let (target_w, target_h) = self.target.get_dimensions();
         let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
-        let render_cells_size = target_size / self.render_cell_scale.pixels_per_cell();
+        let render_cells_size = target_size / self.render_cell_scale.units_per_cell();
         let render_cells_center = self.pos - self.visible_rect.min().to_fvec();
         let mut render_cells_frect =
             FRect2D::centered(render_cells_center, render_cells_size / 2.0);
@@ -337,7 +336,7 @@ impl<'a> RenderInProgress<'a> {
         let log2_render_cell_spacing = log2_cell_spacing - self.render_cell_layer.to_u32() as f64;
         let mut spacing = log2_render_cell_spacing.exp2().raw() as usize;
         // Convert from render cells to pixels.
-        let mut pixel_spacing = spacing as f64 * self.render_cell_scale.pixels_per_cell().raw();
+        let mut pixel_spacing = spacing as f64 * self.render_cell_scale.units_per_cell().raw();
 
         while spacing > 0 && pixel_spacing > MIN_GRIDLINE_SPACING {
             // Compute grid color, including alpha.
@@ -425,7 +424,7 @@ impl<'a> RenderInProgress<'a> {
         // If there are more than 1.5 pixels per render cell, the upper boundary
         // should be *between* cells (+1). If there are fewer, the upper
         // boundary should be *on* the cell (+0).
-        let pixels_per_cell = self.render_cell_scale.pixels_per_cell();
+        let pixels_per_cell = self.render_cell_scale.units_per_cell();
         let a = rect.min();
         let b = rect.max() + (pixels_per_cell > 1.5) as isize;
         let NdVec([ax, ay]) = a;
@@ -636,7 +635,7 @@ impl<'a> RenderInProgress<'a> {
                     vbo_slice,
                     &ibos::rect_indices(count),
                     &shaders::POINTS,
-                    &uniform! { matrix: self.transform.gl_render_cell_transform() },
+                    &uniform! { matrix: self.transform.gl_matrix() },
                     &glium::DrawParameters {
                         blend: glium::Blend::alpha_blending(),
                         depth: glium::Depth {
@@ -772,7 +771,7 @@ impl CellOverlayRect {
         {
             let width = width.round().max(1.0);
             // At this point, the rectangle should have zero width.
-            let cells_per_pixel = render_cell_scale.cells_per_pixel();
+            let cells_per_pixel = render_cell_scale.cells_per_unit();
             let offset = FVec::repeat(cells_per_pixel * width / 2.0) * (b - a).signum();
             // Expand it in all directions, so now it has the correct width and
             // includes its endpoints.

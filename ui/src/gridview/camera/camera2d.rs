@@ -68,7 +68,7 @@ impl Camera<Dim2D> for Camera2D {
         // Read the comments in `average_lerped_scale()` before proceeding.
         let avg_scale = super::average_lerped_scale(a.scale, b.scale);
         // Convert the cell distance to the total number of pixels to travel.
-        let total_pixels_delta = avg_scale.cells_to_pixels(&b.center - &a.center);
+        let total_pixels_delta = avg_scale.cells_to_units(&b.center - &a.center);
 
         // Now that we know the number of pixels to travel in the whole timestep
         // of 0 <= t <= 1, we have to figure out how many cells to travel during
@@ -82,7 +82,7 @@ impl Camera<Dim2D> for Camera2D {
         let pixels_delta = &total_pixels_delta * &FixedPoint::from(t);
         // Finally, divide by the new scale factor to get the number of cells to
         // travel on 0 <= t <= T.
-        let cells_delta = zt.pixels_to_cells(pixels_delta);
+        let cells_delta = zt.units_to_cells(pixels_delta);
         ret.center += cells_delta;
 
         ret
@@ -102,8 +102,8 @@ impl Camera<Dim2D> for Camera2D {
                 scaled,
             } => {
                 if scaled {
-                    x = x.map(|x| self.scale.pixels_to_cells(x));
-                    y = y.map(|y| self.scale.pixels_to_cells(y));
+                    x = x.map(|x| self.scale.units_to_cells(x));
+                    y = y.map(|y| self.scale.units_to_cells(y));
                 }
                 if relative {
                     self.center[X] += x.unwrap_or_default();
@@ -122,7 +122,7 @@ impl Camera<Dim2D> for Camera2D {
             }
             MoveCommand::Pan { start, end } => {
                 let delta = (start - end) * NdVec([r64(1.0), r64(-1.0)]);
-                self.center += self.scale.pixels_to_cells(delta.to_fixedvec());
+                self.center += self.scale.units_to_cells(delta.to_fixedvec());
             }
             MoveCommand::Scale {
                 log2_factor,

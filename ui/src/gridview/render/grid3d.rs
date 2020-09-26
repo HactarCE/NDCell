@@ -22,13 +22,6 @@ use crate::DISPLAY;
 /// Number of cubes to render in each render batch.
 const CUBE_BATCH_SIZE: usize = 256;
 
-/// Vertical field-of-view.
-const FOV: Deg<f32> = Deg(60.0);
-/// Near clipping plane.
-const NEAR_PLANE: f32 = 1.0;
-/// Far clipping plane.
-const FAR_PLANE: f32 = 65536.0;
-
 #[derive(Default)]
 pub struct RenderCache {}
 
@@ -38,8 +31,10 @@ pub struct RenderInProgress<'a> {
     camera: &'a Camera3D,
     /// Target to render to.
     target: &'a mut glium::Frame,
-    /// Combined view and perspective matrix.
-    matrix: Matrix4<f32>,
+    /// Transform from `visible_octree` space (1 unit = 1 render cell; (0, 0) =
+    /// bottom left) to screen space ((-1, -1) = bottom left; (1, 1) = top
+    /// right) and pixel space (1 unit = 1 pixel; (0, 0) = top left).
+    transform: CellTransform3D,
 }
 impl<'a> RenderInProgress<'a> {
     pub fn new(
@@ -50,20 +45,15 @@ impl<'a> RenderInProgress<'a> {
         target.clear_depth(f32::INFINITY);
         let (target_w, target_h) = target.get_dimensions();
         let aspect_ratio = target_w as f32 / target_h as f32;
-        let perspective_matrix = cgmath::PerspectiveFov {
-            fovy: FOV.into(),
-            aspect: aspect_ratio,
-            near: NEAR_PLANE,
-            far: FAR_PLANE,
-        };
-
         let camera = g.camera();
-        let world_translation = -cgmath::vec3(
+
+        let render_cell_world_translation = -cgmath::vec3(
             camera.pos()[X].to_f32().context("3D cell translation")?,
             camera.pos()[Y].to_f32().context("3D cell translation")?,
             camera.pos()[Z].to_f32().context("3D cell translation")?,
         );
-        let view_matrix = cgmath::Decomposed {
+
+        let render_cell_view_matrix = cgmath::Decomposed {
             scale: camera
                 .scale()
                 .factor()
@@ -73,22 +63,33 @@ impl<'a> RenderInProgress<'a> {
             disp: cgmath::vec3(0.0, 0.0, Camera3D::DISTANCE_TO_PIVOT as f32),
         };
 
+        let render_cell_transform = Matrix4::from(render_cell_view_matrix)
+            * Matrix4::from_translation(render_cell_world_translation);
+
+        let transform = CellTransform3D::new_perspective(
+            NdVec::origin(),
+            Layer(0),
+            render_cell_transform,
+            (target_w as f32, target_h as f32),
+        );
+
         Ok(Self {
             octree: g.automaton.projected_tree(),
             camera,
             target,
-            matrix: Matrix4::from(perspective_matrix)
-                // Invert Z axis, so that +Z is forward.
-                * Matrix4::from_nonuniform_scale(1.0, 1.0, -1.0)
-                * Matrix4::from(view_matrix)
-                * Matrix4::from_translation(world_translation),
+            transform,
         })
     }
 
+    pub fn cell_transform(&self) -> &CellTransform3D {
+        &self.transform
+    }
+
     pub fn draw_cells(&mut self) {
-        let rainbow_cube_matrix: [[f32; 4]; 4] = self.matrix.into();
+        let rainbow_cube_matrix: [[f32; 4]; 4] = self.transform.gl_matrix();
         let cam_pos = self.camera.pos().floor().0;
-        let selection_cube_matrix: [[f32; 4]; 4] = (self.matrix
+        let selection_cube_matrix: [[f32; 4]; 4] = (self.transform.projection_transform
+            * self.transform.render_cell_transform
             * Matrix4::from_translation(cgmath::vec3(
                 cam_pos[X].to_f32().unwrap(),
                 cam_pos[Y].to_f32().unwrap(),

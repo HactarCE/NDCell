@@ -66,17 +66,17 @@ pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
 
         // Compute the old scaled offset of `invariant_pos` from the camera
         // position.
-        let invariant_pos_old_scaled_offset = old_scale.cells_to_pixels(&invariant_pos_offset);
+        let invariant_pos_old_scaled_offset = old_scale.cells_to_units(&invariant_pos_offset);
         // Compute the new scaled offset of `invariant_pos` from the camera
         // position.
-        let invariant_pos_new_scaled_offset = new_scale.cells_to_pixels(&invariant_pos_offset);
+        let invariant_pos_new_scaled_offset = new_scale.cells_to_units(&invariant_pos_offset);
 
         // Compute the difference between those scaled offsets.
         let delta_pixel_offset = invariant_pos_new_scaled_offset - invariant_pos_old_scaled_offset;
 
         // Apply that offset so that the point goes back to the same scaled
         // location as before.
-        self.set_pos(self.pos() + new_scale.pixels_to_cells(delta_pixel_offset));
+        self.set_pos(self.pos() + new_scale.units_to_cells(delta_pixel_offset));
     }
     /// Scales by 2^`log2_factor`, keeping one invariant point at the same
     /// location in screen space.

@@ -5,9 +5,9 @@ use ndcell_core::num::{r64, FixedPoint, Float, R64};
 
 /// The scale factor.
 ///
-/// In 2D, this is the width or height of a cell in pixels. In 3D, this is the
-/// number of spatial "units" per cell, where the camera is always a fixed
-/// number of "units" away from the pivot.
+/// In 2D, this is the width or height of a cell in "scaled units," which are
+/// pixels in 2D and abstract units in 3D, where the camera is always a fixed
+/// number of "units" away from the pivot point.
 ///
 /// When zoomed in close, the scale factor is large, and the base-2 logarithm of
 /// the scale factor is positive. When zoomed out far away, the scale factor is
@@ -19,7 +19,7 @@ pub struct Scale {
 }
 impl Default for Scale {
     fn default() -> Self {
-        // 32 pixels per cell
+        // 32 pixels per cell is a decent default
         Self::from_factor(r64(32.0))
     }
 }
@@ -41,10 +41,10 @@ impl fmt::Display for Scale {
 impl Scale {
     /// The lower scale limit; i.e. the furthest the user can zoom out.
     ///
-    /// `f64` has an 11-bit exponent and so cannott represent values above
-    /// around 2^1022. For this reason we don't allow zooming out past around
-    /// 2^1000:1. This restriction could probably be relaxed if anyone is
-    /// actually trying to view patterns as large as 2^1000 cells across.
+    /// `f64` has an 11-bit exponent and so cannot represent values above around
+    /// 2^1022. For this reason we don't allow zooming out past around 2^1000:1.
+    /// This restriction could probably be relaxed if anyone is actually trying
+    /// to view patterns as large as 2^1000 cells across.
     const LOWER_LIMIT: f64 = -1000.0;
     /// The upper scale limit; i.e. the furthest the user can zoom in.
     ///
@@ -93,31 +93,31 @@ impl Scale {
         FixedPoint::from(self.log2_factor()).exp2()
     }
 
-    /// Returns the length of pixels per cell, which is equivalent to the scale
-    /// factor.
+    /// Returns the length of scaled units per cell, which is equivalent to the
+    /// scale factor.
     ///
     /// # Panics
     ///
     /// This method panics if the result does not fit in an `f64`.
-    pub fn pixels_per_cell(self) -> R64 {
+    pub fn units_per_cell(self) -> R64 {
         self.log2_factor().exp2()
     }
-    /// Converts a length of cells to a length of pixels.
-    pub fn cells_to_pixels<X: Div<FixedPoint>>(self, cells: X) -> X::Output {
+    /// Converts a length of cells to a length of scaled units.
+    pub fn cells_to_units<X: Div<FixedPoint>>(self, cells: X) -> X::Output {
         cells / FixedPoint::from(-self.log2_factor()).exp2()
     }
 
-    /// Returns the length of cells per pixel, which is equivalent to the
+    /// Returns the length of cells per scaled unit, which is equivalent to the
     /// reciprocal of the scale factor.
     ///
     /// This value always fits in an `f64`, however it may be infinitessimally
     /// close to zero (and therefore round to zero).
-    pub fn cells_per_pixel(self) -> R64 {
+    pub fn cells_per_unit(self) -> R64 {
         (-self.log2_factor()).exp2()
     }
-    /// Converts a length of pixels to a length of cells.
-    pub fn pixels_to_cells<X: Mul<FixedPoint>>(self, pixels: X) -> X::Output {
-        pixels * FixedPoint::from(-self.log2_factor()).exp2()
+    /// Converts a length of scaled units to a length of cells.
+    pub fn units_to_cells<X: Mul<FixedPoint>>(self, scaled_units: X) -> X::Output {
+        scaled_units * FixedPoint::from(-self.log2_factor()).exp2()
     }
     /// Rounds the scale factor to the nearest power of 2.
     pub fn round(self) -> Self {

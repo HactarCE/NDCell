@@ -158,11 +158,11 @@ impl Camera<Dim3D> for Camera3D {
         ret.scale_by_factor(delta_scale_factor.powf(t), None);
 
         let avg_scale = super::average_lerped_scale(a.scale, b.scale);
-        let total_pixels_delta = avg_scale.cells_to_pixels(&b.pivot - &a.pivot);
+        let total_pixels_delta = avg_scale.cells_to_units(&b.pivot - &a.pivot);
 
         let zt = super::average_lerped_scale(a.scale, ret.scale);
         let pixels_delta = &total_pixels_delta * &FixedPoint::from(t);
-        let cells_delta = zt.pixels_to_cells(pixels_delta);
+        let cells_delta = zt.units_to_cells(pixels_delta);
         ret.pivot += cells_delta;
 
         // Interpolate using Euler angles, not proper spherical interpolation.

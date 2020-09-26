@@ -219,7 +219,10 @@ impl fmt::Display for FixedPoint {
         let int = self.trunc();
         if int.magnitude() >= &BigUint::from(10_usize) {
             fmt::Display::fmt(&(&int / 10_usize), f)?;
+        } else if self.is_negative() {
+            write!(f, "-")?;
         }
+
         let lowest_digit: BigUint = int.magnitude() % 10_usize;
         fmt::Display::fmt(&(lowest_digit.to_f64().unwrap() + self.fract().abs()), f)?;
         Ok(())

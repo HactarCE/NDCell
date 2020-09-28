@@ -1,6 +1,5 @@
 use cgmath::prelude::*;
 use cgmath::{Deg, Matrix4};
-use std::convert::TryFrom;
 
 use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
@@ -54,7 +53,8 @@ impl CellTransform {
             .and_then(|this| this.pixel_to_global_cell(pixel))
     }
     pub fn pixel_to_cell_3d(&self, pixel: FVec2D, z: f32) -> Option<FixedVec3D> {
-        self.as_3d().and_then(|this| this.pixel_to_cell(pixel, z))
+        self.as_3d()
+            .and_then(|this| this.pixel_to_global_cell(pixel, z))
     }
 }
 
@@ -176,7 +176,7 @@ impl<D: Dim> NdCellTransform<D> {
     }
 }
 
-impl NdCellTransform<Dim2D> {
+impl CellTransform2D {
     pub fn pixel_to_local_render_cell(&self, pixel: FVec2D) -> Option<FVec2D> {
         // Convert to `cgmath` type for matrix math.
         let pixel = cgmath::Point3::new(pixel[X].raw() as f32, pixel[Y].raw() as f32, 0.0);
@@ -204,8 +204,8 @@ impl NdCellTransform<Dim2D> {
     }
 }
 
-impl NdCellTransform<Dim3D> {
-    pub fn pixel_to_cell(&self, pixel: FVec2D, mut z: f32) -> Option<FixedVec3D> {
+impl CellTransform3D {
+    pub fn pixel_to_local_render_cell(&self, pixel: FVec2D, z: f32) -> Option<FVec3D> {
         // Apply the perspective transformation to the Z coordinate to see where
         // it ends up.
         let z = self
@@ -219,14 +219,16 @@ impl NdCellTransform<Dim3D> {
             (self.pixel_transform * self.projection_transform * self.render_cell_transform)
                 .inverse_transform()?
                 .transform_point(pixel);
-        // Convert to `ndcell_core` type for big precision.
-        let local_render_cell: FixedVec3D = NdVec([
-            FixedPoint::try_from(local_render_cell.x as f64).ok()?,
-            FixedPoint::try_from(local_render_cell.y as f64).ok()?,
-            FixedPoint::try_from(local_render_cell.z as f64).ok()?,
-        ]);
+        Some(NdVec([
+            R64::try_new(local_render_cell.x as f64)?,
+            R64::try_new(local_render_cell.y as f64)?,
+            R64::try_new(local_render_cell.z as f64)?,
+        ]))
+    }
+    pub fn pixel_to_global_cell(&self, pixel: FVec2D, z: f32) -> Option<FixedVec3D> {
+        let local_render_cell = self.pixel_to_local_render_cell(pixel, z)?;
         // Convert from local render cell coordinates to local cell coordinates.
-        let local_cell = local_render_cell << self.render_cell_layer.to_u32();
+        let local_cell = local_render_cell.to_fixedvec() << self.render_cell_layer.to_u32();
         // Convert from local cell coordinates to global cell coordinates.
         Some(local_cell + self.global_cell_offset.to_fixedvec())
     }

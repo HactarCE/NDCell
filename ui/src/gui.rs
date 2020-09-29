@@ -36,7 +36,7 @@ x = 47, y = 14, rule = Life
 $26bobo!
 ";
 
-const DEFAULT_3D: bool = true;
+const DEFAULT_3D: bool = false;
 
 fn make_default_gridview() -> GridView {
     if DEFAULT_3D {

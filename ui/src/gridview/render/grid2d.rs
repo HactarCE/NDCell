@@ -375,7 +375,7 @@ impl<'a> RenderInProgress<'a> {
         width: f64,
     ) -> Result<()> {
         if !self.visible_quadtree.rect().contains(cell_position) {
-            warn!(
+            debug!(
                 "Cursor position is outside visible rectangle: {:?}",
                 cell_position
             );

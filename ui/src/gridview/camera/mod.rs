@@ -146,6 +146,9 @@ pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
     fn lerp(a: &Self, b: &Self, t: R64) -> Self;
 
     /// Executes a movement command.
+    ///
+    /// Returns `Err(())` if the dimensionality of `cell_transform` does not
+    /// match the dimensionality of the camera.
     fn do_move_command(
         &mut self,
         command: MoveCommand,

@@ -94,13 +94,9 @@ impl Camera<Dim2D> for Camera2D {
         config: &Config,
         cell_transform: &CellTransform,
     ) -> Result<()> {
-        let cell_transform = match cell_transform.as_2d() {
-            Some(ct) => ct,
-            None => {
-                warn!("Received 2D camera command without 2D cell transform");
-                return Ok(());
-            }
-        };
+        let cell_transform = cell_transform
+            .as_2d()
+            .context("Received 2D camera command without 2D cell transform")?;
 
         match command {
             MoveCommand::GoTo2D {

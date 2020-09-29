@@ -36,6 +36,13 @@ impl From<CellTransform3D> for CellTransform {
     }
 }
 impl CellTransform {
+    pub fn ndim(&self) -> Option<usize> {
+        match self {
+            CellTransform::None => None,
+            CellTransform::Some2D(_) => Some(2),
+            CellTransform::Some3D(_) => Some(3),
+        }
+    }
     pub fn as_2d(&self) -> Option<&CellTransform2D> {
         match self {
             Self::Some2D(ret) => Some(ret),
@@ -174,16 +181,11 @@ impl CellTransform2D {
     pub fn pixel_to_local_render_cell(&self, pixel: FVec2D) -> Option<FVec2D> {
         // Convert to `cgmath` type for matrix math.
         let pixel = cgmath::Point3::new(pixel[X].raw() as f32, pixel[Y].raw() as f32, 0.0);
-        // Convert from pixels to OpenGL coordinates.
-        let opengl_pos = self
-            .pixel_transform
-            .inverse_transform()?
-            .transform_point(pixel);
-        // Convert from OpenGL coordinates to local render cell coordinates.
-        let local_render_cell = self
-            .render_cell_transform
-            .inverse_transform()?
-            .transform_point(opengl_pos);
+        // Convert from pixels to screen space to camera space to render cell space.
+        let local_render_cell =
+            (self.pixel_transform * self.projection_transform * self.render_cell_transform)
+                .inverse_transform()?
+                .transform_point(pixel);
         Some(NdVec([
             R64::try_new(local_render_cell.x as f64)?,
             R64::try_new(local_render_cell.y as f64)?,

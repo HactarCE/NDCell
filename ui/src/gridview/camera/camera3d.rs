@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use cgmath::prelude::*;
 use cgmath::{Basis3, Deg};
 use log::warn;
@@ -185,13 +185,9 @@ impl Camera<Dim3D> for Camera3D {
         config: &Config,
         cell_transform: &CellTransform,
     ) -> Result<()> {
-        let cell_transform = match cell_transform.as_3d() {
-            Some(ct) => ct,
-            None => {
-                warn!("Received 3D camera command without 3D cell transform");
-                return Ok(());
-            }
-        };
+        let cell_transform = cell_transform
+            .as_3d()
+            .context("Received 3D camera command without 3D cell transform")?;
 
         match command {
             MoveCommand::GoTo3D {

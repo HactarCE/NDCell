@@ -16,6 +16,7 @@ const DISTANCE_THRESHOLD: f64 = 0.001;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Interpolator<D: Dim, C: Camera<D>> {
+    // pub
     pub current: C,
     pub target: C,
     state: (),
@@ -45,6 +46,9 @@ pub trait Interpolate {
     fn advance(&mut self, fps: f64, interpolation: Interpolation) -> bool;
 
     /// Executes a movement command, interpolating if necessary.
+    ///
+    /// Returns an `Err` if the dimensionality of `cell_transform` does not
+    /// match the dimensionality of the camera.
     fn do_move_command(
         &mut self,
         command: MoveCommand,

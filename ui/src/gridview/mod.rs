@@ -214,6 +214,19 @@ pub trait GridViewTrait:
     /// Executes a `Move` command.
     fn do_move_command(&mut self, command: MoveCommand, config: &Config) -> Result<()> {
         let cell_transform = self.nth_render_result(0).cell_transform.clone();
+
+        if Some(self.ndim()) != cell_transform.ndim() {
+            // We haven't rendered a single frame yet, but executing the command
+            // might require information about the previous render result in
+            // order to convert mouse coordinates to cell coordinates. So just
+            // put the command back in the queue and we'll execute it next
+            // frame. This should only happen on the very first frame.
+            debug!("Invalid cell transform; deferring {:?}", command);
+            self.enqueue(command);
+            return Ok(());
+        }
+        trace!("Executing {:?}", command);
+
         self.camera_interpolator()
             .do_move_command(command, config, &cell_transform)
             .context("Executing move command")

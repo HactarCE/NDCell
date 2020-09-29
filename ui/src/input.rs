@@ -386,8 +386,13 @@ impl<'a> FrameInProgress<'a> {
                 }
                 Some(MouseButton::Middle) => {
                     if self.gridview.is_3d() {
-                        self.gridview.enqueue(MoveCommand::Pan { start, end });
-                        moved = true;
+                        if self.modifiers.shift() {
+                            self.gridview.enqueue(MoveCommand::PanFlat { start, end });
+                            moved = true;
+                        } else {
+                            self.gridview.enqueue(MoveCommand::Pan { start, end });
+                            moved = true;
+                        }
                     }
                 }
                 _ => {}

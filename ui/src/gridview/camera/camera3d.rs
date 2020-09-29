@@ -185,6 +185,14 @@ impl Camera<Dim3D> for Camera3D {
         config: &Config,
         cell_transform: &CellTransform,
     ) -> Result<()> {
+        let cell_transform = match cell_transform.as_3d() {
+            Some(ct) => ct,
+            None => {
+                warn!("Received 3D camera command without 3D cell transform");
+                return Ok(());
+            }
+        };
+
         match command {
             MoveCommand::GoTo3D {
                 mut x,
@@ -233,8 +241,17 @@ impl Camera<Dim3D> for Camera3D {
 
             MoveCommand::Pan { start, end } => {
                 let z = Self::DISTANCE_TO_PIVOT as f32;
-                let start = cell_transform.pixel_to_cell_3d(start, z);
-                let end = cell_transform.pixel_to_cell_3d(end, z);
+                let start = cell_transform.pixel_to_global_cell(start, z);
+                let end = cell_transform.pixel_to_global_cell(end, z);
+                if let (Some(start), Some(end)) = (start, end) {
+                    self.pivot += start - end;
+                }
+            }
+            MoveCommand::PanFlat { start, end } => {
+                let start =
+                    cell_transform.pixel_to_global_cell_in_plane(start, (Y, self.pivot[Y].clone()));
+                let end =
+                    cell_transform.pixel_to_global_cell_in_plane(end, (Y, self.pivot[Y].clone()));
                 if let (Some(start), Some(end)) = (start, end) {
                     self.pivot += start - end;
                 }

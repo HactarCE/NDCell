@@ -48,14 +48,6 @@ impl CellTransform {
             _ => None,
         }
     }
-    pub fn pixel_to_cell_2d(&self, pixel: FVec2D) -> Option<FixedVec2D> {
-        self.as_2d()
-            .and_then(|this| this.pixel_to_global_cell(pixel))
-    }
-    pub fn pixel_to_cell_3d(&self, pixel: FVec2D, z: f32) -> Option<FixedVec3D> {
-        self.as_3d()
-            .and_then(|this| this.pixel_to_global_cell(pixel, z))
-    }
 }
 
 /// Transformation between four coordinate spaces for rendering.
@@ -177,6 +169,8 @@ impl<D: Dim> NdCellTransform<D> {
 }
 
 impl CellTransform2D {
+    /// Returns the local render cell position at the given pixel position on
+    /// the screen.
     pub fn pixel_to_local_render_cell(&self, pixel: FVec2D) -> Option<FVec2D> {
         // Convert to `cgmath` type for matrix math.
         let pixel = cgmath::Point3::new(pixel[X].raw() as f32, pixel[Y].raw() as f32, 0.0);
@@ -195,6 +189,8 @@ impl CellTransform2D {
             R64::try_new(local_render_cell.y as f64)?,
         ]))
     }
+    /// Returns the global cell position at the given pixel position on the
+    /// screen.
     pub fn pixel_to_global_cell(&self, pixel: FVec2D) -> Option<FixedVec2D> {
         let local_render_cell = self.pixel_to_local_render_cell(pixel)?;
         // Convert from local render cell coordinates to local cell coordinates.
@@ -205,6 +201,8 @@ impl CellTransform2D {
 }
 
 impl CellTransform3D {
+    /// Returns the local render cell position at the given pixel position on
+    /// the screen at the given scaled-unit Z coordinate.
     pub fn pixel_to_local_render_cell(&self, pixel: FVec2D, z: f32) -> Option<FVec3D> {
         // Apply the perspective transformation to the Z coordinate to see where
         // it ends up.
@@ -225,11 +223,41 @@ impl CellTransform3D {
             R64::try_new(local_render_cell.z as f64)?,
         ]))
     }
+    /// Returns the global cell position at the given pixel position on the
+    /// screen at the given scaled-unit Z coordiniate.
     pub fn pixel_to_global_cell(&self, pixel: FVec2D, z: f32) -> Option<FixedVec3D> {
         let local_render_cell = self.pixel_to_local_render_cell(pixel, z)?;
         // Convert from local render cell coordinates to local cell coordinates.
         let local_cell = local_render_cell.to_fixedvec() << self.render_cell_layer.to_u32();
         // Convert from local cell coordinates to global cell coordinates.
         Some(local_cell + self.global_cell_offset.to_fixedvec())
+    }
+
+    /// Returns the global cell position at the given pixel position on the
+    /// screen intersecting an axis-aligned plane.
+    pub fn pixel_to_global_cell_in_plane(
+        &self,
+        pixel: FVec2D,
+        plane: (Axis, FixedPoint),
+    ) -> Option<FixedVec3D> {
+        let (plane_axis, plane_pos) = plane;
+        let global_cell_0 = self.pixel_to_global_cell(pixel, NEAR_PLANE)?;
+        let global_cell_1 = self.pixel_to_global_cell(pixel, FAR_PLANE)?;
+        let delta = global_cell_1 - &global_cell_0;
+
+        if delta[plane_axis].is_zero() {
+            // The delta vector is parallel to the plane.
+            return None;
+        }
+
+        // How many times do we have to add `delta` to reach the plane?
+        let t = (plane_pos - &global_cell_0[plane_axis]) / &delta[plane_axis];
+
+        if !t.is_positive() {
+            // The plane is behind the camera.
+            return None;
+        }
+
+        Some(global_cell_0 + delta * t)
     }
 }

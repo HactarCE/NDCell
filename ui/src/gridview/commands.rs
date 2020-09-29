@@ -66,6 +66,12 @@ pub enum MoveCommand {
         /// Cursor pixel position after event.
         end: FVec2D,
     },
+    PanFlat {
+        /// Cursor pixel position before event.
+        start: FVec2D,
+        /// Cursor pixel position after event.
+        end: FVec2D,
+    },
     Orbit {
         /// Cursor pixel position before event.
         start: FVec2D,
@@ -100,6 +106,7 @@ impl MoveCommand {
             Self::GoTo3D { .. } => true,
             Self::GoToScale(_) => true,
             Self::Pan { .. } => false,
+            Self::PanFlat { .. } => false,
             Self::Orbit { .. } => false,
             Self::Scale { .. } => true,
             Self::SnapPos => true,

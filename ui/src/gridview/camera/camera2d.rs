@@ -94,6 +94,14 @@ impl Camera<Dim2D> for Camera2D {
         config: &Config,
         cell_transform: &CellTransform,
     ) -> Result<()> {
+        let cell_transform = match cell_transform.as_2d() {
+            Some(ct) => ct,
+            None => {
+                warn!("Received 2D camera command without 2D cell transform");
+                return Ok(());
+            }
+        };
+
         match command {
             MoveCommand::GoTo2D {
                 mut x,
@@ -130,7 +138,8 @@ impl Camera<Dim2D> for Camera2D {
             } => {
                 self.scale_by_log2_factor(
                     R64::try_new(log2_factor).context("Invalid scale factor")?,
-                    invariant_pos.and_then(|pixel_pos| cell_transform.pixel_to_cell_2d(pixel_pos)),
+                    invariant_pos
+                        .and_then(|pixel_pos| cell_transform.pixel_to_global_cell(pixel_pos)),
                 );
             }
             MoveCommand::SnapPos => {
@@ -138,13 +147,14 @@ impl Camera<Dim2D> for Camera2D {
             }
             MoveCommand::SnapScale { invariant_pos } => {
                 self.snap_scale(
-                    invariant_pos.and_then(|pixel_pos| cell_transform.pixel_to_cell_2d(pixel_pos)),
+                    invariant_pos
+                        .and_then(|pixel_pos| cell_transform.pixel_to_global_cell(pixel_pos)),
                 );
             }
 
-            MoveCommand::GoTo3D { .. } | MoveCommand::Orbit { .. } => {
-                warn!("Ignoring {:?} in Camera2D", command)
-            }
+            MoveCommand::GoTo3D { .. }
+            | MoveCommand::PanFlat { .. }
+            | MoveCommand::Orbit { .. } => warn!("Ignoring {:?} in Camera2D", command),
         }
 
         Ok(())

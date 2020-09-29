@@ -119,18 +119,18 @@ pub struct FrameInProgress<'a> {
     /// HiDPI factor.
     dpi: f64,
 }
-impl<'a> Deref for FrameInProgress<'a> {
+impl Deref for FrameInProgress<'_> {
     type Target = State;
     fn deref(&self) -> &State {
         &self.state
     }
 }
-impl<'a> DerefMut for FrameInProgress<'a> {
+impl DerefMut for FrameInProgress<'_> {
     fn deref_mut(&mut self) -> &mut State {
         &mut self.state
     }
 }
-impl<'a> FrameInProgress<'a> {
+impl FrameInProgress<'_> {
     fn start_drawing(&mut self, draw_cell_state: u8) {
         self.gridview.enqueue(DrawCommand::Start);
         self.draw_cell_state = Some(draw_cell_state);

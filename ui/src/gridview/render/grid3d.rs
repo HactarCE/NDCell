@@ -4,18 +4,14 @@
 //! models and maybe textures in the future.
 
 use anyhow::{Context, Result};
-use cgmath::prelude::*;
-use cgmath::{Basis3, Deg, Matrix4};
+use cgmath::{Basis3, Matrix4};
 use glium::index::PrimitiveType;
 use glium::Surface;
 
 use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
-use super::consts::*;
-use super::gl_quadtree::CachedGlQuadtree;
-use super::vertices::RgbaVertex;
-use super::{ibos, shaders, textures, vbos};
+use super::shaders;
 use crate::gridview::*;
 use crate::DISPLAY;
 
@@ -44,7 +40,6 @@ impl<'a> RenderInProgress<'a> {
     ) -> Result<Self> {
         target.clear_depth(f32::INFINITY);
         let (target_w, target_h) = target.get_dimensions();
-        let aspect_ratio = target_w as f32 / target_h as f32;
         let camera = g.camera();
 
         let render_cell_world_translation = -cgmath::vec3(

@@ -1,17 +1,13 @@
 use anyhow::{anyhow, Result};
-use log::warn;
 use std::borrow::Cow;
-use std::collections::VecDeque;
-use std::sync::{mpsc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
 use super::commands::*;
 use super::render::grid3d::{RenderCache, RenderInProgress};
 use super::worker::*;
-use super::{Camera, Camera3D, GridViewCommon, GridViewTrait, Interpolator, RenderResult};
+use super::{Camera3D, GridViewCommon, GridViewTrait, Interpolator, RenderResult};
 use crate::config::Config;
 use crate::history::HistoryManager;
 
@@ -51,15 +47,15 @@ impl AsMut<GridViewCommon> for GridView3D {
 }
 
 impl GridViewTrait for GridView3D {
-    fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()> {
+    fn do_draw_command(&mut self, _command: DrawCommand, _config: &Config) -> Result<()> {
         // Err(anyhow!("unimplemented"))
         Ok(())
     }
-    fn do_clipboard_command(&mut self, command: ClipboardCommand, config: &Config) -> Result<()> {
+    fn do_clipboard_command(&mut self, _command: ClipboardCommand, _config: &Config) -> Result<()> {
         Err(anyhow!("unimplemented"))
     }
 
-    fn enqueue_worker_request(&mut self, request: WorkerRequest) {
+    fn enqueue_worker_request(&mut self, _request: WorkerRequest) {
         todo!()
     }
     fn reset_worker(&mut self) {

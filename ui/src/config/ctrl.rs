@@ -1,12 +1,3 @@
-use ndcell_core::num::BigInt;
-
-#[derive(Debug, Default)]
-pub struct Config {
-    pub ctrl: CtrlConfig,
-    pub gfx: GfxConfig,
-    pub sim: SimConfig,
-}
-
 #[derive(Debug)]
 pub struct CtrlConfig {
     pub keybd_move_speed_2d: f64,
@@ -61,20 +52,6 @@ impl Default for CtrlConfig {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum Interpolation {
-    None,
-    Linear { speed: f64 },
-    Exponential { decay_constant: f64 },
-}
-impl Default for Interpolation {
-    fn default() -> Self {
-        Self::Exponential {
-            decay_constant: 0.08,
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
 pub enum UpAxis3D {
     /// "Up" is relative to the camera orientation.
     Camera,
@@ -107,37 +84,16 @@ impl Default for ForwardAxis3D {
     }
 }
 
-#[derive(Debug)]
-pub struct GfxConfig {
-    pub dpi: f64,
-    pub fps: f64,
-    pub font_size: f32,
+#[derive(Debug, Copy, Clone)]
+pub enum Interpolation {
+    None,
+    Linear { speed: f64 },
+    Exponential { decay_constant: f64 },
 }
-impl Default for GfxConfig {
+impl Default for Interpolation {
     fn default() -> Self {
-        Self {
-            dpi: 1.0,
-            fps: 60.0,
-            font_size: 16.0,
+        Self::Exponential {
+            decay_constant: 0.08,
         }
     }
-}
-
-#[derive(Debug)]
-pub struct SimConfig {
-    pub step_size: BigInt,
-    pub use_breakpoint: bool,
-    pub breakpoint_gen: BigInt,
-    pub max_memory: usize,
-}
-impl Default for SimConfig {
-    fn default() -> Self {
-        Self {
-            step_size: 4.into(),
-            use_breakpoint: false,
-            breakpoint_gen: 0.into(),
-            max_memory: 1024 * 1024 * 1024, // 1 GiB
-        }
-    }
-    // TODO: consider adding setter for step_size
 }

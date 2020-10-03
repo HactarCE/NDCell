@@ -156,20 +156,36 @@ impl From<Automaton3D> for GridView3D {
     }
 }
 
-pub struct HistoryEntry {}
+pub struct HistoryEntry {
+    automaton: ProjectedAutomaton3D,
+}
 
 impl HistoryManager for GridView3D {
     type HistoryEntry = HistoryEntry;
+
     fn history_entry(&self) -> HistoryEntry {
-        unimplemented!()
+        HistoryEntry {
+            automaton: self.automaton.clone(),
+        }
     }
-    fn restore(&mut self, _entry: HistoryEntry) -> HistoryEntry {
-        unimplemented!()
+    fn restore(&mut self, entry: HistoryEntry) -> HistoryEntry {
+        HistoryEntry {
+            // Replace automaton, but keep camera, cache, and everything else.
+            automaton: std::mem::replace(&mut self.automaton, entry.automaton),
+        }
     }
-    fn undo_stack(&mut self) -> &mut Vec<HistoryEntry> {
-        unimplemented!()
+
+    fn undo_stack(&self) -> &Vec<HistoryEntry> {
+        &self.undo_stack
     }
-    fn redo_stack(&mut self) -> &mut Vec<HistoryEntry> {
-        unimplemented!()
+    fn redo_stack(&self) -> &Vec<HistoryEntry> {
+        &self.redo_stack
+    }
+
+    fn undo_stack_mut(&mut self) -> &mut Vec<HistoryEntry> {
+        &mut self.undo_stack
+    }
+    fn redo_stack_mut(&mut self) -> &mut Vec<HistoryEntry> {
+        &mut self.redo_stack
     }
 }

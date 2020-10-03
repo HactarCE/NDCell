@@ -28,7 +28,7 @@ const RENDER_RESULTS_COUNT: usize = 4;
 const MAX_LAST_SIM_TIMES: usize = 4;
 
 /// Abstraction over 2D and 3D gridviews.
-#[enum_dispatch(GridViewTrait)]
+#[enum_dispatch(GridViewTrait, History)]
 pub enum GridView {
     View2D(pub GridView2D),
     View3D(pub GridView3D),
@@ -415,28 +415,6 @@ impl AsSimulate for GridView {
             Self::View2D(view2d) => view2d,
             Self::View3D(view3d) => view3d,
         }
-    }
-}
-
-impl History for GridView {
-    fn record(&mut self) {
-        self.as_history().record()
-    }
-    fn has_undo(&mut self) -> bool {
-        self.as_history().has_undo()
-    }
-    fn has_redo(&mut self) -> bool {
-        self.as_history().has_redo()
-    }
-    fn undo(&mut self) -> bool {
-        let ret = self.as_history().undo();
-        self.reset_worker();
-        ret
-    }
-    fn redo(&mut self) -> bool {
-        let ret = self.as_history().redo();
-        self.reset_worker();
-        ret
     }
 }
 

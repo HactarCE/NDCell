@@ -119,11 +119,11 @@ impl GridViewTrait for GridView2D {
                     }
                     DrawShape::Line => todo!(),
                 };
-                new_draw_drag_handler(self, cursor_start)?;
 
                 self.stop_running();
                 self.record();
                 self.common.is_drawing = true;
+                new_draw_drag_handler(self, cursor_start)?;
                 self.draw_drag_handler = Some(new_draw_drag_handler);
             }
 

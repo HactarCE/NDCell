@@ -13,7 +13,7 @@ const FOV: Deg<f32> = Deg(60.0);
 /// Near clipping plane.
 pub const NEAR_PLANE: f32 = 1.0;
 /// Far clipping plane.
-pub const FAR_PLANE: f32 = 56536.0;
+pub const FAR_PLANE: f32 = 65536.0;
 
 #[derive(Debug, Clone)]
 pub enum CellTransform {

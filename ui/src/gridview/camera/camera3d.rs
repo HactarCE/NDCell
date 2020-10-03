@@ -273,13 +273,12 @@ impl Camera<Dim3D> for Camera3D {
                     let start = self
                         .cell_transform()
                         .pixel_to_global_cell_in_plane(cursor_start, (Y, &y));
-                    let old_pivot = self.pivot.clone();
                     Ok(Some(Box::new(move |cam, cursor_end| {
                         let end = cam
                             .cell_transform()
                             .pixel_to_global_cell_in_plane(cursor_end, (Y, &y));
                         if let (Some(start), Some(end)) = (&start, &end) {
-                            cam.pivot = &old_pivot - start + end;
+                            cam.pivot += start - end;
                         }
                     })))
                 }

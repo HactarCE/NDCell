@@ -40,7 +40,7 @@ impl<'a> RenderInProgress<'a> {
     ) -> Result<Self> {
         target.clear_depth(f32::INFINITY);
         let camera = g.camera();
-        let transform = camera.cell_transform();
+        let transform = camera.cell_transform_with_base(BigVec3D::origin())?;
 
         Ok(Self {
             octree: g.automaton.projected_tree(),

@@ -19,14 +19,17 @@ use std::sync::Arc;
 use ndcell_core::prelude::{Dim2D, Rule};
 
 mod clipboard_compat;
+mod commands;
 mod config;
 mod gridview;
 mod gui;
 mod history;
 mod input;
+mod scale;
 mod windows;
 
 use gui::DISPLAY;
+use scale::Scale;
 
 /// The title of the window (both the OS window, and the main imgui window).
 const TITLE: &str = "NDCell";

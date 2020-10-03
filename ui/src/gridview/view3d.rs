@@ -1,13 +1,11 @@
 use anyhow::{anyhow, Result};
-use std::borrow::Cow;
-use std::time::Instant;
 
 use ndcell_core::prelude::*;
 
-use super::commands::*;
 use super::render::grid3d::{RenderCache, RenderInProgress};
 use super::worker::*;
-use super::{Camera3D, GridViewCommon, GridViewTrait, Interpolator, RenderResult};
+use super::{Camera, Camera3D, GridViewCommon, GridViewTrait, Interpolator};
+use crate::commands::*;
 use crate::config::Config;
 use crate::history::HistoryManager;
 
@@ -24,6 +22,9 @@ pub struct GridView3D {
     pub automaton: ProjectedAutomaton3D,
     /// Camera interpolator.
     camera_interpolator: Interpolator<Dim3D, Camera3D>,
+    /// Pixel position of the mouse cursor from the top left of the area where
+    /// the gridview is being drawn.
+    cursor_pos: Option<FVec2D>,
 
     /// List of undo states.
     undo_stack: Vec<HistoryEntry>,
@@ -76,12 +77,15 @@ impl GridViewTrait for GridView3D {
     fn camera_interpolator(&mut self) -> &mut dyn super::Interpolate {
         &mut self.camera_interpolator
     }
+    fn cursor_pos(&self) -> Option<FVec2D> {
+        self.cursor_pos
+    }
     fn render(
         &mut self,
         _config: &Config,
         target: &mut glium::Frame,
         _params: super::RenderParams,
-    ) -> Result<Cow<super::RenderResult>> {
+    ) -> Result<()> {
         // let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
         let node_cache = self.automaton.projected_cache().read();
         let mut rip = RenderInProgress::new(
@@ -108,15 +112,8 @@ impl GridViewTrait for GridView3D {
         //     rip.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0);
         // }
 
-        let cell_transform = rip.cell_transform().clone();
-        drop(node_cache);
         // self.render_cache = Some(render_cache);
-        Ok(self.push_render_result(RenderResult {
-            hover_pos: None,
-            draw_pos: None,
-            cell_transform: cell_transform.into(),
-            instant: Instant::now(),
-        }))
+        Ok(())
     }
 }
 
@@ -124,6 +121,15 @@ impl GridView3D {
     /// Returns the current camera.
     pub fn camera(&self) -> &Camera3D {
         &self.camera_interpolator.current
+    }
+    /// Returns the cell position underneath the cursor. Floor this to get an
+    /// integer cell position.
+    pub fn hovered_cell_pos(&self) -> Option<FixedVec3D> {
+        // TODO: Raycast or something
+        let z = Camera3D::DISTANCE_TO_PIVOT;
+        self.camera()
+            .cell_transform()
+            .pixel_to_global_cell(self.cursor_pos?, z)
     }
 }
 

@@ -1,17 +1,20 @@
 use anyhow::{Context, Result};
 use cgmath::prelude::*;
-use cgmath::{Basis3, Deg};
+use cgmath::{Basis3, Decomposed, Deg, Matrix4};
 use log::warn;
 
 use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
-use super::{Camera, CellTransform, Scale};
+use super::{Camera, CameraDragHandler, CellTransform3D, Scale, MIN_TARGET_SIZE};
+use crate::commands::{DragCommand, ViewCommand, ViewDragAction};
 use crate::config::{Config, ForwardAxis3D, UpAxis3D};
-use crate::gridview::commands::MoveCommand;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Camera3D {
+    /// Width and height of the viewport.
+    target_dimensions: (u32, u32),
+
     /// Scale.
     scale: Scale,
     /// Yaw (-180..+180).
@@ -25,6 +28,8 @@ pub struct Camera3D {
 impl Default for Camera3D {
     fn default() -> Self {
         Self {
+            target_dimensions: (MIN_TARGET_SIZE, MIN_TARGET_SIZE),
+
             scale: Scale::default(),
             yaw: Self::DEFAULT_YAW,
             pitch: Self::DEFAULT_PITCH,
@@ -35,7 +40,7 @@ impl Default for Camera3D {
 
 impl Camera3D {
     /// Number of scaled units away from the pivot to position the camera.
-    pub const DISTANCE_TO_PIVOT: f64 = 512.0;
+    pub const DISTANCE_TO_PIVOT: f32 = 512.0;
 
     pub const DEFAULT_PITCH: Deg<f32> = Deg(-30.0);
     pub const DEFAULT_YAW: Deg<f32> = Deg(20.0);
@@ -81,7 +86,7 @@ impl Camera3D {
     }
     /// Returns the real position of the camera (not the pivot).
     pub fn camera_pos(&self) -> FixedVec3D {
-        let distance = self.scale.factor() * FixedPoint::from(r64(Self::DISTANCE_TO_PIVOT));
+        let distance = self.scale.factor() * FixedPoint::from(r64(Self::DISTANCE_TO_PIVOT as f64));
         &self.pivot + self.look_vector().to_fixedvec() * &distance
     }
 
@@ -121,6 +126,16 @@ impl Camera3D {
 }
 
 impl Camera<Dim3D> for Camera3D {
+    fn target_dimensions(&self) -> (u32, u32) {
+        self.target_dimensions
+    }
+    fn set_target_dimensions(&mut self, (target_w, target_h): (u32, u32)) {
+        self.target_dimensions = (
+            std::cmp::max(MIN_TARGET_SIZE, target_w),
+            std::cmp::max(MIN_TARGET_SIZE, target_h),
+        );
+    }
+
     fn pos(&self) -> &FixedVec<Dim3D> {
         &self.pivot
     }
@@ -179,18 +194,102 @@ impl Camera<Dim3D> for Camera3D {
         ret
     }
 
+    fn cell_transform_with_base(&self, base_cell_pos: BigVec3D) -> Result<CellTransform3D> {
+        // Compute the layer of each "render cell."
+        let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
+
+        // Compute the render cell transform; see `NdCellTransform` docs.
+        let render_cell_offset = self.pos() - base_cell_pos.to_fixedvec();
+        let render_cell_translate_matrix = Matrix4::from_translation(-cgmath::vec3(
+            render_cell_offset[X]
+                .to_f32()
+                .context("Base cell position is too far from camera position")?,
+            render_cell_offset[Y]
+                .to_f32()
+                .context("Base cell position is too far from camera position")?,
+            render_cell_offset[Z]
+                .to_f32()
+                .context("Base cell position is too far from camera position")?,
+        ));
+        let render_cell_scale = render_cell_scale.units_per_cell().raw() as f32;
+        let render_cell_view_matrix = Matrix4::from(Decomposed {
+            scale: render_cell_scale,
+            rot: self.orientation(),
+            disp: cgmath::vec3(0.0, 0.0, Self::DISTANCE_TO_PIVOT),
+        });
+        // The offset is measured in render cells, so we must apply the offest
+        // before scaling.
+        let render_cell_transform = render_cell_view_matrix * render_cell_translate_matrix;
+
+        let (target_w, target_h) = self.target_dimensions();
+
+        Ok(CellTransform3D::new_perspective(
+            base_cell_pos,
+            render_cell_layer,
+            render_cell_transform,
+            (target_w as f32, target_h as f32),
+        ))
+    }
+
     fn do_move_command(
         &mut self,
-        command: MoveCommand,
+        command: ViewCommand,
         config: &Config,
-        cell_transform: &CellTransform,
-    ) -> Result<()> {
-        let cell_transform = cell_transform
-            .as_3d()
-            .context("Received 3D camera command without 3D cell transform")?;
-
+    ) -> Result<Option<CameraDragHandler<Self>>> {
         match command {
-            MoveCommand::GoTo3D {
+            ViewCommand::Drag(DragCommand::Start {
+                action,
+                cursor_start,
+            }) => match action {
+                ViewDragAction::Orbit => {
+                    let orbit_factor = r64(config.ctrl.mouse_orbit_speed / config.gfx.dpi);
+                    let old_yaw = self.yaw();
+                    let old_pitch = self.pitch();
+                    Ok(Some(Box::new(move |cam, cursor_end| {
+                        let delta = (cursor_start - cursor_end) * orbit_factor;
+                        cam.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
+                        cam.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
+                    })))
+                }
+
+                ViewDragAction::Pan => {
+                    let z = Self::DISTANCE_TO_PIVOT;
+                    let start = self.cell_transform().pixel_to_global_cell(cursor_start, z);
+                    Ok(Some(Box::new(move |cam, cursor_end| {
+                        let end = cam.cell_transform().pixel_to_global_cell(cursor_end, z);
+                        if let (Some(start), Some(end)) = (&start, &end) {
+                            cam.pivot += start - end;
+                        }
+                    })))
+                }
+                ViewDragAction::PanAligned => {
+                    todo!("pan aligned");
+                }
+                ViewDragAction::PanAlignedVertical => {
+                    todo!("pan aligned vertical");
+                }
+                ViewDragAction::PanHorizontal => {
+                    let y = self.pivot[Y].clone();
+                    let start = self
+                        .cell_transform()
+                        .pixel_to_global_cell_in_plane(cursor_start, (Y, &y));
+                    let old_pivot = self.pivot.clone();
+                    Ok(Some(Box::new(move |cam, cursor_end| {
+                        let end = cam
+                            .cell_transform()
+                            .pixel_to_global_cell_in_plane(cursor_end, (Y, &y));
+                        if let (Some(start), Some(end)) = (&start, &end) {
+                            cam.pivot = &old_pivot - start + end;
+                        }
+                    })))
+                }
+
+                ViewDragAction::Scale => todo!("Scale using click & drag"),
+            },
+            ViewCommand::Drag(DragCommand::Continue { .. }) => Ok(None),
+            ViewCommand::Drag(DragCommand::Stop) => Ok(None),
+
+            ViewCommand::GoTo3D {
                 mut x,
                 mut y,
                 mut z,
@@ -230,47 +329,35 @@ impl Camera<Dim3D> for Camera3D {
                         self.set_pitch(pitch);
                     }
                 }
+                Ok(None)
             }
-            MoveCommand::GoToScale(scale) => {
+            ViewCommand::GoToScale(scale) => {
                 self.set_scale(scale);
+                Ok(None)
             }
 
-            MoveCommand::Pan { start, end } => {
-                let z = Self::DISTANCE_TO_PIVOT as f32;
-                let start = cell_transform.pixel_to_global_cell(start, z);
-                let end = cell_transform.pixel_to_global_cell(end, z);
-                if let (Some(start), Some(end)) = (start, end) {
-                    self.pivot += start - end;
-                }
-            }
-            MoveCommand::PanFlat { start, end } => {
-                let start =
-                    cell_transform.pixel_to_global_cell_in_plane(start, (Y, self.pivot[Y].clone()));
-                let end =
-                    cell_transform.pixel_to_global_cell_in_plane(end, (Y, self.pivot[Y].clone()));
-                if let (Some(start), Some(end)) = (start, end) {
-                    self.pivot += start - end;
-                }
-            }
-            MoveCommand::Orbit { start, end } => {
-                let delta = (start - end) * r64(config.ctrl.mouse_orbit_speed / config.gfx.dpi);
-                self.set_yaw(self.yaw() + Deg(delta[X].raw() as f32));
-                self.set_pitch(self.pitch() + Deg(delta[Y].raw() as f32));
-            }
-            MoveCommand::Scale {
+            ViewCommand::Scale {
                 log2_factor,
                 invariant_pos: _,
             } => {
                 self.scale_by_log2_factor(r64(log2_factor), None);
+                Ok(None)
             }
 
-            MoveCommand::SnapPos => self.snap_pos(config),
-            MoveCommand::SnapScale { invariant_pos: _ } => self.snap_scale(None),
+            ViewCommand::SnapPos => {
+                self.snap_pos(config);
+                Ok(None)
+            }
+            ViewCommand::SnapScale { invariant_pos: _ } => {
+                self.snap_scale(None);
+                Ok(None)
+            }
 
-            MoveCommand::GoTo2D { .. } => warn!("Ignoring {:?} in Camera3D", command),
+            ViewCommand::GoTo2D { .. } => {
+                warn!("Ignoring {:?} in Camera3D", command);
+                Ok(None)
+            }
         }
-
-        Ok(())
     }
 }
 

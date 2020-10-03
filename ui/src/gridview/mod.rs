@@ -1,8 +1,7 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use enum_dispatch::enum_dispatch;
 use log::{debug, trace, warn};
 use parking_lot::Mutex;
-use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -10,16 +9,15 @@ use std::time::{Duration, Instant};
 use ndcell_core::prelude::*;
 
 mod camera;
-pub mod commands;
 mod render;
 mod view2d;
 mod view3d;
 mod worker;
 
+use crate::commands::*;
 use crate::config::Config;
 use crate::history::History;
 pub use camera::*;
-pub use commands::*;
 pub use view2d::GridView2D;
 pub use view3d::GridView3D;
 use worker::*;
@@ -65,15 +63,22 @@ impl AsMut<GridViewCommon> for GridView {
 }
 
 /// Shared fields common to all `GridView`s.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct GridViewCommon {
     /// Queue of pending commands to be executed on the next frame.
     command_queue: Mutex<Vec<Command>>,
+
+    /// Size of the pixel rectangle to render to.
+    last_target_size: (u32, u32),
 
     /// Whether the simulation is currently running.
     is_running: bool,
     /// Whether the user is currently drawing.
     is_drawing: bool,
+    /// Whether the user is currently dragging the viewport by holding down a
+    /// mouse button.
+    is_dragging_view: bool,
+
     /// Whether a one-off simulation request is currently happening
     /// concurrently.
     ///
@@ -83,10 +88,31 @@ pub struct GridViewCommon {
     /// Communication channel with the garbage collection thread.
     gc_channel: Option<mpsc::Receiver<()>>,
 
-    /// The last several render results, with the most recent at the front.
-    pub render_results: VecDeque<RenderResult>,
+    /// The time that the last several frames completed.
+    pub last_frame_times: VecDeque<Instant>,
     /// The last several simulation times, with the most recent at the front.
     pub last_sim_times: VecDeque<Duration>,
+}
+impl Default for GridViewCommon {
+    fn default() -> Self {
+        Self {
+            command_queue: Default::default(),
+
+            // Initialize to something nonzero.
+            last_target_size: (100, 100),
+
+            is_running: Default::default(),
+            is_drawing: Default::default(),
+            is_dragging_view: Default::default(),
+
+            is_waiting: Default::default(),
+
+            gc_channel: Default::default(),
+
+            last_frame_times: Default::default(),
+            last_sim_times: Default::default(),
+        }
+    }
 }
 
 /// Shared functionality for 2D and 3D gridviews.
@@ -212,24 +238,16 @@ pub trait GridViewTrait:
         Ok(())
     }
     /// Executes a `Move` command.
-    fn do_move_command(&mut self, command: MoveCommand, config: &Config) -> Result<()> {
-        let cell_transform = self.nth_render_result(0).cell_transform.clone();
-
-        if Some(self.ndim()) != cell_transform.ndim() {
-            // We haven't rendered a single frame yet, but executing the command
-            // might require information about the previous render result in
-            // order to convert mouse coordinates to cell coordinates. So just
-            // put the command back in the queue and we'll execute it next
-            // frame. This should only happen on the very first frame.
-            debug!("Invalid cell transform; deferring {:?}", command);
-            self.enqueue(command);
-            return Ok(());
-        }
-        trace!("Executing {:?}", command);
+    fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
+        // if !matches!(command, ViewCommand::SnapPos | ViewCommand::SnapScale {..}) {
+        //     trace!("Executing {:?}", command);
+        // }
 
         self.camera_interpolator()
-            .do_move_command(command, config, &cell_transform)
-            .context("Executing move command")
+            .do_move_command(command, config)
+            .context("Executing move command")?;
+        self.as_mut().is_dragging_view = self.camera_interpolator().is_dragging();
+        Ok(())
     }
     /// Executes a `Draw` command.
     fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()>;
@@ -268,6 +286,11 @@ pub trait GridViewTrait:
     /// Returns whether the user is currently drawing.
     fn is_drawing(&self) -> bool {
         self.as_ref().is_drawing
+    }
+    /// Returns whether the user is currently dragging the viewport by holding
+    /// down a mouse button.
+    fn is_dragging_view(&self) -> bool {
+        self.as_ref().is_dragging_view
     }
     /// Returns whether a one-off simulation request is currently happening
     /// concurrently.
@@ -324,43 +347,32 @@ pub trait GridViewTrait:
 
     /// Returns the camera interpolator.
     fn camera_interpolator(&mut self) -> &mut dyn Interpolate;
+    /// Updates the pixel size of the viewport.
+    fn update_target_dimensions(&mut self, target_dimensions: (u32, u32)) {
+        self.camera_interpolator()
+            .update_target_dimensions(target_dimensions);
+    }
+    /// Returns the pixel position of the mouse cursor from the top left of the
+    /// area where the gridview is being drawn.
+    fn cursor_pos(&self) -> Option<FVec2D>;
     /// Renders the gridview.
     fn render(
         &mut self,
         config: &Config,
         target: &mut glium::Frame,
         params: RenderParams,
-    ) -> Result<Cow<RenderResult>>;
-    /// Pushes the `RenderResult` from the most recent render and returns a
-    /// reference to it.
-    fn push_render_result(&mut self, render_result: RenderResult) -> Cow<RenderResult> {
-        let render_results = &mut self.as_mut().render_results;
-        if render_results.len() >= RENDER_RESULTS_COUNT {
-            render_results.pop_back();
-        }
-        render_results.push_front(render_result);
-        self.nth_render_result(0)
-    }
-    /// Returns the `RenderResult` of the nth most recent render, or
-    /// `RenderResult::default()` if there hasn't been one or it has been
-    /// forgotten.
-    fn nth_render_result(&self, frame: usize) -> Cow<RenderResult> {
-        if frame > RENDER_RESULTS_COUNT {
-            warn!("Attempted to access render result {:?} of gridview, but render results are only kept for {:?} frames", frame, RENDER_RESULTS_COUNT);
-        }
-        self.as_ref()
-            .render_results
-            .get(frame)
-            .map(Cow::Borrowed)
-            .unwrap_or_default()
-    }
+    ) -> Result<()>;
+
     /// Returns the framerate measured between the last two frames, or the
     /// user-configured FPS if that fails.
     fn fps(&self, config: &Config) -> f64 {
-        self.nth_render_result(0)
-            .instant
-            .checked_duration_since(self.nth_render_result(1).instant)
-            .map(|duration| 1.0 / duration.as_secs_f64())
+        let last_frame_times = &self.as_ref().last_frame_times;
+        last_frame_times
+            .get(0)
+            .zip(last_frame_times.get(1))
+            .and_then(|(latest, &prior)| latest.checked_duration_since(prior))
+            .and_then(|duration| R64::try_new(1.0 / duration.as_secs_f64()))
+            .map(R64::raw)
             .unwrap_or(config.gfx.fps)
     }
 }
@@ -431,31 +443,7 @@ impl History for GridView {
 /// Parameters that may control the rendering process.
 #[derive(Debug, Default)]
 pub struct RenderParams {
-    /// The pixel position of the mouse cursor from the top left of the area
-    /// where the gridview is being drawn.
+    /// Pixel position of the mouse cursor from the top left of the area where
+    /// the gridview is being drawn.
     pub cursor_pos: Option<FVec2D>,
-}
-
-/// Information computed during the render.
-#[derive(Debug, Clone)]
-pub struct RenderResult {
-    /// The cell in the projected ND-tree that the mouse cursor is hovering
-    /// over.
-    pub hover_pos: Option<AnyDimFixedVec>,
-    /// The cell in the projected ND-tree to draw at if the user draws.
-    pub draw_pos: Option<AnyDimFixedVec>,
-    /// Transformation from cells to screen pixels.
-    pub cell_transform: CellTransform,
-    /// The moment that this render finished.
-    pub instant: Instant,
-}
-impl Default for RenderResult {
-    fn default() -> Self {
-        Self {
-            hover_pos: None,
-            draw_pos: None,
-            cell_transform: CellTransform::None,
-            instant: Instant::now(),
-        }
-    }
 }

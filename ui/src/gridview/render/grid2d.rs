@@ -37,7 +37,6 @@
 //! non-integer scale factors, however, this is not guaranteed.
 
 use anyhow::{Context, Result};
-use cgmath::Matrix4;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
 use itertools::Itertools;
@@ -50,6 +49,7 @@ use super::gl_quadtree::CachedGlQuadtree;
 use super::vertices::RgbaVertex;
 use super::{ibos, shaders, textures, vbos};
 use crate::gridview::*;
+use crate::Scale;
 
 #[derive(Default)]
 pub struct RenderCache {
@@ -67,9 +67,6 @@ pub struct RenderInProgress<'a> {
     render_cell_scale: Scale,
     /// Quadtree encompassing all visible cells.
     visible_quadtree: NdTreeSlice2D<'a>,
-    /// The render cell position within `visible_quadtree` that is centered on the
-    /// screen.
-    pos: FVec2D,
     /// Rectangle of render cells within `visible_quadtree` that is visible.
     visible_rect: IRect2D,
     /// Transform from `visible_quadtree` space (1 unit = 1 render cell; (0, 0)
@@ -89,46 +86,24 @@ impl<'a> RenderInProgress<'a> {
     ) -> Result<Self> {
         target.clear_depth(0.0);
 
-        let (target_w, target_h) = target.get_dimensions();
-        if target_w < 5 || target_h < 5 {
-            return Err(anyhow!(
-                "2D grid render target too small: ({}, {})",
-                target_w,
-                target_h,
-            ));
-        }
-        let target_pixels_size: FVec2D = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let camera = g.camera().clone();
 
         // Determine the lowest layer of the quadtree that we must visited,
         // which is the layer of a "render cell," a quadtree node that is
         // rendered as one unit (one pixel in step #1).
-        let render_cell_layer: Layer = Layer(
-            (-camera.scale().round().log2_factor())
-                .to_u32()
-                .unwrap_or(0),
-        );
+        let (render_cell_layer, render_cell_scale) = camera.render_cell_layer_and_scale();
         // Compute the width of cells represented by each render cell.
-        let render_cell_len: BigInt = BigInt::from(1) << render_cell_layer.to_u32();
-        // Compute the scaling to use for render cells by the scale factor by
-        // the size of a render cell -- except it's addition, because we're
-        // actually using logarithms.
-        let render_cell_scale = Scale::from_log2_factor(
-            camera.scale().log2_factor() + render_cell_layer.to_u32() as f64,
-        );
-        // Now the scale factor should be greater than 1/2 (since 1/2 or
-        // anything lower should be handled by having a higher render cell
-        // layer). log₂(1/2) = -1.
-        assert!(render_cell_scale.log2_factor() > -1.0);
+        let render_cell_len = render_cell_layer.big_len();
 
-        // Get a smaller slice of the grid that covers the entire visible area,
-        // a rectangle of visible render cells relative to that node, and a
-        // floating-point render cell position relative to that node that will
-        // be in the center of the screen.
+        // Get a smaller slice of the grid that covers the entire visible area
+        // and a rectangle containing all visible render cells relative to that
+        // node.
         let visible_quadtree: NdTreeSlice2D<'a>;
         let visible_rect: IRect2D;
-        let mut pos: FVec2D;
         {
+            let (target_w, target_h) = camera.target_dimensions();
+            let target_pixels_size: IVec2D = NdVec([target_w as isize, target_h as isize]);
+
             // Find the global rectangle of visible cells.
             let global_visible_rect: BigRect2D;
             {
@@ -160,53 +135,11 @@ impl<'a> RenderInProgress<'a> {
             // Now it is safe to convert from `BigInt` to `isize`, because the
             // number of visible render cells must be reasonable.
             visible_rect = tmp_visible_rect.to_irect();
-
-            // Subtract the slice offset from the camera position and divide by
-            // the size of a render cell to get the render cell offset from the
-            // lower corner of the slice.
-            pos = ((camera.pos() - visible_quadtree.offset.to_fixedvec())
-                >> render_cell_layer.to_u32())
-            .to_fvec();
-            // TODO: uncomment this
-            // // Round to the nearest pixel.
-            // pos = (pos * render_cell_scale.pixels_per_cell()).round()
-            //     * render_cell_scale.cells_per_pixel();
-            // Offset by half a pixel if the target dimensions are odd, so that
-            // cells boundaries always line up with pixel boundaries.
-            pos += (target_pixels_size % 2.0) * render_cell_scale.cells_per_unit() / 2.0;
         }
 
-        // Compute the render cell transform; see `NdCellTransform` docs.
-        let render_cell_transform: Matrix4<f32>;
-        {
-            // Compute the scale factor for the view matrix. Multiply by 2
-            // because the OpenGL screen space ranges from -1 to +1.
-            let pixels_per_render_cell = render_cell_scale.units_per_cell();
-            let scale = FVec2D::repeat(pixels_per_render_cell);
-
-            // Determine the translation offset for the view matrix.
-            let mut offset = pos;
-            // Offset by a tiny fraction of a pixel so that gridlines round to
-            // the top-right instead of rounding whichever way OpenGL picks.
-            offset -= r64(TINY_OFFSET as f64) * render_cell_scale.cells_per_unit();
-
-            // The offset is in units of render cells, not screen space units,
-            // so we apply the translation before scaling, contrary to the usual
-            // scale-rotate-translate order in computer graphics.
-            let scale_x = scale[X].to_f32().context("scale[X].to_f32()")?;
-            let scale_y = scale[Y].to_f32().context("scale[Y].to_f32()")?;
-            let offset_x = offset[X].to_f32().context("offset[X].to_f32()")?;
-            let offset_y = offset[Y].to_f32().context("offset[Y].to_f32()")?;
-            render_cell_transform = Matrix4::from_nonuniform_scale(scale_x, scale_y, 1.0)
-                * Matrix4::from_translation(-cgmath::Vector3::new(offset_x, offset_y, 0.0));
-        }
-
-        let transform = CellTransform2D::new_ortho(
-            visible_quadtree.offset.clone(),
-            render_cell_layer,
-            render_cell_transform,
-            (target_w as f32, target_h as f32),
-        );
+        // Compute the transformation from individual cells all the way to
+        // pixels.
+        let transform = camera.cell_transform_with_base(visible_quadtree.offset.clone())?;
 
         Ok(Self {
             camera,
@@ -214,7 +147,6 @@ impl<'a> RenderInProgress<'a> {
             render_cell_layer,
             render_cell_scale,
             visible_quadtree,
-            pos,
             visible_rect,
             transform,
             render_cache,
@@ -290,7 +222,8 @@ impl<'a> RenderInProgress<'a> {
         let (target_w, target_h) = self.target.get_dimensions();
         let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let render_cells_size = target_size / self.render_cell_scale.units_per_cell();
-        let render_cells_center = self.pos - self.visible_rect.min().to_fvec();
+        let render_cells_center = self.camera.render_cell_pos(&self.visible_quadtree.offset)
+            - self.visible_rect.min().to_fvec();
         let mut render_cells_frect =
             FRect2D::centered(render_cells_center, render_cells_size / 2.0);
         render_cells_frect /= self.visible_rect.size().to_fvec();
@@ -374,13 +307,6 @@ impl<'a> RenderInProgress<'a> {
         cell_position: &BigVec2D,
         width: f64,
     ) -> Result<()> {
-        if !self.visible_quadtree.rect().contains(cell_position) {
-            debug!(
-                "Cursor position is outside visible rectangle: {:?}",
-                cell_position
-            );
-            return Ok(());
-        }
         let cell_pos = cell_position - &self.visible_quadtree.offset;
         let render_cell_pos = cell_pos.div_floor(&self.render_cell_layer.big_len());
 

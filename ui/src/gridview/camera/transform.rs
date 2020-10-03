@@ -1,5 +1,6 @@
 use cgmath::prelude::*;
 use cgmath::{Deg, Matrix4};
+use std::convert::TryFrom;
 
 use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
@@ -16,14 +17,8 @@ pub const FAR_PLANE: f32 = 56536.0;
 
 #[derive(Debug, Clone)]
 pub enum CellTransform {
-    None,
     Some2D(CellTransform2D),
     Some3D(CellTransform3D),
-}
-impl Default for CellTransform {
-    fn default() -> Self {
-        Self::None
-    }
 }
 impl From<CellTransform2D> for CellTransform {
     fn from(ct: CellTransform2D) -> Self {
@@ -35,12 +30,25 @@ impl From<CellTransform3D> for CellTransform {
         Self::Some3D(ct)
     }
 }
+impl<'a> TryFrom<&'a CellTransform> for &'a CellTransform2D {
+    type Error = ();
+
+    fn try_from(value: &'a CellTransform) -> Result<Self, Self::Error> {
+        value.as_2d().ok_or(())
+    }
+}
+impl<'a> TryFrom<&'a CellTransform> for &'a CellTransform3D {
+    type Error = ();
+
+    fn try_from(value: &'a CellTransform) -> Result<Self, Self::Error> {
+        value.as_3d().ok_or(())
+    }
+}
 impl CellTransform {
-    pub fn ndim(&self) -> Option<usize> {
+    pub fn ndim(&self) -> usize {
         match self {
-            CellTransform::None => None,
-            CellTransform::Some2D(_) => Some(2),
-            CellTransform::Some3D(_) => Some(3),
+            CellTransform::Some2D(_) => 2,
+            CellTransform::Some3D(_) => 3,
         }
     }
     pub fn as_2d(&self) -> Option<&CellTransform2D> {
@@ -57,7 +65,8 @@ impl CellTransform {
     }
 }
 
-/// Transformation between four coordinate spaces for rendering.
+/// Transformation between five coordinate spaces for rendering and input
+/// handling.
 ///
 /// 1. Cell space
 ///     - Unit: individual cell
@@ -88,16 +97,21 @@ impl CellTransform {
 /// In 3D, pixel space and screen space have the perspective transformation
 /// applied while camera space does not.
 ///
-/// Coordinates in cell space may be arbitrarily large, so conversion from cell
-/// space to render cell space cannot be done using floating-point numbers; all
-/// other conversions use `cgmath` matrices. To convert from cell space to
-/// render cell space, we subtract the global cell offset and divide by the size
-/// of a render cell (equivalent to a right-shift by the render cell layer).
+/// When displaying large patterns, individual cells may be smaller than a
+/// single pixel, so we group cells into "render cells;" each render cell is a
+/// power-of-2-sized square/cube of cells that is rendered as a single unit.
 ///
-/// To convert from render cell space to camera space, we use the
-/// `render_cell_transform`. To convert from camera space to screen space, we
-/// use the `projection_transform`. To convert from screen space to pixel space,
-/// we use the `pixel_transform`.
+/// Because coordinates in cell space may be arbitrarily large, conversion from
+/// cell space to render cell space cannot be done using floating-point numbers;
+/// all other conversions use `cgmath::Matrix4<f32>`, which can be easily
+/// converted to `[[f32; 4]; 4]` to pass to OpenGL. To convert from cell space
+/// to render cell space, we subtract the global cell offset and divide by the
+/// size of a render cell (equivalent to a right-shift by the render cell
+/// layer).
+///
+/// `render_cell_transform` converts from render cell space to camera space,
+/// `projection_transform` converts from camera space to screen space, and
+/// `pixel_transform` converts from screen space to pixel space.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NdCellTransform<D: Dim> {
     /// Global position of the origin of render cell space.
@@ -240,7 +254,7 @@ impl CellTransform3D {
     pub fn pixel_to_global_cell_in_plane(
         &self,
         pixel: FVec2D,
-        plane: (Axis, FixedPoint),
+        plane: (Axis, &FixedPoint),
     ) -> Option<FixedVec3D> {
         let (plane_axis, plane_pos) = plane;
         let global_cell_0 = self.pixel_to_global_cell(pixel, NEAR_PLANE)?;

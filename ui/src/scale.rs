@@ -3,7 +3,7 @@ use std::ops::*;
 
 use ndcell_core::num::{r64, FixedPoint, Float, R64};
 
-/// The scale factor.
+/// Scale factor.
 ///
 /// In 2D, this is the width or height of a cell in "scaled units," which are
 /// pixels in 2D and abstract units in 3D, where the camera is always a fixed
@@ -13,7 +13,7 @@ use ndcell_core::num::{r64, FixedPoint, Float, R64};
 /// the scale factor is positive. When zoomed out far away, the scale factor is
 /// small (between 0 and 1) and the base-2 logarithm of the scale factor is
 /// negative.
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Scale {
     log2_factor: R64,
 }

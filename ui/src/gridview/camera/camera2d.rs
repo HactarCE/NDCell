@@ -1,22 +1,74 @@
 use anyhow::{Context, Result};
+use cgmath::Matrix4;
 use log::warn;
 
 use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
 
-use super::{Camera, CellTransform, Scale};
+use super::{Camera, CameraDragHandler, CellTransform2D, Scale, MIN_TARGET_SIZE};
+use crate::commands::{DragCommand, ViewCommand, ViewDragAction};
 use crate::config::Config;
-use crate::gridview::commands::MoveCommand;
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Camera2D {
+    /// Width and height of the viewport.
+    target_dimensions: (u32, u32),
+
     /// Cell coordinates at the center of the camera.
     center: FixedVec2D,
     /// The scale factor.
     scale: Scale,
 }
 
+impl Default for Camera2D {
+    fn default() -> Self {
+        Self {
+            target_dimensions: (MIN_TARGET_SIZE, MIN_TARGET_SIZE),
+            center: FixedVec::origin(),
+            scale: Scale::default(),
+        }
+    }
+}
+
+impl Camera2D {
+    // Compute the position of the camera in render cell space, given a base
+    // position near the camera center.
+    pub fn render_cell_pos(&self, base_cell_pos: &BigVec2D) -> FVec2D {
+        // Compute the layer of each "render cell."
+        let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
+
+        let cell_offset = self.pos() - base_cell_pos.to_fixedvec();
+        let mut render_cell_pos = (cell_offset >> render_cell_layer.to_u32()).to_fvec();
+
+        // Round to the nearest pixel.
+        render_cell_pos = (render_cell_pos * render_cell_scale.units_per_cell()).round()
+            * render_cell_scale.cells_per_unit();
+
+        // Offset by half a pixel if the target dimensions are odd, so that
+        // cells boundaries always line up with pixel boundaries.
+        let (target_w, target_h) = self.target_dimensions();
+        if target_w % 2 == 1 {
+            render_cell_pos[X] += render_cell_scale.cells_per_unit() / 2.0;
+        }
+        if target_h % 2 == 1 {
+            render_cell_pos[Y] += render_cell_scale.cells_per_unit() / 2.0;
+        }
+
+        render_cell_pos
+    }
+}
+
 impl Camera<Dim2D> for Camera2D {
+    fn target_dimensions(&self) -> (u32, u32) {
+        self.target_dimensions
+    }
+    fn set_target_dimensions(&mut self, (target_w, target_h): (u32, u32)) {
+        self.target_dimensions = (
+            std::cmp::max(MIN_TARGET_SIZE, target_w),
+            std::cmp::max(MIN_TARGET_SIZE, target_h),
+        );
+    }
+
     fn pos(&self) -> &FixedVec<Dim2D> {
         &self.center
     }
@@ -88,18 +140,74 @@ impl Camera<Dim2D> for Camera2D {
         ret
     }
 
+    fn cell_transform_with_base(&self, base_cell_pos: BigVec2D) -> Result<CellTransform2D> {
+        // Compute the layer of each "render cell."
+        let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
+
+        // Compute the render cell translation matrix.
+        let render_cell_pos = self.render_cell_pos(&base_cell_pos);
+        let render_cell_translate_matrix = Matrix4::from_translation(-cgmath::vec3(
+            render_cell_pos[X]
+                .to_f32()
+                .context("Base cell position is too far from camera position")?,
+            render_cell_pos[Y]
+                .to_f32()
+                .context("Base cell position is too far from camera position")?,
+            0.0,
+        ));
+        // Compute scale factor for render cells, relative to pixels.
+        let render_cell_scale = render_cell_scale.units_per_cell().raw() as f32;
+        let render_cell_scale_matrix =
+            Matrix4::from_nonuniform_scale(render_cell_scale, render_cell_scale, 1.0);
+        // Compute the render cell transform; see `NdCellTransform` docs. The
+        // offset is measured in render cells, so we must apply the offset
+        // before scaling.
+        let render_cell_transform = render_cell_scale_matrix * render_cell_translate_matrix;
+
+        let (target_w, target_h) = self.target_dimensions();
+
+        Ok(CellTransform2D::new_ortho(
+            base_cell_pos,
+            render_cell_layer,
+            render_cell_transform,
+            (target_w as f32, target_h as f32),
+        ))
+    }
+
     fn do_move_command(
         &mut self,
-        command: MoveCommand,
+        command: ViewCommand,
         config: &Config,
-        cell_transform: &CellTransform,
-    ) -> Result<()> {
-        let cell_transform = cell_transform
-            .as_2d()
-            .context("Received 2D camera command without 2D cell transform")?;
-
+    ) -> Result<Option<CameraDragHandler<Self>>> {
         match command {
-            MoveCommand::GoTo2D {
+            ViewCommand::Drag(DragCommand::Start {
+                action,
+                cursor_start,
+            }) => match action {
+                ViewDragAction::Orbit => {
+                    warn!("Ignoring {:?} in Camera2D", command);
+                    Ok(None)
+                }
+
+                ViewDragAction::Pan
+                | ViewDragAction::PanAligned
+                | ViewDragAction::PanAlignedVertical
+                | ViewDragAction::PanHorizontal => {
+                    let start = self.cell_transform().pixel_to_global_cell(cursor_start);
+                    Ok(Some(Box::new(move |cam, cursor_end| {
+                        let end = cam.cell_transform().pixel_to_global_cell(cursor_end);
+                        if let (Some(start), Some(end)) = (&start, &end) {
+                            cam.center += start - end;
+                        }
+                    })))
+                }
+
+                ViewDragAction::Scale => todo!("Scale using click & drag"),
+            },
+            ViewCommand::Drag(DragCommand::Continue { .. }) => Ok(None),
+            ViewCommand::Drag(DragCommand::Stop) => Ok(None),
+
+            ViewCommand::GoTo2D {
                 mut x,
                 mut y,
                 relative,
@@ -120,39 +228,43 @@ impl Camera<Dim2D> for Camera2D {
                         self.center[Y] = y;
                     }
                 }
+                Ok(None)
             }
-            MoveCommand::GoToScale(scale) => {
+            ViewCommand::GoToScale(scale) => {
                 self.set_scale(scale);
+                Ok(None)
             }
-            MoveCommand::Pan { start, end } => {
-                let delta = (start - end) * NdVec([r64(1.0), r64(-1.0)]);
-                self.center += self.scale.units_to_cells(delta.to_fixedvec());
-            }
-            MoveCommand::Scale {
+
+            ViewCommand::Scale {
                 log2_factor,
                 invariant_pos,
             } => {
                 self.scale_by_log2_factor(
                     R64::try_new(log2_factor).context("Invalid scale factor")?,
-                    invariant_pos
-                        .and_then(|pixel_pos| cell_transform.pixel_to_global_cell(pixel_pos)),
+                    invariant_pos.and_then(|pixel_pos| {
+                        self.cell_transform().pixel_to_global_cell(pixel_pos)
+                    }),
                 );
+                Ok(None)
             }
-            MoveCommand::SnapPos => {
+
+            ViewCommand::SnapPos => {
                 self.snap_pos(config);
+                Ok(None)
             }
-            MoveCommand::SnapScale { invariant_pos } => {
+            ViewCommand::SnapScale { invariant_pos } => {
                 self.snap_scale(
-                    invariant_pos
-                        .and_then(|pixel_pos| cell_transform.pixel_to_global_cell(pixel_pos)),
+                    invariant_pos.and_then(|pixel_pos| {
+                        self.cell_transform().pixel_to_global_cell(pixel_pos)
+                    }),
                 );
+                Ok(None)
             }
 
-            MoveCommand::GoTo3D { .. }
-            | MoveCommand::PanFlat { .. }
-            | MoveCommand::Orbit { .. } => warn!("Ignoring {:?} in Camera2D", command),
+            ViewCommand::GoTo3D { .. } => {
+                warn!("Ignoring {:?} in Camera2D", command);
+                Ok(None)
+            }
         }
-
-        Ok(())
     }
 }

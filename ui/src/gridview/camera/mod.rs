@@ -5,16 +5,18 @@ use ndcell_core::prelude::*;
 mod camera2d;
 mod camera3d;
 mod interpolator;
-mod scale;
 mod transform;
 
-use super::commands::MoveCommand;
+use crate::commands::ViewCommand;
 use crate::config::Config;
+use crate::Scale;
 pub use camera2d::Camera2D;
 pub use camera3d::Camera3D;
 pub use interpolator::{Interpolate, Interpolator};
-pub use scale::Scale;
 pub use transform::{CellTransform, CellTransform2D, CellTransform3D, NdCellTransform};
+
+/// Minimum target width & height, to avoid a divide-by-zero error.
+const MIN_TARGET_SIZE: u32 = 10;
 
 /// Number of pixels to pan that feels equivalent to scaling by a factor of 2.
 ///
@@ -34,8 +36,22 @@ const PIXELS_PER_2X_SCALE: f64 = 400.0;
 /// This one is completely arbitrary.
 const ROT_DEGREES_PER_2X_SCALE: f64 = PIXELS_PER_2X_SCALE;
 
+/// Handler for mouse drag events, when the user starts dragging and called for
+/// each cursor movement until released.
+///
+/// It takes as input the current camera, which is mutated, the cell transform
+/// from the previous frame, and the current mouse cursor position. If any
+/// initial state or mouse cursor history is relevant, the closure must maintain
+/// this information.
+pub type CameraDragHandler<C> = Box<dyn FnMut(&mut C, FVec2D)>;
+
 /// Common functionality for 2D and 3D cameras.
 pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
+    /// Returns the width and height of the viewport.
+    fn target_dimensions(&self) -> (u32, u32);
+    /// Sets the width and height of the viewport.
+    fn set_target_dimensions(&mut self, target_dimensions: (u32, u32));
+
     /// Returns the position the camera is looking at/from.
     fn pos(&self) -> &FixedVec<D>;
     /// Sets the position the camera is looking at/from.
@@ -145,16 +161,36 @@ pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
     #[must_use = "This method returns a new value instead of mutating its input"]
     fn lerp(a: &Self, b: &Self, t: R64) -> Self;
 
+    /// Returns the layer and scale factor of render cells.
+    fn render_cell_layer_and_scale(&self) -> (Layer, Scale) {
+        let layer = Layer((-self.scale().round().log2_factor()).to_u32().unwrap_or(0));
+
+        // Multiply the camera scale factor by the size of a render cell, except
+        // it's addition because we're actually using logarithms.
+        let scale = Scale::from_log2_factor(self.scale().log2_factor() + layer.to_u32() as f64);
+        // The render cell scale factor should be greater than 1/2 (since 1/2 or
+        // anything lower should be handled by having a higher render cell
+        // layer). log₂(1/2) = -1.
+        assert!(scale.log2_factor() > -1.0);
+
+        (layer, scale)
+    }
+    /// Returns the cell transform for this camera with the given render target
+    /// size and a base position near the camera center.
+    fn cell_transform(&self) -> NdCellTransform<D> {
+        self.cell_transform_with_base(self.pos().round())
+            .expect("Camera::cell_transform() failed")
+    }
+    /// Returns the cell transform for this camera with the given render target
+    /// size and base position.
+    fn cell_transform_with_base(&self, base_cell_pos: BigVec<D>) -> Result<NdCellTransform<D>>;
+
     /// Executes a movement command.
-    ///
-    /// Returns `Err(())` if the dimensionality of `cell_transform` does not
-    /// match the dimensionality of the camera.
     fn do_move_command(
         &mut self,
-        command: MoveCommand,
+        command: ViewCommand,
         config: &Config,
-        cell_transform: &CellTransform,
-    ) -> Result<()>;
+    ) -> Result<Option<CameraDragHandler<Self>>>;
 }
 
 /// Returns the "average" scale between the two cameras, averaging scale

@@ -3,8 +3,8 @@
 //! Currently, only solid colors are supported, however I plan to add custom
 //! models and maybe textures in the future.
 
-use anyhow::{Context, Result};
-use cgmath::{Basis3, Matrix4};
+use anyhow::Result;
+use cgmath::Matrix4;
 use glium::index::PrimitiveType;
 use glium::Surface;
 
@@ -39,34 +39,8 @@ impl<'a> RenderInProgress<'a> {
         target: &'a mut glium::Frame,
     ) -> Result<Self> {
         target.clear_depth(f32::INFINITY);
-        let (target_w, target_h) = target.get_dimensions();
         let camera = g.camera();
-
-        let render_cell_world_translation = -cgmath::vec3(
-            camera.pos()[X].to_f32().context("3D cell translation")?,
-            camera.pos()[Y].to_f32().context("3D cell translation")?,
-            camera.pos()[Z].to_f32().context("3D cell translation")?,
-        );
-
-        let render_cell_view_matrix = cgmath::Decomposed {
-            scale: camera
-                .scale()
-                .factor()
-                .to_f32()
-                .context("Converting scale factor to f32")?,
-            rot: Basis3::from(camera.orientation()),
-            disp: cgmath::vec3(0.0, 0.0, Camera3D::DISTANCE_TO_PIVOT as f32),
-        };
-
-        let render_cell_transform = Matrix4::from(render_cell_view_matrix)
-            * Matrix4::from_translation(render_cell_world_translation);
-
-        let transform = CellTransform3D::new_perspective(
-            NdVec::origin(),
-            Layer(0),
-            render_cell_transform,
-            (target_w as f32, target_h as f32),
-        );
+        let transform = camera.cell_transform();
 
         Ok(Self {
             octree: g.automaton.projected_tree(),

@@ -154,10 +154,12 @@ pub fn show_gui() -> ! {
                 let ui = imgui.frame();
                 main_window.build(&ui, &mut config, &gridview);
 
+                let mut target = display.draw();
+
                 // Update the camera and run the simulation if necessary.
+                gridview.update_target_dimensions(target.get_dimensions());
                 gridview.do_frame(&config).expect("Unhandled exception!");
 
-                let mut target = display.draw();
                 if target.get_dimensions() != (0, 0) {
                     // Render the gridview.
                     gridview

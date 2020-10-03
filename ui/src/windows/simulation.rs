@@ -2,8 +2,8 @@ use imgui::*;
 
 use ndcell_core::prelude::*;
 
+use crate::commands::*;
 use crate::config::Config;
-use crate::gridview::commands::*;
 use crate::gridview::{GridView, GridViewTrait};
 
 #[derive(Debug, Default)]

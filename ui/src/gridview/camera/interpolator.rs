@@ -16,7 +16,7 @@ use crate::config::{Config, Interpolation};
 const DISTANCE_THRESHOLD: f64 = 0.001;
 
 #[derive(Default)]
-pub struct Interpolator<D: Dim, C: Camera<D>> {
+pub struct Interpolator<D, C> {
     pub current: C,
     pub target: C,
     state: (),

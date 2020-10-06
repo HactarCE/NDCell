@@ -5,15 +5,15 @@ use std::sync::Arc;
 
 use ndcell_core::prelude::*;
 
+use super::camera::{Camera, Camera2D, Interpolate, Interpolator};
+use super::common::{GridViewCommon, GridViewTrait, RenderParams};
+use super::history::{History, HistoryBase, HistoryManager};
 use super::render::grid2d::{RenderCache, RenderInProgress};
+use super::selection::Selection2D;
 use super::worker::*;
-use super::{
-    Camera, Camera2D, GridViewCommon, GridViewTrait, Interpolate, Interpolator, RenderParams,
-};
 use crate::clipboard_compat::{clipboard_get, clipboard_set};
 use crate::commands::*;
 use crate::config::Config;
-use crate::history::{History, HistoryManager};
 use crate::Scale;
 
 /// The number of render results to remember.
@@ -32,16 +32,16 @@ pub struct GridView2D {
 
     /// Automaton being simulated and displayed.
     pub automaton: ProjectedAutomaton2D,
+    /// Selection.
+    selection: Option<Selection2D>,
+    /// Undo/redo history manager.
+    history: HistoryManager<HistoryEntry>,
+
     /// Camera interpolator.
     camera_interpolator: Interpolator<Dim2D, Camera2D>,
     /// Pixel position of the mouse cursor from the top left of the area where
     /// the gridview is being drawn.
     cursor_pos: Option<FVec2D>,
-
-    /// List of undo states.
-    undo_stack: Vec<HistoryEntry>,
-    /// List of redo states.
-    redo_stack: Vec<HistoryEntry>,
 
     /// Communication channel with the simulation worker thread.
     worker: Option<Worker<ProjectedAutomaton2D>>,
@@ -331,34 +331,41 @@ impl GridView2D {
 
 pub struct HistoryEntry {
     automaton: ProjectedAutomaton2D,
+    selection: Option<Selection2D>,
+    camera: Camera2D,
 }
 
-impl HistoryManager for GridView2D {
-    type HistoryEntry = HistoryEntry;
+impl HistoryBase for GridView2D {
+    type Entry = HistoryEntry;
 
-    fn history_entry(&self) -> HistoryEntry {
+    fn history_entry(&self) -> Self::Entry {
         HistoryEntry {
             automaton: self.automaton.clone(),
+            selection: self.selection.clone(),
+            camera: self.camera_interpolator.target.clone(),
         }
     }
-    fn restore(&mut self, entry: HistoryEntry) -> HistoryEntry {
+
+    fn restore_history_entry(&mut self, config: &Config, entry: Self::Entry) -> Self::Entry {
         HistoryEntry {
-            // Replace automaton, but keep camera, cache, and everything else.
             automaton: std::mem::replace(&mut self.automaton, entry.automaton),
+            selection: Selection2D::restore_history_entry(
+                config,
+                &mut self.selection,
+                entry.selection,
+            ),
+            camera: if config.hist.record_view {
+                std::mem::replace(&mut self.camera_interpolator.target, entry.camera)
+            } else {
+                self.camera_interpolator.target.clone()
+            },
         }
     }
 
-    fn undo_stack(&self) -> &Vec<HistoryEntry> {
-        &self.undo_stack
+    fn as_history(&self) -> &HistoryManager<Self::Entry> {
+        &self.history
     }
-    fn redo_stack(&self) -> &Vec<HistoryEntry> {
-        &self.redo_stack
-    }
-
-    fn undo_stack_mut(&mut self) -> &mut Vec<HistoryEntry> {
-        &mut self.undo_stack
-    }
-    fn redo_stack_mut(&mut self) -> &mut Vec<HistoryEntry> {
-        &mut self.redo_stack
+    fn as_history_mut(&mut self) -> &mut HistoryManager<Self::Entry> {
+        &mut self.history
     }
 }

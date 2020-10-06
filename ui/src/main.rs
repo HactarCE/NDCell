@@ -23,7 +23,6 @@ mod commands;
 mod config;
 mod gridview;
 mod gui;
-mod history;
 mod input;
 mod scale;
 mod windows;

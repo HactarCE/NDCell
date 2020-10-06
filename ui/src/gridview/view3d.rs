@@ -2,12 +2,14 @@ use anyhow::{anyhow, Result};
 
 use ndcell_core::prelude::*;
 
+use super::camera::{Camera, Camera3D, Interpolate, Interpolator};
+use super::common::{GridViewCommon, GridViewTrait};
+use super::history::{HistoryBase, HistoryManager};
 use super::render::grid3d::{RenderCache, RenderInProgress};
+use super::selection::Selection3D;
 use super::worker::*;
-use super::{Camera, Camera3D, GridViewCommon, GridViewTrait, Interpolator};
 use crate::commands::*;
 use crate::config::Config;
-use crate::history::HistoryManager;
 
 /// The number of render results to remember.
 const RENDER_RESULTS_COUNT: usize = 4;
@@ -20,16 +22,16 @@ pub struct GridView3D {
 
     /// Automaton being simulated and displayed.
     pub automaton: ProjectedAutomaton3D,
+    /// Selection.
+    selection: Option<Selection3D>,
+    /// Undo/redo history manager.
+    history: HistoryManager<HistoryEntry>,
+
     /// Camera interpolator.
     camera_interpolator: Interpolator<Dim3D, Camera3D>,
     /// Pixel position of the mouse cursor from the top left of the area where
     /// the gridview is being drawn.
     cursor_pos: Option<FVec2D>,
-
-    /// List of undo states.
-    undo_stack: Vec<HistoryEntry>,
-    /// List of redo states.
-    redo_stack: Vec<HistoryEntry>,
 
     /// Communication channel with the simulation worker thread.
     worker: Option<Worker<ProjectedAutomaton3D>>,
@@ -74,7 +76,7 @@ impl GridViewTrait for GridView3D {
         todo!()
     }
 
-    fn camera_interpolator(&mut self) -> &mut dyn super::Interpolate {
+    fn camera_interpolator(&mut self) -> &mut dyn Interpolate {
         &mut self.camera_interpolator
     }
     fn cursor_pos(&self) -> Option<FVec2D> {
@@ -158,34 +160,41 @@ impl From<Automaton3D> for GridView3D {
 
 pub struct HistoryEntry {
     automaton: ProjectedAutomaton3D,
+    selection: Option<Selection3D>,
+    camera: Camera3D,
 }
 
-impl HistoryManager for GridView3D {
-    type HistoryEntry = HistoryEntry;
+impl HistoryBase for GridView3D {
+    type Entry = HistoryEntry;
 
-    fn history_entry(&self) -> HistoryEntry {
+    fn history_entry(&self) -> Self::Entry {
         HistoryEntry {
             automaton: self.automaton.clone(),
+            selection: self.selection.clone(),
+            camera: self.camera_interpolator.target.clone(),
         }
     }
-    fn restore(&mut self, entry: HistoryEntry) -> HistoryEntry {
+
+    fn restore_history_entry(&mut self, config: &Config, entry: Self::Entry) -> Self::Entry {
         HistoryEntry {
-            // Replace automaton, but keep camera, cache, and everything else.
             automaton: std::mem::replace(&mut self.automaton, entry.automaton),
+            selection: Selection3D::restore_history_entry(
+                config,
+                &mut self.selection,
+                entry.selection,
+            ),
+            camera: if config.hist.record_view {
+                std::mem::replace(&mut self.camera_interpolator.target, entry.camera)
+            } else {
+                self.camera_interpolator.target.clone()
+            },
         }
     }
 
-    fn undo_stack(&self) -> &Vec<HistoryEntry> {
-        &self.undo_stack
+    fn as_history(&self) -> &HistoryManager<Self::Entry> {
+        &self.history
     }
-    fn redo_stack(&self) -> &Vec<HistoryEntry> {
-        &self.redo_stack
-    }
-
-    fn undo_stack_mut(&mut self) -> &mut Vec<HistoryEntry> {
-        &mut self.undo_stack
-    }
-    fn redo_stack_mut(&mut self) -> &mut Vec<HistoryEntry> {
-        &mut self.redo_stack
+    fn as_history_mut(&mut self) -> &mut HistoryManager<Self::Entry> {
+        &mut self.history
     }
 }

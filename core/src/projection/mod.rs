@@ -119,7 +119,6 @@ impl<'a, D: Dim, P: Dim> TryInto<Box<dyn NdProjector<D, P>>> for ProjectionParam
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone)]
 pub enum NdProjectionError {
-    WrongCellType,
     WrongNdTreeDim,
     WrongProjectedDim,
 }

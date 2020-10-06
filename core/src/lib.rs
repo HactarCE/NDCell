@@ -75,8 +75,9 @@ pub mod prelude {
 
     pub use crate::automaton::{
         Automaton1D, Automaton2D, Automaton3D, Automaton4D, Automaton5D, Automaton6D, AutomatonMut,
-        AutomatonRef, ProjectedAutomaton, ProjectedAutomaton1D, ProjectedAutomaton2D,
-        ProjectedAutomaton3D, ProjectedAutomaton4D, ProjectedAutomaton5D, ProjectedAutomaton6D,
+        AutomatonRef, NdAutomaton, NdProjectedAutomaton, ProjectedAutomaton, ProjectedAutomaton1D,
+        ProjectedAutomaton2D, ProjectedAutomaton3D, ProjectedAutomaton4D, ProjectedAutomaton5D,
+        ProjectedAutomaton6D,
     };
     pub use crate::axis::Axis;
     pub use crate::dim::{Dim1D, Dim2D, Dim3D, Dim4D, Dim5D, Dim6D};
@@ -90,6 +91,7 @@ pub mod prelude {
     pub use crate::ndvec::aliases::*;
     pub use crate::ndvec::{AnyDimVec, NdVec};
     pub use crate::num::{r64, BigInt, BigUint, FixedPoint, R64};
+    pub use crate::projection::{NdProjection, NdProjectionError};
     pub use crate::sim::hashlife;
 }
 

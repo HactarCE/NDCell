@@ -265,6 +265,24 @@ impl FrameInProgress<'_> {
                                                         .into(),
                                                 });
                                             }
+                                            Some(MouseDragBinding::Select) => {
+                                                self.gridview.enqueue(Command::Select(
+                                                    DragCommand::Start {
+                                                        action: (),
+                                                        cursor_start,
+                                                    },
+                                                ));
+                                                *drag_handler = Some(DragHandler {
+                                                    continue_command: |cursor_pos| {
+                                                        Command::Select(DragCommand::Continue {
+                                                            cursor_pos,
+                                                        })
+                                                    },
+                                                    stop_command: Command::Select(
+                                                        DragCommand::Stop,
+                                                    ),
+                                                })
+                                            }
                                         }
                                     }
                                 }

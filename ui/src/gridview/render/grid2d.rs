@@ -320,8 +320,37 @@ impl<'a> RenderInProgress<'a> {
                 crosshairs: true,
             },
         ))
-        .context("Drawing blue cursor highlight")?;
-        Ok(())
+        .context("Drawing cursor highlight")
+    }
+    /// Draws a highlight around the selected rectangle.
+    pub fn draw_green_selection_highlight(
+        &mut self,
+        selection_rect: BigRect2D,
+        width: f64,
+    ) -> Result<()> {
+        let render_cell_rect = self.clip_cell_rect_to_visible_render_cells(selection_rect);
+        if let Some(visible_selection_rect) = render_cell_rect {
+            self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
+                visible_selection_rect,
+                SELECTION_DEPTH,
+                width,
+                GRID_SELECT_COLOR,
+                RectHighlightParams {
+                    fill: true,
+                    crosshairs: false,
+                },
+            ))
+            .context("Drawing selection highlight")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn clip_cell_rect_to_visible_render_cells(&self, cells_rect: BigRect2D) -> Option<IRect2D> {
+        (cells_rect - &self.visible_quadtree.offset)
+            .div_outward(&self.render_cell_layer.big_len())
+            .intersection(&self.visible_rect.offset_min_max(-1, 1).to_bigrect())
+            .map(|r| r.to_irect())
     }
 
     /// Generates a cell overlay to outline the given cell rectangle, with

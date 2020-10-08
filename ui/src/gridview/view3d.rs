@@ -51,8 +51,10 @@ impl AsMut<GridViewCommon> for GridView3D {
 
 impl GridViewTrait for GridView3D {
     fn do_draw_command(&mut self, _command: DrawCommand, _config: &Config) -> Result<()> {
-        // Err(anyhow!("unimplemented"))
-        Ok(())
+        Err(anyhow!("unimplemented"))
+    }
+    fn do_select_command(&mut self, _command: DragCommand<()>, _config: &Config) -> Result<()> {
+        Err(anyhow!("unimplemented"))
     }
     fn do_clipboard_command(&mut self, _command: ClipboardCommand, _config: &Config) -> Result<()> {
         Err(anyhow!("unimplemented"))

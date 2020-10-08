@@ -17,7 +17,7 @@ impl Default for KeyConfig {
         const NONE: ModifiersState = ModifiersState::empty();
 
         use MouseButton::{Left, Middle, Right};
-        use MouseDragBinding::{Draw, View};
+        use MouseDragBinding::{Draw, Select, View};
 
         const FREEFORM_2D: DrawDragAction = DrawDragAction {
             mode: DrawMode::Replace,
@@ -32,6 +32,7 @@ impl Default for KeyConfig {
             mouse_drag_bindings_2d: vec![
                 (NONE, Left, Draw(FREEFORM_2D)),
                 (SHIFT, Left, Draw(LINE_2D)),
+                (CTRL, Left, Select),
                 (NONE, Right, View(ViewDragAction::Pan)),
                 (CTRL, Right, View(ViewDragAction::Scale)),
                 (NONE, Middle, View(ViewDragAction::Pan)),
@@ -39,6 +40,7 @@ impl Default for KeyConfig {
             .into_iter()
             .collect(),
             mouse_drag_bindings_3d: vec![
+                (CTRL, Left, Select),
                 (NONE, Right, View(ViewDragAction::Orbit)),
                 (CTRL, Right, View(ViewDragAction::Scale)),
                 (NONE, Middle, View(ViewDragAction::Pan)),
@@ -117,4 +119,5 @@ impl<T: Copy> std::iter::FromIterator<(ModifiersState, MouseButton, T)> for Mous
 pub enum MouseDragBinding {
     View(ViewDragAction),
     Draw(DrawDragAction),
+    Select,
 }

@@ -48,8 +48,8 @@ pub struct GridView2D {
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
 
-    /// Drag handler for drawing.
-    draw_drag_handler: Option<DrawDragHandler>,
+    /// Non-movement drag handler.
+    drag_handler: Option<DrawDragHandler>,
 }
 impl AsRef<GridViewCommon> for GridView2D {
     fn as_ref(&self) -> &GridViewCommon {
@@ -67,7 +67,7 @@ impl GridViewTrait for GridView2D {
         // Don't draw if the scale is too small.
         if self.camera().scale() < Scale::from_factor(r64(1.0)) {
             self.common.is_drawing = false;
-            self.draw_drag_handler = None;
+            self.drag_handler = None;
             return Ok(());
         }
 
@@ -98,7 +98,7 @@ impl GridViewTrait for GridView2D {
                     DrawMode::Erase => 0,
                 };
 
-                let mut new_draw_drag_handler: DrawDragHandler = match shape {
+                let mut new_drag_handler: DrawDragHandler = match shape {
                     DrawShape::Freeform => {
                         let mut pos1 = initial_pos;
                         Box::new(move |this, new_cursor_pos| {
@@ -123,20 +123,69 @@ impl GridViewTrait for GridView2D {
                 self.stop_running();
                 self.record();
                 self.common.is_drawing = true;
-                new_draw_drag_handler(self, cursor_start)?;
-                self.draw_drag_handler = Some(new_draw_drag_handler);
+                new_drag_handler(self, cursor_start)?;
+                self.drag_handler = Some(new_drag_handler);
             }
 
             DragCommand::Continue { cursor_pos } => {
-                if let Some(mut h) = self.draw_drag_handler.take() {
+                if let Some(mut h) = self.drag_handler.take() {
                     h(self, cursor_pos)?;
-                    self.draw_drag_handler = Some(h);
+                    self.drag_handler = Some(h);
                 }
             }
 
             DragCommand::Stop => {
                 self.common.is_drawing = false;
-                self.draw_drag_handler = None;
+                self.drag_handler = None;
+            }
+        }
+        Ok(())
+    }
+    fn do_select_command(&mut self, command: DragCommand<()>, config: &Config) -> Result<()> {
+        match command {
+            DragCommand::Start {
+                action: (),
+                cursor_start,
+            } => {
+                let cell_transform = self.camera().cell_transform();
+
+                let initial_pos = cell_transform
+                    .pixel_to_global_cell(cursor_start)
+                    .map(|pos| pos.floor().0);
+
+                let pos1 = initial_pos;
+                let new_drag_handler: DrawDragHandler = Box::new(move |this, new_cursor_pos| {
+                    let pos2 = this
+                        .camera()
+                        .cell_transform()
+                        .pixel_to_global_cell(new_cursor_pos)
+                        .map(|pos| pos.floor().0);
+                    if let (Some(pos1), Some(pos2)) = (&pos1, &pos2) {
+                        this.selection = Some(Selection2D {
+                            rect: BigRect::span(pos1.clone(), pos2.clone()),
+                            cells: None,
+                        });
+                    }
+                    Ok(())
+                });
+
+                if !self.is_running() && config.hist.record_select {
+                    self.record();
+                }
+                self.deselect();
+                self.drag_handler = Some(new_drag_handler);
+            }
+
+            DragCommand::Continue { cursor_pos } => {
+                if let Some(mut h) = self.drag_handler.take() {
+                    h(self, cursor_pos)?;
+                    self.drag_handler = Some(h);
+                }
+            }
+
+            DragCommand::Stop => {
+                self.common.is_drawing = false;
+                self.drag_handler = None;
             }
         }
         Ok(())
@@ -270,6 +319,10 @@ impl GridViewTrait for GridView2D {
         if let Some(pos) = &draw_pos {
             rip.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0)?;
         }
+        // Draw selection.
+        if let Some(selection) = &self.selection {
+            rip.draw_green_selection_highlight(selection.rect.clone(), gridlines_width * 4.0)?;
+        }
 
         self.render_cache = Some(render_cache);
         Ok(())
@@ -287,6 +340,18 @@ impl GridView2D {
         self.camera()
             .cell_transform()
             .pixel_to_global_cell(self.cursor_pos?)
+    }
+    /// Deselect all.
+    pub fn deselect(&mut self) {
+        if self
+            .selection
+            .as_ref()
+            .and_then(|s| s.cells.as_ref())
+            .is_some()
+        {
+            todo!("deselect with cells");
+        }
+        self.selection = None;
     }
 }
 

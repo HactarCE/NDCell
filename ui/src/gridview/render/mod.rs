@@ -28,6 +28,8 @@ mod consts {
     /// Color given to the highlighted cell. This will be configurable in the
     /// future.
     pub const GRID_HIGHLIGHT_COLOR: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
+    /// Color given to the selection. This will be configurable in the future.
+    pub const GRID_SELECT_COLOR: [f32; 4] = [0.6, 0.6, 0.6, 0.8];
     /// Color for dead cells. This will be configurable in the future.
     pub const DEAD_COLOR: (u8, u8, u8) = (0, 0, 0);
     /// Color for live cells. This will be configurable in the future.
@@ -40,6 +42,8 @@ mod consts {
     pub const GRIDLINE_DEPTH: f32 = 0.1;
     /// Depth at which to render highlight/crosshairs.
     pub const CURSOR_DEPTH: f32 = 0.2;
+    /// Depth at which to render selection rectangle.
+    pub const SELECTION_DEPTH: f32 = 0.3;
 
     /// A small offset used to force correct Z order or align things at the
     /// sub-pixel scale.

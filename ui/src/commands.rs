@@ -20,6 +20,7 @@ pub enum Command {
     History(HistoryCommand),
     Move(ViewCommand),
     Draw(DrawCommand),
+    Select(DragCommand<()>),
     Clipboard(ClipboardCommand),
     GarbageCollect,
 }

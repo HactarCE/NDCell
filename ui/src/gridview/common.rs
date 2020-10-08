@@ -133,6 +133,7 @@ pub trait GridViewTrait:
             Command::History(c) => self.do_history_command(c, config),
             Command::Move(c) => self.do_move_command(c, config),
             Command::Draw(c) => self.do_draw_command(c, config),
+            Command::Select(c) => self.do_select_command(c, config),
             Command::Clipboard(c) => self.do_clipboard_command(c, config),
             Command::GarbageCollect => Ok(self.schedule_gc()),
         }
@@ -208,6 +209,8 @@ pub trait GridViewTrait:
     }
     /// Executes a `Draw` command.
     fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()>;
+    /// Executes a `Select` command.
+    fn do_select_command(&mut self, command: DragCommand<()>, config: &Config) -> Result<()>;
     /// Executes a `Clipboard` command.
     fn do_clipboard_command(&mut self, command: ClipboardCommand, config: &Config) -> Result<()>;
 

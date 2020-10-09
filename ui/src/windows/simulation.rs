@@ -12,7 +12,7 @@ pub struct SimulationWindow {
 }
 impl SimulationWindow {
     /// Builds the main window.
-    pub fn build(&mut self, ui: &imgui::Ui, config: &mut Config, gridview: &GridView) {
+    pub fn build(&mut self, ui: &imgui::Ui<'_>, config: &mut Config, gridview: &GridView) {
         if self.is_visible {
             Window::new(&ImString::new("Simulation")).build(&ui, || {
                 let mut width = ui.window_content_region_width();

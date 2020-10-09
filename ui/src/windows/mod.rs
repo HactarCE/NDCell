@@ -21,7 +21,7 @@ pub struct MainWindow {
 }
 impl MainWindow {
     /// Builds the main window.
-    pub fn build(&mut self, ui: &imgui::Ui, config: &mut Config, gridview: &GridView) {
+    pub fn build(&mut self, ui: &imgui::Ui<'_>, config: &mut Config, gridview: &GridView) {
         Window::new(&ImString::new(crate::TITLE)).build(&ui, || {
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
             ui.text("");

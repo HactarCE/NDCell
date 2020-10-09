@@ -142,7 +142,7 @@ impl FrameInProgress<'_> {
             }
         }
     }
-    pub fn handle_event(&mut self, ev: &Event<()>) {
+    pub fn handle_event(&mut self, ev: &Event<'_, ()>) {
         match ev {
             // Handle WindowEvents.
             Event::WindowEvent { event, .. } => {

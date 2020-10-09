@@ -114,7 +114,7 @@ impl GlQuadtree {
         }
         assert!(width * width * 4 >= pixel_vec.len());
         pixel_vec.resize(width * width * 4, 0);
-        let raw_image: RawImage2d<u32> = RawImage2d {
+        let raw_image: RawImage2d<'_, u32> = RawImage2d {
             data: Cow::Owned(pixel_vec),
             width: width as u32,
             height: width as u32,

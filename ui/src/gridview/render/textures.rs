@@ -1,7 +1,7 @@
 //! OpenGL textures.
 
 use glium::framebuffer::SimpleFrameBuffer;
-use glium::texture::srgb_texture2d::SrgbTexture2d;
+use glium::texture::SrgbTexture2d;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 
@@ -10,13 +10,28 @@ use ndcell_core::num::r64;
 
 use crate::DISPLAY;
 
+lazy_static! {
+    pub static ref CACHE: SendWrapper<RefCell<TextureCache>> =
+        SendWrapper::new(RefCell::new(TextureCache::default()));
+}
+
+#[derive(Default)]
+pub struct TextureCache {
+    pub unscaled_cells: CachedSrgbTexture2d,
+    pub scaled_cells: CachedSrgbTexture2d,
+}
+
 #[derive(Default)]
 pub struct CachedSrgbTexture2d {
     cached: Option<SrgbTexture2d>,
     current_size: Option<(u32, u32)>,
 }
 impl CachedSrgbTexture2d {
-    pub fn at_min_size(&mut self, w: u32, h: u32) -> (&SrgbTexture2d, SimpleFrameBuffer, FVec2D) {
+    pub fn at_min_size<'a>(
+        &'a mut self,
+        w: u32,
+        h: u32,
+    ) -> (&SrgbTexture2d, SimpleFrameBuffer<'a>, FVec2D) {
         let mut real_w = w.next_power_of_two();
         let mut real_h = h.next_power_of_two();
         if let Some((current_w, current_h)) = self.current_size {
@@ -42,18 +57,7 @@ impl CachedSrgbTexture2d {
     pub fn unwrap(&self) -> &SrgbTexture2d {
         self.cached.as_ref().unwrap()
     }
-    pub fn make_fbo(&self) -> SimpleFrameBuffer {
+    pub fn make_fbo<'a>(&'a self) -> SimpleFrameBuffer<'a> {
         SimpleFrameBuffer::new(&**DISPLAY, self.unwrap()).expect("Failed to create frame buffer")
     }
-}
-
-#[derive(Default)]
-pub struct TextureCache {
-    pub unscaled_cells: CachedSrgbTexture2d,
-    pub scaled_cells: CachedSrgbTexture2d,
-}
-
-lazy_static! {
-    pub static ref CACHE: SendWrapper<RefCell<TextureCache>> =
-        SendWrapper::new(RefCell::new(TextureCache::default()));
 }

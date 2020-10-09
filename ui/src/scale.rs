@@ -24,7 +24,7 @@ impl Default for Scale {
     }
 }
 impl fmt::Display for Scale {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.log2_factor > 0.0 {
             // Zoomed in
             write!(f, "{}:1", self.log2_factor.exp2().round())

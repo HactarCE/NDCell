@@ -14,16 +14,16 @@ clipboard = "0.5"
 enum_dispatch = "0.3"
 glium = "0.27"
 itertools = "0.9"
-imgui = "0.4"
-imgui-glium-renderer = "0.4"
-imgui-winit-support = "0.4"
+imgui = "0.5"
+imgui-glium-renderer = "0.5"
+imgui-winit-support = "0.5"
 lazy_static = "1.4"
 log = "0.4"
 mimalloc = { version = "*", default-features = false }
 parking_lot = "0.11"
 # preferences = "1.1"
 send_wrapper = "0.4"
-simple_logger = "1.6"
+simple_logger = "1.11"
 
 ndcell_core = { path = "../core" }
 ndcell_lang = { path = "../lang" }

@@ -125,7 +125,11 @@ pub fn show_gui() -> ! {
                 platform
                     .prepare_frame(imgui_io, gl_window.window())
                     .expect("Failed to start frame");
-                last_frame_time = imgui_io.update_delta_time(last_frame_time);
+
+                if let Some(delta) = Instant::now().checked_duration_since(last_frame_time) {
+                    imgui_io.update_delta_time(delta);
+                }
+                last_frame_time = Instant::now();
 
                 // Prep the gridview for event handling.
                 let mut input_frame =

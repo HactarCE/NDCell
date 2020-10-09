@@ -34,7 +34,9 @@ use scale::Scale;
 const TITLE: &str = "NDCell";
 
 fn main() {
-    simple_logger::init().unwrap();
+    simple_logger::SimpleLogger::new()
+        .init()
+        .expect("Failed to initialize logging");
     info!("Starting NDCell v{} ...", env!("CARGO_PKG_VERSION"));
     debug!("Launching UI");
     gui::show_gui();

@@ -743,22 +743,22 @@ dependencies = [
 
 [[package]]
 name = "imgui"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fdb2bcc7e498e78137ce28705ae836d69e36ee2eac89d0d926cfabfcf550570"
+checksum = "b1baf4d55b2c00e5dd54d8a3b840003a5dffa5561f132511bbb9002ce7c63518"
 dependencies = [
  "bitflags",
  "glium",
  "imgui-sys",
  "lazy_static",
- "parking_lot 0.10.2",
+ "parking_lot 0.11.0",
 ]
 
 [[package]]
 name = "imgui-glium-renderer"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c73e47cb3db3e354e3977265b14d7e6ff8b55a83f06ab6c7d04b4d441d64f586"
+checksum = "9c2797dcdf288774e0352b27d2899762c85c76ae6d7e3bf82043f49d87fde9fe"
 dependencies = [
  "glium",
  "imgui",
@@ -766,18 +766,18 @@ dependencies = [
 
 [[package]]
 name = "imgui-sys"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72be9671d64dd0ed26bb708cd10060a431262ac90ae70cf7c5912feefe6849da"
+checksum = "06686645bdaa0e276ab93977da5bc6419c57ae4f4fb12cb14dd0e047dc46f894"
 dependencies = [
  "cc",
 ]
 
 [[package]]
 name = "imgui-winit-support"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f98171c35263e3eb0dfb66cb876e3efdb788d777c1b613c7d2592303d1276bb5"
+checksum = "3296de3dbdb90a5385477ed8322aa71a7b50034fc5e6e926795a23d0ba1471c0"
 dependencies = [
  "imgui",
  "winit",
@@ -1962,9 +1962,9 @@ dependencies = [
 
 [[package]]
 name = "simple_logger"
-version = "1.6.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fea0c4611f32f4c2bac73754f22dca1f57e6c1945e0590dae4e5f2a077b92367"
+checksum = "cd57f17c093ead1d4a1499dc9acaafdd71240908d64775465543b8d9a9f1d198"
 dependencies = [
  "atty",
  "chrono",

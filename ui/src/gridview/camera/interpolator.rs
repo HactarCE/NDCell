@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use ndcell_core::prelude::*;
 
 use super::{Camera, CameraDragHandler, CellTransform, NdCellTransform};
-use crate::commands::{DragCommand, ViewCommand};
+use crate::commands::{Drag, ViewCommand};
 use crate::config::{Config, Interpolation};
 
 /// Distance beneath which to "snap" to the target, for interpolation strategies
@@ -109,7 +109,7 @@ where
 
     fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
         match command {
-            ViewCommand::Drag(DragCommand::Continue { cursor_pos }) => {
+            ViewCommand::Drag(Drag::Continue { cursor_pos }) => {
                 if let Some(h) = &mut self.drag_handler {
                     // Skip interpolation.
                     h(&mut self.target, cursor_pos);
@@ -117,7 +117,7 @@ where
                 }
             }
 
-            ViewCommand::Drag(DragCommand::Stop) => {
+            ViewCommand::Drag(Drag::Stop) => {
                 self.drag_handler = None;
             }
 

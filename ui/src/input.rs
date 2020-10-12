@@ -2,6 +2,7 @@ use glium::glutin::dpi::{PhysicalPosition, PhysicalSize};
 use glium::glutin::event::*;
 use imgui_winit_support::WinitPlatform;
 use std::collections::HashSet;
+use std::fmt;
 use std::ops::Index;
 use std::time::{Duration, Instant};
 
@@ -128,6 +129,24 @@ pub struct FrameInProgress<'a> {
     dpi: f64,
 }
 impl FrameInProgress<'_> {
+    #[must_use = "DragHandler must be used"]
+    fn start_drag<A: 'static, C: 'static + Into<Command>>(
+        gridview: &GridView,
+        command_constructor: fn(Drag<A>) -> C,
+        action: A,
+        cursor_start: FVec2D,
+    ) -> DragHandler {
+        gridview.enqueue(command_constructor(Drag::Start {
+            action,
+            cursor_start,
+        }));
+        DragHandler {
+            continue_command: Box::new(move |cursor_pos| {
+                command_constructor(Drag::Continue { cursor_pos }).into()
+            }),
+            stop_command: command_constructor(Drag::Stop).into(),
+        }
+    }
     fn update_drag(
         gridview: &GridView,
         drag_handler: &mut Option<DragHandler>,
@@ -225,64 +244,29 @@ impl FrameInProgress<'_> {
                                             .keys
                                             .get_mouse_bindings(ndim, mods, *button);
 
-                                        match drag_action {
-                                            None => (),
-                                            Some(MouseDragBinding::View(action)) => {
-                                                self.gridview.enqueue(ViewCommand::Drag(
-                                                    DragCommand::Start {
+                                        if let Some(a) = drag_action {
+                                            *drag_handler = Some(match a {
+                                                MouseDragBinding::View(action) => Self::start_drag(
+                                                    self.gridview,
+                                                    ViewCommand::Drag,
+                                                    action,
+                                                    cursor_start,
+                                                ),
+                                                MouseDragBinding::Draw(action) => Self::start_drag(
+                                                    self.gridview,
+                                                    DrawCommand,
+                                                    (action, 1_u8),
+                                                    cursor_start,
+                                                ),
+                                                MouseDragBinding::Select(action) => {
+                                                    Self::start_drag(
+                                                        self.gridview,
+                                                        SelectCommand,
                                                         action,
                                                         cursor_start,
-                                                    },
-                                                ));
-                                                *drag_handler = Some(DragHandler {
-                                                    continue_command: |cursor_pos| {
-                                                        ViewCommand::Drag(DragCommand::Continue {
-                                                            cursor_pos,
-                                                        })
-                                                        .into()
-                                                    },
-                                                    stop_command: ViewCommand::Drag(
-                                                        DragCommand::Stop,
                                                     )
-                                                    .into(),
-                                                });
-                                            }
-                                            Some(MouseDragBinding::Draw(action)) => {
-                                                self.gridview.enqueue(DrawCommand(
-                                                    DragCommand::Start {
-                                                        action: (action, 1_u8),
-                                                        cursor_start,
-                                                    },
-                                                ));
-                                                *drag_handler = Some(DragHandler {
-                                                    continue_command: |cursor_pos| {
-                                                        DrawCommand(DragCommand::Continue {
-                                                            cursor_pos,
-                                                        })
-                                                        .into()
-                                                    },
-                                                    stop_command: DrawCommand(DragCommand::Stop)
-                                                        .into(),
-                                                });
-                                            }
-                                            Some(MouseDragBinding::Select) => {
-                                                self.gridview.enqueue(Command::Select(
-                                                    DragCommand::Start {
-                                                        action: (),
-                                                        cursor_start,
-                                                    },
-                                                ));
-                                                *drag_handler = Some(DragHandler {
-                                                    continue_command: |cursor_pos| {
-                                                        Command::Select(DragCommand::Continue {
-                                                            cursor_pos,
-                                                        })
-                                                    },
-                                                    stop_command: Command::Select(
-                                                        DragCommand::Stop,
-                                                    ),
-                                                })
-                                            }
+                                                }
+                                            });
                                         }
                                     }
                                 }
@@ -569,8 +553,12 @@ impl Index<VirtualKeyCode> for KeysPressed {
     }
 }
 
-#[derive(Debug)]
 struct DragHandler {
-    pub continue_command: fn(FVec2D) -> Command,
+    pub continue_command: Box<dyn Fn(FVec2D) -> Command>,
     pub stop_command: Command,
+}
+impl fmt::Debug for DragHandler {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DragHandler  {{ stop: {:?} }}", self.stop_command)
+    }
 }

@@ -20,7 +20,7 @@ pub enum Command {
     History(HistoryCommand),
     Move(ViewCommand),
     Draw(DrawCommand),
-    Select(DragCommand<()>),
+    Select(SelectCommand),
     Clipboard(ClipboardCommand),
     GarbageCollect,
 }
@@ -49,7 +49,7 @@ impl From<HistoryCommand> for Command {
 }
 
 #[derive(Debug, Clone)]
-pub enum DragCommand<A> {
+pub enum Drag<A> {
     Start { action: A, cursor_start: FVec2D },
     Continue { cursor_pos: FVec2D },
     Stop,
@@ -57,7 +57,7 @@ pub enum DragCommand<A> {
 
 #[derive(Debug, Clone)]
 pub enum ViewCommand {
-    Drag(DragCommand<ViewDragAction>),
+    Drag(Drag<ViewDragAction>),
 
     GoTo2D {
         x: Option<FixedPoint>,
@@ -110,7 +110,7 @@ pub enum ViewDragAction {
 }
 
 #[derive(Debug, Clone)]
-pub struct DrawCommand(pub DragCommand<(DrawDragAction, u8)>);
+pub struct DrawCommand(pub Drag<(DrawDragAction, u8)>);
 impl_command_from!(Command::Draw(DrawCommand));
 
 #[derive(Debug, Copy, Clone)]
@@ -138,6 +138,16 @@ pub enum DrawShape {
     Freeform,
     /// Modifies cells in a straight line.
     Line,
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectCommand(pub Drag<SelectDragAction>);
+impl_command_from!(Command::Select(SelectCommand));
+
+#[derive(Debug, Copy, Clone)]
+pub enum SelectDragAction {
+    NewRect,
+    Resize,
 }
 
 #[derive(Debug, Clone)]

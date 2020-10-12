@@ -72,7 +72,7 @@ impl GridViewTrait for GridView2D {
         }
 
         match command.0 {
-            DragCommand::Start {
+            Drag::Start {
                 action: (DrawDragAction { mode, shape }, selected_cell_state),
                 cursor_start,
             } => {
@@ -127,24 +127,24 @@ impl GridViewTrait for GridView2D {
                 self.drag_handler = Some(new_drag_handler);
             }
 
-            DragCommand::Continue { cursor_pos } => {
+            Drag::Continue { cursor_pos } => {
                 if let Some(mut h) = self.drag_handler.take() {
                     h(self, cursor_pos)?;
                     self.drag_handler = Some(h);
                 }
             }
 
-            DragCommand::Stop => {
+            Drag::Stop => {
                 self.common.is_drawing = false;
                 self.drag_handler = None;
             }
         }
         Ok(())
     }
-    fn do_select_command(&mut self, command: DragCommand<()>, config: &Config) -> Result<()> {
-        match command {
-            DragCommand::Start {
-                action: (),
+    fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()> {
+        match command.0 {
+            Drag::Start {
+                action,
                 cursor_start,
             } => {
                 let cell_transform = self.camera().cell_transform();
@@ -155,6 +155,9 @@ impl GridViewTrait for GridView2D {
 
                 let pos1 = initial_pos;
                 let new_drag_handler: DrawDragHandler = Box::new(move |this, new_cursor_pos| {
+                    // TODO: DPI-aware mouse movement threshold before making
+                    // new selection, then call drag handler before returning
+                    // from do_select_command(), in case threshold=0
                     let pos2 = this
                         .camera()
                         .cell_transform()
@@ -169,21 +172,22 @@ impl GridViewTrait for GridView2D {
                     Ok(())
                 });
 
-                if !self.is_running() && config.hist.record_select {
+                if config.hist.record_select {
+                    self.stop_running();
                     self.record();
                 }
                 self.deselect();
                 self.drag_handler = Some(new_drag_handler);
             }
 
-            DragCommand::Continue { cursor_pos } => {
+            Drag::Continue { cursor_pos } => {
                 if let Some(mut h) = self.drag_handler.take() {
                     h(self, cursor_pos)?;
                     self.drag_handler = Some(h);
                 }
             }
 
-            DragCommand::Stop => {
+            Drag::Stop => {
                 self.common.is_drawing = false;
                 self.drag_handler = None;
             }

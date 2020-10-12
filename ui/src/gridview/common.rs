@@ -210,7 +210,7 @@ pub trait GridViewTrait:
     /// Executes a `Draw` command.
     fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()>;
     /// Executes a `Select` command.
-    fn do_select_command(&mut self, command: DragCommand<()>, config: &Config) -> Result<()>;
+    fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()>;
     /// Executes a `Clipboard` command.
     fn do_clipboard_command(&mut self, command: ClipboardCommand, config: &Config) -> Result<()>;
 

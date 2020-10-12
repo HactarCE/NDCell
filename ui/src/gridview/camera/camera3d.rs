@@ -7,7 +7,7 @@ use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
 use super::{Camera, CameraDragHandler, CellTransform3D, Scale, MIN_TARGET_SIZE};
-use crate::commands::{DragCommand, ViewCommand, ViewDragAction};
+use crate::commands::{Drag, ViewCommand, ViewDragAction};
 use crate::config::{Config, ForwardAxis3D, UpAxis3D};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -237,7 +237,7 @@ impl Camera<Dim3D> for Camera3D {
         config: &Config,
     ) -> Result<Option<CameraDragHandler<Self>>> {
         match command {
-            ViewCommand::Drag(DragCommand::Start {
+            ViewCommand::Drag(Drag::Start {
                 action,
                 cursor_start,
             }) => match action {
@@ -285,8 +285,8 @@ impl Camera<Dim3D> for Camera3D {
 
                 ViewDragAction::Scale => todo!("Scale using click & drag"),
             },
-            ViewCommand::Drag(DragCommand::Continue { .. }) => Ok(None),
-            ViewCommand::Drag(DragCommand::Stop) => Ok(None),
+            ViewCommand::Drag(Drag::Continue { .. }) => Ok(None),
+            ViewCommand::Drag(Drag::Stop) => Ok(None),
 
             ViewCommand::GoTo3D {
                 mut x,

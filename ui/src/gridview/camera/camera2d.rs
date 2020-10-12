@@ -13,6 +13,8 @@ use crate::config::Config;
 pub struct Camera2D {
     /// Width and height of the viewport.
     target_dimensions: (u32, u32),
+    /// Display scaling factor.
+    dpi: f32,
 
     /// Cell coordinates at the center of the camera.
     center: FixedVec2D,
@@ -24,6 +26,8 @@ impl Default for Camera2D {
     fn default() -> Self {
         Self {
             target_dimensions: (MIN_TARGET_SIZE, MIN_TARGET_SIZE),
+            dpi: 1.0,
+
             center: FixedVec::origin(),
             scale: Scale::default(),
         }
@@ -67,6 +71,12 @@ impl Camera<Dim2D> for Camera2D {
             std::cmp::max(MIN_TARGET_SIZE, target_w),
             std::cmp::max(MIN_TARGET_SIZE, target_h),
         );
+    }
+    fn dpi(&self) -> f32 {
+        self.dpi
+    }
+    fn set_dpi(&mut self, dpi: f32) {
+        self.dpi = dpi;
     }
 
     fn pos(&self) -> &FixedVec<Dim2D> {

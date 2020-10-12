@@ -44,6 +44,9 @@ impl<D: Dim, C: Camera<D>> From<C> for Interpolator<D, C> {
 ///
 /// This abstracts away dimensionality, so it can be used as a trait object.
 pub trait Interpolate {
+    /// Sets the display scaling factor of the underlying camera.
+    fn set_dpi(&mut self, dpi: f32);
+
     /// Returns the distance between the current state and the target state.
     fn distance(&self) -> f64;
 
@@ -69,6 +72,11 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C>
 where
     for<'a> &'a NdCellTransform<D>: TryFrom<&'a CellTransform>,
 {
+    fn set_dpi(&mut self, dpi: f32) {
+        self.current.set_dpi(dpi);
+        self.target.set_dpi(dpi);
+    }
+
     fn distance(&self) -> f64 {
         C::distance(&self.current, &self.target)
             .to_f64()

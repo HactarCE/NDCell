@@ -51,6 +51,11 @@ pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
     fn target_dimensions(&self) -> (u32, u32);
     /// Sets the width and height of the viewport.
     fn set_target_dimensions(&mut self, target_dimensions: (u32, u32));
+    /// Returns the display scaling factor, which does not affect rendering of
+    /// cells but may affect other UI elements.
+    fn dpi(&self) -> f32;
+    /// Sets the display scaling factor.
+    fn set_dpi(&mut self, dpi: f32);
 
     /// Returns the position the camera is looking at/from.
     fn pos(&self) -> &FixedVec<D>;

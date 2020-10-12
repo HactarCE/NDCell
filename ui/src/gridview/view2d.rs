@@ -290,10 +290,13 @@ impl GridViewTrait for GridView2D {
     }
     fn render(
         &mut self,
-        _config: &Config,
+        config: &Config,
         target: &mut glium::Frame,
         params: RenderParams,
     ) -> Result<()> {
+        // Update DPI.
+        self.camera_interpolator().set_dpi(config.gfx.dpi as f32);
+
         let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
         let node_cache = self.automaton.projected_cache().read();
         let mut rip = RenderInProgress::new(self, &node_cache, &mut render_cache, target)?;

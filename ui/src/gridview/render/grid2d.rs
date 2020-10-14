@@ -12,29 +12,14 @@
 //!    out.)
 //! 2. Render the visible portion of that quadtree into an OpenGL texture, where
 //!    each pixel represents one cell.
-//! 3. Resize that texture to the next-highest power-of-2 scale using
-//!    nearest-neighbor sampling. For example, if the scale factor is 2.4 (i.e.
-//!    each cell takes up a square 2.4 pixels wide), resize the texture by a
-//!    factor of 4.
-//! 4. Blit that texture onto the screen at the appropriate position using
-//!    linear sampling, which accounts for the remaining scaling.
+//! 3. Blit that texture onto the screen using the "pixel mixing" scaling
+//!    technique; see http://entropymine.com/imageworsener/pixelmixing/ for more
+//!    info.
 //!
-//! We resize the texture twice to get the best of both nearest-neighbor scaling
-//! and linear scaling: if we only used nearest-neighbor, cells at non-integer
-//! scale factors would look uneven; some cells would be larger and some would
-//! be smaller, and many would be slightly rectangular instead of square. (You
-//! can see this effect using the default configuration in LifeViewer.) If we
-//! only used linear scaling, then cells would appear blurry when zoomed in.
-//! (This is a common problem when resizing pixel art.) Performing
-//! nearest-neighbor scaling for the potentially large integer factor and then
-//! linear scaling for the relatively small remaining factor yields a much nicer
-//! result that imperceptibly blends between different scale factors.
-//!
-//! TODO: Write custom vertex shader that can do pretty resizing in one step.
-//!
-//! It's worth noting that translation is always rounded to the nearest pixel,
-//! so at any integer scale factor, cell boundaries are always between pixels. At
-//! non-integer scale factors, however, this is not guaranteed.
+//! There is also some subpixel adjustment happening in `Camera2D`. The position
+//! is offset by 0.5 pixels when the viewport dimensions are odd, and everything
+//! except cells are offset by 0.25 pixels to force consistent rounding behavior
+//! for features that are directly between cells.
 
 use anyhow::{Context, Result};
 use glium::index::PrimitiveType;
@@ -168,17 +153,13 @@ impl<'a> RenderInProgress<'a> {
         )?;
         // Step #2: draw at 1 pixel per render cell, including only the cells
         // inside `self.visible_rect`.
-        let unscaled_cells_w = self.visible_rect.len(X) as u32;
-        let unscaled_cells_h = self.visible_rect.len(Y) as u32;
-        let (_tex, mut unscaled_cells_fbo, unscaled_cells_texture_fract) = textures
-            .unscaled_cells
-            .at_min_size(unscaled_cells_w, unscaled_cells_h);
-        unscaled_cells_fbo
+        let cells_w = self.visible_rect.len(X) as u32;
+        let cells_h = self.visible_rect.len(Y) as u32;
+        let (cells_texture, mut cells_fbo, cells_texture_fract) =
+            textures.cells.at_min_size(cells_w, cells_h);
+        cells_fbo
             .draw(
-                &*vbos::quadtree_quad_with_quadtree_coords(
-                    self.visible_rect,
-                    unscaled_cells_texture_fract,
-                ),
+                &*vbos::quadtree_quad_with_quadtree_coords(self.visible_rect, cells_texture_fract),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::QUADTREE,
                 &uniform! {
@@ -188,55 +169,27 @@ impl<'a> RenderInProgress<'a> {
                 },
                 &glium::DrawParameters::default(),
             )
-            .context("unscaled_cells_fbo.draw()")?;
+            .context("cells_fbo.draw()")?;
 
-        // Step #3: resize that texture by an integer factor.
-        // Compute the width of pixels for each render cell.
-        let pixels_per_render_cell = self.render_cell_scale.units_per_cell();
-        let integer_scale_factor = pixels_per_render_cell.round().to_u32().unwrap();
-        let visible_cells_w = self.visible_rect.len(X) as u32;
-        let visible_cells_h = self.visible_rect.len(Y) as u32;
-        let scaled_cells_w = visible_cells_w * integer_scale_factor;
-        let scaled_cells_h = visible_cells_h * integer_scale_factor;
-        let (scaled_cells_texture, scaled_cells_fbo, scaled_cells_texture_fract) = textures
-            .scaled_cells
-            .at_min_size(scaled_cells_w, scaled_cells_h);
-        scaled_cells_fbo.blit_from_simple_framebuffer(
-            &unscaled_cells_fbo,
-            &glium::Rect {
-                left: 0,
-                bottom: 0,
-                width: unscaled_cells_w,
-                height: unscaled_cells_h,
-            },
-            &glium::BlitTarget {
-                left: 0,
-                bottom: 0,
-                width: scaled_cells_w as i32,
-                height: scaled_cells_h as i32,
-            },
-            glium::uniforms::MagnifySamplerFilter::Nearest,
-        );
-
-        // Step #4: render that onto the screen.
+        // Step #3: scale and render that onto the screen.
         let (target_w, target_h) = self.target.get_dimensions();
         let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let render_cells_size = target_size / self.render_cell_scale.units_per_cell();
         let render_cells_center = self.camera.render_cell_pos(&self.visible_quadtree.offset)
             - self.visible_rect.min().to_fvec();
-        let mut render_cells_frect =
-            FRect2D::centered(render_cells_center, render_cells_size / 2.0);
-        render_cells_frect /= self.visible_rect.size().to_fvec();
-        render_cells_frect *= scaled_cells_texture_fract;
+        let render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size / 2.0);
+        let texture_coords_rect =
+            render_cells_rect / self.visible_rect.size().to_fvec() * cells_texture_fract;
 
         self.target
             .draw(
-                &*vbos::blit_quad_with_src_coords(render_cells_frect),
+                &*vbos::blit_quad_with_src_coords(texture_coords_rect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::BLIT,
+                &shaders::PIXMIX,
                 &uniform! {
-                    src_texture: scaled_cells_texture.sampled(),
                     alpha: 1.0_f32,
+                    src_texture: cells_texture.sampled(),
+                    scale_factor: self.render_cell_scale.units_per_cell().raw() as f32,
                 },
                 &glium::DrawParameters::default(),
             )
@@ -244,9 +197,9 @@ impl<'a> RenderInProgress<'a> {
 
         // // Draw a 1:1 "minimap" in the corner
         // self.target.blit_from_simple_framebuffer(
-        //     &unscaled_cells_fbo,
-        //     &entire_rect(&unscaled_cells_fbo),
-        //     &entire_blit_target(&unscaled_cells_fbo),
+        //     &cells_fbo,
+        //     &entire_rect(&cells_fbo),
+        //     &entire_blit_target(&cells_fbo),
         //     glium::uniforms::MagnifySamplerFilter::Linear,
         // );
 

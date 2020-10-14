@@ -17,8 +17,7 @@ lazy_static! {
 
 #[derive(Default)]
 pub struct TextureCache {
-    pub unscaled_cells: CachedSrgbTexture2d,
-    pub scaled_cells: CachedSrgbTexture2d,
+    pub cells: CachedSrgbTexture2d,
 }
 
 #[derive(Default)]

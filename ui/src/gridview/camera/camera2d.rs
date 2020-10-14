@@ -44,18 +44,20 @@ impl Camera2D {
         let cell_offset = self.pos() - base_cell_pos.to_fixedvec();
         let mut render_cell_pos = (cell_offset >> render_cell_layer.to_u32()).to_fvec();
 
-        // Round to the nearest pixel.
-        render_cell_pos = (render_cell_pos * render_cell_scale.units_per_cell()).round()
-            * render_cell_scale.cells_per_unit();
+        // This is the width of a pixel, measured in render cells.
+        let one_pixel = render_cell_scale.cells_per_unit();
+
+        // Round to the nearest pixel (disabled because it causes jiggling).
+        // render_cell_pos = (render_cell_pos / one_pixel).round() * one_pixel;
 
         // Offset by half a pixel if the target dimensions are odd, so that
         // cells boundaries always line up with pixel boundaries.
         let (target_w, target_h) = self.target_dimensions();
         if target_w % 2 == 1 {
-            render_cell_pos[X] += render_cell_scale.cells_per_unit() / 2.0;
+            render_cell_pos[X] += one_pixel / 2.0;
         }
         if target_h % 2 == 1 {
-            render_cell_pos[Y] += render_cell_scale.cells_per_unit() / 2.0;
+            render_cell_pos[Y] += one_pixel / 2.0;
         }
 
         render_cell_pos
@@ -155,7 +157,15 @@ impl Camera<Dim2D> for Camera2D {
         let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
 
         // Compute the render cell translation matrix.
-        let render_cell_pos = self.render_cell_pos(&base_cell_pos);
+        let mut render_cell_pos = self.render_cell_pos(&base_cell_pos);
+        // Offset by a quarter of a pixel so that OpenGL rounds consistently
+        // when drawing things that are right on a cell boundary, such as
+        // 1-pixel-wide gridlines.
+        render_cell_pos -= render_cell_scale.cells_per_unit() / 4.0;
+        // This sub-pixel offest is in the opposite direction of the in
+        // render_cell_pos() so that they partially cancel, and never offset the
+        // whole image by more than half a pixel.
+
         let render_cell_translate_matrix = Matrix4::from_translation(-cgmath::vec3(
             render_cell_pos[X]
                 .to_f32()

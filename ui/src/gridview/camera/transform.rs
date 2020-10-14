@@ -183,8 +183,12 @@ impl<D: Dim> NdCellTransform<D> {
     fn pixel_transform(target_w: f32, target_h: f32) -> Matrix4<f32> {
         // Negate the vertical axis because Glutin measures window coordinates
         // from the top-left corner, but we want the Y coordinate increasing
-        // upwards.
-        Matrix4::from_nonuniform_scale(target_w as f32 / 2.0, -(target_h as f32 / 2.0), 1.0)
+        // upwards. Also, offset by half a pixel because OpenGL considers pixels
+        // centered on half-integers.
+
+        // Offset by half a pixel because OpenGL samples the center of a pixel to determine its value.
+        Matrix4::from_translation(cgmath::vec3(-0.5, -0.5, 0.0))
+            * Matrix4::from_nonuniform_scale(target_w as f32 / 2.0, -(target_h as f32 / 2.0), 1.0)
             * Matrix4::from_translation(cgmath::vec3(1.0, -1.0, 0.0))
     }
 }

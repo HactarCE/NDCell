@@ -13,9 +13,6 @@ use crate::config::{Config, MouseDragBinding};
 use crate::gridview::{GridView, GridViewTrait};
 use crate::Scale;
 
-const FALSE_REF: &bool = &false;
-const TRUE_REF: &bool = &true;
-
 const SHIFT: ModifiersState = ModifiersState::SHIFT;
 const CTRL: ModifiersState = ModifiersState::CTRL;
 const ALT: ModifiersState = ModifiersState::ALT;
@@ -536,9 +533,9 @@ impl Index<u32> for KeysPressed {
     type Output = bool;
     fn index(&self, scancode: u32) -> &bool {
         if self.scancodes.contains(&scancode) {
-            TRUE_REF
+            &true
         } else {
-            FALSE_REF
+            &false
         }
     }
 }
@@ -546,9 +543,9 @@ impl Index<VirtualKeyCode> for KeysPressed {
     type Output = bool;
     fn index(&self, virtual_keycode: VirtualKeyCode) -> &bool {
         if self.virtual_keycodes.contains(&virtual_keycode) {
-            TRUE_REF
+            &true
         } else {
-            FALSE_REF
+            &false
         }
     }
 }

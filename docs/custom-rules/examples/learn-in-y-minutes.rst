@@ -49,7 +49,7 @@ __ https://learnxinyminutes.com/
     // Assertions
     assert x == 23
     // ... with an optional message.
-    assert x > 0, "Why is x negative?"
+    assert x >= 0, "Why is x negative?"
 
     // Even though cell2 hasn't been set, it's been defined as a variable
     // containing a cell. All variables have a default value (generally 0).

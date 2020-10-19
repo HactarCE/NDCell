@@ -35,7 +35,7 @@ NOTE: this rule uses several features that are not yet implemented and VERY subj
             or (nbhd[W] is #excited & #e and this is ~#w | #splitter)
             or (nbhd[S] is #excited & #n and this is ~#s | #splitter)
       become (#wire, #splitter, #e, #n, #w, #s) from this
-            & #excited:(excited)
+            & #excited:(excite)
     }
   }
 

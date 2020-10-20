@@ -84,8 +84,8 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 
 ## What works right now
 
-- **Edit and simulate Conway's Game of Life on an infinite grid using HashLife**
-- **Custom rules** written in NDCA, a custom JIT-compiled programming language. Documentation in progress at [ndcell.rtfd.io][NDCA docs].
+- **Edit and simulate Conway's Game of Life on an infinite 2D grid using HashLife**
+- **Custom rules** written in NDCA, a custom JIT-compiled programming language. Documentation in progress at [ndcell.rtfd.io][NDCA docs]. ([Demo video][custom-rules-demo])
 - **Undo history**
   - Undo with <kbd>Ctrl</kbd>+<kbd>Z</kbd>
   - Redo with <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
@@ -96,7 +96,7 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - Toggle cells with left click
   - Select a cell state using <kbd>0</kbd>-<kbd>9</kbd>
   - Cycle selected cell state using <kbd>[</kbd>/<kbd>]</kbd>
-- **Rectangular selection**
+- **Rectangular selection** ([Demo video][selections-demo])
   - Select with left click while holding <kbd>Ctrl</kbd>
   - Resize the selection with left click while holding <kbd>Ctrl</kbd>+<kbd>Shift</kbd>, or by dragging the edges of the selection
 - **Navigation**
@@ -109,6 +109,12 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - Set step size
     - Double/halve step size with <kbd>+</kbd>/<kbd>-</kbd>
   - Set breakpoint
+- **3D rendering**
+  - Partially working ([Demo video][3d-demo])
+
+[custom-rules-demo]: https://streamable.com/7yawnq
+[selections-demo]: https://streamable.com/taei4j
+[3d-demo]: https://streamable.com/7yp8ml
 
 ## What's planned for the future
 

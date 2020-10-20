@@ -20,7 +20,7 @@ const RENDER_RESULTS_COUNT: usize = 4;
 const MAX_LAST_SIM_TIMES: usize = 4;
 
 /// Shared fields common to all `GridView`s.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct GridViewCommon {
     /// Queue of pending commands to be executed on the next frame.
     pub command_queue: Mutex<Vec<Command>>,
@@ -45,12 +45,32 @@ pub struct GridViewCommon {
     /// Communication channel with the garbage collection thread.
     gc_channel: Option<mpsc::Receiver<()>>,
 
-    /// The time that the last several frames completed.
+    /// Time that the last several frames completed.
     pub last_frame_times: VecDeque<Instant>,
-    /// The last several simulation times, with the most recent at the front.
+    /// Last several simulation times, with the most recent at the front.
     pub last_sim_times: VecDeque<Duration>,
-    /// The most recent render result.
+    /// Most recent render result.
     pub last_render_result: RenderResult,
+
+    /// Selected cell state.
+    pub selected_cell_state: u8,
+}
+impl Default for GridViewCommon {
+    fn default() -> Self {
+        Self {
+            command_queue: Default::default(),
+            mouse: Default::default(),
+            is_running: Default::default(),
+            is_drawing: Default::default(),
+            is_dragging_view: Default::default(),
+            is_waiting: Default::default(),
+            gc_channel: Default::default(),
+            last_frame_times: Default::default(),
+            last_sim_times: Default::default(),
+            last_render_result: Default::default(),
+            selected_cell_state: 1_u8,
+        }
+    }
 }
 
 /// Shared functionality for 2D and 3D gridviews.
@@ -239,6 +259,11 @@ pub trait GridViewTrait:
     /// front.
     fn last_sim_times(&self) -> &VecDeque<Duration> {
         &self.as_ref().last_sim_times
+    }
+
+    /// Returns the selected cell state.
+    fn selected_cell_state(&self) -> u8 {
+        self.as_ref().selected_cell_state
     }
 
     /// Updates state relating to the mouse cursor.

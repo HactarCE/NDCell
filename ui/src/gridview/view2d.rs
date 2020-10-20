@@ -69,6 +69,9 @@ impl GridViewTrait for GridView2D {
         }
 
         match command {
+            DrawCommand::SetState(new_selected_cell_state) => {
+                self.common.selected_cell_state = new_selected_cell_state;
+            }
             DrawCommand::Drag(c, cursor_start) => {
                 let cell_transform = self.camera().cell_transform();
 
@@ -77,16 +80,18 @@ impl GridViewTrait for GridView2D {
                     .map(|pos| pos.floor().0);
 
                 let new_cell_state = match c.mode {
-                    DrawMode::Place => c.cell_state,
+                    DrawMode::Place => self.selected_cell_state(),
                     DrawMode::Replace => {
                         if let Some(pos) = &initial_pos {
-                            if self.get_cell(&self.cache().read(), pos) == c.cell_state {
+                            if self.get_cell(&self.cache().read(), pos)
+                                == self.selected_cell_state()
+                            {
                                 0
                             } else {
-                                c.cell_state
+                                self.selected_cell_state()
                             }
                         } else {
-                            c.cell_state
+                            self.selected_cell_state()
                         }
                     }
                     DrawMode::Erase => 0,

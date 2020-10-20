@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use ndcell_core::prelude::*;
 
 use crate::commands::*;
-use crate::config::{Config, MouseDisplay, MouseDragBinding};
+use crate::config::{Config, MouseDisplay};
 use crate::gridview::{GridView, GridViewTrait, MouseState};
 use crate::Scale;
 
@@ -215,6 +215,40 @@ impl FrameInProgress<'_> {
                                 self.config.sim.step_size = 1.into();
                             }
                         }
+                        Some(k @ VirtualKeyCode::LBracket)
+                        | Some(k @ VirtualKeyCode::RBracket)
+                        | Some(k @ VirtualKeyCode::Key0)
+                        | Some(k @ VirtualKeyCode::Key1)
+                        | Some(k @ VirtualKeyCode::Key2)
+                        | Some(k @ VirtualKeyCode::Key3)
+                        | Some(k @ VirtualKeyCode::Key4)
+                        | Some(k @ VirtualKeyCode::Key5)
+                        | Some(k @ VirtualKeyCode::Key6)
+                        | Some(k @ VirtualKeyCode::Key7)
+                        | Some(k @ VirtualKeyCode::Key8)
+                        | Some(k @ VirtualKeyCode::Key9) => {
+                            self.gridview.enqueue(DrawCommand::SetState(match k {
+                                // Select the previous cell state.
+                                VirtualKeyCode::LBracket => {
+                                    self.gridview.selected_cell_state().wrapping_sub(1)
+                                }
+                                // Select the next cell state.
+                                VirtualKeyCode::RBracket => {
+                                    self.gridview.selected_cell_state().wrapping_add(1)
+                                }
+                                VirtualKeyCode::Key0 => 0_u8,
+                                VirtualKeyCode::Key1 => 1_u8,
+                                VirtualKeyCode::Key2 => 2_u8,
+                                VirtualKeyCode::Key3 => 3_u8,
+                                VirtualKeyCode::Key4 => 4_u8,
+                                VirtualKeyCode::Key5 => 5_u8,
+                                VirtualKeyCode::Key6 => 6_u8,
+                                VirtualKeyCode::Key7 => 7_u8,
+                                VirtualKeyCode::Key8 => 8_u8,
+                                VirtualKeyCode::Key9 => 9_u8,
+                                _ => unreachable!(),
+                            }));
+                        }
                         _ => (),
                     }
                 }
@@ -298,31 +332,23 @@ impl FrameInProgress<'_> {
                 return;
             }
             // Possibility #1: Drag mouse target
-            if let Some(binding) = &mouse_target_data.binding {
+            if let Some(b) = &mouse_target_data.binding {
                 self.state.dragging_button = Some(button);
                 self.state.mouse.display = mouse_target_data.display;
-                self.gridview.enqueue(match binding {
-                    MouseDragBinding::Draw(b) => b.to_command(cursor_pos, 1_u8),
-                    MouseDragBinding::Select(b) => b.to_command(cursor_pos),
-                    MouseDragBinding::View(b) => b.to_command(cursor_pos),
-                });
+                self.gridview.enqueue(b.to_command(cursor_pos));
             }
-        } else if let Some(binding) = click_binding {
+        } else if let Some(b) = click_binding {
             // Possibility #2: Click
-            match binding {
+            match b {
                 // If mouse click bindings are ever implemented, they will
                 // need to be handled here.
                 _ => unimplemented!("Mouse click bindings are not implemented"),
             }
-        } else if let Some(binding) = drag_binding {
+        } else if let Some(b) = drag_binding {
             // Possibility #3: Drag
             self.state.dragging_button = Some(button);
-            self.state.mouse.display = binding.display();
-            self.gridview.enqueue(match binding {
-                MouseDragBinding::Draw(b) => b.to_command(cursor_pos, 1_u8),
-                MouseDragBinding::Select(b) => b.to_command(cursor_pos),
-                MouseDragBinding::View(b) => b.to_command(cursor_pos),
-            })
+            self.state.mouse.display = b.display();
+            self.gridview.enqueue(b.to_command(cursor_pos));
         }
     }
     fn handle_mouse_release(&mut self, button: MouseButton) {

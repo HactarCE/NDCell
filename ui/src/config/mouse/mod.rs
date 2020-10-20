@@ -8,7 +8,7 @@ mod drag;
 pub use click::*;
 pub use drag::*;
 
-use crate::commands::{DrawMode, DrawShape, SelectDragCommand, ViewDragCommand};
+use crate::commands::{DrawDragCommand, DrawMode, DrawShape, SelectDragCommand, ViewDragCommand};
 
 #[derive(Debug)]
 pub struct MouseConfig {
@@ -27,21 +27,23 @@ impl Default for MouseConfig {
         use MouseButton::{Left, Middle, Right};
         use MouseDragBinding::{Draw, Select, View};
 
-        const FREEFORM_2D: DrawDragBinding = DrawDragBinding {
+        let freeform_2d: DrawDragBinding = DrawDragCommand {
             mode: DrawMode::Replace,
             shape: DrawShape::Freeform,
-        };
-        const LINE_2D: DrawDragBinding = DrawDragBinding {
+        }
+        .into();
+        let line_2d: DrawDragBinding = DrawDragCommand {
             mode: DrawMode::Replace,
             shape: DrawShape::Line,
-        };
+        }
+        .into();
 
         Self {
             click_bindings_2d: vec![].into_iter().collect(),
             click_bindings_3d: vec![].into_iter().collect(),
             drag_bindings_2d: vec![
-                (NONE, Left, Draw(FREEFORM_2D)),
-                (SHIFT, Left, Draw(LINE_2D)),
+                (NONE, Left, Draw(freeform_2d)),
+                (SHIFT, Left, Draw(line_2d)),
                 (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
                 (NONE, Right, View(ViewDragCommand::Pan.into())),
                 (CTRL, Right, View(ViewDragCommand::Scale.into())),

@@ -125,6 +125,11 @@ impl MainWindow {
                 gridview.enqueue(Command::GarbageCollect)
             }
             ui.text("");
+            ui.text(format!(
+                "Selected cell state: {}",
+                gridview.selected_cell_state(),
+            ));
+            ui.text("");
             ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
         });
         self.simulation.build(ui, config, gridview)

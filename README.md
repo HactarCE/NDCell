@@ -95,6 +95,8 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - Double/halve step size with <kbd>+</kbd>/<kbd>-</kbd>
   - Set breakpoint
 - **Custom rules** written in NDCA, a custom JIT-compiled programming language. Documentation in progress at [ndcell.rtfd.io][NDCA docs].
+  - Select a cell state using <kbd>0</kbd>-<kbd>9</kbd>
+  - Cycle selected cell state using <kbd>[</kbd>/<kbd>]</kbd>
 - **Undo/redo** with <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
 - **Copy/paste RLE** with <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>
 

@@ -3,7 +3,7 @@ use ndcell_core::ndvec::FVec2D;
 use crate::commands::*;
 use crate::config::MouseDisplay;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum MouseDragBinding {
     Draw(DrawDragBinding),
     Select(SelectDragBinding),
@@ -17,24 +17,25 @@ impl MouseDragBinding {
             Self::View(_) => MouseDisplay::Pan,
         }
     }
+    pub fn to_command(self, cursor_pos: FVec2D) -> Command {
+        match self {
+            Self::Draw(b) => b.to_command(cursor_pos),
+            Self::Select(b) => b.to_command(cursor_pos),
+            Self::View(b) => b.to_command(cursor_pos),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct DrawDragBinding {
-    pub mode: DrawMode,
-    pub shape: DrawShape,
-}
+pub struct DrawDragBinding(DrawDragCommand);
 impl DrawDragBinding {
-    pub fn to_command(self, cursor_pos: FVec2D, selected_cell_state: u8) -> Command {
-        DrawCommand::Drag(
-            DrawDragCommand {
-                mode: self.mode,
-                shape: self.shape,
-                cell_state: selected_cell_state,
-            },
-            cursor_pos,
-        )
-        .into()
+    pub fn to_command(self, cursor_pos: FVec2D) -> Command {
+        DrawCommand::Drag(self.0, cursor_pos).into()
+    }
+}
+impl From<DrawDragCommand> for DrawDragBinding {
+    fn from(c: DrawDragCommand) -> Self {
+        Self(c)
     }
 }
 

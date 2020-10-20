@@ -107,6 +107,7 @@ pub enum ViewDragCommand {
 
 #[derive(Debug, Clone)]
 pub enum DrawCommand {
+    SetState(u8),
     Drag(DrawDragCommand, FVec2D),
 }
 impl_command_from!(Command::Draw(DrawCommand));
@@ -115,7 +116,6 @@ impl_command_from!(Command::Draw(DrawCommand));
 pub struct DrawDragCommand {
     pub mode: DrawMode,
     pub shape: DrawShape,
-    pub cell_state: u8,
 }
 
 #[derive(Debug, Copy, Clone)]

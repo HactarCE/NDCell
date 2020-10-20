@@ -174,7 +174,10 @@ impl GridViewTrait for GridView2D {
                     }
                 };
 
-                let mut moved = false;
+                let mut moved = match c {
+                    SelectDragCommand::NewRect => false,
+                    SelectDragCommand::Resize { .. } => true,
+                };
                 let new_drag_handler: DragHandler<Self> = Box::new(move |this, new_cursor_pos| {
                     // TODO: DPI-aware mouse movement threshold before making
                     // new selection, then call drag handler before returning
@@ -200,24 +203,29 @@ impl GridViewTrait for GridView2D {
                             SelectDragCommand::Resize {
                                 x: resize_x,
                                 y: resize_y,
+                                absolute,
                                 ..
                             } => {
-                                // Use delta from original cursor position to new
-                                // cursor position.
-                                let delta = new_pos - &initial_pos_fract;
-                                let mut new_corner = delta.round() + &pos2;
+                                if absolute {
+                                    new_pos.floor().0
+                                } else {
+                                    // Use delta from original cursor position to new
+                                    // cursor position.
+                                    let delta = new_pos - &initial_pos_fract;
+                                    let mut new_corner = delta.round() + &pos2;
 
-                                // Only resize along certain axes.
-                                if !resize_x {
-                                    // Keep original X value.
-                                    new_corner[X] = pos2[X].clone();
-                                }
-                                if !resize_y {
-                                    // Keep original Y value.
-                                    new_corner[Y] = pos2[Y].clone();
-                                }
+                                    // Only resize along certain axes.
+                                    if !resize_x {
+                                        // Keep original X value.
+                                        new_corner[X] = pos2[X].clone();
+                                    }
+                                    if !resize_y {
+                                        // Keep original Y value.
+                                        new_corner[Y] = pos2[Y].clone();
+                                    }
 
-                                new_corner
+                                    new_corner
+                                }
                             }
                         };
                         this.selection = Some(Selection2D {

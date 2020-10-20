@@ -153,6 +153,7 @@ pub enum SelectDragCommand {
         y: bool,
         z: bool,
         plane: Option<Axis>,
+        absolute: bool,
     },
 }
 impl SelectDragCommand {
@@ -162,6 +163,7 @@ impl SelectDragCommand {
         y: false,
         z: false,
         plane: None,
+        absolute: true,
     };
     /// 2D selection resize along the vertical axis.
     pub const RESIZE_2D_V: Self = Self::Resize {
@@ -169,6 +171,7 @@ impl SelectDragCommand {
         y: true,
         z: false,
         plane: None,
+        absolute: true,
     };
     /// 2D selection resize both axes.
     pub const RESIZE_2D_DIAG: Self = Self::Resize {
@@ -176,6 +179,7 @@ impl SelectDragCommand {
         y: true,
         z: false,
         plane: None,
+        absolute: true,
     };
 }
 

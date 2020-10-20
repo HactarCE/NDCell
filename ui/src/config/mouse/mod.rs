@@ -45,6 +45,11 @@ impl Default for MouseConfig {
                 (NONE, Left, Draw(freeform_2d)),
                 (SHIFT, Left, Draw(line_2d)),
                 (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
+                (
+                    CTRL | SHIFT,
+                    Left,
+                    Select(SelectDragCommand::RESIZE_2D_DIAG.into()),
+                ),
                 (NONE, Right, View(ViewDragCommand::Pan.into())),
                 (CTRL, Right, View(ViewDragCommand::Scale.into())),
                 (NONE, Middle, View(ViewDragCommand::Pan.into())),

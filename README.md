@@ -98,7 +98,7 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - Cycle selected cell state using <kbd>[</kbd>/<kbd>]</kbd>
 - **Rectangular selection**
   - Select with left click while holding <kbd>Ctrl</kbd>
-  - Resize the selection with the left click while holding <kbd>Ctrl</kbd>+<kbd>Shift</kbd>, or by dragging the edges of the selection
+  - Resize the selection with left click while holding <kbd>Ctrl</kbd>+<kbd>Shift</kbd>, or by dragging the edges of the selection
 - **Navigation**
   - Pan with arrow keys, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right mouse button (hold <kbd>Shift</kbd> to go faster)
   - Zoom with scroll wheel or <kbd>Q</kbd>/<kbd>Z</kbd> (hold <kbd>Shift</kbd> to go faster)

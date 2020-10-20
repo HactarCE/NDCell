@@ -1,12 +1,25 @@
 //! Conversions between different types of `NdRect`s.
 
-use super::{BigRect, IRect, URect};
+use super::{BigRect, FixedRect, IRect, URect};
 use crate::dim::Dim;
+use crate::ndvec::NdVec;
+use crate::num::{FixedPoint, One};
 
 // NOTE: when implementing conversions involving `FRect` or `FixedRect`, make
 // sure to account for off-by-one error with bounds.
 
 impl<D: Dim> BigRect<D> {
+    /// Converts this `BigRect` to a `FixedVec`.
+    #[inline]
+    pub fn to_fixedrect(&self) -> FixedRect<D> {
+        FixedRect::with_size(
+            self.start.to_fixedvec(),
+            // Increment size because `BigRect` includes endpoints, but
+            // `FixedRect` does not.
+            self.size.to_fixedvec() + NdVec::repeat(FixedPoint::one()),
+        )
+    }
+
     /// Converts this `BigRect` to an `IRect`.
     ///
     /// # Panics

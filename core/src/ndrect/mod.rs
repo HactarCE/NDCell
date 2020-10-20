@@ -11,7 +11,7 @@ mod ops;
 use crate::axis::Axis;
 use crate::dim::{Dim, DimFor};
 use crate::ndvec::NdVec;
-use crate::num::{Float, Integer, NdVecNum, ToPrimitive};
+use crate::num::{Float, Integer, NdVecNum, Signed, ToPrimitive};
 pub use aliases::*;
 use iter::NdRectIter;
 
@@ -180,6 +180,40 @@ where
         N: Integer,
     {
         num::range_inclusive(self.start[axis].clone(), self.max()[axis].clone())
+    }
+
+    /// Returns the corner of the rectangle closest to the given point.
+    #[inline]
+    pub fn closest_corner(&self, point: &NdVec<D, N>) -> NdVec<D, N>
+    where
+        N: Signed,
+    {
+        let mut ret = self.max();
+        for &ax in D::Dim::axes() {
+            if (point[ax].clone() - ret[ax].clone()).abs()
+                > (point[ax].clone() - self.start[ax].clone()).abs()
+            {
+                ret[ax] = self.start[ax].clone();
+            }
+        }
+        ret
+    }
+
+    /// Returns the corner of the rectangle farthest from the given point.
+    #[inline]
+    pub fn farthest_corner(&self, point: &NdVec<D, N>) -> NdVec<D, N>
+    where
+        N: Signed,
+    {
+        let mut ret = self.max();
+        for &ax in D::Dim::axes() {
+            if (point[ax].clone() - ret[ax].clone()).abs()
+                <= (point[ax].clone() - self.start[ax].clone()).abs()
+            {
+                ret[ax] = self.start[ax].clone();
+            }
+        }
+        ret
     }
 
     /// Returns `true` if the two rectangles intersect.

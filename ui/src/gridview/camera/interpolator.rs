@@ -1,14 +1,15 @@
 //! Camera interpolation.
 
 use anyhow::Result;
+use std::any::Any;
 use std::convert::TryFrom;
 use std::fmt;
 use std::marker::PhantomData;
 
 use ndcell_core::prelude::*;
 
-use super::{Camera, CameraDragHandler, CellTransform, NdCellTransform};
-use crate::commands::{Drag, ViewCommand};
+use super::{Camera, CellTransform, DragHandler, NdCellTransform};
+use crate::commands::ViewCommand;
 use crate::config::{Config, Interpolation};
 
 /// Distance beneath which to "snap" to the target, for interpolation strategies
@@ -20,7 +21,6 @@ pub struct Interpolator<D, C> {
     pub current: C,
     pub target: C,
     state: (),
-    drag_handler: Option<CameraDragHandler<C>>,
     _marker: PhantomData<D>,
 }
 impl<D: Dim, C: Camera<D>> fmt::Debug for Interpolator<D, C> {
@@ -34,7 +34,6 @@ impl<D: Dim, C: Camera<D>> From<C> for Interpolator<D, C> {
             current: camera.clone(),
             target: camera.clone(),
             state: (),
-            drag_handler: None,
             _marker: PhantomData,
         }
     }
@@ -43,7 +42,7 @@ impl<D: Dim, C: Camera<D>> From<C> for Interpolator<D, C> {
 /// Stateful interpolation.
 ///
 /// This abstracts away dimensionality, so it can be used as a trait object.
-pub trait Interpolate {
+pub trait Interpolate: Any {
     /// Sets the display scaling factor of the underlying camera.
     fn set_dpi(&mut self, dpi: f32);
 
@@ -55,18 +54,8 @@ pub trait Interpolate {
     /// Returns `true` if the target has been reached, or `false` otherwise.
     fn advance(&mut self, fps: f64, interpolation: Interpolation) -> bool;
 
-    /// Whether the user is currently dragging the viewport by holding down a
-    /// mouse button.
-    fn is_dragging(&self) -> bool;
-
     /// Update the pixel size of the viewport.
     fn update_target_dimensions(&mut self, target_dimensions: (u32, u32));
-
-    /// Executes a movement command, interpolating if necessary.
-    ///
-    /// Returns an `Err` if the dimensionality of `cell_transform` does not
-    /// match the dimensionality of the camera.
-    fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()>;
 }
 impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C>
 where
@@ -106,38 +95,30 @@ where
         }
     }
 
-    fn is_dragging(&self) -> bool {
-        self.drag_handler.is_some()
-    }
-
     fn update_target_dimensions(&mut self, target_dimensions: (u32, u32)) {
         self.target.set_target_dimensions(target_dimensions);
         self.current.set_target_dimensions(target_dimensions);
     }
+}
 
-    fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
-        match command {
-            ViewCommand::Drag(Drag::Continue { cursor_pos }) => {
-                if let Some(h) = &mut self.drag_handler {
-                    // Skip interpolation.
-                    h(&mut self.target, cursor_pos);
-                    h(&mut self.current, cursor_pos);
-                }
-            }
-
-            ViewCommand::Drag(Drag::Stop) => {
-                self.drag_handler = None;
-            }
-
-            c @ ViewCommand::Drag(_) => {
-                self.drag_handler = self.target.do_move_command(c, config)?;
-            }
-
-            c => {
-                self.target.do_move_command(c, config)?;
-            }
-        };
-
-        Ok(())
+impl<D: Dim, C: Camera<D>> Interpolator<D, C> {
+    /// Executes a movement command, interpolating if necessary.
+    pub fn do_move_command(
+        &mut self,
+        command: ViewCommand,
+        config: &Config,
+    ) -> Result<Option<DragHandler<Self>>> {
+        Ok(self
+            .target
+            .do_move_command(command, config)?
+            // Turn the DragHandler<C> into a DragHandler<Interpolator<D, C>>.
+            .map(|mut camera_drag_handler| -> DragHandler<Self> {
+                Box::new(move |this, cursor_pos| {
+                    // Skip interpolation for dragging.
+                    camera_drag_handler(&mut this.target, cursor_pos)?;
+                    camera_drag_handler(&mut this.current, cursor_pos)?;
+                    Ok(true)
+                })
+            }))
     }
 }

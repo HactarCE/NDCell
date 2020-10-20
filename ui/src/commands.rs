@@ -23,6 +23,9 @@ pub enum Command {
     Select(SelectCommand),
     Clipboard(ClipboardCommand),
     GarbageCollect,
+
+    ContinueDrag(FVec2D),
+    StopDrag,
 }
 
 #[derive(Debug, Clone)]
@@ -49,15 +52,8 @@ impl From<HistoryCommand> for Command {
 }
 
 #[derive(Debug, Clone)]
-pub enum Drag<A> {
-    Start { action: A, cursor_start: FVec2D },
-    Continue { cursor_pos: FVec2D },
-    Stop,
-}
-
-#[derive(Debug, Clone)]
 pub enum ViewCommand {
-    Drag(Drag<ViewDragAction>),
+    Drag(ViewDragCommand, FVec2D),
 
     GoTo2D {
         x: Option<FixedPoint>,
@@ -94,7 +90,7 @@ pub enum ViewCommand {
 impl_command_from!(Command::Move(ViewCommand));
 
 #[derive(Debug, Copy, Clone)]
-pub enum ViewDragAction {
+pub enum ViewDragCommand {
     /// Rotates the 3D view around the pivot.
     Orbit,
     /// Pans in the plane of the camera.
@@ -110,13 +106,16 @@ pub enum ViewDragAction {
 }
 
 #[derive(Debug, Clone)]
-pub struct DrawCommand(pub Drag<(DrawDragAction, u8)>);
+pub enum DrawCommand {
+    Drag(DrawDragCommand, FVec2D),
+}
 impl_command_from!(Command::Draw(DrawCommand));
 
 #[derive(Debug, Copy, Clone)]
-pub struct DrawDragAction {
+pub struct DrawDragCommand {
     pub mode: DrawMode,
     pub shape: DrawShape,
+    pub cell_state: u8,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -141,13 +140,43 @@ pub enum DrawShape {
 }
 
 #[derive(Debug, Clone)]
-pub struct SelectCommand(pub Drag<SelectDragAction>);
+pub enum SelectCommand {
+    Drag(SelectDragCommand, FVec2D),
+}
 impl_command_from!(Command::Select(SelectCommand));
 
 #[derive(Debug, Copy, Clone)]
-pub enum SelectDragAction {
+pub enum SelectDragCommand {
     NewRect,
-    Resize,
+    Resize {
+        x: bool,
+        y: bool,
+        z: bool,
+        plane: Option<Axis>,
+    },
+}
+impl SelectDragCommand {
+    /// 2D selection resize along the horizontal axis.
+    pub const RESIZE_2D_H: Self = Self::Resize {
+        x: true,
+        y: false,
+        z: false,
+        plane: None,
+    };
+    /// 2D selection resize along the vertical axis.
+    pub const RESIZE_2D_V: Self = Self::Resize {
+        x: false,
+        y: true,
+        z: false,
+        plane: None,
+    };
+    /// 2D selection resize both axes.
+    pub const RESIZE_2D_DIAG: Self = Self::Resize {
+        x: true,
+        y: true,
+        z: false,
+        plane: None,
+    };
 }
 
 #[derive(Debug, Clone)]

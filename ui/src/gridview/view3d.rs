@@ -1,13 +1,14 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 
 use ndcell_core::prelude::*;
 
 use super::camera::{Camera, Camera3D, Interpolate, Interpolator};
-use super::common::{GridViewCommon, GridViewTrait};
+use super::common::{GridViewCommon, GridViewTrait, RenderParams, RenderResult};
 use super::history::{HistoryBase, HistoryManager};
 use super::render::grid3d::{RenderCache, RenderInProgress};
 use super::selection::Selection3D;
 use super::worker::*;
+use super::DragHandler;
 use crate::commands::*;
 use crate::config::Config;
 
@@ -29,14 +30,14 @@ pub struct GridView3D {
 
     /// Camera interpolator.
     camera_interpolator: Interpolator<Dim3D, Camera3D>,
-    /// Pixel position of the mouse cursor from the top left of the area where
-    /// the gridview is being drawn.
-    cursor_pos: Option<FVec2D>,
 
     /// Communication channel with the simulation worker thread.
     worker: Option<Worker<ProjectedAutomaton3D>>,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
+
+    /// Mouse drag handler.
+    drag_handler: Option<DragHandler<Self>>,
 }
 impl AsRef<GridViewCommon> for GridView3D {
     fn as_ref(&self) -> &GridViewCommon {
@@ -58,6 +59,35 @@ impl GridViewTrait for GridView3D {
     }
     fn do_clipboard_command(&mut self, _command: ClipboardCommand, _config: &Config) -> Result<()> {
         Err(anyhow!("unimplemented"))
+    }
+    fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
+        let maybe_new_drag_handler = self
+            .camera_interpolator
+            .do_move_command(command, config)
+            .context("Executing move command")?
+            .map(|mut interpolator_drag_handler| {
+                Box::new(move |this: &mut Self, cursor_pos| {
+                    interpolator_drag_handler(&mut this.camera_interpolator, cursor_pos)
+                }) as DragHandler<Self>
+            });
+        if maybe_new_drag_handler.is_some() && self.drag_handler.is_none() {
+            self.drag_handler = maybe_new_drag_handler;
+            self.common.is_dragging_view = true;
+        }
+        Ok(())
+    }
+    fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()> {
+        if let Some(mut h) = self.drag_handler.take() {
+            h(self, cursor_pos)?;
+            self.drag_handler = Some(h);
+        }
+        Ok(())
+    }
+    fn stop_drag(&mut self) -> Result<()> {
+        self.drag_handler = None;
+        self.common.is_drawing = false;
+        self.common.is_dragging_view = false;
+        Ok(())
     }
 
     fn enqueue_worker_request(&mut self, _request: WorkerRequest) {
@@ -81,15 +111,9 @@ impl GridViewTrait for GridView3D {
     fn camera_interpolator(&mut self) -> &mut dyn Interpolate {
         &mut self.camera_interpolator
     }
-    fn cursor_pos(&self) -> Option<FVec2D> {
-        self.cursor_pos
-    }
-    fn render(
-        &mut self,
-        config: &Config,
-        target: &mut glium::Frame,
-        _params: super::RenderParams,
-    ) -> Result<()> {
+    fn render(&mut self, params: RenderParams<'_>) -> Result<&RenderResult> {
+        let config = params.config;
+
         // Update DPI.
         self.camera_interpolator().set_dpi(config.gfx.dpi as f32);
 
@@ -97,9 +121,9 @@ impl GridViewTrait for GridView3D {
         let node_cache = self.automaton.projected_cache().read();
         let mut rip = RenderInProgress::new(
             self,
+            params,
             &node_cache,
             // &mut render_cache,
-            target,
         )?;
         rip.draw_cells();
 
@@ -119,8 +143,9 @@ impl GridViewTrait for GridView3D {
         //     rip.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0);
         // }
 
+        // self.common.last_render_result = rip.finish();
         // self.render_cache = Some(render_cache);
-        Ok(())
+        Ok(self.last_render_result())
     }
 }
 
@@ -136,7 +161,7 @@ impl GridView3D {
         let z = Camera3D::DISTANCE_TO_PIVOT;
         self.camera()
             .cell_transform()
-            .pixel_to_global_cell(self.cursor_pos?, z)
+            .pixel_to_global_cell(self.common.mouse.pos?, z)
     }
 }
 

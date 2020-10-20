@@ -5,8 +5,8 @@ use log::warn;
 use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
 
-use super::{Camera, CameraDragHandler, CellTransform2D, Scale, MIN_TARGET_SIZE};
-use crate::commands::{Drag, ViewCommand, ViewDragAction};
+use super::{Camera, CellTransform2D, DragHandler, Scale, MIN_TARGET_SIZE};
+use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::config::Config;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -198,34 +198,30 @@ impl Camera<Dim2D> for Camera2D {
         &mut self,
         command: ViewCommand,
         config: &Config,
-    ) -> Result<Option<CameraDragHandler<Self>>> {
+    ) -> Result<Option<DragHandler<Self>>> {
         match command {
-            ViewCommand::Drag(Drag::Start {
-                action,
-                cursor_start,
-            }) => match action {
-                ViewDragAction::Orbit => {
+            ViewCommand::Drag(c, cursor_start) => match c {
+                ViewDragCommand::Orbit => {
                     warn!("Ignoring {:?} in Camera2D", command);
                     Ok(None)
                 }
 
-                ViewDragAction::Pan
-                | ViewDragAction::PanAligned
-                | ViewDragAction::PanAlignedVertical
-                | ViewDragAction::PanHorizontal => {
+                ViewDragCommand::Pan
+                | ViewDragCommand::PanAligned
+                | ViewDragCommand::PanAlignedVertical
+                | ViewDragCommand::PanHorizontal => {
                     let start = self.cell_transform().pixel_to_global_cell(cursor_start);
                     Ok(Some(Box::new(move |cam, cursor_end| {
                         let end = cam.cell_transform().pixel_to_global_cell(cursor_end);
                         if let (Some(start), Some(end)) = (&start, &end) {
                             cam.center += start - end;
                         }
+                        Ok(true)
                     })))
                 }
 
-                ViewDragAction::Scale => todo!("Scale using click & drag"),
+                ViewDragCommand::Scale => todo!("Scale using click & drag"),
             },
-            ViewCommand::Drag(Drag::Continue { .. }) => Ok(None),
-            ViewCommand::Drag(Drag::Stop) => Ok(None),
 
             ViewCommand::GoTo2D {
                 mut x,

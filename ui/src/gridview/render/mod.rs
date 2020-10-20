@@ -4,6 +4,7 @@ mod gl_quadtree;
 pub mod grid2d;
 pub mod grid3d;
 mod ibos;
+mod picker;
 mod shaders;
 mod textures;
 mod vbos;
@@ -22,18 +23,6 @@ mod consts {
     /// This is so that gridlines do not completely obscure the presence of
     /// cells.
     pub const ZOOMED_OUT_MAX_GRID_ALPHA: f64 = 0.75;
-
-    /// Color of the grid. This will be configurable in the future.
-    pub const GRID_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
-    /// Color given to the highlighted cell. This will be configurable in the
-    /// future.
-    pub const GRID_HIGHLIGHT_COLOR: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
-    /// Color given to the selection. This will be configurable in the future.
-    pub const GRID_SELECT_COLOR: [f32; 4] = [0.6, 0.6, 0.6, 0.8];
-    /// Color for dead cells. This will be configurable in the future.
-    pub const DEAD_COLOR: (u8, u8, u8) = (0, 0, 0);
-    /// Color for live cells. This will be configurable in the future.
-    pub const LIVE_COLOR: (u8, u8, u8) = (255, 255, 255);
 
     /// Number of cell overlay rectangles in each render batch.
     pub const CELL_OVERLAY_BATCH_SIZE: usize = 256;

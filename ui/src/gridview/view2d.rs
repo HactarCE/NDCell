@@ -1,19 +1,21 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use log::{trace, warn};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+use ndcell_core::axis::Axis::{X, Y};
 use ndcell_core::prelude::*;
 
 use super::camera::{Camera, Camera2D, Interpolate, Interpolator};
-use super::common::{GridViewCommon, GridViewTrait, RenderParams};
+use super::common::{GridViewCommon, GridViewTrait, RenderParams, RenderResult};
 use super::history::{History, HistoryBase, HistoryManager};
 use super::render::grid2d::{RenderCache, RenderInProgress};
 use super::selection::Selection2D;
 use super::worker::*;
+use super::DragHandler;
 use crate::clipboard_compat::{clipboard_get, clipboard_set};
 use crate::commands::*;
-use crate::config::Config;
+use crate::config::{Config, MouseDisplay};
 use crate::Scale;
 
 /// The number of render results to remember.
@@ -23,8 +25,6 @@ const MAX_LAST_SIM_TIMES: usize = 4;
 
 /// Width of gridlines, in units of cells.
 const GRIDLINE_WIDTH: f64 = 1.0 / 32.0;
-
-type DrawDragHandler = Box<dyn FnMut(&mut GridView2D, FVec2D) -> Result<()>>;
 
 #[derive(Default)]
 pub struct GridView2D {
@@ -39,17 +39,14 @@ pub struct GridView2D {
 
     /// Camera interpolator.
     camera_interpolator: Interpolator<Dim2D, Camera2D>,
-    /// Pixel position of the mouse cursor from the top left of the area where
-    /// the gridview is being drawn.
-    cursor_pos: Option<FVec2D>,
 
     /// Communication channel with the simulation worker thread.
     worker: Option<Worker<ProjectedAutomaton2D>>,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
 
-    /// Non-movement drag handler.
-    drag_handler: Option<DrawDragHandler>,
+    /// Mouse drag handler.
+    drag_handler: Option<DragHandler<Self>>,
 }
 impl AsRef<GridViewCommon> for GridView2D {
     fn as_ref(&self) -> &GridViewCommon {
@@ -65,43 +62,44 @@ impl AsMut<GridViewCommon> for GridView2D {
 impl GridViewTrait for GridView2D {
     fn do_draw_command(&mut self, command: DrawCommand, _config: &Config) -> Result<()> {
         // Don't draw if the scale is too small.
-        if self.camera().scale() < Scale::from_factor(r64(1.0)) {
+        if self.too_small_to_draw() {
             self.common.is_drawing = false;
             self.drag_handler = None;
             return Ok(());
         }
 
-        match command.0 {
-            Drag::Start {
-                action: (DrawDragAction { mode, shape }, selected_cell_state),
-                cursor_start,
-            } => {
+        match command {
+            DrawCommand::Drag(c, cursor_start) => {
                 let cell_transform = self.camera().cell_transform();
 
                 let initial_pos = cell_transform
                     .pixel_to_global_cell(cursor_start)
                     .map(|pos| pos.floor().0);
 
-                let new_cell_state = match mode {
-                    DrawMode::Place => selected_cell_state,
+                let new_cell_state = match c.mode {
+                    DrawMode::Place => c.cell_state,
                     DrawMode::Replace => {
                         if let Some(pos) = &initial_pos {
-                            if self.get_cell(&self.cache().read(), pos) == selected_cell_state {
+                            if self.get_cell(&self.cache().read(), pos) == c.cell_state {
                                 0
                             } else {
-                                selected_cell_state
+                                c.cell_state
                             }
                         } else {
-                            selected_cell_state
+                            c.cell_state
                         }
                     }
                     DrawMode::Erase => 0,
                 };
 
-                let mut new_drag_handler: DrawDragHandler = match shape {
+                let mut new_drag_handler: DragHandler<Self> = match c.shape {
                     DrawShape::Freeform => {
                         let mut pos1 = initial_pos;
                         Box::new(move |this, new_cursor_pos| {
+                            if this.too_small_to_draw() {
+                                // Cancel the drag.
+                                return Ok(false);
+                            }
                             let pos2 = this
                                 .camera()
                                 .cell_transform()
@@ -114,7 +112,8 @@ impl GridViewTrait for GridView2D {
                                 }
                             }
                             pos1 = pos2;
-                            Ok(())
+                            // Continue the drag.
+                            Ok(true)
                         })
                     }
                     DrawShape::Line => todo!(),
@@ -126,70 +125,109 @@ impl GridViewTrait for GridView2D {
                 new_drag_handler(self, cursor_start)?;
                 self.drag_handler = Some(new_drag_handler);
             }
-
-            Drag::Continue { cursor_pos } => {
-                if let Some(mut h) = self.drag_handler.take() {
-                    h(self, cursor_pos)?;
-                    self.drag_handler = Some(h);
-                }
-            }
-
-            Drag::Stop => {
-                self.common.is_drawing = false;
-                self.drag_handler = None;
-            }
         }
         Ok(())
     }
     fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()> {
-        match command.0 {
-            Drag::Start {
-                action,
-                cursor_start,
-            } => {
+        match command {
+            SelectCommand::Drag(c, cursor_start) => {
+                if let SelectDragCommand::Resize { .. } = c {
+                    if self.selection.is_none() {
+                        return Ok(());
+                    }
+                }
+
                 let cell_transform = self.camera().cell_transform();
 
-                let initial_pos = cell_transform
-                    .pixel_to_global_cell(cursor_start)
-                    .map(|pos| pos.floor().0);
+                let initial_pos_fract = match cell_transform.pixel_to_global_cell(cursor_start) {
+                    Some(pos) => pos,
+                    None => return Ok(()),
+                };
+                let initial_pos = initial_pos_fract.floor().0;
 
-                let pos1 = initial_pos;
-                let new_drag_handler: DrawDragHandler = Box::new(move |this, new_cursor_pos| {
+                // Compute initial selection rectangle. `pos1` is fixed; `pos2`
+                // will change with the mouse cursor.
+                let (pos1, pos2) = match c {
+                    SelectDragCommand::NewRect => (initial_pos.clone(), initial_pos.clone()),
+                    SelectDragCommand::Resize { .. } => {
+                        if let Some(sel) = &self.selection {
+                            (
+                                // Farthest corner stays fixed.
+                                sel.rect.farthest_corner(&initial_pos),
+                                // Closest corner varies.
+                                sel.rect.closest_corner(&initial_pos),
+                            )
+                        } else {
+                            // Can't resize the selection if there is no
+                            // selection!
+                            return Ok(());
+                        }
+                    }
+                };
+
+                let mut moved = false;
+                let new_drag_handler: DragHandler<Self> = Box::new(move |this, new_cursor_pos| {
                     // TODO: DPI-aware mouse movement threshold before making
                     // new selection, then call drag handler before returning
                     // from do_select_command(), in case threshold=0
-                    let pos2 = this
+                    if !moved {
+                        if new_cursor_pos != cursor_start {
+                            moved = true;
+                        } else {
+                            // Give the user a chance to remove their selection
+                            // instead of making a new one.
+                            return Ok(true);
+                        }
+                    }
+
+                    let new_pos = this
                         .camera()
                         .cell_transform()
                         .pixel_to_global_cell(new_cursor_pos)
-                        .map(|pos| pos.floor().0);
-                    if let (Some(pos1), Some(pos2)) = (&pos1, &pos2) {
+                        .map(|pos| pos);
+                    if let Some(new_pos) = new_pos {
+                        let new_corner = match c {
+                            SelectDragCommand::NewRect => new_pos.floor().0,
+                            SelectDragCommand::Resize {
+                                x: resize_x,
+                                y: resize_y,
+                                ..
+                            } => {
+                                // Use delta from original cursor position to new
+                                // cursor position.
+                                let delta = new_pos - &initial_pos_fract;
+                                let mut new_corner = delta.round() + &pos2;
+
+                                // Only resize along certain axes.
+                                if !resize_x {
+                                    // Keep original X value.
+                                    new_corner[X] = pos2[X].clone();
+                                }
+                                if !resize_y {
+                                    // Keep original Y value.
+                                    new_corner[Y] = pos2[Y].clone();
+                                }
+
+                                new_corner
+                            }
+                        };
                         this.selection = Some(Selection2D {
-                            rect: BigRect::span(pos1.clone(), pos2.clone()),
+                            rect: BigRect::span(pos1.clone(), new_corner),
                             cells: None,
                         });
                     }
-                    Ok(())
+                    // Continue the drag.
+                    Ok(true)
                 });
 
                 if config.hist.record_select {
                     self.stop_running();
                     self.record();
                 }
-                self.deselect();
-                self.drag_handler = Some(new_drag_handler);
-            }
-
-            Drag::Continue { cursor_pos } => {
-                if let Some(mut h) = self.drag_handler.take() {
-                    h(self, cursor_pos)?;
-                    self.drag_handler = Some(h);
+                if let SelectDragCommand::NewRect = c {
+                    self.deselect();
                 }
-            }
-
-            Drag::Stop => {
-                self.common.is_drawing = false;
-                self.drag_handler = None;
+                self.drag_handler = Some(new_drag_handler);
             }
         }
         Ok(())
@@ -239,6 +277,39 @@ impl GridViewTrait for GridView2D {
         }
         Ok(())
     }
+    fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
+        let maybe_new_drag_handler = self
+            .camera_interpolator
+            .do_move_command(command, config)
+            .context("Executing move command")?
+            .map(|mut interpolator_drag_handler| {
+                Box::new(move |this: &mut Self, cursor_pos| {
+                    interpolator_drag_handler(&mut this.camera_interpolator, cursor_pos)
+                }) as DragHandler<Self>
+            });
+        if maybe_new_drag_handler.is_some() && self.drag_handler.is_none() {
+            self.drag_handler = maybe_new_drag_handler;
+            self.common.is_dragging_view = true;
+        }
+        Ok(())
+    }
+    fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()> {
+        if let Some(mut h) = self.drag_handler.take() {
+            let continue_drag = h(self, cursor_pos)?;
+            if continue_drag {
+                self.drag_handler = Some(h);
+            } else {
+                self.stop_drag()?;
+            }
+        }
+        Ok(())
+    }
+    fn stop_drag(&mut self) -> Result<()> {
+        self.drag_handler = None;
+        self.common.is_drawing = false;
+        self.common.is_dragging_view = false;
+        Ok(())
+    }
 
     fn enqueue_worker_request(&mut self, request: WorkerRequest) {
         match &request {
@@ -285,33 +356,16 @@ impl GridViewTrait for GridView2D {
     fn camera_interpolator(&mut self) -> &mut dyn Interpolate {
         &mut self.camera_interpolator
     }
-    fn cursor_pos(&self) -> Option<FVec2D> {
-        self.cursor_pos
-    }
-    fn render(
-        &mut self,
-        config: &Config,
-        target: &mut glium::Frame,
-        params: RenderParams,
-    ) -> Result<()> {
+    fn render(&mut self, params: RenderParams<'_>) -> Result<&RenderResult> {
+        let config = params.config;
+
         // Update DPI.
         self.camera_interpolator().set_dpi(config.gfx.dpi as f32);
 
         let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
         let node_cache = self.automaton.projected_cache().read();
-        let mut rip = RenderInProgress::new(self, &node_cache, &mut render_cache, target)?;
+        let mut rip = RenderInProgress::new(self, params, &node_cache, &mut render_cache)?;
         rip.draw_cells()?;
-
-        self.cursor_pos = params.cursor_pos;
-        let hover_pos = params
-            .cursor_pos
-            .and_then(|pos| rip.cell_transform().pixel_to_global_cell(pos));
-        // Only allow drawing at 1:1 or bigger.
-        let draw_pos = if self.camera().scale().log2_factor() >= 0.0 {
-            hover_pos.clone()
-        } else {
-            None
-        };
 
         // Draw gridlines.
         let gridlines_width = self
@@ -323,16 +377,25 @@ impl GridViewTrait for GridView2D {
             .unwrap_or(1.0);
         rip.draw_gridlines(gridlines_width)?;
         // Draw crosshairs.
-        if let Some(pos) = &draw_pos {
-            rip.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0)?;
+        match self.mouse().display {
+            MouseDisplay::Draw => {
+                if !self.too_small_to_draw() {
+                    rip.draw_hover_highlight(gridlines_width * 2.0, crate::colors::HOVERED_DRAW)?;
+                }
+            }
+            MouseDisplay::Select => {
+                rip.draw_hover_highlight(gridlines_width * 2.0, crate::colors::HOVERED_SELECT)?;
+            }
+            _ => (),
         }
         // Draw selection.
         if let Some(selection) = &self.selection {
-            rip.draw_green_selection_highlight(selection.rect.clone(), gridlines_width * 4.0)?;
+            rip.draw_selection_highlight(selection.rect.clone(), gridlines_width * 4.0)?;
         }
 
+        self.common.last_render_result = rip.finish();
         self.render_cache = Some(render_cache);
-        Ok(())
+        Ok(self.last_render_result())
     }
 }
 
@@ -346,7 +409,7 @@ impl GridView2D {
     pub fn hovered_cell_pos(&self) -> Option<FixedVec2D> {
         self.camera()
             .cell_transform()
-            .pixel_to_global_cell(self.cursor_pos?)
+            .pixel_to_global_cell(self.common.mouse.pos?)
     }
     /// Deselect all.
     pub fn deselect(&mut self) {
@@ -359,6 +422,12 @@ impl GridView2D {
             todo!("deselect with cells");
         }
         self.selection = None;
+    }
+
+    /// Returns `true` if the scale is too small to draw individual cells, or
+    /// `false` otherwise.
+    fn too_small_to_draw(&self) -> bool {
+        self.camera().scale() < Scale::from_factor(r64(1.0))
     }
 }
 

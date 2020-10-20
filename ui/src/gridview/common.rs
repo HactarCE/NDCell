@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use enum_dispatch::enum_dispatch;
 use log::{debug, trace, warn};
 use parking_lot::Mutex;
@@ -12,7 +12,7 @@ use super::camera::Interpolate;
 use super::history::History;
 use super::worker::WorkerRequest;
 use crate::commands::*;
-use crate::config::Config;
+use crate::config::{Config, MouseDisplay, MouseDragBinding};
 
 /// The number of render results to remember.
 const RENDER_RESULTS_COUNT: usize = 4;
@@ -20,13 +20,13 @@ const RENDER_RESULTS_COUNT: usize = 4;
 const MAX_LAST_SIM_TIMES: usize = 4;
 
 /// Shared fields common to all `GridView`s.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct GridViewCommon {
     /// Queue of pending commands to be executed on the next frame.
     pub command_queue: Mutex<Vec<Command>>,
 
-    /// Size of the pixel rectangle to render to.
-    pub last_target_size: (u32, u32),
+    /// State of the mouse cursor.
+    pub mouse: MouseState,
 
     /// Whether the simulation is currently running.
     pub is_running: bool,
@@ -49,27 +49,8 @@ pub struct GridViewCommon {
     pub last_frame_times: VecDeque<Instant>,
     /// The last several simulation times, with the most recent at the front.
     pub last_sim_times: VecDeque<Duration>,
-}
-impl Default for GridViewCommon {
-    fn default() -> Self {
-        Self {
-            command_queue: Default::default(),
-
-            // Initialize to something nonzero.
-            last_target_size: (100, 100),
-
-            is_running: Default::default(),
-            is_drawing: Default::default(),
-            is_dragging_view: Default::default(),
-
-            is_waiting: Default::default(),
-
-            gc_channel: Default::default(),
-
-            last_frame_times: Default::default(),
-            last_sim_times: Default::default(),
-        }
-    }
+    /// The most recent render result.
+    pub last_render_result: RenderResult,
 }
 
 /// Shared functionality for 2D and 3D gridviews.
@@ -87,17 +68,17 @@ pub trait GridViewTrait:
     /// Does all the frame things: executes commands, advances the simulation,
     /// etc.
     fn do_frame(&mut self, config: &Config) -> Result<()> {
+        // Interpolate camera.
+        let fps = self.fps(config);
+        let interpolation = config.ctrl.interpolation;
+        self.camera_interpolator().advance(fps, interpolation);
+
         // Execute commands.
         let old_command_queue =
             std::mem::replace(&mut *self.as_mut().command_queue.get_mut(), vec![]);
         for command in old_command_queue {
             self.do_command(command, config)?;
         }
-
-        // Interpolate camera.
-        let fps = self.fps(config);
-        let interpolation = config.ctrl.interpolation;
-        self.camera_interpolator().advance(fps, interpolation);
 
         // Trigger breakpoint.
         if self.is_running()
@@ -136,6 +117,9 @@ pub trait GridViewTrait:
             Command::Select(c) => self.do_select_command(c, config),
             Command::Clipboard(c) => self.do_clipboard_command(c, config),
             Command::GarbageCollect => Ok(self.schedule_gc()),
+
+            Command::ContinueDrag(cursor_pos) => self.continue_drag(cursor_pos),
+            Command::StopDrag => self.stop_drag(),
         }
     }
     /// Executes a `SimCommand`.
@@ -196,23 +180,17 @@ pub trait GridViewTrait:
         Ok(())
     }
     /// Executes a `Move` command.
-    fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
-        // if !matches!(command, ViewCommand::SnapPos | ViewCommand::SnapScale {..}) {
-        //     trace!("Executing {:?}", command);
-        // }
-
-        self.camera_interpolator()
-            .do_move_command(command, config)
-            .context("Executing move command")?;
-        self.as_mut().is_dragging_view = self.camera_interpolator().is_dragging();
-        Ok(())
-    }
+    fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()>;
     /// Executes a `Draw` command.
     fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()>;
     /// Executes a `Select` command.
     fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()>;
     /// Executes a `Clipboard` command.
     fn do_clipboard_command(&mut self, command: ClipboardCommand, config: &Config) -> Result<()>;
+    /// Executes a `ContinueDrag` command.
+    fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()>;
+    /// Executes a `StopDrag` command.
+    fn stop_drag(&mut self) -> Result<()>;
 
     /// Enqueues a request to the simulation worker thread(s).
     fn enqueue_worker_request(&mut self, request: WorkerRequest);
@@ -261,6 +239,15 @@ pub trait GridViewTrait:
     /// front.
     fn last_sim_times(&self) -> &VecDeque<Duration> {
         &self.as_ref().last_sim_times
+    }
+
+    /// Updates state relating to the mouse cursor.
+    fn update_mouse_state(&mut self, new_state: MouseState) {
+        self.as_mut().mouse = new_state;
+    }
+    /// Returns state relating to the mouse cursor.
+    fn mouse(&self) -> MouseState {
+        self.as_ref().mouse
     }
 
     /// Schedules garbage collection.
@@ -312,16 +299,12 @@ pub trait GridViewTrait:
         self.camera_interpolator()
             .update_target_dimensions(target_dimensions);
     }
-    /// Returns the pixel position of the mouse cursor from the top left of the
-    /// area where the gridview is being drawn.
-    fn cursor_pos(&self) -> Option<FVec2D>;
     /// Renders the gridview.
-    fn render(
-        &mut self,
-        config: &Config,
-        target: &mut glium::Frame,
-        params: RenderParams,
-    ) -> Result<()>;
+    fn render(&mut self, params: RenderParams<'_>) -> Result<&RenderResult>;
+    /// Returns data generated by the most recent render.
+    fn last_render_result(&self) -> &RenderResult {
+        &self.as_ref().last_render_result
+    }
 
     /// Returns the framerate measured between the last two frames, or the
     /// user-configured FPS if that fails.
@@ -338,9 +321,42 @@ pub trait GridViewTrait:
 }
 
 /// Parameters that may control the rendering process.
-#[derive(Debug, Default)]
-pub struct RenderParams {
+pub struct RenderParams<'a> {
+    /// Render target.
+    pub target: &'a mut glium::Frame,
+    /// User configuration.
+    pub config: &'a Config,
+}
+
+/// Extra data generated when rendering a frame.
+#[derive(Debug, Default, Clone)]
+pub struct RenderResult {
+    /// Target under the mouse cursor, if any.
+    pub mouse_target: Option<MouseTargetData>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct MouseTargetData {
+    /// Mouse binding for clicking the left mouse button over the target and
+    /// dragging.
+    pub binding: Option<MouseDragBinding>,
+    /// Display mode for the cursor when hovering over the target or clicking on
+    /// it and dragging.
+    pub display: MouseDisplay,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct MouseState {
     /// Pixel position of the mouse cursor from the top left of the area where
     /// the gridview is being drawn.
-    pub cursor_pos: Option<FVec2D>,
+    pub pos: Option<FVec2D>,
+
+    /// Whether a mouse button is being held and dragged.
+    pub dragging: bool,
+
+    /// What to display for the mouse cursor.
+    ///
+    /// This determines the mouse cursor icon and how/whether to indicate the
+    /// highlighted cell in the grid.
+    pub display: MouseDisplay,
 }

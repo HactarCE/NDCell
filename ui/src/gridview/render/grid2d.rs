@@ -31,14 +31,19 @@ use ndcell_core::prelude::*;
 
 use super::consts::*;
 use super::gl_quadtree::CachedGlQuadtree;
-use super::vertices::RgbaVertex;
+use super::picker::CachedMousePicker;
+use super::vertices::{MouseTargetVertex, RgbaVertex};
 use super::{ibos, shaders, textures, vbos};
+use crate::config::{MouseDisplay, MouseDragBinding};
 use crate::gridview::*;
 use crate::Scale;
 
 #[derive(Default)]
 pub struct RenderCache {
+    /// Texture that encodes a quadtree of visbile render cells.
     gl_quadtree: CachedGlQuadtree,
+    /// Pixel buffer object that tells which target the cursor is hovering over on.
+    picker: CachedMousePicker,
 }
 
 pub struct RenderInProgress<'a> {
@@ -46,6 +51,10 @@ pub struct RenderInProgress<'a> {
     camera: Camera2D,
     /// Target to render to.
     target: &'a mut glium::Frame,
+    /// User configuration.
+    config: &'a Config,
+    /// Mouse cursor state.
+    mouse: MouseState,
     /// Node layer of a render cell.
     render_cell_layer: Layer,
     /// Scale to draw render cells at.
@@ -58,6 +67,8 @@ pub struct RenderInProgress<'a> {
     /// = bottom left) to screen space ((-1, -1) = bottom left; (1, 1) = top
     /// right) and pixel space (1 unit = 1 pixel; (0, 0) = top left).
     transform: CellTransform2D,
+    /// Mouse targets, indexed by ID.
+    mouse_targets: Vec<MouseTargetData>,
     /// Cached render data maintained by the `GridView2D`.
     render_cache: &'a mut RenderCache,
 }
@@ -65,11 +76,14 @@ impl<'a> RenderInProgress<'a> {
     /// Creates a `RenderInProgress` for a gridview.
     pub fn new(
         g: &GridView2D,
+        RenderParams { target, config }: RenderParams<'a>,
         node_cache: &'a NodeCache<Dim2D>,
         render_cache: &'a mut RenderCache,
-        target: &'a mut glium::Frame,
     ) -> Result<Self> {
         target.clear_depth(0.0);
+        let p = render_cache.picker.at_size(target.get_dimensions());
+        p.make_fbo()
+            .clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 0.0);
 
         let camera = g.camera().clone();
 
@@ -126,16 +140,38 @@ impl<'a> RenderInProgress<'a> {
         // pixels.
         let transform = camera.cell_transform_with_base(visible_quadtree.offset.clone())?;
 
+        let mouse_targets = vec![];
+
         Ok(Self {
             camera,
             target,
+            config,
+            mouse: g.mouse(),
             render_cell_layer,
             render_cell_scale,
             visible_quadtree,
             visible_rect,
             transform,
+            mouse_targets,
             render_cache,
         })
+    }
+
+    /// Returns a `RenderResult` from this render.
+    pub fn finish(self) -> RenderResult {
+        RenderResult {
+            mouse_target: self
+                .mouse
+                .pos
+                // Convert mouse position to `u32`.
+                .and_then(|pos| pos[X].to_u32().zip(pos[Y].to_u32()))
+                // Get mouse target ID underneath cursor.
+                .map(|cursor_pos| self.render_cache.picker.unwrap().get_pixel(cursor_pos) as usize)
+                // Get mouse target using that ID (subtract 1 because 0 means no
+                // target).
+                .and_then(|i| self.mouse_targets.get(i.checked_sub(1)?))
+                .cloned(),
+        }
     }
 
     pub fn cell_transform(&self) -> &CellTransform2D {
@@ -226,7 +262,7 @@ impl<'a> RenderInProgress<'a> {
 
         while spacing > 0 && pixel_spacing > MIN_GRIDLINE_SPACING {
             // Compute grid color, including alpha.
-            let mut color = GRID_COLOR;
+            let mut color = crate::colors::GRIDLINES;
             let alpha = gridline_alpha(pixel_spacing, self.camera.scale()) as f32;
             color[3] *= alpha;
             // Draw gridlines with the given spacing.
@@ -254,29 +290,31 @@ impl<'a> RenderInProgress<'a> {
         Ok(())
     }
 
-    /// Draws a highlight around the given cell.
-    pub fn draw_blue_cursor_highlight(
-        &mut self,
-        cell_position: &BigVec2D,
-        width: f64,
-    ) -> Result<()> {
-        let cell_pos = cell_position - &self.visible_quadtree.offset;
-        let render_cell_pos = cell_pos.div_floor(&self.render_cell_layer.big_len());
+    /// Draws a highlight on the render cell under the mouse cursor.
+    pub fn draw_hover_highlight(&mut self, width: f64, color: [f32; 4]) -> Result<()> {
+        let mouse_pos = self.mouse.pos;
+        if let Some(global_cell_pos) =
+            mouse_pos.and_then(|pos| self.cell_transform().pixel_to_global_cell(pos))
+        {
+            let local_cell_pos = global_cell_pos.floor().0 - &self.visible_quadtree.offset;
+            let render_cell_pos = local_cell_pos.div_floor(&self.render_cell_layer.big_len());
 
-        self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-            IRect2D::single_cell(render_cell_pos.to_ivec()),
-            CURSOR_DEPTH,
-            width,
-            GRID_HIGHLIGHT_COLOR,
-            RectHighlightParams {
-                fill: true,
-                crosshairs: true,
-            },
-        ))
-        .context("Drawing cursor highlight")
+            self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
+                IRect2D::single_cell(render_cell_pos.to_ivec()),
+                CURSOR_DEPTH,
+                width,
+                color,
+                RectHighlightParams {
+                    fill: true,
+                    crosshairs: true,
+                },
+            ))
+            .context("Drawing cursor highlight")?;
+        }
+        Ok(())
     }
     /// Draws a highlight around the selected rectangle.
-    pub fn draw_green_selection_highlight(
+    pub fn draw_selection_highlight(
         &mut self,
         selection_rect: BigRect2D,
         width: f64,
@@ -287,13 +325,77 @@ impl<'a> RenderInProgress<'a> {
                 visible_selection_rect,
                 SELECTION_DEPTH,
                 width,
-                GRID_SELECT_COLOR,
+                crate::colors::SELECTION,
                 RectHighlightParams {
                     fill: true,
                     crosshairs: false,
                 },
             ))
-            .context("Drawing selection highlight")
+            .context("Drawing selection highlight")?;
+
+            let click_target_width = self.config.ctrl.selection_resize_drag_target_width
+                / self.render_cell_scale.factor().to_f64().unwrap();
+            let (min, max) = (
+                visible_selection_rect.min(),
+                visible_selection_rect.max() + 1,
+            );
+            let xs = vec![
+                r64(min[X] as f64 - click_target_width * 0.75),
+                r64(min[X] as f64 + click_target_width * 0.25),
+                r64(max[X] as f64 - click_target_width * 0.25),
+                r64(max[X] as f64 + click_target_width * 0.75),
+            ];
+            let ys = vec![
+                r64(min[Y] as f64 - click_target_width * 0.75),
+                r64(min[Y] as f64 + click_target_width * 0.25),
+                r64(max[Y] as f64 - click_target_width * 0.25),
+                r64(max[Y] as f64 + click_target_width * 0.75),
+            ];
+            let x_indices = vec![0, 1, 2, 0, 2, 0, 1, 2];
+            let y_indices = vec![0, 0, 0, 1, 1, 2, 2, 2];
+            let mouse_displays = vec![
+                MouseDisplay::ResizeNESW,
+                MouseDisplay::ResizeNS,
+                MouseDisplay::ResizeNWSE,
+                MouseDisplay::ResizeEW,
+                MouseDisplay::ResizeEW,
+                MouseDisplay::ResizeNWSE,
+                MouseDisplay::ResizeNS,
+                MouseDisplay::ResizeNESW,
+            ];
+            let mut verts = Vec::with_capacity(4 * 8);
+            for ((xi, yi), display) in x_indices.into_iter().zip(y_indices).zip(mouse_displays) {
+                let binding = Some(MouseDragBinding::Select(
+                    SelectDragCommand::Resize {
+                        x: xi != 1,
+                        y: yi != 1,
+                        z: false,
+                        plane: None,
+                    }
+                    .into(),
+                ));
+                verts.extend_from_slice(&self.add_mouse_target(
+                    FRect::span(NdVec([xs[xi], ys[yi]]), NdVec([xs[xi + 1], ys[yi + 1]])),
+                    MouseTargetData { binding, display },
+                ));
+            }
+            let vbo = vbos::mouse_target_verts();
+            let vbo_slice = vbo.slice(0..(4 * 8)).unwrap();
+            vbo_slice.write(&verts);
+            self.render_cache
+                .picker
+                .unwrap()
+                .make_fbo()
+                .draw(
+                    vbo_slice,
+                    &ibos::rect_indices(8),
+                    &shaders::PICKER,
+                    &uniform! { matrix: self.transform.gl_matrix() },
+                    &glium::DrawParameters::default(),
+                )
+                .context("Computing selection mouse targets")?;
+
+            Ok(())
         } else {
             Ok(())
         }
@@ -378,7 +480,7 @@ impl<'a> RenderInProgress<'a> {
                 vec![ay, by],
                 z - TINY_OFFSET,
                 width,
-                GRID_COLOR,
+                crate::colors::GRIDLINES,
             ));
         }
 
@@ -519,8 +621,8 @@ impl<'a> RenderInProgress<'a> {
 
     /// Draws a cell overlay.
     fn draw_cell_overlay_rects(&mut self, rects: &[CellOverlayRect]) -> Result<()> {
-        // Draw the gridlines in batches, because the VBO might not be able to
-        // hold all the points at once.
+        // Draw the rectangles in batches, because the VBO might not be able to
+        // hold all the vertices at once.
         for rect_batch in rects
             .into_iter()
             .chunks(CELL_OVERLAY_BATCH_SIZE)
@@ -534,15 +636,15 @@ impl<'a> RenderInProgress<'a> {
                 .flat_map(|&rect| rect.verts(self.render_cell_scale).to_vec())
                 .collect_vec();
             // Put the data in a slice of the VBO.
-            let gridlines_vbo = vbos::gridlines();
-            let vbo_slice = gridlines_vbo.slice(0..(4 * count)).unwrap();
+            let vbo = vbos::rgba_verts();
+            let vbo_slice = vbo.slice(0..(4 * count)).unwrap();
             vbo_slice.write(&verts);
-            // Draw gridlines.
+            // Draw rectangles.
             self.target
                 .draw(
                     vbo_slice,
                     &ibos::rect_indices(count),
-                    &shaders::POINTS,
+                    &shaders::RGBA,
                     &uniform! { matrix: self.transform.gl_matrix() },
                     &glium::DrawParameters {
                         blend: glium::Blend::alpha_blending(),
@@ -564,8 +666,8 @@ impl<'a> RenderInProgress<'a> {
         let (r, g, b) = if node.layer() == Layer(0) {
             let cell_state = node.as_leaf().unwrap().cells()[0];
             match cell_state {
-                0 => DEAD_COLOR,
-                1 => LIVE_COLOR,
+                0 => crate::colors::DEAD,
+                1 => crate::colors::LIVE,
                 i => colorous::TURBO
                     .eval_rational(257 - i as usize, 256)
                     .as_tuple(),
@@ -582,18 +684,48 @@ impl<'a> RenderInProgress<'a> {
                 // Bias so that 50% is the minimum brightness if there is any population.
                 (population_ratio / 2.0) + 0.5
             };
-            let r = ((LIVE_COLOR.0 as f64).powf(2.0) * ratio
-                + (DEAD_COLOR.0 as f64).powf(2.0) * (1.0 - ratio))
+            let r = ((crate::colors::LIVE.0 as f64).powf(2.0) * ratio
+                + (crate::colors::DEAD.0 as f64).powf(2.0) * (1.0 - ratio))
                 .powf(0.5);
-            let g = ((LIVE_COLOR.1 as f64).powf(2.0) * ratio
-                + (DEAD_COLOR.1 as f64).powf(2.0) * (1.0 - ratio))
+            let g = ((crate::colors::LIVE.1 as f64).powf(2.0) * ratio
+                + (crate::colors::DEAD.1 as f64).powf(2.0) * (1.0 - ratio))
                 .powf(0.5);
-            let b = ((LIVE_COLOR.2 as f64).powf(2.0) * ratio
-                + (DEAD_COLOR.2 as f64).powf(2.0) * (1.0 - ratio))
+            let b = ((crate::colors::LIVE.2 as f64).powf(2.0) * ratio
+                + (crate::colors::DEAD.2 as f64).powf(2.0) * (1.0 - ratio))
                 .powf(0.5);
             (r as u8, g as u8, b as u8)
         };
         [r, g, b, 255]
+    }
+
+    fn add_mouse_target(
+        &mut self,
+        cells: FRect2D,
+        data: MouseTargetData,
+    ) -> [MouseTargetVertex; 4] {
+        self.mouse_targets.push(data);
+        let target_id = self.mouse_targets.len() as u32; // IDs start at 1
+        let NdVec([x1, y1]) = cells.min();
+        let NdVec([x2, y2]) = cells.max();
+        let z = 0.0;
+        [
+            MouseTargetVertex {
+                pos: [x1.raw() as f32, y1.raw() as f32, z],
+                target_id,
+            },
+            MouseTargetVertex {
+                pos: [x2.raw() as f32, y1.raw() as f32, z],
+                target_id,
+            },
+            MouseTargetVertex {
+                pos: [x1.raw() as f32, y2.raw() as f32, z],
+                target_id,
+            },
+            MouseTargetVertex {
+                pos: [x2.raw() as f32, y2.raw() as f32, z],
+                target_id,
+            },
+        ]
     }
 }
 
@@ -632,7 +764,7 @@ fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: 
     min_result + (max_result - min_result) * progress
 }
 
-/// A simple rectangle in a cell overlay.
+/// Simple rectangle in a cell overlay.
 ///
 /// Because glLineWidth is not supported on all platforms, we draw rectangles to
 /// vary gridline width.

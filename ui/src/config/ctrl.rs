@@ -22,6 +22,8 @@ pub struct CtrlConfig {
     pub fwd_axis_3d: ForwardAxis3D,
 
     pub interpolation: Interpolation,
+
+    pub selection_resize_drag_target_width: f64,
 }
 impl Default for CtrlConfig {
     fn default() -> Self {
@@ -47,6 +49,8 @@ impl Default for CtrlConfig {
             fwd_axis_3d: ForwardAxis3D::default(),
 
             interpolation: Interpolation::default(),
+
+            selection_resize_drag_target_width: 8.0,
         }
     }
 }

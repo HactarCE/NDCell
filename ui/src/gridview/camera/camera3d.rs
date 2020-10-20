@@ -6,8 +6,8 @@ use log::warn;
 use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
-use super::{Camera, CameraDragHandler, CellTransform3D, Scale, MIN_TARGET_SIZE};
-use crate::commands::{Drag, ViewCommand, ViewDragAction};
+use super::{Camera, CellTransform3D, DragHandler, Scale, MIN_TARGET_SIZE};
+use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::config::{Config, ForwardAxis3D, UpAxis3D};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -244,13 +244,10 @@ impl Camera<Dim3D> for Camera3D {
         &mut self,
         command: ViewCommand,
         config: &Config,
-    ) -> Result<Option<CameraDragHandler<Self>>> {
+    ) -> Result<Option<DragHandler<Self>>> {
         match command {
-            ViewCommand::Drag(Drag::Start {
-                action,
-                cursor_start,
-            }) => match action {
-                ViewDragAction::Orbit => {
+            ViewCommand::Drag(c, cursor_start) => match c {
+                ViewDragCommand::Orbit => {
                     let orbit_factor = r64(config.ctrl.mouse_orbit_speed / config.gfx.dpi);
                     let old_yaw = self.yaw();
                     let old_pitch = self.pitch();
@@ -258,10 +255,11 @@ impl Camera<Dim3D> for Camera3D {
                         let delta = (cursor_start - cursor_end) * orbit_factor;
                         cam.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
                         cam.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
+                        Ok(true)
                     })))
                 }
 
-                ViewDragAction::Pan => {
+                ViewDragCommand::Pan => {
                     let z = Self::DISTANCE_TO_PIVOT;
                     let start = self.cell_transform().pixel_to_global_cell(cursor_start, z);
                     Ok(Some(Box::new(move |cam, cursor_end| {
@@ -269,15 +267,16 @@ impl Camera<Dim3D> for Camera3D {
                         if let (Some(start), Some(end)) = (&start, &end) {
                             cam.pivot += start - end;
                         }
+                        Ok(true)
                     })))
                 }
-                ViewDragAction::PanAligned => {
+                ViewDragCommand::PanAligned => {
                     todo!("pan aligned");
                 }
-                ViewDragAction::PanAlignedVertical => {
+                ViewDragCommand::PanAlignedVertical => {
                     todo!("pan aligned vertical");
                 }
-                ViewDragAction::PanHorizontal => {
+                ViewDragCommand::PanHorizontal => {
                     let y = self.pivot[Y].clone();
                     let start = self
                         .cell_transform()
@@ -289,13 +288,12 @@ impl Camera<Dim3D> for Camera3D {
                         if let (Some(start), Some(end)) = (&start, &end) {
                             cam.pivot += start - end;
                         }
+                        Ok(true)
                     })))
                 }
 
-                ViewDragAction::Scale => todo!("Scale using click & drag"),
+                ViewDragCommand::Scale => todo!("Scale using click & drag"),
             },
-            ViewCommand::Drag(Drag::Continue { .. }) => Ok(None),
-            ViewCommand::Drag(Drag::Stop) => Ok(None),
 
             ViewCommand::GoTo3D {
                 mut x,

@@ -9,6 +9,7 @@ mod transform;
 
 use crate::commands::ViewCommand;
 use crate::config::Config;
+use crate::gridview::DragHandler;
 use crate::Scale;
 pub use camera2d::Camera2D;
 pub use camera3d::Camera3D;
@@ -36,17 +37,8 @@ const PIXELS_PER_2X_SCALE: f64 = 400.0;
 /// This one is completely arbitrary.
 const ROT_DEGREES_PER_2X_SCALE: f64 = PIXELS_PER_2X_SCALE;
 
-/// Handler for mouse drag events, when the user starts dragging and called for
-/// each cursor movement until released.
-///
-/// It takes as input the current camera, which is mutated, the cell transform
-/// from the previous frame, and the current mouse cursor position. If any
-/// initial state or mouse cursor history is relevant, the closure must maintain
-/// this information.
-pub type CameraDragHandler<C> = Box<dyn FnMut(&mut C, FVec2D)>;
-
 /// Common functionality for 2D and 3D cameras.
-pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
+pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialEq {
     /// Returns the width and height of the viewport.
     fn target_dimensions(&self) -> (u32, u32);
     /// Sets the width and height of the viewport.
@@ -195,7 +187,7 @@ pub trait Camera<D: Dim>: std::fmt::Debug + Default + Clone + PartialEq {
         &mut self,
         command: ViewCommand,
         config: &Config,
-    ) -> Result<Option<CameraDragHandler<Self>>>;
+    ) -> Result<Option<DragHandler<Self>>>;
 }
 
 /// Returns the "average" scale between the two cameras, averaging scale

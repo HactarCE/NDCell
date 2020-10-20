@@ -35,8 +35,8 @@ pub struct RenderInProgress<'a> {
 impl<'a> RenderInProgress<'a> {
     pub fn new(
         g: &'a GridView3D,
+        RenderParams { target, config: _ }: RenderParams<'a>,
         _node_cache: &'a NodeCache<Dim3D>,
-        target: &'a mut glium::Frame,
     ) -> Result<Self> {
         target.clear_depth(f32::INFINITY);
         let camera = g.camera();
@@ -120,7 +120,7 @@ impl<'a> RenderInProgress<'a> {
             .draw(
                 &cube_vbo,
                 &cube_ibo,
-                &shaders::POINTS,
+                &shaders::RGBA,
                 &uniform! {
                     matrix: rainbow_cube_matrix,
                 },
@@ -142,7 +142,7 @@ impl<'a> RenderInProgress<'a> {
             .draw(
                 &cube_vbo,
                 &cube_ibo,
-                &shaders::POINTS,
+                &shaders::RGBA,
                 &uniform! {
                     matrix: selection_cube_matrix,
                 },

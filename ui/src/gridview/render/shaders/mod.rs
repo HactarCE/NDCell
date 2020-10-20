@@ -24,6 +24,7 @@ macro_rules! static_shader {
     };
 }
 
+static_shader!(PICKER    = { "picker",    140, srgb: false  });
 static_shader!(PIXMIX    = { "pixmix",    140, srgb: false });
 static_shader!(QUADTREE  = { "quadtree",  140, srgb: true  });
 static_shader!(RGBA      = { "rgba",      140, srgb: true  });

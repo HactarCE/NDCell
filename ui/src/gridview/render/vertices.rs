@@ -2,7 +2,7 @@
 
 use glium::implement_vertex;
 
-/// A vertex containing a 2D floating-point position and a 2D texture position.
+/// Vertex containing a 2D floating-point position and a 2D texture position.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct TexturePosVertex {
     pub src_coords: [f32; 2],
@@ -10,7 +10,7 @@ pub struct TexturePosVertex {
 }
 implement_vertex!(TexturePosVertex, src_coords, dest_coords);
 
-/// A vertex containing a 2D floating-point position and a 2D cell position.
+/// Vertex containing a 2D floating-point position and a 2D cell position.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct QuadtreePosVertex {
     pub cell_coords: [i32; 2],
@@ -18,7 +18,7 @@ pub struct QuadtreePosVertex {
 }
 implement_vertex!(QuadtreePosVertex, cell_coords, dest_coords);
 
-/// A vertex containing a 2D floating-point position and an RGBA color.
+/// Vertex containing a 3D floating-point position and an RGBA color.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct RgbaVertex {
     pub pos: [f32; 3],
@@ -37,3 +37,13 @@ impl From<([f32; 3], [f32; 4])> for RgbaVertex {
         Self { pos, color }
     }
 }
+
+/// Vertex containing a 3D floating-point position and an ID, for use with the
+/// pixel buffer object to map out regions that the mouse cursor can interact
+/// with.
+#[derive(Debug, Default, Copy, Clone)]
+pub struct MouseTargetVertex {
+    pub pos: [f32; 3],
+    pub target_id: u32,
+}
+implement_vertex!(MouseTargetVertex, pos, target_id);

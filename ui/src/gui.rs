@@ -155,25 +155,28 @@ pub fn show_gui() -> ! {
                 input_frame.finish();
 
                 // Prep imgui for rendering.
+                let imgui_has_mouse = imgui_io.want_capture_mouse;
                 let ui = imgui.frame();
                 main_window.build(&ui, &mut config, &gridview);
+
+                if !imgui_has_mouse {
+                    ui.set_mouse_cursor(input_state.mouse().display.cursor_icon());
+                }
 
                 let mut target = display.draw();
 
                 // Update the camera and run the simulation if necessary.
                 gridview.update_target_dimensions(target.get_dimensions());
+                gridview.update_mouse_state(input_state.mouse());
                 gridview.do_frame(&config).expect("Unhandled exception!");
 
                 if target.get_dimensions() != (0, 0) {
                     // Render the gridview.
                     gridview
-                        .render(
-                            &config,
-                            &mut target,
-                            RenderParams {
-                                cursor_pos: input_state.cursor_pos(),
-                            },
-                        )
+                        .render(RenderParams {
+                            target: &mut target,
+                            config: &config,
+                        })
                         .expect("Unhandled exception!");
 
                     // Render imgui.

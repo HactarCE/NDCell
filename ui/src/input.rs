@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 use ndcell_core::prelude::*;
 
 use crate::commands::*;
-use crate::config::{Config, MouseDragBinding};
-use crate::gridview::{GridView, GridViewTrait};
+use crate::config::{Config, MouseDisplay, MouseDragBinding};
+use crate::gridview::{GridView, GridViewTrait, MouseState};
 use crate::Scale;
 
 const SHIFT: ModifiersState = ModifiersState::SHIFT;
@@ -50,18 +50,11 @@ pub struct State {
     /// Set of pressed modifiers.
     modifiers: ModifiersState,
 
-    /// Drag handler for the left mouse button, if it is pressed and being
-    /// dragged.
-    lmb_drag_handler: Option<DragHandler>,
-    /// Drag handler for the right mouse button, if it is pressed and being
-    /// dragged.
-    rmb_drag_handler: Option<DragHandler>,
-    /// Drag handler for the middle mouse button, if it is pressed and being
-    /// dragged.
-    mmb_drag_handler: Option<DragHandler>,
+    /// Mouse button being pressed and dragged, if any.
+    dragging_button: Option<MouseButton>,
 
-    /// Current pixel position of the mouse cursor (relative to top left).
-    cursor_pos: Option<FVec2D>,
+    /// State of the mouse cursor.
+    mouse: MouseState,
 
     /// Cooldown until scale snap.
     scale_snap_cooldown: Option<Instant>,
@@ -74,17 +67,8 @@ pub struct State {
     window_position: Option<PhysicalPosition<i32>>,
 }
 impl State {
-    fn drag_handler(&mut self, button: MouseButton) -> Option<&mut Option<DragHandler>> {
-        match button {
-            MouseButton::Left => Some(&mut self.lmb_drag_handler),
-            MouseButton::Right => Some(&mut self.rmb_drag_handler),
-            MouseButton::Middle => Some(&mut self.mmb_drag_handler),
-            MouseButton::Other(_) => None,
-        }
-    }
-
-    pub fn cursor_pos(&self) -> Option<FVec2D> {
-        self.cursor_pos
+    pub fn mouse(&self) -> MouseState {
+        self.mouse
     }
 
     pub fn frame<'a>(
@@ -97,7 +81,7 @@ impl State {
         let has_keyboard = !imgui_io.want_capture_keyboard;
         let has_mouse = !imgui_io.want_capture_mouse;
         if !has_mouse {
-            self.cursor_pos = None;
+            self.mouse.pos = None;
         }
         FrameInProgress {
             state: self,
@@ -126,38 +110,6 @@ pub struct FrameInProgress<'a> {
     dpi: f64,
 }
 impl FrameInProgress<'_> {
-    #[must_use = "DragHandler must be used"]
-    fn start_drag<A: 'static, C: 'static + Into<Command>>(
-        gridview: &GridView,
-        command_constructor: fn(Drag<A>) -> C,
-        action: A,
-        cursor_start: FVec2D,
-    ) -> DragHandler {
-        gridview.enqueue(command_constructor(Drag::Start {
-            action,
-            cursor_start,
-        }));
-        DragHandler {
-            continue_command: Box::new(move |cursor_pos| {
-                command_constructor(Drag::Continue { cursor_pos }).into()
-            }),
-            stop_command: command_constructor(Drag::Stop).into(),
-        }
-    }
-    fn update_drag(
-        gridview: &GridView,
-        drag_handler: &mut Option<DragHandler>,
-        cursor_pos: Option<FVec2D>,
-    ) {
-        if let Some(h) = drag_handler {
-            if let Some(pos) = cursor_pos {
-                gridview.enqueue((h.continue_command)(pos));
-            } else {
-                gridview.enqueue(h.stop_command.clone());
-                *drag_handler = None;
-            }
-        }
-    }
     pub fn handle_event(&mut self, ev: &Event<'_, ()>) {
         match ev {
             // Handle WindowEvents.
@@ -173,30 +125,18 @@ impl FrameInProgress<'_> {
                         self.state.modifiers = *new_modifiers;
                     }
                     WindowEvent::CursorLeft { .. } => {
-                        self.state.cursor_pos = None;
+                        self.state.mouse.pos = None;
                     }
                     WindowEvent::CursorMoved {
                         position: PhysicalPosition { x, y },
                         ..
                     } => {
-                        self.state.cursor_pos = None;
+                        self.state.mouse.pos = None;
                         if self.has_mouse {
                             if let (Some(x), Some(y)) = (R64::try_new(*x), R64::try_new(*y)) {
-                                self.state.cursor_pos = Some(NdVec([x, y]));
+                                self.state.mouse.pos = Some(NdVec([x, y]));
                             }
                         }
-
-                        let gv = self.gridview;
-                        let pos = self.state.cursor_pos;
-                        // Update in this order so that panning happens before
-                        // drawing; panning is generally assigned to middle or
-                        // right mouse buttons, while drawing is generally
-                        // assigned to the left mouse button. This is obviously
-                        // a hack, but it's an easy workaround for a
-                        // low-priority bug (panning quickly while drawing).
-                        Self::update_drag(gv, &mut self.state.mmb_drag_handler, pos);
-                        Self::update_drag(gv, &mut self.state.rmb_drag_handler, pos);
-                        Self::update_drag(gv, &mut self.state.lmb_drag_handler, pos);
                     }
                     WindowEvent::MouseWheel { delta, .. } if self.has_mouse => {
                         let (_dx, dy) = match delta {
@@ -223,58 +163,14 @@ impl FrameInProgress<'_> {
                         };
                         self.gridview.enqueue(ViewCommand::Scale {
                             log2_factor: dy * speed,
-                            invariant_pos: self.state.cursor_pos,
+                            invariant_pos: self.state.mouse.pos,
                         });
                         self.state.scale_snap_cooldown = Some(Instant::now() + SCALE_SNAP_COOLDOWN);
                     }
-                    WindowEvent::MouseInput { button, state, .. } => {
-                        let ndim = self.gridview.ndim();
-                        let mods = self.state.modifiers;
-                        let cursor_pos = self.state.cursor_pos();
-
-                        if let Some(drag_handler) = self.state.drag_handler(*button) {
-                            match state {
-                                ElementState::Pressed => {
-                                    if let Some(cursor_start) = cursor_pos {
-                                        let (_click_action, drag_action) = self
-                                            .config
-                                            .keys
-                                            .get_mouse_bindings(ndim, mods, *button);
-
-                                        if let Some(a) = drag_action {
-                                            *drag_handler = Some(match a {
-                                                MouseDragBinding::View(action) => Self::start_drag(
-                                                    self.gridview,
-                                                    ViewCommand::Drag,
-                                                    action,
-                                                    cursor_start,
-                                                ),
-                                                MouseDragBinding::Draw(action) => Self::start_drag(
-                                                    self.gridview,
-                                                    DrawCommand,
-                                                    (action, 1_u8),
-                                                    cursor_start,
-                                                ),
-                                                MouseDragBinding::Select(action) => {
-                                                    Self::start_drag(
-                                                        self.gridview,
-                                                        SelectCommand,
-                                                        action,
-                                                        cursor_start,
-                                                    )
-                                                }
-                                            });
-                                        }
-                                    }
-                                }
-                                ElementState::Released => {
-                                    if let Some(h) = drag_handler.take() {
-                                        self.gridview.enqueue(h.stop_command);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    WindowEvent::MouseInput { button, state, .. } => match state {
+                        ElementState::Pressed => self.handle_mouse_press(*button),
+                        ElementState::Released => self.handle_mouse_release(*button),
+                    },
 
                     // Ignore other `WindowEvent`s.
                     _ => (),
@@ -380,8 +276,90 @@ impl FrameInProgress<'_> {
         }
     }
 
+    fn handle_mouse_press(&mut self, button: MouseButton) {
+        // Ignore mouse press if we are already dragging.
+        if self.state.dragging_button.is_some() {
+            return;
+        }
+
+        // Ignore mouse press if we don't own the mouse cursor.
+        let cursor_pos = match self.state.mouse.pos {
+            Some(pos) => pos,
+            None => return,
+        };
+
+        let ndim = self.gridview.ndim();
+        let mods = self.state.modifiers;
+        let (click_binding, drag_binding) = self.config.mouse.get_bindings(ndim, mods, button);
+
+        if let Some(mouse_target_data) = &self.gridview.last_render_result().mouse_target {
+            // Ignore all but left mouse button.
+            if button != MouseButton::Left {
+                return;
+            }
+            // Possibility #1: Drag mouse target
+            if let Some(binding) = &mouse_target_data.binding {
+                self.state.dragging_button = Some(button);
+                self.state.mouse.display = mouse_target_data.display;
+                self.gridview.enqueue(match binding {
+                    MouseDragBinding::Draw(b) => b.to_command(cursor_pos, 1_u8),
+                    MouseDragBinding::Select(b) => b.to_command(cursor_pos),
+                    MouseDragBinding::View(b) => b.to_command(cursor_pos),
+                });
+            }
+        } else if let Some(binding) = click_binding {
+            // Possibility #2: Click
+            match binding {
+                // If mouse click bindings are ever implemented, they will
+                // need to be handled here.
+                _ => unimplemented!("Mouse click bindings are not implemented"),
+            }
+        } else if let Some(binding) = drag_binding {
+            // Possibility #3: Drag
+            self.state.dragging_button = Some(button);
+            self.state.mouse.display = binding.display();
+            self.gridview.enqueue(match binding {
+                MouseDragBinding::Draw(b) => b.to_command(cursor_pos, 1_u8),
+                MouseDragBinding::Select(b) => b.to_command(cursor_pos),
+                MouseDragBinding::View(b) => b.to_command(cursor_pos),
+            })
+        }
+    }
+    fn handle_mouse_release(&mut self, button: MouseButton) {
+        if self.state.dragging_button == Some(button) {
+            self.gridview.enqueue(Command::StopDrag);
+            self.state.dragging_button = None;
+        }
+    }
+
+    fn update_mouse_state(&mut self) {
+        self.state.mouse.dragging = self.state.dragging_button.is_some();
+
+        if !self.state.mouse.dragging {
+            let (click_binding, drag_binding) = self.config.mouse.get_bindings(
+                self.gridview.ndim(),
+                self.state.modifiers,
+                MouseButton::Left,
+            );
+            if let Some(mouse_target_data) = &self.gridview.last_render_result().mouse_target {
+                self.state.mouse.display = mouse_target_data.display;
+            } else {
+                self.state.mouse.display = None
+                    .or(click_binding.as_ref().map(|b| b.display()))
+                    .or(drag_binding.as_ref().map(|b| b.display()))
+                    .unwrap_or(MouseDisplay::Normal);
+            }
+        }
+    }
+
     pub fn finish(mut self) {
+        self.update_mouse_state();
+
+        // Update DPI in config.
+
         self.config.gfx.dpi = self.dpi;
+
+        // Move the viewport in one step.
 
         let mut moved = false;
         let mut scaled = false;
@@ -498,6 +476,17 @@ impl FrameInProgress<'_> {
             self.gridview.enqueue(ViewCommand::SnapScale {
                 invariant_pos: None,
             });
+        }
+
+        // Send mouse drag command, if dragging.
+
+        if self.state.dragging_button.is_some() {
+            if let Some(pos) = self.state.mouse.pos {
+                self.gridview.enqueue(Command::ContinueDrag(pos));
+            } else {
+                self.gridview.enqueue(Command::StopDrag);
+                self.state.dragging_button = None;
+            }
         }
     }
 }

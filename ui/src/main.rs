@@ -22,6 +22,7 @@ use std::sync::Arc;
 use ndcell_core::prelude::{Dim2D, Rule};
 
 mod clipboard_compat;
+mod colors;
 mod commands;
 mod config;
 mod gridview;

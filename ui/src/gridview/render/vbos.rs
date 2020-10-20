@@ -22,7 +22,8 @@ fn empty_static_vbo<T: glium::Vertex>(size: usize) -> StaticVbo<T> {
 lazy_static! {
     static ref QUADTREE_QUAD: StaticVbo<QuadtreePosVertex> = empty_static_vbo(4);
     static ref BLIT_QUAD: StaticVbo<TexturePosVertex> = empty_static_vbo(4);
-    static ref GRIDLINES: StaticVbo<RgbaVertex> = empty_static_vbo(4 * CELL_OVERLAY_BATCH_SIZE);
+    static ref RGBA_VERTS: StaticVbo<RgbaVertex> = empty_static_vbo(4 * CELL_OVERLAY_BATCH_SIZE);
+    static ref MOUSE_TARGET_VERTS: StaticVbo<MouseTargetVertex> = empty_static_vbo(4 * 8);
 }
 
 pub fn quadtree_quad<'a>() -> RefMut<'a, VertexBuffer<QuadtreePosVertex>> {
@@ -91,6 +92,10 @@ pub fn blit_quad_with_src_coords<'a>(rect: FRect2D) -> RefMut<'a, VertexBuffer<T
     ret
 }
 
-pub fn gridlines<'a>() -> RefMut<'a, VertexBuffer<RgbaVertex>> {
-    GRIDLINES.borrow_mut()
+pub fn rgba_verts<'a>() -> RefMut<'a, VertexBuffer<RgbaVertex>> {
+    RGBA_VERTS.borrow_mut()
+}
+
+pub fn mouse_target_verts<'a>() -> RefMut<'a, VertexBuffer<MouseTargetVertex>> {
+    MOUSE_TARGET_VERTS.borrow_mut()
 }

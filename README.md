@@ -85,20 +85,30 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 ## What works right now
 
 - **Edit and simulate Conway's Game of Life on an infinite grid using HashLife**
+- **Custom rules** written in NDCA, a custom JIT-compiled programming language. Documentation in progress at [ndcell.rtfd.io][NDCA docs].
+- **Undo history**
+  - Undo with <kbd>Ctrl</kbd>+<kbd>Z</kbd>
+  - Redo with <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
+- **Import/export**
+  - Copy RLE with <kbd>Ctrl</kbd>+<kbd>C</kbd>
+  - Paste RLE with <kbd>Ctrl</kbd>+<kbd>V</kbd>
+- **Freeform drawing**
+  - Toggle cells with left click
+  - Select a cell state using <kbd>0</kbd>-<kbd>9</kbd>
+  - Cycle selected cell state using <kbd>[</kbd>/<kbd>]</kbd>
+- **Rectangular selection**
+  - Select with left click while holding <kbd>Ctrl</kbd>
+  - Resize the selection with the left click while holding <kbd>Ctrl</kbd>+<kbd>Shift</kbd>, or by dragging the edges of the selection
+- **Navigation**
   - Pan with arrow keys, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right mouse button (hold <kbd>Shift</kbd> to go faster)
   - Zoom with scroll wheel or <kbd>Q</kbd>/<kbd>Z</kbd> (hold <kbd>Shift</kbd> to go faster)
-  - Toggle cells with left click
+- **Simulation**
   - Step 1 generation with <kbd>Space</kbd>
   - Step N generations with <kbd>Tab</kbd>
   - Run continuously with <kbd>Enter</kbd>
   - Set step size
-  - Double/halve step size with <kbd>+</kbd>/<kbd>-</kbd>
+    - Double/halve step size with <kbd>+</kbd>/<kbd>-</kbd>
   - Set breakpoint
-- **Custom rules** written in NDCA, a custom JIT-compiled programming language. Documentation in progress at [ndcell.rtfd.io][NDCA docs].
-  - Select a cell state using <kbd>0</kbd>-<kbd>9</kbd>
-  - Cycle selected cell state using <kbd>[</kbd>/<kbd>]</kbd>
-- **Undo/redo** with <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
-- **Copy/paste RLE** with <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>
 
 ## What's planned for the future
 

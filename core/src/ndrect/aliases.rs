@@ -2,9 +2,7 @@
 
 use super::NdRect;
 use crate::dim::*;
-use crate::num::{BigInt, R64};
-
-// TODO: add FixedPoint aliases
+use crate::num::{BigInt, FixedPoint, R64};
 
 /// 1D hyperrectangle (linear range) with coordinates of type `N`.
 pub type Rect1D<N> = NdRect<Dim1D, N>;
@@ -21,14 +19,14 @@ pub type Rect6D<N> = NdRect<Dim6D, N>;
 
 /// N-dimensional hyperrectangle with `BigInt` coordinates.
 pub type BigRect<D> = NdRect<D, BigInt>;
+/// N-dimensional hyperrectangle with `FixedPoint` coordinates.
+pub type FixedRect<D> = NdRect<D, FixedPoint>;
 /// N-dimensional hyperrectangle with `R64` coordinates.
 pub type FRect<D> = NdRect<D, R64>;
 /// N-dimensional hyperrectangle with `isize` coordinates.
 pub type IRect<D> = NdRect<D, isize>;
 /// N-dimensional hyperrectangle with `usize` coordinates.
 pub type URect<D> = NdRect<D, usize>;
-/// N-dimensional hyperrectangle with `u8` coordinates.
-pub type ByteRect<D> = NdRect<D, u8>;
 
 /// 1D hyperrectangle (linear range) with `BigInt` coordinates.
 pub type BigRect1D = BigRect<Dim1D>;
@@ -42,6 +40,19 @@ pub type BigRect4D = BigRect<Dim4D>;
 pub type BigRect5D = BigRect<Dim5D>;
 /// 6D hyperrectangle with `BigInt` coordinates.
 pub type BigRect6D = BigRect<Dim6D>;
+
+/// 1D hyperrectangle (linear range) with `FixedPoint` coordinates.
+pub type FixedRect1D = FixedRect<Dim1D>;
+/// 2D hyperrectangle (rectangle) with `FixedPoint` coordinates.
+pub type FixedRect2D = FixedRect<Dim2D>;
+/// 3D hyperrectangle (rectangular prism) with `FixedPoint` coordinates.
+pub type FixedRect3D = FixedRect<Dim3D>;
+/// 4D hyperrectangle (rectangular duoprism) with `FixedPoint` coordinates.
+pub type FixedRect4D = FixedRect<Dim4D>;
+/// 5D hyperrectangle with `FixedPoint` coordinates.
+pub type FixedRect5D = FixedRect<Dim5D>;
+/// 6D hyperrectangle with `FixedPoint` coordinates.
+pub type FixedRect6D = FixedRect<Dim6D>;
 
 /// 1D hyperrectangle (linear range) with `R64` coordinates.
 pub type FRect1D = FRect<Dim1D>;
@@ -81,16 +92,3 @@ pub type URect4D = URect<Dim4D>;
 pub type URect5D = URect<Dim5D>;
 /// 6D hyperrectangle with `usize` coordinates.
 pub type URect6D = URect<Dim6D>;
-
-/// 1D hyperrectangle (linear range) with `u8` coordinates.
-pub type ByteRect1D = ByteRect<Dim1D>;
-/// 2D hyperrectangle (rectangle) with `u8` coordinates.
-pub type ByteRect2D = ByteRect<Dim2D>;
-/// 3D hyperrectangle (rectangular prism) with `u8` coordinates.
-pub type ByteRect3D = ByteRect<Dim3D>;
-/// 4D hyperrectangle (rectangular duoprism) with `u8` coordinates.
-pub type ByteRect4D = ByteRect<Dim4D>;
-/// 5D hyperrectangle with `u8` coordinates.
-pub type ByteRect5D = ByteRect<Dim5D>;
-/// 6D hyperrectangle with `u8` coordinates.
-pub type ByteRect6D = ByteRect<Dim6D>;

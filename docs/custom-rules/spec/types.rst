@@ -42,9 +42,9 @@ Basic types
 
   Example vector types:
 
-  * ``Vector1``
-  * ``Vector3``
-  * ``Vector256``
+  - ``Vector1``
+  - ``Vector3``
+  - ``Vector256``
 
 ### Vector arithmetic
 

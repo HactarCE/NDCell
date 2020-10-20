@@ -6,13 +6,13 @@ Syntax
 
 Like Lua and most C-family programming languages:
 
-* :ref:`Code blocks <code-block>` begin with ``{`` and end with ``}``
-* Line comments begin with ``//`` and end with a newline
-* Block comments begin with ``/*`` and end with ``*/`` (and cannot be nested)
-* All whitespace is equivalent, used to separate tokens, with the following exceptions:
+- :ref:`Code blocks <code-block>` begin with ``{`` and end with ``}``
+- Line comments begin with ``//`` and end with a newline
+- Block comments begin with ``/*`` and end with ``*/`` (and cannot be nested)
+- All whitespace is equivalent, used to separate tokens, with the following exceptions:
 
-  * Strings, where whitespace is interpreted literally
-  * Line comments, where only a newline ends a line comment
+  - Strings, where whitespace is interpreted literally
+  - Line comments, where only a newline ends a line comment
 
 Unless you really care about formalism, you're better off reading the :ref:`examples <examples>` to get a jist of the syntax.
 
@@ -23,22 +23,22 @@ Tokens
 
 The file is split into tokens, where each token is one of the following:
 
-* Line comment beginning with ``//`` and ending with the next newline
-* Block comment beginning with ``/*`` and ending with the next ``*/``
-* String beginning and ending with ``"``  (may contain any character except ``"``)
-* String beginning and ending with ``'`` (may contain any character except ``'``)
-* Number with a decimal point, matching the `regex`_ ``-?\d?\.\d+`` (currently unused)
-* Number without a decimal point, matching the `regex`_ ``-?\d+``
-* Identifier, matching the `regex`_ ``[A-Za-z_][A-Za-z_\d]*``
-* Tag name, consisting of ``#`` followed immediately by an identifier (no space)
-* Directive name, consisting of ``@`` followed immediately by an identifier (no space)
-* One of the following literal character sequences:
+- Line comment beginning with ``//`` and ending with the next newline
+- Block comment beginning with ``/*`` and ending with the next ``*/``
+- String beginning and ending with ``"``  (may contain any character except ``"``)
+- String beginning and ending with ``'`` (may contain any character except ``'``)
+- Number with a decimal point, matching the `regex`_ ``-?\d?\.\d+`` (currently unused)
+- Number without a decimal point, matching the `regex`_ ``-?\d+``
+- Identifier, matching the `regex`_ ``[A-Za-z_][A-Za-z_\d]*``
+- Tag name, consisting of ``#`` followed immediately by an identifier (no space)
+- Directive name, consisting of ``@`` followed immediately by an identifier (no space)
+- One of the following literal character sequences:
 
-  * Assignment operator `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `**=`, `<<=`, `>>=`, or `>>>=`
-  * Operator `..`, `**`, `<<`, `>>`, or `>>>`
-  * Relational operator `==`, `!=`, `<=`, or `>=`
+  - Assignment operator `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `**=`, `<<=`, `>>=`, or `>>>=`
+  - Operator `..`, `**`, `<<`, `>>`, or `>>>`
+  - Relational operator `==`, `!=`, `<=`, or `>=`
 
-* Any other single Unicode character from the letter, numeral, punctuation, or symbol categories. (See `Unicode Character Categories`__.)
+- Any other single Unicode character from the letter, numeral, punctuation, or symbol categories. (See `Unicode Character Categories`__.)
 
 __ https://www.compart.com/en/unicode/category
 

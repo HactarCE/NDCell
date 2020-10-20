@@ -23,9 +23,9 @@ The first build may take ~10 minutes or more. Remove `--release` to disable opti
 
 What you'll need:
 
-* Rustup
-* CMake
-* Visual Studio + Visual Studio Build Tools
+- Rustup
+- CMake
+- Visual Studio + Visual Studio Build Tools
 
 Visual Studio is optional if you do not want to build LLVM from source, but the Visual Studio Build Tools are required.
 

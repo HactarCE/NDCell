@@ -17,7 +17,7 @@ __ https://www.lua.org/
 
 NDCA takes inspiration from the following sources:
 
-* **Rust** — basic syntax and static typing with inference
-* **GLSL** — first-class vectors and user code designed to run in parallel, processing a vast amount of data in small chunks
-* **Golly rule tables** — symmetry, ``@directive`` syntax, and pattern matching
-* **Java** — `>>>` logical right-shift operator
+- **Rust** — basic syntax and static typing with inference
+- **GLSL** — first-class vectors and user code designed to run in parallel, processing a vast amount of data in small chunks
+- **Golly rule tables** — symmetry, ``@directive`` syntax, and pattern matching
+- **Java** — `>>>` logical right-shift operator

@@ -61,7 +61,7 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
     - [ ] RLE loading
     - [ ] Compile error from custom rule
     - [ ] Runtime error from custom rule
-  - [ ] Rectangular selection
+  - [x] Rectangular selection
   - [ ] Copy/paste selection
   - [ ] Rotate/reflect selection
   - [ ] Simulate in selection

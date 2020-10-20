@@ -121,7 +121,11 @@ impl GridViewTrait for GridView2D {
                             Ok(true)
                         })
                     }
-                    DrawShape::Line => todo!(),
+                    DrawShape::Line => {
+                        // TODO: implement drawing straight line
+                        warn!("Line drawing is not yet implemented!");
+                        return Ok(());
+                    }
                 };
 
                 self.stop_running();

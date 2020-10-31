@@ -16,7 +16,7 @@ use super::{
     ShardedBoxedSet,
 };
 use crate::dim::Dim;
-use crate::ndvec::BigVec;
+use crate::ndvec::{BigVec, UVec};
 
 /// Cache of ND-tree nodes for a single simulation.
 pub struct NodeCache<D: Dim> {
@@ -302,6 +302,41 @@ impl<D: Dim> NodeCache<D> {
                     .unwrap()
                     .map(|subcube| self.get_from_cells(subcube)),
             )
+        }
+    }
+
+    /// Creates a node by evaluating `generator` for each cell. Cells may be
+    /// generated out of order. This is not recommended for large nodes.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if the size of the node does not fit in a `usize`.
+    pub fn get_from_fn<'cache>(
+        &'cache self,
+        layer: Layer,
+        mut generator: impl FnMut(UVec<D>) -> u8,
+    ) -> NodeRef<'cache, D> {
+        self._get_from_fn(UVec::origin(), layer, &mut generator)
+    }
+    fn _get_from_fn<'cache>(
+        &'cache self,
+        offset: UVec<D>,
+        layer: Layer,
+        generator: &mut impl FnMut(UVec<D>) -> u8,
+    ) -> NodeRef<'cache, D> {
+        if layer.is_leaf::<D>() {
+            let rect = layer
+                .rect()
+                .expect("Cannot construct a node at {:?} from individual cells");
+            self.get_from_cells((rect + offset).iter().map(generator).collect_vec())
+        } else {
+            self.join_nodes((0..D::BRANCHING_FACTOR).map(|index| {
+                self._get_from_fn(
+                    offset.clone() + layer.big_child_offset(index).to_uvec(),
+                    layer.child_layer(),
+                    generator,
+                )
+            }))
         }
     }
 

@@ -48,3 +48,43 @@ fn test_ndtree_node_set_get() {
         assert_eq!(cell, node.set_cell(&pos, cell).cell_at_pos(&pos));
     }
 }
+
+#[test]
+fn test_ndtree_node_recursive_modify() {
+    let _node_cache = NodeCache::<Dim2D>::new();
+    let node_cache = _node_cache.read();
+    let mut node = node_cache.get_from_fn(TEST_LAYER, cell_state_from_hash);
+
+    let rect = NdRect::span(NdVec::big([-10, 4]), NdVec::big([7, 30]));
+    // Remove cells outside of the rectangle.
+    node = node.recursive_modify(
+        |offset, node| {
+            let self_rect = node.big_rect() + offset;
+            if !rect.intersects(&self_rect) {
+                Some(node.cache().get_empty(node.layer()))
+            } else if rect.contains(&self_rect) {
+                Some(node)
+            } else {
+                None
+            }
+        },
+        |pos, cell| {
+            if rect.contains(pos) {
+                cell
+            } else {
+                0_u8
+            }
+        },
+    );
+
+    for pos in &node.big_rect() {
+        if rect.contains(&pos) {
+            if rect.contains(&pos) {
+                let cell = cell_state_from_hash(pos.to_uvec());
+                assert_eq!(cell, node.cell_at_pos(&pos));
+            } else {
+                assert_eq!(0_u8, node.cell_at_pos(&pos));
+            }
+        }
+    }
+}

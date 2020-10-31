@@ -192,6 +192,64 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
         }
         ret
     }
+
+    /// Generates a new node from this one by calling one of the given closures
+    /// on its children, recursing if the closure returns `None`. All coordinate
+    /// values are with respect to the original root node.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if `modify_node` returns a node at a different layer
+    /// from the one passed into it.
+    fn recursive_modify(
+        self,
+        mut modify_node: impl FnMut(
+            &BigVec<Self::D>,
+            NodeRef<'cache, Self::D>,
+        ) -> Option<NodeRef<'cache, Self::D>>,
+        mut modify_cell: impl FnMut(&BigVec<Self::D>, u8) -> u8,
+    ) -> NodeRef<'cache, Self::D> {
+        self.recursive_modify_with_offset(&BigVec::origin(), &mut modify_node, &mut modify_cell)
+    }
+    /// Same as `recursive_modify()`, but `offset` is added to all coordinate
+    /// values before being passed to either closure.
+    fn recursive_modify_with_offset(
+        self,
+        offset: &BigVec<Self::D>,
+        modify_node: &mut impl FnMut(
+            &BigVec<Self::D>,
+            NodeRef<'cache, Self::D>,
+        ) -> Option<NodeRef<'cache, Self::D>>,
+        modify_cell: &mut impl FnMut(&BigVec<Self::D>, u8) -> u8,
+    ) -> NodeRef<'cache, Self::D> {
+        match self.as_enum() {
+            NodeRefEnum::Leaf(node) => self.cache().get_from_cells(
+                node.cells_with_positions()
+                    .map(|(pos, cell)| modify_cell(&(pos.to_bigvec() + offset), cell))
+                    .collect_vec(),
+            ),
+            NodeRefEnum::NonLeaf(node) => {
+                self.cache()
+                    .join_nodes(node.children().enumerate().map(|(index, old_child)| {
+                        let child_offset = self.layer().big_child_offset(index) + offset;
+                        let new_child =
+                            modify_node(&child_offset, old_child).unwrap_or_else(|| {
+                                old_child.recursive_modify_with_offset(
+                                    &child_offset,
+                                    modify_node,
+                                    modify_cell,
+                                )
+                            });
+                        assert_eq!(
+                            old_child.layer(),
+                            new_child.layer(),
+                            "Invalid layer for node in recursive_modify_with_offset()",
+                        );
+                        new_child
+                    }))
+            }
+        }
+    }
 }
 
 /// Enumeration of references to leaf or non-leaf nodes.

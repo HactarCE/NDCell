@@ -1,12 +1,15 @@
 //! References to nodes in a cache.
 
+use itertools::{Either, Itertools};
+use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::Ordering::Relaxed;
 
 use super::{Layer, NodeCache, RawNode, SimCacheGuard};
+use crate::axis::Axis;
 use crate::dim::Dim;
-use crate::ndrect::{BigRect, URect};
+use crate::ndrect::{BigRect, CanContain, URect};
 use crate::ndvec::{BigVec, UVec};
 use crate::num::{BigInt, BigUint};
 
@@ -249,6 +252,60 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
                     }))
             }
         }
+    }
+
+    /// Returns `true` if all cells in the node within the rectangle are state
+    /// #0. Returns `false` if the rectangle does not intersect the node
+    fn rect_is_empty(self, rect: &BigRect<Self::D>) -> bool {
+        // Are there even any cells in `self` at all?
+        if self.is_empty() {
+            return true;
+        }
+
+        // Is `self` entirely outside of `rect`?
+        let self_rect = self.big_rect();
+        let rect = match self_rect.intersection(rect) {
+            Some(r) => r,
+            None => return true,
+        };
+
+        // Is `self` entirely included in `rect`?
+        if rect == self_rect {
+            // We already checked that `self` is non-empty.
+            return false;
+        }
+
+        match self.as_enum() {
+            // Check cells individually.
+            NodeRefEnum::Leaf(node) => {
+                // The rectangle is empty if all cells are #0. It is safe to
+                // convert to `URect` because this is a leaf node and `rect` is
+                // restricted to the bounds of `self`.
+                rect.to_urect()
+                    .iter()
+                    .all(|pos| node.leaf_cell_at_pos(pos) == 0_u8)
+            }
+            // Delegate to children.
+            NodeRefEnum::NonLeaf(node) => {
+                // The rectangle is empty if it is empty in all children.
+                node.children().enumerate().all(|(index, child)| {
+                    child.rect_is_empty(&(rect.clone() - self.layer().big_child_offset(index)))
+                })
+            }
+        }
+    }
+    /// Returns the smallest rectangle containing all nonzero cells, or `None`
+    /// if there are no live cells.
+    fn min_nonzero_rect(self) -> Option<BigRect<Self::D>> {
+        self.shrink_nonzero_rect(&self.big_rect())
+    }
+    /// Shrinks a rectangle as much as possible while still containing the same
+    /// nonzero cells. Returns `None` if all cells in the rectangle are zero.
+    fn shrink_nonzero_rect(self, rect: &BigRect<Self::D>) -> Option<BigRect<Self::D>> {
+        Some(BigRect::span(
+            BigVec::try_from_fn(|ax| shrink_nonzero_lower_bound(self, rect, ax))?,
+            BigVec::try_from_fn(|ax| shrink_nonzero_upper_bound(self, rect, ax))?,
+        ))
     }
 }
 
@@ -547,6 +604,306 @@ fn split_grandchild_index<D: Dim>(index: usize) -> (usize, usize) {
 
     (child_index, grandchild_index)
 }
+
+/// Returns the exact lower bound for coordinates of live cells within a
+/// rectangle, or `None` if there are no live cells within the rectangle.
+fn shrink_nonzero_lower_bound<'cache, D: Dim>(
+    node: impl CachedNodeRefTrait<'cache, D = D>,
+    rect: &BigRect<D>,
+    axis: Axis,
+) -> Option<BigInt> {
+    let mut hashset = HashSet::new();
+    hashset.insert((node.as_ref(), rect.clone()));
+    shrink_nonzero_bound::<D, Minimize>(hashset, axis)
+}
+/// Returns the exact upper bound for coordinates of live cells within a
+/// rectangle, or `None` if there are no live cells within the rectangle.
+fn shrink_nonzero_upper_bound<'cache, D: Dim>(
+    node: impl CachedNodeRefTrait<'cache, D = D>,
+    rect: &BigRect<D>,
+    axis: Axis,
+) -> Option<BigInt> {
+    let mut hashset = HashSet::new();
+    hashset.insert((node.as_ref(), rect.clone()));
+    shrink_nonzero_bound::<D, Maximize>(hashset, axis)
+}
+
+/// Utility function for `shrink_nonzero_lower_bound()` and
+/// `shrink_nonzero_upper_bound()` that is generalized over lower/upper bounds.
+fn shrink_nonzero_bound<D: Dim, M: MinMax>(
+    edge_nodes: HashSet<(NodeRef<'_, D>, BigRect<D>)>,
+    axis: Axis,
+) -> Option<BigInt> {
+    // This algorithm is based on the one used by Golly:
+    // https://github.com/AlephAlpha/golly/blob/497a432cfbd58e4182eae6b1a95658732c734a09/gollybase/hlifedraw.cpp#L419-L598
+
+    if edge_nodes.is_empty() {
+        return None;
+    }
+
+    // If `edge_nodes` is empty, then there are no live cells and therefore
+    // there is no lower/upper bound. If there is at least one node, get its
+    // layer. All nodes in `edge_nodes` must have the same layer.
+    let layer = edge_nodes.iter().next()?.0.layer();
+
+    if layer.is_leaf::<D>() {
+        // Try to find the "best" value. For example, if we are searching for
+        // the minimum X bound, the "best" value is the lowest X coordinate of
+        // any nonzero cell.
+        edge_nodes
+            .into_iter()
+            // For each node ...
+            .map(|(node, rect_within_node)| {
+                assert_eq!(layer, node.layer(), "Node layer mismatch");
+                // Return `None` if it's empty.
+                if node.is_empty() {
+                    return None;
+                }
+                let rect_within_node = rect_within_node.to_urect();
+                node.as_leaf()
+                    .unwrap()
+                    .cells_with_positions()
+                    // Only consider nonzero cells.
+                    .filter(|(_pos, cell)| *cell != 0_u8)
+                    // Only consider cells inside the rectangle.
+                    .filter(|(pos, _cell)| rect_within_node.contains(pos))
+                    // Only consider the axis we care about.
+                    .map(|(pos, _cell)| pos[axis])
+                    // Pick the "best" value.
+                    .fold1(M::pick_best)
+            })
+            // Pick the "best" value from all of those nodes.
+            .fold(None, |a, b| match (a, b) {
+                (Some(a), Some(b)) => Some(M::pick_best(a, b)),
+                (None, x) | (x, None) => x,
+            })
+            // And convert to `BigInt`.
+            .map(BigInt::from)
+    } else {
+        // Subdivide each node into its children, and partition them into two
+        // sets depending on their position along `axis`. If a node in
+        // `better_set` contains any cell within the rectangle, is will always
+        // be closer to the edge than any cell of a node in `worse_set`.
+        let (better_set, worse_set): (HashSet<_>, HashSet<_>) = edge_nodes
+            .into_iter()
+            .flat_map(|(node, rect_within_node)| {
+                assert_eq!(layer, node.layer(), "Node layer mismatch");
+                node.as_non_leaf()
+                    .unwrap()
+                    .children()
+                    .enumerate()
+                    // Compute the intersection of the rectangle inside the child.
+                    .filter_map(move |(index, child)| {
+                        let child_offset = layer.big_child_offset(index);
+                        let rect_within_child = child
+                            .big_rect()
+                            .intersection(&(rect_within_node.clone() - &child_offset))?;
+                        Some((index, child, rect_within_child))
+                    })
+            })
+            .partition_map(|(index, child, rect_within_child)| {
+                if M::is_better(index, index ^ axis.bit()) {
+                    // This node goes into the "better" set.
+                    Either::Left((child, rect_within_child))
+                } else {
+                    // This node goes into the "worse" set.
+                    Either::Right((child, rect_within_child))
+                }
+            });
+        println!("better {:?}; worse {:?}", better_set.len(), worse_set.len());
+        if let Some(result) = shrink_nonzero_bound::<D, M>(better_set, axis) {
+            Some(result + layer.child_layer().big_len() * M::pick_best(0, 1))
+        } else if let Some(result) = shrink_nonzero_bound::<D, M>(worse_set, axis) {
+            Some(result + layer.child_layer().big_len() * M::pick_worst(0, 1))
+        } else {
+            None
+        }
+
+        // // We will split each edge node into its children. Those that are closer
+        // // to the edge we want (e.g. if looking for minimum X bound, those with
+        // // a more negative X coordinate) will go in `new_edge_nodes`; those that
+        // // are farther from the edge we want (e.g. if looking for a minimum X
+        // // bound, those with a more positive X coordinate) will go in
+        // // `fallback_edge_nodes`.
+        // let mut new_edge_nodes = HashSet::new();
+        // let mut new_fallback_edge_nodes = HashSet::new();
+        // for (node, rect_within_node) in descendents_along_edge {
+        //     assert_eq!(layer, node.layer(), "Node layer mismatch");
+        //     node.as_non_leaf().unwrap();
+        //     match node.as_enum() {
+        //         // Base case: check cells individually.
+        //         NodeRefEnum::Leaf(node) => node.cells_with_positions(),
+        //         NodeRefEnum::NonLeaf(node) => {}
+        //     }
+        // }
+    }
+}
+
+trait MinMax {
+    type Opposite: MinMax;
+
+    fn pick_best<T: std::cmp::Ord>(a: T, b: T) -> T;
+    fn pick_worst<T: std::cmp::Ord>(a: T, b: T) -> T {
+        Self::Opposite::pick_best(a, b)
+    }
+    fn is_better<T: std::cmp::Ord>(a: T, b: T) -> bool;
+}
+struct Minimize;
+struct Maximize;
+impl MinMax for Minimize {
+    type Opposite = Maximize;
+
+    fn pick_best<T: std::cmp::Ord>(a: T, b: T) -> T {
+        std::cmp::min(a, b)
+    }
+    fn is_better<T: std::cmp::Ord>(a: T, b: T) -> bool {
+        a < b
+    }
+}
+impl MinMax for Maximize {
+    type Opposite = Minimize;
+
+    fn pick_best<T: std::cmp::Ord>(a: T, b: T) -> T {
+        std::cmp::max(a, b)
+    }
+    fn is_better<T: std::cmp::Ord>(a: T, b: T) -> bool {
+        a > b
+    }
+}
+
+// /// Returns the lower bound on coordinates of live cells in the node along an
+// /// axis, or `None` if the cell is empty.
+// ///
+// /// Because this method is called infrequently, it is optimized for the case of
+// /// very large nodes with many repeated descendents.
+// fn lower_live_bound<'cache, D: Dim>(
+//     node: impl CachedNodeRefTrait<'cache, D = D>,
+//     axis: Axis,
+//     rect_cache: &mut HashMap<NodeRef<'cache, D>, Option<BigInt>, crate::NodeHasher>,
+// ) -> Option<BigInt> {
+//     rect_cache
+//         .entry(node.as_ref())
+//         .or_insert_with(|| {
+//             // If the node is empty, then there is no lower bound.
+//             if node.is_empty() {
+//                 return None;
+//             }
+
+//             match node.as_enum() {
+//                 NodeRefEnum::Leaf(node) => {
+//                     // For each position in the node:
+//                     node.rect()
+//                         .iter()
+//                         // Take the corresponding cell state.
+//                         .zip(node.cells())
+//                         // Only look at positions where the cell state is
+//                         // nonzero.
+//                         .filter(|(_pos, &cell_state)| cell_state != 0_u8)
+//                         // Only look at one coordinate of the position.
+//                         .map(|(pos, _cell_state)| pos[axis])
+//                         // And take the minimum value.
+//                         .min()
+//                         // And convert to `BigInt`.
+//                         .map(|n| n.into())
+//                 }
+//                 NodeRefEnum::NonLeaf(node) => {
+//                     // For each child:
+//                     (0..D::BRANCHING_FACTOR)
+//                         .zip(node.children())
+//                         // Only look at the more negative children along `axis`
+//                         // for now. (If this doesn't work, we'll try the rest.)
+//                         .filter(|(index, _child)| index & axis.bit() == 0)
+//                         // Recurse!
+//                         .filter_map(|(_index, child)| lower_live_bound(child, axis, rect_cache))
+//                         // And take the minimum value.
+//                         .min()
+//                         // But if we didn't find any cells ...
+//                         .or_else(|| {
+//                             // ... then try the same thing with the more
+//                             // positive children along `axis`.
+//                             (0..D::BRANCHING_FACTOR)
+//                                 .zip(node.children())
+//                                 .filter(|(index, _child)| index & axis.bit() != 0)
+//                                 .filter_map(|(_index, child)| {
+//                                     lower_live_bound(child, axis, rect_cache)
+//                                 })
+//                                 .min()
+//                                 // And account for the offset of the more
+//                                 // positive children.
+//                                 .map(|pos| pos + node.layer().child_layer().big_len())
+//                         })
+//                 }
+//             }
+//         })
+//         .clone()
+// }
+
+// /// Returns the upper bound on coordinates of live cells in the node along an
+// /// axis, or `None` if the cell is empty.
+// ///
+// /// Because this method is called infrequently, it is optimized for the case of
+// /// very large nodes with many repeated descendents.
+// fn upper_live_bound<'cache, D: Dim>(
+//     node: impl CachedNodeRefTrait<'cache, D = D>,
+//     axis: Axis,
+//     rect_cache: &mut HashMap<NodeRef<'cache, D>, Option<BigInt>, crate::NodeHasher>,
+// ) -> Option<BigInt> {
+//     rect_cache
+//         .entry(node.as_ref())
+//         .or_insert_with(|| {
+//             // If the node is empty, then there is no upper bound.
+//             if node.is_empty() {
+//                 return None;
+//             }
+
+//             match node.as_enum() {
+//                 NodeRefEnum::Leaf(node) => {
+//                     // For each position in the node:
+//                     node.rect()
+//                         .iter()
+//                         // Take the corresponding cell state.
+//                         .zip(node.cells())
+//                         // Only look at positions where the cell state is
+//                         // nonzero.
+//                         .filter(|(_pos, &cell_state)| cell_state != 0_u8)
+//                         // Only look at one coordinate of the position.
+//                         .map(|(pos, _cell_state)| pos[axis])
+//                         // And take the maximum value.
+//                         .max()
+//                         // And convert to `BigInt`.
+//                         .map(|n| n.into())
+//                 }
+//                 NodeRefEnum::NonLeaf(node) => {
+//                     // For each child:
+//                     (0..D::BRANCHING_FACTOR)
+//                         .zip(node.children())
+//                         // Only look at the more positive children along `axis`
+//                         // for now. (If this doesn't work, we'll try the rest.)
+//                         .filter(|(index, _child)| index & axis.bit() != 0)
+//                         // Recurse!
+//                         .filter_map(|(_index, child)| upper_live_bound(child, axis, rect_cache))
+//                         // And take the minimum value.
+//                         .max()
+//                         // And account for the offset of the more
+//                         // positive children.
+//                         .map(|pos| pos + node.layer().child_layer().big_len())
+//                         // But if we didn't find any cells ...
+//                         .or_else(|| {
+//                             // ... then try the same thing with the more
+//                             // negative children along `axis`.
+//                             (0..D::BRANCHING_FACTOR)
+//                                 .zip(node.children())
+//                                 .filter(|(index, _child)| index & axis.bit() == 0)
+//                                 .filter_map(|(_index, child)| {
+//                                     upper_live_bound(child, axis, rect_cache)
+//                                 })
+//                                 .max()
+//                         })
+//                 }
+//             }
+//         })
+//         .clone()
+// }
 
 #[cfg(test)]
 mod tests {

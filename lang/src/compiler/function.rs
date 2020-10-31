@@ -1,6 +1,7 @@
 //! Compiled user function.
 
 use itertools::Itertools;
+use std::fmt;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 
 use super::convert::ValueConverter;
@@ -51,6 +52,11 @@ pub struct CompiledFunction {
     rule_meta: Arc<RuleMeta>,
     /// List of possible runtime errors.
     error_points: Vec<LangError>,
+}
+impl fmt::Display for CompiledFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NDCellCustomRule")
+    }
 }
 impl Clone for CompiledFunction {
     fn clone(&self) -> Self {

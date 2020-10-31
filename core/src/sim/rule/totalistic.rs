@@ -1,5 +1,6 @@
 use regex::Regex;
 use std::convert::TryFrom;
+use std::fmt;
 
 use super::{Rule, TransitionFunction};
 use crate::dim::Dim2D;
@@ -19,6 +20,7 @@ impl Default for MooreTotalistic2D {
 
 impl TryFrom<&str> for MooreTotalistic2D {
     type Error = ();
+
     fn try_from(s: &str) -> Result<Self, ()> {
         let regex = Regex::new(r"^[Bb](\d*)/?[Ss](\d*)$").unwrap();
         let captures = regex.captures(s).ok_or(())?;
@@ -32,6 +34,23 @@ impl TryFrom<&str> for MooreTotalistic2D {
             birth: conditions[0],
             survival: conditions[0],
         })
+    }
+}
+impl fmt::Display for MooreTotalistic2D {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "B")?;
+        for i in 0..=8 {
+            if self.birth[i] != 0_u8 {
+                write!(f, "{}", i)?;
+            }
+        }
+        write!(f, "/S")?;
+        for i in 0..=8 {
+            if self.survival[i] != 0_u8 {
+                write!(f, "{}", i)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -57,6 +76,9 @@ impl Rule<Dim2D> for MooreTotalistic2D {
                 }
             })
         })
+    }
+    fn max_state(&self) -> u8 {
+        1
     }
 }
 

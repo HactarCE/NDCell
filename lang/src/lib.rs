@@ -114,6 +114,9 @@ impl Rule<Dim2D> for compiler::CompiledFunction {
             })
         })
     }
+    fn max_state(&self) -> u8 {
+        (self.rule_meta().states.len() - 1) as u8
+    }
 }
 
 #[cfg(test)]

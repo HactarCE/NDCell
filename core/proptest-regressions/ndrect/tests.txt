@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc b5e015c71a31edeb31f8f7ac03dcd9d1b04a10cf0ab5f4ec75adeed7c47d6b93 # shrinks to corner1 = NdVec([0, 0, 0]), corner2 = NdVec([0, 0, 0])
+cc 6486f1665c3dda2d0d53fa3e85e601d18903d63c5cfda6abd3a6928e5136febd # shrinks to center = NdVec([0, 0, 0]), radius = 0, test_offset = NdVec([0, 0, 0])
+cc 38b3dd60c5a411be3d4893984d63165140327b011c4d032c57e94c515c450a8a # shrinks to pos = NdVec([0, 0, 0]), offset = NdVec([0, 0, 0])

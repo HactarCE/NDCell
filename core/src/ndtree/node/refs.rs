@@ -133,9 +133,10 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     /// each axis.
     fn cell_at_pos(self, pos: &BigVec<Self::D>) -> u8 {
         match self.as_enum() {
-            // If this is a leaf node, the position must be small enough to
-            // convert to a UVec.
-            NodeRefEnum::Leaf(node) => node.cells()[node.pos_to_cell_index(pos.to_uvec())],
+            // If this is a leaf node, get the individual cell.
+            NodeRefEnum::Leaf(node) => {
+                node.leaf_cell_at_pos((pos & BigInt::from(usize::MAX)).to_uvec())
+            }
             // If this is not a leaf node, delegate to one of the children.
             NodeRefEnum::NonLeaf(node) => node
                 .child_at_index(node.child_index_with_pos(pos))
@@ -313,6 +314,13 @@ impl<'cache, D: Dim> LeafNodeRef<'cache, D> {
     #[inline]
     pub fn cells(self) -> &'cache [u8] {
         self.as_raw().cell_slice().unwrap()
+    }
+    /// Returns the cell at the given position, modulo the node length along
+    /// each axis.
+    ///
+    /// Unlike `cell_at_pos()`, this safely takes a `UVec`.
+    pub fn leaf_cell_at_pos(self, pos: UVec<D>) -> u8 {
+        self.cells()[self.pos_to_cell_index(pos)]
     }
 }
 

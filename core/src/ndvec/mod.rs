@@ -90,11 +90,20 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     /// Creates a vector by evaluating `generator` for each axis.
     #[inline]
     pub fn from_fn(mut generator: impl FnMut(Axis) -> N) -> Self {
-        let mut ret: Self = Self::default();
+        let mut ret = Self::default();
         for &ax in D::Dim::axes() {
             ret[ax] = generator(ax);
         }
         ret
+    }
+    /// Creates a vector by evaluating `generator` for each axis, and returns `None` if any component is `None`.
+    #[inline]
+    pub fn try_from_fn(mut generator: impl FnMut(Axis) -> Option<N>) -> Option<Self> {
+        let mut ret = Self::default();
+        for &ax in D::Dim::axes() {
+            ret[ax] = generator(ax)?;
+        }
+        Some(ret)
     }
     /// Creates a vector by evaluating `f` on each each component of this one.
     #[inline]

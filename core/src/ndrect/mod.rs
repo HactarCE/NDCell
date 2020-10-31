@@ -260,10 +260,10 @@ where
 /// Trait to allow overloading of the `contains()` method.
 pub trait CanContain<I> {
     /// Returns `true` if `inner` is "contained" within `self`.
-    fn contains(&self, inner: I) -> bool;
+    fn contains(&self, inner: &I) -> bool;
 }
 
-impl<D: DimFor<N>, N: NdVecNum> CanContain<&NdVec<D, N>> for NdRect<D, N>
+impl<D: DimFor<N>, N: NdVecNum> CanContain<NdVec<D, N>> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec,
 {
@@ -278,7 +278,7 @@ where
         true
     }
 }
-impl<D: DimFor<N>, N: NdVecNum> CanContain<&Self> for NdRect<D, N>
+impl<D: DimFor<N>, N: NdVecNum> CanContain<Self> for NdRect<D, N>
 where
     NdVec<D, N>: NdRectVec,
 {

@@ -315,10 +315,17 @@ impl<'cache, D: Dim> LeafNodeRef<'cache, D> {
     pub fn cells(self) -> &'cache [u8] {
         self.as_raw().cell_slice().unwrap()
     }
+    /// Returns an iterator over the cells of the node, along with their
+    /// positions.
+    #[inline]
+    pub fn cells_with_positions(self) -> impl 'cache + Iterator<Item = (UVec<D>, u8)> {
+        self.rect().iter().zip(self.cells().iter().copied())
+    }
     /// Returns the cell at the given position, modulo the node length along
     /// each axis.
     ///
     /// Unlike `cell_at_pos()`, this safely takes a `UVec`.
+    #[inline]
     pub fn leaf_cell_at_pos(self, pos: UVec<D>) -> u8 {
         self.cells()[self.pos_to_cell_index(pos)]
     }

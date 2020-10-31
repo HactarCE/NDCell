@@ -16,7 +16,7 @@ fn get_non_default_set<D: Dim>(slice: NdTreeSlice<'_, D>) -> HashSet<IVec<D>> {
         }
         Err((leaf, pos)) => {
             let pos = pos.to_ivec();
-            for (offset, &cell) in leaf.rect().iter().zip(leaf.cells()) {
+            for (offset, cell) in leaf.cells_with_positions() {
                 if cell != 0 {
                     ret.insert(&pos + offset.to_ivec());
                 }

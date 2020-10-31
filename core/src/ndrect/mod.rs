@@ -289,3 +289,6 @@ where
         self.contains(&rect.min()) && self.contains(&rect.max())
     }
 }
+
+#[cfg(test)]
+mod tests;

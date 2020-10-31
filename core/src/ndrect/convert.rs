@@ -54,3 +54,11 @@ impl<D: Dim> IRect<D> {
         BigRect::with_size(self.start.to_bigvec(), self.size.to_bigvec())
     }
 }
+
+impl<D: Dim> URect<D> {
+    /// Converts this `URect` to a `BigRect`.
+    #[inline]
+    pub fn to_bigrect(&self) -> BigRect<D> {
+        BigRect::with_size(self.start.to_bigvec(), self.size.to_bigvec())
+    }
+}

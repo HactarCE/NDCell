@@ -159,7 +159,8 @@ impl Layer {
     ///
     /// # Panics
     ///
-    /// This method panics if the layer is `Layer(0)`, which does not have children.
+    /// This method may panic if the layer is `Layer(0)`, which does not have
+    /// children.
     #[inline]
     pub fn non_leaf_child_index<D: Dim>(self, pos: &BigVec<D>) -> usize {
         // Extract the single bit of each component that is relevant for this
@@ -198,8 +199,8 @@ impl Layer {
     ///
     /// # Panics
     ///
-    /// This method panics if `index` is out of range and may panic if the layer
-    /// is too high to be a leaf node layer.
+    /// This method may panic if `index` is out of range and may panic if the
+    /// layer is too high to be a leaf node layer.
     #[inline]
     pub fn leaf_pos<D: Dim>(self, index: usize) -> UVec<D> {
         assert!(index < self.num_cells::<D>().unwrap());

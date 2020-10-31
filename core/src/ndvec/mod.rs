@@ -222,4 +222,50 @@ impl<D: Dim> FixedVec<D> {
 }
 
 #[cfg(test)]
+pub fn proptest_ivec<'a, D: Dim, S: 'a + proptest::strategy::Strategy<Value = i32>>(
+    component_strategy: S,
+) -> impl 'a + proptest::strategy::Strategy<Value = IVec<D>> {
+    use proptest::strategy::Strategy;
+
+    proptest::collection::vec(component_strategy, D::NDIM)
+        .prop_map(|v| NdVec::from_fn(|ax| v[ax as usize] as isize))
+}
+
+#[cfg(test)]
+pub fn proptest_bigvec<'a, D: Dim, S: 'a + proptest::strategy::Strategy<Value = i32>>(
+    component_strategy: S,
+) -> impl 'a + proptest::strategy::Strategy<Value = BigVec<D>> {
+    use proptest::strategy::Strategy;
+
+    proptest::collection::vec(component_strategy, D::NDIM)
+        .prop_map(|v| NdVec::from_fn(|ax| v[ax as usize].into()))
+}
+
+#[cfg(test)]
+pub fn proptest_ivec2d<'a, S: 'a + proptest::strategy::Strategy<Value = i32>>(
+    component_strategy: S,
+) -> impl 'a + proptest::strategy::Strategy<Value = IVec2D> {
+    proptest_ivec(component_strategy)
+}
+
+#[cfg(test)]
+pub fn proptest_ivec3d<'a, S: 'a + proptest::strategy::Strategy<Value = i32>>(
+    component_strategy: S,
+) -> impl 'a + proptest::strategy::Strategy<Value = IVec2D> {
+    proptest_ivec(component_strategy)
+}
+
+#[cfg(test)]
+impl proptest::arbitrary::Arbitrary for IVec3D {
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: ()) -> Self::Strategy {
+        use proptest::strategy::Strategy;
+
+        proptest_ivec(-100..=100).boxed()
+    }
+}
+
+#[cfg(test)]
 mod tests;

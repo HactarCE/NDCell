@@ -47,28 +47,6 @@ fn test_fvec() {
     assert_eq!(z / scalar, v1[Z]);
 }
 
-impl proptest::arbitrary::Arbitrary for IVec2D {
-    type Parameters = Option<isize>;
-    type Strategy = BoxedStrategy<Self>;
-    fn arbitrary_with(max: Option<isize>) -> Self::Strategy {
-        let max = max.unwrap_or(100);
-        prop::collection::vec(-max..=max, 2)
-            .prop_flat_map(|v| Just(NdVec([v[0], v[1]])))
-            .boxed()
-    }
-}
-
-impl proptest::arbitrary::Arbitrary for IVec3D {
-    type Parameters = Option<isize>;
-    type Strategy = BoxedStrategy<Self>;
-    fn arbitrary_with(max: Option<isize>) -> Self::Strategy {
-        let max = max.unwrap_or(100);
-        prop::collection::vec(-max..=max, 3)
-            .prop_flat_map(|v| Just(NdVec([v[0], v[1], v[2]])))
-            .boxed()
-    }
-}
-
 proptest! {
     /// Tests various vector operations.
     #[test]

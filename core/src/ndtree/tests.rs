@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use super::*;
 use crate::axis::{X, Y};
 use crate::ndrect::IRect;
-use crate::ndvec::{IVec2D, NdVec};
+use crate::ndvec::{proptest_ivec2d, IVec2D, NdVec};
 use crate::num::BigUint;
 
 fn assert_ndtree_valid(
@@ -40,14 +40,14 @@ proptest! {
     /// a HashMap.
     #[test]
     fn test_ndtree_set_get(
-        mut cells_to_set: Vec<(IVec2D, u8)>,
-        mut cells_to_get: Vec<IVec2D>,
+        cells_to_set in proptest_cells_to_set(),
+        mut cells_to_get in proptest_cells_to_get(),
     ) {
         let mut ndtree = NdTree::default();
         let _node_cache = Arc::clone(ndtree.cache());
         let node_cache = _node_cache.read();
         let mut hashmap = HashMap::new();
-            for (pos, state) in cells_to_set {
+        for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
             ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);
             cells_to_get.push(pos);
@@ -69,7 +69,7 @@ proptest! {
     /// Tests that identical nodes use the same underlying structure.
     #[test]
     fn test_ndtree_cache(
-        mut cells_to_set: Vec<(IVec2D, u8)>,
+        cells_to_set in proptest_cells_to_set(),
     ) {
         prop_assume!(!cells_to_set.is_empty());
 
@@ -90,8 +90,8 @@ proptest! {
     /// Tests `NdTree::slice_containing()`.
     #[test]
     fn test_ndtree_slice_containing(
-        cells_to_set: Vec<(IVec2D, u8)>,
-        center: IVec2D,
+        cells_to_set in proptest_cells_to_set(),
+        center in proptest_ivec2d(-100..=100),
         x_radius in 0..20_isize,
         y_radius in 0..20_isize,
     ) {
@@ -130,4 +130,18 @@ proptest! {
             || slice.root.big_len() <= (rect.len(Y) - 2) * 4
         );
     }
+}
+
+fn proptest_cells_to_set() -> impl Strategy<Value = Vec<(IVec2D, u8)>> {
+    prop::collection::vec(
+        (proptest_ivec2d(-100..100), 0..=255_u8),
+        proptest::collection::SizeRange::default(),
+    )
+}
+
+fn proptest_cells_to_get() -> impl Strategy<Value = Vec<IVec2D>> {
+    prop::collection::vec(
+        proptest_ivec2d(-100..100),
+        proptest::collection::SizeRange::default(),
+    )
 }

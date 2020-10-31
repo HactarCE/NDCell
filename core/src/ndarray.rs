@@ -5,7 +5,7 @@ use std::ops::{Index, IndexMut};
 
 use crate::dim::*;
 use crate::ndrect::URect;
-use crate::ndtree::{CachedNodeRefTrait, Layer, NodeRef, NodeRefEnum, NodeRefTrait};
+use crate::ndtree::{CachedNodeRefTrait, NodeRef, NodeRefEnum, NodeRefTrait};
 use crate::ndvec::UVec;
 use crate::num::ToPrimitive;
 
@@ -131,9 +131,7 @@ impl<D: Dim> NdArray<u8, D> {
             }
             NodeRefEnum::NonLeaf(n) => {
                 for (index, child) in n.children().enumerate() {
-                    // TODO: consider adding child_offset() method on Layer
-                    let child_vector_offset =
-                        Layer(1).leaf_pos(index) << node.layer().child_layer().to_u32();
+                    let child_vector_offset = node.layer().child_offset(index).unwrap();
                     let child_array_offset = self.flatten_idx(child_vector_offset);
                     self.populate_from_node(base_idx + child_array_offset, child);
                 }

@@ -80,20 +80,17 @@ impl<'cache, D: Dim> NdTreeSlice<'cache, D> {
     ) -> Result<Vec<NdTreeSlice<'a, D>>, (LeafNodeRef<'a, D>, &'a BigVec<D>)> {
         match self.root.as_enum() {
             NodeRefEnum::Leaf(n) => Err((n, &self.offset)),
-            NodeRefEnum::NonLeaf(n) => {
-                Ok(n.children()
-                    .enumerate()
-                    .map(move |(child_index, subcube)| {
-                        // TODO: consider adding child_offset() method on Layer
-                        let child_offset =
-                            Layer(1).leaf_pos(child_index).to_bigvec() << subcube.layer().to_u32();
-                        Self {
-                            root: subcube.into(),
-                            offset: child_offset + &self.offset,
-                        }
-                    })
-                    .collect())
-            }
+            NodeRefEnum::NonLeaf(n) => Ok(n
+                .children()
+                .enumerate()
+                .map(move |(child_index, subcube)| {
+                    let child_offset = n.layer().big_child_offset(child_index);
+                    Self {
+                        root: subcube.into(),
+                        offset: child_offset + &self.offset,
+                    }
+                })
+                .collect()),
         }
     }
 }

@@ -154,6 +154,33 @@ impl Layer {
         BigRect::span(BigVec::origin(), BigVec::repeat(self.big_len() - 1))
     }
 
+    /// Returns the cell offset of the child of a node at this layer with the
+    /// given index, or `None` if it does not fit in a `UVec`.
+    ///
+    /// # Panics
+    ///
+    /// This method may panic if the layer is `Layer(0)`, which does not have
+    /// children.
+    #[inline]
+    pub fn child_offset<D: Dim>(self, index: usize) -> Option<UVec<D>> {
+        if 1 << self.child_layer().to_usize() == 0 {
+            None
+        } else {
+            Some(Layer(1).leaf_pos(index) << self.child_layer().to_usize())
+        }
+    }
+    /// Returns the cell offset of the child of a node at this layer with the
+    /// given index.
+    ///
+    /// # Panics
+    ///
+    /// This method may panic if the layer is `Layer(0)`, which does not have
+    /// children.
+    #[inline]
+    pub fn big_child_offset<D: Dim>(self, index: usize) -> BigVec<D> {
+        Layer(1).leaf_pos(index).to_bigvec() << self.child_layer().0
+    }
+
     /// Returns the index of the child of a node at this layer that contains the
     /// given position, modulo the node length along each axis.
     ///

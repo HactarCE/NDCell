@@ -7,7 +7,6 @@ use std::marker::PhantomData;
 
 use super::{CachedNodeRefTrait, Layer, NodeRef, NodeRefTrait};
 use crate::dim::Dim;
-use crate::NodeHasher;
 
 /// ND-tree represented as a list of nodes.
 #[derive(Debug)]
@@ -98,7 +97,7 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
 struct IndexedNdTreeBuilder<'cache, D: Dim, T, F> {
     min_layer: Layer,
     nodes: Vec<IndexedNdTreeNode<D, T>>,
-    node_indices: HashMap<NodeRef<'cache, D>, usize, NodeHasher>,
+    node_indices: HashMap<NodeRef<'cache, D>, usize, crate::FastHashBuilder>,
     node_to_data: F,
 }
 impl<'cache, D: Dim, T, F: Fn(NodeRef<'cache, D>) -> T> IndexedNdTreeBuilder<'cache, D, T, F> {

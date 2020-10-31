@@ -7,15 +7,13 @@ use std::collections::HashSet;
 use std::hash::Hash;
 use std::hash::{BuildHasher, Hasher};
 
-use crate::NodeHasher;
-
 /// Number of "shards" to split the `ShardedBoxedSet` into.
 ///
 /// TODO: Measure performance with different shard counts.
 const SHARD_COUNT: usize = 64;
 
 /// Single "shard" of the set.
-type Shard<T> = HashSet<Box<T>, NodeHasher>;
+type Shard<T> = HashSet<Box<T>, crate::FastHashBuilder>;
 
 /// `HashSet` split into many "shards" to allow multiple threads to access
 /// different parts of the set simultaneously with minimal contention.
@@ -44,7 +42,7 @@ impl<T: Eq + Hash> ShardedBoxedSet<T> {
     /// until the shard is available, so do NOT hold multiple shards at once and
     /// try to release this guard as soon as possible.
     fn get_shard<'a>(&'a self, elem: &T) -> MutexGuard<'a, Shard<T>> {
-        let mut h = NodeHasher::default().build_hasher();
+        let mut h = crate::FastHashBuilder::default().build_hasher();
         elem.hash(&mut h);
         // Hash a little extra, so that the hash here is distinct from the one
         // used within the individual shard.

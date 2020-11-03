@@ -34,14 +34,20 @@ impl Axis {
             Axis::V => "V",
         }
     }
+
+    /// Returns the bit in a child index corresponding to this axis.
+    #[inline]
+    pub fn bit(self) -> usize {
+        1 << self as usize
+    }
 }
 
 /// List of axes in order.
-const AXES: &'static [Axis] = &[Axis::X, Axis::Y, Axis::Z, Axis::W, Axis::U, Axis::V];
+pub const AXES: &'static [Axis] = &[Axis::X, Axis::Y, Axis::Z, Axis::W, Axis::U, Axis::V];
 
 /// Returns a list of axes up to some number of dimensions.
 #[inline]
-pub(super) fn ndim_axes(ndim: usize) -> &'static [Axis] {
+pub fn ndim_axes(ndim: usize) -> &'static [Axis] {
     &AXES[..ndim]
 }
 

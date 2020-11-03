@@ -5,12 +5,14 @@ use core::fmt;
 use itertools::Itertools;
 use std::sync::Arc;
 
+pub mod aliases;
 mod totalistic;
 
-use crate::dim::Dim;
+use crate::dim::*;
 use crate::ndarray::NdArray;
 use crate::ndrect::URect;
 use crate::ndvec::UVec;
+pub use aliases::*;
 pub use totalistic::*;
 
 /// Type alias for a CA transition function that transitions all the cells in an
@@ -18,8 +20,56 @@ pub use totalistic::*;
 pub type TransitionFunction<'a, D> =
     Box<dyn 'a + FnMut(&NdArray<u8, D>, URect<D>) -> NdArray<u8, D>>;
 
-/// A cellular automaton rule.
-pub trait Rule<D: Dim>: fmt::Debug + fmt::Display + Send + Sync {
+/// Cellular automaton rule of any dimensionality.
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub enum Rule {
+    Rule1D(Rule1D),
+    Rule2D(Rule2D),
+    Rule3D(Rule3D),
+    Rule4D(Rule4D),
+    Rule5D(Rule5D),
+    Rule6D(Rule6D),
+}
+impl fmt::Display for Rule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Rule::Rule1D(r) => write!(f, "{}", r),
+            Rule::Rule2D(r) => write!(f, "{}", r),
+            Rule::Rule3D(r) => write!(f, "{}", r),
+            Rule::Rule4D(r) => write!(f, "{}", r),
+            Rule::Rule5D(r) => write!(f, "{}", r),
+            Rule::Rule6D(r) => write!(f, "{}", r),
+        }
+    }
+}
+impl<D: Dim> From<Arc<dyn NdRule<D>>> for Rule {
+    fn from(r: Arc<dyn NdRule<D>>) -> Self {
+        match_ndim!(match D {
+            1 => Self::Rule1D(unsafe {
+                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim1D>>>(r)
+            }),
+            2 => Self::Rule2D(unsafe {
+                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim2D>>>(r)
+            }),
+            3 => Self::Rule3D(unsafe {
+                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim3D>>>(r)
+            }),
+            4 => Self::Rule4D(unsafe {
+                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim4D>>>(r)
+            }),
+            5 => Self::Rule5D(unsafe {
+                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim5D>>>(r)
+            }),
+            6 => Self::Rule6D(unsafe {
+                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim6D>>>(r)
+            }),
+        })
+    }
+}
+
+/// Cellular automaton rule.
+pub trait NdRule<D: Dim>: fmt::Debug + fmt::Display + Send + Sync {
     /// Returns the maximum distance away that a cell may need to see in order
     /// to compute its next state.
     fn radius(&self) -> usize;
@@ -30,7 +80,7 @@ pub trait Rule<D: Dim>: fmt::Debug + fmt::Display + Send + Sync {
     /// of cell states.
     fn max_state(&self) -> u8;
     /// Returns the rule as an `Arc<dyn Rule>`.
-    fn into_arc(self) -> Arc<dyn Rule<D>>
+    fn into_arc(self) -> Arc<dyn NdRule<D>>
     where
         Self: 'static + Sized,
     {
@@ -46,7 +96,7 @@ impl fmt::Display for DummyRule {
         write!(f, "Dummy")
     }
 }
-impl<D: Dim> Rule<D> for DummyRule {
+impl<D: Dim> NdRule<D> for DummyRule {
     fn radius(&self) -> usize {
         0
     }

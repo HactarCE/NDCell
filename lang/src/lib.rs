@@ -8,7 +8,7 @@ extern crate lazy_static;
 use std::sync::{mpsc, Arc};
 
 use ndcell_core::prelude::{Dim2D, Vec2D};
-use ndcell_core::sim::rule::{Rule, TransitionFunction};
+use ndcell_core::sim::rule::{NdRule, TransitionFunction};
 
 #[macro_use]
 mod utils;
@@ -83,7 +83,7 @@ pub fn compile_blocking(
         .unwrap_or_else(|e| internal_error!("MPSC channel error: {:?}", e))
 }
 
-impl Rule<Dim2D> for compiler::CompiledFunction {
+impl NdRule<Dim2D> for compiler::CompiledFunction {
     fn radius(&self) -> usize {
         let (min, max) = self.rule_meta().nbhd_shape.bounds().min_and_max();
         min.into_iter()

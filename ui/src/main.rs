@@ -19,7 +19,7 @@ extern crate lazy_static;
 use log::{debug, info};
 use std::sync::Arc;
 
-use ndcell_core::prelude::{Dim2D, Rule};
+use ndcell_core::sim::rule::Rule2D;
 
 mod clipboard_compat;
 mod colors;
@@ -46,12 +46,12 @@ fn main() {
     gui::show_gui();
 }
 
-fn load_custom_rule() -> Arc<dyn Rule<Dim2D>> {
+fn load_custom_rule_2d() -> Rule2D {
     use std::fs::File;
     use std::io::Read;
 
     File::open("rule.ndca")
-        .map(|mut file| -> Arc<dyn Rule<Dim2D>> {
+        .map(|mut file| -> Rule2D {
             let mut source_code = String::new();
             file.read_to_string(&mut source_code)
                 .expect("Error reading file");

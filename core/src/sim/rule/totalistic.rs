@@ -2,7 +2,7 @@ use regex::Regex;
 use std::convert::TryFrom;
 use std::fmt;
 
-use super::{Rule, TransitionFunction};
+use super::{NdRule, TransitionFunction};
 use crate::dim::Dim2D;
 use crate::ndrect::Rect2D;
 
@@ -54,7 +54,7 @@ impl fmt::Display for MooreTotalistic2D {
     }
 }
 
-impl Rule<Dim2D> for MooreTotalistic2D {
+impl NdRule<Dim2D> for MooreTotalistic2D {
     fn radius(&self) -> usize {
         1
     }

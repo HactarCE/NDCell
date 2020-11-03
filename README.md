@@ -44,8 +44,9 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - [ ] Multithreaded simulation
   - [x] Reduce `BigInt` allocations
     - [x] Precompute HashLife time splits
-  - [ ] Rewrite RLE export/import
-  - [ ] Macrocell export/import
+    - [ ] Cache `layer.big_len()`, `layer.big_rect()`, and maybe `layer.child_offset()` results
+  - [x] Rewrite RLE import/export
+  - [ ] Macrocell import/export
 - [ ] Render 3D
   - [ ] Cubes
   - [ ] Lighting

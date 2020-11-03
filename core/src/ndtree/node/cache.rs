@@ -114,6 +114,11 @@ impl<D: Dim> NodeCache<D> {
         ret
     }
 
+    /// Returns the `Arc<RwLock<_>>` containing the cache.
+    pub fn arc(&self) -> Arc<RwLock<Self>> {
+        self.this.upgrade().unwrap()
+    }
+
     /// Asserts that the two caches are the same (point to the same location).
     fn assert_same_as<T: fmt::Debug>(&self, other: &T)
     where
@@ -572,7 +577,7 @@ impl<D: Dim> ArcNode<D> {
             .or_insert(1);
 
         Self {
-            cache: cache.this.upgrade().unwrap(),
+            cache: cache.arc(),
             raw_node_ptr,
         }
     }

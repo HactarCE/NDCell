@@ -24,7 +24,7 @@ fn methuselah_benchmark(c: &mut Criterion) {
 
 fn bench_sim_2d(
     c: &mut Criterion,
-    rule: impl 'static + Rule<Dim2D>,
+    rule: impl 'static + NdRule<Dim2D>,
     pattern: Pattern,
     gens: impl Into<BigInt>,
     step_size: impl Into<BigInt>,
@@ -36,7 +36,8 @@ fn bench_sim_2d(
     let rule = rule.into_arc();
 
     let ndarray = {
-        let automaton = Automaton2D::from_rle(pattern.rle).expect("RLE parsing failed");
+        let automaton = Automaton2D::from_rle_str(pattern.rle, |_| Ok(Arc::clone(&rule)))
+            .expect("Failed to load RLE");
         let node_cache = automaton.tree.cache().read();
         NdArray::from(automaton.tree.root().as_ref(&node_cache))
     };

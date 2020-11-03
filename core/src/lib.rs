@@ -60,7 +60,6 @@ type FastHashBuilder = std::hash::BuildHasherDefault<seahash::SeaHasher>;
 pub mod traits {
     pub use crate::automaton::NdProjectedAutomatonTrait;
     pub use crate::dim::Dim;
-    pub use crate::io::rle::RleEncode;
     pub use crate::ndrect::CanContain;
     pub use crate::ndtree::{CachedNodeRefTrait, NodeRefTrait};
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};
@@ -81,6 +80,7 @@ pub mod prelude {
     };
     pub use crate::axis::Axis;
     pub use crate::dim::{Dim1D, Dim2D, Dim3D, Dim4D, Dim5D, Dim6D};
+    pub use crate::io::{RleError, RleResult};
     pub use crate::ndrect::aliases::*;
     pub use crate::ndrect::NdRect;
     pub use crate::ndtree::aliases::*;

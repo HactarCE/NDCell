@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use log::{trace, warn};
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -254,40 +254,34 @@ impl GridViewTrait for GridView2D {
             self.stop_running();
             match command {
                 ClipboardCommand::CopyRle => {
-                    let result = match self.as_automaton() {
-                        AutomatonRef::Automaton2D(automaton) => {
-                            clipboard_set(RleEncode::to_rle(automaton))
-                                .map_err(|_| "Unable to set clipboard contents")
+                    let result = self.as_automaton().to_rle_string();
+                    match result {
+                        Ok(s) => {
+                            clipboard_set(s).map_err(|_| anyhow!("Setting clipboard contents"))?
                         }
-                        _ => Err("Unable to convert non-2D patterns to RLE"),
-                    };
-                    if let Err(msg) = result {
-                        warn!("Failed to save RLE to clipboard: {}", msg);
+                        Err(msg) => warn!("Failed to generate RLE: {}", msg),
                     }
                 }
                 ClipboardCommand::CopyCxrle => {
-                    let result = match self.as_automaton() {
-                        AutomatonRef::Automaton2D(automaton) => {
-                            clipboard_set(RleEncode::to_cxrle(automaton))
-                                .map_err(|_| "Unable to set clipboard contents")
+                    let result = self.as_automaton().to_cxrle_string();
+                    match result {
+                        Ok(s) => {
+                            clipboard_set(s).map_err(|_| anyhow!("Setting clipboard contents"))?
                         }
-                        _ => Err("Unable to convert non-2D patterns to RLE"),
-                    };
-                    if let Err(msg) = result {
-                        warn!("Failed to save CXRLE to clipboard: {}", msg);
+                        Err(msg) => warn!("Failed to generate CXRLE: {}", msg),
                     }
                 }
                 ClipboardCommand::Paste => {
                     self.record();
-                    let result: Result<Automaton2D, _> = clipboard_get()
-                        .map_err(|_| "Unable to access clipboard contents".to_owned())
-                        .and_then(|s| RleEncode::from_rle(&s));
+                    let rle_string =
+                        clipboard_get().map_err(|_| anyhow!("Fetching clipboard contents"))?;
+                    let result = Automaton::from_rle_str(&rle_string, |_| {
+                        Ok(crate::load_custom_rule_2d().into())
+                    });
                     match result {
-                        Ok(mut new_automaton) => {
-                            new_automaton.rule = crate::load_custom_rule();
-                            *self = Self::from(new_automaton)
-                        }
-                        Err(msg) => warn!("Failed to load RLE from clipboard: {}", msg),
+                        Ok(Automaton::Automaton2D(automaton)) => *self = Self::from(automaton),
+                        Ok(_) => warn!("Failed to load RLE because rule is not 2D"),
+                        Err(msg) => warn!("Failed to load RLE: {}", msg),
                     }
                 }
             }

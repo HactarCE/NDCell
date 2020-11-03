@@ -152,8 +152,7 @@ impl<'cache, D: Dim, T, F: Fn(NodeRef<'cache, D>) -> T> IndexedNdTreeBuilder<'ca
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::automaton::Automaton2D;
-    use crate::io::rle;
+    use crate::ndtree::NdTree2D;
 
     /// Thoroughly test a single "indexed" quadtree.
     #[test]
@@ -168,16 +167,16 @@ mod tests {
         // - x - - - - - x
         // x - x - - - - -
         // - x - x - - - -
-        let automaton: Automaton2D = rle::RleEncode::from_rle(
+        let ndtree = NdTree2D::from_rle_str(
             "
 #CXRLE Pos=-4,-3
 x = 8, y = 8, rule = B3/S23
 4bo$5bo$4bobo$5bobo$o5bo$bo5bo$obo$bobo!
 ",
         )
-        .unwrap();
-        let node_cache = automaton.tree.root.cache().read();
-        let root = automaton.tree.root.as_ref(&node_cache);
+        .expect("Failed to import RLE");
+        let node_cache = ndtree.cache().read();
+        let root = ndtree.root().as_ref(&node_cache);
         assert_eq!(Layer(3), root.layer());
 
         // The root node is at layer 3 (8x8), and there should be ...

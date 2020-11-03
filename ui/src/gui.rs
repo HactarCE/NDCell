@@ -12,7 +12,6 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use ndcell_core::automaton::Automaton2D;
-use ndcell_core::traits::RleEncode;
 
 use super::clipboard_compat::*;
 use super::gridview::*;
@@ -42,15 +41,14 @@ fn make_default_gridview() -> GridView {
     if DEFAULT_3D {
         GridView::View3D(GridView3D::default())
     } else {
-        let mut automaton =
-            Automaton2D::from_rle(GOSPER_GLIDER_GUN_SYNTH_RLE).unwrap_or_else(|_| {
-                warn!("Unable to parse default pattern; using empty pattern instead");
-                Default::default()
-            });
-
-        automaton.rule = crate::load_custom_rule();
-
-        GridView::from(automaton)
+        Automaton2D::from_rle_str(GOSPER_GLIDER_GUN_SYNTH_RLE, |_| {
+            Ok(crate::load_custom_rule_2d())
+        })
+        .unwrap_or_else(|_| {
+            warn!("Failed to load default pattern; using empty pattern instaed");
+            Default::default()
+        })
+        .into()
     }
 }
 

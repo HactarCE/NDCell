@@ -24,13 +24,13 @@ fn to_rle_benchmark(c: &mut Criterion) {
 
 fn bench_from_rle_2d(c: &mut Criterion, pattern: Pattern) {
     c.bench_function(&format!("{}_from_RLE", pattern.name), |b| {
-        b.iter(|| Automaton2D::from_rle(pattern.rle).unwrap())
+        b.iter(|| NdTree2D::from_rle_str(pattern.rle).unwrap())
     });
 }
 
 fn bench_to_rle_2d(c: &mut Criterion, pattern: Pattern) {
-    let from_rle = Automaton2D::from_rle(pattern.rle).unwrap();
+    let from_rle = NdTree2D::from_rle_str(pattern.rle).unwrap();
     c.bench_function(&format!("{}_to_RLE", pattern.name), move |b| {
-        b.iter(|| from_rle.to_rle())
+        b.iter(|| from_rle.to_rle(None).unwrap().to_string_2_state())
     });
 }

@@ -151,7 +151,8 @@ fn test_cxrle_2d() {
         "\
 #CXRLE Pos=10,-4
 x = 3, y = 3
-bo$2bo$3o!",
+bo$2bo$3o!
+",
         exported,
     );
     let reimported = NdTree2D::from_rle_str(&exported).expect("Failed to reimport RLE output");

@@ -84,6 +84,7 @@ impl Rle {
                 write!(f, "{}", run)?;
             }
         }
+        writeln!(f)?;
 
         Ok(())
     }

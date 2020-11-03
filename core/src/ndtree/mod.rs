@@ -333,6 +333,33 @@ impl<D: Dim> NdTree<D> {
         }
         ret
     }
+
+    /// Returns `true` if all cells within the rectangle are state #0.
+    pub fn rect_is_empty(&self, cache: &NodeCache<D>, rect: BigRect<D>) -> bool {
+        self.root()
+            .as_ref(cache)
+            .rect_is_empty(&(rect - self.offset()))
+    }
+    /// Returns the smallest rectangle containing all nonzero cells, or `None`
+    /// if there are no live cells.
+    pub fn bounding_rect(&self, cache: &NodeCache<D>) -> Option<BigRect<D>> {
+        self.root()
+            .as_ref(cache)
+            .min_nonzero_rect()
+            .map(|r| r + self.offset())
+    }
+    /// Shrinks a rectangle as much as possible while still containing the same
+    /// nonzero cells. Returns `None` if all cells in the rectangle are zero.
+    pub fn shrink_nonzero_rect(
+        &self,
+        cache: &NodeCache<D>,
+        rect: BigRect<D>,
+    ) -> Option<BigRect<D>> {
+        self.root()
+            .as_ref(cache)
+            .shrink_nonzero_rect(&(rect - self.offset()))
+            .map(|r| r + self.offset())
+    }
 }
 
 #[cfg(test)]

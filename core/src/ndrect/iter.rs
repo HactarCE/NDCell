@@ -10,7 +10,7 @@ where
     NdVec<D, N>: NdRectVec,
 {
     type Item = NdVec<D, N>;
-    type IntoIter = NdRectIter<D, N>;
+    type IntoIter = Iter<D, N>;
 
     /// Returns an iterator over all the integer positions in the rectangle.
     #[inline]
@@ -21,17 +21,12 @@ where
 
 /// Iterator over positions in an integer hyperrectangle.
 #[derive(Debug, Clone)]
-pub struct NdRectIter<D: DimFor<N>, N: NdVecNum + Integer>
-where
-    NdVec<D, N>: NdRectVec,
-{
+pub struct Iter<D: DimFor<N>, N: NdVecNum> {
     start: NdVec<D, N>,
     end: NdVec<D, N>,
     next: Option<NdVec<D, N>>,
-    remaining: Option<usize>,
 }
-
-impl<D: DimFor<N>, N: NdVecNum + Integer + ToPrimitive> From<&NdRect<D, N>> for NdRectIter<D, N>
+impl<D: DimFor<N>, N: NdVecNum> From<&NdRect<D, N>> for Iter<D, N>
 where
     NdVec<D, N>: NdRectVec,
 {
@@ -40,17 +35,10 @@ where
         let start = rect.min();
         let end = rect.max();
         let next = Some(start.clone());
-        let remaining = rect.count().to_usize();
-        Self {
-            start,
-            end,
-            next,
-            remaining,
-        }
+        Self { start, end, next }
     }
 }
-
-impl<D: DimFor<N>, N: NdVecNum + Integer> Iterator for NdRectIter<D, N>
+impl<D: DimFor<N>, N: NdVecNum + Integer + ToPrimitive> Iterator for Iter<D, N>
 where
     NdVec<D, N>: NdRectVec,
 {
@@ -61,20 +49,45 @@ where
         let ret = self.next.clone();
         if let Some(ref mut next) = &mut self.next {
             for &ax in D::Dim::axes() {
+                // Increment this axis.
                 next[ax] += N::one();
+                // If this axis overflows ...
                 if next[ax] > self.end[ax] {
+                    // ... then reset it and increment the next axis.
                     next[ax] = self.start[ax].clone();
                 } else {
+                    // If not, then we're done. We advanced along this axis with no
+                    // overflow.
                     return ret;
                 }
             }
+            // If we got this far, then we overflowed on every axis. Return `None`
+            // forever.
             self.next = None;
         }
         return ret;
     }
-
+}
+impl<D: DimFor<N>, N: NdVecNum + Integer> Iter<D, N>
+where
+    NdVec<D, N>: NdRectVec,
+{
+    /// Returns the first position returned by the iterator.
     #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.remaining.unwrap_or(usize::MAX), self.remaining)
+    pub fn start(&self) -> &NdVec<D, N> {
+        &self.start
+    }
+
+    /// Returns the last position returned by the iterator.
+    #[inline]
+    pub fn end(&self) -> &NdVec<D, N> {
+        &self.end
+    }
+
+    /// Moves the iterator to the given position, which will be returned from
+    /// the next call to `next()`.
+    #[inline]
+    pub fn go_to(&mut self, pos: NdVec<D, N>) {
+        self.next = Some(pos);
     }
 }

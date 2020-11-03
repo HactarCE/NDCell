@@ -5,7 +5,7 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 pub mod aliases;
 mod convert;
-pub mod iter;
+mod iter;
 mod ops;
 
 use crate::axis::Axis;
@@ -13,7 +13,7 @@ use crate::dim::{Dim, DimFor};
 use crate::ndvec::NdVec;
 use crate::num::{Float, Integer, NdVecNum, Signed, ToPrimitive};
 pub use aliases::*;
-use iter::NdRectIter;
+pub use iter::Iter;
 
 /// "Trait alias" for types that can be used as vectors in an `NdRect`.
 pub trait NdRectVec: 'static + Sized
@@ -166,7 +166,7 @@ where
 
     /// Returns an iterator over all the integer positions in the rectangle.
     #[inline]
-    pub fn iter(&self) -> NdRectIter<D, N>
+    pub fn iter(&self) -> Iter<D, N>
     where
         N: Integer + ToPrimitive,
     {
@@ -216,10 +216,19 @@ where
         ret
     }
 
+    /// Negates an axis of the rectangle.
+    #[inline]
+    pub fn negate_axis(&mut self, axis: Axis)
+    where
+        N: Signed,
+    {
+        self.start[axis] = -self.max()[axis].clone();
+    }
+
     /// Returns `true` if the two rectangles intersect.
     #[inline]
     #[must_use = "This method returns a new value instead of mutating its input"]
-    pub fn intersects(self, other: Self) -> bool {
+    pub fn intersects(&self, other: &Self) -> bool {
         // Iff `self` and `other` intersect along all axes, then they truly
         // intersect in N-dimensional space.
         D::Dim::axes().iter().all(|&ax| {

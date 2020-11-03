@@ -1,4 +1,4 @@
-use num::{BigInt, BigUint};
+use crate::num::{BigInt, BigUint};
 
 /// Dimension-independent automaton simulation methods.
 pub trait Simulate {

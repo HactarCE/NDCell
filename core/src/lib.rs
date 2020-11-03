@@ -35,9 +35,6 @@
 #![warn(clippy::all)]
 #![deny(clippy::correctness)]
 
-#[macro_use]
-extern crate pest_derive;
-
 mod io;
 #[macro_use]
 mod macros;

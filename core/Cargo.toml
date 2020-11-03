@@ -11,8 +11,6 @@ lazy_static = "1.4"
 noisy_float = "0.1"
 num = "0.3"
 parking_lot = "0.11"
-pest = "2.1"
-pest_derive = "2.1"
 regex = "1"
 seahash = "4.0"
 

@@ -10,11 +10,11 @@ use crate::ndtree::{CachedNodeRefTrait, NdTree, NodeCache};
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, BigUint, Zero};
 use crate::projection::{NdProjection, NdProjectionError, NdProjector, ProjectionParams};
-use crate::sim::rule::{DummyRule, Rule};
+use crate::sim::rule::{DummyRule, NdRule};
 use crate::sim::{hashlife, AsSimulate, Simulate};
 
-/// ProjectedAutomaton functionality implemented by dispatching to
-/// NdProjectedAutomaton.
+/// `ProjectedAutomaton` functionality implemented by dispatching to
+/// `NdProjectedAutomaton`.
 #[enum_dispatch]
 pub trait NdProjectedAutomatonTrait<P: Dim> {
     /// Returns a reference to the node cache used for projected nodes.
@@ -42,8 +42,8 @@ pub type ProjectedAutomaton5D = ProjectedAutomaton<Dim5D>;
 /// A cellular automaton projected to 6D.
 pub type ProjectedAutomaton6D = ProjectedAutomaton<Dim6D>;
 
-/// An automaton of an unknown dimensionality combined with a projection to a
-/// given dimensionality.
+/// Automaton of any dimensionality with a projection to display it using a
+/// particular number of dimensions.
 #[allow(missing_docs)]
 #[enum_dispatch(NdProjectedAutomatonTrait)]
 #[derive(Debug, Clone)]
@@ -55,47 +55,12 @@ pub enum ProjectedAutomaton<P: Dim> {
     From5D(NdProjectedAutomaton<Dim5D, P>),
     From6D(NdProjectedAutomaton<Dim6D, P>),
 }
-impl<P: Dim> Default for ProjectedAutomaton<P> {
+impl<P: Dim> Default for ProjectedAutomaton<P>
+where
+    Self: From<NdProjectedAutomaton<P, P>>,
+{
     fn default() -> Self {
-        let inner = Box::new(NdProjectedAutomaton::<P, P>::default());
-        match_ndim!(match P {
-            1 => Self::From1D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim1D, P>>,
-                >(inner)
-            }),
-            2 => Self::From2D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim2D, P>>,
-                >(inner)
-            }),
-            3 => Self::From3D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim3D, P>>,
-                >(inner)
-            }),
-            4 => Self::From4D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim4D, P>>,
-                >(inner)
-            }),
-            5 => Self::From5D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim5D, P>>,
-                >(inner)
-            }),
-            6 => Self::From6D(unsafe {
-                *std::mem::transmute::<
-                    Box<NdProjectedAutomaton<P, P>>,
-                    Box<NdProjectedAutomaton<Dim6D, P>>,
-                >(inner)
-            }),
-        })
+        NdProjectedAutomaton::default().into()
     }
 }
 impl<D: Dim, P: Dim> From<NdAutomaton<D>> for ProjectedAutomaton<P>
@@ -130,8 +95,8 @@ impl<P: Dim> AsSimulate for ProjectedAutomaton<P> {
     }
 }
 
-/// A D-dimensional automaton with a projection from a D-dimensional grid to a
-/// P-dimensional one.
+/// `D`-dimensional automaton with a projection from a `D`-dimensional grid to a
+/// `P`-dimensional one.
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct NdProjectedAutomaton<D: Dim, P: Dim> {
@@ -182,13 +147,138 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
     }
 }
 
-/// A fully-fledged cellular automaton, including a grid (NdTree), rule
-/// (Simulation), and generation count.
+/// 1D cellular automaton.
+pub type Automaton1D = NdAutomaton<Dim1D>;
+/// 2D cellular automaton.
+pub type Automaton2D = NdAutomaton<Dim2D>;
+/// 3D cellular automaton.
+pub type Automaton3D = NdAutomaton<Dim3D>;
+/// 4D cellular automaton.
+pub type Automaton4D = NdAutomaton<Dim4D>;
+/// 5D cellular automaton.
+pub type Automaton5D = NdAutomaton<Dim5D>;
+/// 6D cellular automaton.
+pub type Automaton6D = NdAutomaton<Dim6D>;
+
+/// Cellular automaton of any dimensionality.
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub enum Automaton {
+    Automaton1D(Automaton1D),
+    Automaton2D(Automaton2D),
+    Automaton3D(Automaton3D),
+    Automaton4D(Automaton4D),
+    Automaton5D(Automaton5D),
+    Automaton6D(Automaton6D),
+}
+impl Default for Automaton {
+    fn default() -> Self {
+        Self::Automaton2D(Automaton2D::default())
+    }
+}
+impl<'a, D: Dim> From<NdAutomaton<D>> for Automaton {
+    fn from(automaton: NdAutomaton<D>) -> Self {
+        let a = Box::new(automaton);
+        match_ndim!(match D {
+            1 => Self::Automaton1D(unsafe {
+                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim1D>>>(a)
+            }),
+            2 => Self::Automaton2D(unsafe {
+                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim2D>>>(a)
+            }),
+            3 => Self::Automaton3D(unsafe {
+                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim3D>>>(a)
+            }),
+            4 => Self::Automaton4D(unsafe {
+                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim4D>>>(a)
+            }),
+            5 => Self::Automaton5D(unsafe {
+                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim5D>>>(a)
+            }),
+            6 => Self::Automaton6D(unsafe {
+                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim6D>>>(a)
+            }),
+        })
+    }
+}
+impl AsSimulate for Automaton {
+    fn as_sim(&self) -> &dyn Simulate {
+        match self {
+            Self::Automaton1D(a) => a,
+            Self::Automaton2D(a) => a,
+            Self::Automaton3D(a) => a,
+            Self::Automaton4D(a) => a,
+            Self::Automaton5D(a) => a,
+            Self::Automaton6D(a) => a,
+        }
+    }
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate {
+        match self {
+            Self::Automaton1D(a) => a,
+            Self::Automaton2D(a) => a,
+            Self::Automaton3D(a) => a,
+            Self::Automaton4D(a) => a,
+            Self::Automaton5D(a) => a,
+            Self::Automaton6D(a) => a,
+        }
+    }
+}
+
+/// Immutable reference to a cellular automaton of any dimensionality.
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub enum AutomatonRef<'a> {
+    Automaton1D(&'a Automaton1D),
+    Automaton2D(&'a Automaton2D),
+    Automaton3D(&'a Automaton3D),
+    Automaton4D(&'a Automaton4D),
+    Automaton5D(&'a Automaton5D),
+    Automaton6D(&'a Automaton6D),
+}
+impl<'a, P: Dim> From<&'a ProjectedAutomaton<P>> for AutomatonRef<'a> {
+    fn from(projected_automaton: &'a ProjectedAutomaton<P>) -> Self {
+        match projected_automaton {
+            ProjectedAutomaton::From1D(inner) => Self::Automaton1D(&inner.automaton),
+            ProjectedAutomaton::From2D(inner) => Self::Automaton2D(&inner.automaton),
+            ProjectedAutomaton::From3D(inner) => Self::Automaton3D(&inner.automaton),
+            ProjectedAutomaton::From4D(inner) => Self::Automaton4D(&inner.automaton),
+            ProjectedAutomaton::From5D(inner) => Self::Automaton5D(&inner.automaton),
+            ProjectedAutomaton::From6D(inner) => Self::Automaton6D(&inner.automaton),
+        }
+    }
+}
+
+/// Mutable reference to a cellular automaton of any dimensionality.
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub enum AutomatonMut<'a> {
+    Automaton1D(&'a mut Automaton1D),
+    Automaton2D(&'a mut Automaton2D),
+    Automaton3D(&'a mut Automaton3D),
+    Automaton4D(&'a mut Automaton4D),
+    Automaton5D(&'a mut Automaton5D),
+    Automaton6D(&'a mut Automaton6D),
+}
+impl<'a, P: Dim> From<&'a mut ProjectedAutomaton<P>> for AutomatonMut<'a> {
+    fn from(projected_automaton: &'a mut ProjectedAutomaton<P>) -> Self {
+        match projected_automaton {
+            ProjectedAutomaton::From1D(inner) => Self::Automaton1D(&mut inner.automaton),
+            ProjectedAutomaton::From2D(inner) => Self::Automaton2D(&mut inner.automaton),
+            ProjectedAutomaton::From3D(inner) => Self::Automaton3D(&mut inner.automaton),
+            ProjectedAutomaton::From4D(inner) => Self::Automaton4D(&mut inner.automaton),
+            ProjectedAutomaton::From5D(inner) => Self::Automaton5D(&mut inner.automaton),
+            ProjectedAutomaton::From6D(inner) => Self::Automaton6D(&mut inner.automaton),
+        }
+    }
+}
+
+/// Cellular automaton simulation, including a grid of cells (stored using an
+/// `NdTree`), a rule, and a generation count.
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct NdAutomaton<D: Dim> {
     pub tree: NdTree<D>,
-    pub rule: Arc<dyn Rule<D>>,
+    pub rule: Arc<dyn NdRule<D>>,
     pub generations: BigInt,
 }
 impl<D: Dim> Default for NdAutomaton<D> {
@@ -243,68 +333,7 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
 }
 impl<D: Dim> NdAutomaton<D> {
     /// Sets the rule of the automaton.
-    pub fn set_rule(&mut self, new_rule: impl 'static + Rule<D>) {
+    pub fn set_rule(&mut self, new_rule: impl 'static + NdRule<D>) {
         self.rule = Arc::new(new_rule);
-    }
-}
-
-/// A 1D cellular automaton.
-pub type Automaton1D = NdAutomaton<Dim1D>;
-/// A 2D cellular automaton.
-pub type Automaton2D = NdAutomaton<Dim2D>;
-/// A 3D cellular automaton.
-pub type Automaton3D = NdAutomaton<Dim3D>;
-/// A 4D cellular automaton.
-pub type Automaton4D = NdAutomaton<Dim4D>;
-/// A 5D cellular automaton.
-pub type Automaton5D = NdAutomaton<Dim5D>;
-/// A 6D cellular automaton.
-pub type Automaton6D = NdAutomaton<Dim6D>;
-
-/// An immutable reference to a cellular automaton of an unknown dimensionality.
-#[allow(missing_docs)]
-#[derive(Debug)]
-pub enum AutomatonRef<'a> {
-    Automaton1D(&'a Automaton1D),
-    Automaton2D(&'a Automaton2D),
-    Automaton3D(&'a Automaton3D),
-    Automaton4D(&'a Automaton4D),
-    Automaton5D(&'a Automaton5D),
-    Automaton6D(&'a Automaton6D),
-}
-impl<'a, P: Dim> From<&'a ProjectedAutomaton<P>> for AutomatonRef<'a> {
-    fn from(projected_automaton: &'a ProjectedAutomaton<P>) -> Self {
-        match projected_automaton {
-            ProjectedAutomaton::From1D(inner) => Self::Automaton1D(&inner.automaton),
-            ProjectedAutomaton::From2D(inner) => Self::Automaton2D(&inner.automaton),
-            ProjectedAutomaton::From3D(inner) => Self::Automaton3D(&inner.automaton),
-            ProjectedAutomaton::From4D(inner) => Self::Automaton4D(&inner.automaton),
-            ProjectedAutomaton::From5D(inner) => Self::Automaton5D(&inner.automaton),
-            ProjectedAutomaton::From6D(inner) => Self::Automaton6D(&inner.automaton),
-        }
-    }
-}
-
-/// A mutable reference to a cellular automaton of an unknown dimensionality.
-#[allow(missing_docs)]
-#[derive(Debug)]
-pub enum AutomatonMut<'a> {
-    Automaton1D(&'a mut Automaton1D),
-    Automaton2D(&'a mut Automaton2D),
-    Automaton3D(&'a mut Automaton3D),
-    Automaton4D(&'a mut Automaton4D),
-    Automaton5D(&'a mut Automaton5D),
-    Automaton6D(&'a mut Automaton6D),
-}
-impl<'a, P: Dim> From<&'a mut ProjectedAutomaton<P>> for AutomatonMut<'a> {
-    fn from(projected_automaton: &'a mut ProjectedAutomaton<P>) -> Self {
-        match projected_automaton {
-            ProjectedAutomaton::From1D(inner) => Self::Automaton1D(&mut inner.automaton),
-            ProjectedAutomaton::From2D(inner) => Self::Automaton2D(&mut inner.automaton),
-            ProjectedAutomaton::From3D(inner) => Self::Automaton3D(&mut inner.automaton),
-            ProjectedAutomaton::From4D(inner) => Self::Automaton4D(&mut inner.automaton),
-            ProjectedAutomaton::From5D(inner) => Self::Automaton5D(&mut inner.automaton),
-            ProjectedAutomaton::From6D(inner) => Self::Automaton6D(&mut inner.automaton),
-        }
     }
 }

@@ -65,7 +65,7 @@ pub mod traits {
     pub use crate::ndtree::{CachedNodeRefTrait, NodeRefTrait};
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};
     pub use crate::projection::NdProjector;
-    pub use crate::sim::rule::Rule;
+    pub use crate::sim::rule::NdRule;
     pub use crate::sim::{AsSimulate, Simulate};
 }
 
@@ -74,10 +74,10 @@ pub mod prelude {
     pub use crate::traits::*;
 
     pub use crate::automaton::{
-        Automaton1D, Automaton2D, Automaton3D, Automaton4D, Automaton5D, Automaton6D, AutomatonMut,
-        AutomatonRef, NdAutomaton, NdProjectedAutomaton, ProjectedAutomaton, ProjectedAutomaton1D,
-        ProjectedAutomaton2D, ProjectedAutomaton3D, ProjectedAutomaton4D, ProjectedAutomaton5D,
-        ProjectedAutomaton6D,
+        Automaton, Automaton1D, Automaton2D, Automaton3D, Automaton4D, Automaton5D, Automaton6D,
+        AutomatonMut, AutomatonRef, NdAutomaton, NdProjectedAutomaton, ProjectedAutomaton,
+        ProjectedAutomaton1D, ProjectedAutomaton2D, ProjectedAutomaton3D, ProjectedAutomaton4D,
+        ProjectedAutomaton5D, ProjectedAutomaton6D,
     };
     pub use crate::axis::Axis;
     pub use crate::dim::{Dim1D, Dim2D, Dim3D, Dim4D, Dim5D, Dim6D};
@@ -93,6 +93,8 @@ pub mod prelude {
     pub use crate::num::{r64, BigInt, BigUint, FixedPoint, R64};
     pub use crate::projection::{NdProjection, NdProjectionError};
     pub use crate::sim::hashlife;
+    pub use crate::sim::rule::aliases::*;
+    pub use crate::sim::rule::Rule;
 }
 
 #[cfg(test)]

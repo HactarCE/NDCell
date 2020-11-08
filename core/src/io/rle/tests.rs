@@ -1,36 +1,10 @@
 use proptest::*;
 
 use super::*;
-use crate::axis::Axis::{U, V, W, X, Y, Z};
-use crate::ndrect::IRect3D;
+use crate::axis::Axis::{U, V, W, Y, Z};
 use crate::ndtree::{CachedNodeRefTrait, NdTree2D};
 use crate::ndvec::NdVec;
 use crate::num::ToPrimitive;
-
-#[test]
-fn test_rle_rect_iter() {
-    let rect = IRect3D::span(NdVec([-10, 0, 10]), NdVec([-8, 3, 11])).to_bigrect();
-
-    let mut rle_rect_iter = RleRectIter::new(rect.clone());
-
-    use RleRectIterItem::{Next, Pos};
-
-    for z in rect.axis_range(Z).rev() {
-        for y in rect.axis_range(Y).rev() {
-            for x in rect.axis_range(X) {
-                let pos = NdVec([x, y.clone(), z.clone()]);
-                assert_eq!(Some(Pos(pos)), rle_rect_iter.next());
-            }
-            if y != rect.min()[Y] {
-                assert_eq!(Some(Next(Y)), rle_rect_iter.next());
-            }
-        }
-        if z != rect.min()[Z] {
-            assert_eq!(Some(Next(Z)), rle_rect_iter.next());
-        }
-    }
-    assert_eq!(None, rle_rect_iter.next());
-}
 
 #[test]
 fn test_rle_item() {

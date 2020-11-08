@@ -4,9 +4,7 @@ use std::str::FromStr;
 
 use super::*;
 use crate::axis::{Axis, AXES, U, V, W, X, Y, Z};
-use crate::dim::Dim;
-use crate::ndrect::{self, BigRect};
-use crate::ndvec::{BigVec, BigVec6D, UVec6D};
+use crate::ndvec::{BigVec6D, UVec6D};
 use crate::num::{BigInt, Zero};
 
 /// RLE contents.
@@ -24,11 +22,11 @@ pub struct Rle {
 impl Rle {
     /// Returns the name of the rule.
     pub fn rule(&self) -> Option<&str> {
-        self.header.rule.as_ref().map(|s| s.as_str())
+        self.header.rule.as_deref()
     }
     /// Sets the rule name.
     pub fn with_rule(mut self, rule: Option<impl ToString>) -> Self {
-        self.header.rule = rule.map(|s| s.to_string());
+        self.header.rule = rule.map(|r| r.to_string());
         self
     }
 
@@ -537,78 +535,4 @@ impl fmt::Binary for RleItem {
 /// This function panics if the Rleresult does not fit in a `char`.
 fn char_diff(ch1: char, ch2: char) -> u8 {
     ch2 as u8 - ch1 as u8 + 1
-}
-
-/// Iterator over a rectangle that iterates in normal order for the X axis but
-/// reverse order for the Y, Z, W, U, and V axes. It also returns sentinels
-/// whenever a row or layer ends.
-#[derive(Debug, Clone)]
-pub struct RleRectIter<D: Dim> {
-    /// Iterator over the rectangle with non-X axes negated.
-    inverted_rect_iter: ndrect::Iter<D, BigInt>,
-    /// Position returned most recently.
-    prev_pos: Option<BigVec<D>>,
-    /// Position to yield next; if this is `None`, another element is taken from
-    /// `inverted_rect_iter`.
-    next_pos: Option<BigVec<D>>,
-}
-impl<D: Dim> RleRectIter<D> {
-    pub fn new(mut r: BigRect<D>) -> Self {
-        // Negate all axes except the X axis.
-        for &ax in &D::axes()[1..] {
-            r.negate_axis(ax);
-        }
-
-        Self {
-            inverted_rect_iter: r.iter(),
-            prev_pos: None,
-            next_pos: None,
-        }
-    }
-}
-impl<D: Dim> Iterator for RleRectIter<D> {
-    type Item = RleRectIterItem<D>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // If we returned a sentinel for the last item, return the actual
-        // position now.
-        if let Some(pos) = self.next_pos.take() {
-            return Some(RleRectIterItem::Pos(pos));
-        }
-
-        let mut new_pos = self.inverted_rect_iter.next()?;
-        // Undo negation of all axes except the X axis.
-        for &ax in &D::axes()[1..] {
-            new_pos[ax] *= -1;
-        }
-
-        // Determine the most significant axis that changed and update
-        // `self.prev_pos`.
-        let prev_pos = self.prev_pos.replace(new_pos.clone());
-        let axis = prev_pos.and_then(|prev_pos| {
-            D::axes()
-                .iter()
-                .copied()
-                .filter(|&ax| new_pos[ax] != prev_pos[ax])
-                .next_back()
-        });
-
-        match axis {
-            // No need to give a sentinel for the first value or for moving
-            // along the X axis.
-            None | Some(X) => Some(RleRectIterItem::Pos(new_pos)),
-            // If we are moving along any other axis, return a sentinel before
-            // returning the new position.
-            Some(other_axis) => {
-                self.next_pos = Some(new_pos);
-                Some(RleRectIterItem::Next(other_axis))
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum RleRectIterItem<D: Dim> {
-    Pos(BigVec<D>),
-    Next(Axis),
 }

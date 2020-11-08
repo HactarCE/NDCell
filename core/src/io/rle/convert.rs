@@ -4,6 +4,7 @@ use super::*;
 use crate::automaton::{Automaton, AutomatonRef, NdAutomaton};
 use crate::axis::Axis::X;
 use crate::dim::Dim;
+use crate::io::utils::{SemiReverseRectIter, SemiReverseRectIterItem};
 use crate::ndarray::NdArray;
 use crate::ndrect::{BigRect, CanContain, NdRect};
 use crate::ndtree::{
@@ -136,7 +137,8 @@ impl<D: Dim> NdAutomaton<D> {
             Ok(rle.to_string_2_state())
         }
     }
-    /// Exports a rectangle from the automaton to an RLE struct.
+    /// Exports a rectangle from the automaton to an RLE struct. If `rect` is
+    /// `None`, the entire grid is exported.
     pub fn to_rle(&self, rect: Option<BigRect<D>>) -> RleResult<Rle> {
         Ok(self
             .tree
@@ -240,13 +242,13 @@ impl<D: Dim> NdTree<D> {
             let mut row_rect_max = bounding_rect.max();
             row_rect_max[X] = row_rect_min[X].clone();
             let row_rect = NdRect::span(row_rect_min, row_rect_max);
-            for rect_iter_item in RleRectIter::new(row_rect) {
+            for rect_iter_item in SemiReverseRectIter::new(row_rect) {
                 match rect_iter_item {
-                    RleRectIterItem::Pos(row_start) => {
+                    SemiReverseRectIterItem::Pos(row_start) => {
                         let runs_iter = rle_row_of_node(self.root().as_ref(&cache), row_start);
                         runs.try_extend(runs_iter)?;
                     }
-                    RleRectIterItem::Next(ax) => runs.append(RleItem::Next(ax)),
+                    SemiReverseRectIterItem::Next(ax) => runs.append(RleItem::Next(ax)),
                 }
             }
         }
@@ -323,10 +325,10 @@ impl<D: Dim> From<&NdArray<u8, D>> for Rle {
         }
 
         let mut runs = RleRunVec::default();
-        for item in RleRectIter::new(ndarray.rect().to_bigrect()) {
+        for item in SemiReverseRectIter::new(ndarray.rect().to_bigrect()) {
             runs.append(match item {
-                RleRectIterItem::Pos(pos) => RleItem::Cell(ndarray[pos.to_uvec()]),
-                RleRectIterItem::Next(axis) => RleItem::Next(axis),
+                SemiReverseRectIterItem::Pos(pos) => RleItem::Cell(ndarray[pos.to_uvec()]),
+                SemiReverseRectIterItem::Next(axis) => RleItem::Next(axis),
             });
         }
         let runs = runs.into_vec();

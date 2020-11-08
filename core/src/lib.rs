@@ -52,6 +52,8 @@ pub mod sim;
 
 /// Fast non-cryptographic hasher.
 type FastHashBuilder = std::hash::BuildHasherDefault<seahash::SeaHasher>;
+/// `HashMap` using a fast non-cryptographic hasher.
+type HashMap<K, V> = std::collections::HashMap<K, V, FastHashBuilder>;
 
 /// All public traits, for easy importing.
 pub mod traits {

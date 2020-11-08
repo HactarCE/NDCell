@@ -5,7 +5,6 @@
 
 use itertools::Itertools;
 use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
-use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
@@ -17,6 +16,7 @@ use super::{
 };
 use crate::dim::Dim;
 use crate::ndvec::{BigVec, UVec};
+use crate::HashMap;
 
 /// Cache of ND-tree nodes for a single simulation.
 pub struct NodeCache<D: Dim> {
@@ -98,7 +98,7 @@ impl<D: Dim> NodeCache<D> {
             this: Weak::new(),
 
             nodes: ShardedBoxedSet::new(),
-            arc_nodes: Mutex::new(HashMap::new()),
+            arc_nodes: Mutex::new(HashMap::default()),
             empty_nodes: Mutex::new(vec![]),
 
             node_heap_size: AtomicUsize::new(0),

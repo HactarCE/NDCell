@@ -1,11 +1,11 @@
 use proptest::prelude::*;
-use std::collections::HashMap;
 
 use super::*;
 use crate::axis::{X, Y};
 use crate::ndrect::IRect;
 use crate::ndvec::{proptest_ivec2d, IVec2D, NdVec};
 use crate::num::BigUint;
+use crate::HashMap;
 
 fn assert_ndtree_valid(
     expected_cells: &HashMap<IVec2D, u8>,
@@ -46,7 +46,7 @@ proptest! {
         let mut ndtree = NdTree::default();
         let _node_cache = Arc::clone(ndtree.cache());
         let node_cache = _node_cache.read();
-        let mut hashmap = HashMap::new();
+        let mut hashmap = HashMap::default();
         for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
             ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);
@@ -98,7 +98,7 @@ proptest! {
         let mut ndtree = NdTree::default();
         let _node_cache = Arc::clone(ndtree.cache());
         let node_cache = _node_cache.read();
-        let mut hashmap = HashMap::new();
+        let mut hashmap = HashMap::default();
             for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
             ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);

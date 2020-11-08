@@ -25,3 +25,17 @@ __ http://golly.sourceforge.net/Help/formats.html#rle
   - ``!`` to terminate a pattern (as in normal RLE)
 
 Conventionally Y coordinates increase downwards in an RLE; in NDCell, however, Y coordinates increase upwards. To resolve this, NDCell treats all coordinates in the ``#CXRLE`` ``Pos`` values as negated except for the X value. (This is consistent with Golly's behavior when the setting "Y coordinates increase upwards" is enabled.)
+
+N-dimensional Macrocell format (NDMC)
+=====================================
+
+For interchanging large patterns, NDCell uses a Macrocell format that is mostly backwards-compatible with Golly's `Macrocell format`__. While Golly has a variant for some two-state algorithms, NDCell always uses the generic format that supports any number of states (though it is able to parse the two-state variant). It introduces the following new features:
+
+__ http://golly.sourceforge.net/Help/formats.html#mc
+
+- The number of dimensions is inferred from the rule.
+- An offset may be specified on a line starting with ``#O``, followed by whitespace-separated signed numbers indicating the position of the center node.
+- The ``#G`` line may contain a negative value for the number of generations.
+- Each node line contains ``2^d + 1`` values, where ``d`` is the number of dimensions. These values are ordered as they would be in RLE. (X axis increases; all other axes decrease.)
+
+Unlike RLE, Y coordinates increase upwards in a Macrocell file.

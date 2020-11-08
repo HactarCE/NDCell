@@ -55,6 +55,9 @@ type FastHashBuilder = std::hash::BuildHasherDefault<seahash::SeaHasher>;
 /// `HashMap` using a fast non-cryptographic hasher.
 type HashMap<K, V> = std::collections::HashMap<K, V, FastHashBuilder>;
 
+/// Header used for Macrocell format.
+const MACROCELL_HEADER: &str = concat!("[M2] (ndcell ", env!("CARGO_PKG_VERSION"), ")");
+
 /// All public traits, for easy importing.
 pub mod traits {
     pub use crate::automaton::NdProjectedAutomatonTrait;

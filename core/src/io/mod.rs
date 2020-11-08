@@ -1,3 +1,4 @@
+pub mod macrocell;
 pub mod rle;
 mod utils;
 

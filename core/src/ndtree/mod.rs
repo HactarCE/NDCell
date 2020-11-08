@@ -99,6 +99,26 @@ impl<D: Dim> NdTree<D> {
             offset: BigVec::repeat(-node.layer().child_layer().big_len()),
         }
     }
+    /// Creates an ND-tree containing the given node centered on the given
+    /// position.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the node consists of only a single cell.
+    #[inline]
+    pub fn from_node_centered_on<'n>(
+        node: impl CachedNodeRefTrait<'n, D = D>,
+        offset: BigVec<D>,
+    ) -> Self {
+        assert!(
+            node.layer() > Layer(0),
+            "Root of ND-tree must be larger than a single cell",
+        );
+        Self {
+            root: node.into(),
+            offset: offset + BigVec::repeat(-node.layer().child_layer().big_len()),
+        }
+    }
 
     /// Returns the root node of the ND-tree.
     #[inline]
@@ -144,6 +164,11 @@ impl<D: Dim> NdTree<D> {
     #[inline]
     pub fn offset(&self) -> &BigVec<D> {
         &self.offset
+    }
+    /// Sets the lowest coordinate of the root node of the grid.
+    #[inline]
+    pub fn set_offset(&mut self, offset: BigVec<D>) {
+        self.offset = offset;
     }
     /// Returns a rectangle encompassing the grid.
     #[inline]

@@ -180,19 +180,3 @@ impl MouseDisplay {
         }
     }
 }
-impl From<&MouseDragBinding> for MouseDisplay {
-    fn from(b: &MouseDragBinding) -> Self {
-        match b {
-            MouseDragBinding::Draw(_) => Self::Draw,
-            MouseDragBinding::Select(_) => Self::Select,
-            MouseDragBinding::View(v) => {
-                use ViewDragCommand::*;
-                match v.0 {
-                    Orbit => Self::Normal, // TODO: better mouse icon
-                    Pan | PanAligned | PanAlignedVertical | PanHorizontal => Self::Pan,
-                    Scale => Self::ResizeNS, // TODO: better mouse icon
-                }
-            }
-        }
-    }
-}

@@ -13,8 +13,21 @@ impl MouseDragBinding {
     pub fn display(&self) -> MouseDisplay {
         match self {
             Self::Draw(_) => MouseDisplay::Draw,
-            Self::Select(_) => MouseDisplay::Select,
-            Self::View(_) => MouseDisplay::Pan,
+            Self::Select(s) => {
+                use SelectDragCommand::*;
+                match s.0 {
+                    NewRect => MouseDisplay::Select,
+                    Resize { .. } => MouseDisplay::Normal,
+                }
+            }
+            Self::View(v) => {
+                use ViewDragCommand::*;
+                match v.0 {
+                    Orbit => MouseDisplay::Normal, // TODO: better mouse icon
+                    Pan | PanAligned | PanAlignedVertical | PanHorizontal => MouseDisplay::Pan,
+                    Scale => MouseDisplay::ResizeNS, // TODO: better mouse icon
+                }
+            }
         }
     }
     pub fn to_command(self, cursor_pos: FVec2D) -> Command {

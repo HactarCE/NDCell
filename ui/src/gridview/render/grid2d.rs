@@ -767,8 +767,8 @@ fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: 
 
 /// Simple rectangle in a cell overlay.
 ///
-/// Because glLineWidth is not supported on all platforms, we draw rectangles to
-/// vary gridline width.
+/// Because `glLineWidth` is not supported on all platforms, we draw rectangles
+/// to vary gridline width.
 #[derive(Debug, Copy, Clone)]
 struct CellOverlayRect {
     /// Start point of a line, or one corner of a rectangle.
@@ -788,7 +788,7 @@ impl CellOverlayRect {
     fn solid_rect(rect: IRect2D, z: f32, color: [f32; 4]) -> Self {
         Self {
             start: rect.min(),
-            end: rect.max(),
+            end: rect.max() + 1,
             z,
             start_color: color,
             end_color: color,

@@ -10,7 +10,7 @@ mod ops;
 
 use crate::axis::Axis;
 use crate::dim::{Dim, DimFor};
-use crate::ndvec::NdVec;
+use crate::ndvec::{BigVec, FixedVec, NdVec};
 use crate::num::{Float, Integer, NdVecNum, Signed, ToPrimitive};
 pub use aliases::*;
 pub use iter::Iter;
@@ -175,45 +175,8 @@ where
 
     /// Returns a range over all the values of the given axis in the rectangle.
     #[inline]
-    pub fn axis_range(&self, axis: Axis) -> num::iter::RangeInclusive<N>
-    where
-        N: Integer,
-    {
+    pub fn axis_range(&self, axis: Axis) -> num::iter::RangeInclusive<N> {
         num::range_inclusive(self.start[axis].clone(), self.max()[axis].clone())
-    }
-
-    /// Returns the corner of the rectangle closest to the given point.
-    #[inline]
-    pub fn closest_corner(&self, point: &NdVec<D, N>) -> NdVec<D, N>
-    where
-        N: Signed,
-    {
-        let mut ret = self.max();
-        for &ax in D::Dim::axes() {
-            if (point[ax].clone() - ret[ax].clone()).abs()
-                > (point[ax].clone() - self.start[ax].clone()).abs()
-            {
-                ret[ax] = self.start[ax].clone();
-            }
-        }
-        ret
-    }
-
-    /// Returns the corner of the rectangle farthest from the given point.
-    #[inline]
-    pub fn farthest_corner(&self, point: &NdVec<D, N>) -> NdVec<D, N>
-    where
-        N: Signed,
-    {
-        let mut ret = self.max();
-        for &ax in D::Dim::axes() {
-            if (point[ax].clone() - ret[ax].clone()).abs()
-                <= (point[ax].clone() - self.start[ax].clone()).abs()
-            {
-                ret[ax] = self.start[ax].clone();
-            }
-        }
-        ret
     }
 
     /// Negates an axis of the rectangle.
@@ -263,6 +226,42 @@ where
         NdVec<D, N>: Add<T1, Output = NdVec<D, N>> + Add<T2, Output = NdVec<D, N>>,
     {
         Self::span(self.min() + min_offset, self.max() + max_offset)
+    }
+}
+
+impl<D: Dim> BigRect<D> {
+    /// Returns the corner of the rectangle closest to the given point.
+    #[inline]
+    pub fn closest_corner(&self, point: &FixedVec<D>) -> BigVec<D> {
+        let fixedrect = self.to_fixedrect();
+        let min = fixedrect.min();
+        let max = fixedrect.max();
+        let mut ret = self.max();
+        for &ax in D::axes() {
+            let distance_to_min = (point[ax].clone() - &min[ax]).abs();
+            let distance_to_max = (point[ax].clone() - &max[ax]).abs();
+            if distance_to_min <= distance_to_max {
+                ret[ax] = self.start[ax].clone();
+            }
+        }
+        ret
+    }
+
+    /// Returns the corner of the rectangle farthest from the given point.
+    #[inline]
+    pub fn farthest_corner(&self, point: &FixedVec<D>) -> BigVec<D> {
+        let fixedrect = self.to_fixedrect();
+        let min = fixedrect.min();
+        let max = fixedrect.max();
+        let mut ret = self.max();
+        for &ax in D::axes() {
+            let distance_to_min = (point[ax].clone() - &min[ax]).abs();
+            let distance_to_max = (point[ax].clone() - &max[ax]).abs();
+            if distance_to_min > distance_to_max {
+                ret[ax] = self.start[ax].clone();
+            }
+        }
+        ret
     }
 }
 

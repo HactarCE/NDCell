@@ -114,7 +114,7 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - Partially working ([Demo video][3d-demo])
 
 [custom-rules-demo]: https://streamable.com/7yawnq
-[selections-demo]: https://streamable.com/taei4j
+[selections-demo]: https://streamable.com/1hj7lv
 [3d-demo]: https://streamable.com/7yp8ml
 
 ## What's planned for the future

@@ -9,7 +9,7 @@ mod transform;
 
 use crate::commands::ViewCommand;
 use crate::config::Config;
-use crate::gridview::DragHandler;
+use crate::gridview::{DragHandler, DragOutcome};
 use crate::Scale;
 pub use camera2d::Camera2D;
 pub use camera3d::Camera3D;

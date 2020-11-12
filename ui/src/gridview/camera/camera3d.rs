@@ -6,7 +6,7 @@ use log::warn;
 use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
 
-use super::{Camera, CellTransform3D, DragHandler, Scale, MIN_TARGET_SIZE};
+use super::{Camera, CellTransform3D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE};
 use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::config::{Config, ForwardAxis3D, UpAxis3D};
 
@@ -255,7 +255,7 @@ impl Camera<Dim3D> for Camera3D {
                         let delta = (cursor_start - cursor_end) * orbit_factor;
                         cam.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
                         cam.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
-                        Ok(true)
+                        Ok(DragOutcome::Continue)
                     })))
                 }
 
@@ -267,7 +267,7 @@ impl Camera<Dim3D> for Camera3D {
                         if let (Some(start), Some(end)) = (&start, &end) {
                             cam.pivot += start - end;
                         }
-                        Ok(true)
+                        Ok(DragOutcome::Continue)
                     })))
                 }
                 ViewDragCommand::PanAligned => {
@@ -288,7 +288,7 @@ impl Camera<Dim3D> for Camera3D {
                         if let (Some(start), Some(end)) = (&start, &end) {
                             cam.pivot += start - end;
                         }
-                        Ok(true)
+                        Ok(DragOutcome::Continue)
                     })))
                 }
 

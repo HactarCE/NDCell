@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 
 use ndcell_core::prelude::*;
 
-use super::{Camera, CellTransform, DragHandler, NdCellTransform};
+use super::{Camera, CellTransform, DragHandler, DragOutcome, NdCellTransform};
 use crate::commands::ViewCommand;
 use crate::config::{Config, Interpolation};
 
@@ -117,7 +117,7 @@ impl<D: Dim, C: Camera<D>> Interpolator<D, C> {
                     // Skip interpolation for dragging.
                     camera_drag_handler(&mut this.target, cursor_pos)?;
                     camera_drag_handler(&mut this.current, cursor_pos)?;
-                    Ok(true)
+                    Ok(DragOutcome::Continue)
                 })
             }))
     }

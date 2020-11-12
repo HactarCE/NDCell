@@ -5,7 +5,7 @@ use log::warn;
 use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
 
-use super::{Camera, CellTransform2D, DragHandler, Scale, MIN_TARGET_SIZE};
+use super::{Camera, CellTransform2D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE};
 use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::config::Config;
 
@@ -216,7 +216,7 @@ impl Camera<Dim2D> for Camera2D {
                         if let (Some(start), Some(end)) = (&start, &end) {
                             cam.center += start - end;
                         }
-                        Ok(true)
+                        Ok(DragOutcome::Continue)
                     })))
                 }
 

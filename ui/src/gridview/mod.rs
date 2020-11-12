@@ -25,13 +25,19 @@ pub use view3d::GridView3D;
 use worker::WorkerRequest;
 
 /// Handler for mouse drag events, when the user starts dragging and called for
-/// each cursor movement until released. Returns `false` if the drag should be
-/// cancelled, or `true` if it may continue.
+/// each cursor movement until released. Returns whether to continue or cancel
+/// the drag.
 ///
 /// It takes as input the current state, which is mutated, and the current mouse
 /// cursor position. If any initial state or mouse cursor history is relevant,
 /// the closure must maintain this information.
-type DragHandler<G> = Box<dyn FnMut(&mut G, FVec2D) -> Result<bool>>;
+pub type DragHandler<G> = Box<dyn FnMut(&mut G, FVec2D) -> Result<DragOutcome>>;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum DragOutcome {
+    Continue,
+    Cancel,
+}
 
 /// Abstraction over 2D and 3D gridviews.
 #[enum_dispatch(GridViewTrait, History)]

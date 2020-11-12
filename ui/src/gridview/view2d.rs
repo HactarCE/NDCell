@@ -12,7 +12,7 @@ use super::history::{History, HistoryBase, HistoryManager};
 use super::render::grid2d::{RenderCache, RenderInProgress};
 use super::selection::Selection2D;
 use super::worker::*;
-use super::DragHandler;
+use super::{DragHandler, DragOutcome};
 use crate::clipboard_compat::{clipboard_get, clipboard_set};
 use crate::commands::*;
 use crate::config::{Config, MouseDisplay};
@@ -102,8 +102,7 @@ impl GridViewTrait for GridView2D {
                         let mut pos1 = initial_pos;
                         Box::new(move |this, new_cursor_pos| {
                             if this.too_small_to_draw() {
-                                // Cancel the drag.
-                                return Ok(false);
+                                return Ok(DragOutcome::Cancel);
                             }
                             let pos2 = this
                                 .camera()
@@ -117,8 +116,7 @@ impl GridViewTrait for GridView2D {
                                 }
                             }
                             pos1 = pos2;
-                            // Continue the drag.
-                            Ok(true)
+                            Ok(DragOutcome::Continue)
                         })
                     }
                     DrawShape::Line => {
@@ -172,8 +170,7 @@ impl GridViewTrait for GridView2D {
                         let new_selection_rect = inner_drag_handler(&new_mouse_pos);
                         this.selection = new_selection_rect.map(Selection2D::from);
                     }
-                    // Continue the drag action.
-                    return Ok(true);
+                    return Ok(DragOutcome::Continue);
                 });
 
                 if config.hist.record_select {
@@ -245,11 +242,9 @@ impl GridViewTrait for GridView2D {
     }
     fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()> {
         if let Some(mut h) = self.drag_handler.take() {
-            let continue_drag = h(self, cursor_pos)?;
-            if continue_drag {
-                self.drag_handler = Some(h);
-            } else {
-                self.stop_drag()?;
+            match h(self, cursor_pos)? {
+                DragOutcome::Continue => self.drag_handler = Some(h),
+                DragOutcome::Cancel => self.stop_drag()?,
             }
         }
         Ok(())

@@ -398,7 +398,7 @@ impl<'a> RenderInProgress<'a> {
     pub fn draw_selection_resize_preview(
         &mut self,
         selection_rect: BigRect2D,
-        mouse_pos: &view2d::MousePos,
+        mouse_pos: &ScreenPos2D,
         width: f64,
     ) -> Result<()> {
         let maybe_drag_handler = view2d::selection_drag_handler(

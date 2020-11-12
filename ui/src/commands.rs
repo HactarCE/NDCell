@@ -130,6 +130,23 @@ pub enum DrawMode {
     /// Sets the state of a nonzero cell to #0. Ignores the selected cell state.
     Erase,
 }
+impl DrawMode {
+    /// Returns the cell state to use when drawing, given the existing state of
+    /// the clicked cell and the cell state that is selected.
+    pub fn cell_state(self, existing_cell_state: u8, selected_cell_state: u8) -> u8 {
+        match self {
+            DrawMode::Place => selected_cell_state,
+            DrawMode::Replace => {
+                if existing_cell_state == selected_cell_state {
+                    0_u8
+                } else {
+                    selected_cell_state
+                }
+            }
+            DrawMode::Erase => 0_u8,
+        }
+    }
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum DrawShape {

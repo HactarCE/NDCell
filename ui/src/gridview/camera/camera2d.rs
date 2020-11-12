@@ -35,6 +35,22 @@ impl Default for Camera2D {
 }
 
 impl Camera2D {
+    pub fn pixel_to_screen_pos(&self, pixel: FVec2D) -> Option<ScreenPos2D> {
+        let transform = self.cell_transform();
+        let cell = transform.pixel_to_global_cell(pixel)?;
+        let int_cell = cell.floor().0;
+        let render_cell = transform.pixel_to_local_render_cell(pixel)?;
+        let int_render_cell = render_cell.floor().to_ivec();
+
+        Some(ScreenPos2D {
+            pixel,
+            cell,
+            int_cell,
+            render_cell,
+            int_render_cell,
+        })
+    }
+
     // Compute the position of the camera in render cell space, given a base
     // position near the camera center.
     pub fn render_cell_pos(&self, base_cell_pos: &BigVec2D) -> FVec2D {
@@ -282,5 +298,31 @@ impl Camera<Dim2D> for Camera2D {
                 Ok(None)
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ScreenPos2D {
+    pixel: FVec2D,
+    cell: FixedVec2D,
+    int_cell: BigVec2D,
+    render_cell: FVec2D,
+    int_render_cell: IVec2D,
+}
+impl ScreenPos2D {
+    pub fn pixel(&self) -> FVec2D {
+        self.pixel
+    }
+    pub fn cell(&self) -> &FixedVec2D {
+        &self.cell
+    }
+    pub fn int_cell(&self) -> &BigVec2D {
+        &self.int_cell
+    }
+    pub fn render_cell(&self) -> FVec2D {
+        self.render_cell
+    }
+    pub fn int_render_cell(&self) -> IVec2D {
+        self.int_render_cell
     }
 }

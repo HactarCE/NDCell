@@ -76,11 +76,11 @@ impl MainWindow {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
                         }
                     }
-                    if let Some(hover_pos) = view2d.hovered_cell_pos() {
+                    if let Some(mouse_pos) = view2d.mouse_pos() {
                         ui.text(format!(
                             "Cursor: X = {}, Y = {}",
-                            hover_pos[X].floor().0,
-                            hover_pos[Y].floor().0,
+                            mouse_pos.int_cell()[X],
+                            mouse_pos.int_cell()[Y],
                         ));
                     } else {
                         ui.text("");

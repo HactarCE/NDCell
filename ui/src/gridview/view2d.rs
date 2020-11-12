@@ -6,7 +6,7 @@ use std::sync::Arc;
 use ndcell_core::axis::Axis::{X, Y};
 use ndcell_core::prelude::*;
 
-use super::camera::{Camera, Camera2D, Interpolate, Interpolator};
+use super::camera::{Camera, Camera2D, Interpolate, Interpolator, ScreenPos2D};
 use super::common::{GridViewCommon, GridViewTrait, RenderParams, RenderResult};
 use super::history::{History, HistoryBase, HistoryManager};
 use super::render::grid2d::{RenderCache, RenderInProgress};
@@ -73,29 +73,16 @@ impl GridViewTrait for GridView2D {
                 self.common.selected_cell_state = new_selected_cell_state;
             }
             DrawCommand::Drag(c, cursor_start) => {
-                let cell_transform = self.camera().cell_transform();
-
-                let initial_pos = cell_transform
-                    .pixel_to_global_cell(cursor_start)
-                    .map(|pos| pos.floor().0);
-
-                let new_cell_state = match c.mode {
-                    DrawMode::Place => self.selected_cell_state(),
-                    DrawMode::Replace => {
-                        if let Some(pos) = &initial_pos {
-                            if self.get_cell(&self.cache().read(), pos)
-                                == self.selected_cell_state()
-                            {
-                                0
-                            } else {
-                                self.selected_cell_state()
-                            }
-                        } else {
-                            self.selected_cell_state()
-                        }
-                    }
-                    DrawMode::Erase => 0,
+                let maybe_initial_pos = self.camera().pixel_to_screen_pos(cursor_start);
+                let initial_pos = match maybe_initial_pos {
+                    Some(pos) => pos.int_cell().clone(),
+                    None => return Ok(()),
                 };
+
+                let new_cell_state = c.mode.cell_state(
+                    self.get_cell(&self.cache().read(), &initial_pos),
+                    self.selected_cell_state(),
+                );
 
                 let mut new_drag_handler: DragHandler<Self> = match c.shape {
                     DrawShape::Freeform => {
@@ -109,14 +96,16 @@ impl GridViewTrait for GridView2D {
                                 .cell_transform()
                                 .pixel_to_global_cell(new_cursor_pos)
                                 .map(|pos| pos.floor().0);
-                            if let (Some(pos1), Some(pos2)) = (&pos1, &pos2) {
+                            if let Some(pos2) = &pos2 {
                                 for pos in ndcell_core::math::bresenham(pos1.clone(), pos2.clone())
                                 {
                                     this.automaton.set_cell(&pos, new_cell_state);
                                 }
+                                pos1 = pos2.clone();
+                                Ok(DragOutcome::Continue)
+                            } else {
+                                Ok(DragOutcome::Cancel)
                             }
-                            pos1 = pos2;
-                            Ok(DragOutcome::Continue)
                         })
                     }
                     DrawShape::Line => {
@@ -146,7 +135,7 @@ impl GridViewTrait for GridView2D {
                     }
                 }
 
-                let maybe_initial_mouse_pos = MousePos::from_pixel(cursor_start, self.camera());
+                let maybe_initial_mouse_pos = self.camera().pixel_to_screen_pos(cursor_start);
                 let initial_mouse_pos = match maybe_initial_mouse_pos {
                     Some(pos) => pos,
                     None => return Ok(()),
@@ -163,11 +152,10 @@ impl GridViewTrait for GridView2D {
                 };
 
                 let new_drag_handler: DragHandler<Self> = Box::new(move |this, new_cursor_pos| {
-                    if let Some(new_mouse_pos) = MousePos::from_pixel(new_cursor_pos, this.camera())
-                    {
+                    if let Some(new_pos) = this.camera().pixel_to_screen_pos(new_cursor_pos) {
                         // Compute the new selection rectangle and update the
                         // selection.
-                        let new_selection_rect = inner_drag_handler(&new_mouse_pos);
+                        let new_selection_rect = inner_drag_handler(&new_pos);
                         this.selection = new_selection_rect.map(Selection2D::from);
                     }
                     return Ok(DragOutcome::Continue);
@@ -327,7 +315,7 @@ impl GridViewTrait for GridView2D {
                 MouseDisplay::Draw => {
                     if !self.too_small_to_draw() {
                         rip.draw_hover_highlight(
-                            mouse_pos.int_global(),
+                            mouse_pos.int_cell(),
                             gridlines_width * 2.0,
                             crate::colors::HOVERED_DRAW,
                         )?;
@@ -335,7 +323,7 @@ impl GridViewTrait for GridView2D {
                 }
                 MouseDisplay::Select => {
                     rip.draw_hover_highlight(
-                        mouse_pos.int_global(),
+                        mouse_pos.int_cell(),
                         gridlines_width * 2.0,
                         crate::colors::HOVERED_SELECT,
                     )?;
@@ -366,38 +354,6 @@ impl GridViewTrait for GridView2D {
     }
 }
 
-impl GridView2D {
-    /// Returns the current camera.
-    pub fn camera(&self) -> &Camera2D {
-        &self.camera_interpolator.current
-    }
-    /// Returns the cell position underneath the cursor. Floor this to get an
-    /// integer cell position.
-    pub fn hovered_cell_pos(&self) -> Option<FixedVec2D> {
-        self.camera()
-            .cell_transform()
-            .pixel_to_global_cell(self.common.mouse.pos?)
-    }
-    /// Deselect all.
-    pub fn deselect(&mut self) {
-        if self
-            .selection
-            .as_ref()
-            .and_then(|s| s.cells.as_ref())
-            .is_some()
-        {
-            todo!("deselect with cells");
-        }
-        self.selection = None;
-    }
-
-    /// Returns `true` if the scale is too small to draw individual cells, or
-    /// `false` otherwise.
-    fn too_small_to_draw(&self) -> bool {
-        self.camera().scale() < Scale::from_factor(r64(1.0))
-    }
-}
-
 impl AsSimulate for GridView2D {
     fn as_sim(&self) -> &dyn Simulate {
         &self.automaton
@@ -422,6 +378,30 @@ impl From<Automaton2D> for GridView2D {
 }
 
 impl GridView2D {
+    /// Returns the current camera.
+    pub fn camera(&self) -> &Camera2D {
+        &self.camera_interpolator.current
+    }
+
+    /// Deselect all.
+    pub fn deselect(&mut self) {
+        if self
+            .selection
+            .as_ref()
+            .and_then(|s| s.cells.as_ref())
+            .is_some()
+        {
+            todo!("deselect with cells");
+        }
+        self.selection = None;
+    }
+
+    /// Returns `true` if the scale is too small to draw individual cells, or
+    /// `false` otherwise.
+    fn too_small_to_draw(&self) -> bool {
+        self.camera().scale() < Scale::from_factor(r64(1.0))
+    }
+
     pub fn cache(&self) -> &Arc<RwLock<NodeCache<Dim2D>>> {
         &self.automaton.projected_cache()
     }
@@ -429,8 +409,8 @@ impl GridView2D {
         self.automaton.projected_tree().get_cell(cache, pos)
     }
 
-    fn mouse_pos(&self) -> Option<MousePos> {
-        MousePos::from_pixel(self.mouse().pos?, self.camera())
+    pub fn mouse_pos(&self) -> Option<ScreenPos2D> {
+        self.camera().pixel_to_screen_pos(self.mouse().pos?)
     }
 
     fn get_worker(&mut self) -> &mut Worker<ProjectedAutomaton2D> {
@@ -482,52 +462,11 @@ impl HistoryBase for GridView2D {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct MousePos {
-    pixel: FVec2D,
-    global: FixedVec2D,
-    int_global: BigVec2D,
-    render_cell: FVec2D,
-    int_render_cell: IVec2D,
-}
-impl MousePos {
-    pub fn from_pixel(pixel: FVec2D, camera: &Camera2D) -> Option<Self> {
-        let cell_transform = camera.cell_transform();
-        let global = cell_transform.pixel_to_global_cell(pixel)?;
-        let int_global = global.floor().0;
-        let render_cell = cell_transform.pixel_to_local_render_cell(pixel)?;
-        let int_render_cell = render_cell.floor().to_ivec();
-
-        Some(Self {
-            pixel,
-            global,
-            int_global,
-            render_cell,
-            int_render_cell,
-        })
-    }
-    pub fn pixel(&self) -> FVec2D {
-        self.pixel
-    }
-    pub fn global(&self) -> &FixedVec2D {
-        &self.global
-    }
-    pub fn int_global(&self) -> &BigVec2D {
-        &self.int_global
-    }
-    pub fn render_cell(&self) -> FVec2D {
-        self.render_cell
-    }
-    pub fn int_render_cell(&self) -> IVec2D {
-        self.int_render_cell
-    }
-}
-
 pub fn selection_drag_handler(
     command: SelectDragCommand,
     initial_selection: Option<BigRect2D>,
-    initial_mouse_pos: MousePos,
-) -> Option<Box<dyn FnMut(&MousePos) -> Option<BigRect2D>>> {
+    initial_mouse_pos: ScreenPos2D,
+) -> Option<Box<dyn FnMut(&ScreenPos2D) -> Option<BigRect2D>>> {
     // TODO: at the time of writing, this method is marked as `pub` because it
     // is used by `render::grid2d`, but that should probably not be necessary.
 
@@ -537,15 +476,15 @@ pub fn selection_drag_handler(
     let pos2: BigVec2D;
     match command {
         SelectDragCommand::NewRect => {
-            pos1 = initial_mouse_pos.int_global().clone();
-            pos2 = initial_mouse_pos.int_global().clone();
+            pos1 = initial_mouse_pos.int_cell().clone();
+            pos2 = initial_mouse_pos.int_cell().clone();
         }
         SelectDragCommand::Resize { .. } | SelectDragCommand::ResizeToCell => {
             if let Some(sel) = &initial_selection {
                 // Farthest corner stays fixed.
-                pos1 = sel.farthest_corner(initial_mouse_pos.global());
+                pos1 = sel.farthest_corner(initial_mouse_pos.cell());
                 // Closest corner varies.
-                pos2 = sel.closest_corner(initial_mouse_pos.global());
+                pos2 = sel.closest_corner(initial_mouse_pos.cell());
             } else {
                 // Can't resize the selection if there is no selection!
                 return None;
@@ -571,7 +510,7 @@ pub fn selection_drag_handler(
                     }
                 }
 
-                let new_pos2 = new_mouse_pos.int_global();
+                let new_pos2 = new_mouse_pos.int_cell();
                 Some(NdRect::span(pos1.clone(), new_pos2.clone()))
             })
         }
@@ -584,7 +523,7 @@ pub fn selection_drag_handler(
             Box::new(move |new_mouse_pos| -> Option<BigRect2D> {
                 // Use delta from original cursor position to new cursor
                 // position.
-                let cell_delta = new_mouse_pos.global() - initial_mouse_pos.global();
+                let cell_delta = new_mouse_pos.cell() - initial_mouse_pos.cell();
 
                 // Only resize along some axes.
                 let mut new_pos2 = old_pos2.clone();
@@ -602,16 +541,16 @@ pub fn selection_drag_handler(
             let old_pos2 = pos2;
             let (resize_x, resize_y) = absolute_selection_resize_axes(
                 &initial_selection?.to_fixedrect(),
-                &initial_mouse_pos.global(),
+                &initial_mouse_pos.cell(),
             );
             Box::new(move |new_mouse_pos| -> Option<BigRect2D> {
                 // Only resize along some axes.
                 let mut new_pos2 = old_pos2.clone();
                 if resize_x {
-                    new_pos2[X] = new_mouse_pos.int_global()[X].clone();
+                    new_pos2[X] = new_mouse_pos.int_cell()[X].clone();
                 }
                 if resize_y {
-                    new_pos2[Y] = new_mouse_pos.int_global()[Y].clone();
+                    new_pos2[Y] = new_mouse_pos.int_cell()[Y].clone();
                 }
 
                 Some(NdRect::span(pos1.clone(), new_pos2.clone()))

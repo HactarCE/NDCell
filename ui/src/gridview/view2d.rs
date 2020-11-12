@@ -387,17 +387,27 @@ impl GridViewTrait for GridView2D {
             .map(|x| x * GRIDLINE_WIDTH)
             .unwrap_or(1.0);
         rip.draw_gridlines(gridlines_width)?;
-        // Draw crosshairs.
-        match self.mouse().display {
-            MouseDisplay::Draw => {
-                if !self.too_small_to_draw() {
-                    rip.draw_hover_highlight(gridlines_width * 2.0, crate::colors::HOVERED_DRAW)?;
+        // Draw mouse display.
+        if let Some(mouse_pos) = self.mouse_pos() {
+            match self.mouse().display {
+                MouseDisplay::Draw => {
+                    if !self.too_small_to_draw() {
+                        rip.draw_hover_highlight(
+                            mouse_pos.int_global(),
+                            gridlines_width * 2.0,
+                            crate::colors::HOVERED_DRAW,
+                        )?;
+                    }
                 }
+                MouseDisplay::Select => {
+                    rip.draw_hover_highlight(
+                        mouse_pos.int_global(),
+                        gridlines_width * 2.0,
+                        crate::colors::HOVERED_SELECT,
+                    )?;
+                }
+                _ => (),
             }
-            MouseDisplay::Select => {
-                rip.draw_hover_highlight(gridlines_width * 2.0, crate::colors::HOVERED_SELECT)?;
-            }
-            _ => (),
         }
         // Draw selection.
         if let Some(selection) = &self.selection {
@@ -471,6 +481,10 @@ impl GridView2D {
     }
     pub fn get_cell(&self, cache: &NodeCache<Dim2D>, pos: &BigVec2D) -> u8 {
         self.automaton.projected_tree().get_cell(cache, pos)
+    }
+
+    fn mouse_pos(&self) -> Option<MousePos> {
+        MousePos::from_pixel(self.mouse().pos?, self.camera())
     }
 
     fn get_worker(&mut self) -> &mut Worker<ProjectedAutomaton2D> {

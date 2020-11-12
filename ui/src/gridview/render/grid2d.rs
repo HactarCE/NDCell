@@ -291,27 +291,23 @@ impl<'a> RenderInProgress<'a> {
     }
 
     /// Draws a highlight on the render cell under the mouse cursor.
-    pub fn draw_hover_highlight(&mut self, width: f64, color: [f32; 4]) -> Result<()> {
-        let mouse_pos = self.mouse.pos;
-        if let Some(global_cell_pos) =
-            mouse_pos.and_then(|pos| self.cell_transform().pixel_to_global_cell(pos))
-        {
-            let local_cell_pos = global_cell_pos.floor().0 - &self.visible_quadtree.offset;
-            let render_cell_pos = local_cell_pos.div_floor(&self.render_cell_layer.big_len());
-
-            self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-                IRect2D::single_cell(render_cell_pos.to_ivec()),
-                CURSOR_DEPTH,
-                width,
-                color,
-                RectHighlightParams {
-                    fill: true,
-                    crosshairs: true,
-                },
-            ))
-            .context("Drawing cursor highlight")?;
-        }
-        Ok(())
+    pub fn draw_hover_highlight(
+        &mut self,
+        cell_pos: &BigVec2D,
+        width: f64,
+        color: [f32; 4],
+    ) -> Result<()> {
+        self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
+            IRect2D::single_cell(self.clip_cell_pos_to_visible_render_cells(cell_pos)),
+            CURSOR_DEPTH,
+            width,
+            color,
+            RectHighlightParams {
+                fill: true,
+                crosshairs: true,
+            },
+        ))
+        .context("Drawing cursor highlight")
     }
     /// Draws a highlight around the selected rectangle.
     pub fn draw_selection_highlight(
@@ -319,94 +315,109 @@ impl<'a> RenderInProgress<'a> {
         selection_rect: BigRect2D,
         width: f64,
     ) -> Result<()> {
-        let render_cell_rect = self.clip_cell_rect_to_visible_render_cells(selection_rect);
-        if let Some(visible_selection_rect) = render_cell_rect {
-            self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-                visible_selection_rect,
-                SELECTION_DEPTH,
-                width,
-                crate::colors::SELECTION,
-                RectHighlightParams {
-                    fill: true,
-                    crosshairs: false,
-                },
-            ))
-            .context("Drawing selection highlight")?;
+        let visible_selection_rect = self.clip_cell_rect_to_visible_render_cells(&selection_rect);
 
-            let click_target_width = self.config.ctrl.selection_resize_drag_target_width
-                / self.render_cell_scale.factor().to_f64().unwrap();
-            let (min, max) = (
-                visible_selection_rect.min(),
-                visible_selection_rect.max() + 1,
-            );
-            let xs = vec![
-                r64(min[X] as f64 - click_target_width * 0.75),
-                r64(min[X] as f64 + click_target_width * 0.25),
-                r64(max[X] as f64 - click_target_width * 0.25),
-                r64(max[X] as f64 + click_target_width * 0.75),
-            ];
-            let ys = vec![
-                r64(min[Y] as f64 - click_target_width * 0.75),
-                r64(min[Y] as f64 + click_target_width * 0.25),
-                r64(max[Y] as f64 - click_target_width * 0.25),
-                r64(max[Y] as f64 + click_target_width * 0.75),
-            ];
-            let x_indices = vec![0, 1, 2, 0, 2, 0, 1, 2];
-            let y_indices = vec![0, 0, 0, 1, 1, 2, 2, 2];
-            let mouse_displays = vec![
-                MouseDisplay::ResizeNESW,
-                MouseDisplay::ResizeNS,
-                MouseDisplay::ResizeNWSE,
-                MouseDisplay::ResizeEW,
-                MouseDisplay::ResizeEW,
-                MouseDisplay::ResizeNWSE,
-                MouseDisplay::ResizeNS,
-                MouseDisplay::ResizeNESW,
-            ];
-            let mut verts = Vec::with_capacity(4 * 8);
-            for ((xi, yi), display) in x_indices.into_iter().zip(y_indices).zip(mouse_displays) {
-                let binding = Some(MouseDragBinding::Select(
-                    SelectDragCommand::Resize {
-                        x: xi != 1,
-                        y: yi != 1,
-                        z: false,
-                        plane: None,
-                        absolute: false,
-                    }
-                    .into(),
-                ));
-                verts.extend_from_slice(&self.add_mouse_target(
-                    FRect::span(NdVec([xs[xi], ys[yi]]), NdVec([xs[xi + 1], ys[yi + 1]])),
-                    MouseTargetData { binding, display },
-                ));
-            }
-            let vbo = vbos::mouse_target_verts();
-            let vbo_slice = vbo.slice(0..(4 * 8)).unwrap();
-            vbo_slice.write(&verts);
-            self.render_cache
-                .picker
-                .unwrap()
-                .make_fbo()
-                .draw(
-                    vbo_slice,
-                    &ibos::rect_indices(8),
-                    &shaders::PICKER,
-                    &uniform! { matrix: self.transform.gl_matrix() },
-                    &glium::DrawParameters::default(),
-                )
-                .context("Computing selection mouse targets")?;
+        self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
+            visible_selection_rect,
+            SELECTION_DEPTH,
+            width,
+            crate::colors::SELECTION,
+            RectHighlightParams {
+                fill: true,
+                crosshairs: false,
+            },
+        ))
+        .context("Drawing selection highlight")?;
 
-            Ok(())
-        } else {
-            Ok(())
+        let click_target_width = self.config.ctrl.selection_resize_drag_target_width
+            / self.render_cell_scale.factor().to_f64().unwrap();
+        let (min, max) = (
+            visible_selection_rect.min(),
+            visible_selection_rect.max() + 1,
+        );
+        let xs = vec![
+            r64(min[X] as f64 - click_target_width * 0.75),
+            r64(min[X] as f64 + click_target_width * 0.25),
+            r64(max[X] as f64 - click_target_width * 0.25),
+            r64(max[X] as f64 + click_target_width * 0.75),
+        ];
+        let ys = vec![
+            r64(min[Y] as f64 - click_target_width * 0.75),
+            r64(min[Y] as f64 + click_target_width * 0.25),
+            r64(max[Y] as f64 - click_target_width * 0.25),
+            r64(max[Y] as f64 + click_target_width * 0.75),
+        ];
+        let x_indices = vec![0, 1, 2, 0, 2, 0, 1, 2];
+        let y_indices = vec![0, 0, 0, 1, 1, 2, 2, 2];
+        let mouse_displays = vec![
+            MouseDisplay::ResizeNESW,
+            MouseDisplay::ResizeNS,
+            MouseDisplay::ResizeNWSE,
+            MouseDisplay::ResizeEW,
+            MouseDisplay::ResizeEW,
+            MouseDisplay::ResizeNWSE,
+            MouseDisplay::ResizeNS,
+            MouseDisplay::ResizeNESW,
+        ];
+        let mut verts = Vec::with_capacity(4 * 8);
+        for ((xi, yi), display) in x_indices.into_iter().zip(y_indices).zip(mouse_displays) {
+            let binding = Some(MouseDragBinding::Select(
+                SelectDragCommand::Resize {
+                    x: xi != 1,
+                    y: yi != 1,
+                    z: false,
+                    plane: None,
+                    absolute: false,
+                }
+                .into(),
+            ));
+            verts.extend_from_slice(&self.add_mouse_target(
+                FRect::span(NdVec([xs[xi], ys[yi]]), NdVec([xs[xi + 1], ys[yi + 1]])),
+                MouseTargetData { binding, display },
+            ));
         }
+        let vbo = vbos::mouse_target_verts();
+        let vbo_slice = vbo.slice(0..(4 * 8)).unwrap();
+        vbo_slice.write(&verts);
+        self.render_cache
+            .picker
+            .unwrap()
+            .make_fbo()
+            .draw(
+                vbo_slice,
+                &ibos::rect_indices(8),
+                &shaders::PICKER,
+                &uniform! { matrix: self.transform.gl_matrix() },
+                &glium::DrawParameters::default(),
+            )
+            .context("Computing selection mouse targets")?;
+
+        Ok(())
     }
 
-    fn clip_cell_rect_to_visible_render_cells(&self, cells_rect: BigRect2D) -> Option<IRect2D> {
-        (cells_rect - &self.visible_quadtree.offset)
-            .div_outward(&self.render_cell_layer.big_len())
-            .intersection(&self.visible_rect.offset_min_max(-1, 1).to_bigrect())
-            .map(|r| r.to_irect())
+    /// Returns the render cell position containing the global cell position if
+    /// the cell is visible; otherwise, returns the position of the nearest
+    /// render cell that is just off-screen.
+    fn clip_cell_pos_to_visible_render_cells(&self, cell_pos: &BigVec2D) -> IVec2D {
+        let render_cell_pos =
+            (cell_pos - &self.visible_quadtree.offset).div_floor(&self.render_cell_layer.big_len());
+        // Clip to lower edge minus 2 cells for padding.
+        let render_cell_pos =
+            NdVec::max(&render_cell_pos, &(self.visible_rect.min() - 2).to_bigvec());
+        // Clip to upper edge plus 2 cells for padding.
+        let render_cell_pos =
+            NdVec::min(&render_cell_pos, &(self.visible_rect.max() + 2).to_bigvec());
+
+        render_cell_pos.to_ivec()
+    }
+
+    /// Clips the edges of a rectangle using
+    /// `clip_cell_pos_to_visible_render_cells()`.
+    fn clip_cell_rect_to_visible_render_cells(&self, cells_rect: &BigRect2D) -> IRect2D {
+        NdRect::span(
+            self.clip_cell_pos_to_visible_render_cells(&cells_rect.min()),
+            self.clip_cell_pos_to_visible_render_cells(&cells_rect.max()),
+        )
     }
 
     /// Generates a cell overlay to outline the given cell rectangle, with

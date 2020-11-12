@@ -140,101 +140,40 @@ impl GridViewTrait for GridView2D {
     fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()> {
         match command {
             SelectCommand::Drag(c, cursor_start) => {
-                if let SelectDragCommand::Resize { .. } = c {
+                if matches!(c, SelectDragCommand::Resize {.. } | SelectDragCommand::ResizeToCell) {
+                    // We are supposed to resize a selection ...
                     if self.selection.is_none() {
+                        // ... but there is no selection to resize.
                         return Ok(());
                     }
                 }
 
-                let cell_transform = self.camera().cell_transform();
-
-                let initial_pos_fract = match cell_transform.pixel_to_global_cell(cursor_start) {
+                let maybe_initial_mouse_pos = MousePos::from_pixel(cursor_start, self.camera());
+                let initial_mouse_pos = match maybe_initial_mouse_pos {
                     Some(pos) => pos,
                     None => return Ok(()),
                 };
-                let initial_pos = initial_pos_fract.floor().0;
 
-                // Compute initial selection rectangle. `pos1` is fixed; `pos2`
-                // will change with the mouse cursor.
-                let (pos1, pos2) = match c {
-                    SelectDragCommand::NewRect => (initial_pos.clone(), initial_pos.clone()),
-                    SelectDragCommand::Resize { .. } => {
-                        if let Some(sel) = &self.selection {
-                            (
-                                // Farthest corner stays fixed.
-                                sel.rect.farthest_corner(&initial_pos),
-                                // Closest corner varies.
-                                sel.rect.closest_corner(&initial_pos),
-                            )
-                        } else {
-                            // Can't resize the selection if there is no
-                            // selection!
-                            return Ok(());
-                        }
-                    }
+                let maybe_inner_drag_handler = selection_drag_handler(
+                    c,
+                    self.selection.as_ref().map(|sel| sel.rect.clone()),
+                    initial_mouse_pos,
+                );
+                let mut inner_drag_handler = match maybe_inner_drag_handler {
+                    Some(f) => f,
+                    None => return Ok(()),
                 };
 
-                let mut moved = match c {
-                    SelectDragCommand::NewRect => false,
-                    SelectDragCommand::Resize { .. } => true,
-                };
                 let new_drag_handler: DragHandler<Self> = Box::new(move |this, new_cursor_pos| {
-                    // TODO: DPI-aware mouse movement threshold before making
-                    // new selection, then call drag handler before returning
-                    // from do_select_command(), in case threshold=0
-                    if !moved {
-                        if new_cursor_pos != cursor_start {
-                            moved = true;
-                        } else {
-                            // Give the user a chance to remove their selection
-                            // instead of making a new one.
-                            return Ok(true);
-                        }
+                    if let Some(new_mouse_pos) = MousePos::from_pixel(new_cursor_pos, this.camera())
+                    {
+                        // Compute the new selection rectangle and update the
+                        // selection.
+                        let new_selection_rect = inner_drag_handler(&new_mouse_pos);
+                        this.selection = new_selection_rect.map(Selection2D::from);
                     }
-
-                    let new_pos = this
-                        .camera()
-                        .cell_transform()
-                        .pixel_to_global_cell(new_cursor_pos)
-                        .map(|pos| pos);
-                    if let Some(new_pos) = new_pos {
-                        let new_corner = match c {
-                            SelectDragCommand::NewRect => new_pos.floor().0,
-                            SelectDragCommand::Resize {
-                                x: resize_x,
-                                y: resize_y,
-                                absolute,
-                                ..
-                            } => {
-                                if absolute {
-                                    new_pos.floor().0
-                                } else {
-                                    // Use delta from original cursor position to new
-                                    // cursor position.
-                                    let delta = new_pos - &initial_pos_fract;
-                                    let mut new_corner = delta.round() + &pos2;
-
-                                    // Only resize along certain axes.
-                                    if !resize_x {
-                                        // Keep original X value.
-                                        new_corner[X] = pos2[X].clone();
-                                    }
-                                    if !resize_y {
-                                        // Keep original Y value.
-                                        new_corner[Y] = pos2[Y].clone();
-                                    }
-
-                                    new_corner
-                                }
-                            }
-                        };
-                        this.selection = Some(Selection2D {
-                            rect: BigRect::span(pos1.clone(), new_corner),
-                            cells: None,
-                        });
-                    }
-                    // Continue the drag.
-                    Ok(true)
+                    // Continue the drag action.
+                    return Ok(true);
                 });
 
                 if config.hist.record_select {
@@ -534,4 +473,172 @@ impl HistoryBase for GridView2D {
     fn as_history_mut(&mut self) -> &mut HistoryManager<Self::Entry> {
         &mut self.history
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct MousePos {
+    pixel: FVec2D,
+    global: FixedVec2D,
+    int_global: BigVec2D,
+    render_cell: FVec2D,
+    int_render_cell: IVec2D,
+}
+impl MousePos {
+    pub fn from_pixel(pixel: FVec2D, camera: &Camera2D) -> Option<Self> {
+        let cell_transform = camera.cell_transform();
+        let global = cell_transform.pixel_to_global_cell(pixel)?;
+        let int_global = global.floor().0;
+        let render_cell = cell_transform.pixel_to_local_render_cell(pixel)?;
+        let int_render_cell = render_cell.floor().to_ivec();
+
+        Some(Self {
+            pixel,
+            global,
+            int_global,
+            render_cell,
+            int_render_cell,
+        })
+    }
+    pub fn pixel(&self) -> FVec2D {
+        self.pixel
+    }
+    pub fn global(&self) -> &FixedVec2D {
+        &self.global
+    }
+    pub fn int_global(&self) -> &BigVec2D {
+        &self.int_global
+    }
+    pub fn render_cell(&self) -> FVec2D {
+        self.render_cell
+    }
+    pub fn int_render_cell(&self) -> IVec2D {
+        self.int_render_cell
+    }
+}
+
+pub fn selection_drag_handler(
+    command: SelectDragCommand,
+    initial_selection: Option<BigRect2D>,
+    initial_mouse_pos: MousePos,
+) -> Option<Box<dyn FnMut(&MousePos) -> Option<BigRect2D>>> {
+    // TODO: at the time of writing, this method is marked as `pub` because it
+    // is used by `render::grid2d`, but that should probably not be necessary.
+
+    // Compute initial selection rectangle. `pos1` is fixed; `pos2` will change
+    // with the mouse cursor.
+    let pos1: BigVec2D;
+    let pos2: BigVec2D;
+    match command {
+        SelectDragCommand::NewRect => {
+            pos1 = initial_mouse_pos.int_global().clone();
+            pos2 = initial_mouse_pos.int_global().clone();
+        }
+        SelectDragCommand::Resize { .. } | SelectDragCommand::ResizeToCell => {
+            if let Some(sel) = &initial_selection {
+                // Farthest corner stays fixed.
+                pos1 = sel.farthest_corner(initial_mouse_pos.global());
+                // Closest corner varies.
+                pos2 = sel.closest_corner(initial_mouse_pos.global());
+            } else {
+                // Can't resize the selection if there is no selection!
+                return None;
+            }
+        }
+    };
+
+    // Return the drag handler.
+    Some(match command {
+        SelectDragCommand::NewRect => {
+            let mut moved = false;
+            Box::new(move |new_mouse_pos| -> Option<BigRect2D> {
+                // TODO: DPI-aware mouse movement threshold before making new
+                // selection, then call drag handler before returning from
+                // `do_select_command()`, in case threshold=0.
+                if !moved {
+                    if new_mouse_pos.pixel() != initial_mouse_pos.pixel() {
+                        moved = true;
+                    } else {
+                        // Give the user a chance to remove their selection
+                        // instead of making a new one.
+                        return None;
+                    }
+                }
+
+                let new_pos2 = new_mouse_pos.int_global();
+                Some(NdRect::span(pos1.clone(), new_pos2.clone()))
+            })
+        }
+        SelectDragCommand::Resize {
+            x: resize_x,
+            y: resize_y,
+            ..
+        } => {
+            let old_pos2 = pos2;
+            Box::new(move |new_mouse_pos| -> Option<BigRect2D> {
+                // Use delta from original cursor position to new cursor
+                // position.
+                let cell_delta = new_mouse_pos.global() - initial_mouse_pos.global();
+
+                // Only resize along some axes.
+                let mut new_pos2 = old_pos2.clone();
+                if resize_x {
+                    new_pos2[X] += cell_delta[X].round().0;
+                }
+                if resize_y {
+                    new_pos2[Y] += cell_delta[Y].round().0;
+                }
+
+                Some(NdRect::span(pos1.clone(), new_pos2.clone()))
+            })
+        }
+        SelectDragCommand::ResizeToCell => {
+            let old_pos2 = pos2;
+            let (resize_x, resize_y) = absolute_selection_resize_axes(
+                &initial_selection?.to_fixedrect(),
+                &initial_mouse_pos.global(),
+            );
+            Box::new(move |new_mouse_pos| -> Option<BigRect2D> {
+                // Only resize along some axes.
+                let mut new_pos2 = old_pos2.clone();
+                if resize_x {
+                    new_pos2[X] = new_mouse_pos.int_global()[X].clone();
+                }
+                if resize_y {
+                    new_pos2[Y] = new_mouse_pos.int_global()[Y].clone();
+                }
+
+                Some(NdRect::span(pos1.clone(), new_pos2.clone()))
+            })
+        }
+    })
+}
+
+/// Returns a boolean `(resize_x, resize_y)` for absolute selection resizing
+/// given the selection rectangle and the cursor position.
+fn absolute_selection_resize_axes(
+    selection: &FixedRect2D,
+    cursor_pos: &FixedVec2D,
+) -> (bool, bool) {
+    let selection_min = selection.min();
+    let selection_max = selection.max();
+
+    // Measure signed distance from the nearest edge of the selection; distance
+    // is zero at the selection edge, increases moving away from the selection
+    // box, and decreases moving toward the center of the selection box.
+    let x_edge_distance = std::cmp::max(
+        cursor_pos[X].clone() - &selection_max[X],
+        selection_min[X].clone() - &cursor_pos[X],
+    );
+    let y_edge_distance = std::cmp::max(
+        cursor_pos[Y].clone() - &selection_max[Y],
+        selection_min[Y].clone() - &cursor_pos[Y],
+    );
+
+    // If the cursor is beyond the corner of the selection (both edge distances
+    // are positive), resize along both axes. Otherwise resize along whichever
+    // one is most positive. If both are equal, favor X arbitrarily.
+    (
+        x_edge_distance.is_positive() || x_edge_distance >= y_edge_distance,
+        y_edge_distance.is_positive() || y_edge_distance > x_edge_distance,
+    )
 }

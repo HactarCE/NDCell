@@ -18,6 +18,7 @@ impl MouseDragBinding {
                 match s.0 {
                     NewRect => MouseDisplay::Select,
                     Resize { .. } => MouseDisplay::Normal,
+                    ResizeToCell => MouseDisplay::ResizeSelectionAbsolute,
                 }
             }
             Self::View(v) => {

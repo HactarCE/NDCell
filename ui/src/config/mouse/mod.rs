@@ -48,7 +48,7 @@ impl Default for MouseConfig {
                 (
                     CTRL | SHIFT,
                     Left,
-                    Select(SelectDragCommand::RESIZE_2D_DIAG.into()),
+                    Select(SelectDragCommand::ResizeToCell.into()),
                 ),
                 (NONE, Right, View(ViewDragCommand::Pan.into())),
                 (CTRL, Right, View(ViewDragCommand::Scale.into())),
@@ -147,7 +147,7 @@ impl<T> std::iter::FromIterator<(ModifiersState, MouseButton, T)> for MouseBindi
 ///
 /// This determines the mouse cursor icon and how/whether to indicate the
 /// highlighted cell in the grid.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MouseDisplay {
     Normal,
     Pan,
@@ -157,6 +157,7 @@ pub enum MouseDisplay {
     ResizeNS,
     ResizeNESW,
     ResizeNWSE,
+    ResizeSelectionAbsolute,
     Move,
 }
 impl Default for MouseDisplay {

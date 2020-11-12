@@ -155,6 +155,7 @@ pub enum SelectDragCommand {
         plane: Option<Axis>,
         absolute: bool,
     },
+    ResizeToCell,
 }
 impl SelectDragCommand {
     /// 2D selection resize along the horizontal axis.

@@ -9,6 +9,10 @@ pub const HOVERED_DRAW: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
 /// the future.
 pub const HOVERED_SELECT: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
+/// Color given to the selection resize preview. This will be configurable in
+/// the future.
+pub const SELECTION_RESIZE: [f32; 4] = [0.0, 0.5, 1.0, 0.4];
+
 /// Color given to the selection. This will be configurable in the future.
 pub const SELECTION: [f32; 4] = [0.6, 0.6, 0.6, 0.8];
 

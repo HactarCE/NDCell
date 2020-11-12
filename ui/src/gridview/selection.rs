@@ -28,3 +28,8 @@ impl<D: Dim> Selection<D> {
         }
     }
 }
+impl<D: Dim> From<BigRect<D>> for Selection<D> {
+    fn from(rect: BigRect<D>) -> Self {
+        Self { rect, cells: None }
+    }
+}

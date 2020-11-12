@@ -352,6 +352,18 @@ impl GridViewTrait for GridView2D {
         if let Some(selection) = &self.selection {
             rip.draw_selection_highlight(selection.rect.clone(), gridlines_width * 4.0)?;
         }
+        // Draw selection preview after drawing selection.
+        if self.mouse().display == MouseDisplay::ResizeSelectionAbsolute
+            && self.drag_handler.is_none()
+        {
+            if let Some((mouse_pos, s)) = self.mouse_pos().zip(self.selection.as_ref()) {
+                rip.draw_selection_resize_preview(
+                    s.rect.clone(),
+                    &mouse_pos,
+                    gridlines_width * 2.0,
+                )?;
+            }
+        }
 
         self.common.last_render_result = rip.finish();
         self.render_cache = Some(render_cache);

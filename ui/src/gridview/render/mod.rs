@@ -33,6 +33,8 @@ mod consts {
     pub const CURSOR_DEPTH: f32 = 0.2;
     /// Depth at which to render selection rectangle.
     pub const SELECTION_DEPTH: f32 = 0.3;
+    /// Depth at which to render selection resize preview.
+    pub const SELECTION_RESIZE_DEPTH: f32 = 0.4;
 
     /// A small offset used to force correct Z order or align things at the
     /// sub-pixel scale.

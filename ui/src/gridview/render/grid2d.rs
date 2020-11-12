@@ -394,6 +394,35 @@ impl<'a> RenderInProgress<'a> {
 
         Ok(())
     }
+    /// Draws a highlight indicating how the selection will be resized.
+    pub fn draw_selection_resize_preview(
+        &mut self,
+        selection_rect: BigRect2D,
+        mouse_pos: &view2d::MousePos,
+        width: f64,
+    ) -> Result<()> {
+        let maybe_drag_handler = view2d::selection_drag_handler(
+            SelectDragCommand::ResizeToCell,
+            Some(selection_rect),
+            mouse_pos.clone(),
+        );
+        let maybe_selection_preview_rect =
+            maybe_drag_handler.and_then(|mut drag_handler| drag_handler(mouse_pos));
+        if let Some(selection_preview_rect) = maybe_selection_preview_rect {
+            self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
+                self.clip_cell_rect_to_visible_render_cells(&selection_preview_rect),
+                SELECTION_RESIZE_DEPTH,
+                width,
+                crate::colors::SELECTION_RESIZE,
+                RectHighlightParams {
+                    fill: true,
+                    crosshairs: false,
+                },
+            ))
+            .context("Drawing selection resize highlight")?;
+        }
+        Ok(())
+    }
 
     /// Returns the render cell position containing the global cell position if
     /// the cell is visible; otherwise, returns the position of the nearest

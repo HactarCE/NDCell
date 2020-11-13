@@ -16,6 +16,7 @@ pub struct MouseConfig {
     pub click_bindings_3d: MouseBindings<Option<MouseClickBinding>>,
     pub drag_bindings_2d: MouseBindings<Option<MouseDragBinding>>,
     pub drag_bindings_3d: MouseBindings<Option<MouseDragBinding>>,
+    pub drag_threshold: f64,
 }
 impl Default for MouseConfig {
     fn default() -> Self {
@@ -65,6 +66,7 @@ impl Default for MouseConfig {
             ]
             .into_iter()
             .collect(),
+            drag_threshold: 2.0,
         }
     }
 }

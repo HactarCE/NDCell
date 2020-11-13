@@ -361,15 +361,15 @@ impl<'a> RenderInProgress<'a> {
         ];
         let mut verts = Vec::with_capacity(4 * 8);
         for ((xi, yi), display) in x_indices.into_iter().zip(y_indices).zip(mouse_displays) {
+            let mut axes = AxisSet::empty();
+            if xi != 1 {
+                axes.add(X);
+            }
+            if yi != 1 {
+                axes.add(Y);
+            }
             let binding = Some(MouseDragBinding::Select(
-                SelectDragCommand::Resize {
-                    x: xi != 1,
-                    y: yi != 1,
-                    z: false,
-                    plane: None,
-                    absolute: false,
-                }
-                .into(),
+                SelectDragCommand::Resize { axes, plane: None }.into(),
             ));
             verts.extend_from_slice(&self.add_mouse_target(
                 FRect::span(NdVec([xs[xi], ys[yi]]), NdVec([xs[xi + 1], ys[yi + 1]])),
@@ -395,32 +395,30 @@ impl<'a> RenderInProgress<'a> {
         Ok(())
     }
     /// Draws a highlight indicating how the selection will be resized.
-    pub fn draw_selection_resize_preview(
+    pub fn draw_absolute_selection_resize_preview(
         &mut self,
         selection_rect: BigRect2D,
         mouse_pos: &ScreenPos2D,
         width: f64,
     ) -> Result<()> {
-        let maybe_drag_handler = view2d::selection_drag_handler(
-            SelectDragCommand::ResizeToCell,
-            Some(selection_rect),
-            mouse_pos.clone(),
+        let selection_preview_rect = selection::resize_selection_absolute(
+            &selection_rect,
+            mouse_pos.cell(),
+            mouse_pos.cell(),
         );
-        let maybe_selection_preview_rect =
-            maybe_drag_handler.and_then(|mut drag_handler| drag_handler(mouse_pos));
-        if let Some(selection_preview_rect) = maybe_selection_preview_rect {
-            self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-                self.clip_cell_rect_to_visible_render_cells(&selection_preview_rect),
-                SELECTION_RESIZE_DEPTH,
-                width,
-                crate::colors::SELECTION_RESIZE,
-                RectHighlightParams {
-                    fill: true,
-                    crosshairs: false,
-                },
-            ))
-            .context("Drawing selection resize highlight")?;
-        }
+        let visible_selection_preview_rect =
+            self.clip_cell_rect_to_visible_render_cells(&selection_preview_rect);
+        self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
+            visible_selection_preview_rect,
+            SELECTION_RESIZE_DEPTH,
+            width,
+            crate::colors::SELECTION_RESIZE,
+            RectHighlightParams {
+                fill: true,
+                crosshairs: false,
+            },
+        ))
+        .context("Drawing selection resize highlight")?;
         Ok(())
     }
 

@@ -165,40 +165,8 @@ impl_command_from!(Command::Select(SelectCommand));
 #[derive(Debug, Copy, Clone)]
 pub enum SelectDragCommand {
     NewRect,
-    Resize {
-        x: bool,
-        y: bool,
-        z: bool,
-        plane: Option<Axis>,
-        absolute: bool,
-    },
+    Resize { axes: AxisSet, plane: Option<Axis> },
     ResizeToCell,
-}
-impl SelectDragCommand {
-    /// 2D selection resize along the horizontal axis.
-    pub const RESIZE_2D_H: Self = Self::Resize {
-        x: true,
-        y: false,
-        z: false,
-        plane: None,
-        absolute: true,
-    };
-    /// 2D selection resize along the vertical axis.
-    pub const RESIZE_2D_V: Self = Self::Resize {
-        x: false,
-        y: true,
-        z: false,
-        plane: None,
-        absolute: true,
-    };
-    /// 2D selection resize both axes.
-    pub const RESIZE_2D_DIAG: Self = Self::Resize {
-        x: true,
-        y: true,
-        z: false,
-        plane: None,
-        absolute: true,
-    };
 }
 
 #[derive(Debug, Clone)]

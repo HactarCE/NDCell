@@ -80,7 +80,7 @@ pub mod prelude {
         ProjectedAutomaton1D, ProjectedAutomaton2D, ProjectedAutomaton3D, ProjectedAutomaton4D,
         ProjectedAutomaton5D, ProjectedAutomaton6D,
     };
-    pub use crate::axis::Axis;
+    pub use crate::axis::{Axis, AxisSet};
     pub use crate::dim::{Dim1D, Dim2D, Dim3D, Dim4D, Dim5D, Dim6D};
     pub use crate::io::{RleError, RleResult};
     pub use crate::ndrect::aliases::*;

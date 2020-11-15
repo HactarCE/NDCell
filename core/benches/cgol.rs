@@ -43,21 +43,24 @@ fn bench_sim_2d(
     };
 
     c.bench(
-        &format!("{}_{}_gens_by_{}", pattern.name, gens, step_size),
-        Benchmark::new("sim", move |b| {
-            b.iter(|| {
-                // Create a new automaton from the array so that the cache is empty.
-                let _cache = NodeCache::new();
-                let cache = _cache.read();
-                let root = cache.get_from_cells(ndarray.clone().into_flat_slice());
-                let automaton = Automaton2D {
-                    tree: NdTree::from_node_centered(root),
-                    rule: Arc::clone(&rule),
-                    generations: 0.into(),
-                };
-                assert_eq!(expected_pop, run_simulation(automaton, &gens, &step_size))
-            })
-        })
+        &format!("sim_{}", pattern.name),
+        Benchmark::new(
+            &format!("{}_gens_by_steps_of_{}", gens, step_size),
+            move |b| {
+                b.iter(|| {
+                    // Create a new automaton from the array so that the cache is empty.
+                    let _cache = NodeCache::new();
+                    let cache = _cache.read();
+                    let root = cache.get_from_cells(ndarray.clone().into_flat_slice());
+                    let automaton = Automaton2D {
+                        tree: NdTree::from_node_centered(root),
+                        rule: Arc::clone(&rule),
+                        generations: 0.into(),
+                    };
+                    assert_eq!(expected_pop, run_simulation(automaton, &gens, &step_size))
+                })
+            },
+        )
         .sample_size(10),
     );
 }

@@ -187,6 +187,27 @@ proptest! {
         let expected = expected.map(|(min, max)| NdRect::span(min, max));
         assert_eq!(expected, node.shrink_nonzero_rect(&starting_rect));
     }
+
+    #[test]
+    fn test_ndtree_node_copy_from_other_cache(
+        cells_to_set in cells_to_set(TEST_LAYER, 1_u8),
+    ) {
+        let _node_cache = NodeCache::<Dim3D>::new();
+        let node_cache = _node_cache.read();
+        let mut node = node_cache.get_empty(TEST_LAYER);
+        for (pos, cell_state) in &cells_to_set {
+            node = node.set_cell(pos, *cell_state);
+        }
+
+        let _new_node_cache = NodeCache::<Dim3D>::new();
+        let new_node_cache = _new_node_cache.read();
+        let new_node = new_node_cache.copy_from_other_cache(node);
+
+        assert_eq!(new_node.to_string(), node.to_string());
+        for (pos, _) in cells_to_set {
+            assert_eq!(node.cell_at_pos(&pos), new_node.cell_at_pos(&pos));
+        }
+    }
 }
 
 fn pos_in_node(layer: Layer) -> impl Strategy<Value = BigVec3D> {

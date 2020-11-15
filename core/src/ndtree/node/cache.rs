@@ -416,6 +416,32 @@ impl<D: Dim> NodeCache<D> {
         })
     }
 
+    /// Creates a node identical to one from another cache.
+    pub fn copy_from_other_cache<'cache, 'other>(
+        &'cache self,
+        node: impl CachedNodeRefTrait<'other, D = D>,
+    ) -> NodeRef<'cache, D> {
+        self._copy_from_other_cache(node.as_ref(), &mut HashMap::default())
+    }
+    fn _copy_from_other_cache<'cache, 'other>(
+        &'cache self,
+        node: NodeRef<'other, D>,
+        convert_table: &mut HashMap<NodeRef<'other, D>, NodeRef<'cache, D>>,
+    ) -> NodeRef<'cache, D> {
+        if let Some(already_computed) = convert_table.get(&node) {
+            return *already_computed;
+        }
+        let ret = match node.as_enum() {
+            NodeRefEnum::Leaf(node) => self.get_from_cells(node.cells()),
+            NodeRefEnum::NonLeaf(node) => self.join_nodes(
+                node.children()
+                    .map(|child| self._copy_from_other_cache(child, convert_table)),
+            ),
+        };
+        convert_table.insert(node, ret);
+        ret
+    }
+
     /// Creates an identical node except with the cell at the given position
     /// (modulo the node length along each axis) modified.
     #[must_use = "This method returns a new value instead of mutating its input"]

@@ -539,6 +539,33 @@ impl<D: Dim> fmt::Debug for NodeRef<'_, D> {
         write!(f, "Node({:p})", self.raw_node)
     }
 }
+impl<D: Dim> fmt::Display for NodeRef<'_, D> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_empty() {
+            write!(f, "<empty>")?;
+        } else {
+            match self.as_enum() {
+                NodeRefEnum::Leaf(node) => {
+                    write!(f, "Leaf{:?}", node.cells())?;
+                }
+                NodeRefEnum::NonLeaf(node) => {
+                    write!(f, "NonLeaf[")?;
+                    let mut first = true;
+                    for child in node.children() {
+                        if first {
+                            first = false;
+                        } else {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", child)?;
+                    }
+                    write!(f, "]")?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
 impl<D: Dim> PartialEq for NodeRef<'_, D> {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self.raw_node, other.raw_node)

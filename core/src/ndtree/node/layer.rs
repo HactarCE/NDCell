@@ -3,9 +3,7 @@
 use crate::dim::Dim;
 use crate::ndrect::{BigRect, URect};
 use crate::ndvec::{BigVec, UVec};
-use crate::num::{BigInt, BigUint, One};
-
-// TODO: consider moving `Layer` into `ndtree::node::raw`.
+use crate::num::{BigInt, BigUint, One, ToPrimitive};
 
 /// Layer of a node (32-bit unsigned integer).
 ///
@@ -198,6 +196,19 @@ impl Layer {
         // cells, the children are other nodes.
         Layer(1).leaf_cell_index(child_index_vector)
     }
+    /// Same as `non_leaf_child_index()`, but takes a `UVec` instead of a
+    /// `BigVec`.
+    ///
+    /// # Panics
+    ///
+    /// This method may panic if the layer is `Layer(0)`, which does not have
+    /// children, or if the length of a node at this layer does not fit in a
+    /// `usize`.
+    #[inline]
+    pub fn small_non_leaf_child_index<D: Dim>(self, pos: UVec<D>) -> usize {
+        // See `non_leaf_child_index()` for explanation.
+        Layer(1).leaf_cell_index((pos >> self.child_layer().to_u32()) & 1)
+    }
 
     /// Returns the strides of the cell array for a leaf node at this layer.
     ///
@@ -241,6 +252,26 @@ impl Layer {
     #[inline]
     pub fn modulo_pos<D: Dim>(self, pos: &BigVec<D>) -> BigVec<D> {
         pos & &(self.big_len() - 1)
+    }
+
+    /// Returns the layer of the largest layer boundary a vector points to, or
+    /// `None` if it is the origin vector (largest aligned layer would be
+    /// infinity).
+    #[inline]
+    pub fn largest_aligned<D: Dim>(pos: &BigVec<D>) -> Option<Layer> {
+        D::axes()
+            .iter()
+            // `trailing_zeros()` gives the largest power-of-2 multiple, or
+            // `None` if the number is zero (infinite trailing zeros).
+            .filter_map(|&ax| pos[ax].trailing_zeros())
+            // Convert to `u32`, or `None` if it is too large (shouldn't
+            // actually happen).
+            .filter_map(|n| n.to_u32())
+            .map(Layer)
+            // Now the iterator gives the largest aligned layer along each axis;
+            // return the smallest of these, because the layer must be aligned
+            // on all axes.
+            .min()
     }
 }
 
@@ -295,5 +326,26 @@ mod tests {
             assert_eq!(i, layer.leaf_cell_index(pos));
             assert_eq!(pos, layer.leaf_pos(i));
         }
+    }
+
+    /// Tests `Layer::largest_aligned()`.
+    #[test]
+    fn test_ndtree_node_largest_aligned_layer() {
+        use crate::dim::Dim2D;
+
+        let gcl = |x, y| Layer::largest_aligned::<Dim2D>(&NdVec::big([x, y]));
+
+        assert_eq!(gcl(0, 0), None);
+        assert_eq!(gcl(1, 0), Some(Layer(0)));
+        assert_eq!(gcl(2, 0), Some(Layer(1))); // 2
+        assert_eq!(gcl(3, 0), Some(Layer(0)));
+        assert_eq!(gcl(4, 4), Some(Layer(2))); // 4
+        assert_eq!(gcl(5, 5), Some(Layer(0)));
+        assert_eq!(gcl(0, 6), Some(Layer(1))); // 2
+        assert_eq!(gcl(0, 7), Some(Layer(0)));
+        assert_eq!(gcl(0, 8), Some(Layer(3))); // 8
+
+        assert_eq!(gcl(2, 8), Some(Layer(1))); // 2
+        assert_eq!(gcl(8, 2), Some(Layer(1))); // 2
     }
 }

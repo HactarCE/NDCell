@@ -23,5 +23,9 @@ name = "cgol"
 harness = false
 
 [[bench]]
+name = "ndtree"
+harness = false
+
+[[bench]]
 name = "rle"
 harness = false

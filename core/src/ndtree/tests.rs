@@ -99,12 +99,12 @@ proptest! {
         let _node_cache = Arc::clone(ndtree.cache());
         let node_cache = _node_cache.read();
         let mut hashmap = HashMap::default();
-            for (pos, state) in cells_to_set {
+        for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
             ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);
         }
         let half_diag = NdVec([x_radius, y_radius]);
-        let rect = IRect::span(center - half_diag, center + half_diag).to_bigrect();
+        let rect = IRect2D::span(center - half_diag, center + half_diag).to_bigrect();
         let slice = ndtree.slice_containing(&node_cache, &rect);
         let slice_rect = slice.rect();
         // Check that the slice contains the rectangle.
@@ -129,6 +129,31 @@ proptest! {
             || slice.root.big_len() <= (rect.len(X) - 2) * 4
             || slice.root.big_len() <= (rect.len(Y) - 2) * 4
         );
+    }
+
+    /// Tests `NdTree::recenter()`.
+    #[test]
+    fn test_ndtree_recenter(
+        cells_to_set in proptest_cells_to_set(),
+        old_offset in proptest_ivec2d(-100..=100),
+        new_center in proptest_ivec2d(-100..=100),
+    ) {
+        let mut ndtree = NdTree::default();
+        ndtree.set_center(old_offset.to_bigvec());
+        let _node_cache = Arc::clone(ndtree.cache());
+        let node_cache = _node_cache.read();
+
+        let mut hashmap = HashMap::default();
+        for (pos, cell) in cells_to_set {
+            ndtree.set_cell(&node_cache, &pos.to_bigvec(), cell);
+            hashmap.insert(pos, cell);
+        }
+
+        ndtree.recenter(&node_cache, &new_center.to_bigvec());
+
+        for (pos, cell) in hashmap {
+            assert_eq!(cell, ndtree.get_cell(&node_cache, &pos.to_bigvec()));
+        }
     }
 }
 

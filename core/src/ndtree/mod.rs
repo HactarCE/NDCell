@@ -22,7 +22,7 @@ mod slice;
 use crate::dim::*;
 use crate::ndrect::{BigRect, CanContain, URect};
 use crate::ndvec::BigVec;
-use crate::num::BigInt;
+use crate::num::{BigInt, Signed};
 pub use aliases::*;
 pub use node::*;
 pub use slice::*;
@@ -165,10 +165,23 @@ impl<D: Dim> NdTree<D> {
     pub fn offset(&self) -> &BigVec<D> {
         &self.offset
     }
-    /// Sets the lowest coordinate of the root node of the grid.
+    /// Sets the lowest coordinate of the root node of the grid. This changes
+    /// cell coordinates.
     #[inline]
     pub fn set_offset(&mut self, offset: BigVec<D>) {
         self.offset = offset;
+    }
+    /// Returns the position of the center of the root node of the ND-tree.
+    #[inline]
+    pub fn center(&self) -> BigVec<D> {
+        self.offset.clone() + self.layer().child_layer().big_len()
+    }
+    /// Sets the center of the root node of the grid. This changes cell
+    /// coordinates.
+    #[inline]
+    pub fn set_center(&mut self, center: BigVec<D>) {
+        self.offset += center.clone() - self.center();
+        assert_eq!(center, self.center());
     }
     /// Returns a rectangle encompassing the grid.
     #[inline]
@@ -384,6 +397,61 @@ impl<D: Dim> NdTree<D> {
             .as_ref(cache)
             .shrink_nonzero_rect(&(rect - self.offset()))
             .map(|r| r + self.offset())
+    }
+
+    /// Recenters the ND-tree with the same cell contents at each position, but
+    /// a different origin.
+    ///
+    /// This may take a lot of time for large patterns when the difference
+    /// between `new_center` and the existing ND-tree center is not a multiple
+    /// of a large power of 2 (relative to pattern size).
+    pub fn recenter(&mut self, cache: &NodeCache<D>, new_center: &BigVec<D>) {
+        let delta = new_center - self.center();
+        let max_abs_delta = delta[delta.max_axis(|_, x| x.abs())].abs();
+
+        self.offset += &delta;
+        assert_eq!(*new_center, self.center());
+
+        // Expand until half the size of the root node is smaller than (or equal
+        // to) the delta vector.
+        while max_abs_delta > self.root().big_len() / 2 {
+            self.expand(cache);
+        }
+        let root = self.root().as_ref(cache);
+        let layer = root.layer(); // Let's call this layer L.
+
+        let mut source_lower_corner = vec![cache.get_empty(layer); D::BRANCHING_FACTOR];
+        source_lower_corner[D::BRANCHING_FACTOR - 1] = root;
+        let source_lower_corner = cache.join_nodes(source_lower_corner);
+        // `source_lower_corner` is now a node at layer L+1 with the tree's root
+        // in the "upper" corner (more negative coordinates along all axes).
+        // Here's a picture for 2D, where `#` represents the ND-tree's root node
+        // and `.` represents an empty node of the same size:
+        //
+        // . #
+        // . .
+
+        let mut sources = vec![cache.get_empty(layer.parent_layer()); D::BRANCHING_FACTOR];
+        sources[0] = source_lower_corner;
+        // `sources` is now a vector of nodes which combined represent a node at
+        // layer L+2 with the ND-tree's root node in the upper corner of the
+        // lower corner. Here's a picture for 2D, with the same symbols:
+        //
+        // . . . .
+        // . . . .
+        // . # . .
+        // . . . .
+        //
+        // We will use `get_offset_child`, which will extract a rectangle of
+        // cells from that picture at one layer above the current root node.
+        // This result will be the new root node.
+        //
+        // If we wanted to keep the same center (i.e. `delta` = 0) we would pass
+        // an offset of `root.big_len() / 2` along each axis, because that would
+        // center the `#` in the picture. To move the center any other distance,
+        // we just add the `delta` vector.
+        let new_root = cache.get_offset_child(&(delta + &(root.big_len() / 2)), sources);
+        self.set_root_centered(new_root);
     }
 }
 

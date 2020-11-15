@@ -16,6 +16,7 @@ use super::{
 };
 use crate::dim::Dim;
 use crate::ndvec::{BigVec, UVec};
+use crate::num::{BigInt, One};
 use crate::HashMap;
 
 /// Cache of ND-tree nodes for a single simulation.
@@ -414,6 +415,83 @@ impl<D: Dim> NodeCache<D> {
                 self.join_nodes(new_children)
             }
         })
+    }
+
+    /// Creates a node from a 2^NDIM block of nodes at the same layer, but the
+    /// result is offset by a vector (modulo the size of a node at that layer).
+    pub fn get_offset_child<'cache>(
+        &'cache self,
+        offset: &BigVec<D>,
+        sources: Vec<NodeRef<'cache, D>>,
+    ) -> NodeRef<'cache, D> {
+        assert_eq!(D::BRANCHING_FACTOR, sources.len());
+        let layer = sources[0].layer();
+        let largest_aligned_layer = Layer::largest_aligned(offset).unwrap_or(layer);
+        self._get_offset_child(offset, sources, largest_aligned_layer)
+    }
+    fn _get_offset_child<'cache>(
+        &'cache self,
+        offset: &BigVec<D>,
+        sources: Vec<NodeRef<'cache, D>>,
+        largest_aligned_layer: Layer,
+    ) -> NodeRef<'cache, D> {
+        assert_eq!(D::BRANCHING_FACTOR, sources.len());
+        let layer = sources[0].layer();
+        if layer <= largest_aligned_layer {
+            sources[0]
+        } else if layer.is_leaf::<D>() {
+            let sources = sources
+                .iter()
+                .map(|n| n.as_leaf().unwrap())
+                .take(D::BRANCHING_FACTOR)
+                .collect_vec();
+            let big_cell_offset: BigVec<D> = offset & &(layer.big_len() - 1);
+            let cell_offset = big_cell_offset.to_uvec();
+            self.get_from_fn(layer, move |pos| {
+                let source_pos = pos.clone() + &cell_offset;
+                let source_index = layer
+                    .parent_layer()
+                    .small_non_leaf_child_index(source_pos.clone());
+                sources[source_index].leaf_cell_at_pos(source_pos)
+            })
+        } else {
+            // These source nodes are conceptually the children of one combined
+            // node, but we keep them separate for performance. (Looking up
+            // nodes in the cache isn't free!) Let's call this combined node the
+            // "source node."
+            let sources = sources
+                .iter()
+                .map(|n| n.as_non_leaf().unwrap())
+                .take(D::BRANCHING_FACTOR)
+                .collect_vec();
+            // (optimization for empty nodes)
+            if sources.iter().all(|n| n.is_empty()) {
+                return sources[0].as_ref(); // All nodes are the same empty.
+            }
+            // The node we will return is somewhere inside the source node. The
+            // source node has 4^NDIM grandchildren; there must be some 3^NDIM
+            // block of those grandchildren that still contains the node to
+            // return. And each 2^NDIM block of grandchildren within that 3^NDIM
+            // block contains the corresponding child of the node to return. So
+            // first, find the offset (in terms of grandchildren) of that 3^NDIM
+            // block.
+            let grandchild_offset_1 =
+                ((offset >> layer.child_layer().to_u32()) & &BigInt::one()).to_uvec();
+            self.join_nodes((0..D::BRANCHING_FACTOR).map(|i| {
+                // For each child of the result, get the 2^NDIM block of
+                // grandchildren that contains it.
+                let grandchild_offset_2 = Layer(1).leaf_pos(i) + &grandchild_offset_1;
+                let sources_for_new_child = (0..D::BRANCHING_FACTOR)
+                    .map(|j| {
+                        let grandchild_pos = Layer(1).leaf_pos(j) + &grandchild_offset_2;
+                        let child_index = Layer(1).leaf_cell_index(grandchild_pos.clone() >> 1);
+                        let grandchild_index = Layer(1).leaf_cell_index(grandchild_pos & 1);
+                        sources[child_index].child_at_index(grandchild_index)
+                    })
+                    .collect_vec();
+                self._get_offset_child(offset, sources_for_new_child, largest_aligned_layer)
+            }))
+        }
     }
 
     /// Creates a node identical to one from another cache.

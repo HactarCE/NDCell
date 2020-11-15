@@ -175,6 +175,7 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     /// Creates an identical node except with the cell at the given position
     /// (modulo the node length along each axis) modified.
     #[inline]
+    #[must_use = "This method returns a new value instead of mutating its input"]
     fn set_cell(self, pos: &BigVec<Self::D>, cell_state: u8) -> NodeRef<'cache, Self::D> {
         self.cache().set_cell(self.as_enum(), pos, cell_state)
     }
@@ -204,6 +205,7 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     ///
     /// This method panics if `modify_node` returns a node at a different layer
     /// from the one passed into it.
+    #[must_use = "This method returns a new value instead of mutating its input"]
     fn recursive_modify(
         self,
         mut modify_node: impl FnMut(
@@ -216,6 +218,7 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     }
     /// Same as `recursive_modify()`, but `offset` is added to all coordinate
     /// values before being passed to either closure.
+    #[must_use = "This method returns a new value instead of mutating its input"]
     fn recursive_modify_with_offset(
         self,
         offset: &BigVec<Self::D>,

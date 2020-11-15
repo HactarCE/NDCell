@@ -84,7 +84,7 @@ impl fmt::Display for Macrocell {
         // Nodes/contents
         for node in &self.nodes {
             match node {
-                MacrocellNode::Empty => {}
+                MacrocellNode::Empty => (),
                 MacrocellNode::Leaf8x8 { .. } => {
                     writeln!(f, "Error: cannot generate 8x8 leaf node")?
                 }

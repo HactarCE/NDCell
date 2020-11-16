@@ -1,8 +1,9 @@
 use proptest::prelude::*;
+use std::collections::HashSet;
 
 use super::*;
 use crate::axis::{X, Y};
-use crate::ndrect::IRect;
+use crate::ndrect::{proptest_irect2d, IRect2D};
 use crate::ndvec::{proptest_ivec2d, IVec2D, NdVec};
 use crate::num::BigUint;
 use crate::HashMap;
@@ -130,6 +131,10 @@ proptest! {
             || slice.root.big_len() <= (rect.len(Y) - 2) * 4
         );
     }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(16))]
 
     /// Tests `NdTree::recenter()`.
     #[test]
@@ -153,6 +158,64 @@ proptest! {
 
         for (pos, cell) in hashmap {
             assert_eq!(cell, ndtree.get_cell(&node_cache, &pos.to_bigvec()));
+        }
+    }
+
+    /// Tests `NdTree::paste_custom()`.
+    #[test]
+    fn test_ndtree_paste(
+        cells_to_set in proptest_cells_to_set(),
+        cells_to_paste in proptest_cells_to_set(),
+        paste_offset in proptest_ivec2d(-100..=100),
+        paste_rect in proptest_irect2d(-100..=100),
+    ) {
+        let mut all_cell_positions = HashSet::new();
+
+        let mut ndtree = NdTree::default();
+        let _node_cache = Arc::clone(ndtree.cache());
+        let node_cache = _node_cache.read();
+        let mut hashmap = HashMap::default();
+        for (pos, state) in cells_to_set {
+            hashmap.insert(pos, state);
+            ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);
+            all_cell_positions.insert(pos);
+        }
+
+        let mut ndtree_to_paste = NdTree::with_cache(Arc::clone(&_node_cache));
+        ndtree_to_paste.set_offset(paste_offset.to_bigvec());
+        let mut hashmap_pasted = HashMap::default();
+        for (pos, state) in cells_to_paste {
+            hashmap_pasted.insert(pos, state);
+            ndtree_to_paste.set_cell(&node_cache, &pos.to_bigvec(), state);
+            all_cell_positions.insert(pos);
+        }
+
+        // Paste using bitwise XOR.
+        ndtree.paste_custom(
+            &node_cache,
+            ndtree_to_paste,
+            paste_rect.to_bigrect(),
+            |original_node, pasted_node| {
+                if original_node.is_empty() {
+                    Some(pasted_node)
+                } else if pasted_node.is_empty() {
+                    Some(original_node)
+                } else {
+                    None
+                }
+            },
+            |original_cell, pasted_cell| original_cell ^ pasted_cell,
+        );
+
+        for pos in &all_cell_positions {
+            let original = *hashmap.get(pos).unwrap_or(&0);
+            let pasted = if paste_rect.contains(pos) {
+                *hashmap_pasted.get(pos).unwrap_or(&0)
+            } else {
+                0
+            };
+            let expected = original ^ pasted;
+            assert_eq!(expected, ndtree.get_cell(&node_cache, &pos.to_bigvec()));
         }
     }
 }

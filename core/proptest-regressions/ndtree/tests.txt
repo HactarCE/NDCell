@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 05025db6fa45b84b686b00bdc607f425604803952af2f0b5164388e8fbad7ce1 # shrinks to cells_to_set = [(NdVec([0, -1]), 1)], mut cells_to_get = []
+cc b24e2734746e49ddd27d7aa30714a41c0d6729f7d320e3d0707e041615bd4a2d # shrinks to cells_to_set = [(NdVec([86, 66]), 0), (NdVec([86, 66]), 1)], old_offset = NdVec([0, 0]), new_center = NdVec([0, 0])

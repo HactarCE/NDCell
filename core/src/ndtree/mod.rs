@@ -455,6 +455,48 @@ impl<D: Dim> NdTree<D> {
         let new_root = cache.get_offset_child(&(delta + &(root.big_len() / 2)), sources);
         self.set_root_centered(new_root);
     }
+
+    /// Pastes a rectangle from another ND-tree onto this one, using custom
+    /// functions to paste a full node or cell. Each closure is passed the
+    /// node/cell from `self` followed by the node/cell from `other`, and must
+    /// return the new node/cell (or `None` to subdivide the nodes further).
+    pub fn paste_custom<'cache>(
+        &mut self,
+        cache: &'cache NodeCache<D>,
+        mut other: NdTree<D>,
+        rect: BigRect<D>,
+        mut paste_full_node: impl FnMut(
+            NodeRef<'cache, D>,
+            NodeRef<'cache, D>,
+        ) -> Option<NodeRef<'cache, D>>,
+        mut paste_cell: impl FnMut(u8, u8) -> u8,
+    ) {
+        assert_eq!(
+            cache,
+            other.cache(),
+            "Cannot paste NdTrees with different node caches",
+        );
+
+        other.recenter(cache, &self.center());
+
+        while self.layer() < other.layer() {
+            self.expand(cache);
+        }
+        while other.layer() < self.layer() {
+            other.expand(cache);
+        }
+        assert_eq!(self.layer(), other.layer());
+
+        let mask = NdMaskEnum::from_rect(other.layer(), &(rect - other.offset()));
+        let new_root = mask.paste_node(
+            self.root().as_ref(cache),
+            other.root().as_ref(cache),
+            &mut paste_full_node,
+            &mut paste_cell,
+        );
+        assert_eq!(self.layer(), new_root.layer());
+        self.set_root_centered(new_root);
+    }
 }
 
 #[cfg(test)]

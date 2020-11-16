@@ -15,7 +15,7 @@ fn recenter_benchmark(c: &mut Criterion) {
 }
 
 fn bench_recenter_2d(c: &mut Criterion, pattern: Pattern, dx: isize) {
-    let ndtree = NdTree::from_rle_str(pattern.rle).unwrap();
+    let ndtree = NdTree2D::from_rle_str(pattern.rle).unwrap();
     c.bench(
         &format!("recenter_{}", pattern.name),
         Benchmark::new(&format!("{},{}", dx, 0), move |b| {

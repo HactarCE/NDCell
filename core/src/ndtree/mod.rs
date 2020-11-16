@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 pub mod aliases;
 pub mod indexed;
+mod mask;
 mod node;
 mod slice;
 
@@ -24,6 +25,7 @@ use crate::ndrect::{BigRect, CanContain, URect};
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, Signed};
 pub use aliases::*;
+pub use mask::*;
 pub use node::*;
 pub use slice::*;
 

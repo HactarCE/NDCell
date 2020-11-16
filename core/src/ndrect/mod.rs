@@ -299,4 +299,24 @@ where
 }
 
 #[cfg(test)]
+pub fn proptest_irect<'a, D: Dim, S: 'a + Clone + proptest::strategy::Strategy<Value = i32>>(
+    component_strategy: S,
+) -> impl 'a + proptest::strategy::Strategy<Value = IRect<D>> {
+    use proptest::strategy::Strategy;
+
+    (
+        crate::ndvec::proptest_ivec(component_strategy.clone()),
+        crate::ndvec::proptest_ivec(component_strategy),
+    )
+        .prop_map(|(a, b)| NdRect::span(a, b))
+}
+
+#[cfg(test)]
+pub fn proptest_irect2d<'a, S: 'a + Clone + proptest::strategy::Strategy<Value = i32>>(
+    component_strategy: S,
+) -> impl 'a + proptest::strategy::Strategy<Value = IRect2D> {
+    proptest_irect(component_strategy)
+}
+
+#[cfg(test)]
 mod tests;

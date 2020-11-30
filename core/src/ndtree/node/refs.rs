@@ -6,7 +6,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::Ordering::Relaxed;
 
-use super::{Layer, NodeCache, RawNode, SimCacheGuard};
+use super::{Layer, LayerTooSmall, NodeCache, RawNode, SimCacheGuard};
 use crate::axis::Axis;
 use crate::dim::Dim;
 use crate::ndrect::{BigRect, CanContain, URect};
@@ -169,7 +169,7 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     /// Creates a node one layer lower containing the contents of the center of
     /// the node.
     #[inline]
-    fn centered_inner(self) -> Result<NodeRef<'cache, Self::D>, ()> {
+    fn centered_inner(self) -> Result<NodeRef<'cache, Self::D>, LayerTooSmall> {
         self.cache().centered_inner(self.as_enum())
     }
     /// Creates an identical node except with the cell at the given position

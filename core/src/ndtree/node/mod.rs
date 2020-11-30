@@ -14,7 +14,7 @@ mod result;
 mod set;
 
 pub use cache::{ArcNode, NodeCache, SimCacheGuard};
-pub use layer::Layer;
+pub use layer::{Layer, LayerTooSmall};
 pub use raw::RawNode;
 pub use refs::{
     CachedNodeRefTrait, LeafNodeRef, NodeRef, NodeRefEnum, NodeRefTrait, NonLeafNodeRef,

@@ -11,8 +11,8 @@ use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::sync::{Arc, Weak};
 
 use super::{
-    CachedNodeRefTrait, HashLifeResultParams, Layer, NodeRef, NodeRefEnum, NodeRefTrait, RawNode,
-    ShardedBoxedSet,
+    CachedNodeRefTrait, HashLifeResultParams, Layer, LayerTooSmall, NodeRef, NodeRefEnum,
+    NodeRefTrait, RawNode, ShardedBoxedSet,
 };
 use crate::dim::Dim;
 use crate::ndvec::{BigVec, UVec};
@@ -383,11 +383,11 @@ impl<D: Dim> NodeCache<D> {
     /// Creates a node one layer lower containing the contents of the center of
     /// the node.
     ///
-    /// If the node is below `Layer(2)`, returns `Err(())`.
+    /// If the node is below `Layer(2)`, returns `Err(LayerTooSmall)`.
     pub fn centered_inner<'cache>(
         &'cache self,
         node: impl CachedNodeRefTrait<'cache, D = D>,
-    ) -> Result<NodeRef<'cache, D>, ()> {
+    ) -> Result<NodeRef<'cache, D>, LayerTooSmall> {
         self.assert_owns_node(node);
 
         Ok(match node.as_enum() {
@@ -398,7 +398,7 @@ impl<D: Dim> NodeCache<D> {
                 let child_index_bitmask = D::BRANCHING_FACTOR - 1;
                 let new_children = self
                     .subdivide(n)
-                    .map_err(|_| ())?
+                    .map_err(|_| LayerTooSmall)?
                     .into_iter()
                     .enumerate()
                     .map(|(child_index, child)| {

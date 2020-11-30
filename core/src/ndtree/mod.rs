@@ -244,9 +244,13 @@ impl<D: Dim> NdTree<D> {
         while self._shrink(cache).is_ok() {}
     }
     /// "Zooms in" the grid by a factor of 2.
-    fn _shrink(&mut self, cache: &NodeCache<D>) -> Result<(), ()> {
+    fn _shrink(&mut self, cache: &NodeCache<D>) -> Result<(), LayerTooSmall> {
         // Don't shrink past the base layer.
-        let root = self.root().as_ref(cache).as_non_leaf().ok_or(())?;
+        let root = self
+            .root()
+            .as_ref(cache)
+            .as_non_leaf()
+            .ok_or(LayerTooSmall)?;
 
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         // Fetch the grandchildren of this node that are closest to the center.
@@ -263,7 +267,7 @@ impl<D: Dim> NdTree<D> {
                 let mut grandchildren = child.subdivide().unwrap();
                 for (i, grandchild) in grandchildren.iter().enumerate() {
                     if i != opposite_child_index && !grandchild.is_empty() {
-                        return Err(());
+                        return Err(LayerTooSmall);
                     }
                 }
                 // Return the grandchild closest to the center.

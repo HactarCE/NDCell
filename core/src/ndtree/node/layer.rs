@@ -275,6 +275,10 @@ impl Layer {
     }
 }
 
+/// Error returned when an operation fails because a node or layer is too small.
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+pub struct LayerTooSmall;
+
 #[cfg(test)]
 mod tests {
     use super::*;

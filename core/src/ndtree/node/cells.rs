@@ -2,7 +2,7 @@
 
 use itertools::Itertools;
 
-use super::Layer;
+use super::{Layer, LayerTooSmall};
 use crate::dim::Dim;
 
 /// Returns a corner hypercube of half the size from a power-of-2 hypercube.
@@ -98,15 +98,15 @@ pub fn expand_centered<D: Dim>(cells: &[u8]) -> Result<Box<[u8]>, u8> {
 
 /// Creates a (2^(n-1))^NDIM hypercube of cells from a (2^n)^NDIM hypercube of
 /// cells using the center 2^n. If the hypercube is smaller than 4^NDIM, returns
-/// `Err(())`.
+/// `Err(LayerTooSmall)`.
 ///
 /// # Panics
 ///
 /// This function panics if the length of `cells` is not (2^n)^NDIM for some n.
-pub fn shrink_centered<D: Dim>(cells: &[u8]) -> Result<Box<[u8]>, ()> {
+pub fn shrink_centered<D: Dim>(cells: &[u8]) -> Result<Box<[u8]>, LayerTooSmall> {
     let old_layer = Layer::from_num_cells::<D>(cells.len()).unwrap();
     if old_layer < Layer(2) {
-        return Err(());
+        return Err(LayerTooSmall);
     }
     let new_layer = old_layer.child_layer();
 
@@ -270,10 +270,13 @@ mod tests {
     #[test]
     fn test_cells_shrink_centered() {
         // Test 1x1x1 (should fail).
-        assert_eq!(Err(()), shrink_centered::<Dim3D>(&[60]));
+        assert_eq!(Err(LayerTooSmall), shrink_centered::<Dim3D>(&[60]));
 
         // Test 2x2x2 (should fail).
-        assert_eq!(Err(()), shrink_centered::<Dim3D>(&(0..8).collect_vec()));
+        assert_eq!(
+            Err(LayerTooSmall),
+            shrink_centered::<Dim3D>(&(0..8).collect_vec()),
+        );
 
         // Test 4x4x4.
         test_cells_shrink_centered_single_case::<Dim3D>(Layer(2));

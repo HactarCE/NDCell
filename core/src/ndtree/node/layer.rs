@@ -47,12 +47,12 @@ impl std::ops::Sub for Layer {
 impl Layer {
     /// Returns the layer number as a `u32`.
     #[inline]
-    pub fn to_u32(self) -> u32 {
+    pub const fn to_u32(self) -> u32 {
         self.0
     }
     /// Returns the layer number as a `usize`.
     #[inline]
-    pub fn to_usize(self) -> usize {
+    pub const fn to_usize(self) -> usize {
         self.0 as usize
     }
     /// Returns the layer with the given total number of cells exactly, or
@@ -124,6 +124,11 @@ impl Layer {
     pub fn big_len(self) -> BigInt {
         BigInt::one() << self.to_usize()
     }
+    /// Returns the number of cells along each axis of a node at the base layer.
+    #[inline]
+    pub fn base_len<D: Dim>() -> usize {
+        Self::base::<D>().len().unwrap()
+    }
 
     /// Returns the total number of cells of a node at this layer, or `None` if
     /// it does not fit in a `usize`.
@@ -131,11 +136,15 @@ impl Layer {
     pub fn num_cells<D: Dim>(self) -> Option<usize> {
         crate::math::try_pow_2(self.to_usize() * D::NDIM)
     }
-    /// Returns the number of cells along each axis of a node at this layer as a
-    /// `BigInt`.
+    /// Returns the total number of cells of a node at this layer as a `BigInt`.
     #[inline]
     pub fn big_num_cells<D: Dim>(self) -> BigUint {
         BigUint::one() << (self.to_usize() * D::NDIM)
+    }
+    /// Returns the total number of cells of a node at the base layer.
+    #[inline]
+    pub fn base_num_cells<D: Dim>() -> usize {
+        Self::base::<D>().num_cells::<D>().unwrap()
     }
 
     /// Returns a rectangle the size of a node at this layer with the lower

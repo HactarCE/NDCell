@@ -1,6 +1,6 @@
-//! Type aliases for `NdTree`s.
+//! Type aliases for `NdTree`s and related types.
 
-use super::{NdTree, NdTreeSlice};
+use super::{NdTree, NdTreeSlice, Region};
 use crate::dim::*;
 
 /// 1D grid represented as a bintree.
@@ -28,3 +28,16 @@ pub type NdTreeSlice4D<'cache> = NdTreeSlice<'cache, Dim4D>;
 pub type NdTreeSlice5D<'cache> = NdTreeSlice<'cache, Dim5D>;
 /// Slice of a 6D grid represented as a tree with branching factor 64.
 pub type NdTreeSlice6D<'cache> = NdTreeSlice<'cache, Dim6D>;
+
+/// Finite set of 1D cell positions.
+pub type Region1D = Region<Dim1D>;
+/// Finite set of 2D cell positions.
+pub type Region2D = Region<Dim2D>;
+/// Finite set of 3D cell positions.
+pub type Region3D = Region<Dim3D>;
+/// Finite set of 4D cell positions.
+pub type Region4D = Region<Dim4D>;
+/// Finite set of 5D cell positions.
+pub type Region5D = Region<Dim5D>;
+/// Finite set of 6D cell positions.
+pub type Region6D = Region<Dim6D>;

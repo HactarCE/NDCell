@@ -192,12 +192,12 @@ proptest! {
 
         // Paste using bitwise XOR.
         ndtree.paste_custom(
-            &node_cache,
             ndtree_to_paste,
-            paste_rect.to_bigrect(),
+            Region::Rect(paste_rect.to_bigrect()),
             |original_node, pasted_node| {
                 if original_node.is_empty() {
-                    Some(pasted_node)
+                    let result_cache = original_node.cache();
+                    Some(result_cache.copy_from_other_cache(pasted_node))
                 } else if pasted_node.is_empty() {
                     Some(original_node)
                 } else {

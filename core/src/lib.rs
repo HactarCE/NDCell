@@ -89,7 +89,7 @@ pub mod prelude {
     pub use crate::ndtree::aliases::*;
     pub use crate::ndtree::{
         ArcNode, Layer, LeafNodeRef, NdTree, NdTreeSlice, NodeCache, NodeRef, NodeRefEnum,
-        NonLeafNodeRef,
+        NonLeafNodeRef, Region,
     };
     pub use crate::ndvec::aliases::*;
     pub use crate::ndvec::{AnyDimVec, NdVec};

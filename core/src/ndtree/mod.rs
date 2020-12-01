@@ -9,15 +9,15 @@
 //! Each of these hypercubes is stored in a **node**. See the `ndtree::node`
 //! documentation for more details.
 
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use parking_lot::RwLock;
 use std::fmt;
 use std::sync::Arc;
 
 pub mod aliases;
 pub mod indexed;
-mod mask;
 mod node;
+pub mod region;
 mod slice;
 
 use crate::dim::*;
@@ -25,9 +25,9 @@ use crate::ndrect::{BigRect, CanContain, URect};
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, Signed};
 pub use aliases::*;
-pub use mask::*;
 pub use node::*;
-pub use slice::*;
+pub use region::Region;
+pub use slice::NdTreeSlice;
 
 /// An N-dimensional generalization of a quadtree.
 ///
@@ -477,46 +477,117 @@ impl<D: Dim> NdTree<D> {
         self.set_root_centered(new_root);
     }
 
-    /// Pastes a rectangle from another ND-tree onto this one, using custom
+    /// Pastes a region from another ND-tree onto this one, using custom
     /// functions to paste a full node or cell. Each closure is passed the
     /// node/cell from `self` followed by the node/cell from `other`, and must
-    /// return the new node/cell (or `None` to subdivide the nodes further).
-    pub fn paste_custom<'cache>(
+    /// return the new node/cell (or `None` to subdivide the nodes further). The
+    /// closure is only passed nodes/cells that are completely covered by the
+    /// region.
+    ///
+    /// Note that `self`, `other`, and `mask` do **not** need to use the same
+    /// cache; the returned node will be from the same cache as `self`.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if `self`, `other`, and `mask` are not all at the
+    /// same layer, if `paste_full_node` returns a node at a different layer
+    /// than the ones passed into it, or if `paste_full_node` returns a node
+    /// from a cache other than `self`'s.
+    pub fn paste_custom(
         &mut self,
-        cache: &'cache NodeCache<D>,
         mut other: NdTree<D>,
-        rect: BigRect<D>,
-        mut paste_full_node: impl FnMut(
-            NodeRef<'cache, D>,
-            NodeRef<'cache, D>,
-        ) -> Option<NodeRef<'cache, D>>,
+        mask: Region<D>,
+        mut paste_full_node: impl for<'dest, 'src> FnMut(
+            NodeRef<'dest, D>,
+            NodeRef<'src, D>,
+        ) -> Option<NodeRef<'dest, D>>,
         mut paste_cell: impl FnMut(u8, u8) -> u8,
     ) {
-        assert_eq!(
-            cache,
-            other.cache(),
-            "Cannot paste NdTrees with different node caches",
-        );
+        // Ensure same center.
+        other.recenter(&self.center());
+        let mut mask = mask.into_ndtree(self.center());
+        assert_eq!(self.center(), other.center());
+        assert_eq!(self.center(), mask.center());
 
-        other.recenter(cache, &self.center());
-
-        while self.layer() < other.layer() {
-            self.expand(cache);
-        }
-        while other.layer() < self.layer() {
-            other.expand(cache);
-        }
+        // Ensure same layer.
+        let common_layer = std::cmp::max(std::cmp::max(self.layer(), other.layer()), mask.layer());
+        self.expand_while(|ndtree| ndtree.layer() < common_layer);
+        other.expand_while(|ndtree| ndtree.layer() < common_layer);
+        mask.expand_while(|ndtree| ndtree.layer() < common_layer);
         assert_eq!(self.layer(), other.layer());
+        assert_eq!(self.layer(), mask.layer());
 
-        let mask = NdMaskEnum::from_rect(other.layer(), &(rect - other.offset()));
-        let new_root = mask.paste_node(
-            self.root().as_ref(cache),
-            other.root().as_ref(cache),
+        let _self_cache = Arc::clone(self.cache());
+        let self_cache = _self_cache.read();
+        let other_cache = other.cache().read();
+        let mask_cache = mask.cache().read();
+
+        let new_root = Self::_paste_custom(
+            self.root().as_ref(&self_cache),
+            other.root().as_ref(&other_cache),
+            mask.root().as_ref(&mask_cache),
             &mut paste_full_node,
             &mut paste_cell,
         );
         assert_eq!(self.layer(), new_root.layer());
         self.set_root_centered(new_root);
+    }
+    fn _paste_custom<'dest, 'src, 'mask>(
+        destination: NodeRef<'dest, D>,
+        source: NodeRef<'src, D>,
+        mask: NodeRef<'mask, D>,
+        paste_full_node: &mut impl FnMut(
+            NodeRef<'dest, D>,
+            NodeRef<'src, D>,
+        ) -> Option<NodeRef<'dest, D>>,
+        paste_cell: &mut impl FnMut(u8, u8) -> u8,
+    ) -> NodeRef<'dest, D> {
+        match mask.single_state() {
+            // The mask completely excludes this node.
+            Some(0_u8) => return destination,
+            // The mask completely includes this node.
+            Some(1_u8) => {
+                if let Some(pasted_result) = paste_full_node(destination, source) {
+                    return pasted_result;
+                }
+                // If `paste_full_node()` returned `None`, then we must recurse
+                // further.
+            }
+            // If the mask only partially covers this node, we must recurse
+            // further.
+            _ => (),
+        }
+
+        // Recurse!
+        let dest_cache = destination.cache();
+        use NodeRefEnum::{Leaf, NonLeaf};
+        match (destination.as_enum(), source.as_enum(), mask.as_enum()) {
+            (Leaf(dest), Leaf(src), Leaf(mask)) => dest_cache.get_from_cells(
+                izip!(dest.cells(), src.cells(), mask.cells())
+                    .map(|(&dest_cell, &src_cell, &mask_cell)| {
+                        if mask_cell == 0_u8 {
+                            dest_cell
+                        } else {
+                            paste_cell(dest_cell, src_cell)
+                        }
+                    })
+                    .collect_vec(),
+            ),
+            (NonLeaf(dest), NonLeaf(src), NonLeaf(mask)) => {
+                dest_cache.join_nodes(izip!(dest.children(), src.children(), mask.children()).map(
+                    |(dest_child, src_child, mask_child)| {
+                        Self::_paste_custom(
+                            dest_child,
+                            src_child,
+                            mask_child,
+                            paste_full_node,
+                            paste_cell,
+                        )
+                    },
+                ))
+            }
+            _ => panic!("Layer mismatch"),
+        }
     }
 }
 

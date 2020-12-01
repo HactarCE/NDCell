@@ -498,17 +498,22 @@ impl<D: Dim> NodeCache<D> {
     }
 
     /// Creates a node identical to one from another cache.
-    pub fn copy_from_other_cache<'cache, 'other>(
-        &'cache self,
+    pub fn copy_from_other_cache<'this, 'other>(
+        &'this self,
         node: impl CachedNodeRefTrait<'other, D = D>,
-    ) -> NodeRef<'cache, D> {
-        self._copy_from_other_cache(node.as_ref(), &mut HashMap::default())
+    ) -> NodeRef<'this, D> {
+        if self == node.cache() {
+            // If the caches are actually the same, this is trivial.
+            unsafe { std::mem::transmute::<NodeRef<'other, D>, NodeRef<'this, D>>(node.as_ref()) }
+        } else {
+            self._copy_from_other_cache(node.as_ref(), &mut HashMap::default())
+        }
     }
-    fn _copy_from_other_cache<'cache, 'other>(
-        &'cache self,
+    fn _copy_from_other_cache<'this, 'other>(
+        &'this self,
         node: NodeRef<'other, D>,
-        convert_table: &mut HashMap<NodeRef<'other, D>, NodeRef<'cache, D>>,
-    ) -> NodeRef<'cache, D> {
+        convert_table: &mut HashMap<NodeRef<'other, D>, NodeRef<'this, D>>,
+    ) -> NodeRef<'this, D> {
         if let Some(already_computed) = convert_table.get(&node) {
             return *already_computed;
         }

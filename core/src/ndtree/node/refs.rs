@@ -266,7 +266,8 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     }
 
     /// Returns `true` if all cells in the node within the rectangle are state
-    /// #0. Returns `false` if the rectangle does not intersect the node
+    /// #0, or false otherwise. Returns `true` if the rectangle does not
+    /// intersect the node.
     fn rect_is_empty(self, rect: &BigRect<Self::D>) -> bool {
         // Are there even any cells in `self` at all?
         if self.is_empty() {

@@ -85,6 +85,13 @@ impl<D: Dim> NdTree<D> {
     pub fn with_cache(node_cache: Arc<RwLock<NodeCache<D>>>) -> Self {
         Self::from_node_centered(node_cache.read_recursive().get_empty_base())
     }
+    /// Creates an empty ND-tree centered at the given position.
+    #[inline]
+    pub fn with_center(center: BigVec<D>) -> Self {
+        let mut ret = Self::new();
+        ret.set_center(center);
+        ret
+    }
     /// Creates an ND-tree containing the given node centered on the origin.
     ///
     /// # Panics
@@ -231,10 +238,20 @@ impl<D: Dim> NdTree<D> {
         self.set_root_centered(new_root);
     }
     /// "Zooms out" the grid by calling `NdTree::expand()` until the tree
-    /// includes the given position.
-    pub fn expand_to(&mut self, cache: &NodeCache<D>, pos: &BigVec<D>) {
-        while !self.rect().contains(pos) {
-            self.expand(cache);
+    /// includes the given position or rectangle.
+    pub fn expand_to<T>(&mut self, pos_or_rect: &T)
+    where
+        BigRect<D>: CanContain<T>,
+    {
+        self.expand_while(|this| !this.rect().contains(pos_or_rect))
+    }
+    /// "Zooms out" the grid by calling `NdTree::expand()` as long as the given
+    /// predicate returns `true`.
+    pub fn expand_while(&mut self, mut predicate: impl FnMut(&Self) -> bool) {
+        let _cache = Arc::clone(self.cache());
+        let cache = _cache.read();
+        while predicate(&self) {
+            self.expand(&cache);
         }
     }
     /// "Zooms in" the grid as much as possible without losing
@@ -244,13 +261,13 @@ impl<D: Dim> NdTree<D> {
         while self._shrink(cache).is_ok() {}
     }
     /// "Zooms in" the grid by a factor of 2.
-    fn _shrink(&mut self, cache: &NodeCache<D>) -> Result<(), LayerTooSmall> {
+    fn _shrink(&mut self, cache: &NodeCache<D>) -> Result<(), Unshrinkable> {
         // Don't shrink past the base layer.
         let root = self
             .root()
             .as_ref(cache)
             .as_non_leaf()
-            .ok_or(LayerTooSmall)?;
+            .ok_or(Unshrinkable::LayerTooSmall)?;
 
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         // Fetch the grandchildren of this node that are closest to the center.
@@ -267,7 +284,7 @@ impl<D: Dim> NdTree<D> {
                 let mut grandchildren = child.subdivide().unwrap();
                 for (i, grandchild) in grandchildren.iter().enumerate() {
                     if i != opposite_child_index && !grandchild.is_empty() {
-                        return Err(LayerTooSmall);
+                        return Err(Unshrinkable::PatternTooBig);
                     }
                 }
                 // Return the grandchild closest to the center.
@@ -291,7 +308,7 @@ impl<D: Dim> NdTree<D> {
     }
     /// Sets the state of the cell at the given position.
     pub fn set_cell(&mut self, cache: &NodeCache<D>, pos: &BigVec<D>, cell_state: u8) {
-        self.expand_to(cache, &pos);
+        self.expand_to(pos);
         let new_root = self
             .root
             .as_ref(cache)
@@ -313,8 +330,7 @@ impl<D: Dim> NdTree<D> {
     ) -> NdTreeSlice<'cache, D> {
         // Grow the NdTree until it contains the desired rectangle.
         let mut tmp_ndtree = self.clone();
-        tmp_ndtree.expand_to(cache, &rect.min());
-        tmp_ndtree.expand_to(cache, &rect.max());
+        tmp_ndtree.expand_to(rect);
         let mut ret = tmp_ndtree.slice(cache);
         // "Zoom in" on either a corner, an edge/face, or the center until it
         // can't shrink any more. Each iteration of the loop "zooms in" by a
@@ -411,7 +427,10 @@ impl<D: Dim> NdTree<D> {
     /// This may take a lot of time for large patterns when the difference
     /// between `new_center` and the existing ND-tree center is not a multiple
     /// of a large power of 2 (relative to pattern size).
-    pub fn recenter(&mut self, cache: &NodeCache<D>, new_center: &BigVec<D>) {
+    pub fn recenter(&mut self, new_center: &BigVec<D>) {
+        let _cache = Arc::clone(self.cache());
+        let cache = _cache.read_recursive();
+
         let delta = new_center - self.center();
         let max_abs_delta = delta[delta.max_axis(|_, x| x.abs())].abs();
 
@@ -420,10 +439,8 @@ impl<D: Dim> NdTree<D> {
 
         // Expand until half the size of the root node is smaller than (or equal
         // to) the delta vector.
-        while max_abs_delta > self.root().big_len() / 2 {
-            self.expand(cache);
-        }
-        let root = self.root().as_ref(cache);
+        self.expand_while(|this| max_abs_delta > this.root().big_len() / 2);
+        let root = self.root().as_ref(&cache);
         let layer = root.layer(); // Let's call this layer L.
 
         let mut source_lower_corner = vec![cache.get_empty(layer); D::BRANCHING_FACTOR];
@@ -501,6 +518,14 @@ impl<D: Dim> NdTree<D> {
         assert_eq!(self.layer(), new_root.layer());
         self.set_root_centered(new_root);
     }
+}
+
+/// Error returned when an ND-tree cannot be shrunk further.
+#[allow(missing_docs)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum Unshrinkable {
+    LayerTooSmall,
+    PatternTooBig,
 }
 
 #[cfg(test)]

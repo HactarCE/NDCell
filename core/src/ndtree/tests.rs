@@ -154,7 +154,7 @@ proptest! {
             hashmap.insert(pos, cell);
         }
 
-        ndtree.recenter(&node_cache, &new_center.to_bigvec());
+        ndtree.recenter(&new_center.to_bigvec());
 
         for (pos, cell) in hashmap {
             assert_eq!(cell, ndtree.get_cell(&node_cache, &pos.to_bigvec()));

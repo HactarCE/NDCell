@@ -19,10 +19,9 @@ fn bench_recenter_2d(c: &mut Criterion, pattern: Pattern, dx: isize) {
     c.bench(
         &format!("recenter_{}", pattern.name),
         Benchmark::new(&format!("{},{}", dx, 0), move |b| {
-            let cache = ndtree.cache().read();
             b.iter(|| {
                 let mut a = ndtree.clone();
-                a.recenter(&cache, &NdVec::big([dx, 0]));
+                a.recenter(&NdVec::big([dx, 0]));
             })
         }),
     );

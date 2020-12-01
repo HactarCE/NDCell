@@ -172,12 +172,46 @@ impl<D: Dim> Hash for RawNode<D> {
 impl<D: Dim> PartialEq for RawNode<D> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.layer == other.layer
-            && self.residue == other.residue
-            && (self.is_empty() && other.is_empty()
-                || self.slice_ptr == other.slice_ptr
-                || (self.cell_slice() == other.cell_slice()
-                    && self.children_slice() == other.children_slice()))
+        // The nodes must have the same layer ...
+        if self.layer != other.layer {
+            return false;
+        }
+
+        // ... and the same residue
+        if self.residue != other.residue {
+            return false;
+        }
+
+        // ... and the same contents, which implies the same value for
+        // `single_state()`
+        if self.single_state != other.single_state {
+            return false;
+        }
+
+        // ... and the same contents, which we can check in several ways:
+
+        // 1. If the nodes have different values for `single_state`, they are
+        //    obviously unequal.
+        if self.single_state != other.single_state {
+            return false;
+        }
+
+        // 2. If the nodes have equal slice pointers, they are obviously equal.
+        if self.slice_ptr == other.slice_ptr {
+            return true;
+        }
+
+        // 3. If the nodes have the same non-`None` value for `single_state`,
+        //    they must be equal.
+        if self.single_state.is_some() && self.single_state == other.single_state {
+            return true;
+        }
+
+        // 4. Check the children recursively. Either `cell_slice()` or
+        //    `children_slice()` will be `None`, and the other will be
+        //    `Some(...)`.
+        return self.cell_slice() == other.cell_slice()
+            && self.children_slice() == other.children_slice();
     }
 }
 impl<D: Dim> Eq for RawNode<D> {}

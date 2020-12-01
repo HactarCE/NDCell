@@ -346,13 +346,15 @@ fn rle_row_of_node<'cache, D: Dim>(
     node: NodeRef<'cache, D>,
     start_pos: BigVec<D>,
 ) -> Box<dyn 'cache + Iterator<Item = RleResult<RleRun>>> {
-    if node.is_empty() {
+    if let Some(single_state) = node.single_state() {
+        // All cells in this node are the same state, so encode a run of that
+        // cell state with the length of this node.
         Box::new(std::iter::once_with(move || {
             Ok(RleRun {
                 count: (node.layer().big_len() - &node.layer().modulo_pos(&start_pos)[X])
                     .to_usize()
                     .ok_or(RleError::TooBig)?,
-                item: RleItem::Cell(0_u8),
+                item: RleItem::Cell(single_state),
             })
         }))
     } else {

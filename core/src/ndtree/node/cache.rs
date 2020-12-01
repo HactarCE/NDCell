@@ -465,9 +465,11 @@ impl<D: Dim> NodeCache<D> {
                 .map(|n| n.as_non_leaf().unwrap())
                 .take(D::BRANCHING_FACTOR)
                 .collect_vec();
-            // (optimization for empty nodes)
-            if sources.iter().all(|n| n.is_empty()) {
-                return sources[0].as_ref(); // All nodes are the same empty.
+            // (optimization for nodes with a single cell state)
+            if sources[0].single_state().is_some()
+                && sources.iter().map(|n| n.single_state()).all_equal()
+            {
+                return sources[0].as_ref(); // All nodes are the same single state.
             }
             // The node we will return is somewhere inside the source node. The
             // source node has 4^NDIM grandchildren; there must be some 3^NDIM

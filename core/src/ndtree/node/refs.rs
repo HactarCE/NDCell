@@ -89,10 +89,18 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     }
     /// Returns `true` if all cells in the node are state #0.
     ///
-    /// This is O(1) because each node stores a flag to indicate if it is empty.
+    /// This is O(1) because each node tracks this information.
     #[inline]
     fn is_empty(self) -> bool {
         self.as_raw().is_empty()
+    }
+    /// Returns the state of all cells in the node, if they are the same, or
+    /// `None` otherwise.
+    ///
+    /// This is O(1) because each node tracks this information.
+    #[inline]
+    fn single_state(self) -> Option<u8> {
+        self.as_raw().single_state()
     }
 
     /// Returns the cache that the node is stored in.
@@ -546,6 +554,8 @@ impl<D: Dim> fmt::Display for NodeRef<'_, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_empty() {
             write!(f, "<empty>")?;
+        } else if let Some(single_state) = self.single_state() {
+            write!(f, "<#{}>", single_state)?;
         } else {
             match self.as_enum() {
                 NodeRefEnum::Leaf(node) => {

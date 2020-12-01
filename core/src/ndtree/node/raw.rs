@@ -2,6 +2,7 @@
 //!
 //! This is based loosely on `hlife_algo.cpp` in Golly.
 
+use itertools::Itertools;
 use std::fmt;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -35,13 +36,12 @@ const RAW_NODE_MEMORY_OVERHEAD: usize = 3 * std::mem::size_of::<usize>();
 /// - `result_ptr` - 8 bytes
 /// - `population` - 8 bytes
 /// - `layer` - 4 bytes
+/// - `single_state` - 2 bytes
 /// - `residue` - 1 byte
-/// - `is_empty` - 1 byte
 /// - `gc_reachable` - 1 byte
-/// - padding - 1 byte
 ///
 /// Total: 32 bytes, which exactly matches one of jemalloc's size classes, so no
-/// space is wasted (except for the one padding byte at the end).
+/// space is wasted.
 ///
 /// ## 32-bit
 ///
@@ -49,10 +49,9 @@ const RAW_NODE_MEMORY_OVERHEAD: usize = 3 * std::mem::size_of::<usize>();
 /// - `result_ptr` - 4 bytes
 /// - `population` - 4 bytes
 /// - `layer` - 4 bytes
+/// - `single_state` - 2 bytes
 /// - `residue` - 1 byte
-/// - `is_empty` - 1 byte
 /// - `gc_reachable` - 1 byte
-/// - padding - 1 byte
 ///
 /// Total: 20 bytes, which isn't great but still fits within jemalloc's 32-byte
 /// size class and only wastes 6 bytes. Memory optimization on 32-bit targets
@@ -97,15 +96,16 @@ pub struct RawNode<D: Dim> {
     /// Layer of this node.
     layer: Layer,
 
+    /// Cell state, if all cells in this node are the same state; `None`
+    /// otherwise.
+    single_state: Option<u8>,
+
     /// Linear combination of spacetime residues of this node.
     ///
     /// Each spacetime residue is an arbitrary linear combination of spatial
     /// positions and temporal position (global generation count), modulo some
     /// value. The exact combinations used depend on the automaton.
     residue: u8,
-
-    /// Whether the node contains only state #0.
-    is_empty: bool,
 
     /// Whether this node is reachable and thus should be preserved during
     /// garbage collection.
@@ -204,7 +204,11 @@ impl<D: Dim> RawNode<D> {
     pub fn new_leaf(cells: Box<[u8]>) -> Self {
         let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid leaf node cell count");
         assert!(layer.is_leaf::<D>(), "Leaf node layer too large");
-        let is_empty = cells.iter().all(|&x| x == 0);
+        let single_state = if cells.iter().all_equal() {
+            Some(cells[0])
+        } else {
+            None
+        };
         let start_of_cells = &Box::leak(cells)[0];
 
         Self {
@@ -215,8 +219,8 @@ impl<D: Dim> RawNode<D> {
             population: AtomicUsize::new(0),
 
             layer,
+            single_state,
             residue: 0,
-            is_empty,
             gc_reachable: AtomicBool::new(true),
         }
     }
@@ -247,7 +251,11 @@ impl<D: Dim> RawNode<D> {
         for child in &children[1..] {
             debug_assert_eq!(child_layer, child.layer());
         }
-        let is_empty = children.iter().all(|child| child.is_empty());
+        let single_state = if children.iter().map(|child| child.single_state).all_equal() {
+            children[0].single_state
+        } else {
+            None
+        };
         let start_of_children = &Box::leak(children)[0];
 
         Self {
@@ -258,8 +266,8 @@ impl<D: Dim> RawNode<D> {
             population: AtomicUsize::new(0),
 
             layer,
+            single_state,
             residue: 0,
-            is_empty,
             gc_reachable: AtomicBool::new(true),
         }
     }
@@ -279,10 +287,19 @@ impl<D: Dim> RawNode<D> {
 
     /// Returns `true` if all cells in the node are state #0.
     ///
-    /// This is O(1) because each node stores a flag to indicate if it is empty.
+    /// This is O(1) because each node tracks this information.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.is_empty
+        self.single_state() == Some(0_u8)
+    }
+
+    /// Returns the state of all cells in the node, if they are the same, or
+    /// `None` otherwise.
+    ///
+    /// This is O(1) because each node tracks this information.
+    #[inline]
+    pub fn single_state(&self) -> Option<u8> {
+        self.single_state
     }
 
     /// Returns a pointer to the cell state slice if this is a leaf node, or
@@ -355,9 +372,13 @@ impl<D: Dim> RawNode<D> {
             return p;
         }
 
-        let ret = if self.is_empty() {
-            // Empty nodes have no cells, duh.
+        let ret: Result<usize, BigUint> = if self.is_empty() {
+            // Empty nodes have no nonzero cells, duh.
             Ok(0)
+        } else if self.single_state().is_some() {
+            // We already handled the zero case, so all cells in the node are
+            // the same nonzero state.
+            Err(self.layer().big_num_cells::<D>().into())
         } else if let Some(cells) = self.cell_slice() {
             // Count nonzero cells.
             Ok(cells.iter().filter(|&&x| x != 0).count())
@@ -373,7 +394,7 @@ impl<D: Dim> RawNode<D> {
             }
             total
         } else {
-            unreachable!()
+            unreachable!("All nodes have children or cells")
         };
         match ret {
             Ok(small_pop) => self.set_pop_small(small_pop),

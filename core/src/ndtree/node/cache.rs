@@ -269,6 +269,7 @@ impl<D: Dim> NodeCache<D> {
             .into_iter()
             .inspect(|&node| self.assert_owns_node(node))
             .map(|node| node.as_raw())
+            .take(D::BRANCHING_FACTOR)
             .collect_vec()
             .into_boxed_slice();
         assert_eq!(children.len(), D::BRANCHING_FACTOR);

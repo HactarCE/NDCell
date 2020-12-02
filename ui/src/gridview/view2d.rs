@@ -1,7 +1,5 @@
 use anyhow::{anyhow, Context, Result};
 use log::{trace, warn};
-use parking_lot::RwLock;
-use std::sync::Arc;
 
 use ndcell_core::prelude::*;
 
@@ -30,7 +28,7 @@ pub struct GridView2D {
     common: GridViewCommon,
 
     /// Automaton being simulated and displayed.
-    pub automaton: ProjectedAutomaton2D,
+    pub automaton: Automaton2D,
     /// Selection.
     selection: Option<Selection2D>,
     /// Undo/redo history manager.
@@ -40,7 +38,7 @@ pub struct GridView2D {
     camera_interpolator: Interpolator<Dim2D, Camera2D>,
 
     /// Communication channel with the simulation worker thread.
-    worker: Option<Worker<ProjectedAutomaton2D>>,
+    worker: Option<Worker<Automaton2D>>,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
 
@@ -79,7 +77,7 @@ impl GridViewTrait for GridView2D {
                 };
 
                 let new_cell_state = c.mode.cell_state(
-                    self.get_cell(&self.cache().read(), &initial_pos),
+                    self.automaton.tree.get_cell(&initial_pos),
                     self.selected_cell_state(),
                 );
 
@@ -98,7 +96,7 @@ impl GridViewTrait for GridView2D {
                             if let Some(pos2) = &pos2 {
                                 for pos in ndcell_core::math::bresenham(pos1.clone(), pos2.clone())
                                 {
-                                    this.automaton.set_cell(&pos, new_cell_state);
+                                    this.automaton.tree.set_cell(&pos, new_cell_state);
                                 }
                                 pos1 = pos2.clone();
                                 Ok(DragOutcome::Continue)
@@ -284,10 +282,10 @@ impl GridViewTrait for GridView2D {
     }
 
     fn as_automaton<'a>(&'a self) -> AutomatonRef<'a> {
-        AutomatonRef::from(&self.automaton)
+        AutomatonRef::Automaton2D(&self.automaton)
     }
     fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
-        AutomatonMut::from(&mut self.automaton)
+        AutomatonMut::Automaton2D(&mut self.automaton)
     }
 
     fn run_step(&mut self) {
@@ -323,8 +321,7 @@ impl GridViewTrait for GridView2D {
         self.camera_interpolator().set_dpi(config.gfx.dpi as f32);
 
         let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
-        let node_cache = self.automaton.projected_cache().read();
-        let mut rip = RenderInProgress::new(self, params, &node_cache, &mut render_cache)?;
+        let mut rip = RenderInProgress::new(self, params, &mut render_cache)?;
         rip.draw_cells()?;
 
         // Draw gridlines.
@@ -390,17 +387,12 @@ impl AsSimulate for GridView2D {
     }
 }
 
-impl From<ProjectedAutomaton2D> for GridView2D {
-    fn from(automaton: ProjectedAutomaton2D) -> Self {
+impl From<Automaton2D> for GridView2D {
+    fn from(automaton: Automaton2D) -> Self {
         Self {
             automaton,
             ..Default::default()
         }
-    }
-}
-impl From<Automaton2D> for GridView2D {
-    fn from(automaton: Automaton2D) -> Self {
-        Self::from(ProjectedAutomaton2D::from(automaton))
     }
 }
 
@@ -429,18 +421,11 @@ impl GridView2D {
         self.camera().scale() < Scale::from_factor(r64(1.0))
     }
 
-    pub fn cache(&self) -> &Arc<RwLock<NodeCache<Dim2D>>> {
-        &self.automaton.projected_cache()
-    }
-    pub fn get_cell(&self, cache: &NodeCache<Dim2D>, pos: &BigVec2D) -> u8 {
-        self.automaton.projected_tree().get_cell(cache, pos)
-    }
-
     pub fn mouse_pos(&self) -> Option<ScreenPos2D> {
         self.camera().pixel_to_screen_pos(self.mouse().pos?)
     }
 
-    fn get_worker(&mut self) -> &mut Worker<ProjectedAutomaton2D> {
+    fn get_worker(&mut self) -> &mut Worker<Automaton2D> {
         if let None = self.worker {
             self.worker = Some(Worker::new(self.automaton.clone()));
         }
@@ -449,7 +434,7 @@ impl GridView2D {
 }
 
 pub struct HistoryEntry {
-    automaton: ProjectedAutomaton2D,
+    automaton: Automaton2D,
     selection: Option<Selection2D>,
     camera: Camera2D,
 }

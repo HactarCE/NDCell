@@ -22,7 +22,7 @@ pub struct GridView3D {
     common: GridViewCommon,
 
     /// Automaton being simulated and displayed.
-    pub automaton: ProjectedAutomaton3D,
+    pub automaton: Automaton3D,
     /// Selection.
     selection: Option<Selection3D>,
     /// Undo/redo history manager.
@@ -32,7 +32,7 @@ pub struct GridView3D {
     camera_interpolator: Interpolator<Dim3D, Camera3D>,
 
     /// Communication channel with the simulation worker thread.
-    worker: Option<Worker<ProjectedAutomaton3D>>,
+    worker: Option<Worker<Automaton3D>>,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
 
@@ -98,10 +98,10 @@ impl GridViewTrait for GridView3D {
     }
 
     fn as_automaton<'a>(&'a self) -> AutomatonRef<'a> {
-        AutomatonRef::from(&self.automaton)
+        AutomatonRef::Automaton3D(&self.automaton)
     }
     fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
-        AutomatonMut::from(&mut self.automaton)
+        AutomatonMut::Automaton3D(&mut self.automaton)
     }
 
     fn run_step(&mut self) {
@@ -118,11 +118,8 @@ impl GridViewTrait for GridView3D {
         self.camera_interpolator().set_dpi(config.gfx.dpi as f32);
 
         // let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
-        let node_cache = self.automaton.projected_cache().read();
         let mut rip = RenderInProgress::new(
-            self,
-            params,
-            &node_cache,
+            self, params,
             // &mut render_cache,
         )?;
         rip.draw_cells();
@@ -174,22 +171,17 @@ impl AsSimulate for GridView3D {
     }
 }
 
-impl From<ProjectedAutomaton3D> for GridView3D {
-    fn from(automaton: ProjectedAutomaton3D) -> Self {
+impl From<Automaton3D> for GridView3D {
+    fn from(automaton: Automaton3D) -> Self {
         Self {
             automaton,
             ..Default::default()
         }
     }
 }
-impl From<Automaton3D> for GridView3D {
-    fn from(automaton: Automaton3D) -> Self {
-        Self::from(ProjectedAutomaton3D::from(automaton))
-    }
-}
 
 pub struct HistoryEntry {
-    automaton: ProjectedAutomaton3D,
+    automaton: Automaton3D,
     selection: Option<Selection3D>,
     camera: Camera3D,
 }

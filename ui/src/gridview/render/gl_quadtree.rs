@@ -8,7 +8,6 @@ use log::warn;
 use std::borrow::Cow;
 use std::sync::Once;
 
-use ndcell_core::ndtree::indexed::*;
 use ndcell_core::prelude::*;
 
 use crate::DISPLAY;
@@ -49,7 +48,7 @@ impl CachedGlQuadtree {
             return Ok(self.cached.as_ref().unwrap());
         }
         self.cached = Some(GlQuadtree::from_node(
-            node.as_ref(&node.cache().read_recursive()),
+            &node.as_ref_with_guard(),
             min_layer,
             pixelator,
         )?);
@@ -76,25 +75,25 @@ impl GlQuadtree {
     /// Constructs a GlQuadtree from a node and a function to turn a node into a
     /// solid color.
     pub fn from_node<'n>(
-        node: NodeRef<'n, Dim2D>,
+        node: impl NodeRefTrait<'n, D = Dim2D>,
         min_layer: Layer,
         mut pixelator: impl FnMut(NodeRef<'n, Dim2D>) -> [u8; 4],
     ) -> Result<Self> {
         // Use the parent layer because we want to store four pixels (each
         // representing a node at `min_layer`) inside one index.
-        let indexed_tree = IndexedNdTree::from_node(node, min_layer.parent_layer(), |node| node);
+        let indexed_tree = FlatNdTree2D::from_node(node, min_layer.parent_layer(), |node| node);
         let mut pixel_vec: Vec<u32> = indexed_tree
             .nodes()
             .iter()
             .flat_map(|indexed_node| match indexed_node {
-                IndexedNdTreeNode::Leaf(node, _) => node
+                FlatNdTreeNode::Leaf(node, _) => node
                     .subdivide()
                     .unwrap()
                     .into_iter()
                     .map(&mut pixelator)
                     .map(u32::from_le_bytes) // shader expects little-endian
                     .collect_vec(),
-                IndexedNdTreeNode::NonLeaf(indices, _) => {
+                FlatNdTreeNode::NonLeaf(indices, _) => {
                     indices.into_iter().map(|&i| i as u32).collect_vec()
                 }
             })

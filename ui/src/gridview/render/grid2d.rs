@@ -75,9 +75,8 @@ pub struct RenderInProgress<'a> {
 impl<'a> RenderInProgress<'a> {
     /// Creates a `RenderInProgress` for a gridview.
     pub fn new(
-        g: &GridView2D,
+        g: &'a GridView2D,
         RenderParams { target, config }: RenderParams<'a>,
-        node_cache: &'a NodeCache<Dim2D>,
         render_cache: &'a mut RenderCache,
     ) -> Result<Self> {
         target.clear_depth(0.0);
@@ -120,10 +119,7 @@ impl<'a> RenderInProgress<'a> {
             }
 
             // Now fetch the `NdTreeSlice` containing all of the visible cells.
-            visible_quadtree = g
-                .automaton
-                .projected_tree()
-                .slice_containing(node_cache, &global_visible_rect);
+            visible_quadtree = g.automaton.tree.slice_containing(&global_visible_rect);
 
             // Subtract the slice offset from `global_visible_rect` and
             // `global_visible_rect` to get the rectangle of visible cells
@@ -183,7 +179,7 @@ impl<'a> RenderInProgress<'a> {
         let textures: &mut textures::TextureCache = &mut textures::CACHE.borrow_mut();
         // Steps #1: encode the quadtree as a texture.
         let gl_quadtree = self.render_cache.gl_quadtree.from_node(
-            self.visible_quadtree.root.into(),
+            (&self.visible_quadtree.root).into(),
             self.render_cell_layer,
             Self::node_pixel_color,
         )?;

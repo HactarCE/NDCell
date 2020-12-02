@@ -48,12 +48,12 @@ pub enum GridView {
 /// Conversions from an `NdAutomaton` to a `GridView`.
 impl From<Automaton2D> for GridView {
     fn from(automaton: Automaton2D) -> Self {
-        Self::View2D(GridView2D::from(ProjectedAutomaton::from(automaton)))
+        Self::View2D(GridView2D::from(automaton))
     }
 }
 impl From<Automaton3D> for GridView {
     fn from(automaton: Automaton3D) -> Self {
-        Self::View3D(GridView3D::from(ProjectedAutomaton::from(automaton)))
+        Self::View3D(GridView3D::from(automaton))
     }
 }
 

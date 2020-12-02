@@ -22,7 +22,7 @@ const CUBE_BATCH_SIZE: usize = 256;
 pub struct RenderCache {}
 
 pub struct RenderInProgress<'a> {
-    octree: NdTree3D,
+    octree: &'a NdTree3D,
     /// Camera to render the scene from.
     camera: &'a Camera3D,
     /// Target to render to.
@@ -36,14 +36,13 @@ impl<'a> RenderInProgress<'a> {
     pub fn new(
         g: &'a GridView3D,
         RenderParams { target, config: _ }: RenderParams<'a>,
-        _node_cache: &'a NodeCache<Dim3D>,
     ) -> Result<Self> {
         target.clear_depth(f32::INFINITY);
         let camera = g.camera();
         let transform = camera.cell_transform_with_base(BigVec3D::origin())?;
 
         Ok(Self {
-            octree: g.automaton.projected_tree(),
+            octree: &g.automaton.tree,
             camera,
             target,
             transform,

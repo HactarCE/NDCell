@@ -48,7 +48,6 @@ pub mod ndrect;
 pub mod ndtree;
 pub mod ndvec;
 pub mod num;
-pub mod projection;
 pub mod sim;
 
 /// Fast non-cryptographic hasher.
@@ -61,12 +60,10 @@ const MACROCELL_HEADER: &str = concat!("[M2] (ndcell ", env!("CARGO_PKG_VERSION"
 
 /// All public traits, for easy importing.
 pub mod traits {
-    // pub use crate::automaton::NdProjectedAutomatonTrait;
     pub use crate::dim::Dim;
     pub use crate::ndrect::CanContain;
     pub use crate::ndtree::NodeRefTrait;
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};
-    // pub use crate::projection::NdProjector;
     pub use crate::sim::rule::NdRule;
     pub use crate::sim::{AsSimulate, Simulate};
 }
@@ -77,9 +74,7 @@ pub mod prelude {
 
     pub use crate::automaton::{
         Automaton, Automaton1D, Automaton2D, Automaton3D, Automaton4D, Automaton5D, Automaton6D,
-        AutomatonMut, AutomatonRef, NdAutomaton, NdProjectedAutomaton, ProjectedAutomaton,
-        ProjectedAutomaton1D, ProjectedAutomaton2D, ProjectedAutomaton3D, ProjectedAutomaton4D,
-        ProjectedAutomaton5D, ProjectedAutomaton6D,
+        AutomatonMut, AutomatonRef, NdAutomaton,
     };
     pub use crate::axis::{Axis, AxisSet};
     pub use crate::dim::{Dim1D, Dim2D, Dim3D, Dim4D, Dim5D, Dim6D};
@@ -94,7 +89,6 @@ pub mod prelude {
     pub use crate::ndvec::aliases::*;
     pub use crate::ndvec::{AnyDimVec, NdVec};
     pub use crate::num::{r64, BigInt, BigUint, FixedPoint, R64};
-    pub use crate::projection::{NdProjection, NdProjectionError};
     pub use crate::sim::hashlife;
     pub use crate::sim::rule::aliases::*;
     pub use crate::sim::rule::Rule;

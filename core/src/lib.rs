@@ -83,8 +83,8 @@ pub mod prelude {
     pub use crate::ndrect::NdRect;
     pub use crate::ndtree::aliases::*;
     pub use crate::ndtree::{
-        ArcNode, Layer, LeafNodeRef, NdTree, NdTreeSlice, NodePool, NodeRef, NodeRefEnum,
-        NonLeafNodeRef, Region, SharedNodePool,
+        ArcNode, FlatNdTree, FlatNdTreeNode, Layer, LeafNodeRef, NdTree, NdTreeSlice, NodePool,
+        NodeRef, NodeRefEnum, NonLeafNodeRef, Region, SharedNodePool,
     };
     pub use crate::ndvec::aliases::*;
     pub use crate::ndvec::{AnyDimVec, NdVec};

@@ -1,6 +1,6 @@
 //! Type aliases for `NdTree`s and related types.
 
-use super::{NdTree, NdTreeSlice, Region};
+use super::{FlatNdTree, NdTree, NdTreeSlice, Region};
 use crate::dim::*;
 
 /// 1D grid represented as a bintree.
@@ -28,6 +28,19 @@ pub type NdTreeSlice4D<'pool> = NdTreeSlice<'pool, Dim4D>;
 pub type NdTreeSlice5D<'pool> = NdTreeSlice<'pool, Dim5D>;
 /// Slice of a 6D grid represented as a tree with branching factor 64.
 pub type NdTreeSlice6D<'pool> = NdTreeSlice<'pool, Dim6D>;
+
+/// Flattened representation of a bintree.
+pub type FlatNdTree1D<T> = FlatNdTree<Dim1D, T>;
+/// Flattened representation of a quadtree.
+pub type FlatNdTree2D<T> = FlatNdTree<Dim2D, T>;
+/// Flattened representation of a  octree.
+pub type FlatNdTree3D<T> = FlatNdTree<Dim3D, T>;
+/// Flattened representation of a tree with branching factor 16.
+pub type FlatNdTree4D<T> = FlatNdTree<Dim4D, T>;
+/// Flattened representation of a tree with branching factor 32.
+pub type FlatNdTree5D<T> = FlatNdTree<Dim5D, T>;
+/// Flattened representation of a tree with branching factor 64.
+pub type FlatNdTree6D<T> = FlatNdTree<Dim6D, T>;
 
 /// Finite set of 1D cell positions.
 pub type Region1D = Region<Dim1D>;

@@ -1,5 +1,5 @@
-//! "Indexed" ND-tree, to export/import MacroCell format or for passing to GLSL
-//! in rendering.
+//! Flattened representation of an ND-tree, to export/import MacroCell format or
+//! for passing to GLSL in rendering.
 
 use itertools::Itertools;
 use std::marker::PhantomData;
@@ -10,38 +10,38 @@ use crate::HashMap;
 
 /// ND-tree represented as a list of nodes.
 #[derive(Debug)]
-pub struct IndexedNdTree<D: Dim, T> {
+pub struct FlatNdTree<D: Dim, T> {
     /// Number of non-leaf layers.
     ///
     /// If all nodes are leaf nodes, this is 0.
     ///
-    /// Note that the minimum layer in this IndexedNdTree might represent
-    /// multiple cells, such as when rendering zoomed out past 1:1.
+    /// Note that the minimum layer in this ND-tree might represent multiple
+    /// cells, such as when rendering zoomed out past 1:1.
     layers: usize,
     /// List of all the nodes.
-    nodes: Vec<IndexedNdTreeNode<D, T>>,
+    nodes: Vec<FlatNdTreeNode<D, T>>,
     /// Index of the root node.
     root_idx: usize,
 }
 
-/// Node in an `IndexedNdTree`.
+/// Node in a `FlatNdTree`.
 #[derive(Debug)]
-pub enum IndexedNdTreeNode<D: Dim, T> {
+pub enum FlatNdTreeNode<D: Dim, T> {
     /// Leaf node.
     Leaf(T, PhantomData<D>),
     /// Non-leaf node, containing "pointers" (array indices) to other nodes.
     NonLeaf(Box<[usize]>, PhantomData<D>),
 }
 
-impl<D: Dim, T> IndexedNdTree<D, T> {
-    /// Returns the number of indexed layers; i.e. how many times you have to
+impl<D: Dim, T> FlatNdTree<D, T> {
+    /// Returns the number of flat layers; i.e. how many times you have to
     /// follow a pointer (including getting the initial node) to reach a leaf.
     /// The minimum is 0.
     pub fn layers(&self) -> usize {
         self.layers
     }
     /// Returns the list of nodes.
-    pub fn nodes(&self) -> &[IndexedNdTreeNode<D, T>] {
+    pub fn nodes(&self) -> &[FlatNdTreeNode<D, T>] {
         &self.nodes
     }
     /// Returns the list index of the root node.
@@ -49,7 +49,7 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
         self.root_idx
     }
 
-    /// Constructs a `IndexedNdTree` from a `NodeRef`, indexing nodes down to the
+    /// Constructs a `FlatNdTree` from a `NodeRef`, flattening nodes down to the
     /// given layer. Use `min_layer = 0` to store the entire ND-tree.
     pub fn from_node<'pool>(
         node: impl NodeRefTrait<'pool, D = D>,
@@ -57,7 +57,7 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
         node_to_data: impl Fn(NodeRef<'pool, D>) -> T,
     ) -> Self {
         assert!(node.layer() >= min_layer);
-        IndexedNdTreeBuilder {
+        FlatNdTreeBuilder {
             min_layer,
             nodes: vec![],
             node_indices: HashMap::default(),
@@ -65,23 +65,23 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
         }
         .build(node.as_ref())
     }
-    /// Converts this IndexedNdTree back into a Node.
+    /// Converts this `FlatNdTree` back into a `NodeRef`.
     pub fn to_node<'s, 'pool>(
         &'s self,
         data_to_node: impl Fn(&'s T) -> NodeRef<'pool, D>,
     ) -> NodeRef<'pool, D> {
         self._to_node(&data_to_node, self.root_idx)
     }
-    /// Converts a single root node (and its descendants) of this IndexedNdTree
-    /// into a Node.
+    /// Converts a single root node (and its descendants) of this `FlatNdTree`
+    /// into a `NodeRef`.
     fn _to_node<'s, 'pool>(
         &'s self,
         data_to_node: &impl Fn(&'s T) -> NodeRef<'pool, D>,
         root: usize,
     ) -> NodeRef<'pool, D> {
         match &self.nodes[root] {
-            IndexedNdTreeNode::Leaf(data, _) => data_to_node(data),
-            IndexedNdTreeNode::NonLeaf(indices, _) => {
+            FlatNdTreeNode::Leaf(data, _) => data_to_node(data),
+            FlatNdTreeNode::NonLeaf(indices, _) => {
                 let mut children = indices
                     .iter()
                     .map(|&index| self._to_node(data_to_node, index))
@@ -93,24 +93,24 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
     }
 }
 
-/// Builder for an `IndexedNdTree`.
-struct IndexedNdTreeBuilder<'pool, D: Dim, T, F> {
+/// Builder for a `FlatNdTree`.
+struct FlatNdTreeBuilder<'pool, D: Dim, T, F> {
     min_layer: Layer,
-    nodes: Vec<IndexedNdTreeNode<D, T>>,
+    nodes: Vec<FlatNdTreeNode<D, T>>,
     node_indices: HashMap<NodeRef<'pool, D>, usize>,
     node_to_data: F,
 }
-impl<'pool, D: Dim, T, F: Fn(NodeRef<'pool, D>) -> T> IndexedNdTreeBuilder<'pool, D, T, F> {
-    /// Returns the final `IndexedNdTree`, using the given node as the root.
-    pub fn build(mut self, node: NodeRef<'pool, D>) -> IndexedNdTree<D, T> {
+impl<'pool, D: Dim, T, F: Fn(NodeRef<'pool, D>) -> T> FlatNdTreeBuilder<'pool, D, T, F> {
+    /// Returns the final `FlatNdTree`, using the given node as the root.
+    pub fn build(mut self, node: NodeRef<'pool, D>) -> FlatNdTree<D, T> {
         let root_idx = self.add_node(node);
-        IndexedNdTree {
+        FlatNdTree {
             layers: (node.layer() - self.min_layer).to_usize(),
             nodes: self.nodes,
             root_idx,
         }
     }
-    /// Adds a node recursively to the `IndexedNdTree` (if it is not already
+    /// Adds a node recursively to the `FlatNdTree` (if it is not already
     /// present) and returns its index.
     ///
     /// Panics if `original_node` is layer 0 (single cell).
@@ -118,10 +118,10 @@ impl<'pool, D: Dim, T, F: Fn(NodeRef<'pool, D>) -> T> IndexedNdTreeBuilder<'pool
         if let Some(&node_index) = self.node_indices.get(&original_node) {
             node_index
         } else {
-            let indexed_node = if original_node.layer() <= self.min_layer {
+            let flat_node = if original_node.layer() <= self.min_layer {
                 // This is the recursive base case for `min_layer >=
                 // base_layer`.
-                IndexedNdTreeNode::Leaf((self.node_to_data)(original_node), PhantomData)
+                FlatNdTreeNode::Leaf((self.node_to_data)(original_node), PhantomData)
             } else {
                 // Subdivide this node into 2^NDIM pieces and recurse.
                 let children = original_node
@@ -131,20 +131,20 @@ impl<'pool, D: Dim, T, F: Fn(NodeRef<'pool, D>) -> T> IndexedNdTreeBuilder<'pool
                     .map(|child| self.add_node(child))
                     .collect_vec()
                     .into_boxed_slice();
-                IndexedNdTreeNode::NonLeaf(children, PhantomData)
+                FlatNdTreeNode::NonLeaf(children, PhantomData)
             };
-            self.push_indexed_node(original_node, indexed_node)
+            self.push_flat_node(original_node, flat_node)
         }
     }
-    /// Appends an `IndexedNdTreeNode` to the `IndexedNdTree`.
-    fn push_indexed_node(
+    /// Appends a `FlatNdTreeNode` to the `FlatNdTree`.
+    fn push_flat_node(
         &mut self,
         original_node: NodeRef<'pool, D>,
-        indexed_node: IndexedNdTreeNode<D, T>,
+        flat_node: FlatNdTreeNode<D, T>,
     ) -> usize {
         let new_index = self.nodes.len();
         self.node_indices.insert(original_node, new_index);
-        self.nodes.push(indexed_node);
+        self.nodes.push(flat_node);
         new_index
     }
 }
@@ -154,9 +154,9 @@ mod tests {
     use super::*;
     use crate::ndtree::NdTree2D;
 
-    /// Thoroughly test a single "indexed" quadtree.
+    /// Thoroughly test a single "flat" quadtree.
     #[test]
-    fn test_indexed_ndtree() {
+    fn test_flat_ndtree() {
         // Load this pattern:
         //
         // - - - - x - - -
@@ -183,50 +183,50 @@ x = 8, y = 8, rule = B3/S23
         //  - two unique layer-1 nodes (2x2)
         //  - two unique layer-0 nodes (individual cells)
         //
-        // When we make the tree indexed down to layer N, we are indexing all
-        // nodes of layer >= N, and leaving the rest as NdTreeNodes. The number
-        // of indexed nodes is indexed_N.nodes.len().
+        // When we make the tree flat down to layer N, we are flattening all
+        // nodes of layer >= N, and leaving the rest as `NdTreeNodes`. The
+        // number of flat nodes is `flat_N.nodes.len()`.
 
         // 1+3+2+2 = 8, so there should be a total of eight nodes in this one.
-        let indexed_0 = IndexedNdTree::from_node(&root, Layer(0), |x| x);
-        assert_eq!(3, indexed_0.layers);
-        assert_eq!(8, indexed_0.nodes.len());
-        assert_eq!(root, indexed_0.to_node(|&x| x));
-        for n in indexed_0.nodes() {
-            if let IndexedNdTreeNode::Leaf(x, _) = n {
+        let flat_0 = FlatNdTree::from_node(&root, Layer(0), |x| x);
+        assert_eq!(3, flat_0.layers);
+        assert_eq!(8, flat_0.nodes.len());
+        assert_eq!(root, flat_0.to_node(|&x| x));
+        for n in flat_0.nodes() {
+            if let FlatNdTreeNode::Leaf(x, _) = n {
                 assert_eq!(Layer(0), x.layer());
             }
         }
 
         // 1+3+2 = 6, so there should be a total of six nodes in this one.
-        let indexed_1 = IndexedNdTree::from_node(&root, Layer(1), |x| x);
-        assert_eq!(2, indexed_1.layers);
-        assert_eq!(6, indexed_1.nodes.len());
-        assert_eq!(root, indexed_1.to_node(|&x| x));
-        for n in indexed_1.nodes() {
-            if let IndexedNdTreeNode::Leaf(x, _) = n {
+        let flat_1 = FlatNdTree::from_node(&root, Layer(1), |x| x);
+        assert_eq!(2, flat_1.layers);
+        assert_eq!(6, flat_1.nodes.len());
+        assert_eq!(root, flat_1.to_node(|&x| x));
+        for n in flat_1.nodes() {
+            if let FlatNdTreeNode::Leaf(x, _) = n {
                 assert_eq!(Layer(1), x.layer());
             }
         }
 
         // 1+3 = 4
-        let indexed_2 = IndexedNdTree::from_node(&root, Layer(2), |x| x);
-        assert_eq!(1, indexed_2.layers);
-        assert_eq!(4, indexed_2.nodes.len());
-        assert_eq!(root, indexed_2.to_node(|&x| x));
-        for n in indexed_2.nodes() {
-            if let IndexedNdTreeNode::Leaf(x, _) = n {
+        let flat_2 = FlatNdTree::from_node(&root, Layer(2), |x| x);
+        assert_eq!(1, flat_2.layers);
+        assert_eq!(4, flat_2.nodes.len());
+        assert_eq!(root, flat_2.to_node(|&x| x));
+        for n in flat_2.nodes() {
+            if let FlatNdTreeNode::Leaf(x, _) = n {
                 assert_eq!(Layer(2), x.layer());
             }
         }
 
         // 1 = 1
-        let indexed_3 = IndexedNdTree::from_node(&root, Layer(3), |x| x);
-        assert_eq!(0, indexed_3.layers);
-        assert_eq!(1, indexed_3.nodes.len());
-        assert_eq!(root, indexed_3.to_node(|&x| x));
-        for n in indexed_3.nodes() {
-            if let IndexedNdTreeNode::Leaf(x, _) = n {
+        let flat_3 = FlatNdTree::from_node(&root, Layer(3), |x| x);
+        assert_eq!(0, flat_3.layers);
+        assert_eq!(1, flat_3.nodes.len());
+        assert_eq!(root, flat_3.to_node(|&x| x));
+        for n in flat_3.nodes() {
+            if let FlatNdTreeNode::Leaf(x, _) = n {
                 assert_eq!(Layer(3), x.layer());
             }
         }

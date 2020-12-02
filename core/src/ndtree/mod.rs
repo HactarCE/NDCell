@@ -13,9 +13,9 @@ use itertools::{izip, Itertools};
 use std::fmt;
 
 pub mod aliases;
-pub mod indexed;
+mod flat;
 mod node;
-pub mod region;
+mod region;
 mod slice;
 
 use crate::dim::*;
@@ -23,6 +23,7 @@ use crate::ndrect::{BigRect, CanContain, URect};
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, Signed};
 pub use aliases::*;
+pub use flat::{FlatNdTree, FlatNdTreeNode};
 pub use node::*;
 pub use region::Region;
 pub use slice::NdTreeSlice;

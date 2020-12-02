@@ -1,7 +1,7 @@
 //! Cache for ND-tree (generalized N-dimensional quadtree) nodes.
 //!
-//! Reading from and adding to the cache only requires a &NodeCache, but garbage
-//! collection requires a &mut NodeCache.
+//! Reading from and adding to the pool only requires a &NodePool, but garbage
+//! collection requires a &mut NodePool.
 
 use itertools::Itertools;
 use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
@@ -11,23 +11,81 @@ use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::sync::{Arc, Weak};
 
 use super::{
-    CachedNodeRefTrait, HashLifeResultParams, Layer, LayerTooSmall, NodeRef, NodeRefEnum,
-    NodeRefTrait, RawNode, ShardedBoxedSet,
+    HashLifeResultParams, Layer, LayerTooSmall, NodeRef, NodeRefEnum, NodeRefTrait,
+    NodeRefWithGuard, RawNode, ShardedBoxedSet,
 };
 use crate::dim::Dim;
 use crate::ndvec::{BigVec, UVec};
 use crate::num::{BigInt, One};
 use crate::HashMap;
 
-/// Cache of ND-tree nodes for a single simulation.
-pub struct NodeCache<D: Dim> {
-    /// Pointer to the `Arc<RwLock<T>>` of this cache. This value should never
-    /// be dropped until the `NodeCache` is.
+/// Shared pool of interned ND-tree nodes for a single simulation.
+///
+/// Cloning this struct creates a new reference to the same pool; prefer
+/// `.new_ref()` for clarity.
+#[derive(Debug, Clone)]
+pub struct SharedNodePool<D: Dim>(Arc<RwLock<NodePool<D>>>);
+impl<D: Dim> SharedNodePool<D> {
+    /// Creates an empty node pool.
+    pub fn new() -> Self {
+        let ret = Arc::new(RwLock::new(NodePool {
+            this: Weak::new(),
+
+            nodes: ShardedBoxedSet::new(),
+            arc_nodes: Mutex::new(HashMap::default()),
+            empty_nodes: Mutex::new(vec![]),
+
+            node_heap_size: AtomicUsize::new(0),
+
+            sim_lock: RwLock::new(HashLifeResultParams::default()),
+        }));
+
+        {
+            let mut ret_write = ret.write();
+            ret_write.this = Arc::downgrade(&ret);
+        }
+
+        Self(ret)
+    }
+    /// Creates a new reference to the same node pool.
+    ///
+    /// This is equivalent to `.clone()` but is clearer.
+    pub fn new_ref(&self) -> Self {
+        self.clone()
+    }
+
+    /// Acquires access to find nodes in the pool and add missing ones, blocking
+    /// only if another thread has total access to the pool.
+    #[inline]
+    pub fn access<'a>(&'a self) -> RwLockReadGuard<'a, NodePool<D>> {
+        self.0.read_recursive()
+    }
+    /// Acquires access to remove nodes from the pool, which is required for
+    /// garbage collection, blocking if any threads have access to the pool.
+    #[inline]
+    pub fn total_access<'a>(&'a self) -> RwLockWriteGuard<'a, NodePool<D>> {
+        self.0.write()
+    }
+
+    /// Possibly blocks if a garbage collection thread is trying to access the
+    /// node pool; otherwise does nothing.
+    #[inline]
+    pub fn yield_to_gc(&self) {
+        // TODO: this is kind of a hack. Develop a system where threads actually
+        // communicate their intent, or do GC on the simulation thread(s).
+        let _ = self.0.read();
+    }
+}
+
+/// Pool of interned ND-tree nodes for a single simulation.
+pub struct NodePool<D: Dim> {
+    /// Pointer to the `Arc<RwLock<T>>` of this pool. This value should never be
+    /// dropped until the `NodePool` is.
     this: Weak<RwLock<Self>>,
 
     /// Set of canonical instances of nodes.
     ///
-    /// A node can only be deleted from this set using a `&mut NodeCache` and
+    /// A node can only be deleted from this set using a `&mut NodePool` and
     /// only if it is not reachable from any `ArcNode`.
     ///
     /// A node is only deleted from this set if there are no "strong" (`Arc<T>`)
@@ -53,7 +111,7 @@ pub struct NodeCache<D: Dim> {
 
     /// Memory usage counter, in bytes.
     ///
-    /// This value is updated any time a new node is added to the cache, an
+    /// This value is updated any time a new node is added to the pool, an
     /// existing node is removed, or a node's memory usage changes (such as via
     /// `calc_population()`).
     pub(super) node_heap_size: AtomicUsize,
@@ -66,73 +124,51 @@ pub struct NodeCache<D: Dim> {
     /// modifying this value may invalidate some or all results.
     sim_lock: RwLock<HashLifeResultParams>,
 }
-impl<D: Dim> fmt::Debug for NodeCache<D> {
+impl<D: Dim> fmt::Debug for NodePool<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NodeCache({:#p})", self.this.as_ptr())
+        write!(f, "NodePool({:#p})", self.this.as_ptr())
     }
 }
-impl<D: Dim> PartialEq for NodeCache<D> {
+impl<D: Dim> PartialEq for NodePool<D> {
     fn eq(&self, other: &Self) -> bool {
         Weak::ptr_eq(&self.this, &other.this)
     }
 }
-impl<D: Dim> PartialEq<Weak<RwLock<NodeCache<D>>>> for NodeCache<D> {
-    fn eq(&self, other: &Weak<RwLock<NodeCache<D>>>) -> bool {
+impl<D: Dim> PartialEq<Weak<RwLock<NodePool<D>>>> for NodePool<D> {
+    fn eq(&self, other: &Weak<RwLock<NodePool<D>>>) -> bool {
         Weak::ptr_eq(&self.this, other)
     }
 }
-impl<D: Dim> PartialEq<Arc<RwLock<NodeCache<D>>>> for NodeCache<D> {
-    fn eq(&self, other: &Arc<RwLock<NodeCache<D>>>) -> bool {
-        Weak::as_ptr(&self.this) == Arc::as_ptr(other)
+impl<D: Dim> PartialEq<SharedNodePool<D>> for NodePool<D> {
+    fn eq(&self, other: &SharedNodePool<D>) -> bool {
+        Weak::as_ptr(&self.this) == Arc::as_ptr(&other.0)
     }
 }
-impl<D: Dim> Eq for NodeCache<D> {}
-impl<D: Dim> Hash for NodeCache<D> {
+impl<D: Dim> Eq for NodePool<D> {}
+impl<D: Dim> Hash for NodePool<D> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.this.as_ptr().hash(state)
     }
 }
-impl<D: Dim> NodeCache<D> {
-    /// Creates an empty node cache.
-    pub fn new() -> Arc<RwLock<Self>> {
-        let ret = Arc::new(RwLock::new(Self {
-            this: Weak::new(),
-
-            nodes: ShardedBoxedSet::new(),
-            arc_nodes: Mutex::new(HashMap::default()),
-            empty_nodes: Mutex::new(vec![]),
-
-            node_heap_size: AtomicUsize::new(0),
-
-            sim_lock: RwLock::new(HashLifeResultParams::default()),
-        }));
-
-        {
-            let mut ret_write = ret.write();
-            ret_write.this = Arc::downgrade(&ret);
-        }
-
-        ret
+impl<D: Dim> NodePool<D> {
+    /// Returns a new reference to the same node pool.
+    pub fn new_ref(&self) -> SharedNodePool<D> {
+        SharedNodePool(self.this.upgrade().unwrap())
     }
 
-    /// Returns the `Arc<RwLock<_>>` containing the cache.
-    pub fn arc(&self) -> Arc<RwLock<Self>> {
-        self.this.upgrade().unwrap()
-    }
-
-    /// Asserts that the two caches are the same (point to the same location).
+    /// Asserts that the two node pools are the same (identity).
     fn assert_same_as<T: fmt::Debug>(&self, other: &T)
     where
         Self: PartialEq<T>,
     {
         assert_eq!(
             *self, *other,
-            "Attempt to operate on a node from a different cache",
+            "Attempt to operate on a node from a different pool",
         );
     }
-    /// Asserts that the node is from this cache.
-    pub(super) fn assert_owns_node<'cache>(&self, node: impl CachedNodeRefTrait<'cache, D = D>) {
-        self.assert_same_as(node.cache());
+    /// Asserts that the node is from this pool.
+    pub(super) fn assert_owns_node<'pool>(&self, node: impl NodeRefTrait<'pool, D = D>) {
+        self.assert_same_as(node.pool());
     }
 
     /// Returns the amount of space used by nodes on the heap.
@@ -141,19 +177,25 @@ impl<D: Dim> NodeCache<D> {
     }
     /// Does a "strong" garbage collection. This invalidates all HashLife
     /// results, deletes all unused empty nodes, and then removes all nodes not
-    /// reachable.
+    /// reachable from an `ArcNode`.
     ///
     /// Returns the tuple `(nodes_dropped, nodes_kept)`.
     pub fn strong_gc(&mut self) -> (usize, usize) {
         self.invalidate_results();
         self.clear_empty_node_cache();
-        self.weak_gc()
+        self.remove_unreachable()
     }
     /// Does a "weak" garbage collection. This removes all nodes that are not
-    /// reachable.
+    /// reachable from an `ArcNode`.
     ///
     /// Returns the tuple `(nodes_dropped, nodes_kept)`.
     pub fn weak_gc(&mut self) -> (usize, usize) {
+        self.remove_unreachable()
+    }
+    /// Removes all nodes that are not recursively reachable from `ArcNode`s.
+    ///
+    /// Returns the tuple `(nodes_dropped, nodes_kept)`.
+    fn remove_unreachable(&mut self) -> (usize, usize) {
         // Mark all nodes as unreachable ("innocent until proven guilty").
         self.nodes.for_each(RawNode::mark_gc_unreachable);
 
@@ -197,7 +239,7 @@ impl<D: Dim> NodeCache<D> {
     ///
     /// Note that another thread may add HashLife results to a node while this
     /// function is running.
-    pub fn invalidate_results(&self) {
+    fn invalidate_results(&self) {
         self.nodes.for_each(|node| unsafe { node.set_result(None) });
     }
     /// Clears the HashLife results cache from every node above a particular
@@ -205,7 +247,7 @@ impl<D: Dim> NodeCache<D> {
     ///
     /// Note that another thread may add HashLife results to a node while this
     /// function is running.
-    pub fn invalidate_results_above(&self, layer: Layer) {
+    fn invalidate_results_above(&self, layer: Layer) {
         self.nodes.for_each(|node| {
             if node.layer() > layer {
                 unsafe { node.set_result(None) }
@@ -218,11 +260,11 @@ impl<D: Dim> NodeCache<D> {
     }
 
     /// Returns the largest possible canonical leaf node containing only state #0.
-    pub fn get_empty_base<'cache>(&'cache self) -> NodeRef<'cache, D> {
+    pub fn get_empty_base<'pool>(&'pool self) -> NodeRef<'pool, D> {
         self.get_empty(Layer::base::<D>())
     }
     /// Returns the canonical node at the given layer containing only state #0.
-    pub fn get_empty<'cache>(&'cache self, layer: Layer) -> NodeRef<'cache, D> {
+    pub fn get_empty<'pool>(&'pool self, layer: Layer) -> NodeRef<'pool, D> {
         let mut empty_nodes = self.empty_nodes.lock();
         // Add empty nodes until we have enough.
         while empty_nodes.len() <= layer.to_usize() {
@@ -241,9 +283,9 @@ impl<D: Dim> NodeCache<D> {
         ret
     }
 
-    /// Returns the canonical instance of a node, adding it to the cache if one
+    /// Returns the canonical instance of a node, adding it to the pool if one
     /// does not exist.
-    pub fn get<'cache>(&'cache self, raw_node: RawNode<D>) -> NodeRef<'cache, D> {
+    fn get<'pool>(&'pool self, raw_node: RawNode<D>) -> NodeRef<'pool, D> {
         let (ret, already_present) = self.nodes.get_or_insert(raw_node);
         if !already_present {
             // Record the heap usage of this node.
@@ -261,14 +303,14 @@ impl<D: Dim> NodeCache<D> {
     ///
     /// This method panics in debug mode if the children are not all at the same
     /// layer.
-    pub fn join_nodes<'cache, N: CachedNodeRefTrait<'cache, D = D>>(
-        &'cache self,
+    pub fn join_nodes<'pool, 'children, N: NodeRefTrait<'children, D = D>>(
+        &'pool self,
         children: impl IntoIterator<Item = N>,
-    ) -> NodeRef<'cache, D> {
+    ) -> NodeRef<'pool, D> {
         let children = children
             .into_iter()
             .inspect(|&node| self.assert_owns_node(node))
-            .map(|node| node.as_raw())
+            .map(|node| node.as_ref().as_raw())
             .take(D::BRANCHING_FACTOR)
             .collect_vec()
             .into_boxed_slice();
@@ -294,7 +336,7 @@ impl<D: Dim> NodeCache<D> {
         }
     }
     /// Creates a node containing the given cells.
-    pub fn get_from_cells<'cache>(&'cache self, cells: impl Into<Box<[u8]>>) -> NodeRef<'cache, D> {
+    pub fn get_from_cells<'pool>(&'pool self, cells: impl Into<Box<[u8]>>) -> NodeRef<'pool, D> {
         let cells = cells.into();
         let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid cell count");
 
@@ -318,23 +360,23 @@ impl<D: Dim> NodeCache<D> {
     /// # Panics
     ///
     /// This method panics if the size of the node does not fit in a `usize`.
-    pub fn get_from_fn<'cache>(
-        &'cache self,
+    pub fn get_from_fn<'pool>(
+        &'pool self,
         layer: Layer,
         mut generator: impl FnMut(UVec<D>) -> u8,
-    ) -> NodeRef<'cache, D> {
+    ) -> NodeRef<'pool, D> {
         self._get_from_fn(UVec::origin(), layer, &mut generator)
     }
-    fn _get_from_fn<'cache>(
-        &'cache self,
+    fn _get_from_fn<'pool>(
+        &'pool self,
         offset: UVec<D>,
         layer: Layer,
         generator: &mut impl FnMut(UVec<D>) -> u8,
-    ) -> NodeRef<'cache, D> {
+    ) -> NodeRef<'pool, D> {
         if layer.is_leaf::<D>() {
             let rect = layer
                 .rect()
-                .expect("Cannot construct a node at {:?} from individual cells");
+                .expect("Cannot construct a node at this layer from individual cells");
             self.get_from_cells((rect + offset).iter().map(generator).collect_vec())
         } else {
             self.join_nodes((0..D::BRANCHING_FACTOR).map(|index| {
@@ -354,11 +396,11 @@ impl<D: Dim> NodeCache<D> {
     /// is a leaf.
     ///
     /// This is equivalent to taking one element of the result of `subdivide()`.
-    pub fn get_corner<'cache>(
-        &'cache self,
-        node: impl CachedNodeRefTrait<'cache, D = D>,
+    pub fn get_corner<'pool>(
+        &'pool self,
+        node: impl NodeRefTrait<'pool, D = D>,
         index: usize,
-    ) -> Result<NodeRef<'cache, D>, u8> {
+    ) -> Result<NodeRef<'pool, D>, u8> {
         self.assert_owns_node(node);
 
         Ok(match node.as_enum() {
@@ -373,10 +415,10 @@ impl<D: Dim> NodeCache<D> {
     ///
     /// The return value is borrowed if `node` is a non-leaf and owned if `node`
     /// is a leaf.
-    pub fn subdivide<'cache>(
-        &'cache self,
-        node: impl CachedNodeRefTrait<'cache, D = D>,
-    ) -> Result<Vec<NodeRef<'cache, D>>, u8> {
+    pub fn subdivide<'pool>(
+        &'pool self,
+        node: impl NodeRefTrait<'pool, D = D>,
+    ) -> Result<Vec<NodeRef<'pool, D>>, u8> {
         (0..D::BRANCHING_FACTOR)
             .map(|i| self.get_corner(node, i))
             .try_collect()
@@ -385,10 +427,10 @@ impl<D: Dim> NodeCache<D> {
     /// the node.
     ///
     /// If the node is below `Layer(2)`, returns `Err(LayerTooSmall)`.
-    pub fn centered_inner<'cache>(
-        &'cache self,
-        node: impl CachedNodeRefTrait<'cache, D = D>,
-    ) -> Result<NodeRef<'cache, D>, LayerTooSmall> {
+    pub fn centered_inner<'pool>(
+        &'pool self,
+        node: impl NodeRefTrait<'pool, D = D>,
+    ) -> Result<NodeRef<'pool, D>, LayerTooSmall> {
         self.assert_owns_node(node);
 
         Ok(match node.as_enum() {
@@ -417,25 +459,24 @@ impl<D: Dim> NodeCache<D> {
             }
         })
     }
-
     /// Creates a node from a 2^NDIM block of nodes at the same layer, but the
     /// result is offset by a vector (modulo the size of a node at that layer).
-    pub fn get_offset_child<'cache>(
-        &'cache self,
+    pub fn get_offset_child<'pool>(
+        &'pool self,
         offset: &BigVec<D>,
-        sources: Vec<NodeRef<'cache, D>>,
-    ) -> NodeRef<'cache, D> {
+        sources: Vec<NodeRef<'pool, D>>,
+    ) -> NodeRef<'pool, D> {
         assert_eq!(D::BRANCHING_FACTOR, sources.len());
         let layer = sources[0].layer();
         let largest_aligned_layer = Layer::largest_aligned(offset).unwrap_or(layer);
         self._get_offset_child(offset, sources, largest_aligned_layer)
     }
-    fn _get_offset_child<'cache>(
-        &'cache self,
+    fn _get_offset_child<'pool>(
+        &'pool self,
         offset: &BigVec<D>,
-        sources: Vec<NodeRef<'cache, D>>,
+        sources: Vec<NodeRef<'pool, D>>,
         largest_aligned_layer: Layer,
-    ) -> NodeRef<'cache, D> {
+    ) -> NodeRef<'pool, D> {
         assert_eq!(D::BRANCHING_FACTOR, sources.len());
         let layer = sources[0].layer();
         if layer <= largest_aligned_layer {
@@ -457,8 +498,8 @@ impl<D: Dim> NodeCache<D> {
             })
         } else {
             // These source nodes are conceptually the children of one combined
-            // node, but we keep them separate for performance. (Looking up
-            // nodes in the cache isn't free!) Let's call this combined node the
+            // node, but we keep them separate for performance. (Finding nodes
+            // in the pool isn't free!) Let's call this combined node the
             // "source node."
             let sources = sources
                 .iter()
@@ -497,19 +538,28 @@ impl<D: Dim> NodeCache<D> {
         }
     }
 
-    /// Creates a node identical to one from another cache.
-    pub fn copy_from_other_cache<'this, 'other>(
+    /// Safely extend the lifetime of a node reference from this pool.
+    pub fn extend_lifetime<'this, 'other>(
         &'this self,
-        node: impl CachedNodeRefTrait<'other, D = D>,
+        node: impl NodeRefTrait<'other, D = D>,
     ) -> NodeRef<'this, D> {
-        if self == node.cache() {
-            // If the caches are actually the same, this is trivial.
-            unsafe { std::mem::transmute::<NodeRef<'other, D>, NodeRef<'this, D>>(node.as_ref()) }
+        self.assert_owns_node(node);
+
+        unsafe { std::mem::transmute::<NodeRef<'_, D>, NodeRef<'this, D>>(node.as_ref()) }
+    }
+    /// Creates a node in this pool identical to one from another pool.
+    pub fn copy_from_other_pool<'this, 'other>(
+        &'this self,
+        node: impl NodeRefTrait<'other, D = D>,
+    ) -> NodeRef<'this, D> {
+        if self == node.pool() {
+            // If the pools are actually the same, `extend_lifetime()` will succeed.
+            self.extend_lifetime(node)
         } else {
-            self._copy_from_other_cache(node.as_ref(), &mut HashMap::default())
+            self._copy_from_other_pool(node.as_ref(), &mut HashMap::default())
         }
     }
-    fn _copy_from_other_cache<'this, 'other>(
+    fn _copy_from_other_pool<'this, 'other>(
         &'this self,
         node: NodeRef<'other, D>,
         convert_table: &mut HashMap<NodeRef<'other, D>, NodeRef<'this, D>>,
@@ -521,7 +571,7 @@ impl<D: Dim> NodeCache<D> {
             NodeRefEnum::Leaf(node) => self.get_from_cells(node.cells()),
             NodeRefEnum::NonLeaf(node) => self.join_nodes(
                 node.children()
-                    .map(|child| self._copy_from_other_cache(child, convert_table)),
+                    .map(|child| self._copy_from_other_pool(child, convert_table)),
             ),
         };
         convert_table.insert(node, ret);
@@ -531,12 +581,12 @@ impl<D: Dim> NodeCache<D> {
     /// Creates an identical node except with the cell at the given position
     /// (modulo the node length along each axis) modified.
     #[must_use = "This method returns a new value instead of mutating its input"]
-    pub fn set_cell<'cache>(
-        &'cache self,
-        node: impl CachedNodeRefTrait<'cache, D = D>,
+    pub fn set_cell<'pool>(
+        &'pool self,
+        node: impl NodeRefTrait<'pool, D = D>,
         pos: &BigVec<D>,
         cell_state: u8,
-    ) -> NodeRef<'cache, D> {
+    ) -> NodeRef<'pool, D> {
         self.assert_owns_node(node);
 
         // Modulo the node length along each axis using bitwise AND.
@@ -561,15 +611,12 @@ impl<D: Dim> NodeCache<D> {
         }
     }
 
-    /// Returns the simulation lock, invalidating the results cache partially or
+    /// Returns a simulation guard, invalidating the results cache partially or
     /// fully if necessary.
     ///
     /// This method blocks if other parameters are being used for simulation at
     /// the same time.
-    pub fn sim_with<'cache>(
-        &'cache self,
-        params: HashLifeResultParams,
-    ) -> SimCacheGuard<'cache, D> {
+    pub fn sim_with<'pool>(&'pool self, params: HashLifeResultParams) -> SimCacheGuard<'pool, D> {
         let lock = self.sim_lock.upgradable_read();
         let old_params = *lock;
         let lock = if old_params != params {
@@ -580,7 +627,7 @@ impl<D: Dim> NodeCache<D> {
             RwLockUpgradableReadGuard::downgrade(lock)
         };
         SimCacheGuard {
-            cache: self,
+            pool: self,
             sim_lock: lock,
         }
     }
@@ -589,10 +636,10 @@ impl<D: Dim> NodeCache<D> {
     /// fully if necessary.
     ///
     /// If the lock cannot be acquired, returns `Err` containing the current parameters.
-    pub fn try_sim_with<'cache>(
-        &'cache self,
+    pub fn try_sim_with<'pool>(
+        &'pool self,
         params: HashLifeResultParams,
-    ) -> Option<SimCacheGuard<'cache, D>> {
+    ) -> Option<SimCacheGuard<'pool, D>> {
         let lock = self.sim_lock.try_upgradable_read()?;
         let old_params = *lock;
         let lock = if old_params != params {
@@ -603,7 +650,7 @@ impl<D: Dim> NodeCache<D> {
             RwLockUpgradableReadGuard::downgrade(lock)
         };
         Some(SimCacheGuard {
-            cache: self,
+            pool: self,
             sim_lock: lock,
         })
     }
@@ -632,24 +679,24 @@ impl<D: Dim> NodeCache<D> {
     }
 }
 
-// Conceptually, the `*const RawNode`s held by `NodeCache` are just references,
-// with lifetimes dependent on the cache. `&RawNode` is `Send + Sync`, so it's
-// safe to implement `Send` on `NodeCache` as well.
-unsafe impl<D: Dim> Send for NodeCache<D> {}
-unsafe impl<D: Dim> Sync for NodeCache<D> {}
+// Conceptually, the `*const RawNode`s held by `NodePool` are just references,
+// with lifetimes dependent on the node pool. `&RawNode` is `Send + Sync`, so
+// it's safe to implement `Send` and `Sync` on `NodePool` as well.
+unsafe impl<D: Dim> Send for NodePool<D> {}
+unsafe impl<D: Dim> Sync for NodePool<D> {}
 
-/// Node reference that also holds an `Arc` reference to the cache instead of
+/// Node reference that also holds an `Arc` reference to the pool instead of
 /// borrowing it.
 #[derive(Debug)]
 pub struct ArcNode<D: Dim> {
-    cache: Arc<RwLock<NodeCache<D>>>,
+    pool: SharedNodePool<D>,
     raw_node_ptr: *const RawNode<D>,
 }
 impl<D: Dim> Drop for ArcNode<D> {
     fn drop(&mut self) {
         // Decrement the refcount.
-        self.cache
-            .read_recursive()
+        self.pool
+            .access()
             .arc_nodes
             .lock()
             .entry(self.raw_node_ptr)
@@ -658,7 +705,7 @@ impl<D: Dim> Drop for ArcNode<D> {
 }
 impl<D: Dim> Clone for ArcNode<D> {
     fn clone(&self) -> Self {
-        unsafe { Self::new(&self.cache().read_recursive(), self.raw_node_ptr) }
+        unsafe { Self::new(&self.pool().access(), self.raw_node_ptr) }
     }
 }
 impl<D: Dim> PartialEq for ArcNode<D> {
@@ -667,9 +714,15 @@ impl<D: Dim> PartialEq for ArcNode<D> {
     }
 }
 impl<D: Dim> Eq for ArcNode<D> {}
-impl<'cache, D: Dim, N: NodeRefTrait<'cache, D = D>> PartialEq<N> for ArcNode<D> {
+impl<'pool, D: Dim, N: NodeRefTrait<'pool, D = D>> PartialEq<N> for ArcNode<D> {
     fn eq(&self, other: &N) -> bool {
-        std::ptr::eq(self.raw_node_ptr, other.as_raw())
+        std::ptr::eq(self.raw_node_ptr, other.as_ref().as_raw())
+    }
+}
+impl<'pool, D: Dim, N: NodeRefTrait<'pool, D = D>> From<N> for ArcNode<D> {
+    #[inline]
+    fn from(n: N) -> Self {
+        unsafe { Self::new(n.pool(), n.as_ref().as_raw()) }
     }
 }
 impl<D: Dim> ArcNode<D> {
@@ -677,70 +730,74 @@ impl<D: Dim> ArcNode<D> {
     ///
     /// # Saftey
     ///
-    /// `raw_node_ptr` must point to a valid node obtained from `cache`.
+    /// `raw_node_ptr` must point to a valid node obtained from `pool`.
     #[inline]
-    pub unsafe fn new(cache: &NodeCache<D>, raw_node_ptr: *const RawNode<D>) -> Self {
-        // Increment the refcount.
-        cache
-            .arc_nodes
+    unsafe fn new(pool: &NodePool<D>, raw_node_ptr: *const RawNode<D>) -> Self {
+        // Increment the refcount for this node.
+        pool.arc_nodes
             .lock()
             .entry(raw_node_ptr)
             .and_modify(|refcount| *refcount += 1)
             .or_insert(1);
 
         Self {
-            cache: cache.arc(),
+            pool: pool.new_ref(),
             raw_node_ptr,
         }
     }
 
-    /// Returns the cache that the node is stored in.
-    pub fn cache(&self) -> &Arc<RwLock<NodeCache<D>>> {
-        &self.cache
+    /// Returns the pool that the node is stored in.
+    #[inline]
+    pub fn pool(&self) -> &SharedNodePool<D> {
+        &self.pool
+    }
+
+    /// Returns a reference to the raw node structure.
+    #[inline]
+    fn as_raw(&self) -> &RawNode<D> {
+        unsafe { &*self.raw_node_ptr }
+    }
+    /// Returns the layer of the node.
+    #[inline]
+    pub fn layer(&self) -> Layer {
+        self.as_raw().layer()
     }
 
     /// Returns a `NodeRef` of the node.
     ///
     /// # Panics
     ///
-    /// This method panics if `cache` is not a reference to the cache that
-    /// this node is stored in.
-    pub fn as_ref<'cache>(&self, cache: &'cache NodeCache<D>) -> NodeRef<'cache, D> {
-        cache.assert_same_as(self.cache());
-        unsafe { NodeRef::new(cache, &*self.raw_node_ptr) }
-    }
-}
-impl<'cache, D: Dim, N: CachedNodeRefTrait<'cache, D = D>> From<N> for ArcNode<D> {
+    /// This method panics if `pool` is not a reference to the pool that this
+    /// node is stored in.
     #[inline]
-    fn from(n: N) -> Self {
-        unsafe { Self::new(n.cache(), n.as_raw()) }
+    pub fn as_ref<'pool>(&self, pool: &'pool NodePool<D>) -> NodeRef<'pool, D> {
+        assert_eq!(Arc::as_ptr(&self.pool.0), pool.this.as_ptr());
+        unsafe { NodeRef::new(pool, &*self.raw_node_ptr) }
     }
-}
-impl<'node, D: Dim> NodeRefTrait<'node> for &'node ArcNode<D> {
-    type D = D;
-
-    fn as_raw(self) -> &'node RawNode<Self::D> {
-        unsafe { &*self.raw_node_ptr }
+    /// Returns a `NodeRefWithGuard` of the node.
+    #[inline]
+    pub fn as_ref_with_guard<'a>(&'a self) -> NodeRefWithGuard<'a, D> {
+        unsafe { NodeRefWithGuard::from_ptr_with_guard(self.pool().access(), &*self.raw_node_ptr) }
     }
 }
 
 // Conceptually, the `*const RawNode` held by `ArcNode` is just a reference,
-// with a lifetime dependent on the cache. `&RawNode` is `Send + Sync`, so it's
-// safe to implement `Send` on `ArcNode` as well.
+// with a lifetime dependent on the node pool. `&RawNode` is `Send + Sync`, so
+// it's safe to implement `Send` and `Sync` on `ArcNode` as well.
 unsafe impl<D: Dim> Send for ArcNode<D> {}
 unsafe impl<D: Dim> Sync for ArcNode<D> {}
 
 /// RAII wrapper around simulation results cache.
 #[derive(Debug)]
-pub struct SimCacheGuard<'cache, D: Dim> {
-    cache: &'cache NodeCache<D>,
+pub struct SimCacheGuard<'pool, D: Dim> {
+    pool: &'pool NodePool<D>,
     /// Guard to make sure that no one else modifies the parameters.
-    sim_lock: RwLockReadGuard<'cache, HashLifeResultParams>,
+    sim_lock: RwLockReadGuard<'pool, HashLifeResultParams>,
 }
-impl<'cache, D: Dim> SimCacheGuard<'cache, D> {
-    /// Returns the cache that this guard gives access to.
-    pub fn cache(&self) -> &'cache NodeCache<D> {
-        self.cache
+impl<'pool, D: Dim> SimCacheGuard<'pool, D> {
+    /// Returns the node pool that this guard gives access to.
+    pub fn pool(&self) -> &'pool NodePool<D> {
+        self.pool
     }
     /// Returns the parameters defining simulation results.
     pub fn params(&self) -> &HashLifeResultParams {

@@ -5,14 +5,14 @@ use super::{Macrocell, MacrocellError, MacrocellNode, MacrocellResult};
 use crate::automaton::{Automaton, AutomatonRef, NdAutomaton};
 use crate::axis::Axis;
 use crate::dim::Dim;
-use crate::ndtree::{CachedNodeRefTrait, Layer, NdTree, NodeCache, NodeRef, NodeRefTrait};
+use crate::ndtree::{Layer, NdTree, NodePool, NodeRef, NodeRefTrait, SharedNodePool};
 use crate::ndvec::{BigVec, BigVec6D};
 use crate::num::{BigInt, Zero};
 use crate::sim::rule::{NdRule, Rule};
 use crate::HashMap;
 
 impl Automaton {
-    /// Loads an automaton from a Macrocell string using a new node cache.
+    /// Loads an automaton from a Macrocell string using a new node pool.
     pub fn from_macrocell_str(
         s: &str,
         resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Rule>,
@@ -20,7 +20,7 @@ impl Automaton {
         Self::from_macrocell(&s.parse()?, resolve_rule)
     }
 
-    /// Loads an automaton from a Macrocell struct using a new node cache.
+    /// Loads an automaton from a Macrocell struct using a new node pool.
     pub fn from_macrocell(
         macrocell: &Macrocell,
         resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Rule>,
@@ -29,9 +29,11 @@ impl Automaton {
             macrocell: &Macrocell,
             rule: Arc<dyn NdRule<D>>,
         ) -> MacrocellResult<Automaton> {
-            NdAutomaton::from_macrocell_with_cache(macrocell, &NodeCache::new().read(), |_| {
-                Ok(rule)
-            })
+            NdAutomaton::from_macrocell_with_node_pool(
+                macrocell,
+                &SharedNodePool::new().access(),
+                |_| Ok(rule),
+            )
             .map(|a| a.into())
         }
 
@@ -71,32 +73,32 @@ impl AutomatonRef<'_> {
     }
 }
 impl<D: Dim> NdAutomaton<D> {
-    /// Loads an automaton from a Macrocell string using a new node cache.
+    /// Loads an automaton from a Macrocell string using a new node pool.
     pub fn from_macrocell_str(
         s: &str,
         resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Arc<dyn NdRule<D>>>,
     ) -> MacrocellResult<Self> {
-        Self::from_macrocell_str_with_cache(s, &NodeCache::new().read(), resolve_rule)
+        Self::from_macrocell_str_with_node_pool(s, &SharedNodePool::new().access(), resolve_rule)
     }
-    /// Loads an automaton from a Macrocell string using an existing node cache.
-    pub fn from_macrocell_str_with_cache(
+    /// Loads an automaton from a Macrocell string using an existing node pool.
+    pub fn from_macrocell_str_with_node_pool(
         s: &str,
-        cache: &NodeCache<D>,
+        node_pool: &NodePool<D>,
         resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Arc<dyn NdRule<D>>>,
     ) -> MacrocellResult<Self> {
-        Self::from_macrocell_with_cache(&s.parse()?, cache, resolve_rule)
+        Self::from_macrocell_with_node_pool(&s.parse()?, node_pool, resolve_rule)
     }
 
-    /// Loads an automaton from a Macrocell struct using an existing node cache.
-    pub fn from_macrocell_with_cache(
+    /// Loads an automaton from a Macrocell struct using an existing node pool.
+    pub fn from_macrocell_with_node_pool(
         macrocell: &Macrocell,
-        cache: &NodeCache<D>,
+        node_pool: &NodePool<D>,
         resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Arc<dyn NdRule<D>>>,
     ) -> MacrocellResult<Self> {
         let rule = resolve_rule(macrocell.rule())?;
         let generations = macrocell.generation();
         Ok(NdAutomaton {
-            tree: NdTree::from_macrocell_with_cache(macrocell, cache)?,
+            tree: NdTree::from_macrocell_with_node_pool(macrocell, node_pool)?,
             rule,
             generations,
         })
@@ -116,36 +118,36 @@ impl<D: Dim> NdAutomaton<D> {
 }
 
 impl<D: Dim> NdTree<D> {
-    /// Loads an ND-tree from a Macrocell string using a new node cache.
+    /// Loads an ND-tree from a Macrocell string using a new node pool.
     pub fn from_macrocell_str(s: &str) -> MacrocellResult<Self> {
-        Self::from_macrocell_str_with_cache(s, &NodeCache::new().read())
+        Self::from_macrocell_str_with_node_pool(s, &SharedNodePool::new().access())
     }
-    /// Loads an ND-tree from a Macrocell string using an existing node cache.
-    pub fn from_macrocell_str_with_cache(s: &str, cache: &NodeCache<D>) -> MacrocellResult<Self> {
-        Self::from_macrocell_with_cache(&s.parse()?, cache)
-    }
-
-    /// Loads an ND-tree from a Macrocell struct using an existing node cache.
-    pub fn from_macrocell_with_cache(
-        macrocell: &Macrocell,
-        cache: &NodeCache<D>,
+    /// Loads an ND-tree from a Macrocell string using an existing node pool.
+    pub fn from_macrocell_str_with_node_pool(
+        s: &str,
+        node_pool: &NodePool<D>,
     ) -> MacrocellResult<Self> {
-        let _node_cache = cache.arc();
-        let cache = _node_cache.read_recursive();
+        Self::from_macrocell_with_node_pool(&s.parse()?, node_pool)
+    }
 
+    /// Loads an ND-tree from a Macrocell struct using an existing node pool.
+    pub fn from_macrocell_with_node_pool(
+        macrocell: &Macrocell,
+        node_pool: &NodePool<D>,
+    ) -> MacrocellResult<Self> {
         let mut nodes: Vec<NodeRef<'_, D>> = vec![];
 
         for macrocell_node in &macrocell.nodes {
             let new_node = match macrocell_node {
                 // Put a dummy node at index 0 -- we'll handle index 0 specially
                 // anyway.
-                MacrocellNode::Empty => cache.get_empty_base(),
+                MacrocellNode::Empty => node_pool.get_empty_base(),
 
                 MacrocellNode::Leaf8x8 { bits } => {
                     if D::NDIM != 2 {
                         return Err(MacrocellError::LeafNodeNon2D);
                     }
-                    cache.get_from_cells(
+                    node_pool.get_from_cells(
                         (0..8)
                             // Reverse because Macrocell stores cells with
                             // *decreasing* Y values.
@@ -166,12 +168,12 @@ impl<D: Dim> NdTree<D> {
                         Layer(1) => {
                             // `as u8` will take the least-significant byte,
                             // which is fine here.
-                            cache.get_from_cells(children_iter.map(|i| i as u8).collect_vec())
+                            node_pool.get_from_cells(children_iter.map(|i| i as u8).collect_vec())
                         }
-                        Layer(_) => cache.join_nodes(
+                        Layer(_) => node_pool.join_nodes(
                             children_iter
                                 .map(|child_index| match child_index {
-                                    0 => Ok(cache.get_empty(layer.child_layer())),
+                                    0 => Ok(node_pool.get_empty(layer.child_layer())),
                                     i => {
                                         let child = nodes
                                             .get(i)
@@ -195,7 +197,7 @@ impl<D: Dim> NdTree<D> {
 
         let offset = BigVec::from_fn(|ax| macrocell.offset[ax].clone());
         Ok(NdTree::from_node_centered_on(
-            nodes.pop().unwrap_or_else(|| cache.get_empty_base()),
+            nodes.pop().unwrap_or_else(|| node_pool.get_empty_base()),
             offset,
         ))
     }
@@ -203,16 +205,18 @@ impl<D: Dim> NdTree<D> {
     /// Exports a rectangle from the automaton to a Macrocell struct. If `rect`
     /// is `None`, the entire grid is exported.
     pub fn to_macrocell(&self) -> Macrocell {
-        let cache = self.cache().read_recursive();
-        let root_node = self.root().as_ref(&cache);
-
         let mut offset = BigVec6D::origin();
+        let center = self.center();
         for &ax in D::axes() {
-            offset[ax] = &self.offset()[ax] + root_node.big_len() / 2;
+            offset[ax] = center[ax].clone();
         }
 
         let mut nodes = vec![MacrocellNode::Empty];
-        add_macrocell_node(&mut nodes, &mut HashMap::default(), root_node);
+        add_macrocell_node(
+            &mut nodes,
+            &mut HashMap::default(),
+            self.root_ref().as_ref(),
+        );
 
         Macrocell {
             rule: None,
@@ -224,10 +228,10 @@ impl<D: Dim> NdTree<D> {
     }
 }
 
-fn add_macrocell_node<'cache, D: Dim>(
+fn add_macrocell_node<'pool, D: Dim>(
     node_list: &mut Vec<MacrocellNode>,
-    node_indices: &mut HashMap<NodeRef<'cache, D>, usize>,
-    new_node: NodeRef<'cache, D>,
+    node_indices: &mut HashMap<NodeRef<'pool, D>, usize>,
+    new_node: NodeRef<'pool, D>,
 ) -> usize {
     // If the node is empty, return sentinel 0.
     if new_node.is_empty() {

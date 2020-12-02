@@ -1,14 +1,11 @@
-use parking_lot::RwLock;
-use std::sync::Arc;
-
 use super::*;
 
 /// A projection that takes a 2D slice out of a D-dimensional automaton where D
 /// >= 2.
 #[derive(Debug, Clone)]
 pub struct SliceProjection2D<D: Dim> {
-    /// The 2D node cache.
-    cache: Arc<RwLock<NodeCache<Dim2D>>>,
+    /// The 2D node pool.
+    projected_node_pool: SharedNodePool<Dim2D>,
     /// The position at which to slice the NdTree.
     pub slice_pos: BigVec<D>,
     /// The axis displayed horizontally.
@@ -18,8 +15,8 @@ pub struct SliceProjection2D<D: Dim> {
 }
 
 impl<D: Dim> NdProjector<D, Dim2D> for SliceProjection2D<D> {
-    fn projected_cache<'a>(&'a self, _tree: &'a NdTree<D>) -> &'a Arc<RwLock<NodeCache<Dim2D>>> {
-        &self.cache
+    fn projected_node_pool<'a>(&'a self, _tree: &'a NdTree<D>) -> &'a SharedNodePool<Dim2D> {
+        &self.projected_node_pool
     }
     fn project_tree(&self, _tree: &NdTree<D>) -> NdTree<Dim2D> {
         unimplemented!()
@@ -41,7 +38,7 @@ impl<D: Dim> Default for SliceProjection2D<D> {
             panic!("Cannot create 2D projection from less than 2 dimensions.");
         }
         Self {
-            cache: NodeCache::new(),
+            projected_node_pool: SharedNodePool::new(),
             slice_pos: NdVec::default(),
             h: Axis::X,
             v: Axis::Y,

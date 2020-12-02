@@ -18,15 +18,13 @@ fn _test_macrocell_empty_nd<D: Dim>() {
     let rule: Arc<dyn NdRule<D>> = Arc::new(DummyRule);
 
     let ndtree = NdTree::<D>::from_macrocell_str(EMPTY_MACROCELL).unwrap();
-    let cache = ndtree.cache().read();
-    assert!(ndtree.root().as_ref(&cache).is_empty());
+    assert!(ndtree.root_ref().is_empty());
     let expected = format!("{}\n", crate::MACROCELL_HEADER);
     assert_eq!(expected, ndtree.to_macrocell().to_string());
 
     let automaton =
         NdAutomaton::<D>::from_macrocell_str(EMPTY_MACROCELL, |_| Ok(Arc::clone(&rule))).unwrap();
-    let cache = automaton.tree.cache().read();
-    assert!(automaton.tree.root().as_ref(&cache).is_empty());
+    assert!(automaton.tree.root_ref().is_empty());
     assert!(Arc::ptr_eq(&automaton.rule, &rule));
 }
 
@@ -125,11 +123,7 @@ obobobobobobo33bobobobobobobobobobobobobobobobo$33b2ob2o3b2ob2o3b2ob2o
 ";
 
     let ndtree = NdTree2D::from_macrocell_str(MACROCELL).unwrap();
-    let cache = ndtree.cache().read();
-    assert_eq!(
-        BigUint::from(2592_usize),
-        ndtree.root().as_ref(&cache).population(),
-    );
+    assert_eq!(BigUint::from(2592_usize), ndtree.root_ref().population(),);
     assert_eq!(
         RLE,
         ndtree

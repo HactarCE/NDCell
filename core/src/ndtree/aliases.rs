@@ -17,17 +17,17 @@ pub type NdTree5D = NdTree<Dim5D>;
 pub type NdTree6D = NdTree<Dim6D>;
 
 /// Slice of a 1D grid represented as a bintree.
-pub type NdTreeSlice1D<'cache> = NdTreeSlice<'cache, Dim1D>;
+pub type NdTreeSlice1D<'pool> = NdTreeSlice<'pool, Dim1D>;
 /// Slice of a 2D grid represented as a quadtree.
-pub type NdTreeSlice2D<'cache> = NdTreeSlice<'cache, Dim2D>;
+pub type NdTreeSlice2D<'pool> = NdTreeSlice<'pool, Dim2D>;
 /// Slice of a 3D grid represented as an octree.
-pub type NdTreeSlice3D<'cache> = NdTreeSlice<'cache, Dim3D>;
+pub type NdTreeSlice3D<'pool> = NdTreeSlice<'pool, Dim3D>;
 /// Slice of a 4D grid represented as a tree with branching factor 16.
-pub type NdTreeSlice4D<'cache> = NdTreeSlice<'cache, Dim4D>;
+pub type NdTreeSlice4D<'pool> = NdTreeSlice<'pool, Dim4D>;
 /// Slice of a 5D grid represented as a tree with branching factor 32.
-pub type NdTreeSlice5D<'cache> = NdTreeSlice<'cache, Dim5D>;
+pub type NdTreeSlice5D<'pool> = NdTreeSlice<'pool, Dim5D>;
 /// Slice of a 6D grid represented as a tree with branching factor 64.
-pub type NdTreeSlice6D<'cache> = NdTreeSlice<'cache, Dim6D>;
+pub type NdTreeSlice6D<'pool> = NdTreeSlice<'pool, Dim6D>;
 
 /// Finite set of 1D cell positions.
 pub type Region1D = Region<Dim1D>;

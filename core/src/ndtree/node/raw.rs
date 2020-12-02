@@ -63,7 +63,7 @@ const RAW_NODE_MEMORY_OVERHEAD: usize = 3 * std::mem::size_of::<usize>();
 /// infer the length of the slice from `layer` so we don't need to carry around
 /// the extra `usize`.
 #[derive(Debug)]
-pub struct RawNode<D: Dim> {
+pub(super) struct RawNode<D: Dim> {
     /// Phantom data for type variance.
     _phantom: PhantomData<D>,
 
@@ -111,7 +111,7 @@ pub struct RawNode<D: Dim> {
     /// garbage collection.
     ///
     /// This field is only read/written during GC, which happens on one thread
-    /// at a time (enforced by requiring a `&mut NodeCache`) but we make it
+    /// at a time (enforced by requiring a `&mut NodePool`) but we make it
     /// atomic because it's hard to get a mutable reference to an element in a
     /// `HashSet`, and for good reason.
     ///
@@ -222,7 +222,7 @@ impl<D: Dim> RawNode<D> {
     /// # Panics
     ///
     /// This function panics if `layer` is not a leaf layer.
-    pub fn new_empty_leaf(layer: Layer) -> Self {
+    pub(super) fn new_empty_leaf(layer: Layer) -> Self {
         assert!(layer.is_leaf::<D>(), "Leaf node layer too large");
         let cells_vec = vec![0_u8; layer.num_cells::<D>().unwrap()];
         Self::new_leaf(cells_vec.into_boxed_slice())
@@ -235,7 +235,7 @@ impl<D: Dim> RawNode<D> {
     ///
     /// This function panics if the number of cells does not match the inferred
     /// layer, or if the inferred layer is above the base layer.
-    pub fn new_leaf(cells: Box<[u8]>) -> Self {
+    pub(super) fn new_leaf(cells: Box<[u8]>) -> Self {
         let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid leaf node cell count");
         assert!(layer.is_leaf::<D>(), "Leaf node layer too large");
         let single_state = if cells.iter().all_equal() {
@@ -272,8 +272,9 @@ impl<D: Dim> RawNode<D> {
     ///
     /// # Safety
     ///
-    /// All `children` must be valid nodes stored in the same cache that this one will be stored in.
-    pub unsafe fn new_non_leaf(children: Box<[&RawNode<D>]>) -> Self {
+    /// All `children` must be valid nodes stored in the same pool that this one
+    /// will be stored in.
+    pub(super) unsafe fn new_non_leaf(children: Box<[&RawNode<D>]>) -> Self {
         assert_eq!(
             D::BRANCHING_FACTOR,
             children.len(),
@@ -306,16 +307,16 @@ impl<D: Dim> RawNode<D> {
         }
     }
 
-    /// Returns the same node with a different residue.
-    #[inline]
-    pub fn with_residue(mut self, residue: u8) -> Self {
-        self.residue = residue;
-        self
-    }
+    // /// Returns the same node with a different residue.
+    // #[inline]
+    // pub(super) fn with_residue(mut self, residue: u8) -> Self {
+    //     self.residue = residue;
+    //     self
+    // }
 
     /// Returns the layer of the node.
     #[inline]
-    pub fn layer(&self) -> Layer {
+    pub(super) fn layer(&self) -> Layer {
         self.layer
     }
 
@@ -323,7 +324,7 @@ impl<D: Dim> RawNode<D> {
     ///
     /// This is O(1) because each node tracks this information.
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.single_state() == Some(0_u8)
     }
 
@@ -332,7 +333,7 @@ impl<D: Dim> RawNode<D> {
     ///
     /// This is O(1) because each node tracks this information.
     #[inline]
-    pub fn single_state(&self) -> Option<u8> {
+    pub(super) fn single_state(&self) -> Option<u8> {
         self.single_state
     }
 
@@ -364,13 +365,13 @@ impl<D: Dim> RawNode<D> {
     /// Returns the cell state slice if this is a leaf node, or `None` if it is
     /// not.
     #[inline]
-    pub fn cell_slice(&self) -> Option<&[u8]> {
+    pub(super) fn cell_slice(&self) -> Option<&[u8]> {
         unsafe { self.cell_slice_ptr().as_ref() }
     }
     /// Returns the children slice if this is a non-leaf node, or `None` if it
     /// is not.
     #[inline]
-    pub fn children_slice(&self) -> Option<&[&RawNode<D>]> {
+    pub(super) fn children_slice(&self) -> Option<&[&RawNode<D>]> {
         unsafe { self.children_slice_ptr().as_ref() }
     }
 
@@ -378,7 +379,7 @@ impl<D: Dim> RawNode<D> {
     /// this node some fixed number of generations, or `None` if that result
     /// hasn't been computed yet.
     #[inline]
-    pub fn result<'a>(&'a self) -> Option<&'a RawNode<D>> {
+    pub(super) fn result<'a>(&'a self) -> Option<&'a RawNode<D>> {
         unsafe { self.result_ptr.load(Relaxed).as_ref() }
     }
     /// Atomically sets the result of simulating this node for some fixed number
@@ -386,7 +387,7 @@ impl<D: Dim> RawNode<D> {
     ///
     /// # Safety
     ///
-    /// `result_ptr` must reside in the same cache as this node, so that it will
+    /// `result_ptr` must reside in the same pool as this node, so that it will
     /// not be dropped as long as this node has a pointer to it.
     #[inline]
     pub(super) unsafe fn set_result(&self, result_ptr: Option<&RawNode<D>>) {
@@ -440,7 +441,7 @@ impl<D: Dim> RawNode<D> {
     }
     /// Returns the population of the node, or `None` if it has not yet been
     /// computed.
-    pub fn population<'a>(&'a self) -> Option<MaybeBigUint<'a>> {
+    pub(super) fn population<'a>(&'a self) -> Option<MaybeBigUint<'a>> {
         let pop = self.population.load(Relaxed);
         if pop == 0 {
             // If the whole value is 0, then it hasn't been computed yet.
@@ -481,7 +482,7 @@ impl<D: Dim> RawNode<D> {
     /// node.
     ///
     /// This does not take into account jemalloc's size classes.
-    pub fn heap_size(&self) -> usize {
+    pub(super) fn heap_size(&self) -> usize {
         std::mem::size_of::<Self>()
             // Heap size of cells or children.
             + self.cell_slice().map(std::mem::size_of_val).unwrap_or(0)
@@ -498,8 +499,8 @@ impl<D: Dim> RawNode<D> {
             } else {
                 0
             }
-        // Estimate the overhead of storing this node in the cache.
-        +RAW_NODE_MEMORY_OVERHEAD
+            // Estimate the overhead of storing this node in the node pool.
+            + RAW_NODE_MEMORY_OVERHEAD
     }
 
     /// Marks the node as unreachable during garbage collection.

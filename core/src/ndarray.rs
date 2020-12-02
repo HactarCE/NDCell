@@ -5,7 +5,7 @@ use std::ops::{Index, IndexMut};
 
 use crate::dim::*;
 use crate::ndrect::URect;
-use crate::ndtree::{CachedNodeRefTrait, NodeRef, NodeRefEnum, NodeRefTrait};
+use crate::ndtree::{NodeRef, NodeRefEnum, NodeRefTrait};
 use crate::ndvec::UVec;
 use crate::num::ToPrimitive;
 
@@ -101,9 +101,9 @@ impl<T, D: Dim> NdArray<T, D> {
     }
 }
 
-impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
+impl<'pool, D: Dim, N: NodeRefTrait<'pool, D = D>> From<N> for NdArray<u8, D> {
     /// Creates an `NdArray` from the cells in an `ndtree::Node`.
-    fn from(node: NodeRef<'a, D>) -> Self {
+    fn from(node: N) -> Self {
         let count = node
             .big_num_cells()
             .to_usize()
@@ -115,7 +115,7 @@ impl<'a, D: Dim> From<NodeRef<'a, D>> for NdArray<u8, D> {
         let data = vec![unsafe { std::mem::MaybeUninit::<u8>::uninit().assume_init() }; count]
             .into_boxed_slice();
         let mut ret = Self { size, data };
-        ret.populate_from_node(0, node);
+        ret.populate_from_node(0, node.as_ref());
         ret
     }
 }
@@ -183,7 +183,7 @@ pub type Array6D<T> = NdArray<T, Dim6D>;
 mod tests {
     use super::*;
     use crate::ndrect::{NdRect, URect4D};
-    use crate::ndtree::NodeCache;
+    use crate::ndtree::SharedNodePool;
     use crate::ndvec::{NdVec, UVec4D};
 
     /// Tests `flatten_idx()` and `unflatten_idx()`.
@@ -221,9 +221,9 @@ mod tests {
             0, 1, 1, 0, // Y = 2
             0, 0, 0, 0, // Y = 3
         ];
-        let _node_cache = NodeCache::<Dim2D>::new();
-        let node_cache = _node_cache.read();
-        let node = node_cache.get_from_cells(flats_cells);
+        let node_pool = SharedNodePool::<Dim2D>::new();
+        let node_pool_access = node_pool.access();
+        let node = node_pool_access.get_from_cells(flats_cells);
         let array = NdArray::from(node);
         assert_eq!(*array.data, flats_cells);
         for pos in node.big_rect().iter() {

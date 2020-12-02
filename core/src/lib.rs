@@ -61,12 +61,12 @@ const MACROCELL_HEADER: &str = concat!("[M2] (ndcell ", env!("CARGO_PKG_VERSION"
 
 /// All public traits, for easy importing.
 pub mod traits {
-    pub use crate::automaton::NdProjectedAutomatonTrait;
+    // pub use crate::automaton::NdProjectedAutomatonTrait;
     pub use crate::dim::Dim;
     pub use crate::ndrect::CanContain;
-    pub use crate::ndtree::{CachedNodeRefTrait, NodeRefTrait};
+    pub use crate::ndtree::NodeRefTrait;
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};
-    pub use crate::projection::NdProjector;
+    // pub use crate::projection::NdProjector;
     pub use crate::sim::rule::NdRule;
     pub use crate::sim::{AsSimulate, Simulate};
 }
@@ -88,8 +88,8 @@ pub mod prelude {
     pub use crate::ndrect::NdRect;
     pub use crate::ndtree::aliases::*;
     pub use crate::ndtree::{
-        ArcNode, Layer, LeafNodeRef, NdTree, NdTreeSlice, NodeCache, NodeRef, NodeRefEnum,
-        NonLeafNodeRef, Region,
+        ArcNode, Layer, LeafNodeRef, NdTree, NdTreeSlice, NodePool, NodeRef, NodeRefEnum,
+        NonLeafNodeRef, Region, SharedNodePool,
     };
     pub use crate::ndvec::aliases::*;
     pub use crate::ndvec::{AnyDimVec, NdVec};

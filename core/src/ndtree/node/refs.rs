@@ -1,30 +1,88 @@
-//! References to nodes in a cache.
+//! References to nodes in a pool.
 
 use itertools::{Either, Itertools};
+use parking_lot::RwLockReadGuard;
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::Ordering::Relaxed;
 
-use super::{Layer, LayerTooSmall, NodeCache, RawNode, SimCacheGuard};
+use super::{Layer, LayerTooSmall, NodePool, RawNode, SimCacheGuard};
 use crate::axis::Axis;
 use crate::dim::Dim;
 use crate::ndrect::{BigRect, CanContain, URect};
 use crate::ndvec::{BigVec, UVec};
 use crate::num::{BigInt, BigUint};
 
-/// Common functionality for ND-tree nodes.
-pub trait NodeRefTrait<'node>: Copy {
+// Make `NodeRefTrait` a "sealed trait."
+// https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
+mod private {
+    use super::*;
+
+    pub trait Sealed {}
+    impl<D: Dim> Sealed for NodeRefEnum<'_, D> {}
+    impl<D: Dim> Sealed for LeafNodeRef<'_, D> {}
+    impl<D: Dim> Sealed for NonLeafNodeRef<'_, D> {}
+    impl<D: Dim> Sealed for NodeRef<'_, D> {}
+    impl<D: Dim> Sealed for &NodeRefWithGuard<'_, D> {}
+}
+
+/// Common functionality for ND-tree nodes that requires shared access to the
+/// node pool.
+pub trait NodeRefTrait<'pool>: Copy + private::Sealed {
     /// Number of dimensions.
     type D: Dim;
 
-    /// Returns a reference to the raw node structure.
-    fn as_raw(self) -> &'node RawNode<Self::D>;
+    /// Returns a `NodeRef` of the node.
+    fn as_ref(self) -> NodeRef<'pool, Self::D>;
+    /// Returns a `NodeRefEnum` of the node.
+    fn as_enum(self) -> NodeRefEnum<'pool, Self::D>;
+
+    /// Returns the pool that the node is stored in.
+    fn pool(self) -> &'pool NodePool<Self::D>;
+    /// Asserts that both nodes are from the same pool.
+    #[inline]
+    fn assert_same_pool<'b>(self, other: impl NodeRefTrait<'b, D = Self::D>) {
+        assert_eq!(
+            self.pool(),
+            other.pool(),
+            "Attempt to operate on nodes from different pools",
+        );
+    }
+
+    /// Returns the leaf node wrapped in `Some` if it is a leaf node, or `None`
+    /// if it is not.
+    #[inline]
+    fn as_leaf(self) -> Option<LeafNodeRef<'pool, Self::D>> {
+        match self.as_enum() {
+            NodeRefEnum::Leaf(node) => Some(node),
+            NodeRefEnum::NonLeaf(_) => None,
+        }
+    }
+    /// Returns the non-leaf node wrapped in `Some` if it is a non-leaf node, or
+    /// `None` if it is a leaf node.
+    #[inline]
+    fn as_non_leaf(self) -> Option<NonLeafNodeRef<'pool, Self::D>> {
+        match self.as_enum() {
+            NodeRefEnum::Leaf(_) => None,
+            NodeRefEnum::NonLeaf(node) => Some(node),
+        }
+    }
 
     /// Returns the layer of the node.
     #[inline]
     fn layer(self) -> Layer {
-        self.as_raw().layer()
+        self.as_ref().as_raw().layer()
+    }
+    /// Returns `true` if the node is a leaf node.
+    #[inline]
+    fn is_leaf(self) -> bool {
+        self.as_leaf().is_some()
+    }
+    /// Returns `true` if the node is a non-leaf node.
+    #[inline]
+    fn is_non_leaf(self) -> bool {
+        self.as_non_leaf().is_some()
     }
 
     /// Returns the number of cells along each axis of the node as a `BigInt`.
@@ -43,56 +101,18 @@ pub trait NodeRefTrait<'node>: Copy {
     fn big_rect(self) -> BigRect<Self::D> {
         self.layer().big_rect()
     }
-
     /// Returns the given position modulo the size of the node along each axis.
     #[inline]
     fn modulo_pos(self, pos: &BigVec<Self::D>) -> BigVec<Self::D> {
         pos & &(self.big_len() - 1)
     }
-}
 
-/// Common functionality for ND-tree nodes that requires shared access to the
-/// node cache.
-pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
-    /// Returns a `NodeRef` of the node.
-    fn as_ref(self) -> NodeRef<'cache, Self::D>;
-    /// Returns a `NodeRefEnum` of the node.
-    fn as_enum(self) -> NodeRefEnum<'cache, Self::D>;
-
-    /// Returns the leaf node wrapped in `Some` if it is a leaf node, or `None`
-    /// if it is not.
-    #[inline]
-    fn as_leaf(self) -> Option<LeafNodeRef<'cache, Self::D>> {
-        match self.as_enum() {
-            NodeRefEnum::Leaf(node) => Some(node),
-            NodeRefEnum::NonLeaf(_) => None,
-        }
-    }
-    /// Returns the non-leaf node wrapped in `Some` if it is a non-leaf node, or
-    /// `None` if it is a leaf node.
-    #[inline]
-    fn as_non_leaf(self) -> Option<NonLeafNodeRef<'cache, Self::D>> {
-        match self.as_enum() {
-            NodeRefEnum::Leaf(_) => None,
-            NodeRefEnum::NonLeaf(node) => Some(node),
-        }
-    }
-    /// Returns `true` if the node is a leaf node.
-    #[inline]
-    fn is_leaf(self) -> bool {
-        self.as_leaf().is_some()
-    }
-    /// Returns `true` if the node is a non-leaf node.
-    #[inline]
-    fn is_non_leaf(self) -> bool {
-        self.as_non_leaf().is_some()
-    }
     /// Returns `true` if all cells in the node are state #0.
     ///
     /// This is O(1) because each node tracks this information.
     #[inline]
     fn is_empty(self) -> bool {
-        self.as_raw().is_empty()
+        self.as_ref().as_raw().is_empty()
     }
     /// Returns the state of all cells in the node, if they are the same, or
     /// `None` otherwise.
@@ -100,44 +120,37 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     /// This is O(1) because each node tracks this information.
     #[inline]
     fn single_state(self) -> Option<u8> {
-        self.as_raw().single_state()
-    }
-
-    /// Returns the cache that the node is stored in.
-    fn cache(self) -> &'cache NodeCache<Self::D>;
-    /// Asserts that both nodes are from the same cache.
-    #[inline]
-    fn assert_same_cache<'b>(self, other: impl CachedNodeRefTrait<'b, D = Self::D>) {
-        assert_eq!(
-            self.cache(),
-            other.cache(),
-            "Attempt to operate on nodes from different caches",
-        );
+        self.as_ref().as_raw().single_state()
     }
 
     /// Returns the node one layer below this one that results from simulating
     /// this node some fixed number of generations, or `None` if that result
     /// hasn't been computed yet.
     #[inline]
-    fn result(self, guard: &SimCacheGuard<'_, Self::D>) -> Option<NodeRef<'cache, Self::D>> {
-        guard.cache().assert_owns_node(self);
-        self.as_raw()
+    fn result(self, guard: &SimCacheGuard<'_, Self::D>) -> Option<NodeRef<'pool, Self::D>> {
+        guard.pool().assert_owns_node(self);
+        self.as_ref()
+            .as_raw()
             .result()
-            .map(|res| unsafe { NodeRef::new(self.cache(), res) })
+            .map(|res| unsafe { NodeRef::new(self.pool(), res) })
     }
     /// Atomically sets the result of simulating this node for some fixed number
     /// of generations.
     ///
     /// # Panics
     ///
-    /// Panics if `result` is from a different node cache.
+    /// Panics if `result` is from a different node pool.
     #[inline]
-    fn set_result<'b>(self, result: Option<impl CachedNodeRefTrait<'b, D = Self::D>>) {
+    fn set_result<'b>(self, result: Option<impl NodeRefTrait<'b, D = Self::D>>) {
         if let Some(res) = result {
-            // Nodes must not contain pointers to nodes in other caches.
-            self.assert_same_cache(res);
+            // Nodes must not contain pointers to nodes in other pools.
+            self.assert_same_pool(res);
         }
-        unsafe { self.as_raw().set_result(result.map(NodeRefTrait::as_raw)) };
+        unsafe {
+            self.as_ref()
+                .as_raw()
+                .set_result(result.map(|r| r.as_ref().as_raw()))
+        };
     }
 
     /// Returns the cell at the given position, modulo the node length along
@@ -162,8 +175,8 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     /// is a leaf.
     ///
     /// This is equivalent to taking one element of the result of `subdivide()`.
-    fn get_corner(self, index: usize) -> Result<NodeRef<'cache, Self::D>, u8> {
-        self.cache().get_corner(self.as_enum(), index)
+    fn get_corner(self, index: usize) -> Result<NodeRef<'pool, Self::D>, u8> {
+        self.pool().get_corner(self.as_enum(), index)
     }
     /// Subdivides the node into 2^NDIM smaller nodes at one layer lower. If the
     /// node is only a single cell, returns `Err()` containing that cell state.
@@ -171,34 +184,34 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     /// The return value is borrowed if `node` is a non-leaf and owned if `node`
     /// is a leaf.
     #[inline]
-    fn subdivide(self) -> Result<Vec<NodeRef<'cache, Self::D>>, u8> {
-        self.cache().subdivide(self.as_enum())
+    fn subdivide(self) -> Result<Vec<NodeRef<'pool, Self::D>>, u8> {
+        self.pool().subdivide(self.as_enum())
     }
     /// Creates a node one layer lower containing the contents of the center of
     /// the node.
     #[inline]
-    fn centered_inner(self) -> Result<NodeRef<'cache, Self::D>, LayerTooSmall> {
-        self.cache().centered_inner(self.as_enum())
+    fn centered_inner(self) -> Result<NodeRef<'pool, Self::D>, LayerTooSmall> {
+        self.pool().centered_inner(self.as_enum())
     }
     /// Creates an identical node except with the cell at the given position
     /// (modulo the node length along each axis) modified.
     #[inline]
     #[must_use = "This method returns a new value instead of mutating its input"]
-    fn set_cell(self, pos: &BigVec<Self::D>, cell_state: u8) -> NodeRef<'cache, Self::D> {
-        self.cache().set_cell(self.as_enum(), pos, cell_state)
+    fn set_cell(self, pos: &BigVec<Self::D>, cell_state: u8) -> NodeRef<'pool, Self::D> {
+        self.pool().set_cell(self.as_enum(), pos, cell_state)
     }
 
     /// Returns the population of the node.
     #[inline]
     fn population(self) -> BigUint {
         // Record the difference in memory usage.
-        let old_heap_size = self.as_raw().heap_size();
-        let ret = self.as_raw().calc_population().into();
-        let new_heap_size = self.as_raw().heap_size();
+        let old_heap_size = self.as_ref().as_raw().heap_size();
+        let ret = self.as_ref().as_raw().calc_population().into();
+        let new_heap_size = self.as_ref().as_raw().heap_size();
         // If the heap size didn't change, don't touch the atomic variable.
         if old_heap_size != new_heap_size {
             // += new_heap_size - old_heap_size
-            self.cache()
+            self.pool()
                 .node_heap_size
                 .fetch_add(new_heap_size.wrapping_sub(old_heap_size), Relaxed);
         }
@@ -218,10 +231,10 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
         self,
         mut modify_node: impl FnMut(
             &BigVec<Self::D>,
-            NodeRef<'cache, Self::D>,
-        ) -> Option<NodeRef<'cache, Self::D>>,
+            NodeRef<'pool, Self::D>,
+        ) -> Option<NodeRef<'pool, Self::D>>,
         mut modify_cell: impl FnMut(&BigVec<Self::D>, u8) -> u8,
-    ) -> NodeRef<'cache, Self::D> {
+    ) -> NodeRef<'pool, Self::D> {
         self.recursive_modify_with_offset(&BigVec::origin(), &mut modify_node, &mut modify_cell)
     }
     /// Same as `recursive_modify()`, but `offset` is added to all coordinate
@@ -232,18 +245,18 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
         offset: &BigVec<Self::D>,
         modify_node: &mut impl FnMut(
             &BigVec<Self::D>,
-            NodeRef<'cache, Self::D>,
-        ) -> Option<NodeRef<'cache, Self::D>>,
+            NodeRef<'pool, Self::D>,
+        ) -> Option<NodeRef<'pool, Self::D>>,
         modify_cell: &mut impl FnMut(&BigVec<Self::D>, u8) -> u8,
-    ) -> NodeRef<'cache, Self::D> {
+    ) -> NodeRef<'pool, Self::D> {
         match self.as_enum() {
-            NodeRefEnum::Leaf(node) => self.cache().get_from_cells(
+            NodeRefEnum::Leaf(node) => self.pool().get_from_cells(
                 node.cells_with_positions()
                     .map(|(pos, cell)| modify_cell(&(pos.to_bigvec() + offset), cell))
                     .collect_vec(),
             ),
             NodeRefEnum::NonLeaf(node) => {
-                self.cache()
+                self.pool()
                     .join_nodes(node.children().enumerate().map(|(index, old_child)| {
                         let child_offset = self.layer().big_child_offset(index) + offset;
                         let new_child =
@@ -321,80 +334,85 @@ pub trait CachedNodeRefTrait<'cache>: Copy + NodeRefTrait<'cache> {
     }
 }
 
-/// Enumeration of references to leaf or non-leaf nodes.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum NodeRefEnum<'cache, D: Dim> {
-    /// Leaf node.
-    Leaf(LeafNodeRef<'cache, D>),
-    /// Non-leaf node.
-    NonLeaf(NonLeafNodeRef<'cache, D>),
+macro_rules! impl_node_ref_eq {
+    ($node_ref_type:ident) => {
+        impl<'other, D: Dim, T> PartialEq<T> for $node_ref_type<'_, D>
+        where
+            T: NodeRefTrait<'other, D = D>,
+        {
+            #[inline]
+            fn eq(&self, other: &T) -> bool {
+                std::ptr::eq(self.as_ref().as_raw(), other.as_ref().as_raw())
+            }
+        }
+        impl<D: Dim> Eq for $node_ref_type<'_, D> {}
+    };
 }
-impl<'cache, D: Dim> From<LeafNodeRef<'cache, D>> for NodeRefEnum<'cache, D> {
+
+/// Enumeration of references to leaf or non-leaf nodes.
+#[derive(Debug, Copy, Clone, Hash)]
+pub enum NodeRefEnum<'pool, D: Dim> {
+    /// Leaf node.
+    Leaf(LeafNodeRef<'pool, D>),
+    /// Non-leaf node.
+    NonLeaf(NonLeafNodeRef<'pool, D>),
+}
+impl_node_ref_eq!(NodeRefEnum);
+impl<'pool, D: Dim> From<LeafNodeRef<'pool, D>> for NodeRefEnum<'pool, D> {
     #[inline]
-    fn from(node: LeafNodeRef<'cache, D>) -> Self {
+    fn from(node: LeafNodeRef<'pool, D>) -> Self {
         Self::Leaf(node)
     }
 }
-impl<'cache, D: Dim> From<NonLeafNodeRef<'cache, D>> for NodeRefEnum<'cache, D> {
+impl<'pool, D: Dim> From<NonLeafNodeRef<'pool, D>> for NodeRefEnum<'pool, D> {
     #[inline]
-    fn from(node: NonLeafNodeRef<'cache, D>) -> Self {
+    fn from(node: NonLeafNodeRef<'pool, D>) -> Self {
         Self::NonLeaf(node)
     }
 }
-impl<'cache, D: Dim> NodeRefTrait<'cache> for NodeRefEnum<'cache, D> {
+impl<'pool, D: Dim> NodeRefTrait<'pool> for NodeRefEnum<'pool, D> {
     type D = D;
 
     #[inline]
-    fn as_raw(self) -> &'cache RawNode<D> {
-        self.as_ref().as_raw()
-    }
-}
-impl<'cache, D: Dim> CachedNodeRefTrait<'cache> for NodeRefEnum<'cache, D> {
-    #[inline]
-    fn as_ref(self) -> NodeRef<'cache, D> {
+    fn as_ref(self) -> NodeRef<'pool, D> {
         match self {
             NodeRefEnum::Leaf(node) => node.as_ref(),
             NodeRefEnum::NonLeaf(node) => node.as_ref(),
         }
     }
     #[inline]
-    fn as_enum(self) -> NodeRefEnum<'cache, D> {
+    fn as_enum(self) -> NodeRefEnum<'pool, D> {
         self
     }
     #[inline]
-    fn cache(self) -> &'cache NodeCache<D> {
-        self.as_ref().cache()
+    fn pool(self) -> &'pool NodePool<D> {
+        self.as_ref().pool()
     }
 }
 
-/// Reference to a leaf node in a cache.
+/// Reference to a leaf node in a pool.
 ///
 /// Cells are stored in a flattened array in row-major order.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct LeafNodeRef<'cache, D: Dim>(NodeRef<'cache, D>);
-impl<'cache, D: Dim> NodeRefTrait<'cache> for LeafNodeRef<'cache, D> {
+#[derive(Debug, Copy, Clone, Hash)]
+pub struct LeafNodeRef<'pool, D: Dim>(NodeRef<'pool, D>);
+impl_node_ref_eq!(LeafNodeRef);
+impl<'pool, D: Dim> NodeRefTrait<'pool> for LeafNodeRef<'pool, D> {
     type D = D;
 
     #[inline]
-    fn as_raw(self) -> &'cache RawNode<D> {
-        self.0.as_raw()
-    }
-}
-impl<'cache, D: Dim> CachedNodeRefTrait<'cache> for LeafNodeRef<'cache, D> {
-    #[inline]
-    fn as_ref(self) -> NodeRef<'cache, D> {
+    fn as_ref(self) -> NodeRef<'pool, D> {
         self.0
     }
     #[inline]
-    fn as_enum(self) -> NodeRefEnum<'cache, D> {
+    fn as_enum(self) -> NodeRefEnum<'pool, D> {
         self.into()
     }
     #[inline]
-    fn cache(self) -> &'cache NodeCache<D> {
-        self.0.cache()
+    fn pool(self) -> &'pool NodePool<D> {
+        self.0.pool()
     }
 }
-impl<'cache, D: Dim> LeafNodeRef<'cache, D> {
+impl<'pool, D: Dim> LeafNodeRef<'pool, D> {
     /// Returns the flattened cell index corresponding to the given position in
     /// a leaf node, modulo the node length along each axis.
     #[inline]
@@ -439,13 +457,13 @@ impl<'cache, D: Dim> LeafNodeRef<'cache, D> {
     ///
     /// See the documentation at the crate root for more details.
     #[inline]
-    pub fn cells(self) -> &'cache [u8] {
-        self.as_raw().cell_slice().unwrap()
+    pub fn cells(self) -> &'pool [u8] {
+        self.as_ref().as_raw().cell_slice().unwrap()
     }
     /// Returns an iterator over the cells of the node, along with their
     /// positions.
     #[inline]
-    pub fn cells_with_positions(self) -> impl 'cache + Iterator<Item = (UVec<D>, u8)> {
+    pub fn cells_with_positions(self) -> impl 'pool + Iterator<Item = (UVec<D>, u8)> {
         self.rect().iter().zip(self.cells().iter().copied())
     }
     /// Returns the cell at the given position, modulo the node length along
@@ -458,32 +476,27 @@ impl<'cache, D: Dim> LeafNodeRef<'cache, D> {
     }
 }
 
-/// Reference to a non-leaf node in a cache.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct NonLeafNodeRef<'cache, D: Dim>(NodeRef<'cache, D>);
-impl<'cache, D: Dim> NodeRefTrait<'cache> for NonLeafNodeRef<'cache, D> {
+/// Reference to a non-leaf node in a pool.
+#[derive(Debug, Copy, Clone, Hash)]
+pub struct NonLeafNodeRef<'pool, D: Dim>(NodeRef<'pool, D>);
+impl_node_ref_eq!(NonLeafNodeRef);
+impl<'pool, D: Dim> NodeRefTrait<'pool> for NonLeafNodeRef<'pool, D> {
     type D = D;
 
     #[inline]
-    fn as_raw(self) -> &'cache RawNode<D> {
-        self.0.as_raw()
-    }
-}
-impl<'cache, D: Dim> CachedNodeRefTrait<'cache> for NonLeafNodeRef<'cache, D> {
-    #[inline]
-    fn as_ref(self) -> NodeRef<'cache, D> {
+    fn as_ref(self) -> NodeRef<'pool, D> {
         self.0
     }
     #[inline]
-    fn as_enum(self) -> NodeRefEnum<'cache, D> {
+    fn as_enum(self) -> NodeRefEnum<'pool, D> {
         self.into()
     }
     #[inline]
-    fn cache(self) -> &'cache NodeCache<D> {
-        self.0.cache()
+    fn pool(self) -> &'pool NodePool<D> {
+        self.0.pool()
     }
 }
-impl<'cache, D: Dim> NonLeafNodeRef<'cache, D> {
+impl<'pool, D: Dim> NonLeafNodeRef<'pool, D> {
     /// Returns the index of the child containing the given position, module the
     /// node size along each axis.
     #[inline]
@@ -494,27 +507,27 @@ impl<'cache, D: Dim> NonLeafNodeRef<'cache, D> {
     /// Returns the array of pointers to the node's children, each of which is
     /// one layer below the node.
     #[inline]
-    pub fn raw_children(self) -> &'cache [&'cache RawNode<D>] {
-        self.as_raw().children_slice().unwrap()
+    fn raw_children(self) -> &'pool [&'pool RawNode<D>] {
+        self.as_ref().as_raw().children_slice().unwrap()
     }
     /// Returns an iterator over the node's children, each of which is one layer
     /// below this node.
     #[inline]
-    pub fn children(self) -> impl 'cache + Iterator<Item = NodeRef<'cache, D>> {
+    pub fn children(self) -> impl 'pool + Iterator<Item = NodeRef<'pool, D>> {
         (0..D::BRANCHING_FACTOR).map(move |i| self.child_at_index(i))
     }
     /// Returns a reference to the child node at the given index.
     ///
     /// Panics if the index is not between 0 and 2^NDIM (exclusive).
     #[inline]
-    pub fn child_at_index(self, index: usize) -> NodeRef<'cache, D> {
+    pub fn child_at_index(self, index: usize) -> NodeRef<'pool, D> {
         assert!(index < D::BRANCHING_FACTOR);
-        unsafe { NodeRef::new(self.cache(), self.raw_children()[index]) }
+        unsafe { NodeRef::new(self.pool(), self.raw_children()[index]) }
     }
     /// Returns a reference to the child node containing the given position,
     /// modulo the node length along each axis.
     #[inline]
-    pub fn child_with_pos(self, pos: &BigVec<D>) -> NodeRef<'cache, D> {
+    pub fn child_with_pos(self, pos: &BigVec<D>) -> NodeRef<'pool, D> {
         self.child_at_index(self.layer().non_leaf_child_index(pos))
     }
     /// Returns a reference to the grandchild node at the given index.
@@ -523,7 +536,7 @@ impl<'cache, D: Dim> NonLeafNodeRef<'cache, D> {
     ///
     /// This method panics if the index is not between 0 and 4^NDIM (exclusive).
     #[inline]
-    pub fn grandchild_at_index(self, index: usize) -> NodeRef<'cache, D> {
+    pub fn grandchild_at_index(self, index: usize) -> NodeRef<'pool, D> {
         assert!(index < D::BRANCHING_FACTOR * D::BRANCHING_FACTOR);
         let (child_index, grandchild_index) = split_grandchild_index::<D>(index);
         let child = self.child_at_index(child_index);
@@ -536,16 +549,17 @@ impl<'cache, D: Dim> NonLeafNodeRef<'cache, D> {
     }
 }
 
-/// Reference to a node in a cache.
+/// Reference to a node in a pool.
 ///
-/// Hashing and equality are based on the pointer to the node and to the cache,
+/// Hashing and equality are based on the pointer to the node and to the pool,
 /// rather than the contents of the node. This relies on only a single
-/// "canonical" instance of each unique node in the cache.
+/// "canonical" instance of each unique node in the pool.
 #[derive(Copy, Clone)]
-pub struct NodeRef<'cache, D: Dim> {
-    cache: &'cache NodeCache<D>,
-    raw_node: &'cache RawNode<D>,
+pub struct NodeRef<'pool, D: Dim> {
+    pool: &'pool NodePool<D>,
+    raw_node: &'pool RawNode<D>,
 }
+impl_node_ref_eq!(NodeRef);
 impl<D: Dim> fmt::Debug for NodeRef<'_, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Node({:p})", self.raw_node)
@@ -580,33 +594,21 @@ impl<D: Dim> fmt::Display for NodeRef<'_, D> {
         Ok(())
     }
 }
-impl<D: Dim> PartialEq for NodeRef<'_, D> {
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self.raw_node, other.raw_node)
-    }
-}
-impl<D: Dim> Eq for NodeRef<'_, D> {}
 impl<D: Dim> Hash for NodeRef<'_, D> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.cache.hash(state);
+        self.pool.hash(state);
         std::ptr::hash(self.raw_node, state);
     }
 }
-impl<'cache, D: Dim> NodeRefTrait<'cache> for NodeRef<'cache, D> {
+impl<'pool, D: Dim> NodeRefTrait<'pool> for NodeRef<'pool, D> {
     type D = D;
 
     #[inline]
-    fn as_raw(self) -> &'cache RawNode<D> {
-        &self.raw_node
-    }
-}
-impl<'cache, D: Dim> CachedNodeRefTrait<'cache> for NodeRef<'cache, D> {
-    #[inline]
-    fn as_ref(self) -> NodeRef<'cache, D> {
+    fn as_ref(self) -> NodeRef<'pool, D> {
         self
     }
     #[inline]
-    fn as_enum(self) -> NodeRefEnum<'cache, D> {
+    fn as_enum(self) -> NodeRefEnum<'pool, D> {
         if self.layer().is_leaf::<D>() {
             LeafNodeRef(self).into()
         } else {
@@ -614,20 +616,111 @@ impl<'cache, D: Dim> CachedNodeRefTrait<'cache> for NodeRef<'cache, D> {
         }
     }
     #[inline]
-    fn cache(self) -> &'cache NodeCache<D> {
-        self.cache
+    fn pool(self) -> &'pool NodePool<D> {
+        self.pool
     }
 }
-impl<'cache, D: Dim> NodeRef<'cache, D> {
+impl<'pool, D: Dim> NodeRef<'pool, D> {
     /// Creates a reference to a raw node, extending the lifetime of the node
-    /// reference to the lifetime of the cache reference.
+    /// reference to the lifetime of the node pool reference.
     ///
     /// # Safety
     ///
-    /// `raw_node` must be a valid node obtained from `cache`.
-    pub unsafe fn new(cache: &'cache NodeCache<D>, raw_node: &'_ RawNode<D>) -> Self {
-        let raw_node = std::mem::transmute::<&'_ RawNode<D>, &'cache RawNode<D>>(raw_node);
-        Self { cache, raw_node }
+    /// `raw_node` must be a valid node obtained from `pool`.
+    pub(super) unsafe fn new(pool: &'pool NodePool<D>, raw_node: &'_ RawNode<D>) -> Self {
+        let raw_node = std::mem::transmute::<&'_ RawNode<D>, &'pool RawNode<D>>(raw_node);
+        Self { pool, raw_node }
+    }
+
+    /// Returns a reference to the raw node structure.
+    pub(super) fn as_raw(self) -> &'pool RawNode<D> {
+        &self.raw_node
+    }
+}
+
+/// Reference to a node in a pool, along with either a read guard or a normal
+/// reference for that pool.
+pub struct NodeRefWithGuard<'pool, D: Dim> {
+    pool: NodePoolGuard<'pool, D>,
+    raw_node: *const RawNode<D>,
+}
+impl<D: Dim> PartialEq for NodeRefWithGuard<'_, D> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self.raw_node, other.raw_node)
+    }
+}
+impl_node_ref_eq!(NodeRefWithGuard);
+impl<D: Dim> fmt::Debug for NodeRefWithGuard<'_, D> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&NodeRefTrait::as_ref(self), f)
+    }
+}
+impl<'pool, 'node: 'pool, D: Dim> NodeRefTrait<'node> for &'node NodeRefWithGuard<'pool, D> {
+    type D = D;
+
+    #[inline]
+    fn as_ref(self) -> NodeRef<'node, Self::D> {
+        unsafe { NodeRef::new(self.pool(), self.raw_node.as_ref().unwrap()) }
+    }
+    #[inline]
+    fn as_enum(self) -> NodeRefEnum<'node, Self::D> {
+        self.as_ref().as_enum()
+    }
+    #[inline]
+    fn pool(self) -> &'node NodePool<Self::D> {
+        &*self.pool
+    }
+}
+impl<'pool, D: Dim, N: NodeRefTrait<'pool, D = D>> From<N> for NodeRefWithGuard<'pool, D> {
+    fn from(node: N) -> Self {
+        Self {
+            pool: NodePoolGuard::Ref(node.pool()),
+            raw_node: node.as_ref().as_raw() as *const _,
+        }
+    }
+}
+impl<'pool, D: Dim> NodeRefWithGuard<'pool, D> {
+    /// Creates a reference to a node, extending the lifetime of the original
+    /// node reference to the lifetime of the node pool guard.
+    ///
+    /// # Safety
+    ///
+    /// `raw_node` must be a valid node obtained from the pool of `pool_guard`.
+    pub(super) unsafe fn from_ptr_with_guard(
+        pool_guard: RwLockReadGuard<'pool, NodePool<D>>,
+        raw_node: &'_ RawNode<D>,
+    ) -> Self {
+        Self {
+            pool: NodePoolGuard::ReadGuard(pool_guard),
+            raw_node: raw_node as *const _,
+        }
+    }
+
+    /// Creates a reference to a node, extending the lifetime of the original
+    /// node reference to the lifetime of the node pool guard.
+    pub fn with_guard<'node>(
+        pool_guard: RwLockReadGuard<'pool, NodePool<D>>,
+        node_ref: impl NodeRefTrait<'node, D = D>,
+    ) -> Self {
+        pool_guard.assert_owns_node(node_ref);
+        unsafe { Self::from_ptr_with_guard(pool_guard, node_ref.as_ref().as_raw()) }
+    }
+}
+
+#[allow(missing_debug_implementations, missing_docs)]
+enum NodePoolGuard<'a, D: Dim> {
+    ReadGuard(RwLockReadGuard<'a, NodePool<D>>),
+    Ref(&'a NodePool<D>),
+}
+impl<'a, D: Dim> std::ops::Deref for NodePoolGuard<'a, D> {
+    type Target = NodePool<D>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::ReadGuard(p) => p,
+            Self::Ref(p) => p,
+        }
     }
 }
 
@@ -648,8 +741,8 @@ fn split_grandchild_index<D: Dim>(index: usize) -> (usize, usize) {
 
 /// Returns the exact lower bound for coordinates of live cells within a
 /// rectangle, or `None` if there are no live cells within the rectangle.
-fn shrink_nonzero_lower_bound<'cache, D: Dim>(
-    node: impl CachedNodeRefTrait<'cache, D = D>,
+fn shrink_nonzero_lower_bound<'pool, D: Dim>(
+    node: impl NodeRefTrait<'pool, D = D>,
     rect: &BigRect<D>,
     axis: Axis,
 ) -> Option<BigInt> {
@@ -659,8 +752,8 @@ fn shrink_nonzero_lower_bound<'cache, D: Dim>(
 }
 /// Returns the exact upper bound for coordinates of live cells within a
 /// rectangle, or `None` if there are no live cells within the rectangle.
-fn shrink_nonzero_upper_bound<'cache, D: Dim>(
-    node: impl CachedNodeRefTrait<'cache, D = D>,
+fn shrink_nonzero_upper_bound<'pool, D: Dim>(
+    node: impl NodeRefTrait<'pool, D = D>,
     rect: &BigRect<D>,
     axis: Axis,
 ) -> Option<BigInt> {
@@ -810,140 +903,6 @@ impl MinMax for Maximize {
         a > b
     }
 }
-
-// /// Returns the lower bound on coordinates of live cells in the node along an
-// /// axis, or `None` if the cell is empty.
-// ///
-// /// Because this method is called infrequently, it is optimized for the case of
-// /// very large nodes with many repeated descendents.
-// fn lower_live_bound<'cache, D: Dim>(
-//     node: impl CachedNodeRefTrait<'cache, D = D>,
-//     axis: Axis,
-//     rect_cache: &mut HashMap<NodeRef<'cache, D>, Option<BigInt>, crate::NodeHasher>,
-// ) -> Option<BigInt> {
-//     rect_cache
-//         .entry(node.as_ref())
-//         .or_insert_with(|| {
-//             // If the node is empty, then there is no lower bound.
-//             if node.is_empty() {
-//                 return None;
-//             }
-
-//             match node.as_enum() {
-//                 NodeRefEnum::Leaf(node) => {
-//                     // For each position in the node:
-//                     node.rect()
-//                         .iter()
-//                         // Take the corresponding cell state.
-//                         .zip(node.cells())
-//                         // Only look at positions where the cell state is
-//                         // nonzero.
-//                         .filter(|(_pos, &cell_state)| cell_state != 0_u8)
-//                         // Only look at one coordinate of the position.
-//                         .map(|(pos, _cell_state)| pos[axis])
-//                         // And take the minimum value.
-//                         .min()
-//                         // And convert to `BigInt`.
-//                         .map(|n| n.into())
-//                 }
-//                 NodeRefEnum::NonLeaf(node) => {
-//                     // For each child:
-//                     (0..D::BRANCHING_FACTOR)
-//                         .zip(node.children())
-//                         // Only look at the more negative children along `axis`
-//                         // for now. (If this doesn't work, we'll try the rest.)
-//                         .filter(|(index, _child)| index & axis.bit() == 0)
-//                         // Recurse!
-//                         .filter_map(|(_index, child)| lower_live_bound(child, axis, rect_cache))
-//                         // And take the minimum value.
-//                         .min()
-//                         // But if we didn't find any cells ...
-//                         .or_else(|| {
-//                             // ... then try the same thing with the more
-//                             // positive children along `axis`.
-//                             (0..D::BRANCHING_FACTOR)
-//                                 .zip(node.children())
-//                                 .filter(|(index, _child)| index & axis.bit() != 0)
-//                                 .filter_map(|(_index, child)| {
-//                                     lower_live_bound(child, axis, rect_cache)
-//                                 })
-//                                 .min()
-//                                 // And account for the offset of the more
-//                                 // positive children.
-//                                 .map(|pos| pos + node.layer().child_layer().big_len())
-//                         })
-//                 }
-//             }
-//         })
-//         .clone()
-// }
-
-// /// Returns the upper bound on coordinates of live cells in the node along an
-// /// axis, or `None` if the cell is empty.
-// ///
-// /// Because this method is called infrequently, it is optimized for the case of
-// /// very large nodes with many repeated descendents.
-// fn upper_live_bound<'cache, D: Dim>(
-//     node: impl CachedNodeRefTrait<'cache, D = D>,
-//     axis: Axis,
-//     rect_cache: &mut HashMap<NodeRef<'cache, D>, Option<BigInt>, crate::NodeHasher>,
-// ) -> Option<BigInt> {
-//     rect_cache
-//         .entry(node.as_ref())
-//         .or_insert_with(|| {
-//             // If the node is empty, then there is no upper bound.
-//             if node.is_empty() {
-//                 return None;
-//             }
-
-//             match node.as_enum() {
-//                 NodeRefEnum::Leaf(node) => {
-//                     // For each position in the node:
-//                     node.rect()
-//                         .iter()
-//                         // Take the corresponding cell state.
-//                         .zip(node.cells())
-//                         // Only look at positions where the cell state is
-//                         // nonzero.
-//                         .filter(|(_pos, &cell_state)| cell_state != 0_u8)
-//                         // Only look at one coordinate of the position.
-//                         .map(|(pos, _cell_state)| pos[axis])
-//                         // And take the maximum value.
-//                         .max()
-//                         // And convert to `BigInt`.
-//                         .map(|n| n.into())
-//                 }
-//                 NodeRefEnum::NonLeaf(node) => {
-//                     // For each child:
-//                     (0..D::BRANCHING_FACTOR)
-//                         .zip(node.children())
-//                         // Only look at the more positive children along `axis`
-//                         // for now. (If this doesn't work, we'll try the rest.)
-//                         .filter(|(index, _child)| index & axis.bit() != 0)
-//                         // Recurse!
-//                         .filter_map(|(_index, child)| upper_live_bound(child, axis, rect_cache))
-//                         // And take the minimum value.
-//                         .max()
-//                         // And account for the offset of the more
-//                         // positive children.
-//                         .map(|pos| pos + node.layer().child_layer().big_len())
-//                         // But if we didn't find any cells ...
-//                         .or_else(|| {
-//                             // ... then try the same thing with the more
-//                             // negative children along `axis`.
-//                             (0..D::BRANCHING_FACTOR)
-//                                 .zip(node.children())
-//                                 .filter(|(index, _child)| index & axis.bit() == 0)
-//                                 .filter_map(|(_index, child)| {
-//                                     upper_live_bound(child, axis, rect_cache)
-//                                 })
-//                                 .max()
-//                         })
-//                 }
-//             }
-//         })
-//         .clone()
-// }
 
 #[cfg(test)]
 mod tests {

@@ -10,9 +10,7 @@
 //! documentation for more details.
 
 use itertools::{izip, Itertools};
-use parking_lot::RwLock;
 use std::fmt;
-use std::sync::Arc;
 
 pub mod aliases;
 pub mod indexed;
@@ -60,30 +58,29 @@ where
     for<'a> NdTreeSlice<'a, D>: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let node_cache = self.cache().read_recursive();
-        fmt::Display::fmt(&self.slice(&node_cache), f)
+        fmt::Display::fmt(&self.as_slice(), f)
     }
 }
 
 impl<'a, D: Dim> From<NdTreeSlice<'a, D>> for NdTree<D> {
     fn from(slice: NdTreeSlice<'a, D>) -> Self {
         Self {
-            root: slice.root.into(),
+            root: ArcNode::from(slice.root.as_ref()),
             offset: slice.offset,
         }
     }
 }
 
 impl<D: Dim> NdTree<D> {
-    /// Creates an empty ND-tree using a new node cache.
+    /// Creates an empty ND-tree using a new node pool.
     #[inline]
     pub fn new() -> Self {
-        Self::with_cache(NodeCache::new())
+        Self::with_node_pool(SharedNodePool::new())
     }
-    /// Creates an empty ND-tree using the given node cache.
+    /// Creates an empty ND-tree using the given node pool.
     #[inline]
-    pub fn with_cache(node_cache: Arc<RwLock<NodeCache<D>>>) -> Self {
-        Self::from_node_centered(node_cache.read_recursive().get_empty_base())
+    pub fn with_node_pool(node_pool: SharedNodePool<D>) -> Self {
+        Self::from_node_centered(node_pool.access().get_empty_base())
     }
     /// Creates an empty ND-tree centered at the given position.
     #[inline]
@@ -98,7 +95,7 @@ impl<D: Dim> NdTree<D> {
     ///
     /// This function panics if the node consists of only a single cell.
     #[inline]
-    pub fn from_node_centered<'n>(node: impl CachedNodeRefTrait<'n, D = D>) -> Self {
+    pub fn from_node_centered<'n>(node: impl NodeRefTrait<'n, D = D>) -> Self {
         assert!(
             node.layer() > Layer(0),
             "Root of ND-tree must be larger than a single cell",
@@ -116,7 +113,7 @@ impl<D: Dim> NdTree<D> {
     /// This function panics if the node consists of only a single cell.
     #[inline]
     pub fn from_node_centered_on<'n>(
-        node: impl CachedNodeRefTrait<'n, D = D>,
+        node: impl NodeRefTrait<'n, D = D>,
         offset: BigVec<D>,
     ) -> Self {
         assert!(
@@ -133,6 +130,11 @@ impl<D: Dim> NdTree<D> {
     #[inline]
     pub fn root(&self) -> &ArcNode<D> {
         &self.root
+    }
+    /// Returns the root node of the ND-tree.
+    #[inline]
+    pub fn root_ref<'a>(&'a self) -> NodeRefWithGuard<'a, D> {
+        self.root().as_ref_with_guard()
     }
     /// Sets the root node of the ND-tree, maintaining the center position.
     ///
@@ -154,10 +156,10 @@ impl<D: Dim> NdTree<D> {
         self.offset -= &new_node_layer.child_layer().big_len();
     }
 
-    /// Returns the cache for nodes in the ND-tree.
+    /// Returns the node pool for the ND-tree.
     #[inline]
-    pub fn cache(&self) -> &Arc<RwLock<NodeCache<D>>> {
-        self.root().cache()
+    pub fn pool(&self) -> &SharedNodePool<D> {
+        self.root().pool()
     }
     /// Returns the layer of the largest node in the ND-tree.
     #[inline]
@@ -197,14 +199,6 @@ impl<D: Dim> NdTree<D> {
     pub fn rect(&self) -> BigRect<D> {
         self.layer().big_rect() + self.offset()
     }
-    /// Returns an `NdTreeSlice` view into the grid.
-    #[inline]
-    pub fn slice<'cache>(&self, cache: &'cache NodeCache<D>) -> NdTreeSlice<'cache, D> {
-        NdTreeSlice {
-            root: self.root().as_ref(cache),
-            offset: self.offset().clone(),
-        }
-    }
 
     /// "Zooms out" the grid by a factor of 2.
     ///
@@ -213,28 +207,28 @@ impl<D: Dim> NdTree<D> {
     /// node twice the size containing that old NE child in its SW corner. The
     /// final result is that the entire tree contains the same contents as
     /// before, but with 25% padding along each edge.
-    pub fn expand(&mut self, cache: &NodeCache<D>) {
-        let empty_node = cache.get_empty(self.root().layer().child_layer());
+    pub fn expand(&mut self) {
+        let root = self.root_ref();
+        let node_pool = root.pool();
+        let empty_node = node_pool.get_empty(self.layer().child_layer());
+
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
-        let new_root = cache.join_nodes(
-            self.root()
-                .as_ref(cache)
-                .subdivide()
-                .unwrap()
-                .into_iter()
-                .enumerate()
-                .map(|(child_index, subcube)| {
-                    // Invert the bits of the child index to get the index
-                    // of the opposite child.
-                    let opposite_child_index = child_index ^ child_index_bitmask;
-                    // All children of this node will be empty ...
-                    let mut children = vec![empty_node; D::BRANCHING_FACTOR];
-                    // ... except for the opposite child, which will be
-                    // closest to the center of the NdTree.
-                    children[opposite_child_index] = subcube;
-                    cache.join_nodes(children)
-                }),
-        );
+        let new_root = node_pool.join_nodes(root.subdivide().unwrap().into_iter().enumerate().map(
+            |(child_index, subcube)| {
+                // Invert the bits of the child index to get the index
+                // of the opposite child.
+                let opposite_child_index = child_index ^ child_index_bitmask;
+                // All children of this node will be empty ...
+                let mut children = vec![empty_node; D::BRANCHING_FACTOR];
+                // ... except for the opposite child, which will be
+                // closest to the center of the NdTree.
+                children[opposite_child_index] = subcube;
+                node_pool.join_nodes(children)
+            },
+        ));
+
+        let new_root = ArcNode::from(new_root);
+        drop(root);
         self.set_root_centered(new_root);
     }
     /// "Zooms out" the grid by calling `NdTree::expand()` until the tree
@@ -248,31 +242,28 @@ impl<D: Dim> NdTree<D> {
     /// "Zooms out" the grid by calling `NdTree::expand()` as long as the given
     /// predicate returns `true`.
     pub fn expand_while(&mut self, mut predicate: impl FnMut(&Self) -> bool) {
-        let _cache = Arc::clone(self.cache());
-        let cache = _cache.read();
         while predicate(&self) {
-            self.expand(&cache);
+            self.expand();
         }
     }
     /// "Zooms in" the grid as much as possible without losing
     /// non-empty cells. Returns the number of times the tree was shrunk by a
     /// factor of 2.
-    pub fn shrink(&mut self, cache: &NodeCache<D>) {
-        while self._shrink(cache).is_ok() {}
+    pub fn shrink(&mut self) {
+        while self.try_shrink().is_ok() {}
     }
     /// "Zooms in" the grid by a factor of 2.
-    fn _shrink(&mut self, cache: &NodeCache<D>) -> Result<(), Unshrinkable> {
+    fn try_shrink(&mut self) -> Result<(), Unshrinkable> {
         // Don't shrink past the base layer.
-        let root = self
-            .root()
-            .as_ref(cache)
+        let root = self.root_ref();
+        let root_children = root
             .as_non_leaf()
-            .ok_or(Unshrinkable::LayerTooSmall)?;
+            .ok_or(Unshrinkable::LayerTooSmall)?
+            .children();
 
         let child_index_bitmask = D::BRANCHING_FACTOR - 1;
         // Fetch the grandchildren of this node that are closest to the center.
-        let new_children: Vec<_> = root
-            .children()
+        let new_children: Vec<_> = root_children
             .enumerate()
             .map(|(child_index, child)| {
                 // Invert the bits of the child index to get the index of the
@@ -291,31 +282,41 @@ impl<D: Dim> NdTree<D> {
                 Ok(grandchildren.remove(opposite_child_index))
             })
             .try_collect()?;
-        let new_root = cache.join_nodes(new_children);
+        let new_root = root.pool().join_nodes(new_children);
+
+        let new_root = ArcNode::from(new_root);
+        drop(root);
         self.set_root_centered(new_root);
         Ok(())
     }
 
     /// Returns the state of the cell at the given position.
-    pub fn get_cell(&self, cache: &NodeCache<D>, pos: &BigVec<D>) -> u8 {
+    pub fn get_cell(&self, pos: &BigVec<D>) -> u8 {
         if self.rect().contains(pos) {
-            self.root()
-                .as_ref(cache)
-                .cell_at_pos(&(pos - self.offset()))
+            self.root_ref().cell_at_pos(&(pos - self.offset()))
         } else {
             0
         }
     }
     /// Sets the state of the cell at the given position.
-    pub fn set_cell(&mut self, cache: &NodeCache<D>, pos: &BigVec<D>, cell_state: u8) {
+    pub fn set_cell(&mut self, pos: &BigVec<D>, cell_state: u8) {
         self.expand_to(pos);
-        let new_root = self
-            .root
-            .as_ref(cache)
-            .set_cell(&(pos - self.offset()), cell_state);
+        let root = self.root_ref();
+        let new_root = root.set_cell(&(pos - self.offset()), cell_state);
+
+        let new_root = ArcNode::from(new_root);
+        drop(root);
         self.set_root_centered(new_root);
     }
 
+    /// Returns an `NdTreeSlice` view into the grid.
+    #[inline]
+    pub fn as_slice<'a>(&'a self) -> NdTreeSlice<'a, D> {
+        NdTreeSlice {
+            root: self.root_ref(),
+            offset: self.offset().clone(),
+        }
+    }
     /// Returns an `NdTreeSlice` of the smallest node in the grid containing the
     /// given rectangle.
     ///
@@ -323,15 +324,14 @@ impl<D: Dim> NdTree<D> {
     /// centered on an existing node, and thus composed out of smaller existing
     /// nodes. The only guarantee is that the node will be either a leaf node or
     /// less than twice as big as it needs to be.
-    pub fn slice_containing<'cache>(
-        &self,
-        cache: &'cache NodeCache<D>,
-        rect: &BigRect<D>,
-    ) -> NdTreeSlice<'cache, D> {
+    pub fn slice_containing<'a>(&'a self, rect: &BigRect<D>) -> NdTreeSlice<'a, D> {
+        let node_pool = self.pool().access();
+
         // Grow the NdTree until it contains the desired rectangle.
         let mut tmp_ndtree = self.clone();
         tmp_ndtree.expand_to(rect);
-        let mut ret = tmp_ndtree.slice(cache);
+        let mut ret = tmp_ndtree.as_slice();
+
         // "Zoom in" on either a corner, an edge/face, or the center until it
         // can't shrink any more. Each iteration of the loop "zooms in" by a
         // factor of 2.
@@ -341,7 +341,7 @@ impl<D: Dim> NdTree<D> {
             if ret.root.is_leaf() {
                 break 'outer;
             }
-            let root = ret.root.as_non_leaf().unwrap();
+            let root = node_pool.extend_lifetime(&ret.root).as_non_leaf().unwrap();
 
             // Since the root is not a leaf node, we know it is at least at
             // layer 2.
@@ -389,34 +389,31 @@ impl<D: Dim> NdTree<D> {
             // Compute the new offset.
             ret.offset += grandchild_square.min().to_bigvec() << grandchild_layer.to_u32();
             // Create the new node.
-            ret.root = cache.join_nodes(new_children);
+            ret.root = NodeRefWithGuard::from(node_pool.join_nodes(new_children));
         }
-        ret
+
+        // Recreate the `NdTreeSlice` with a different lifetime.
+        NdTreeSlice {
+            root: NodeRefWithGuard::with_guard(self.pool().access(), ret.root.as_ref()),
+            offset: ret.offset,
+        }
     }
 
     /// Returns `true` if all cells within the rectangle are state #0.
-    pub fn rect_is_empty(&self, cache: &NodeCache<D>, rect: BigRect<D>) -> bool {
-        self.root()
-            .as_ref(cache)
-            .rect_is_empty(&(rect - self.offset()))
+    pub fn rect_is_empty(&self, rect: BigRect<D>) -> bool {
+        self.root_ref().rect_is_empty(&(rect - self.offset()))
     }
     /// Returns the smallest rectangle containing all nonzero cells, or `None`
     /// if there are no live cells.
-    pub fn bounding_rect(&self, cache: &NodeCache<D>) -> Option<BigRect<D>> {
-        self.root()
-            .as_ref(cache)
+    pub fn bounding_rect(&self) -> Option<BigRect<D>> {
+        self.root_ref()
             .min_nonzero_rect()
             .map(|r| r + self.offset())
     }
     /// Shrinks a rectangle as much as possible while still containing the same
     /// nonzero cells. Returns `None` if all cells in the rectangle are zero.
-    pub fn shrink_nonzero_rect(
-        &self,
-        cache: &NodeCache<D>,
-        rect: BigRect<D>,
-    ) -> Option<BigRect<D>> {
-        self.root()
-            .as_ref(cache)
+    pub fn shrink_nonzero_rect(&self, rect: BigRect<D>) -> Option<BigRect<D>> {
+        self.root_ref()
             .shrink_nonzero_rect(&(rect - self.offset()))
             .map(|r| r + self.offset())
     }
@@ -428,9 +425,6 @@ impl<D: Dim> NdTree<D> {
     /// between `new_center` and the existing ND-tree center is not a multiple
     /// of a large power of 2 (relative to pattern size).
     pub fn recenter(&mut self, new_center: &BigVec<D>) {
-        let _cache = Arc::clone(self.cache());
-        let cache = _cache.read_recursive();
-
         let delta = new_center - self.center();
         let max_abs_delta = delta[delta.max_axis(|_, x| x.abs())].abs();
 
@@ -439,13 +433,14 @@ impl<D: Dim> NdTree<D> {
 
         // Expand until half the size of the root node is smaller than (or equal
         // to) the delta vector.
-        self.expand_while(|this| max_abs_delta > this.root().big_len() / 2);
-        let root = self.root().as_ref(&cache);
+        self.expand_while(|this| max_abs_delta > this.len() / 2);
+        let root = self.root_ref();
+        let node_pool = root.pool();
         let layer = root.layer(); // Let's call this layer L.
 
-        let mut source_lower_corner = vec![cache.get_empty(layer); D::BRANCHING_FACTOR];
-        source_lower_corner[D::BRANCHING_FACTOR - 1] = root;
-        let source_lower_corner = cache.join_nodes(source_lower_corner);
+        let mut source_lower_corner = vec![node_pool.get_empty(layer); D::BRANCHING_FACTOR];
+        source_lower_corner[D::BRANCHING_FACTOR - 1] = root.as_ref();
+        let source_lower_corner = node_pool.join_nodes(source_lower_corner);
         // `source_lower_corner` is now a node at layer L+1 with the tree's root
         // in the "upper" corner (more negative coordinates along all axes).
         // Here's a picture for 2D, where `#` represents the ND-tree's root node
@@ -454,7 +449,7 @@ impl<D: Dim> NdTree<D> {
         // . #
         // . .
 
-        let mut sources = vec![cache.get_empty(layer.parent_layer()); D::BRANCHING_FACTOR];
+        let mut sources = vec![node_pool.get_empty(layer.parent_layer()); D::BRANCHING_FACTOR];
         sources[0] = source_lower_corner;
         // `sources` is now a vector of nodes which combined represent a node at
         // layer L+2 with the ND-tree's root node in the upper corner of the
@@ -473,7 +468,10 @@ impl<D: Dim> NdTree<D> {
         // an offset of `root.big_len() / 2` along each axis, because that would
         // center the `#` in the picture. To move the center any other distance,
         // we just add the `delta` vector.
-        let new_root = cache.get_offset_child(&(delta + &(root.big_len() / 2)), sources);
+        let new_root = node_pool.get_offset_child(&(delta + &(root.big_len() / 2)), sources);
+
+        let new_root = ArcNode::from(new_root);
+        drop(root);
         self.set_root_centered(new_root);
     }
 
@@ -484,23 +482,23 @@ impl<D: Dim> NdTree<D> {
     /// closure is only passed nodes/cells that are completely covered by the
     /// region.
     ///
-    /// Note that `self`, `other`, and `mask` do **not** need to use the same
-    /// cache; the returned node will be from the same cache as `self`.
+    /// Note that `self`, `other`, `mask`, and the nodes returned from the
+    /// provided closure do **not** need to use the same node pool; the returned
+    /// node will be from the same pool as `self`.
     ///
     /// # Panics
     ///
     /// This method panics if `self`, `other`, and `mask` are not all at the
     /// same layer, if `paste_full_node` returns a node at a different layer
-    /// than the ones passed into it, or if `paste_full_node` returns a node
-    /// from a cache other than `self`'s.
+    /// than the ones passed into it.
     pub fn paste_custom(
         &mut self,
         mut other: NdTree<D>,
         mask: Region<D>,
-        mut paste_full_node: impl for<'dest, 'src> FnMut(
-            NodeRef<'dest, D>,
-            NodeRef<'src, D>,
-        ) -> Option<NodeRef<'dest, D>>,
+        mut paste_full_node: impl for<'node> FnMut(
+            NodeRef<'node, D>,
+            NodeRef<'node, D>,
+        ) -> Option<NodeRef<'node, D>>,
         mut paste_cell: impl FnMut(u8, u8) -> u8,
     ) {
         // Ensure same center.
@@ -517,29 +515,31 @@ impl<D: Dim> NdTree<D> {
         assert_eq!(self.layer(), other.layer());
         assert_eq!(self.layer(), mask.layer());
 
-        let _self_cache = Arc::clone(self.cache());
-        let self_cache = _self_cache.read();
-        let other_cache = other.cache().read();
-        let mask_cache = mask.cache().read();
+        let self_root = self.root_ref();
+        let other_root = other.root_ref();
+        let mask_root = mask.root_ref();
 
         let new_root = Self::_paste_custom(
-            self.root().as_ref(&self_cache),
-            other.root().as_ref(&other_cache),
-            mask.root().as_ref(&mask_cache),
+            self_root.as_ref(),
+            other_root.as_ref(),
+            mask_root.as_ref(),
             &mut paste_full_node,
             &mut paste_cell,
         );
         assert_eq!(self.layer(), new_root.layer());
+
+        let new_root = ArcNode::from(new_root);
+        drop(self_root);
         self.set_root_centered(new_root);
     }
     fn _paste_custom<'dest, 'src, 'mask>(
         destination: NodeRef<'dest, D>,
         source: NodeRef<'src, D>,
         mask: NodeRef<'mask, D>,
-        paste_full_node: &mut impl FnMut(
-            NodeRef<'dest, D>,
-            NodeRef<'src, D>,
-        ) -> Option<NodeRef<'dest, D>>,
+        paste_full_node: &mut impl for<'node> FnMut(
+            NodeRef<'node, D>,
+            NodeRef<'node, D>,
+        ) -> Option<NodeRef<'node, D>>,
         paste_cell: &mut impl FnMut(u8, u8) -> u8,
     ) -> NodeRef<'dest, D> {
         match mask.single_state() {
@@ -548,7 +548,7 @@ impl<D: Dim> NdTree<D> {
             // The mask completely includes this node.
             Some(1_u8) => {
                 if let Some(pasted_result) = paste_full_node(destination, source) {
-                    return pasted_result;
+                    return destination.pool().copy_from_other_pool(pasted_result);
                 }
                 // If `paste_full_node()` returned `None`, then we must recurse
                 // further.
@@ -559,10 +559,10 @@ impl<D: Dim> NdTree<D> {
         }
 
         // Recurse!
-        let dest_cache = destination.cache();
+        let dest_node_pool = destination.pool();
         use NodeRefEnum::{Leaf, NonLeaf};
         match (destination.as_enum(), source.as_enum(), mask.as_enum()) {
-            (Leaf(dest), Leaf(src), Leaf(mask)) => dest_cache.get_from_cells(
+            (Leaf(dest), Leaf(src), Leaf(mask)) => dest_node_pool.get_from_cells(
                 izip!(dest.cells(), src.cells(), mask.cells())
                     .map(|(&dest_cell, &src_cell, &mask_cell)| {
                         if mask_cell == 0_u8 {
@@ -573,8 +573,8 @@ impl<D: Dim> NdTree<D> {
                     })
                     .collect_vec(),
             ),
-            (NonLeaf(dest), NonLeaf(src), NonLeaf(mask)) => {
-                dest_cache.join_nodes(izip!(dest.children(), src.children(), mask.children()).map(
+            (NonLeaf(dest), NonLeaf(src), NonLeaf(mask)) => dest_node_pool.join_nodes(
+                izip!(dest.children(), src.children(), mask.children()).map(
                     |(dest_child, src_child, mask_child)| {
                         Self::_paste_custom(
                             dest_child,
@@ -584,8 +584,8 @@ impl<D: Dim> NdTree<D> {
                             paste_cell,
                         )
                     },
-                ))
-            }
+                ),
+            ),
             _ => panic!("Layer mismatch"),
         }
     }

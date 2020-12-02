@@ -8,15 +8,14 @@ use crate::io::utils::{SemiReverseRectIter, SemiReverseRectIterItem};
 use crate::ndarray::NdArray;
 use crate::ndrect::{BigRect, CanContain, NdRect};
 use crate::ndtree::{
-    CachedNodeRefTrait, LeafNodeRef, NdTree, NodeCache, NodeRef, NodeRefEnum, NodeRefTrait,
-    NonLeafNodeRef,
+    LeafNodeRef, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, NonLeafNodeRef, SharedNodePool,
 };
 use crate::ndvec::{BigVec, NdVec, UVec, UVec6D};
 use crate::num::{BigInt, ToPrimitive, Zero};
 use crate::sim::rule::{NdRule, Rule};
 
 impl Automaton {
-    /// Loads an automaton from an RLE string using a new node cache.
+    /// Loads an automaton from an RLE string using a new node pool.
     pub fn from_rle_str(
         s: &str,
         resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Rule>,
@@ -24,7 +23,7 @@ impl Automaton {
         Self::from_rle(&s.parse()?, resolve_rule)
     }
 
-    /// Loads an automaton from an RLE struct using a new node cache.
+    /// Loads an automaton from an RLE struct using a new node pool.
     pub fn from_rle(
         rle: &Rle,
         resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Rule>,
@@ -33,7 +32,7 @@ impl Automaton {
             rle: &Rle,
             rule: Arc<dyn NdRule<D>>,
         ) -> RleResult<Automaton> {
-            NdAutomaton::from_rle_with_cache(rle, &NodeCache::new().read(), |_| Ok(rule))
+            NdAutomaton::from_rle_with_node_pool(rle, SharedNodePool::new(), |_| Ok(rule))
                 .map(|a| a.into())
         }
 
@@ -85,32 +84,32 @@ impl AutomatonRef<'_> {
     }
 }
 impl<D: Dim> NdAutomaton<D> {
-    /// Loads an automaton from an RLE string using a new node cache.
+    /// Loads an automaton from an RLE string using a new node pool.
     pub fn from_rle_str(
         s: &str,
         resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Arc<dyn NdRule<D>>>,
     ) -> RleResult<Self> {
-        Self::from_rle_str_with_cache(s, &NodeCache::new().read(), resolve_rule)
+        Self::from_rle_str_with_node_pool(s, SharedNodePool::new(), resolve_rule)
     }
-    /// Loads an automaton from an RLE string using an existing node cache.
-    pub fn from_rle_str_with_cache(
+    /// Loads an automaton from an RLE string using an existing node pool.
+    pub fn from_rle_str_with_node_pool(
         s: &str,
-        cache: &NodeCache<D>,
+        node_pool: SharedNodePool<D>,
         resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Arc<dyn NdRule<D>>>,
     ) -> RleResult<Self> {
-        Self::from_rle_with_cache(&s.parse()?, cache, resolve_rule)
+        Self::from_rle_with_node_pool(&s.parse()?, node_pool, resolve_rule)
     }
 
-    /// Loads an automaton from an RLE struct using an existing node cache.
-    pub fn from_rle_with_cache(
+    /// Loads an automaton from an RLE struct using an existing node pool.
+    pub fn from_rle_with_node_pool(
         rle: &Rle,
-        cache: &NodeCache<D>,
+        node_pool: SharedNodePool<D>,
         resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Arc<dyn NdRule<D>>>,
     ) -> RleResult<Self> {
         let rule = resolve_rule(rle.rule())?;
         let generations = rle.generation();
         Ok(NdAutomaton {
-            tree: NdTree::from_rle_with_cache(rle, cache),
+            tree: NdTree::from_rle_with_node_pool(rle, node_pool),
             rule,
             generations,
         })
@@ -149,20 +148,18 @@ impl<D: Dim> NdAutomaton<D> {
 }
 
 impl<D: Dim> NdTree<D> {
-    /// Loads an ND-tree from an RLE string using a new node cache.
+    /// Loads an ND-tree from an RLE string using a new node pool.
     pub fn from_rle_str(s: &str) -> RleResult<Self> {
-        Self::from_rle_str_with_cache(s, &NodeCache::new().read())
+        Self::from_rle_str_with_node_pool(s, SharedNodePool::new())
     }
-    /// Loads an ND-tree from an RLE string using an existing node cache.
-    pub fn from_rle_str_with_cache(s: &str, cache: &NodeCache<D>) -> RleResult<Self> {
-        Ok(Self::from_rle_with_cache(&s.parse()?, cache))
+    /// Loads an ND-tree from an RLE string using an existing node pool.
+    pub fn from_rle_str_with_node_pool(s: &str, node_pool: SharedNodePool<D>) -> RleResult<Self> {
+        Ok(Self::from_rle_with_node_pool(&s.parse()?, node_pool))
     }
 
-    /// Loads an ND-tree from an RLE struct using an existing node cache.
-    pub fn from_rle_with_cache(rle: &Rle, cache: &NodeCache<D>) -> Self {
-        let mut ret = NdTree::with_cache(cache.arc());
-        let _node_cache = Arc::clone(ret.cache());
-        let cache = _node_cache.read_recursive();
+    /// Loads an ND-tree from an RLE struct using an existing node pool.
+    pub fn from_rle_with_node_pool(rle: &Rle, node_pool: SharedNodePool<D>) -> Self {
+        let mut ret = NdTree::with_node_pool(node_pool);
 
         let mut start: BigVec<D> = rle
             .cxrle_header
@@ -182,7 +179,7 @@ impl<D: Dim> NdTree<D> {
                 RleItem::Cell(0) => pos[X] += run.count,
                 RleItem::Cell(state) => {
                     for _ in 0..run.count {
-                        ret.set_cell(&cache, &pos, state);
+                        ret.set_cell(&pos, state);
                         pos[X] += 1;
                     }
                 }
@@ -214,8 +211,7 @@ impl<D: Dim> NdTree<D> {
         let mut cxrle_header = None;
         let mut runs = RleRunVec::default();
 
-        let cache = self.cache().read();
-        if let Some(bounding_rect) = rect.or_else(|| self.bounding_rect(&cache)) {
+        if let Some(bounding_rect) = rect.or_else(|| self.bounding_rect()) {
             let size = bounding_rect.size();
             let pos = {
                 // Negate all axes except X.
@@ -245,7 +241,8 @@ impl<D: Dim> NdTree<D> {
             for rect_iter_item in SemiReverseRectIter::new(row_rect) {
                 match rect_iter_item {
                     SemiReverseRectIterItem::Pos(row_start) => {
-                        let runs_iter = rle_row_of_node(self.root().as_ref(&cache), row_start);
+                        let root_node = self.root_ref();
+                        let runs_iter = rle_row_of_node(root_node.as_ref(), row_start);
                         runs.try_extend(runs_iter)?;
                     }
                     SemiReverseRectIterItem::Next(ax) => runs.append(RleItem::Next(ax)),
@@ -342,10 +339,10 @@ impl<D: Dim> From<&NdArray<u8, D>> for Rle {
     }
 }
 
-fn rle_row_of_node<'cache, D: Dim>(
-    node: NodeRef<'cache, D>,
+fn rle_row_of_node<'pool, D: Dim>(
+    node: NodeRef<'pool, D>,
     start_pos: BigVec<D>,
-) -> Box<dyn 'cache + Iterator<Item = RleResult<RleRun>>> {
+) -> Box<dyn 'pool + Iterator<Item = RleResult<RleRun>>> {
     if let Some(single_state) = node.single_state() {
         // All cells in this node are the same state, so encode a run of that
         // cell state with the length of this node.
@@ -367,10 +364,10 @@ fn rle_row_of_node<'cache, D: Dim>(
         }
     }
 }
-fn rle_row_of_leaf_node<'cache, D: Dim>(
-    node: LeafNodeRef<'cache, D>,
+fn rle_row_of_leaf_node<'pool, D: Dim>(
+    node: LeafNodeRef<'pool, D>,
     start_pos: UVec<D>,
-) -> Box<dyn 'cache + Iterator<Item = RleResult<RleRun>>> {
+) -> Box<dyn 'pool + Iterator<Item = RleResult<RleRun>>> {
     let mut end_pos = start_pos.clone();
     end_pos[X] = node.len() - 1;
 
@@ -385,10 +382,10 @@ fn rle_row_of_leaf_node<'cache, D: Dim>(
             .map(Ok),
     )
 }
-fn rle_row_of_non_leaf_node<'cache, D: Dim>(
-    node: NonLeafNodeRef<'cache, D>,
+fn rle_row_of_non_leaf_node<'pool, D: Dim>(
+    node: NonLeafNodeRef<'pool, D>,
     start_pos: BigVec<D>,
-) -> Box<dyn 'cache + Iterator<Item = RleResult<RleRun>>> {
+) -> Box<dyn 'pool + Iterator<Item = RleResult<RleRun>>> {
     let index1 = node.child_index_with_pos(&start_pos);
     let index2 = index1 | X.bit();
     if index1 == index2 {

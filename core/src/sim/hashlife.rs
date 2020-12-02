@@ -1,15 +1,13 @@
 //! HashLife simulation algorithm.
 
 use itertools::Itertools;
-use std::sync::Arc;
 
 use super::rule::{NdRule, TransitionFunction};
 use crate::dim::Dim;
 use crate::ndarray::NdArray;
 use crate::ndrect::{NdRect, URect};
 use crate::ndtree::{
-    CachedNodeRefTrait, HashLifeResultParams, Layer, NdTree, NodeRef, NodeRefEnum, NodeRefTrait,
-    SimCacheGuard,
+    HashLifeResultParams, Layer, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, SimCacheGuard,
 };
 use crate::ndvec::UVec;
 use crate::num::{BigInt, Signed, Zero};
@@ -26,10 +24,10 @@ pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
         return;
     }
 
-    let _node_cache = Arc::clone(tree.cache());
-    let node_cache = _node_cache.read_recursive();
-    // TODO: consider using try_sim_with() instead, maybe with a timeout
-    let sim_guard = node_cache.sim_with(
+    // TODO: consider being nicer to GC threads
+    let node_pool = tree.pool().new_ref();
+    let node_pool_access = node_pool.access();
+    let sim_guard = node_pool_access.sim_with(
         HashLifeResultParams::new()
             .with_rule_radius(rule.radius())
             .with_step_size(gens)
@@ -43,24 +41,22 @@ pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
     // break this into multiple power-of-2-sized steps.
     for _ in 0..sim_guard.params().num_steps() {
         // Expand the existing pattern to `sim_base_layer`.
-        while tree.layer() < sim_guard.params().sim_base_layer() {
-            tree.expand(&node_cache);
-        }
+        tree.expand_while(|ndtree| ndtree.layer() < sim_guard.params().sim_base_layer());
 
         // Expand it by another layer to give room for new cells to be born.
-        tree.expand(&node_cache);
+        tree.expand();
 
-        // Now expand one mor layer to guarantee that the edges of the current
+        // Now expand one more layer to guarantee that the edges of the current
         // ND-tree, which could be altered by cells in the middle, will be
         // included in the final result, because `advance_inner_node()` returns
         // a node one layer lower than its input.
-        tree.expand(&node_cache);
+        tree.expand();
 
         assert!(tree.layer() > Layer(2));
 
         // Now do the actual simulation.
         let new_root = advance_inner_node(
-            tree.root().as_ref(&node_cache),
+            tree.root().as_ref(&node_pool_access),
             &sim_guard,
             &mut transition_function,
         );
@@ -68,10 +64,8 @@ pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
 
         // Shrink the tree as much as possible to avoid wasted space. TODO:
         // is it better to have this inside the loop or outside the loop?
-        tree.shrink(&node_cache);
+        tree.shrink();
     }
-
-    // TODO: garbage collect at some point
 }
 
 /// Computes the inner node for a given node after some predetermined number
@@ -93,11 +87,11 @@ pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
 /// layer must be computed separately, so the `r` and `t` must each be
 /// replaced with their next lowest power of two.
 #[must_use = "This method returns a new value instead of mutating its input"]
-fn advance_inner_node<'cache, D: Dim>(
-    node: NodeRef<'cache, D>,
+fn advance_inner_node<'pool, D: Dim>(
+    node: NodeRef<'pool, D>,
     sim_guard: &SimCacheGuard<'_, D>,
     transition_function: &mut TransitionFunction<'_, D>,
-) -> NodeRef<'cache, D> {
+) -> NodeRef<'pool, D> {
     let sim_params = sim_guard.params();
 
     // Make sure we're above the minimum layer.
@@ -111,16 +105,16 @@ fn advance_inner_node<'cache, D: Dim>(
         return result;
     }
 
-    let ret: NodeRef<'cache, D> = if node.is_empty() {
+    let ret: NodeRef<'pool, D> = if node.is_empty() {
         // If the entire node is empty, then in the future it will remain
         // empty. This is not strictly necessary, but it is an obvious
         // optimization for rules without "B0" behavior.
 
-        // Rather than constructing a new node or fetching one from the
-        // cache, just return one of the children of this one (since we know
-        // it's empty).
+        // Rather than constructing a new node or fetching one from the node
+        // pool, just return one of the children of this one (since we know it's
+        // empty).
         match node.as_enum() {
-            NodeRefEnum::Leaf(n) => n.cache().get_empty(n.layer().child_layer()),
+            NodeRefEnum::Leaf(n) => n.pool().get_empty(n.layer().child_layer()),
             // It's easier to get a reference to a child than to look up an
             // empty node.
             NodeRefEnum::NonLeaf(n) => n.child_at_index(0).into(),
@@ -175,7 +169,7 @@ fn advance_inner_node<'cache, D: Dim>(
         }
 
         // Finally, make an ND-tree from those cells
-        node.cache().get_from_cells(cells_ndarray.into_flat_slice())
+        node.pool().get_from_cells(cells_ndarray.into_flat_slice())
     } else {
         // Let `L` be the layer of the current node, and let `t` be the
         // number of generations to simulate. Colors refer to Figure 4 in
@@ -190,7 +184,7 @@ fn advance_inner_node<'cache, D: Dim>(
 
         // 1. Make a 4^D array of nodes at layer `L-2` of the original node
         //    at time `0`.
-        let unsimmed_quarter_size_nodes: NdArray<NodeRef<'cache, D>, D> = NdArray::from_flat_slice(
+        let unsimmed_quarter_size_nodes: NdArray<NodeRef<'pool, D>, D> = NdArray::from_flat_slice(
             UVec::repeat(4_usize),
             (0..(D::BRANCHING_FACTOR * D::BRANCHING_FACTOR))
                 .map(|i| node.as_non_leaf().unwrap().grandchild_at_index(i))
@@ -199,12 +193,12 @@ fn advance_inner_node<'cache, D: Dim>(
 
         // 2. Combine adjacent nodes at layer `L-2` to make a 3^D array of
         //    nodes at layer `L-1` and time `0`.
-        let unsimmed_half_size_nodes: NdArray<NodeRef<'cache, D>, D> = NdArray::from_flat_slice(
+        let unsimmed_half_size_nodes: NdArray<NodeRef<'pool, D>, D> = NdArray::from_flat_slice(
             UVec::repeat(3_usize),
             URect::<D>::span(UVec::origin(), UVec::repeat(2_usize))
                 .iter()
                 .map(|pos| {
-                    node.cache().join_nodes(
+                    node.pool().join_nodes(
                         NdRect::span(pos.clone(), pos + 1)
                             .iter()
                             .map(|pos| unsimmed_quarter_size_nodes[pos]),
@@ -215,7 +209,7 @@ fn advance_inner_node<'cache, D: Dim>(
 
         // 3. Simulate each of those nodes to get a new node at layer `L-2`
         //    and time `t/2` (red squares).
-        let half_simmed_quarter_size_nodes: NdArray<NodeRef<'cache, D>, D> =
+        let half_simmed_quarter_size_nodes: NdArray<NodeRef<'pool, D>, D> =
             unsimmed_half_size_nodes
                 .map(|&n| advance_inner_node(n, sim_guard, transition_function));
 
@@ -224,7 +218,7 @@ fn advance_inner_node<'cache, D: Dim>(
         let half_simmed_half_size_nodes = URect::<D>::span(UVec::origin(), UVec::repeat(1_usize))
             .iter()
             .map(|pos| {
-                node.cache().join_nodes(
+                node.pool().join_nodes(
                     NdRect::span(pos.clone(), pos + 1)
                         .iter()
                         .map(|pos| half_simmed_quarter_size_nodes[pos]),
@@ -251,7 +245,7 @@ fn advance_inner_node<'cache, D: Dim>(
 
         // 6. Combine the nodes from step #5 to make a new node at layer
         //    `L-1` and time `t` (blue square). This is the final result.
-        node.cache().join_nodes(fully_simmed_quarter_size_nodes)
+        node.pool().join_nodes(fully_simmed_quarter_size_nodes)
     };
 
     // Cache that result so we don't have to do all that work next time.

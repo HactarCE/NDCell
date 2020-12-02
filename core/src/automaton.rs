@@ -1,12 +1,11 @@
 //! High-level CA interface.
 
 use enum_dispatch::enum_dispatch;
-use parking_lot::RwLock;
 use std::convert::TryInto;
 use std::sync::Arc;
 
 use crate::dim::*;
-use crate::ndtree::{CachedNodeRefTrait, NdTree, NodeCache};
+use crate::ndtree::{NdTree, NodeRefTrait, SharedNodePool};
 use crate::ndvec::BigVec;
 use crate::num::{BigInt, BigUint, Zero};
 use crate::projection::{NdProjection, NdProjectionError, NdProjector, ProjectionParams};
@@ -17,8 +16,8 @@ use crate::sim::{hashlife, AsSimulate, Simulate};
 /// `NdProjectedAutomaton`.
 #[enum_dispatch]
 pub trait NdProjectedAutomatonTrait<P: Dim> {
-    /// Returns a reference to the node cache used for projected nodes.
-    fn projected_cache(&self) -> &Arc<RwLock<NodeCache<P>>>;
+    /// Returns a reference to the node pool used for projected nodes.
+    fn projected_node_pool(&self) -> &SharedNodePool<P>;
     /// Returns the projected NdTree.
     fn projected_tree(&self) -> NdTree<P>;
     /// Returns the ProjectionParams used to create this projection.
@@ -125,8 +124,8 @@ impl<D: Dim, P: Dim> AsSimulate for NdProjectedAutomaton<D, P> {
     }
 }
 impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P> {
-    fn projected_cache(&self) -> &Arc<RwLock<NodeCache<P>>> {
-        self.projection.projected_cache(&self.automaton.tree)
+    fn projected_node_pool(&self) -> &SharedNodePool<P> {
+        self.projection.projected_node_pool(&self.automaton.tree)
     }
     fn projected_tree(&self) -> NdTree<P> {
         self.projection.project_tree(&self.automaton.tree)
@@ -139,11 +138,9 @@ impl<D: Dim, P: Dim> NdProjectedAutomatonTrait<P> for NdProjectedAutomaton<D, P>
         Ok(())
     }
     fn set_cell(&mut self, pos: &BigVec<P>, state: u8) {
-        let _node_cache = Arc::clone(self.automaton.tree.cache());
-        let node_cache = _node_cache.read_recursive();
         self.automaton
             .tree
-            .set_cell(&node_cache, &self.projection.unproject_pos(pos), state);
+            .set_cell(&self.projection.unproject_pos(pos), state);
     }
 }
 
@@ -295,8 +292,7 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
         D::NDIM
     }
     fn population(&self) -> BigUint {
-        let node_cache = self.tree.root().cache().read_recursive();
-        self.tree.root().as_ref(&node_cache).population()
+        self.tree.root_ref().population()
     }
     fn generation_count(&self) -> &BigInt {
         &self.generations
@@ -310,22 +306,20 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
     }
 
     fn memory_usage(&self) -> usize {
-        self.tree.cache().read_recursive().memory_usage()
+        self.tree.pool().access().memory_usage()
     }
     fn yield_to_gc(&self) {
-        // TODO: this is an awful hack. Develop a system where threads actually
-        // communicate their intent, or do GC on the simulation thread(s).
-        let _ = self.tree.cache().read();
+        let _ = self.tree.pool().yield_to_gc();
     }
     fn schedule_gc(
         &self,
         post_gc: Box<dyn Send + FnOnce(usize, usize, usize)>,
     ) -> std::thread::JoinHandle<()> {
-        let cache = Arc::clone(self.tree.cache());
+        let node_pool = self.tree.pool().new_ref();
         let ret = std::thread::spawn(move || {
-            let mut cache = cache.write();
-            let (dropped, kept) = cache.strong_gc();
-            let new_memory_usage = cache.memory_usage();
+            let mut node_pool_access = node_pool.total_access();
+            let (dropped, kept) = node_pool_access.strong_gc();
+            let new_memory_usage = node_pool_access.memory_usage();
             post_gc(dropped, kept, new_memory_usage);
         });
         ret

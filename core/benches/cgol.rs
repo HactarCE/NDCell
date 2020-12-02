@@ -1,5 +1,4 @@
-use criterion::{criterion_group, criterion_main, Benchmark, Criterion};
-use ndcell_core::ndarray::NdArray;
+use criterion::{criterion_group, criterion_main, BatchSize, Benchmark, Criterion};
 use ndcell_core::prelude::*;
 use ndcell_core::sim::rule::LIFE;
 use std::sync::Arc;
@@ -35,30 +34,21 @@ fn bench_sim_2d(
     let expected_pop = expected_pop.into();
     let rule = rule.into_arc();
 
-    let ndarray = {
-        let automaton = Automaton2D::from_rle_str(pattern.rle, |_| Ok(Arc::clone(&rule)))
-            .expect("Failed to load RLE");
-        let node_cache = automaton.tree.cache().read();
-        NdArray::from(automaton.tree.root().as_ref(&node_cache))
-    };
-
     c.bench(
         &format!("sim_{}", pattern.name),
         Benchmark::new(
             &format!("{}_gens_by_steps_of_{}", gens, step_size),
             move |b| {
-                b.iter(|| {
-                    // Create a new automaton from the array so that the cache is empty.
-                    let _cache = NodeCache::new();
-                    let cache = _cache.read();
-                    let root = cache.get_from_cells(ndarray.clone().into_flat_slice());
-                    let automaton = Automaton2D {
-                        tree: NdTree::from_node_centered(root),
-                        rule: Arc::clone(&rule),
-                        generations: 0.into(),
-                    };
-                    assert_eq!(expected_pop, run_simulation(automaton, &gens, &step_size))
-                })
+                b.iter_batched(
+                    || {
+                        Automaton2D::from_rle_str(pattern.rle, |_| Ok(Arc::clone(&rule)))
+                            .expect("Failed to load RLE")
+                    },
+                    |automaton| {
+                        assert_eq!(expected_pop, run_simulation(automaton, &gens, &step_size))
+                    },
+                    BatchSize::SmallInput,
+                )
             },
         )
         .sample_size(10),

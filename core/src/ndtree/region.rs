@@ -1,8 +1,6 @@
 //! Arbitrary regions of an N-dimensional grid.
 
-use std::sync::Arc;
-
-use super::{CachedNodeRefTrait, NdTree, NodeRef, NodeRefTrait};
+use super::{ArcNode, NdTree, NodeRef, NodeRefTrait};
 use crate::dim::Dim;
 use crate::lazyvec::LazyVec;
 use crate::ndrect::{BigRect, CanContain};
@@ -38,21 +36,22 @@ impl<D: Dim> Region<D> {
                 let mut ret = NdTree::with_center(center);
                 ret.expand_to(&rect);
 
-                let _cache = Arc::clone(ret.cache());
-                let cache = _cache.read();
+                let node_pool = ret.pool().access();
+
                 let mut full_nodes: LazyVec<NodeRef<'_, D>, _> =
                     LazyVec::new(|previous| match previous.last() {
                         Some(smaller_full_node) => {
-                            cache.join_nodes(std::iter::repeat(*smaller_full_node))
+                            node_pool.join_nodes(std::iter::repeat(*smaller_full_node))
                         }
-                        None => cache.get_from_cells(vec![1_u8]),
+                        None => node_pool.get_from_cells(vec![1_u8]),
                     });
 
                 // It should be possible to do this in O(d log n) time, but this
                 // O(d n^(d-1)) algorithm is simpler. If converting a rectangle
                 // to an ND-tree is a performance bottleneck, this can be
                 // rewritten.
-                let new_root = ret.root().as_ref(&cache).recursive_modify_with_offset(
+                let root = ret.root_ref();
+                let new_root = root.recursive_modify_with_offset(
                     ret.offset(),
                     &mut |node_offset, node| {
                         let node_rect = node.big_rect() + node_offset;
@@ -66,6 +65,9 @@ impl<D: Dim> Region<D> {
                     },
                     &mut |pos, _| rect.contains(pos) as u8,
                 );
+
+                let new_root = ArcNode::from(new_root);
+                drop((node_pool, root));
                 ret.set_root_centered(new_root);
                 ret
             }
@@ -81,10 +83,7 @@ impl<D: Dim> CanContain<BigVec<D>> for Region<D> {
         match self {
             Region::Empty => false,
             Region::Rect(rect) => rect.contains(pos),
-            Region::NdTree(ndtree) => {
-                let cache = ndtree.cache().read();
-                ndtree.get_cell(&cache, pos) != 0_u8
-            }
+            Region::NdTree(ndtree) => ndtree.get_cell(pos) != 0_u8,
         }
     }
 }
@@ -110,12 +109,11 @@ mod tests {
             let ndtree = region.clone().into_ndtree(center.clone());
             assert_eq!(center, ndtree.center());
 
-            let cache = ndtree.cache().read();
             for pos in cells_to_check {
                 let expected = rect.contains(&pos);
                 let big_pos = pos.to_bigvec();
                 assert_eq!(expected, region.contains(&big_pos));
-                assert_eq!(expected, ndtree.get_cell(&cache, &big_pos) == 1_u8);
+                assert_eq!(expected, ndtree.get_cell(&big_pos) == 1_u8);
             }
         }
     }

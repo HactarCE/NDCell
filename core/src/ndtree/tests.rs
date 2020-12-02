@@ -11,7 +11,6 @@ use crate::HashMap;
 fn assert_ndtree_valid(
     expected_cells: &HashMap<IVec2D, u8>,
     ndtree: &NdTree2D,
-    node_cache: &NodeCache<Dim2D>,
     cells_to_check: &Vec<IVec2D>,
 ) {
     assert_eq!(
@@ -21,12 +20,12 @@ fn assert_ndtree_valid(
                 .filter(|(_, &cell_state)| cell_state != 0)
                 .count()
         ),
-        ndtree.root().as_ref(node_cache).population()
+        ndtree.root_ref().population()
     );
     for pos in cells_to_check {
         assert_eq!(
             *expected_cells.get(pos).unwrap_or(&0),
-            ndtree.get_cell(node_cache, &pos.to_bigvec())
+            ndtree.get_cell(&pos.to_bigvec())
         );
     }
 }
@@ -45,43 +44,39 @@ proptest! {
         mut cells_to_get in proptest_cells_to_get(),
     ) {
         let mut ndtree = NdTree::default();
-        let _node_cache = Arc::clone(ndtree.cache());
-        let node_cache = _node_cache.read();
         let mut hashmap = HashMap::default();
         for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
-            ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);
+            ndtree.set_cell(&pos.to_bigvec(), state);
             cells_to_get.push(pos);
         }
-        assert_ndtree_valid(&hashmap, &ndtree, &node_cache, &cells_to_get);
+        assert_ndtree_valid(&hashmap, &ndtree,  &cells_to_get);
         // Test that expansion preserves population and positions.
         let old_layer = ndtree.layer();
         while ndtree.layer() < Layer(5) {
-            ndtree.expand(&node_cache);
-            assert_ndtree_valid(&hashmap, &ndtree, &node_cache, &cells_to_get);
+            ndtree.expand();
+            assert_ndtree_valid(&hashmap, &ndtree,  &cells_to_get);
         }
         // Test that shrinking actually shrinks.
-        ndtree.shrink(&node_cache);
+        ndtree.shrink();
         assert!(ndtree.layer() <= old_layer);
         // Test that shrinking preserves population and positions.
-        assert_ndtree_valid(&hashmap, &ndtree, &node_cache, &cells_to_get);
+        assert_ndtree_valid(&hashmap, &ndtree,  &cells_to_get);
     }
 
     /// Tests that identical nodes use the same underlying structure.
     #[test]
-    fn test_ndtree_cache(
+    fn test_ndtree_node_pool(
         cells_to_set in proptest_cells_to_set(),
     ) {
         prop_assume!(!cells_to_set.is_empty());
 
         let mut ndtree = NdTree::default();
-        let _node_cache = Arc::clone(ndtree.cache());
-        let node_cache = _node_cache.read();
         for (pos, state) in cells_to_set {
-            ndtree.set_cell(&node_cache, &(pos - 128).to_bigvec(), state);
-            ndtree.set_cell(&node_cache, &(pos + 128).to_bigvec(), state);
+            ndtree.set_cell(&(pos - 128).to_bigvec(), state);
+            ndtree.set_cell(&(pos + 128).to_bigvec(), state);
         }
-        let slice = ndtree.slice(&node_cache);
+        let slice = ndtree.as_slice();
         let children = slice.subdivide().unwrap();
         let subnode1 = &children[0].root;
         let subnode2 = &children[children.len() - 1].root;
@@ -97,16 +92,14 @@ proptest! {
         y_radius in 0..20_isize,
     ) {
         let mut ndtree = NdTree::default();
-        let _node_cache = Arc::clone(ndtree.cache());
-        let node_cache = _node_cache.read();
         let mut hashmap = HashMap::default();
         for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
-            ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);
+            ndtree.set_cell(&pos.to_bigvec(), state);
         }
         let half_diag = NdVec([x_radius, y_radius]);
         let rect = IRect2D::span(center - half_diag, center + half_diag).to_bigrect();
-        let slice = ndtree.slice_containing(&node_cache, &rect);
+        let slice = ndtree.slice_containing(&rect);
         let slice_rect = slice.rect();
         // Check that the slice contains the rectangle.
         assert!(slice_rect.contains(&rect));
@@ -145,19 +138,17 @@ proptest! {
     ) {
         let mut ndtree = NdTree::default();
         ndtree.set_center(old_offset.to_bigvec());
-        let _node_cache = Arc::clone(ndtree.cache());
-        let node_cache = _node_cache.read();
 
         let mut hashmap = HashMap::default();
         for (pos, cell) in cells_to_set {
-            ndtree.set_cell(&node_cache, &pos.to_bigvec(), cell);
+            ndtree.set_cell(&pos.to_bigvec(), cell);
             hashmap.insert(pos, cell);
         }
 
         ndtree.recenter(&new_center.to_bigvec());
 
         for (pos, cell) in hashmap {
-            assert_eq!(cell, ndtree.get_cell(&node_cache, &pos.to_bigvec()));
+            assert_eq!(cell, ndtree.get_cell(&pos.to_bigvec()));
         }
     }
 
@@ -172,21 +163,19 @@ proptest! {
         let mut all_cell_positions = HashSet::new();
 
         let mut ndtree = NdTree::default();
-        let _node_cache = Arc::clone(ndtree.cache());
-        let node_cache = _node_cache.read();
         let mut hashmap = HashMap::default();
         for (pos, state) in cells_to_set {
             hashmap.insert(pos, state);
-            ndtree.set_cell(&node_cache, &pos.to_bigvec(), state);
+            ndtree.set_cell(&pos.to_bigvec(), state);
             all_cell_positions.insert(pos);
         }
 
-        let mut ndtree_to_paste = NdTree::with_cache(Arc::clone(&_node_cache));
+        let mut ndtree_to_paste = NdTree::with_node_pool(ndtree.pool().new_ref());
         ndtree_to_paste.set_offset(paste_offset.to_bigvec());
         let mut hashmap_pasted = HashMap::default();
         for (pos, state) in cells_to_paste {
             hashmap_pasted.insert(pos, state);
-            ndtree_to_paste.set_cell(&node_cache, &pos.to_bigvec(), state);
+            ndtree_to_paste.set_cell(&pos.to_bigvec(), state);
             all_cell_positions.insert(pos);
         }
 
@@ -196,8 +185,7 @@ proptest! {
             Region::Rect(paste_rect.to_bigrect()),
             |original_node, pasted_node| {
                 if original_node.is_empty() {
-                    let result_cache = original_node.cache();
-                    Some(result_cache.copy_from_other_cache(pasted_node))
+                    Some(pasted_node)
                 } else if pasted_node.is_empty() {
                     Some(original_node)
                 } else {
@@ -215,7 +203,7 @@ proptest! {
                 0
             };
             let expected = original ^ pasted;
-            assert_eq!(expected, ndtree.get_cell(&node_cache, &pos.to_bigvec()));
+            assert_eq!(expected, ndtree.get_cell(&pos.to_bigvec()));
         }
     }
 }

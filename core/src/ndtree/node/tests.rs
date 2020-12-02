@@ -36,9 +36,9 @@ fn print_node(node: NodeRef<'_, Dim2D>) {
 
 #[test]
 fn test_ndtree_node_set_get() {
-    let _node_cache = NodeCache::<Dim2D>::new();
-    let node_cache = _node_cache.read();
-    let node = node_cache.get_from_fn(TEST_LAYER, cell_state_from_hash);
+    let node_pool = SharedNodePool::<Dim2D>::new();
+    let node_pool_access = node_pool.access();
+    let node = node_pool_access.get_from_fn(TEST_LAYER, cell_state_from_hash);
     print_node(node);
 
     for pos in &node.big_rect() {
@@ -51,9 +51,9 @@ fn test_ndtree_node_set_get() {
 
 #[test]
 fn test_ndtree_node_recursive_modify() {
-    let _node_cache = NodeCache::<Dim2D>::new();
-    let node_cache = _node_cache.read();
-    let mut node = node_cache.get_from_fn(TEST_LAYER, cell_state_from_hash);
+    let node_pool = SharedNodePool::<Dim2D>::new();
+    let node_pool_access = node_pool.access();
+    let mut node = node_pool_access.get_from_fn(TEST_LAYER, cell_state_from_hash);
 
     let rect = NdRect::span(NdVec::big([-10, 4]), NdVec::big([7, 30]));
     // Remove cells outside of the rectangle.
@@ -61,7 +61,7 @@ fn test_ndtree_node_recursive_modify() {
         |offset, node| {
             let self_rect = node.big_rect() + offset;
             if !rect.intersects(&self_rect) {
-                Some(node.cache().get_empty(node.layer()))
+                Some(node.pool().get_empty(node.layer()))
             } else if rect.contains(&self_rect) {
                 Some(node)
             } else {
@@ -95,9 +95,9 @@ proptest! {
         rect in rect_near_node(TEST_LAYER),
     ) {
         // Empty node should always return false.
-        let _node_cache = NodeCache::new();
-        let node_cache = _node_cache.read();
-        let node = node_cache.get_empty(TEST_LAYER);
+        let node_pool = SharedNodePool::<Dim3D>::new();
+        let node_pool_access = node_pool.access();
+        let node = node_pool_access.get_empty(TEST_LAYER);
         assert!(node.is_empty());
         assert!(node.rect_is_empty(&rect));
     }
@@ -108,9 +108,9 @@ proptest! {
         pos in pos_in_node(TEST_LAYER),
         cell_state in 1..=255_u8,
     ) {
-        let _node_cache = NodeCache::new();
-        let node_cache = _node_cache.read();
-        let node = node_cache.get_empty(TEST_LAYER).set_cell(&pos, cell_state);
+        let node_pool = SharedNodePool::<Dim3D>::new();
+        let node_pool_access = node_pool.access();
+        let node = node_pool_access.get_empty(TEST_LAYER).set_cell(&pos, cell_state);
         assert!(!node.is_empty());
         if rect.contains(&pos) {
             assert!(!node.rect_is_empty(&rect));
@@ -124,15 +124,14 @@ proptest! {
         rect in rect_near_node(TEST_LAYER),
         cells_to_set in cells_to_set(TEST_LAYER, 1_u8),
     ) {
-        let _node_cache = NodeCache::<Dim3D>::new();
-        let node_cache = _node_cache.read();
-        let mut node = node_cache.get_empty(TEST_LAYER);
+        let node_pool = SharedNodePool::<Dim3D>::new();
+        let node_pool_access = node_pool.access();
+        let mut node = node_pool_access.get_empty(TEST_LAYER);
         let node_contains_any = !cells_to_set.is_empty();
         let rect_contains_any = cells_to_set.iter().any(|(pos, _)| rect.contains(pos));
         for (pos, cell_state) in cells_to_set {
             node = node.set_cell(&pos, cell_state);
         }
-
 
         assert_eq!(node_contains_any, !node.is_empty());
         assert_eq!(rect_contains_any, !node.rect_is_empty(&rect));
@@ -141,10 +140,10 @@ proptest! {
 
 #[test]
 fn test_ndtree_node_shrink_nonzero_rect_with_empty() {
-    let _node_cache = NodeCache::<Dim3D>::new();
-    let node_cache = _node_cache.read();
+    let node_pool = SharedNodePool::<Dim3D>::new();
+    let node_pool_access = node_pool.access();
     for i in 0..10 {
-        let node = node_cache.get_empty(Layer(i));
+        let node = node_pool_access.get_empty(Layer(i));
         // Node with no cells should have no minimum nonzero rectangle.
         assert_eq!(None, node.min_nonzero_rect());
     }
@@ -154,9 +153,9 @@ fn test_ndtree_node_shrink_nonzero_rect_with_empty() {
 fn test_ndtree_node_shrink_nonzero_rect_with_single_cell() {
     let pos: IVec3D = NdVec([3, 5, 14]);
 
-    let _node_cache = NodeCache::<Dim3D>::new();
-    let node_cache = _node_cache.read();
-    let node = node_cache
+    let node_pool = SharedNodePool::<Dim3D>::new();
+    let node_pool_access = node_pool.access();
+    let node = node_pool_access
         .get_empty(TEST_LAYER)
         .set_cell(&pos.to_bigvec(), 6);
     assert_eq!(
@@ -171,9 +170,9 @@ proptest! {
         cells_to_set in cells_to_set(TEST_LAYER, 1_u8),
         starting_rect in rect_near_node(TEST_LAYER),
     ) {
-        let _node_cache = NodeCache::<Dim3D>::new();
-        let node_cache = _node_cache.read();
-        let mut node = node_cache.get_empty(TEST_LAYER);
+        let node_pool = SharedNodePool::<Dim3D>::new();
+        let node_pool_access = node_pool.access();
+        let mut node = node_pool_access.get_empty(TEST_LAYER);
         let mut expected = None; // Option<(min, max)>
         for (pos, cell_state) in cells_to_set {
             node = node.set_cell(&pos, cell_state);
@@ -189,19 +188,19 @@ proptest! {
     }
 
     #[test]
-    fn test_ndtree_node_copy_from_other_cache(
+    fn test_ndtree_node_copy_from_other_pool(
         cells_to_set in cells_to_set(TEST_LAYER, 1_u8),
     ) {
-        let _node_cache = NodeCache::<Dim3D>::new();
-        let node_cache = _node_cache.read();
-        let mut node = node_cache.get_empty(TEST_LAYER);
+        let node_pool = SharedNodePool::<Dim3D>::new();
+        let node_pool_access = node_pool.access();
+        let mut node = node_pool_access.get_empty(TEST_LAYER);
         for (pos, cell_state) in &cells_to_set {
             node = node.set_cell(pos, *cell_state);
         }
 
-        let _new_node_cache = NodeCache::<Dim3D>::new();
-        let new_node_cache = _new_node_cache.read();
-        let new_node = new_node_cache.copy_from_other_cache(node);
+        let new_node_pool = SharedNodePool::<Dim3D>::new();
+        let new_node_pool_accesss = new_node_pool.access();
+        let new_node = new_node_pool_accesss.copy_from_other_pool(node);
 
         assert_eq!(new_node.to_string(), node.to_string());
         for (pos, _) in cells_to_set {

@@ -4,7 +4,7 @@
 use itertools::Itertools;
 use std::marker::PhantomData;
 
-use super::{CachedNodeRefTrait, Layer, NodeRef, NodeRefTrait};
+use super::{Layer, NodeRef, NodeRefTrait};
 use crate::dim::Dim;
 use crate::HashMap;
 
@@ -51,10 +51,10 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
 
     /// Constructs a `IndexedNdTree` from a `NodeRef`, indexing nodes down to the
     /// given layer. Use `min_layer = 0` to store the entire ND-tree.
-    pub fn from_node<'cache>(
-        node: NodeRef<'cache, D>,
+    pub fn from_node<'pool>(
+        node: impl NodeRefTrait<'pool, D = D>,
         min_layer: Layer,
-        node_to_data: impl Fn(NodeRef<'cache, D>) -> T,
+        node_to_data: impl Fn(NodeRef<'pool, D>) -> T,
     ) -> Self {
         assert!(node.layer() >= min_layer);
         IndexedNdTreeBuilder {
@@ -63,22 +63,22 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
             node_indices: HashMap::default(),
             node_to_data,
         }
-        .build(node)
+        .build(node.as_ref())
     }
     /// Converts this IndexedNdTree back into a Node.
-    pub fn to_node<'s, 'cache>(
+    pub fn to_node<'s, 'pool>(
         &'s self,
-        data_to_node: impl Fn(&'s T) -> NodeRef<'cache, D>,
-    ) -> NodeRef<'cache, D> {
+        data_to_node: impl Fn(&'s T) -> NodeRef<'pool, D>,
+    ) -> NodeRef<'pool, D> {
         self._to_node(&data_to_node, self.root_idx)
     }
     /// Converts a single root node (and its descendants) of this IndexedNdTree
     /// into a Node.
-    fn _to_node<'s, 'cache>(
+    fn _to_node<'s, 'pool>(
         &'s self,
-        data_to_node: &impl Fn(&'s T) -> NodeRef<'cache, D>,
+        data_to_node: &impl Fn(&'s T) -> NodeRef<'pool, D>,
         root: usize,
-    ) -> NodeRef<'cache, D> {
+    ) -> NodeRef<'pool, D> {
         match &self.nodes[root] {
             IndexedNdTreeNode::Leaf(data, _) => data_to_node(data),
             IndexedNdTreeNode::NonLeaf(indices, _) => {
@@ -86,23 +86,23 @@ impl<D: Dim, T> IndexedNdTree<D, T> {
                     .iter()
                     .map(|&index| self._to_node(data_to_node, index))
                     .peekable();
-                let node_cache = children.peek().unwrap().cache();
-                node_cache.join_nodes(children)
+                let node_pool = children.peek().unwrap().pool();
+                node_pool.join_nodes(children)
             }
         }
     }
 }
 
 /// Builder for an `IndexedNdTree`.
-struct IndexedNdTreeBuilder<'cache, D: Dim, T, F> {
+struct IndexedNdTreeBuilder<'pool, D: Dim, T, F> {
     min_layer: Layer,
     nodes: Vec<IndexedNdTreeNode<D, T>>,
-    node_indices: HashMap<NodeRef<'cache, D>, usize>,
+    node_indices: HashMap<NodeRef<'pool, D>, usize>,
     node_to_data: F,
 }
-impl<'cache, D: Dim, T, F: Fn(NodeRef<'cache, D>) -> T> IndexedNdTreeBuilder<'cache, D, T, F> {
+impl<'pool, D: Dim, T, F: Fn(NodeRef<'pool, D>) -> T> IndexedNdTreeBuilder<'pool, D, T, F> {
     /// Returns the final `IndexedNdTree`, using the given node as the root.
-    pub fn build(mut self, node: NodeRef<'cache, D>) -> IndexedNdTree<D, T> {
+    pub fn build(mut self, node: NodeRef<'pool, D>) -> IndexedNdTree<D, T> {
         let root_idx = self.add_node(node);
         IndexedNdTree {
             layers: (node.layer() - self.min_layer).to_usize(),
@@ -114,7 +114,7 @@ impl<'cache, D: Dim, T, F: Fn(NodeRef<'cache, D>) -> T> IndexedNdTreeBuilder<'ca
     /// present) and returns its index.
     ///
     /// Panics if `original_node` is layer 0 (single cell).
-    fn add_node(&mut self, original_node: NodeRef<'cache, D>) -> usize {
+    fn add_node(&mut self, original_node: NodeRef<'pool, D>) -> usize {
         if let Some(&node_index) = self.node_indices.get(&original_node) {
             node_index
         } else {
@@ -139,7 +139,7 @@ impl<'cache, D: Dim, T, F: Fn(NodeRef<'cache, D>) -> T> IndexedNdTreeBuilder<'ca
     /// Appends an `IndexedNdTreeNode` to the `IndexedNdTree`.
     fn push_indexed_node(
         &mut self,
-        original_node: NodeRef<'cache, D>,
+        original_node: NodeRef<'pool, D>,
         indexed_node: IndexedNdTreeNode<D, T>,
     ) -> usize {
         let new_index = self.nodes.len();
@@ -175,8 +175,7 @@ x = 8, y = 8, rule = B3/S23
 ",
         )
         .expect("Failed to import RLE");
-        let node_cache = ndtree.cache().read();
-        let root = ndtree.root().as_ref(&node_cache);
+        let root = ndtree.root_ref();
         assert_eq!(Layer(3), root.layer());
 
         // The root node is at layer 3 (8x8), and there should be ...
@@ -189,7 +188,7 @@ x = 8, y = 8, rule = B3/S23
         // of indexed nodes is indexed_N.nodes.len().
 
         // 1+3+2+2 = 8, so there should be a total of eight nodes in this one.
-        let indexed_0 = IndexedNdTree::from_node(root, Layer(0), |x| x);
+        let indexed_0 = IndexedNdTree::from_node(&root, Layer(0), |x| x);
         assert_eq!(3, indexed_0.layers);
         assert_eq!(8, indexed_0.nodes.len());
         assert_eq!(root, indexed_0.to_node(|&x| x));
@@ -200,7 +199,7 @@ x = 8, y = 8, rule = B3/S23
         }
 
         // 1+3+2 = 6, so there should be a total of six nodes in this one.
-        let indexed_1 = IndexedNdTree::from_node(root, Layer(1), |x| x);
+        let indexed_1 = IndexedNdTree::from_node(&root, Layer(1), |x| x);
         assert_eq!(2, indexed_1.layers);
         assert_eq!(6, indexed_1.nodes.len());
         assert_eq!(root, indexed_1.to_node(|&x| x));
@@ -211,7 +210,7 @@ x = 8, y = 8, rule = B3/S23
         }
 
         // 1+3 = 4
-        let indexed_2 = IndexedNdTree::from_node(root, Layer(2), |x| x);
+        let indexed_2 = IndexedNdTree::from_node(&root, Layer(2), |x| x);
         assert_eq!(1, indexed_2.layers);
         assert_eq!(4, indexed_2.nodes.len());
         assert_eq!(root, indexed_2.to_node(|&x| x));
@@ -222,7 +221,7 @@ x = 8, y = 8, rule = B3/S23
         }
 
         // 1 = 1
-        let indexed_3 = IndexedNdTree::from_node(root, Layer(3), |x| x);
+        let indexed_3 = IndexedNdTree::from_node(&root, Layer(3), |x| x);
         assert_eq!(0, indexed_3.layers);
         assert_eq!(1, indexed_3.nodes.len());
         assert_eq!(root, indexed_3.to_node(|&x| x));

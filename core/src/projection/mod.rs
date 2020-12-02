@@ -2,10 +2,8 @@
 
 // TODO: consider renaming module to 'project' and including ProjectedAutomaton
 
-use parking_lot::RwLock;
 use std::convert::TryInto;
 use std::fmt;
-use std::sync::Arc;
 
 mod simple;
 mod slice2d;
@@ -13,7 +11,7 @@ mod slice3d;
 
 use crate::axis::Axis;
 use crate::dim::{Dim, Dim2D, Dim3D};
-use crate::ndtree::{NdTree, NodeCache};
+use crate::ndtree::{NdTree, SharedNodePool};
 use crate::ndvec::{AnyDimBigVec, BigVec, NdVec};
 pub use simple::SimpleProjection;
 pub use slice2d::SliceProjection2D;
@@ -34,8 +32,8 @@ impl<D: Dim> Default for NdProjection<D, D> {
     }
 }
 impl<D: Dim, P: Dim> NdProjector<D, P> for NdProjection<D, P> {
-    fn projected_cache<'a>(&'a self, tree: &'a NdTree<D>) -> &'a Arc<RwLock<NodeCache<P>>> {
-        self.0.projected_cache(tree)
+    fn projected_node_pool<'a>(&'a self, tree: &'a NdTree<D>) -> &'a SharedNodePool<P> {
+        self.0.projected_node_pool(tree)
     }
     fn project_tree(&self, tree: &NdTree<D>) -> NdTree<P> {
         self.0.project_tree(tree)
@@ -54,8 +52,8 @@ impl<D: Dim, P: Dim> NdProjector<D, P> for NdProjection<D, P> {
 /// A method for extracting or constructing a P-dimensional slice from a
 /// D-dimensional automaton.
 pub trait NdProjector<D: Dim, P: Dim>: fmt::Debug + Send {
-    /// Returns a reference to the node cache used for projected nodes.
-    fn projected_cache<'a>(&'a self, tree: &'a NdTree<D>) -> &'a Arc<RwLock<NodeCache<P>>>;
+    /// Returns a reference to the node pool used for projected nodes.
+    fn projected_node_pool<'a>(&'a self, tree: &'a NdTree<D>) -> &'a SharedNodePool<P>;
     /// Projects a D-dimensional NdTree into a P-dimensional NdTree.
     fn project_tree(&self, tree: &NdTree<D>) -> NdTree<P>;
     /// Unprojects a P-dimensional point back into D-dimensional space.

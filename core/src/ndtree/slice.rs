@@ -1,19 +1,20 @@
+use itertools::Itertools;
 use std::fmt;
 
-use super::{CachedNodeRefTrait, Layer, LeafNodeRef, NodeRef, NodeRefEnum, NodeRefTrait};
+use super::{Layer, NodeRefTrait, NodeRefWithGuard};
 use crate::axis::{X, Y};
 use crate::dim::*;
 use crate::ndrect::{BigRect, CanContain};
 use crate::ndvec::{BigVec, NdVec};
 use crate::num::ToPrimitive;
 
-/// Immutable view into an NdTree.
+/// Immutable view into an ND-tree.
 ///
-/// Note that like an `NdTree`, `NdTreeSlice` cannot be smaller than a base node.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct NdTreeSlice<'cache, D: Dim> {
+/// Note that like `NdTree`, an `NdTreeSlice` cannot be smaller than a base node.
+#[derive(Debug, Eq, PartialEq)]
+pub struct NdTreeSlice<'pool, D: Dim> {
     /// Root node.
-    pub root: NodeRef<'cache, D>,
+    pub root: NodeRefWithGuard<'pool, D>,
     /// Position of the lower bound of the root node.
     pub offset: BigVec<D>,
 }
@@ -40,23 +41,23 @@ impl fmt::Display for NdTreeSlice<'_, Dim2D> {
     }
 }
 
-impl<'cache, D: Dim> NdTreeSlice<'cache, D> {
-    /// Returns the NdRect bounding the slice.
+impl<'pool, D: Dim> NdTreeSlice<'pool, D> {
+    /// Returns a rectangle encompassing the grid.
     #[inline]
     pub fn rect(&self) -> BigRect<D> {
         self.root.big_rect() + &self.offset
     }
-    /// Returns the minimum position in the slice.
+    /// Returns the minimum position in the slice's rectangle.
     #[inline]
     pub fn min(&self) -> BigVec<D> {
-        self.rect().min()
+        self.offset.clone()
     }
-    /// Returns the maximum position in the slice.
+    /// Returns the maximum position in the slice's rectangle.
     #[inline]
     pub fn max(&self) -> BigVec<D> {
         self.rect().max()
     }
-    /// Returns the vector size of the slice.
+    /// Returns the vector size of the slice's rectangle.
     #[inline]
     pub fn size(&self) -> BigVec<D> {
         self.rect().size()
@@ -75,22 +76,17 @@ impl<'cache, D: Dim> NdTreeSlice<'cache, D> {
     /// Subdivides the slice into 2^NDIM slices half the size. If the slice
     /// contains only one cell, returns `Err()` containing that cell and its
     /// position.
-    pub fn subdivide<'a: 'cache>(
-        &'a self,
-    ) -> Result<Vec<NdTreeSlice<'a, D>>, (LeafNodeRef<'a, D>, &'a BigVec<D>)> {
-        match self.root.as_enum() {
-            NodeRefEnum::Leaf(n) => Err((n, &self.offset)),
-            NodeRefEnum::NonLeaf(n) => Ok(n
-                .children()
+    pub fn subdivide<'a: 'pool>(&'a self) -> Result<Vec<NdTreeSlice<'a, D>>, (u8, &'a BigVec<D>)> {
+        match self.root.as_ref().subdivide() {
+            Ok(children) => Ok(children
+                .into_iter()
                 .enumerate()
-                .map(move |(child_index, subcube)| {
-                    let child_offset = n.layer().big_child_offset(child_index);
-                    Self {
-                        root: subcube.into(),
-                        offset: child_offset + &self.offset,
-                    }
+                .map(|(i, child)| Self {
+                    root: NodeRefWithGuard::from(child),
+                    offset: self.root.layer().big_child_offset(i) + &self.offset,
                 })
-                .collect()),
+                .collect_vec()),
+            Err(cell_state) => Err((cell_state, &self.offset)),
         }
     }
 }

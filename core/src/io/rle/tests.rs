@@ -2,7 +2,7 @@ use proptest::*;
 
 use super::*;
 use crate::axis::Axis::{U, V, W, Y, Z};
-use crate::ndtree::{CachedNodeRefTrait, NdTree2D};
+use crate::ndtree::{NdTree2D, NodeRefTrait};
 use crate::ndvec::NdVec;
 use crate::num::ToPrimitive;
 
@@ -102,21 +102,12 @@ fn test_cxrle_2d() {
     )
     .expect("Failed to import RLE");
     println!("imported\n{}\n", imported);
-    let node_cache = imported.cache().read();
-    assert_eq!(
-        5,
-        imported
-            .root()
-            .as_ref(&node_cache)
-            .population()
-            .to_usize()
-            .unwrap()
-    );
-    assert_eq!(1, imported.get_cell(&node_cache, &NdVec::big([11, 4])));
-    assert_eq!(1, imported.get_cell(&node_cache, &NdVec::big([12, 3])));
-    assert_eq!(1, imported.get_cell(&node_cache, &NdVec::big([10, 2])));
-    assert_eq!(1, imported.get_cell(&node_cache, &NdVec::big([11, 2])));
-    assert_eq!(1, imported.get_cell(&node_cache, &NdVec::big([12, 2])));
+    assert_eq!(5, imported.root_ref().population().to_usize().unwrap());
+    assert_eq!(1, imported.get_cell(&NdVec::big([11, 4])));
+    assert_eq!(1, imported.get_cell(&NdVec::big([12, 3])));
+    assert_eq!(1, imported.get_cell(&NdVec::big([10, 2])));
+    assert_eq!(1, imported.get_cell(&NdVec::big([11, 2])));
+    assert_eq!(1, imported.get_cell(&NdVec::big([12, 2])));
     let exported = imported
         .to_rle(None)
         .expect("Failed to export RLE")
@@ -131,14 +122,13 @@ bo$2bo$3o!
     );
     let reimported = NdTree2D::from_rle_str(&exported).expect("Failed to reimport RLE output");
     println!("reimported\n{}\n", reimported);
-    // `NdTree`s with different caches are considered separate, so we
-    // serialize before comparing.
+    // `NdTree`s with different node pools may be unequal, so we serialize
+    // before comparing.
     assert_eq!(imported.to_string(), reimported.to_string());
 }
 
 #[test]
 fn test_empty_rle() {
     let ndtree: NdTree2D = NdTree2D::from_rle_str("x = 0, y = 0\n!").expect("Failed to import RLE");
-    let cache = ndtree.cache().read();
-    assert!(ndtree.root().as_ref(&cache).is_empty());
+    assert!(ndtree.root_ref().is_empty());
 }

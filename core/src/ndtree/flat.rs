@@ -152,6 +152,7 @@ impl<'pool, D: Dim, T, F: Fn(NodeRef<'pool, D>) -> T> FlatNdTreeBuilder<'pool, D
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::io::{Rle, SerializablePattern};
     use crate::ndtree::NdTree2D;
 
     /// Thoroughly test a single "flat" quadtree.
@@ -167,12 +168,12 @@ mod tests {
         // - x - - - - - x
         // x - x - - - - -
         // - x - x - - - -
-        let ndtree = NdTree2D::from_rle_str(
+        let ndtree: NdTree2D = Rle::from_string_to_ndtree(
             "
-#CXRLE Pos=-4,-3
-x = 8, y = 8, rule = B3/S23
-4bo$5bo$4bobo$5bobo$o5bo$bo5bo$obo$bobo!
-",
+            #CXRLE Pos=-4,-3
+            x = 8, y = 8, rule = B3/S23
+            4bo$5bo$4bobo$5bobo$o5bo$bo5bo$obo$bobo!
+            ",
         )
         .expect("Failed to import RLE");
         let root = ndtree.root_ref();

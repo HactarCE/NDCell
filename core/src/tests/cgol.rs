@@ -112,8 +112,8 @@ $26bobo!";
 
 #[test]
 fn regression_test_cgol_ggg() {
-    let rule = crate::sim::rule::LIFE.into_arc();
-    let mut automaton = Automaton2D::from_rle_str(GGG, |_| Ok(rule)).unwrap();
+    let life = crate::sim::rule::LIFE.into_arc();
+    let mut automaton = Rle::from_string_to_ndautomaton(GGG, life).unwrap();
     // Step 512 generations.
     for _ in 0..8 {
         automaton.step(&64.into());
@@ -123,8 +123,8 @@ fn regression_test_cgol_ggg() {
 
 #[test]
 fn test_cgol_ggg_non_power_of_2() {
-    let rule = crate::sim::rule::LIFE.into_arc();
-    let mut automaton = Automaton2D::from_rle_str(GGG, |_| Ok(rule)).unwrap();
+    let life = crate::sim::rule::LIFE.into_arc();
+    let mut automaton = Rle::from_string_to_ndautomaton(GGG, life).unwrap();
     // Step 240 generations.
     for _ in 0..4 {
         automaton.step(&60.into());

@@ -17,14 +17,17 @@ fn _test_macrocell_empty_nd<D: Dim>() {
     const EMPTY_MACROCELL: &str = "[M2] (some program)\n";
     let rule: Arc<dyn NdRule<D>> = Arc::new(DummyRule);
 
-    let ndtree = NdTree::<D>::from_macrocell_str(EMPTY_MACROCELL).unwrap();
+    let ndtree: NdTree<D> = Macrocell::from_string_to_ndtree(EMPTY_MACROCELL).unwrap();
     assert!(ndtree.root_ref().is_empty());
     let expected = format!("{}\n", crate::MACROCELL_HEADER);
-    assert_eq!(expected, ndtree.to_macrocell().to_string());
+    assert_eq!(
+        Ok(expected),
+        Macrocell::from_ndtree_to_string(&ndtree, None, TwoState::TwoStates),
+    );
 
     let automaton =
-        NdAutomaton::<D>::from_macrocell_str(EMPTY_MACROCELL, |_| Ok(Arc::clone(&rule))).unwrap();
-    assert!(automaton.tree.root_ref().is_empty());
+        Macrocell::from_string_to_ndautomaton(EMPTY_MACROCELL, Arc::clone(&rule)).unwrap();
+    assert!(automaton.ndtree.root_ref().is_empty());
     assert!(Arc::ptr_eq(&automaton.rule, &rule));
 }
 
@@ -122,12 +125,11 @@ obobobobobobo33bobobobobobobobobobobobobobobobo$33b2ob2o3b2ob2o3b2ob2o
 3b2ob2o35b2ob2o3b2ob2o3b2ob2o3b2ob2o!
 ";
 
-    let ndtree = NdTree2D::from_macrocell_str(MACROCELL).unwrap();
-    assert_eq!(BigUint::from(2592_usize), ndtree.root_ref().population(),);
+    let ndtree: NdTree2D = Macrocell::from_string_to_ndtree(MACROCELL).unwrap();
+    assert_eq!(BigUint::from(2592_usize), ndtree.root_ref().population());
     assert_eq!(
         RLE,
-        ndtree
-            .to_rle(None)
+        Rle::from_ndtree(&ndtree, None)
             .unwrap()
             .with_rule(Some("B3/S23"))
             .without_cxrle()
@@ -156,6 +158,9 @@ obobobobobobo33bobobobobobobobobobobobobobobobo$33b2ob2o3b2ob2o3b2ob2o
 7 13 13 13 13
 ",
         ),
-        ndtree.to_macrocell().with_rule(Some("B3/S23")).to_string(),
+        Macrocell::from_ndtree(&ndtree, None)
+            .unwrap()
+            .with_rule(Some("B3/S23"))
+            .to_string(),
     );
 }

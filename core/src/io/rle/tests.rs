@@ -2,9 +2,7 @@ use proptest::*;
 
 use super::*;
 use crate::axis::Axis::{U, V, W, Y, Z};
-use crate::ndtree::{NdTree2D, NodeRefTrait};
-use crate::ndvec::NdVec;
-use crate::num::ToPrimitive;
+use crate::prelude::*;
 
 #[test]
 fn test_rle_item() {
@@ -85,7 +83,7 @@ proptest! {
 // Load and save a glider.
 #[test]
 fn test_cxrle_2d() {
-    let imported = NdTree2D::from_rle_str(
+    let imported = Rle::from_string_to_ndtree(
         "
         #CXRLE Pos=8,-8
         # Comment
@@ -98,7 +96,7 @@ fn test_cxrle_2d() {
 
         #Another Comment 3
         #Comment 4
-    ",
+        ",
     )
     .expect("Failed to import RLE");
     println!("imported\n{}\n", imported);
@@ -108,10 +106,8 @@ fn test_cxrle_2d() {
     assert_eq!(1, imported.get_cell(&NdVec::big([10, 2])));
     assert_eq!(1, imported.get_cell(&NdVec::big([11, 2])));
     assert_eq!(1, imported.get_cell(&NdVec::big([12, 2])));
-    let exported = imported
-        .to_rle(None)
-        .expect("Failed to export RLE")
-        .to_string_2_state();
+    let exported = Rle::from_ndtree_to_string(&imported, None, TwoState::TwoStates)
+        .expect("Failed to export RLE");
     assert_eq!(
         "\
 #CXRLE Pos=10,-4
@@ -120,7 +116,7 @@ bo$2bo$3o!
 ",
         exported,
     );
-    let reimported = NdTree2D::from_rle_str(&exported).expect("Failed to reimport RLE output");
+    let reimported = Rle::from_string_to_ndtree(&exported).expect("Failed to reimport RLE output");
     println!("reimported\n{}\n", reimported);
     // `NdTree`s with different node pools may be unequal, so we serialize
     // before comparing.
@@ -129,6 +125,7 @@ bo$2bo$3o!
 
 #[test]
 fn test_empty_rle() {
-    let ndtree: NdTree2D = NdTree2D::from_rle_str("x = 0, y = 0\n!").expect("Failed to import RLE");
+    let ndtree: NdTree2D =
+        Rle::from_string_to_ndtree("x = 0, y = 0\n!").expect("Failed to import RLE");
     assert!(ndtree.root_ref().is_empty());
 }

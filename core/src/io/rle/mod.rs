@@ -1,11 +1,6 @@
 //! N-dimensional generalization of Golly's 2D ["Extended RLE"
 //! format](http://golly.sourceforge.net/Help/formats.html#rle)
 //!
-//! Use `format!("{:b}", some_rle)` to convert a 2-state RLE to a string, or
-//! `format!("{}", some_rle)` to convert any other RLE to a string. RLEs can be
-//! `parse()`d from strings and convert to/from various types for storing
-//! patterns.
-//!
 //! Note that 2D RLEs always have Y values increasing downwards, while NDCell
 //! has Y values increasing upwards, so all coordinates except X must be negated
 //! and offset, so Y coordinates of 2D RLEs must be negated and offset.
@@ -15,6 +10,7 @@
 mod components;
 mod convert;
 
+use super::{SerializablePattern, TwoState};
 pub use components::Rle;
 use components::*;
 

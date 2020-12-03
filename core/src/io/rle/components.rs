@@ -4,7 +4,9 @@ use std::str::FromStr;
 
 use super::*;
 use crate::axis::{Axis, AXES, U, V, W, X, Y, Z};
-use crate::ndvec::{BigVec6D, UVec6D};
+use crate::dim::Dim;
+use crate::ndrect::BigRect;
+use crate::ndvec::{BigVec, BigVec6D, UVec, UVec6D};
 use crate::num::{BigInt, Zero};
 
 /// RLE contents.
@@ -17,33 +19,9 @@ pub struct Rle {
     /// RLE runs.
     pub(super) runs: Vec<RleRun>,
     /// Pattern comments, not including CXRLE header.
-    pub comments: String,
+    pub(super) comments: String,
 }
 impl Rle {
-    /// Returns the name of the rule.
-    pub fn rule(&self) -> Option<&str> {
-        self.header.rule.as_deref()
-    }
-    /// Sets the rule name.
-    pub fn with_rule(mut self, rule: Option<impl ToString>) -> Self {
-        self.header.rule = rule.map(|r| r.to_string());
-        self
-    }
-
-    /// Returns the number of generations.
-    pub fn generation(&self) -> BigInt {
-        self.cxrle_header
-            .as_ref()
-            .map(|cxrle| cxrle.gen.clone())
-            .unwrap_or_default()
-    }
-    /// Sets the number of generations, adding a CXRLE header if necessary.
-    #[must_use = "This method returns a new value instead of mutating its input"]
-    pub fn with_generation(mut self, generation: BigInt) -> Self {
-        self.cxrle_header.get_or_insert_with(Default::default).gen = generation;
-        self
-    }
-
     /// Removes the CXRLE header.
     #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn without_cxrle(mut self) -> Self {
@@ -51,13 +29,37 @@ impl Rle {
         self
     }
 
-    /// Converts the RLE to a string, using only `b` and `o` symbols to
-    /// represent cells.
-    pub fn to_string_2_state(&self) -> String {
-        format!("{:b}", self)
+    /// Returns the starting position of the first RLE run, in NDCell
+    /// coordinates (meaning Y increases upward).
+    pub(super) fn first_run_start<D: Dim>(&self) -> BigVec<D> {
+        let mut first_run_start = self
+            .cxrle_header
+            .as_ref()
+            // Convert from 6D to ND.
+            .map(|cxrle| BigVec::from_fn(|ax| cxrle.pos[ax].clone()))
+            .unwrap_or(BigVec::origin());
+        // Negate all axes except the X axis.
+        for &ax in &D::axes()[1..] {
+            first_run_start[ax] *= -1;
+        }
+        first_run_start
+    }
+    /// Returns the bounding rectangle according to the header; actual contents
+    /// may be larger or smaller.
+    pub(super) fn rect<D: Dim>(&self) -> BigRect<D> {
+        let corner1 = self.first_run_start();
+
+        // Convert from 6D to ND.
+        let mut size = UVec::from_fn(|ax| self.header.size[ax]).to_bigvec();
+        // Negate all axes except the X axis.
+        for &ax in &D::axes()[1..] {
+            size[ax] *= -1;
+        }
+
+        BigRect::span(corner1.clone(), corner1 + size)
     }
 
-    fn _fmt(&self, f: &mut fmt::Formatter<'_>, binary_cells: bool) -> fmt::Result {
+    fn _fmt(&self, f: &mut fmt::Formatter<'_>, is_2_state: TwoState) -> fmt::Result {
         if let Some(cxrle_header) = &self.cxrle_header {
             writeln!(f, "{}", cxrle_header)?;
         }
@@ -76,10 +78,9 @@ impl Rle {
                 writeln!(f)?;
                 line_len = run.str_len();
             }
-            if binary_cells {
-                write!(f, "{:b}", run)?;
-            } else {
-                write!(f, "{}", run)?;
+            match is_2_state {
+                TwoState::TwoStates => write!(f, "{:b}", run)?,
+                TwoState::MoreStates => write!(f, "{}", run)?,
             }
         }
         writeln!(f)?;
@@ -89,12 +90,12 @@ impl Rle {
 }
 impl fmt::Display for Rle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self._fmt(f, false)
+        self._fmt(f, TwoState::MoreStates)
     }
 }
 impl fmt::Binary for Rle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self._fmt(f, true)
+        self._fmt(f, TwoState::TwoStates)
     }
 }
 impl FromStr for Rle {

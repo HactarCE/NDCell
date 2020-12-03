@@ -1,180 +1,58 @@
-use std::sync::Arc;
-
 use super::*;
-use crate::automaton::{Automaton, AutomatonRef, NdAutomaton};
 use crate::axis::Axis::X;
 use crate::dim::Dim;
 use crate::io::utils::{SemiReverseRectIter, SemiReverseRectIterItem};
-use crate::ndarray::NdArray;
-use crate::ndrect::{BigRect, CanContain, NdRect};
+use crate::ndrect::{BigRect, NdRect};
 use crate::ndtree::{
-    LeafNodeRef, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, NonLeafNodeRef, SharedNodePool,
+    LeafNodeRef, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, NonLeafNodeRef, Region, SharedNodePool,
 };
-use crate::ndvec::{BigVec, NdVec, UVec, UVec6D};
+use crate::ndvec::{BigVec, NdVec, UVec};
 use crate::num::{BigInt, ToPrimitive, Zero};
-use crate::sim::rule::{NdRule, Rule};
 
-impl Automaton {
-    /// Loads an automaton from an RLE string using a new node pool.
-    pub fn from_rle_str(
-        s: &str,
-        resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Rule>,
-    ) -> RleResult<Self> {
-        Self::from_rle(&s.parse()?, resolve_rule)
+impl SerializablePattern for Rle {
+    fn to_string_2_state(&self) -> String {
+        format!("{:b}", self)
     }
 
-    /// Loads an automaton from an RLE struct using a new node pool.
-    pub fn from_rle(
-        rle: &Rle,
-        resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Rule>,
-    ) -> RleResult<Self> {
-        fn _rle_to_ndautomaton<D: Dim>(
-            rle: &Rle,
-            rule: Arc<dyn NdRule<D>>,
-        ) -> RleResult<Automaton> {
-            NdAutomaton::from_rle_with_node_pool(rle, SharedNodePool::new(), |_| Ok(rule))
-                .map(|a| a.into())
-        }
+    fn rule(&self) -> Option<&str> {
+        self.header.rule.as_ref().map(|r| r.as_str())
+    }
+    fn with_rule(mut self, rule: Option<impl ToString>) -> Self {
+        self.header.rule = rule.map(|r| r.to_string());
+        self
+    }
 
-        match resolve_rule(rle.rule())? {
-            Rule::Rule1D(rule) => _rle_to_ndautomaton(&rle, rule),
-            Rule::Rule2D(rule) => _rle_to_ndautomaton(&rle, rule),
-            Rule::Rule3D(rule) => _rle_to_ndautomaton(&rle, rule),
-            Rule::Rule4D(rule) => _rle_to_ndautomaton(&rle, rule),
-            Rule::Rule5D(rule) => _rle_to_ndautomaton(&rle, rule),
-            Rule::Rule6D(rule) => _rle_to_ndautomaton(&rle, rule),
+    fn generation(&self) -> BigInt {
+        match &self.cxrle_header {
+            Some(cxrle_header) => cxrle_header.gen.clone(),
+            None => BigInt::zero(),
         }
     }
-}
-impl AutomatonRef<'_> {
-    /// Exports the automaton to an RLE string.
-    pub fn to_rle_string(&self) -> RleResult<String> {
-        match self {
-            Self::Automaton1D(a) => a.to_rle_string(None),
-            Self::Automaton2D(a) => a.to_rle_string(None),
-            Self::Automaton3D(a) => a.to_rle_string(None),
-            Self::Automaton4D(a) => a.to_rle_string(None),
-            Self::Automaton5D(a) => a.to_rle_string(None),
-            Self::Automaton6D(a) => a.to_rle_string(None),
-        }
-    }
-    /// Exports the automaton to an extended RLE string, which includes a CXRLE
-    /// header.
-    pub fn to_cxrle_string(&self) -> RleResult<String> {
-        match self {
-            Self::Automaton1D(a) => a.to_cxrle_string(None),
-            Self::Automaton2D(a) => a.to_cxrle_string(None),
-            Self::Automaton3D(a) => a.to_cxrle_string(None),
-            Self::Automaton4D(a) => a.to_cxrle_string(None),
-            Self::Automaton5D(a) => a.to_cxrle_string(None),
-            Self::Automaton6D(a) => a.to_cxrle_string(None),
-        }
+    fn with_generation(mut self, generation: BigInt) -> Self {
+        self.cxrle_header
+            .get_or_insert_with(CxrleHeader::default)
+            .gen = generation;
+        self
     }
 
-    /// Exports the automaton to an RLE struct.
-    pub fn to_rle(&self) -> RleResult<Rle> {
-        match self {
-            Self::Automaton1D(a) => a.to_rle(None),
-            Self::Automaton2D(a) => a.to_rle(None),
-            Self::Automaton3D(a) => a.to_rle(None),
-            Self::Automaton4D(a) => a.to_rle(None),
-            Self::Automaton5D(a) => a.to_rle(None),
-            Self::Automaton6D(a) => a.to_rle(None),
-        }
+    fn comments(&self) -> &str {
+        &self.comments
     }
-}
-impl<D: Dim> NdAutomaton<D> {
-    /// Loads an automaton from an RLE string using a new node pool.
-    pub fn from_rle_str(
-        s: &str,
-        resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Arc<dyn NdRule<D>>>,
-    ) -> RleResult<Self> {
-        Self::from_rle_str_with_node_pool(s, SharedNodePool::new(), resolve_rule)
-    }
-    /// Loads an automaton from an RLE string using an existing node pool.
-    pub fn from_rle_str_with_node_pool(
-        s: &str,
-        node_pool: SharedNodePool<D>,
-        resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Arc<dyn NdRule<D>>>,
-    ) -> RleResult<Self> {
-        Self::from_rle_with_node_pool(&s.parse()?, node_pool, resolve_rule)
+    fn comments_mut(&mut self) -> &mut String {
+        &mut self.comments
     }
 
-    /// Loads an automaton from an RLE struct using an existing node pool.
-    pub fn from_rle_with_node_pool(
-        rle: &Rle,
-        node_pool: SharedNodePool<D>,
-        resolve_rule: impl FnOnce(Option<&str>) -> RleResult<Arc<dyn NdRule<D>>>,
-    ) -> RleResult<Self> {
-        let rule = resolve_rule(rle.rule())?;
-        let generations = rle.generation();
-        Ok(NdAutomaton {
-            tree: NdTree::from_rle_with_node_pool(rle, node_pool),
-            rule,
-            generations,
-        })
+    fn region<D: Dim>(&self) -> Result<Region<D>, Self::Err> {
+        Ok(Region::Rect(self.rect()))
     }
 
-    /// Exports a rectangle from the automaton to an RLE string. If `rect` is
-    /// `None`, the entire grid is exported.
-    pub fn to_rle_string(&self, rect: Option<BigRect<D>>) -> RleResult<String> {
-        let rle = self.to_rle(rect)?;
-        if self.rule.max_state() > 1_u8 {
-            Ok(rle.to_string())
-        } else {
-            Ok(rle.to_string_2_state())
-        }
-    }
-    /// Exports a rectangle from the automaton to an extended RLE string, which
-    /// includes a CXRLE header. If `rect` is `None`, the entire grid is
-    /// exported.
-    pub fn to_cxrle_string(&self, rect: Option<BigRect<D>>) -> RleResult<String> {
-        let rle = self.to_rle(rect)?.without_cxrle();
-        if self.rule.max_state() > 1_u8 {
-            Ok(rle.to_string())
-        } else {
-            Ok(rle.to_string_2_state())
-        }
-    }
-    /// Exports a rectangle from the automaton to an RLE struct. If `rect` is
-    /// `None`, the entire grid is exported.
-    pub fn to_rle(&self, rect: Option<BigRect<D>>) -> RleResult<Rle> {
-        Ok(self
-            .tree
-            .to_rle(rect)?
-            .with_rule(Some(self.rule.to_string()))
-            .with_generation(self.generations.clone()))
-    }
-}
-
-impl<D: Dim> NdTree<D> {
-    /// Loads an ND-tree from an RLE string using a new node pool.
-    pub fn from_rle_str(s: &str) -> RleResult<Self> {
-        Self::from_rle_str_with_node_pool(s, SharedNodePool::new())
-    }
-    /// Loads an ND-tree from an RLE string using an existing node pool.
-    pub fn from_rle_str_with_node_pool(s: &str, node_pool: SharedNodePool<D>) -> RleResult<Self> {
-        Ok(Self::from_rle_with_node_pool(&s.parse()?, node_pool))
-    }
-
-    /// Loads an ND-tree from an RLE struct using an existing node pool.
-    pub fn from_rle_with_node_pool(rle: &Rle, node_pool: SharedNodePool<D>) -> Self {
+    fn to_ndtree<D: Dim>(&self, node_pool: SharedNodePool<D>) -> Result<NdTree<D>, Self::Err> {
         let mut ret = NdTree::with_node_pool(node_pool);
 
-        let mut start: BigVec<D> = rle
-            .cxrle_header
-            .as_ref()
-            // Convert from 6D to ND
-            .map(|cxrle| BigVec::from_fn(|ax| cxrle.pos[ax].clone()))
-            .unwrap_or(BigVec::origin());
-        // Negate all axes except the X axis.
-        for &ax in &D::axes()[1..] {
-            start[ax] *= -1;
-        }
+        let start: BigVec<D> = self.first_run_start();
 
         let mut pos = start.clone();
-
-        for run in &rle.runs {
+        for run in &self.runs {
             match run.item {
                 RleItem::Cell(0) => pos[X] += run.count,
                 RleItem::Cell(state) => {
@@ -198,12 +76,13 @@ impl<D: Dim> NdTree<D> {
             }
         }
 
-        ret
+        Ok(ret)
     }
 
-    /// Exports a rectangle from the automaton to an RLE struct. If `rect` is
-    /// `None`, the entire grid is exported.
-    pub fn to_rle(&self, rect: Option<BigRect<D>>) -> RleResult<Rle> {
+    fn from_ndtree<D: Dim>(
+        ndtree: &NdTree<D>,
+        rect: Option<BigRect<D>>,
+    ) -> Result<Self, Self::Err> {
         let mut header = RleHeader {
             size: NdVec::origin(),
             rule: None,
@@ -211,7 +90,7 @@ impl<D: Dim> NdTree<D> {
         let mut cxrle_header = None;
         let mut runs = RleRunVec::default();
 
-        if let Some(bounding_rect) = rect.or_else(|| self.bounding_rect()) {
+        if let Some(bounding_rect) = rect.or_else(|| ndtree.bounding_rect()) {
             let size = bounding_rect.size();
             let pos = {
                 // Negate all axes except X.
@@ -233,7 +112,7 @@ impl<D: Dim> NdTree<D> {
                 gen: BigInt::zero(),
             });
 
-            let bounding_rect = bounding_rect - self.offset();
+            let bounding_rect = bounding_rect - ndtree.offset();
             let row_rect_min = bounding_rect.min();
             let mut row_rect_max = bounding_rect.max();
             row_rect_max[X] = row_rect_min[X].clone();
@@ -241,7 +120,7 @@ impl<D: Dim> NdTree<D> {
             for rect_iter_item in SemiReverseRectIter::new(row_rect) {
                 match rect_iter_item {
                     SemiReverseRectIterItem::Pos(row_start) => {
-                        let root_node = self.root_ref();
+                        let root_node = ndtree.root_ref();
                         let runs_iter = rle_row_of_node(root_node.as_ref(), row_start);
                         runs.try_extend(runs_iter)?;
                     }

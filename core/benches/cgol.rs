@@ -41,7 +41,7 @@ fn bench_sim_2d(
             move |b| {
                 b.iter_batched(
                     || {
-                        Automaton2D::from_rle_str(pattern.rle, |_| Ok(Arc::clone(&rule)))
+                        Rle::from_string_to_ndautomaton(pattern.rle, Arc::clone(&rule))
                             .expect("Failed to load RLE")
                     },
                     |automaton| {

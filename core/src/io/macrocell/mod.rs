@@ -1,6 +1,12 @@
+//! N-dimensional generalization of Golly's 2D ["Macrocell"
+//! format](http://golly.sourceforge.net/Help/formats.html#mc)
+//!
+//! See NDCell documentation for a description of this format.
+//!
 mod components;
 mod convert;
 
+use super::SerializablePattern;
 pub use components::Macrocell;
 use components::*;
 

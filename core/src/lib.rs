@@ -35,7 +35,7 @@
 #![warn(clippy::all)]
 #![deny(clippy::correctness)]
 
-mod io;
+pub mod io;
 #[macro_use]
 mod macros;
 pub mod automaton;
@@ -61,6 +61,7 @@ const MACROCELL_HEADER: &str = concat!("[M2] (ndcell ", env!("CARGO_PKG_VERSION"
 /// All public traits, for easy importing.
 pub mod traits {
     pub use crate::dim::Dim;
+    pub use crate::io::{ResolveRule, SerializablePattern};
     pub use crate::ndrect::CanContain;
     pub use crate::ndtree::NodeRefTrait;
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};
@@ -78,7 +79,10 @@ pub mod prelude {
     };
     pub use crate::axis::{Axis, AxisSet};
     pub use crate::dim::{Dim1D, Dim2D, Dim3D, Dim4D, Dim5D, Dim6D};
-    pub use crate::io::{RleError, RleResult};
+    pub use crate::io::{
+        CaFormat, CaFormatError, Macrocell, MacrocellError, MacrocellResult, Rle, RleError,
+        RleResult, TwoState,
+    };
     pub use crate::ndrect::aliases::*;
     pub use crate::ndrect::NdRect;
     pub use crate::ndtree::aliases::*;

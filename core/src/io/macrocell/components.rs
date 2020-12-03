@@ -8,13 +8,21 @@ use crate::ndtree::Layer;
 use crate::ndvec::BigVec6D;
 use crate::num::{BigInt, Zero};
 
+/// Macrocell contents.
 #[derive(Debug, Clone)]
 pub struct Macrocell {
+    /// Automaton rule.
     pub(super) rule: Option<String>,
+    /// Number of generations simulated.
     pub(super) gen: BigInt,
+    /// Position of center of pattern.
+    ///
+    /// This value is using NDCell coordinates, with Y increasing upwards.
     pub(super) offset: BigVec6D,
+    /// ND-tree nodes.
     pub(super) nodes: Vec<MacrocellNode>,
-    pub comments: String,
+    /// Pattern comments, not including offset, generation count, etc.
+    pub(super) comments: String,
 }
 impl Macrocell {
     /// Returns the name of the rule.
@@ -22,6 +30,7 @@ impl Macrocell {
         self.rule.as_deref()
     }
     /// Sets the rule name.
+    #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn with_rule(mut self, rule: Option<impl ToString>) -> Self {
         self.rule = rule.map(|r| r.to_string());
         self

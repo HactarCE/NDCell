@@ -554,6 +554,7 @@ impl<D: Dim> NdTree<D> {
         let new_root = ArcNode::from(new_root);
         drop(self_root);
         self.set_root_centered(new_root);
+        self.shrink();
     }
     fn _paste_custom<'dest, 'src, 'mask>(
         destination: NodeRef<'dest, D>,

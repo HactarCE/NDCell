@@ -26,17 +26,17 @@ fn bench_from_rle_2d(c: &mut Criterion, pattern: Pattern) {
     c.bench(
         "from_RLE",
         Benchmark::new(pattern.name, move |b| {
-            b.iter(|| NdTree2D::from_rle_str(pattern.rle).unwrap())
+            b.iter(|| Rle::from_string_to_ndtree::<Dim2D>(pattern.rle).unwrap())
         }),
     );
 }
 
 fn bench_to_rle_2d(c: &mut Criterion, pattern: Pattern) {
-    let from_rle = NdTree2D::from_rle_str(pattern.rle).unwrap();
+    let from_rle: NdTree2D = Rle::from_string_to_ndtree(pattern.rle).unwrap();
     c.bench(
         "to_RLE",
         Benchmark::new(pattern.name, move |b| {
-            b.iter(|| from_rle.to_rle(None).unwrap().to_string_2_state())
+            b.iter(|| Rle::from_ndtree_to_string(&from_rle, None, TwoState::TwoStates).unwrap())
         }),
     );
 }

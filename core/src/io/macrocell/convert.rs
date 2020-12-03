@@ -1,153 +1,66 @@
 use itertools::Itertools;
-use std::sync::Arc;
 
-use super::{Macrocell, MacrocellError, MacrocellNode, MacrocellResult};
-use crate::automaton::{Automaton, AutomatonRef, NdAutomaton};
+use super::*;
 use crate::axis::Axis;
 use crate::dim::Dim;
-use crate::ndtree::{Layer, NdTree, NodePool, NodeRef, NodeRefTrait, SharedNodePool};
+use crate::ndrect::BigRect;
+use crate::ndtree::{Layer, NdTree, NodeRef, NodeRefTrait, Region, SharedNodePool};
 use crate::ndvec::{BigVec, BigVec6D};
 use crate::num::{BigInt, Zero};
-use crate::sim::rule::{NdRule, Rule};
 use crate::HashMap;
 
-impl Automaton {
-    /// Loads an automaton from a Macrocell string using a new node pool.
-    pub fn from_macrocell_str(
-        s: &str,
-        resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Rule>,
-    ) -> MacrocellResult<Self> {
-        Self::from_macrocell(&s.parse()?, resolve_rule)
+impl SerializablePattern for Macrocell {
+    fn rule(&self) -> Option<&str> {
+        self.rule.as_ref().map(|r| r.as_str())
+    }
+    fn with_rule(mut self, rule: Option<impl ToString>) -> Self {
+        self.rule = rule.map(|r| r.to_string());
+        self
     }
 
-    /// Loads an automaton from a Macrocell struct using a new node pool.
-    pub fn from_macrocell(
-        macrocell: &Macrocell,
-        resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Rule>,
-    ) -> MacrocellResult<Self> {
-        fn _macrocell_to_ndautomaton<D: Dim>(
-            macrocell: &Macrocell,
-            rule: Arc<dyn NdRule<D>>,
-        ) -> MacrocellResult<Automaton> {
-            NdAutomaton::from_macrocell_with_node_pool(
-                macrocell,
-                &SharedNodePool::new().access(),
-                |_| Ok(rule),
-            )
-            .map(|a| a.into())
-        }
-
-        match resolve_rule(macrocell.rule())? {
-            Rule::Rule1D(rule) => _macrocell_to_ndautomaton(&macrocell, rule),
-            Rule::Rule2D(rule) => _macrocell_to_ndautomaton(&macrocell, rule),
-            Rule::Rule3D(rule) => _macrocell_to_ndautomaton(&macrocell, rule),
-            Rule::Rule4D(rule) => _macrocell_to_ndautomaton(&macrocell, rule),
-            Rule::Rule5D(rule) => _macrocell_to_ndautomaton(&macrocell, rule),
-            Rule::Rule6D(rule) => _macrocell_to_ndautomaton(&macrocell, rule),
-        }
+    fn generation(&self) -> BigInt {
+        self.gen.clone()
     }
-}
-impl AutomatonRef<'_> {
-    /// Exports the automaton to a Macrocell string.
-    pub fn to_macrocell_string(&self) -> String {
-        match self {
-            Self::Automaton1D(a) => a.to_macrocell_string(),
-            Self::Automaton2D(a) => a.to_macrocell_string(),
-            Self::Automaton3D(a) => a.to_macrocell_string(),
-            Self::Automaton4D(a) => a.to_macrocell_string(),
-            Self::Automaton5D(a) => a.to_macrocell_string(),
-            Self::Automaton6D(a) => a.to_macrocell_string(),
-        }
+    fn with_generation(mut self, generation: BigInt) -> Self {
+        self.gen = generation;
+        self
     }
 
-    /// Exports the automaton to a Macrocell struct.
-    pub fn to_macrocell(&self) -> Macrocell {
-        match self {
-            Self::Automaton1D(a) => a.to_macrocell(),
-            Self::Automaton2D(a) => a.to_macrocell(),
-            Self::Automaton3D(a) => a.to_macrocell(),
-            Self::Automaton4D(a) => a.to_macrocell(),
-            Self::Automaton5D(a) => a.to_macrocell(),
-            Self::Automaton6D(a) => a.to_macrocell(),
-        }
+    fn comments(&self) -> &str {
+        &self.comments
     }
-}
-impl<D: Dim> NdAutomaton<D> {
-    /// Loads an automaton from a Macrocell string using a new node pool.
-    pub fn from_macrocell_str(
-        s: &str,
-        resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Arc<dyn NdRule<D>>>,
-    ) -> MacrocellResult<Self> {
-        Self::from_macrocell_str_with_node_pool(s, &SharedNodePool::new().access(), resolve_rule)
-    }
-    /// Loads an automaton from a Macrocell string using an existing node pool.
-    pub fn from_macrocell_str_with_node_pool(
-        s: &str,
-        node_pool: &NodePool<D>,
-        resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Arc<dyn NdRule<D>>>,
-    ) -> MacrocellResult<Self> {
-        Self::from_macrocell_with_node_pool(&s.parse()?, node_pool, resolve_rule)
+    fn comments_mut(&mut self) -> &mut String {
+        &mut self.comments
     }
 
-    /// Loads an automaton from a Macrocell struct using an existing node pool.
-    pub fn from_macrocell_with_node_pool(
-        macrocell: &Macrocell,
-        node_pool: &NodePool<D>,
-        resolve_rule: impl FnOnce(Option<&str>) -> MacrocellResult<Arc<dyn NdRule<D>>>,
-    ) -> MacrocellResult<Self> {
-        let rule = resolve_rule(macrocell.rule())?;
-        let generations = macrocell.generation();
-        Ok(NdAutomaton {
-            tree: NdTree::from_macrocell_with_node_pool(macrocell, node_pool)?,
-            rule,
-            generations,
-        })
+    fn region<D: Dim>(&self) -> Result<Region<D>, Self::Err> {
+        // Convert from 6D to ND.
+        let corner1 = BigVec::from_fn(|ax| self.offset[ax].clone());
+
+        let size = match self.nodes.last() {
+            None | Some(MacrocellNode::Empty) => BigVec::repeat(1.into()),
+            Some(MacrocellNode::Leaf8x8 { .. }) => BigVec::repeat(8.into()),
+            Some(MacrocellNode::NonLeaf { layer, .. }) => BigVec::repeat(layer.big_len()),
+        };
+
+        Ok(Region::Rect(BigRect::with_size(corner1, size)))
     }
 
-    /// Exports the automaton to a Macrocell string.
-    pub fn to_macrocell_string(&self) -> String {
-        self.to_macrocell().to_string()
-    }
-    /// Exports the automaton to a Macrocell struct.
-    pub fn to_macrocell(&self) -> Macrocell {
-        self.tree
-            .to_macrocell()
-            .with_rule(Some(self.rule.to_string()))
-            .with_generation(self.generations.clone())
-    }
-}
-
-impl<D: Dim> NdTree<D> {
-    /// Loads an ND-tree from a Macrocell string using a new node pool.
-    pub fn from_macrocell_str(s: &str) -> MacrocellResult<Self> {
-        Self::from_macrocell_str_with_node_pool(s, &SharedNodePool::new().access())
-    }
-    /// Loads an ND-tree from a Macrocell string using an existing node pool.
-    pub fn from_macrocell_str_with_node_pool(
-        s: &str,
-        node_pool: &NodePool<D>,
-    ) -> MacrocellResult<Self> {
-        Self::from_macrocell_with_node_pool(&s.parse()?, node_pool)
-    }
-
-    /// Loads an ND-tree from a Macrocell struct using an existing node pool.
-    pub fn from_macrocell_with_node_pool(
-        macrocell: &Macrocell,
-        node_pool: &NodePool<D>,
-    ) -> MacrocellResult<Self> {
+    fn to_ndtree<D: Dim>(&self, node_pool: SharedNodePool<D>) -> Result<NdTree<D>, Self::Err> {
+        let node_pool_access = node_pool.access();
         let mut nodes: Vec<NodeRef<'_, D>> = vec![];
 
-        for macrocell_node in &macrocell.nodes {
+        for macrocell_node in &self.nodes {
             let new_node = match macrocell_node {
                 // Put a dummy node at index 0 -- we'll handle index 0 specially
                 // anyway.
-                MacrocellNode::Empty => node_pool.get_empty_base(),
+                MacrocellNode::Empty => node_pool_access.get_empty_base(),
 
                 MacrocellNode::Leaf8x8 { bits } => {
                     if D::NDIM != 2 {
                         return Err(MacrocellError::LeafNodeNon2D);
                     }
-                    node_pool.get_from_cells(
+                    node_pool_access.get_from_cells(
                         (0..8)
                             // Reverse because Macrocell stores cells with
                             // *decreasing* Y values.
@@ -168,12 +81,13 @@ impl<D: Dim> NdTree<D> {
                         Layer(1) => {
                             // `as u8` will take the least-significant byte,
                             // which is fine here.
-                            node_pool.get_from_cells(children_iter.map(|i| i as u8).collect_vec())
+                            node_pool_access
+                                .get_from_cells(children_iter.map(|i| i as u8).collect_vec())
                         }
-                        Layer(_) => node_pool.join_nodes(
+                        Layer(_) => node_pool_access.join_nodes(
                             children_iter
                                 .map(|child_index| match child_index {
-                                    0 => Ok(node_pool.get_empty(layer.child_layer())),
+                                    0 => Ok(node_pool_access.get_empty(layer.child_layer())),
                                     i => {
                                         let child = nodes
                                             .get(i)
@@ -195,36 +109,43 @@ impl<D: Dim> NdTree<D> {
             nodes.push(new_node);
         }
 
-        let offset = BigVec::from_fn(|ax| macrocell.offset[ax].clone());
+        let offset = BigVec::from_fn(|ax| self.offset[ax].clone());
         Ok(NdTree::from_node_centered_on(
-            nodes.pop().unwrap_or_else(|| node_pool.get_empty_base()),
+            nodes
+                .pop()
+                .unwrap_or_else(|| node_pool_access.get_empty_base()),
             offset,
         ))
     }
 
-    /// Exports a rectangle from the automaton to a Macrocell struct. If `rect`
-    /// is `None`, the entire grid is exported.
-    pub fn to_macrocell(&self) -> Macrocell {
+    fn from_ndtree<D: Dim>(
+        ndtree: &NdTree<D>,
+        rect: Option<BigRect<D>>,
+    ) -> Result<Self, Self::Err> {
         let mut offset = BigVec6D::origin();
-        let center = self.center();
+        let center = ndtree.center();
         for &ax in D::axes() {
             offset[ax] = center[ax].clone();
         }
 
         let mut nodes = vec![MacrocellNode::Empty];
+        let ndtree = match rect {
+            Some(r) => ndtree.get_region(Region::Rect(r)),
+            None => ndtree.clone(),
+        };
         add_macrocell_node(
             &mut nodes,
             &mut HashMap::default(),
-            self.root_ref().as_ref(),
+            ndtree.root_ref().as_ref(),
         );
 
-        Macrocell {
+        Ok(Macrocell {
             rule: None,
             gen: BigInt::zero(),
             offset,
             nodes,
             comments: String::new(),
-        }
+        })
     }
 }
 

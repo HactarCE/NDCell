@@ -476,6 +476,28 @@ impl<D: Dim> NdTree<D> {
         self.set_root_centered(new_root);
     }
 
+    /// Sets a region of cells to state #0.
+    pub fn clear_region(&mut self, region: Region<D>) {
+        self.paste_custom(
+            NdTree::with_node_pool(self.pool().new_ref()),
+            region,
+            |_original, empty| Some(empty),
+            |_original, empty| empty,
+        );
+    }
+
+    /// Returns a region of cells from this ND-tree as a new ND-tree.
+    pub fn get_region(&self, region: Region<D>) -> NdTree<D> {
+        let mut ret = NdTree::with_node_pool(self.pool().new_ref());
+        ret.paste_custom(
+            self.clone(),
+            region,
+            |_empty, original| Some(original),
+            |_empty, original| original,
+        );
+        ret
+    }
+
     /// Pastes a region from another ND-tree onto this one, using custom
     /// functions to paste a full node or cell. Each closure is passed the
     /// node/cell from `self` followed by the node/cell from `other`, and must

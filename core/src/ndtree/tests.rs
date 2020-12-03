@@ -152,6 +152,58 @@ proptest! {
         }
     }
 
+    /// Tests `NdTree::clear_region()`.
+    #[test]
+    fn test_ndtree_clear_region(
+        cells_to_set in proptest_cells_to_set(),
+        ndtree_center in proptest_ivec2d(-100..=100),
+        clear_rect in proptest_irect2d(-100..=100),
+    ) {
+        let mut ndtree = NdTree::with_center(ndtree_center.to_bigvec());
+        let mut hashmap = HashMap::default();
+        for (pos, state) in cells_to_set {
+            ndtree.set_cell(&pos.to_bigvec(), state);
+            hashmap.insert(pos, state);
+        }
+
+        ndtree.clear_region(Region::Rect(clear_rect.to_bigrect()));
+
+        for (pos, cell_state) in hashmap {
+            let expected = if clear_rect.contains(&pos) {
+                0_u8
+            } else {
+                cell_state
+            };
+            assert_eq!(expected, ndtree.get_cell(&pos.to_bigvec()));
+        }
+    }
+
+    /// Tests `NdTree::clear_region()`.
+    #[test]
+    fn test_ndtree_get_region(
+        cells_to_set in proptest_cells_to_set(),
+        ndtree_center in proptest_ivec2d(-100..=100),
+        get_rect in proptest_irect2d(-100..=100),
+    ) {
+        let mut ndtree = NdTree::with_center(ndtree_center.to_bigvec());
+        let mut hashmap = HashMap::default();
+        for (pos, state) in cells_to_set {
+            ndtree.set_cell(&pos.to_bigvec(), state);
+            hashmap.insert(pos, state);
+        }
+
+        let result = ndtree.get_region(Region::Rect(get_rect.to_bigrect()));
+
+        for (pos, cell_state) in hashmap {
+            let expected = if get_rect.contains(&pos) {
+                cell_state
+            } else {
+                0_u8
+            };
+            assert_eq!(expected, result.get_cell(&pos.to_bigvec()));
+        }
+    }
+
     /// Tests `NdTree::paste_custom()`.
     #[test]
     fn test_ndtree_paste(

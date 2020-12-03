@@ -37,7 +37,7 @@ impl Default for Automaton {
         Self::Automaton2D(Automaton2D::default())
     }
 }
-impl<'a, D: Dim> From<NdAutomaton<D>> for Automaton {
+impl<D: Dim> From<NdAutomaton<D>> for Automaton {
     fn from(automaton: NdAutomaton<D>) -> Self {
         let a = Box::new(automaton);
         match_ndim!(match D {
@@ -114,16 +114,18 @@ pub enum AutomatonMut<'a> {
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct NdAutomaton<D: Dim> {
-    pub tree: NdTree<D>,
+    pub ndtree: NdTree<D>,
     pub rule: Arc<dyn NdRule<D>>,
     pub generations: BigInt,
+    pub comments: String,
 }
 impl<D: Dim> Default for NdAutomaton<D> {
     fn default() -> Self {
         Self {
-            tree: NdTree::default(),
+            ndtree: NdTree::default(),
             rule: Arc::new(DummyRule),
             generations: BigInt::zero(),
+            comments: String::new(),
         }
     }
 }
@@ -132,7 +134,7 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
         D::NDIM
     }
     fn population(&self) -> BigUint {
-        self.tree.root_ref().population()
+        self.ndtree.root_ref().population()
     }
     fn generation_count(&self) -> &BigInt {
         &self.generations
@@ -141,21 +143,21 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
         self.generations = generations;
     }
     fn step(&mut self, gens: &BigInt) {
-        hashlife::step(&mut self.tree, &*self.rule, gens);
+        hashlife::step(&mut self.ndtree, &*self.rule, gens);
         self.generations += gens;
     }
 
     fn memory_usage(&self) -> usize {
-        self.tree.pool().access().memory_usage()
+        self.ndtree.pool().access().memory_usage()
     }
     fn yield_to_gc(&self) {
-        let _ = self.tree.pool().yield_to_gc();
+        let _ = self.ndtree.pool().yield_to_gc();
     }
     fn schedule_gc(
         &self,
         post_gc: Box<dyn Send + FnOnce(usize, usize, usize)>,
     ) -> std::thread::JoinHandle<()> {
-        let node_pool = self.tree.pool().new_ref();
+        let node_pool = self.ndtree.pool().new_ref();
         let ret = std::thread::spawn(move || {
             let mut node_pool_access = node_pool.total_access();
             let (dropped, kept) = node_pool_access.strong_gc();

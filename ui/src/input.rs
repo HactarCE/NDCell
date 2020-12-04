@@ -255,6 +255,8 @@ impl FrameInProgress<'_> {
 
                 if modifiers == CTRL {
                     match virtual_keycode {
+                        // Select all.
+                        Some(VirtualKeyCode::A) => self.gridview.enqueue(SelectCommand::SelectAll),
                         // Undo.
                         Some(VirtualKeyCode::Z) => self.gridview.enqueue(HistoryCommand::Undo),
                         // Redo.

@@ -195,6 +195,10 @@ impl GridViewTrait for GridView2D {
                 // Execute the drag handler once immediately.
                 self.continue_drag(cursor_start)?;
             }
+
+            SelectCommand::SelectAll => {
+                self.set_selection(self.automaton.ndtree.bounding_rect().map(Selection2D::from))
+            }
         }
         Ok(())
     }
@@ -392,17 +396,22 @@ impl GridView2D {
         &self.camera_interpolator.current
     }
 
+    /// Deselect and set a new selection rectangle.
+    pub fn set_selection_rect(&mut self, new_selection_rect: Option<BigRect2D>) {
+        self.set_selection(new_selection_rect.map(Selection2D::from))
+    }
+    /// Deselect and set a new selection.
+    pub fn set_selection(&mut self, new_selection: Option<Selection2D>) {
+        self.deselect();
+        self.selection = new_selection;
+    }
     /// Deselect all.
     pub fn deselect(&mut self) {
-        if self
-            .selection
-            .as_ref()
-            .and_then(|s| s.cells.as_ref())
-            .is_some()
-        {
-            todo!("deselect with cells");
+        if let Some(sel) = self.selection.take() {
+            if let Some(_cells) = sel.cells {
+                todo!("deselect with cells");
+            }
         }
-        self.selection = None;
     }
 
     /// Returns `true` if the scale is too small to draw individual cells, or

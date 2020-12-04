@@ -159,6 +159,7 @@ pub enum DrawShape {
 #[derive(Debug, Clone)]
 pub enum SelectCommand {
     Drag(SelectDragCommand, FVec2D),
+    SelectAll,
 }
 impl_command_from!(Command::Select(SelectCommand));
 

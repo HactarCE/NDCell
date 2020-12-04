@@ -132,7 +132,7 @@ pub trait GridViewTrait:
         match command {
             Command::Sim(c) => self.do_sim_command(c, config),
             Command::History(c) => self.do_history_command(c, config),
-            Command::Move(c) => self.do_move_command(c, config),
+            Command::View(c) => self.do_view_command(c, config),
             Command::Draw(c) => self.do_draw_command(c, config),
             Command::Select(c) => self.do_select_command(c, config),
             Command::Clipboard(c) => self.do_clipboard_command(c, config),
@@ -200,7 +200,7 @@ pub trait GridViewTrait:
         Ok(())
     }
     /// Executes a `Move` command.
-    fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()>;
+    fn do_view_command(&mut self, command: ViewCommand, config: &Config) -> Result<()>;
     /// Executes a `Draw` command.
     fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()>;
     /// Executes a `Select` command.

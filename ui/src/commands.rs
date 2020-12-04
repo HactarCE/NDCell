@@ -18,7 +18,7 @@ macro_rules! impl_command_from {
 pub enum Command {
     Sim(SimCommand),
     History(HistoryCommand),
-    Move(ViewCommand),
+    View(ViewCommand),
     Draw(DrawCommand),
     Select(SelectCommand),
     Clipboard(ClipboardCommand),
@@ -87,7 +87,7 @@ pub enum ViewCommand {
         invariant_pos: Option<FVec2D>,
     },
 }
-impl_command_from!(Command::Move(ViewCommand));
+impl_command_from!(Command::View(ViewCommand));
 
 #[derive(Debug, Copy, Clone)]
 pub enum ViewDragCommand {

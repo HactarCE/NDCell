@@ -240,7 +240,7 @@ impl Camera<Dim3D> for Camera3D {
         ))
     }
 
-    fn do_move_command(
+    fn do_view_command(
         &mut self,
         command: ViewCommand,
         config: &Config,

@@ -240,11 +240,11 @@ impl GridViewTrait for GridView2D {
         }
         Ok(())
     }
-    fn do_move_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
+    fn do_view_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
         let maybe_new_drag_handler = self
             .camera_interpolator
-            .do_move_command(command, config)
-            .context("Executing move command")?
+            .do_view_command(command, config)
+            .context("Executing view command")?
             .map(|mut interpolator_drag_handler| {
                 Box::new(move |this: &mut Self, cursor_pos| {
                     interpolator_drag_handler(&mut this.camera_interpolator, cursor_pos)

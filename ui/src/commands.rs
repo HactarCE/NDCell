@@ -168,6 +168,8 @@ pub enum SelectDragCommand {
     NewRect,
     Resize { axes: AxisSet, plane: Option<Axis> },
     ResizeToCell,
+    MoveSelection,
+    MoveCells,
 }
 
 #[derive(Debug, Clone)]

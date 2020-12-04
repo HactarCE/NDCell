@@ -177,6 +177,12 @@ impl GridViewTrait for GridView2D {
                                     new_pos.cell(),
                                 ))
                             }
+                            SelectDragCommand::MoveSelection => {
+                                todo!()
+                            }
+                            SelectDragCommand::MoveCells => {
+                                todo!()
+                            }
                         };
                         this.selection = new_selection_rect.map(Selection2D::from);
                     }

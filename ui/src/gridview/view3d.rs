@@ -97,11 +97,8 @@ impl GridViewTrait for GridView3D {
         todo!()
     }
 
-    fn as_automaton<'a>(&'a self) -> AutomatonRef<'a> {
-        AutomatonRef::Automaton3D(&self.automaton)
-    }
-    fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
-        AutomatonMut::Automaton3D(&mut self.automaton)
+    fn export(&self, format: CaFormat) -> Result<String, CaFormatError> {
+        ndcell_core::io::export_ndautomaton_to_string(&self.automaton, format)
     }
 
     fn run_step(&mut self) {

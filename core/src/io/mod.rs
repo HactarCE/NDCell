@@ -1,5 +1,6 @@
 //! Formats for exporting/importing cellular automata.
 
+use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -24,8 +25,17 @@ pub enum CaFormat {
     /// N-dimensional generalization of Golly Macrocell format.
     Macrocell,
 }
+impl fmt::Display for CaFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CaFormat::Rle => write!(f, "RLE"),
+            CaFormat::Macrocell => write!(f, "Macrocell"),
+        }
+    }
+}
+
 /// Error produced during automaton export/import.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum CaFormatError {
     RleError(RleError),
@@ -41,8 +51,29 @@ impl From<MacrocellError> for CaFormatError {
         Self::MacrocellError(e)
     }
 }
+impl fmt::Display for CaFormatError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RleError(e) => write!(f, "RLE error: {}", e),
+            Self::MacrocellError(e) => write!(f, "Macrocell error: {}", e),
+        }
+    }
+}
 
 /// Exports an automaton to a string using a particular format.
+pub fn export_ndautomaton_to_string<D: Dim>(
+    automaton: &NdAutomaton<D>,
+    format: CaFormat,
+) -> Result<String, CaFormatError> {
+    match format {
+        CaFormat::Rle => Rle::from_ndautomaton_to_string(automaton, None).map_err(Into::into),
+        CaFormat::Macrocell => {
+            Macrocell::from_ndautomaton_to_string(automaton, None).map_err(Into::into)
+        }
+    }
+}
+/// Exports an automaton of any dimensionality to a string using a particular
+/// format.
 pub fn export_automaton_to_string(
     automaton: &Automaton,
     format: CaFormat,

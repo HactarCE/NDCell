@@ -119,7 +119,7 @@ impl<'a> RenderInProgress<'a> {
             }
 
             // Now fetch the `NdTreeSlice` containing all of the visible cells.
-            visible_quadtree = g.automaton.tree.slice_containing(&global_visible_rect);
+            visible_quadtree = g.automaton.ndtree.slice_containing(&global_visible_rect);
 
             // Subtract the slice offset from `global_visible_rect` and
             // `global_visible_rect` to get the rectangle of visible cells

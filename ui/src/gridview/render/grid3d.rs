@@ -42,7 +42,7 @@ impl<'a> RenderInProgress<'a> {
         let transform = camera.cell_transform_with_base(BigVec3D::origin())?;
 
         Ok(Self {
-            octree: &g.automaton.tree,
+            octree: &g.automaton.ndtree,
             camera,
             target,
             transform,

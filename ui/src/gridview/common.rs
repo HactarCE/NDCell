@@ -217,10 +217,8 @@ pub trait GridViewTrait:
     /// Resets the simulation worker thread(s).
     fn reset_worker(&mut self);
 
-    /// Returns an immutable reference to the N-dimensional automaton.
-    fn as_automaton<'a>(&'a self) -> AutomatonRef<'a>;
-    /// Returns a mutable reference to the N-dimensional automaton.
-    fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a>;
+    /// Exports the simulation to a string.
+    fn export(&self, format: CaFormat) -> Result<String, CaFormatError>;
 
     /// Returns whether the simulation is running (i.e. stepping forward every
     /// frame automatically with no user input).

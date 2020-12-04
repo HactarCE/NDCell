@@ -263,8 +263,10 @@ impl FrameInProgress<'_> {
                         Some(VirtualKeyCode::R) => {
                             self.gridview.enqueue(HistoryCommand::UndoTo(0.into()))
                         }
-                        // Copy (Golly-compatible).
-                        Some(VirtualKeyCode::C) => self.gridview.enqueue(ClipboardCommand::CopyRle),
+                        // Copy RLE.
+                        Some(VirtualKeyCode::C) => {
+                            self.gridview.enqueue(ClipboardCommand::Copy(CaFormat::Rle))
+                        }
                         // Paste.
                         Some(VirtualKeyCode::V) => self.gridview.enqueue(ClipboardCommand::Paste),
                         // Center pattern.
@@ -297,10 +299,10 @@ impl FrameInProgress<'_> {
                     match virtual_keycode {
                         // Redo.
                         Some(VirtualKeyCode::Z) => self.gridview.enqueue(HistoryCommand::Redo),
-                        // Copy with extra info.
-                        Some(VirtualKeyCode::C) => {
-                            self.gridview.enqueue(ClipboardCommand::CopyCxrle)
-                        }
+                        // Copy Macrocell.
+                        Some(VirtualKeyCode::C) => self
+                            .gridview
+                            .enqueue(ClipboardCommand::Copy(CaFormat::Macrocell)),
                         _ => (),
                     }
                 }

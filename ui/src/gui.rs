@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use ndcell_core::automaton::Automaton2D;
+use ndcell_core::io::{Rle, SerializablePattern};
 
 use super::clipboard_compat::*;
 use super::gridview::*;
@@ -41,9 +41,10 @@ fn make_default_gridview() -> GridView {
     if DEFAULT_3D {
         GridView::View3D(GridView3D::default())
     } else {
-        Automaton2D::from_rle_str(GOSPER_GLIDER_GUN_SYNTH_RLE, |_| {
-            Ok(crate::load_custom_rule_2d())
-        })
+        Rle::from_string_to_ndautomaton(
+            GOSPER_GLIDER_GUN_SYNTH_RLE,
+            crate::load_custom_rule_2d().into(),
+        )
         .unwrap_or_else(|_| {
             warn!("Failed to load default pattern; using empty pattern instaed");
             Default::default()

@@ -77,7 +77,7 @@ impl GridViewTrait for GridView2D {
                 };
 
                 let new_cell_state = c.mode.cell_state(
-                    self.automaton.tree.get_cell(&initial_pos),
+                    self.automaton.ndtree.get_cell(&initial_pos),
                     self.selected_cell_state(),
                 );
 
@@ -96,7 +96,7 @@ impl GridViewTrait for GridView2D {
                             if let Some(pos2) = &pos2 {
                                 for pos in ndcell_core::math::bresenham(pos1.clone(), pos2.clone())
                                 {
-                                    this.automaton.tree.set_cell(&pos, new_cell_state);
+                                    this.automaton.ndtree.set_cell(&pos, new_cell_state);
                                 }
                                 pos1 = pos2.clone();
                                 Ok(DragOutcome::Continue)
@@ -202,35 +202,28 @@ impl GridViewTrait for GridView2D {
         if !self.is_drawing() {
             self.stop_running();
             match command {
-                ClipboardCommand::CopyRle => {
-                    let result = self.as_automaton().to_rle_string();
+                ClipboardCommand::Copy(format) => {
+                    let result = self.export(format);
                     match result {
                         Ok(s) => {
                             clipboard_set(s).map_err(|_| anyhow!("Setting clipboard contents"))?
                         }
-                        Err(msg) => warn!("Failed to generate RLE: {}", msg),
-                    }
-                }
-                ClipboardCommand::CopyCxrle => {
-                    let result = self.as_automaton().to_cxrle_string();
-                    match result {
-                        Ok(s) => {
-                            clipboard_set(s).map_err(|_| anyhow!("Setting clipboard contents"))?
-                        }
-                        Err(msg) => warn!("Failed to generate CXRLE: {}", msg),
+                        Err(msg) => warn!("Failed to generate {}: {}", format, msg),
                     }
                 }
                 ClipboardCommand::Paste => {
                     self.record();
                     let rle_string =
                         clipboard_get().map_err(|_| anyhow!("Fetching clipboard contents"))?;
-                    let result = Automaton::from_rle_str(&rle_string, |_| {
-                        Ok(crate::load_custom_rule_2d().into())
-                    });
+                    let result = ndcell_core::io::import_automaton_from_string(
+                        &rle_string,
+                        Rule::Rule2D(crate::load_custom_rule_2d()),
+                    );
                     match result {
-                        Ok(Automaton::Automaton2D(automaton)) => *self = Self::from(automaton),
-                        Ok(_) => warn!("Failed to load RLE because rule is not 2D"),
-                        Err(msg) => warn!("Failed to load RLE: {}", msg),
+                        Ok(Ok(Automaton::Automaton2D(automaton))) => *self = Self::from(automaton),
+                        Ok(Ok(_)) => warn!("Failed to load pattern because rule is not 2D"),
+                        Ok(Err(_)) => warn!("Failed to load rule"),
+                        Err(errors) => warn!("Failed to load pattern: {:?}", errors),
                     }
                 }
             }
@@ -281,11 +274,8 @@ impl GridViewTrait for GridView2D {
         trace!("Reset simulation worker thread");
     }
 
-    fn as_automaton<'a>(&'a self) -> AutomatonRef<'a> {
-        AutomatonRef::Automaton2D(&self.automaton)
-    }
-    fn as_automaton_mut<'a>(&'a mut self) -> AutomatonMut<'a> {
-        AutomatonMut::Automaton2D(&mut self.automaton)
+    fn export(&self, format: CaFormat) -> Result<String, CaFormatError> {
+        ndcell_core::io::export_ndautomaton_to_string(&self.automaton, format)
     }
 
     fn run_step(&mut self) {

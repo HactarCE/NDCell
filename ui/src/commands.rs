@@ -171,8 +171,7 @@ pub enum SelectDragCommand {
 
 #[derive(Debug, Clone)]
 pub enum ClipboardCommand {
-    CopyRle,
-    CopyCxrle,
+    Copy(CaFormat),
     Paste,
 }
 impl_command_from!(Command::Clipboard(ClipboardCommand));

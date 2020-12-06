@@ -129,3 +129,33 @@ fn test_empty_rle() {
         Rle::from_string_to_ndtree("x = 0, y = 0\n!").expect("Failed to import RLE");
     assert!(ndtree.root_ref().is_empty());
 }
+
+#[test]
+fn test_rle_rect() {
+    let mut ndtree = NdTree2D::new();
+    // Make a diagonal line.
+    for i in -20..=20 {
+        ndtree.set_cell(&NdVec::big([i, i]), (i + 21) as u8);
+    }
+
+    println!("{}", ndtree);
+
+    for start in -0..=20 {
+        for end in start..=20 {
+            println!("{}..={}", start, end);
+
+            let rect = NdRect::span(NdVec::big([start, -20]), NdVec::big([end, 20]));
+            let rle_string =
+                Rle::from_ndtree_to_string(&ndtree, Some(rect), TwoState::MoreStates).unwrap();
+            let reimported: NdTree2D = Rle::from_string_to_ndtree(&rle_string).unwrap();
+
+            let expected_pop: BigUint = BigUint::from_isize(end - start + 1).unwrap();
+            let actual_pop = reimported.root_ref().population();
+            assert_eq!(expected_pop, actual_pop);
+
+            for i in start..=end {
+                assert_eq!((i + 21) as u8, reimported.get_cell(&NdVec::big([i, i])));
+            }
+        }
+    }
+}

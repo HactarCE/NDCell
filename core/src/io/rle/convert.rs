@@ -7,7 +7,7 @@ use crate::ndtree::{
     LeafNodeRef, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, NonLeafNodeRef, Region, SharedNodePool,
 };
 use crate::ndvec::{BigVec, NdVec, UVec};
-use crate::num::{BigInt, ToPrimitive, Zero};
+use crate::num::{BigInt, Integer, ToPrimitive, Zero};
 
 impl SerializablePattern for Rle {
     fn to_string_2_state(&self) -> String {
@@ -117,11 +117,12 @@ impl SerializablePattern for Rle {
             let mut row_rect_max = bounding_rect.max();
             row_rect_max[X] = row_rect_min[X].clone();
             let row_rect = NdRect::span(row_rect_min, row_rect_max);
+            let row_length = bounding_rect.size()[X].to_usize().ok_or(RleError::TooBig)?;
             for rect_iter_item in SemiReverseRectIter::new(row_rect) {
                 match rect_iter_item {
                     SemiReverseRectIterItem::Pos(row_start) => {
                         let root_node = ndtree.root_ref();
-                        let runs_iter = rle_row_of_node(root_node.as_ref(), row_start);
+                        let runs_iter = rle_row_of_node(root_node.as_ref(), row_start, row_length);
                         runs.try_extend(runs_iter)?;
                     }
                     SemiReverseRectIterItem::Next(ax) => runs.append(RleItem::Next(ax)),
@@ -144,15 +145,23 @@ impl SerializablePattern for Rle {
 fn rle_row_of_node<'pool, D: Dim>(
     node: NodeRef<'pool, D>,
     start_pos: BigVec<D>,
+    max_length: usize,
 ) -> Box<dyn 'pool + Iterator<Item = RleResult<RleRun>>> {
+    if max_length == 0 {
+        return Box::new(std::iter::empty());
+    }
+    debug_assert!(BigInt::from(max_length) <= node.big_len());
     if let Some(single_state) = node.single_state() {
         // All cells in this node are the same state, so encode a run of that
         // cell state with the length of this node.
         Box::new(std::iter::once_with(move || {
             Ok(RleRun {
-                count: (node.layer().big_len() - &node.layer().modulo_pos(&start_pos)[X])
-                    .to_usize()
-                    .ok_or(RleError::TooBig)?,
+                count: std::cmp::min(
+                    max_length,
+                    (node.layer().big_len() - &node.layer().modulo_pos(&start_pos)[X])
+                        .to_usize()
+                        .ok_or(RleError::TooBig)?,
+                ),
                 item: RleItem::Cell(single_state),
             })
         }))
@@ -160,18 +169,19 @@ fn rle_row_of_node<'pool, D: Dim>(
         match node.as_enum() {
             NodeRefEnum::Leaf(node) => {
                 let start_pos = node.modulo_pos(&start_pos).to_uvec();
-                rle_row_of_leaf_node(node, start_pos)
+                rle_row_of_leaf_node(node, start_pos, max_length)
             }
-            NodeRefEnum::NonLeaf(node) => rle_row_of_non_leaf_node(node, start_pos),
+            NodeRefEnum::NonLeaf(node) => rle_row_of_non_leaf_node(node, start_pos, max_length),
         }
     }
 }
 fn rle_row_of_leaf_node<'pool, D: Dim>(
     node: LeafNodeRef<'pool, D>,
     start_pos: UVec<D>,
+    max_length: usize,
 ) -> Box<dyn 'pool + Iterator<Item = RleResult<RleRun>>> {
     let mut end_pos = start_pos.clone();
-    end_pos[X] = node.len() - 1;
+    end_pos[X] += max_length - 1;
 
     let start_index = node.pos_to_cell_index(start_pos);
     let end_index = node.pos_to_cell_index(end_pos);
@@ -187,17 +197,26 @@ fn rle_row_of_leaf_node<'pool, D: Dim>(
 fn rle_row_of_non_leaf_node<'pool, D: Dim>(
     node: NonLeafNodeRef<'pool, D>,
     start_pos: BigVec<D>,
+    max_length: usize,
 ) -> Box<dyn 'pool + Iterator<Item = RleResult<RleRun>>> {
     let index1 = node.child_index_with_pos(&start_pos);
     let index2 = index1 | X.bit();
     if index1 == index2 {
-        rle_row_of_node(node.child_at_index(index1), start_pos)
+        rle_row_of_node(node.child_at_index(index1), start_pos, max_length)
     } else {
-        let mut start_pos2 = start_pos.clone();
-        start_pos2[X].set_zero();
+        let mut start_pos_2 = start_pos.clone();
+        start_pos_2[X].set_zero();
+        let child_layer_len = node.layer().child_layer().big_len();
+        let max_length_1 = std::cmp::min(
+            max_length,
+            (&child_layer_len - start_pos[X].mod_floor(&child_layer_len))
+                .to_usize()
+                .unwrap_or(usize::MAX),
+        );
+        let max_length_2 = max_length - max_length_1;
         Box::new(itertools::chain(
-            rle_row_of_node(node.child_at_index(index1), start_pos),
-            rle_row_of_node(node.child_at_index(index2), start_pos2),
+            rle_row_of_node(node.child_at_index(index1), start_pos, max_length_1),
+            rle_row_of_node(node.child_at_index(index2), start_pos_2, max_length_2),
         ))
     }
 }

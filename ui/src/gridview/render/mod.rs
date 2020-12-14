@@ -53,6 +53,7 @@ lazy_static! {
 
 #[derive(Default)]
 struct RenderCache {
-    pub textures: textures::TextureCache,
+    pub ibos: ibos::IboCache,
     pub vbos: vbos::VboCache,
+    pub textures: textures::TextureCache,
 }

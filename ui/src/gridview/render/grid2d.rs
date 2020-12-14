@@ -33,8 +33,8 @@ use ndcell_core::prelude::*;
 use super::consts::*;
 use super::gl_quadtree::CachedGlQuadtree;
 use super::picker::CachedMousePicker;
+use super::shaders;
 use super::vertices::{MouseTargetVertex, RgbaVertex};
-use super::{ibos, shaders};
 use crate::config::{MouseDisplay, MouseDragBinding};
 use crate::gridview::*;
 use crate::Scale;
@@ -386,7 +386,13 @@ impl<'a> RenderInProgress<'a> {
                 MouseTargetData { binding, display },
             ));
         }
-        let vbo = self.cache.vbos.mouse_target_verts();
+
+        // Reborrow is necessary in order to split borrow.
+        let cache = &mut *self.cache;
+        let ibos = &mut cache.ibos;
+        let vbos = &mut cache.vbos;
+
+        let vbo = vbos.mouse_target_verts();
         let vbo_slice = vbo.slice(0..(4 * 8)).unwrap();
         vbo_slice.write(&verts);
         self.render_cache_deprecated
@@ -395,7 +401,7 @@ impl<'a> RenderInProgress<'a> {
             .make_fbo()
             .draw(
                 vbo_slice,
-                &ibos::rect_indices(8),
+                &ibos.rect_indices(8),
                 &shaders::PICKER,
                 &uniform! { matrix: self.transform.gl_matrix() },
                 &glium::DrawParameters::default(),
@@ -684,15 +690,21 @@ impl<'a> RenderInProgress<'a> {
                 .iter()
                 .flat_map(|&rect| rect.verts(self.render_cell_scale).to_vec())
                 .collect_vec();
+
+            // Reborrow is necessary in order to split borrow.
+            let cache = &mut *self.cache;
+            let ibos = &mut cache.ibos;
+            let vbos = &mut cache.vbos;
+
             // Put the data in a slice of the VBO.
-            let vbo = self.cache.vbos.rgba_verts();
+            let vbo = vbos.rgba_verts();
             let vbo_slice = vbo.slice(0..(4 * count)).unwrap();
             vbo_slice.write(&verts);
             // Draw rectangles.
             self.target
                 .draw(
                     vbo_slice,
-                    &ibos::rect_indices(count),
+                    &ibos.rect_indices(count),
                     &shaders::RGBA,
                     &uniform! { matrix: self.transform.gl_matrix() },
                     &glium::DrawParameters {

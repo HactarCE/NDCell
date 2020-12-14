@@ -223,16 +223,12 @@ impl GridViewTrait for GridView2D {
                 }
                 ClipboardCommand::Paste => {
                     self.record();
-                    let rle_string =
+                    let string_from_clipboard =
                         clipboard_get().map_err(|_| anyhow!("Fetching clipboard contents"))?;
-                    let result = ndcell_core::io::import_automaton_from_string(
-                        &rle_string,
-                        Rule::Rule2D(crate::load_custom_rule_2d()),
-                    );
+                    let result =
+                        Selection2D::from_str(&string_from_clipboard, self.automaton.ndtree.pool());
                     match result {
-                        Ok(Ok(Automaton::Automaton2D(automaton))) => *self = Self::from(automaton),
-                        Ok(Ok(_)) => warn!("Failed to load pattern because rule is not 2D"),
-                        Ok(Err(_)) => warn!("Failed to load rule"),
+                        Ok(sel) => self.set_selection(sel),
                         Err(errors) => warn!("Failed to load pattern: {:?}", errors),
                     }
                 }
@@ -285,7 +281,14 @@ impl GridViewTrait for GridView2D {
     }
 
     fn export(&self, format: CaFormat) -> Result<String, CaFormatError> {
-        ndcell_core::io::export_ndautomaton_to_string(&self.automaton, format)
+        let ndtree = self
+            .selection
+            .as_ref()
+            .and_then(|sel| sel.cells.as_ref())
+            .unwrap_or(&self.automaton.ndtree);
+        let two_states = TwoState::from_rule(&*self.automaton.rule);
+        let rect = self.selection_rect().cloned();
+        ndcell_core::io::export_ndtree_to_string(ndtree, format, two_states, rect)
     }
 
     fn run_step(&mut self) {
@@ -402,6 +405,10 @@ impl GridView2D {
         &self.camera_interpolator.current
     }
 
+    /// Returns the selection rectangle.
+    pub fn selection_rect(&self) -> Option<&BigRect2D> {
+        self.selection.as_ref().map(|sel| &sel.rect)
+    }
     /// Deselect and set a new selection rectangle.
     pub fn set_selection_rect(&mut self, new_selection_rect: Option<BigRect2D>) {
         self.set_selection(new_selection_rect.map(Selection2D::from))

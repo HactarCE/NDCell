@@ -33,6 +33,37 @@ impl<D: Dim> From<BigRect<D>> for Selection<D> {
         Self { rect, cells: None }
     }
 }
+impl<D: Dim> Selection<D> {
+    pub fn from_str(
+        s: &str,
+        node_pool: &SharedNodePool<D>,
+    ) -> Result<Option<Self>, Vec<CaFormatError>> {
+        let mut errors: Vec<CaFormatError> = vec![];
+        // TODO: find a nice way to do this without duplicating code from
+        // ndcell_core::io::convert
+        match Self::from_str_with_format::<Rle>(s, node_pool) {
+            Ok(ok) => return Ok(ok),
+            Err(e) => errors.push(e.into()),
+        }
+        match Self::from_str_with_format::<Macrocell>(s, node_pool) {
+            Ok(ok) => return Ok(ok),
+            Err(e) => errors.push(e.into()),
+        }
+        Err(errors)
+    }
+    pub fn from_str_with_format<F: CaFormatTrait>(
+        s: &str,
+        node_pool: &SharedNodePool<D>,
+    ) -> Result<Option<Self>, F::Err> {
+        let pattern: F = s.parse()?;
+        if let Some(rect) = pattern.region().bounding_rect() {
+            let cells = Some(pattern.to_ndtree(node_pool.new_ref())?);
+            Ok(Some(Self { rect, cells }))
+        } else {
+            Ok(None)
+        }
+    }
+}
 
 /// Resizes a selection given cursor movement from `drag_start_pos` to
 /// `drag_end_pos` based on the distance covered during the drag.

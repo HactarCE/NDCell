@@ -98,7 +98,7 @@ impl GridViewTrait for GridView3D {
     }
 
     fn export(&self, format: CaFormat) -> Result<String, CaFormatError> {
-        ndcell_core::io::export_ndautomaton_to_string(&self.automaton, format)
+        ndcell_core::io::export_ndautomaton_to_string(&self.automaton, format, None)
     }
 
     fn run_step(&mut self) {

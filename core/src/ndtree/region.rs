@@ -27,6 +27,16 @@ impl<D: Dim> From<BigRect<D>> for Region<D> {
     }
 }
 impl<D: Dim> Region<D> {
+    /// Returns the smallest rectangle containing the region, or `None` if the
+    /// region is empty.
+    pub fn bounding_rect(&self) -> Option<BigRect<D>> {
+        match self {
+            Region::Empty => None,
+            Region::Rect(rect) => Some(rect.clone()),
+            Region::NdTree(ndtree) => ndtree.bounding_rect(),
+        }
+    }
+
     /// Converts the region into an ND-tree using state #1 for cells that are
     /// inside the region and state #0 for cells that are not.
     pub fn into_ndtree(self, center: BigVec<D>) -> NdTree<D> {

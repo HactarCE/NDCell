@@ -150,18 +150,9 @@ impl<D: Dim> IVec<D> {
         })
     }
     /// Converts the `IVec` to an `FVec`.
-    ///
-    /// # Panics
-    ///
-    /// This method panics if any component does not fit in an `f64`.
     #[inline]
     pub fn to_fvec(&self) -> FVec<D> {
-        FVec::from_fn(|ax| {
-            self[ax]
-                .to_f64()
-                .map(r64)
-                .expect("Cannot convert this IVec into an FVec")
-        })
+        FVec::from_fn(|ax| r64(self[ax] as f64))
     }
 }
 

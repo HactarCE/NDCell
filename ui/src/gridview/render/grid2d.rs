@@ -201,11 +201,11 @@ impl<'a> RenderInProgress<'a> {
         // inside `self.visible_rect`.
         let cells_w = self.visible_rect.len(X) as u32;
         let cells_h = self.visible_rect.len(Y) as u32;
-        let (cells_texture, mut cells_fbo, cells_texture_fract) =
-            cache.textures.cells.at_min_size(cells_w, cells_h);
+        let (cells_texture, mut cells_fbo, cells_texture_viewport) =
+            cache.textures.cells(cells_w, cells_h);
         cells_fbo
             .draw(
-                &*vbos.quadtree_quad_with_quadtree_coords(self.visible_rect, cells_texture_fract),
+                &*vbos.quadtree_quad_with_quadtree_coords(self.visible_rect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::QUADTREE,
                 &uniform! {
@@ -213,7 +213,10 @@ impl<'a> RenderInProgress<'a> {
                     layer_count: gl_quadtree.layers as i32,
                     root_idx: gl_quadtree.root_idx as u32,
                 },
-                &glium::DrawParameters::default(),
+                &glium::DrawParameters {
+                    viewport: Some(cells_texture_viewport),
+                    ..Default::default()
+                },
             )
             .context("cells_fbo.draw()")?;
 
@@ -224,8 +227,7 @@ impl<'a> RenderInProgress<'a> {
         let render_cells_center = self.camera.render_cell_pos(&self.visible_quadtree.offset)
             - self.visible_rect.min().to_fvec();
         let render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size / 2.0);
-        let texture_coords_rect =
-            render_cells_rect / self.visible_rect.size().to_fvec() * cells_texture_fract;
+        let texture_coords_rect = render_cells_rect / self.visible_rect.size().to_fvec();
 
         self.target
             .draw(
@@ -236,6 +238,7 @@ impl<'a> RenderInProgress<'a> {
                     alpha: 1.0_f32,
                     src_texture: cells_texture.sampled(),
                     scale_factor: self.render_cell_scale.units_per_cell().raw() as f32,
+                    active_tex_size: (cells_w as f32, cells_h as f32)
                 },
                 &glium::DrawParameters::default(),
             )

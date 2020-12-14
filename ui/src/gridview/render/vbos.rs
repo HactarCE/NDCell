@@ -33,15 +33,11 @@ impl VboCache {
     pub fn quadtree_quad_with_quadtree_coords(
         &mut self,
         rect: IRect2D,
-        texture_fraction: FVec2D,
     ) -> &mut VertexBuffer<QuadtreePosVertex> {
         let left = rect.min()[X] as i32;
         let right = rect.max()[X] as i32;
         let bottom = rect.min()[Y] as i32;
         let top = rect.max()[Y] as i32;
-        let dest_top_right = texture_fraction * r64(2.0) - r64(1.0);
-        let dest_right = dest_top_right[X].to_f32().unwrap();
-        let dest_top = dest_top_right[Y].to_f32().unwrap();
         self.quadtree_quad.write(&[
             QuadtreePosVertex {
                 cell_coords: [left, bottom],
@@ -49,15 +45,15 @@ impl VboCache {
             },
             QuadtreePosVertex {
                 cell_coords: [right, bottom],
-                dest_coords: [dest_right, -1.0],
+                dest_coords: [1.0, -1.0],
             },
             QuadtreePosVertex {
                 cell_coords: [left, top],
-                dest_coords: [-1.0, dest_top],
+                dest_coords: [-1.0, 1.0],
             },
             QuadtreePosVertex {
                 cell_coords: [right, top],
-                dest_coords: [dest_right, dest_top],
+                dest_coords: [1.0, 1.0],
             },
         ]);
         &mut self.quadtree_quad

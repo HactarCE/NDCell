@@ -34,12 +34,14 @@ uniform float scale_factor;
 // interpolation).
 float p = max(scale_factor, 1.0);
 
-// Pixel size of the source
+// Pixel size of the source texture
 vec2 tex_size = vec2(textureSize(src_texture, 0));
+// Pixel size of the part of the source texture being used
+uniform vec2 active_tex_size;
 
 void main() {
     // Determine the (floating-point) pixel position in the source texture.
-    vec2 uv = tex_coords * tex_size;
+    vec2 uv = tex_coords * active_tex_size;
 
     // Round to the nearest pixel boundary. (Pixels are sampled at
     // half-integers, not integers).
@@ -49,7 +51,7 @@ void main() {
     // See https://www.desmos.com/calculator/sogqxjzxiw.
     uv = uv_i + clamp(uv_f * p, -0.5, 0.5);
 
-    // Convert back from pixels to the range [0,1].
+    // Convert back from pixels to the range [0, 1].
     vec2 new_tex_coords = uv / tex_size;
 
     // Sample the point using linear interpolation.

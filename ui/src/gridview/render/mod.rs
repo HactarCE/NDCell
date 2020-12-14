@@ -8,6 +8,7 @@ pub mod grid2d;
 pub mod grid3d;
 mod ibos;
 mod picker;
+mod resizing;
 mod shaders;
 mod textures;
 mod vbos;

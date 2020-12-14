@@ -32,7 +32,6 @@ use ndcell_core::prelude::*;
 
 use super::consts::*;
 use super::gl_quadtree::CachedGlQuadtree;
-use super::picker::CachedMousePicker;
 use super::shaders;
 use super::vertices::{MouseTargetVertex, RgbaVertex};
 use crate::config::{MouseDisplay, MouseDragBinding};
@@ -43,8 +42,6 @@ use crate::Scale;
 pub struct RenderCache {
     /// Texture that encodes a quadtree of visbile render cells.
     gl_quadtree: CachedGlQuadtree,
-    /// Pixel buffer object that tells which target the cursor is hovering over on.
-    picker: CachedMousePicker,
 }
 
 pub struct RenderInProgress<'a> {
@@ -82,12 +79,13 @@ impl<'a> RenderInProgress<'a> {
         RenderParams { target, config }: RenderParams<'a>,
         render_cache_deprecated: &'a mut RenderCache,
     ) -> Result<Self> {
+        let mut cache = super::CACHE.borrow_mut();
+
+        // Initialize depth buffer.
         target.clear_depth(0.0);
-        let p = render_cache_deprecated
-            .picker
-            .at_size(target.get_dimensions());
-        p.make_fbo()
-            .clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 0.0);
+
+        // Initialize mouse picker.
+        cache.picker.init(target.get_dimensions());
 
         let camera = g.camera().clone();
 
@@ -144,7 +142,7 @@ impl<'a> RenderInProgress<'a> {
         let mouse_targets = vec![];
 
         Ok(Self {
-            cache: super::CACHE.borrow_mut(),
+            cache,
             camera,
             target,
             config,
@@ -168,12 +166,7 @@ impl<'a> RenderInProgress<'a> {
                 // Convert mouse position to `u32`.
                 .and_then(|pos| pos[X].to_u32().zip(pos[Y].to_u32()))
                 // Get mouse target ID underneath cursor.
-                .map(|cursor_pos| {
-                    self.render_cache_deprecated
-                        .picker
-                        .unwrap()
-                        .get_pixel(cursor_pos) as usize
-                })
+                .map(|cursor_pos| self.cache.picker.get_pixel(cursor_pos) as usize)
                 // Get mouse target using that ID (subtract 1 because 0 means no
                 // target).
                 .and_then(|i| self.mouse_targets.get(i.checked_sub(1)?))
@@ -398,16 +391,17 @@ impl<'a> RenderInProgress<'a> {
         let vbo = vbos.mouse_target_verts();
         let vbo_slice = vbo.slice(0..(4 * 8)).unwrap();
         vbo_slice.write(&verts);
-        self.render_cache_deprecated
-            .picker
-            .unwrap()
-            .make_fbo()
+        let (mut picker_fbo, picker_viewport) = cache.picker.fbo();
+        picker_fbo
             .draw(
                 vbo_slice,
                 &ibos.rect_indices(8),
                 &shaders::PICKER,
                 &uniform! { matrix: self.transform.gl_matrix() },
-                &glium::DrawParameters::default(),
+                &glium::DrawParameters {
+                    viewport: Some(picker_viewport),
+                    ..Default::default()
+                },
             )
             .context("Computing selection mouse targets")?;
 

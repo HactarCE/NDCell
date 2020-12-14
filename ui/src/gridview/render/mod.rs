@@ -57,4 +57,5 @@ struct RenderCache {
     pub ibos: ibos::IboCache,
     pub vbos: vbos::VboCache,
     pub textures: textures::TextureCache,
+    pub picker: picker::MousePicker,
 }

@@ -1,5 +1,8 @@
 //! 2D and 3D grid rendering.
 
+use send_wrapper::SendWrapper;
+use std::cell::RefCell;
+
 mod gl_quadtree;
 pub mod grid2d;
 pub mod grid3d;
@@ -26,6 +29,8 @@ mod consts {
 
     /// Number of cell overlay rectangles in each render batch.
     pub const CELL_OVERLAY_BATCH_SIZE: usize = 256;
+    /// Number of mouse target rectangles in each render batch.
+    pub const MOUSE_TARGET_BATCH_SIZE: usize = 256;
 
     /// Depth at which to render gridlines.
     pub const GRIDLINE_DEPTH: f32 = 0.1;
@@ -39,4 +44,15 @@ mod consts {
     /// A small offset used to force correct Z order or align things at the
     /// sub-pixel scale.
     pub const TINY_OFFSET: f32 = 1.0 / 16.0;
+}
+
+lazy_static! {
+    static ref CACHE: SendWrapper<RefCell<RenderCache>> =
+        SendWrapper::new(RefCell::new(RenderCache::default()));
+}
+
+#[derive(Default)]
+struct RenderCache {
+    pub textures: textures::TextureCache,
+    pub vbos: vbos::VboCache,
 }

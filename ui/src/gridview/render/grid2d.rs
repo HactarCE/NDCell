@@ -25,6 +25,7 @@ use anyhow::{Context, Result};
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
 use itertools::Itertools;
+use std::cell::RefMut;
 
 use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
@@ -33,7 +34,7 @@ use super::consts::*;
 use super::gl_quadtree::CachedGlQuadtree;
 use super::picker::CachedMousePicker;
 use super::vertices::{MouseTargetVertex, RgbaVertex};
-use super::{ibos, shaders, textures, vbos};
+use super::{ibos, shaders};
 use crate::config::{MouseDisplay, MouseDragBinding};
 use crate::gridview::*;
 use crate::Scale;
@@ -47,6 +48,8 @@ pub struct RenderCache {
 }
 
 pub struct RenderInProgress<'a> {
+    /// Global lock on cached render data.
+    cache: RefMut<'a, super::RenderCache>,
     /// Camera to render the grid from.
     camera: Camera2D,
     /// Target to render to.
@@ -70,17 +73,19 @@ pub struct RenderInProgress<'a> {
     /// Mouse targets, indexed by ID.
     mouse_targets: Vec<MouseTargetData>,
     /// Cached render data maintained by the `GridView2D`.
-    render_cache: &'a mut RenderCache,
+    render_cache_deprecated: &'a mut RenderCache,
 }
 impl<'a> RenderInProgress<'a> {
     /// Creates a `RenderInProgress` for a gridview.
     pub fn new(
         g: &'a GridView2D,
         RenderParams { target, config }: RenderParams<'a>,
-        render_cache: &'a mut RenderCache,
+        render_cache_deprecated: &'a mut RenderCache,
     ) -> Result<Self> {
         target.clear_depth(0.0);
-        let p = render_cache.picker.at_size(target.get_dimensions());
+        let p = render_cache_deprecated
+            .picker
+            .at_size(target.get_dimensions());
         p.make_fbo()
             .clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 0.0);
 
@@ -139,6 +144,7 @@ impl<'a> RenderInProgress<'a> {
         let mouse_targets = vec![];
 
         Ok(Self {
+            cache: super::CACHE.borrow_mut(),
             camera,
             target,
             config,
@@ -149,7 +155,7 @@ impl<'a> RenderInProgress<'a> {
             visible_rect,
             transform,
             mouse_targets,
-            render_cache,
+            render_cache_deprecated,
         })
     }
 
@@ -162,7 +168,12 @@ impl<'a> RenderInProgress<'a> {
                 // Convert mouse position to `u32`.
                 .and_then(|pos| pos[X].to_u32().zip(pos[Y].to_u32()))
                 // Get mouse target ID underneath cursor.
-                .map(|cursor_pos| self.render_cache.picker.unwrap().get_pixel(cursor_pos) as usize)
+                .map(|cursor_pos| {
+                    self.render_cache_deprecated
+                        .picker
+                        .unwrap()
+                        .get_pixel(cursor_pos) as usize
+                })
                 // Get mouse target using that ID (subtract 1 because 0 means no
                 // target).
                 .and_then(|i| self.mouse_targets.get(i.checked_sub(1)?))
@@ -176,9 +187,12 @@ impl<'a> RenderInProgress<'a> {
 
     /// Draw the cells that appear in the viewport.
     pub fn draw_cells(&mut self) -> Result<()> {
-        let textures: &mut textures::TextureCache = &mut textures::CACHE.borrow_mut();
+        // Reborrow is necessary in order to split borrow.
+        let cache = &mut *self.cache;
+        let vbos = &mut cache.vbos;
+
         // Steps #1: encode the quadtree as a texture.
-        let gl_quadtree = self.render_cache.gl_quadtree.from_node(
+        let gl_quadtree = self.render_cache_deprecated.gl_quadtree.from_node(
             (&self.visible_quadtree.root).into(),
             self.render_cell_layer,
             Self::node_pixel_color,
@@ -188,10 +202,10 @@ impl<'a> RenderInProgress<'a> {
         let cells_w = self.visible_rect.len(X) as u32;
         let cells_h = self.visible_rect.len(Y) as u32;
         let (cells_texture, mut cells_fbo, cells_texture_fract) =
-            textures.cells.at_min_size(cells_w, cells_h);
+            cache.textures.cells.at_min_size(cells_w, cells_h);
         cells_fbo
             .draw(
-                &*vbos::quadtree_quad_with_quadtree_coords(self.visible_rect, cells_texture_fract),
+                &*vbos.quadtree_quad_with_quadtree_coords(self.visible_rect, cells_texture_fract),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::QUADTREE,
                 &uniform! {
@@ -215,7 +229,7 @@ impl<'a> RenderInProgress<'a> {
 
         self.target
             .draw(
-                &*vbos::blit_quad_with_src_coords(texture_coords_rect),
+                &*vbos.blit_quad_with_src_coords(texture_coords_rect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::PIXMIX,
                 &uniform! {
@@ -372,10 +386,10 @@ impl<'a> RenderInProgress<'a> {
                 MouseTargetData { binding, display },
             ));
         }
-        let vbo = vbos::mouse_target_verts();
+        let vbo = self.cache.vbos.mouse_target_verts();
         let vbo_slice = vbo.slice(0..(4 * 8)).unwrap();
         vbo_slice.write(&verts);
-        self.render_cache
+        self.render_cache_deprecated
             .picker
             .unwrap()
             .make_fbo()
@@ -671,7 +685,7 @@ impl<'a> RenderInProgress<'a> {
                 .flat_map(|&rect| rect.verts(self.render_cell_scale).to_vec())
                 .collect_vec();
             // Put the data in a slice of the VBO.
-            let vbo = vbos::rgba_verts();
+            let vbo = self.cache.vbos.rgba_verts();
             let vbo_slice = vbo.slice(0..(4 * count)).unwrap();
             vbo_slice.write(&verts);
             // Draw rectangles.

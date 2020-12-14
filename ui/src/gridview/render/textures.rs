@@ -2,18 +2,11 @@
 
 use glium::framebuffer::SimpleFrameBuffer;
 use glium::texture::SrgbTexture2d;
-use send_wrapper::SendWrapper;
-use std::cell::RefCell;
 
 use ndcell_core::ndvec::{FVec2D, NdVec};
 use ndcell_core::num::r64;
 
 use crate::DISPLAY;
-
-lazy_static! {
-    pub static ref CACHE: SendWrapper<RefCell<TextureCache>> =
-        SendWrapper::new(RefCell::new(TextureCache::default()));
-}
 
 #[derive(Default)]
 pub struct TextureCache {

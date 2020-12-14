@@ -152,7 +152,7 @@ impl<'pool, D: Dim, T, F: Fn(NodeRef<'pool, D>) -> T> FlatNdTreeBuilder<'pool, D
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::{Rle, SerializablePattern};
+    use crate::io::{Rle, CaFormatTrait};
     use crate::ndtree::NdTree2D;
 
     /// Thoroughly test a single "flat" quadtree.

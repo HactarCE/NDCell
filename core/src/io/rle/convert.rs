@@ -9,7 +9,7 @@ use crate::ndtree::{
 use crate::ndvec::{BigVec, NdVec, UVec};
 use crate::num::{BigInt, Integer, ToPrimitive, Zero};
 
-impl SerializablePattern for Rle {
+impl CaFormatTrait for Rle {
     fn to_string_2_state(&self) -> String {
         format!("{:b}", self)
     }
@@ -42,8 +42,8 @@ impl SerializablePattern for Rle {
         &mut self.comments
     }
 
-    fn region<D: Dim>(&self) -> Result<Region<D>, Self::Err> {
-        Ok(Region::Rect(self.rect()))
+    fn region<D: Dim>(&self) -> Region<D> {
+        Region::Rect(self.rect())
     }
 
     fn to_ndtree<D: Dim>(&self, node_pool: SharedNodePool<D>) -> Result<NdTree<D>, Self::Err> {

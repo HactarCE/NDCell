@@ -9,7 +9,7 @@ use crate::ndvec::{BigVec, BigVec6D};
 use crate::num::{BigInt, Zero};
 use crate::HashMap;
 
-impl SerializablePattern for Macrocell {
+impl CaFormatTrait for Macrocell {
     fn rule(&self) -> Option<&str> {
         self.rule.as_ref().map(|r| r.as_str())
     }
@@ -33,7 +33,7 @@ impl SerializablePattern for Macrocell {
         &mut self.comments
     }
 
-    fn region<D: Dim>(&self) -> Result<Region<D>, Self::Err> {
+    fn region<D: Dim>(&self) -> Region<D> {
         // Convert from 6D to ND.
         let corner1 = BigVec::from_fn(|ax| self.offset[ax].clone());
 
@@ -43,7 +43,7 @@ impl SerializablePattern for Macrocell {
             Some(MacrocellNode::NonLeaf { layer, .. }) => BigVec::repeat(layer.big_len()),
         };
 
-        Ok(Region::Rect(BigRect::with_size(corner1, size)))
+        Region::Rect(BigRect::with_size(corner1, size))
     }
 
     fn to_ndtree<D: Dim>(&self, node_pool: SharedNodePool<D>) -> Result<NdTree<D>, Self::Err> {

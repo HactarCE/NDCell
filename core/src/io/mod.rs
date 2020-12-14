@@ -60,15 +60,30 @@ impl fmt::Display for CaFormatError {
     }
 }
 
+/// Exports an ND-tree to a string using a particular format.
+pub fn export_ndtree_to_string<D: Dim>(
+    ndtree: &NdTree<D>,
+    format: CaFormat,
+    two_states: TwoState,
+    rect: Option<BigRect<D>>,
+) -> Result<String, CaFormatError> {
+    match format {
+        CaFormat::Rle => Rle::from_ndtree_to_string(ndtree, rect, two_states).map_err(Into::into),
+        CaFormat::Macrocell => {
+            Macrocell::from_ndtree_to_string(ndtree, rect, two_states).map_err(Into::into)
+        }
+    }
+}
 /// Exports an automaton to a string using a particular format.
 pub fn export_ndautomaton_to_string<D: Dim>(
     automaton: &NdAutomaton<D>,
     format: CaFormat,
+    rect: Option<BigRect<D>>,
 ) -> Result<String, CaFormatError> {
     match format {
-        CaFormat::Rle => Rle::from_ndautomaton_to_string(automaton, None).map_err(Into::into),
+        CaFormat::Rle => Rle::from_ndautomaton_to_string(automaton, rect).map_err(Into::into),
         CaFormat::Macrocell => {
-            Macrocell::from_ndautomaton_to_string(automaton, None).map_err(Into::into)
+            Macrocell::from_ndautomaton_to_string(automaton, rect).map_err(Into::into)
         }
     }
 }
@@ -83,22 +98,41 @@ pub fn export_automaton_to_string(
         CaFormat::Macrocell => Macrocell::from_automaton_to_string(automaton).map_err(Into::into),
     }
 }
+
+/// Helper macro for `try_all_formats!`.
+macro_rules! _try_format {
+    ($errors:ident; $($token:tt)+) => {
+        match $($token)+ {
+            Ok(ok) => return Ok(ok),
+            Err(err) => $errors.push(err.into()),
+        };
+    };
+}
+/// Lazily evaluates a method with the given arguments for each (hard-coded) CA
+/// format, returning the value from the first one that succeeds (returns
+/// `Ok()`). If all formats fail (return `Err()`), returns a `Vec` of all the
+/// `CaFormatError`s.
+macro_rules! try_all_formats {
+    ($($token:tt)+) => {
+        let mut errors: Vec<CaFormatError> = vec![];
+        _try_format!(errors; Rle::$($token)+);
+        _try_format!(errors; Macrocell::$($token)+);
+        return Err(errors);
+    };
+}
+
+/// Imports an ND-tree from a string using the first format that works,
+/// returning the error resulting from each attempt if none succeeded.
+pub fn import_ndtree_from_string<D: Dim>(s: &str) -> Result<NdTree<D>, Vec<CaFormatError>> {
+    try_all_formats!(from_string_to_ndtree(s));
+}
 /// Imports an automaton from a string using the first format that works,
 /// returning the error resulting from each attempt if none succeeded.
 pub fn import_automaton_from_string<R: ResolveRule + Clone>(
     s: &str,
     resolve_rule: R,
 ) -> Result<Result<Automaton, R::Err>, Vec<CaFormatError>> {
-    let mut errors: Vec<CaFormatError> = vec![];
-    match Rle::from_string_to_automaton(s, resolve_rule.clone()) {
-        Ok(a) => return Ok(a),
-        Err(e) => errors.push(e.into()),
-    };
-    match Macrocell::from_string_to_automaton(s, resolve_rule.clone()) {
-        Ok(a) => return Ok(a),
-        Err(e) => errors.push(e.into()),
-    };
-    Err(errors)
+    try_all_formats!(from_string_to_automaton(s, resolve_rule.clone()));
 }
 
 /// Whether a rule has more than two states.
@@ -162,7 +196,7 @@ impl<D: Dim> ResolveRule for Arc<dyn NdRule<D>> {
 ///
 /// The error returned from all these methods is the same one that `from_str()`
 /// returns.
-pub trait SerializablePattern: FromStr + ToString {
+pub trait CaFormatTrait: FromStr + ToString {
     /// Serializes the pattern for an automaton with exactly two states.
     fn to_string_2_state(&self) -> String {
         self.to_string()
@@ -192,7 +226,7 @@ pub trait SerializablePattern: FromStr + ToString {
     }
 
     /// Returns the region bounding the pattern, used mainly for copy/paste.
-    fn region<D: Dim>(&self) -> Result<Region<D>, Self::Err>;
+    fn region<D: Dim>(&self) -> Region<D>;
 
     /// Converts the serializable pattern into an automaton of unknown
     /// dimensionality, given a closure to resolve the name of a rule.

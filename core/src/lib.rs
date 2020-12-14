@@ -61,7 +61,7 @@ const MACROCELL_HEADER: &str = concat!("[M2] (ndcell ", env!("CARGO_PKG_VERSION"
 /// All public traits, for easy importing.
 pub mod traits {
     pub use crate::dim::Dim;
-    pub use crate::io::{ResolveRule, SerializablePattern};
+    pub use crate::io::{ResolveRule, CaFormatTrait};
     pub use crate::ndrect::CanContain;
     pub use crate::ndtree::NodeRefTrait;
     pub use crate::num::{Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero};

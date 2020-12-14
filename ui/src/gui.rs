@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use ndcell_core::io::{Rle, SerializablePattern};
+use ndcell_core::io::{CaFormatTrait, Rle};
 
 use super::clipboard_compat::*;
 use super::gridview::*;

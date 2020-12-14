@@ -10,7 +10,7 @@
 mod components;
 mod convert;
 
-use super::{SerializablePattern, TwoState};
+use super::{CaFormatTrait, TwoState};
 pub use components::Rle;
 use components::*;
 

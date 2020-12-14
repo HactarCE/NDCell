@@ -6,7 +6,7 @@
 mod components;
 mod convert;
 
-use super::SerializablePattern;
+use super::CaFormatTrait;
 pub use components::Macrocell;
 use components::*;
 

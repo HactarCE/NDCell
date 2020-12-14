@@ -14,7 +14,7 @@ use crate::num::{BigInt, Signed, Zero};
 
 // TODO: parallelize using threadpool and crossbeam_channel (call execute threadpool.max_count times with closures that just loop)
 
-/// Advances the given NdTree by the given number of generations.
+/// Advances the given ND-tree by the given number of generations.
 pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
     if gens.is_negative() {
         panic!("Cannot simulate negative timestep");

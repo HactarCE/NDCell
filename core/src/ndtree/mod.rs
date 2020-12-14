@@ -328,7 +328,7 @@ impl<D: Dim> NdTree<D> {
     pub fn slice_containing<'a>(&'a self, rect: &BigRect<D>) -> NdTreeSlice<'a, D> {
         let node_pool = self.pool().access();
 
-        // Grow the NdTree until it contains the desired rectangle.
+        // Grow the ND-tree until it contains the desired rectangle.
         let mut tmp_ndtree = self.clone();
         tmp_ndtree.expand_to(rect);
         let mut ret = tmp_ndtree.as_slice();

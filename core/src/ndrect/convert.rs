@@ -1,6 +1,6 @@
 //! Conversions between different types of `NdRect`s.
 
-use super::{BigRect, FixedRect, IRect, URect};
+use super::{BigRect, FRect, FixedRect, IRect, URect};
 use crate::dim::Dim;
 
 impl<D: Dim> BigRect<D> {
@@ -42,6 +42,11 @@ impl<D: Dim> IRect<D> {
     #[inline]
     pub fn to_bigrect(&self) -> BigRect<D> {
         BigRect::with_size(self.start.to_bigvec(), self.size.to_bigvec())
+    }
+    /// Converts the `IRect` to an `FRect`.
+    #[inline]
+    pub fn to_frect(&self) -> FRect<D> {
+        FRect::with_size(self.start.to_fvec(), self.size.to_fvec())
     }
 }
 

@@ -175,6 +175,7 @@ pub fn show_gui() -> ! {
                         .render(RenderParams {
                             target: &mut target,
                             config: &config,
+                            modifiers: input_state.modifiers(),
                         })
                         .expect("Unhandled exception!");
 

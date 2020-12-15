@@ -1,5 +1,6 @@
 use anyhow::Result;
 use enum_dispatch::enum_dispatch;
+use glium::glutin::event::ModifiersState;
 use log::{debug, trace, warn};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
@@ -349,6 +350,8 @@ pub struct RenderParams<'a> {
     pub target: &'a mut glium::Frame,
     /// User configuration.
     pub config: &'a Config,
+    /// Key modifiers.
+    pub modifiers: ModifiersState,
 }
 
 /// Extra data generated when rendering a frame.

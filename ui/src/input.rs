@@ -67,6 +67,9 @@ pub struct State {
     window_position: Option<PhysicalPosition<i32>>,
 }
 impl State {
+    pub fn modifiers(&self) -> ModifiersState {
+        self.modifiers
+    }
     pub fn mouse(&self) -> MouseState {
         self.mouse
     }

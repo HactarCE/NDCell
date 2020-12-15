@@ -25,26 +25,27 @@ pub struct RenderInProgress<'a> {
     octree: &'a NdTree3D,
     /// Camera to render the scene from.
     camera: &'a Camera3D,
-    /// Target to render to.
-    target: &'a mut glium::Frame,
+
+    /// Render parameters.
+    params: RenderParams<'a>,
+
     /// Transform from `visible_octree` space (1 unit = 1 render cell; (0, 0) =
     /// bottom left) to screen space ((-1, -1) = bottom left; (1, 1) = top
     /// right) and pixel space (1 unit = 1 pixel; (0, 0) = top left).
     transform: CellTransform3D,
 }
 impl<'a> RenderInProgress<'a> {
-    pub fn new(
-        g: &'a GridView3D,
-        RenderParams { target, config: _ }: RenderParams<'a>,
-    ) -> Result<Self> {
-        target.clear_depth(f32::INFINITY);
+    pub fn new(g: &'a GridView3D, params: RenderParams<'a>) -> Result<Self> {
+        params.target.clear_depth(f32::INFINITY);
         let camera = g.camera();
         let transform = camera.cell_transform_with_base(BigVec3D::origin())?;
 
         Ok(Self {
             octree: &g.automaton.ndtree,
             camera,
-            target,
+
+            params,
+
             transform,
         })
     }
@@ -114,8 +115,9 @@ impl<'a> RenderInProgress<'a> {
             ],
         )
         .unwrap();
-        self.target.clear_color_srgb(0.5, 0.5, 0.5, 1.0);
-        self.target
+        self.params.target.clear_color_srgb(0.5, 0.5, 0.5, 1.0);
+        self.params
+            .target
             .draw(
                 &cube_vbo,
                 &cube_ibo,
@@ -137,7 +139,8 @@ impl<'a> RenderInProgress<'a> {
             .expect("Failed to draw cube");
 
         cube_vbo.write(&selection_cube_verts);
-        self.target
+        self.params
+            .target
             .draw(
                 &cube_vbo,
                 &cube_ibo,

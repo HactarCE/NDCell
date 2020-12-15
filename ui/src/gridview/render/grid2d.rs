@@ -22,6 +22,7 @@
 //! for features that are directly between cells.
 
 use anyhow::{Context, Result};
+use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
 use itertools::Itertools;
@@ -40,14 +41,15 @@ use crate::Scale;
 pub struct RenderInProgress<'a> {
     /// Global lock on cached render data.
     cache: RefMut<'a, super::RenderCache>,
-    /// Camera to render the grid from.
-    camera: Camera2D,
-    /// Target to render to.
-    target: &'a mut glium::Frame,
-    /// User configuration.
-    config: &'a Config,
+
+    /// Render parameters.
+    params: RenderParams<'a>,
     /// Mouse cursor state.
     mouse: MouseState,
+
+    /// Camera to render the grid from.
+    camera: Camera2D,
+
     /// Node layer of a render cell.
     render_cell_layer: Layer,
     /// Scale to draw render cells at.
@@ -60,6 +62,7 @@ pub struct RenderInProgress<'a> {
     /// = bottom left) to screen space ((-1, -1) = bottom left; (1, 1) = top
     /// right) and pixel space (1 unit = 1 pixel; (0, 0) = top left).
     transform: CellTransform2D,
+
     /// Mouse targets, indexed by ID.
     mouse_targets: Vec<MouseTargetData>,
     /// Vertex data for mouse targets.
@@ -67,17 +70,14 @@ pub struct RenderInProgress<'a> {
 }
 impl<'a> RenderInProgress<'a> {
     /// Creates a `RenderInProgress` for a gridview.
-    pub fn new(
-        g: &'a GridView2D,
-        RenderParams { target, config }: RenderParams<'a>,
-    ) -> Result<Self> {
+    pub fn new(g: &'a GridView2D, params: RenderParams<'a>) -> Result<Self> {
         let mut cache = super::CACHE.borrow_mut();
 
         // Initialize depth buffer.
-        target.clear_depth(0.0);
+        params.target.clear_depth(0.0);
 
         // Initialize mouse picker.
-        cache.picker.init(target.get_dimensions());
+        cache.picker.init(params.target.get_dimensions());
 
         let camera = g.camera().clone();
 
@@ -136,15 +136,18 @@ impl<'a> RenderInProgress<'a> {
 
         Ok(Self {
             cache,
-            camera,
-            target,
-            config,
+
+            params,
             mouse: g.mouse(),
+
+            camera,
+
             render_cell_layer,
             render_cell_scale,
             visible_quadtree,
             visible_rect,
             transform,
+
             mouse_targets,
             mouse_target_tris,
         })
@@ -243,7 +246,7 @@ impl<'a> RenderInProgress<'a> {
             .context("cells_fbo.draw()")?;
 
         // Step #3: scale and render that onto the screen.
-        let (target_w, target_h) = self.target.get_dimensions();
+        let (target_w, target_h) = self.params.target.get_dimensions();
         let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let render_cells_size = target_size / self.render_cell_scale.units_per_cell();
         let render_cells_center = self.camera.render_cell_pos(&self.visible_quadtree.offset)
@@ -251,7 +254,8 @@ impl<'a> RenderInProgress<'a> {
         let render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size / 2.0);
         let texture_coords_rect = render_cells_rect / self.visible_rect.size().to_fvec();
 
-        self.target
+        self.params
+            .target
             .draw(
                 &*vbos.blit_quad_with_src_coords(texture_coords_rect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
@@ -267,7 +271,7 @@ impl<'a> RenderInProgress<'a> {
             .context("Drawing cells to target")?;
 
         // // Draw a 1:1 "minimap" in the corner
-        // self.target.blit_from_simple_framebuffer(
+        // self.params.target.blit_from_simple_framebuffer(
         //     &cells_fbo,
         //     &entire_rect(&cells_fbo),
         //     &entire_blit_target(&cells_fbo),
@@ -366,6 +370,7 @@ impl<'a> RenderInProgress<'a> {
 
         // "Move selected cells" target.
         self.add_mouse_target_quad(
+            ModifiersState::empty(),
             visible_selection_rect.to_frect(),
             MouseTargetData {
                 binding: Some(MouseDragBinding::Select(
@@ -376,7 +381,7 @@ impl<'a> RenderInProgress<'a> {
         );
 
         // "Resize selection" target.
-        let click_target_width = self.config.ctrl.selection_resize_drag_target_width
+        let click_target_width = self.params.config.ctrl.selection_resize_drag_target_width
             / self.render_cell_scale.factor().to_f64().unwrap();
         let (min, max) = (
             visible_selection_rect.min(),
@@ -418,6 +423,7 @@ impl<'a> RenderInProgress<'a> {
                 SelectDragCommand::Resize { axes, plane: None }.into(),
             ));
             self.add_mouse_target_quad(
+                ModifiersState::empty(),
                 FRect::span(NdVec([xs[xi], ys[yi]]), NdVec([xs[xi + 1], ys[yi + 1]])),
                 MouseTargetData { binding, display },
             );
@@ -711,7 +717,8 @@ impl<'a> RenderInProgress<'a> {
             let vbo_slice = vbo.slice(0..(4 * count)).unwrap();
             vbo_slice.write(&verts);
             // Draw rectangles.
-            self.target
+            self.params
+                .target
                 .draw(
                     vbo_slice,
                     &ibos.rect_indices(count),
@@ -769,7 +776,12 @@ impl<'a> RenderInProgress<'a> {
         [r, g, b, 255]
     }
 
-    fn add_mouse_target_quad(&mut self, cells: FRect2D, data: MouseTargetData) {
+    fn add_mouse_target_quad(
+        &mut self,
+        modifiers: ModifiersState,
+        cells: FRect2D,
+        data: MouseTargetData,
+    ) {
         self.mouse_targets.push(data);
         let target_id = self.mouse_targets.len() as u32; // IDs start at 1
         let NdVec([x1, y1]) = cells.min();
@@ -780,16 +792,23 @@ impl<'a> RenderInProgress<'a> {
             NdVec([x1, y2]),
             NdVec([x2, y2]),
         ];
-        self._add_mouse_target_tri([corners[0], corners[1], corners[2]], target_id);
-        self._add_mouse_target_tri([corners[3], corners[2], corners[1]], target_id);
+        self._add_mouse_target_tri(modifiers, [corners[0], corners[1], corners[2]], target_id);
+        self._add_mouse_target_tri(modifiers, [corners[3], corners[2], corners[1]], target_id);
     }
-    fn _add_mouse_target_tri(&mut self, points: [FVec2D; 3], target_id: u32) {
-        let z = 0.0;
-        for &point in &points {
-            self.mouse_target_tris.push(MouseTargetVertex {
-                pos: [point[X].raw() as f32, point[Y].raw() as f32, z],
-                target_id,
-            })
+    fn _add_mouse_target_tri(
+        &mut self,
+        modifiers: ModifiersState,
+        points: [FVec2D; 3],
+        target_id: u32,
+    ) {
+        if self.params.modifiers == modifiers {
+            let z = 0.0;
+            for &point in &points {
+                self.mouse_target_tris.push(MouseTargetVertex {
+                    pos: [point[X].raw() as f32, point[Y].raw() as f32, z],
+                    target_id,
+                })
+            }
         }
     }
 }

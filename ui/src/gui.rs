@@ -187,6 +187,9 @@ pub fn show_gui() -> ! {
                 }
                 // Put it all on the screen.
                 target.finish().expect("Failed to swap buffers");
+
+                // Clean render cache.
+                super::gridview::post_frame_clean_render_cache();
             }
         })
 }

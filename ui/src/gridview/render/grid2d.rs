@@ -31,7 +31,6 @@ use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
 
 use super::consts::*;
-use super::gl_quadtree::CachedGlQuadtree;
 use super::shaders;
 use super::vertices::{MouseTargetVertex, RgbaVertex};
 use crate::config::{MouseDisplay, MouseDragBinding};
@@ -39,10 +38,7 @@ use crate::gridview::*;
 use crate::Scale;
 
 #[derive(Default)]
-pub struct RenderCache {
-    /// Texture that encodes a quadtree of visbile render cells.
-    gl_quadtree: CachedGlQuadtree,
-}
+pub struct RenderCache {}
 
 pub struct RenderInProgress<'a> {
     /// Global lock on cached render data.
@@ -224,7 +220,7 @@ impl<'a> RenderInProgress<'a> {
         let vbos = &mut cache.vbos;
 
         // Steps #1: encode the quadtree as a texture.
-        let gl_quadtree = self.render_cache_deprecated.gl_quadtree.from_node(
+        let gl_quadtree = cache.gl_quadtrees.gl_quadtree_from_node(
             (&self.visible_quadtree.root).into(),
             self.render_cell_layer,
             Self::node_pixel_color,

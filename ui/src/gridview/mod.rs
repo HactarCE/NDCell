@@ -20,6 +20,7 @@ pub use camera::*;
 use common::GridViewCommon;
 pub use common::{GridViewTrait, MouseState, MouseTargetData, RenderParams, RenderResult};
 pub use history::History;
+pub use render::post_frame_clean_render_cache;
 pub use selection::*;
 pub use view2d::GridView2D;
 pub use view3d::GridView3D;

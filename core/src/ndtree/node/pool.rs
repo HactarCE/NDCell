@@ -719,6 +719,11 @@ impl<'pool, D: Dim, N: NodeRefTrait<'pool, D = D>> PartialEq<N> for ArcNode<D> {
         std::ptr::eq(self.raw_node_ptr, other.as_ref().as_raw())
     }
 }
+impl<D: Dim> Hash for ArcNode<D> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.raw_node_ptr.hash(state)
+    }
+}
 impl<'pool, D: Dim, N: NodeRefTrait<'pool, D = D>> From<N> for ArcNode<D> {
     #[inline]
     fn from(n: N) -> Self {

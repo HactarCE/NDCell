@@ -58,4 +58,10 @@ struct RenderCache {
     pub vbos: vbos::VboCache,
     pub textures: textures::TextureCache,
     pub picker: picker::MousePicker,
+    pub gl_quadtrees: gl_quadtree::GlQuadtreeCache,
+}
+
+pub fn post_frame_clean_render_cache() {
+    let mut cache = CACHE.borrow_mut();
+    cache.gl_quadtrees.post_frame_clean_cache();
 }

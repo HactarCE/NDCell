@@ -69,6 +69,8 @@ pub struct RenderInProgress<'a> {
     transform: CellTransform2D,
     /// Mouse targets, indexed by ID.
     mouse_targets: Vec<MouseTargetData>,
+    /// Vertex data for mouse targets.
+    mouse_target_tris: Vec<MouseTargetVertex>,
     /// Cached render data maintained by the `GridView2D`.
     render_cache_deprecated: &'a mut RenderCache,
 }
@@ -140,6 +142,7 @@ impl<'a> RenderInProgress<'a> {
         let transform = camera.cell_transform_with_base(visible_quadtree.offset.clone())?;
 
         let mouse_targets = vec![];
+        let mouse_target_tris = vec![];
 
         Ok(Self {
             cache,
@@ -153,25 +156,61 @@ impl<'a> RenderInProgress<'a> {
             visible_rect,
             transform,
             mouse_targets,
-            render_cache_deprecated,
+            mouse_target_tris,
         })
     }
 
     /// Returns a `RenderResult` from this render.
-    pub fn finish(self) -> RenderResult {
-        RenderResult {
-            mouse_target: self
-                .mouse
-                .pos
-                // Convert mouse position to `u32`.
-                .and_then(|pos| pos[X].to_u32().zip(pos[Y].to_u32()))
-                // Get mouse target ID underneath cursor.
-                .map(|cursor_pos| self.cache.picker.get_pixel(cursor_pos) as usize)
-                // Get mouse target using that ID (subtract 1 because 0 means no
-                // target).
-                .and_then(|i| self.mouse_targets.get(i.checked_sub(1)?))
-                .cloned(),
+    pub fn finish(mut self) -> Result<RenderResult> {
+        Ok(RenderResult {
+            mouse_target: self.render_mouse_targets()?,
+        })
+    }
+
+    fn render_mouse_targets(&mut self) -> Result<Option<MouseTargetData>> {
+        // Reborrow is necessary in order to split borrow.
+        let cache = &mut *self.cache;
+        let vbos = &mut cache.vbos;
+
+        // Draw the triangles in batches, because the VBO might not be able to
+        // hold all the vertices at once.
+        let (mut picker_fbo, picker_viewport) = cache.picker.fbo();
+        for tri_batch in self.mouse_target_tris.chunks(MOUSE_TARGET_BATCH_SIZE * 3) {
+            let count = tri_batch.len();
+            // Put the data in a slice of the VBO.
+            let vbo = vbos.mouse_target_verts();
+            let vbo_slice = vbo.slice(0..count).unwrap();
+            vbo_slice.write(&tri_batch);
+
+            picker_fbo
+                .draw(
+                    vbo_slice,
+                    &glium::index::NoIndices(PrimitiveType::TrianglesList),
+                    &shaders::PICKER,
+                    &uniform! { matrix: self.transform.gl_matrix() },
+                    &glium::DrawParameters {
+                        depth: glium::Depth {
+                            test: glium::DepthTest::Overwrite,
+                            ..Default::default()
+                        },
+                        viewport: Some(picker_viewport),
+                        ..Default::default()
+                    },
+                )
+                .context("Rendering selection mouse targets")?;
         }
+
+        Ok(self
+            .mouse
+            .pos
+            // Convert mouse position to `u32`.
+            .and_then(|pos| pos[X].to_u32().zip(pos[Y].to_u32()))
+            // Get mouse target ID underneath cursor.
+            .map(|cursor_pos| self.cache.picker.get_pixel(cursor_pos) as usize)
+            // Get mouse target using that ID (subtract 1 because 0 means no
+            // target).
+            .and_then(|i| self.mouse_targets.get(i.checked_sub(1)?))
+            .cloned())
     }
 
     pub fn cell_transform(&self) -> &CellTransform2D {
@@ -335,6 +374,18 @@ impl<'a> RenderInProgress<'a> {
         ))
         .context("Drawing selection highlight")?;
 
+        // "Move selected cells" target.
+        self.add_mouse_target_quad(
+            visible_selection_rect.to_frect(),
+            MouseTargetData {
+                binding: Some(MouseDragBinding::Select(
+                    SelectDragCommand::MoveCells.into(),
+                )),
+                display: MouseDisplay::Move,
+            },
+        );
+
+        // "Resize selection" target.
         let click_target_width = self.config.ctrl.selection_resize_drag_target_width
             / self.render_cell_scale.factor().to_f64().unwrap();
         let (min, max) = (
@@ -365,7 +416,6 @@ impl<'a> RenderInProgress<'a> {
             MouseDisplay::ResizeNS,
             MouseDisplay::ResizeNESW,
         ];
-        let mut verts = Vec::with_capacity(4 * 8);
         for ((xi, yi), display) in x_indices.into_iter().zip(y_indices).zip(mouse_displays) {
             let mut axes = AxisSet::empty();
             if xi != 1 {
@@ -377,33 +427,11 @@ impl<'a> RenderInProgress<'a> {
             let binding = Some(MouseDragBinding::Select(
                 SelectDragCommand::Resize { axes, plane: None }.into(),
             ));
-            verts.extend_from_slice(&self.add_mouse_target(
+            self.add_mouse_target_quad(
                 FRect::span(NdVec([xs[xi], ys[yi]]), NdVec([xs[xi + 1], ys[yi + 1]])),
                 MouseTargetData { binding, display },
-            ));
+            );
         }
-
-        // Reborrow is necessary in order to split borrow.
-        let cache = &mut *self.cache;
-        let ibos = &mut cache.ibos;
-        let vbos = &mut cache.vbos;
-
-        let vbo = vbos.mouse_target_verts();
-        let vbo_slice = vbo.slice(0..(4 * 8)).unwrap();
-        vbo_slice.write(&verts);
-        let (mut picker_fbo, picker_viewport) = cache.picker.fbo();
-        picker_fbo
-            .draw(
-                vbo_slice,
-                &ibos.rect_indices(8),
-                &shaders::PICKER,
-                &uniform! { matrix: self.transform.gl_matrix() },
-                &glium::DrawParameters {
-                    viewport: Some(picker_viewport),
-                    ..Default::default()
-                },
-            )
-            .context("Computing selection mouse targets")?;
 
         Ok(())
     }
@@ -675,12 +703,7 @@ impl<'a> RenderInProgress<'a> {
     fn draw_cell_overlay_rects(&mut self, rects: &[CellOverlayRect]) -> Result<()> {
         // Draw the rectangles in batches, because the VBO might not be able to
         // hold all the vertices at once.
-        for rect_batch in rects
-            .into_iter()
-            .chunks(CELL_OVERLAY_BATCH_SIZE)
-            .into_iter()
-        {
-            let rect_batch = rect_batch.into_iter().collect_vec();
+        for rect_batch in rects.chunks(CELL_OVERLAY_BATCH_SIZE) {
             let count = rect_batch.len();
             // Generate vertices.
             let verts = rect_batch
@@ -756,34 +779,28 @@ impl<'a> RenderInProgress<'a> {
         [r, g, b, 255]
     }
 
-    fn add_mouse_target(
-        &mut self,
-        cells: FRect2D,
-        data: MouseTargetData,
-    ) -> [MouseTargetVertex; 4] {
+    fn add_mouse_target_quad(&mut self, cells: FRect2D, data: MouseTargetData) {
         self.mouse_targets.push(data);
         let target_id = self.mouse_targets.len() as u32; // IDs start at 1
         let NdVec([x1, y1]) = cells.min();
         let NdVec([x2, y2]) = cells.max();
+        let corners = [
+            NdVec([x1, y1]),
+            NdVec([x2, y1]),
+            NdVec([x1, y2]),
+            NdVec([x2, y2]),
+        ];
+        self._add_mouse_target_tri([corners[0], corners[1], corners[2]], target_id);
+        self._add_mouse_target_tri([corners[3], corners[2], corners[1]], target_id);
+    }
+    fn _add_mouse_target_tri(&mut self, points: [FVec2D; 3], target_id: u32) {
         let z = 0.0;
-        [
-            MouseTargetVertex {
-                pos: [x1.raw() as f32, y1.raw() as f32, z],
+        for &point in &points {
+            self.mouse_target_tris.push(MouseTargetVertex {
+                pos: [point[X].raw() as f32, point[Y].raw() as f32, z],
                 target_id,
-            },
-            MouseTargetVertex {
-                pos: [x2.raw() as f32, y1.raw() as f32, z],
-                target_id,
-            },
-            MouseTargetVertex {
-                pos: [x1.raw() as f32, y2.raw() as f32, z],
-                target_id,
-            },
-            MouseTargetVertex {
-                pos: [x2.raw() as f32, y2.raw() as f32, z],
-                target_id,
-            },
-        ]
+            })
+        }
     }
 }
 

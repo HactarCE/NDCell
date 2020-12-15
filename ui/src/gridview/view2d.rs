@@ -375,7 +375,7 @@ impl GridViewTrait for GridView2D {
             }
         }
 
-        self.common.last_render_result = rip.finish();
+        self.common.last_render_result = rip.finish()?;
         self.render_cache = Some(render_cache);
         Ok(self.last_render_result())
     }

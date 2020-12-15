@@ -6,7 +6,7 @@ use ndcell_core::prelude::*;
 use super::camera::{Camera, Camera2D, Interpolate, Interpolator, ScreenPos2D};
 use super::common::{GridViewCommon, GridViewTrait, RenderParams, RenderResult};
 use super::history::{History, HistoryBase, HistoryManager};
-use super::render::grid2d::{RenderCache, RenderInProgress};
+use super::render::grid2d::RenderInProgress;
 use super::selection::Selection2D;
 use super::worker::*;
 use super::{DragHandler, DragOutcome};
@@ -39,8 +39,6 @@ pub struct GridView2D {
 
     /// Communication channel with the simulation worker thread.
     worker: Option<Worker<Automaton2D>>,
-    /// Cached render data unique to this GridView.
-    render_cache: Option<RenderCache>,
 
     /// Mouse drag handler.
     drag_handler: Option<DragHandler<Self>>,
@@ -323,8 +321,8 @@ impl GridViewTrait for GridView2D {
         // Update DPI.
         self.camera_interpolator().set_dpi(config.gfx.dpi as f32);
 
-        let mut render_cache = std::mem::replace(&mut self.render_cache, None).unwrap_or_default();
-        let mut rip = RenderInProgress::new(self, params, &mut render_cache)?;
+        let mut rip = RenderInProgress::new(self, params)?;
+
         rip.draw_cells()?;
 
         // Draw gridlines.
@@ -376,7 +374,6 @@ impl GridViewTrait for GridView2D {
         }
 
         self.common.last_render_result = rip.finish()?;
-        self.render_cache = Some(render_cache);
         Ok(self.last_render_result())
     }
 }

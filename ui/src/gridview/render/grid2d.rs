@@ -37,9 +37,6 @@ use crate::config::{MouseDisplay, MouseDragBinding};
 use crate::gridview::*;
 use crate::Scale;
 
-#[derive(Default)]
-pub struct RenderCache {}
-
 pub struct RenderInProgress<'a> {
     /// Global lock on cached render data.
     cache: RefMut<'a, super::RenderCache>,
@@ -67,15 +64,12 @@ pub struct RenderInProgress<'a> {
     mouse_targets: Vec<MouseTargetData>,
     /// Vertex data for mouse targets.
     mouse_target_tris: Vec<MouseTargetVertex>,
-    /// Cached render data maintained by the `GridView2D`.
-    render_cache_deprecated: &'a mut RenderCache,
 }
 impl<'a> RenderInProgress<'a> {
     /// Creates a `RenderInProgress` for a gridview.
     pub fn new(
         g: &'a GridView2D,
         RenderParams { target, config }: RenderParams<'a>,
-        render_cache_deprecated: &'a mut RenderCache,
     ) -> Result<Self> {
         let mut cache = super::CACHE.borrow_mut();
 

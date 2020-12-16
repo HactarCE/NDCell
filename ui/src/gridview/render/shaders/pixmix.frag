@@ -40,6 +40,11 @@ vec2 tex_size = vec2(textureSize(src_texture, 0));
 uniform vec2 active_tex_size;
 
 void main() {
+    // Discard points outside the range [0, 1].
+    if (!(0.0 <= tex_coords.x && tex_coords.x <= 1.0
+       && 0.0 <= tex_coords.y && tex_coords.y <= 1.0))
+        discard;
+
     // Determine the (floating-point) pixel position in the source texture.
     vec2 uv = tex_coords * active_tex_size;
 

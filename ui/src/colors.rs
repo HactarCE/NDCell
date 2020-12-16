@@ -16,8 +16,11 @@ pub const SELECTION_RESIZE: [f32; 4] = [0.0, 0.5, 1.0, 0.4];
 /// Color given to the selection. This will be configurable in the future.
 pub const SELECTION: [f32; 4] = [0.6, 0.6, 0.6, 0.8];
 
+/// Cell background color. This will be configurable in the future.
+pub const BACKGROUND: (f32, f32, f32, f32) = (0.0, 0.0, 0.0, 1.0);
+
 /// Color for dead cells. This will be configurable in the future.
-pub const DEAD: (u8, u8, u8) = (0, 0, 0);
+pub const DEAD: [u8; 4] = [0, 0, 0, 0];
 
 /// Color for live cells. This will be configurable in the future.
-pub const LIVE: (u8, u8, u8) = (255, 255, 255);
+pub const LIVE: [u8; 4] = [255, 255, 255, 255];

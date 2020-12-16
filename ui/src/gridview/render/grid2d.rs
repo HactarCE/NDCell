@@ -76,8 +76,10 @@ impl<'a> RenderInProgress<'a> {
     pub fn new(g: &'a GridView2D, params: RenderParams<'a>) -> Result<Self> {
         let mut cache = super::CACHE.borrow_mut();
 
-        // Initialize depth buffer.
-        params.target.clear_depth(0.0);
+        // Initialize color and depth buffers.
+        params
+            .target
+            .clear_color_srgb_and_depth(crate::colors::BACKGROUND, 0.0);
 
         // Initialize mouse picker.
         cache.picker.init(params.target.get_dimensions());
@@ -213,15 +215,39 @@ impl<'a> RenderInProgress<'a> {
         &self.transform
     }
 
-    /// Draw an ND-tree to scale in the viewport.
-    pub fn draw_cells(&mut self, ndtree: &NdTree2D) -> Result<()> {
-        // Get the `NdTreeSlice` containing all of the visible cells.
-        let visible_quadtree = ndtree.slice_containing(&self.global_visible_rect);
+    /// Draw an ND-tree to scale on the target.
+    pub fn draw_cells(
+        &mut self,
+        ndtree: &NdTree2D,
+        params: NdTreeDrawParameters<'_>,
+    ) -> Result<()> {
+        // Clip the global rectangle of visible cells according to the draw
+        // parameters.
+        let global_visible_rect = match &params.rect {
+            Some(rect) => match self
+                .render_cell_layer
+                .round_rect(&rect)
+                .intersection(&self.global_visible_rect)
+            {
+                // Only draw the intersection of the viewport and the rectangle
+                // in the draw parameters.
+                Some(intersection) => intersection,
+                // The rectangle in the draw parameters does not intersect the
+                // viewport, so there is nothing to draw.
+                None => return Ok(()),
+            },
+            // There is no rectangle in the parameters, so draw everything in the viewport.
+            None => self.global_visible_rect.clone(),
+        };
 
-        let cell_offset = visible_quadtree.offset.clone() - &self.origin;
-        let render_cell_offset = cell_offset.div_floor(&self.render_cell_layer.big_len());
-        // println!("{}", render_cell_offset);
-        let visible_rect = self.visible_rect - render_cell_offset.to_ivec();
+        // Get the `NdTreeSlice` containing all of the visible cells.
+        let visible_quadtree = ndtree.slice_containing(&global_visible_rect);
+
+        // Convert `global_visible_rect` from cells in global space to render
+        // cells relative to `visible_quadtree`.
+        let visible_rect = (global_visible_rect - &visible_quadtree.offset)
+            .div_outward(&self.render_cell_layer.big_len())
+            .to_irect();
 
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
@@ -234,9 +260,9 @@ impl<'a> RenderInProgress<'a> {
             Self::node_pixel_color,
         )?;
         // Step #2: draw at 1 pixel per render cell, including only the cells
-        // inside `self.visible_rect`.
-        let cells_w = self.visible_rect.len(X) as u32;
-        let cells_h = self.visible_rect.len(Y) as u32;
+        // inside `visible_rect`.
+        let cells_w = visible_rect.len(X) as u32;
+        let cells_h = visible_rect.len(Y) as u32;
         let (cells_texture, mut cells_fbo, cells_texture_viewport) =
             cache.textures.cells(cells_w, cells_h);
         cells_fbo
@@ -272,12 +298,15 @@ impl<'a> RenderInProgress<'a> {
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::PIXMIX,
                 &uniform! {
-                    alpha: 1.0_f32,
+                    alpha: params.alpha,
                     src_texture: cells_texture.sampled(),
                     scale_factor: self.render_cell_scale.units_per_cell().raw() as f32,
                     active_tex_size: (cells_w as f32, cells_h as f32)
                 },
-                &glium::DrawParameters::default(),
+                &glium::DrawParameters {
+                    blend: glium::Blend::alpha_blending(),
+                    ..Default::default()
+                },
             )
             .context("Drawing cells to target")?;
 
@@ -381,6 +410,7 @@ impl<'a> RenderInProgress<'a> {
         &mut self,
         selection_rect: BigRect2D,
         width: f64,
+        fill: bool,
     ) -> Result<()> {
         let visible_selection_rect = self.clip_cell_rect_to_visible_render_cells(&selection_rect);
 
@@ -390,7 +420,7 @@ impl<'a> RenderInProgress<'a> {
             width,
             crate::colors::SELECTION,
             RectHighlightParams {
-                fill: true,
+                fill,
                 crosshairs: false,
             },
         ))
@@ -769,14 +799,16 @@ impl<'a> RenderInProgress<'a> {
 
     /// Returns the color for a pixel representing the given node.
     fn node_pixel_color(node: NodeRef<'_, Dim2D>) -> [u8; 4] {
-        let (r, g, b) = if node.layer() == Layer(0) {
-            let cell_state = node.as_leaf().unwrap().cells()[0];
+        if let Some(cell_state) = node.single_state() {
             match cell_state {
-                0 => crate::colors::DEAD,
-                1 => crate::colors::LIVE,
-                i => colorous::TURBO
-                    .eval_rational(257 - i as usize, 256)
-                    .as_tuple(),
+                0_u8 => crate::colors::DEAD,
+                1_u8 => crate::colors::LIVE,
+                i => {
+                    let [r, g, b] = colorous::TURBO
+                        .eval_rational(257 - i as usize, 256)
+                        .as_array();
+                    [r, g, b, 255]
+                }
             }
         } else {
             let ratio = if node.is_empty() {
@@ -787,21 +819,16 @@ impl<'a> RenderInProgress<'a> {
                     .to_f64()
                     .unwrap()
                     / 255.0;
-                // Bias so that 50% is the minimum brightness if there is any population.
+                // Bias so that 50% is the minimum brightness if there are any
+                // live cells.
                 (population_ratio / 2.0) + 0.5
             };
-            let r = ((crate::colors::LIVE.0 as f64).powf(2.0) * ratio
-                + (crate::colors::DEAD.0 as f64).powf(2.0) * (1.0 - ratio))
-                .powf(0.5);
-            let g = ((crate::colors::LIVE.1 as f64).powf(2.0) * ratio
-                + (crate::colors::DEAD.1 as f64).powf(2.0) * (1.0 - ratio))
-                .powf(0.5);
-            let b = ((crate::colors::LIVE.2 as f64).powf(2.0) * ratio
-                + (crate::colors::DEAD.2 as f64).powf(2.0) * (1.0 - ratio))
-                .powf(0.5);
-            (r as u8, g as u8, b as u8)
-        };
-        [r, g, b, 255]
+
+            // Set alpha to live:dead ratio.
+            let mut color = crate::colors::LIVE;
+            color[3] = (color[3] as f64 * ratio) as u8;
+            color
+        }
     }
 
     fn add_mouse_target_quad(
@@ -874,6 +901,13 @@ fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: 
     }
     let progress = (x - min) / (max - min);
     min_result + (max_result - min_result) * progress
+}
+
+pub struct NdTreeDrawParameters<'a> {
+    /// Alpha value for the whole ND-tree.
+    pub alpha: f32,
+    /// Rectangular portion of the ND-tree to draw.
+    pub rect: Option<&'a BigRect2D>,
 }
 
 /// Simple rectangle in a cell overlay.

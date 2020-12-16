@@ -6,7 +6,7 @@ use ndcell_core::prelude::*;
 use super::camera::{Camera, Camera2D, Interpolate, Interpolator, ScreenPos2D};
 use super::common::{GridViewCommon, GridViewTrait, RenderParams, RenderResult};
 use super::history::{History, HistoryBase, HistoryManager};
-use super::render::grid2d::RenderInProgress;
+use super::render::grid2d::{NdTreeDrawParameters, RenderInProgress};
 use super::selection::Selection2D;
 use super::worker::*;
 use super::{DragHandler, DragOutcome};
@@ -324,7 +324,25 @@ impl GridViewTrait for GridView2D {
         let mut rip = RenderInProgress::new(self, params)?;
 
         // Draw main cells.
-        rip.draw_cells(&self.automaton.ndtree)?;
+        rip.draw_cells(
+            &self.automaton.ndtree,
+            NdTreeDrawParameters {
+                alpha: 1.0,
+                rect: None,
+            },
+        )?;
+        // Draw selection cells.
+        if let Some(selection) = &self.selection {
+            if let Some(cells) = &selection.cells {
+                rip.draw_cells(
+                    cells,
+                    NdTreeDrawParameters {
+                        alpha: 1.0,
+                        rect: Some(&selection.rect),
+                    },
+                )?;
+            }
+        }
 
         // Draw gridlines.
         let gridlines_width = self
@@ -357,9 +375,13 @@ impl GridViewTrait for GridView2D {
                 _ => (),
             }
         }
-        // Draw selection.
+        // Draw selection highlight.
         if let Some(selection) = &self.selection {
-            rip.draw_selection_highlight(selection.rect.clone(), gridlines_width * 4.0)?;
+            rip.draw_selection_highlight(
+                selection.rect.clone(),
+                gridlines_width * 4.0,
+                selection.cells.is_none(),
+            )?;
         }
         // Draw selection preview after drawing selection.
         if self.mouse().display == MouseDisplay::ResizeSelectionAbsolute

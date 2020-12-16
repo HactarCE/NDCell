@@ -268,6 +268,8 @@ impl GridViewTrait for GridView2D {
                 }
             }
             SelectCommand::Paste => {
+                let old_sel_rect = self.selection_rect().cloned();
+
                 self.record();
                 let string_from_clipboard =
                     clipboard_get().map_err(|_| anyhow!("Fetching clipboard contents"))?;
@@ -277,6 +279,14 @@ impl GridViewTrait for GridView2D {
                     Ok(sel) => {
                         self.set_selection(sel);
                         self.ensure_selection_visible();
+
+                        // If selection size is the same, preserve position.
+                        if let Some((old_rect, new_sel)) = old_sel_rect.zip(self.selection.as_mut())
+                        {
+                            if old_rect.size() == new_sel.rect.size() {
+                                *new_sel = new_sel.move_by(old_rect.min() - new_sel.rect.min());
+                            }
+                        }
                     }
                     Err(errors) => warn!("Failed to load pattern: {:?}", errors),
                 }

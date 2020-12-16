@@ -323,7 +323,8 @@ impl GridViewTrait for GridView2D {
 
         let mut rip = RenderInProgress::new(self, params)?;
 
-        rip.draw_cells()?;
+        // Draw main cells.
+        rip.draw_cells(&self.automaton.ndtree)?;
 
         // Draw gridlines.
         let gridlines_width = self

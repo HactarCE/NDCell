@@ -23,6 +23,8 @@ const WARN_TEXTURE_SIZE_THRESHOLD: usize = 4096;
 // Only warn once.
 static WARN_TEXTURE_SIZE: Once = Once::new();
 
+// TODO: does all this caching stuff actually help perf?
+
 /// Several cached quadtrees encoded in OpenGL textures, which dropped if unused
 /// for one frame.
 #[derive(Default)]

@@ -49,18 +49,21 @@ pub struct RenderInProgress<'a> {
 
     /// Camera to render the grid from.
     camera: Camera2D,
+    /// Origin for "local" cell vectors. This is an integer in render cell
+    /// coordinates.
+    origin: BigVec2D,
 
+    /// Rectangle of cells in global space that is visible, rounded to render cell boundaries.
+    global_visible_rect: BigRect2D,
+    /// Rectangle of render cells relative to `origin` that is visible.
+    visible_rect: IRect2D,
     /// Node layer of a render cell.
     render_cell_layer: Layer,
     /// Scale to draw render cells at.
     render_cell_scale: Scale,
-    /// Quadtree encompassing all visible cells.
-    visible_quadtree: NdTreeSlice2D<'a>,
-    /// Rectangle of render cells within `visible_quadtree` that is visible.
-    visible_rect: IRect2D,
-    /// Transform from `visible_quadtree` space (1 unit = 1 render cell; (0, 0)
-    /// = bottom left) to screen space ((-1, -1) = bottom left; (1, 1) = top
-    /// right) and pixel space (1 unit = 1 pixel; (0, 0) = top left).
+    /// Transform from render cell space (1 unit = 1 render cell; (0, 0) =
+    /// `origin`) to screen space ((-1, -1) = bottom left; (1, 1) = top right)
+    /// and pixel space (1 unit = 1 pixel; (0, 0) = top left).
     transform: CellTransform2D,
 
     /// Mouse targets, indexed by ID.
@@ -88,48 +91,48 @@ impl<'a> RenderInProgress<'a> {
         // Compute the width of cells represented by each render cell.
         let render_cell_len = render_cell_layer.big_len();
 
-        // Get a smaller slice of the grid that covers the entire visible area
-        // and a rectangle containing all visible render cells relative to that
-        // node.
-        let visible_quadtree: NdTreeSlice2D<'a>;
+        let origin = camera.pos().floor().0.div_floor(&render_cell_len) * &render_cell_len;
+
+        let (target_w, target_h) = camera.target_dimensions();
+        let target_pixels_size: IVec2D = NdVec([target_w as isize, target_h as isize]);
+
+        // Determine the rectangle of visible cells in global coordinate space.
+        let global_visible_rect: BigRect2D;
+        {
+            // Compute the width and height of individual cells that fit on
+            // the screen.
+            let target_cells_size: FixedVec2D = camera
+                .scale()
+                .units_to_cells(target_pixels_size.to_fixedvec());
+            // Compute the cell vector pointing from the origin to the top
+            // right corner of the screen; i.e. the "half diagonal."
+            let half_diag: FixedVec2D = target_cells_size / 2.0;
+
+            let tmp_global_visible_rect = BigRect2D::centered(origin.clone(), &half_diag.ceil().0);
+
+            // Round to the nearest render cell.
+            global_visible_rect =
+                tmp_global_visible_rect.div_outward(&render_cell_len) * &render_cell_len;
+        }
+
+        // Convert that rectangle of cells into a rectangle of render cells,
+        // relative to `origin`.
         let visible_rect: IRect2D;
         {
-            let (target_w, target_h) = camera.target_dimensions();
-            let target_pixels_size: IVec2D = NdVec([target_w as isize, target_h as isize]);
-
-            // Find the global rectangle of visible cells.
-            let global_visible_rect: BigRect2D;
-            {
-                // Compute the width and height of individual cells that fit on
-                // the screen.
-                let target_cells_size: FixedVec2D = camera
-                    .scale()
-                    .units_to_cells(target_pixels_size.to_fixedvec());
-                // Compute the cell vector pointing from the origin to the top
-                // right corner of the screen; i.e. the "half diagonal."
-                let half_diag: FixedVec2D = target_cells_size / 2.0;
-
-                global_visible_rect =
-                    BigRect2D::centered(camera.pos().floor().0, &half_diag.ceil().0);
-            }
-
-            // Now fetch the `NdTreeSlice` containing all of the visible cells.
-            visible_quadtree = g.automaton.ndtree.slice_containing(&global_visible_rect);
-
-            // Subtract the slice offset from `global_visible_rect` and
-            // `global_visible_rect` to get the rectangle of visible cells
-            // within the slice.
-            let mut tmp_visible_rect = global_visible_rect - &visible_quadtree.offset;
-            // Divide by `render_cell_len` to get render cells.
-            tmp_visible_rect = tmp_visible_rect.div_outward(&render_cell_len);
+            // Get the rectangle of visible cells relative to the origin.
+            let tmp_visible_rect = global_visible_rect.clone() - &origin;
+            // Divide by `render_cell_len` to get the rectangle of visible
+            // render cells relative to the origin.
+            let tmp_visible_rect = tmp_visible_rect.div_outward(&render_cell_len);
             // Now it is safe to convert from `BigInt` to `isize`, because the
-            // number of visible render cells must be reasonable.
+            // extent of visible render cells from the origin must be
+            // reasonable.
             visible_rect = tmp_visible_rect.to_irect();
         }
 
         // Compute the transformation from individual cells all the way to
         // pixels.
-        let transform = camera.cell_transform_with_base(visible_quadtree.offset.clone())?;
+        let transform = camera.cell_transform_with_base(origin.clone())?;
 
         let mouse_targets = vec![];
         let mouse_target_tris = vec![];
@@ -141,11 +144,12 @@ impl<'a> RenderInProgress<'a> {
             mouse: g.mouse(),
 
             camera,
+            origin,
 
+            global_visible_rect,
+            visible_rect,
             render_cell_layer,
             render_cell_scale,
-            visible_quadtree,
-            visible_rect,
             transform,
 
             mouse_targets,
@@ -210,15 +214,23 @@ impl<'a> RenderInProgress<'a> {
         &self.transform
     }
 
-    /// Draw the cells that appear in the viewport.
-    pub fn draw_cells(&mut self) -> Result<()> {
+    /// Draw an ND-tree to scale in the viewport.
+    pub fn draw_cells(&mut self, ndtree: &NdTree2D) -> Result<()> {
+        // Get the `NdTreeSlice` containing all of the visible cells.
+        let visible_quadtree = ndtree.slice_containing(&self.global_visible_rect);
+
+        let cell_offset = visible_quadtree.offset.clone() - &self.origin;
+        let render_cell_offset = cell_offset.div_floor(&self.render_cell_layer.big_len());
+        // println!("{}", render_cell_offset);
+        let visible_rect = self.visible_rect - render_cell_offset.to_ivec();
+
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
 
         // Steps #1: encode the quadtree as a texture.
         let gl_quadtree = cache.gl_quadtrees.gl_quadtree_from_node(
-            (&self.visible_quadtree.root).into(),
+            (&visible_quadtree.root).into(),
             self.render_cell_layer,
             Self::node_pixel_color,
         )?;
@@ -230,7 +242,7 @@ impl<'a> RenderInProgress<'a> {
             cache.textures.cells(cells_w, cells_h);
         cells_fbo
             .draw(
-                &*vbos.quadtree_quad_with_quadtree_coords(self.visible_rect),
+                &*vbos.quadtree_quad_with_quadtree_coords(visible_rect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::QUADTREE,
                 &uniform! {
@@ -249,10 +261,10 @@ impl<'a> RenderInProgress<'a> {
         let (target_w, target_h) = self.params.target.get_dimensions();
         let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
         let render_cells_size = target_size / self.render_cell_scale.units_per_cell();
-        let render_cells_center = self.camera.render_cell_pos(&self.visible_quadtree.offset)
-            - self.visible_rect.min().to_fvec();
+        let render_cells_center =
+            self.camera.render_cell_pos(&visible_quadtree.offset) - visible_rect.min().to_fvec();
         let render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size / 2.0);
-        let texture_coords_rect = render_cells_rect / self.visible_rect.size().to_fvec();
+        let texture_coords_rect = render_cells_rect / visible_rect.size().to_fvec();
 
         self.params
             .target
@@ -271,12 +283,25 @@ impl<'a> RenderInProgress<'a> {
             .context("Drawing cells to target")?;
 
         // // Draw a 1:1 "minimap" in the corner
-        // self.params.target.blit_from_simple_framebuffer(
-        //     &cells_fbo,
-        //     &entire_rect(&cells_fbo),
-        //     &entire_blit_target(&cells_fbo),
-        //     glium::uniforms::MagnifySamplerFilter::Linear,
-        // );
+        // {
+        //     let (width, height) = cells_fbo.get_dimensions();
+        //     self.params.target.blit_from_simple_framebuffer(
+        //         &cells_fbo,
+        //         &glium::Rect {
+        //             left: 0,
+        //             bottom: 0,
+        //             width,
+        //             height,
+        //         },
+        //         &glium::BlitTarget {
+        //             left: 0,
+        //             bottom: 0,
+        //             width: width as i32,
+        //             height: height as i32,
+        //         },
+        //         glium::uniforms::MagnifySamplerFilter::Linear,
+        //     );
+        // }
 
         Ok(())
     }
@@ -299,22 +324,26 @@ impl<'a> RenderInProgress<'a> {
         // Convert from render cells to pixels.
         let mut pixel_spacing = spacing as f64 * self.render_cell_scale.units_per_cell().raw();
 
+        let cell_offset = -self
+            .global_visible_rect
+            .min()
+            .div_floor(&self.render_cell_layer.big_len());
         while spacing > 0 && pixel_spacing > MIN_GRIDLINE_SPACING {
             // Compute grid color, including alpha.
             let mut color = crate::colors::GRIDLINES;
             let alpha = gridline_alpha(pixel_spacing, self.camera.scale()) as f32;
             color[3] *= alpha;
             // Draw gridlines with the given spacing.
-            let offset = (-self.visible_rect.min()).mod_floor(&(spacing as isize));
+            let offset = cell_offset.mod_floor(&BigInt::from(spacing)).to_uvec();
             self.draw_cell_overlay_rects(
                 &self.generate_solid_cell_borders(
                     self.visible_rect
                         .axis_range(X)
-                        .skip(offset[X] as usize)
+                        .skip(offset[X])
                         .step_by(spacing),
                     self.visible_rect
                         .axis_range(Y)
-                        .skip(offset[Y] as usize)
+                        .skip(offset[Y])
                         .step_by(spacing),
                     GRIDLINE_DEPTH,
                     width,
@@ -464,7 +493,7 @@ impl<'a> RenderInProgress<'a> {
     /// render cell that is just off-screen.
     fn clip_cell_pos_to_visible_render_cells(&self, cell_pos: &BigVec2D) -> IVec2D {
         let render_cell_pos =
-            (cell_pos - &self.visible_quadtree.offset).div_floor(&self.render_cell_layer.big_len());
+            (cell_pos - &self.origin).div_floor(&self.render_cell_layer.big_len());
         // Clip to lower edge minus 2 cells for padding.
         let render_cell_pos =
             NdVec::max(&render_cell_pos, &(self.visible_rect.min() - 2).to_bigvec());

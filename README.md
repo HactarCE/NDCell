@@ -100,6 +100,8 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 - **Rectangular selection** ([Demo video][selections-demo])
   - Select with left click while holding <kbd>Ctrl</kbd>
   - Resize the selection with left click while holding <kbd>Ctrl</kbd>+<kbd>Shift</kbd>, or by dragging the edges of the selection
+  - Move the selected cells with left click
+  - Move the selection region with left click while holding <kbd>Shift</kbd>
 - **Navigation**
   - Pan with arrow keys, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right mouse button (hold <kbd>Shift</kbd> to go faster)
   - Zoom with scroll wheel or <kbd>Q</kbd>/<kbd>Z</kbd> (hold <kbd>Shift</kbd> to go faster)

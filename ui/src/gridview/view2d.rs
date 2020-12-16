@@ -122,79 +122,130 @@ impl GridViewTrait for GridView2D {
     fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()> {
         match command {
             SelectCommand::Drag(c, cursor_start) => {
-                if matches!(c, SelectDragCommand::Resize {.. } | SelectDragCommand::ResizeToCell) {
-                    // We are supposed to resize a selection ...
-                    if self.selection.is_none() {
-                        // ... but there is no selection to resize.
-                        return Ok(());
-                    }
-                }
-
                 let maybe_initial_pos = self.camera().pixel_to_screen_pos(cursor_start);
                 let initial_pos = match maybe_initial_pos {
                     Some(pos) => pos,
                     None => return Ok(()),
                 };
 
-                let initial_selection_rect = self.selection.as_ref().map(|sel| sel.rect.clone());
-
                 let drag_threshold = r64(config.mouse.drag_threshold);
-                let mut past_drag_threshold: bool = false;
+                // State variable to be moved into the closure and used by the
+                // drag handler.
+                let mut initial_selection = None;
 
-                let new_drag_handler: DragHandler<Self> = Box::new(move |this, new_cursor_pos| {
-                    if !(new_cursor_pos - cursor_start < FVec::repeat(drag_threshold)) {
-                        past_drag_threshold = true;
-                    }
-
-                    if let Some(new_pos) = this.camera().pixel_to_screen_pos(new_cursor_pos) {
-                        // Compute the new selection rectangle and update the
-                        // selection.
-                        let new_selection_rect = match c {
-                            SelectDragCommand::NewRect => {
-                                if past_drag_threshold {
-                                    Some(NdRect::span(
-                                        initial_pos.int_cell().clone(),
-                                        new_pos.int_cell().clone(),
-                                    ))
-                                } else {
-                                    None
-                                }
-                            }
-                            SelectDragCommand::Resize { axes, plane: _ } => {
-                                Some(super::selection::resize_selection_relative(
-                                    initial_selection_rect.as_ref().unwrap(),
+                let mut new_drag_handler: Box<
+                    dyn FnMut(&mut Self, ScreenPos2D) -> Result<DragOutcome>,
+                > = match c {
+                    SelectDragCommand::NewRect => Box::new(move |this, new_pos| {
+                        this.set_selection_rect(Some(NdRect::span(
+                            initial_pos.int_cell().clone(),
+                            new_pos.int_cell().clone(),
+                        )));
+                        Ok(DragOutcome::Continue)
+                    }),
+                    SelectDragCommand::Resize { axes, .. } => Box::new(move |this, new_pos| {
+                        initial_selection = initial_selection.take().or_else(|| this.deselect());
+                        if let Some(s) = &initial_selection {
+                            this.set_selection_rect(Some(
+                                super::selection::resize_selection_relative(
+                                    &s.rect,
                                     initial_pos.cell(),
                                     new_pos.cell(),
                                     axes,
-                                ))
-                            }
-                            SelectDragCommand::ResizeToCell => {
-                                Some(super::selection::resize_selection_absolute(
-                                    initial_selection_rect.as_ref().unwrap(),
+                                ),
+                            ));
+                            Ok(DragOutcome::Continue)
+                        } else {
+                            // There is no selection to resize.
+                            Ok(DragOutcome::Cancel)
+                        }
+                    }),
+                    SelectDragCommand::ResizeToCell => Box::new(move |this, new_pos| {
+                        initial_selection = initial_selection.take().or_else(|| this.deselect());
+                        if let Some(s) = &initial_selection {
+                            this.set_selection_rect(Some(
+                                super::selection::resize_selection_absolute(
+                                    &s.rect,
                                     initial_pos.cell(),
                                     new_pos.cell(),
-                                ))
-                            }
-                            SelectDragCommand::MoveSelection => {
-                                todo!()
-                            }
-                            SelectDragCommand::MoveCells => {
-                                todo!()
-                            }
-                        };
-                        this.selection = new_selection_rect.map(Selection2D::from);
-                    }
-                    return Ok(DragOutcome::Continue);
-                });
+                                ),
+                            ));
+                            Ok(DragOutcome::Continue)
+                        } else {
+                            // There is no selection to resize.
+                            Ok(DragOutcome::Cancel)
+                        }
+                    }),
+                    SelectDragCommand::MoveSelection => Box::new(move |this, new_pos| {
+                        initial_selection = initial_selection.take().or_else(|| this.deselect());
+                        if let Some(s) = &initial_selection {
+                            let delta = (new_pos.cell() - initial_pos.cell()).round();
+                            this.set_selection_rect(Some(s.rect.clone() + delta));
+                            Ok(DragOutcome::Continue)
+                        } else {
+                            // There is no selection to move.
+                            Ok(DragOutcome::Cancel)
+                        }
+                    }),
+                    SelectDragCommand::MoveCells => Box::new(move |this, new_pos| {
+                        initial_selection = initial_selection.take().or_else(|| {
+                            this.grab_selected_cells();
+                            this.selection.take()
+                        });
+                        if let Some(s) = &initial_selection {
+                            let delta = (new_pos.cell() - initial_pos.cell()).round();
+                            this.selection = Some(s.move_by(delta));
+                            Ok(DragOutcome::Continue)
+                        } else {
+                            // There is no selection to move.
+                            Ok(DragOutcome::Cancel)
+                        }
+                    }),
+                };
 
-                if config.hist.record_select {
-                    self.stop_running();
-                    self.record();
+                // State variable to be moved into the closure and used by the
+                // drag handler.
+                let mut past_drag_threshold: bool = false;
+
+                let new_drag_handler_with_threshold: DragHandler<Self> =
+                    Box::new(move |this, new_cursor_pos| {
+                        if !((new_cursor_pos - cursor_start).abs() < FVec::repeat(drag_threshold)) {
+                            past_drag_threshold = true;
+                        }
+                        if past_drag_threshold {
+                            if let Some(new_pos) = this.camera().pixel_to_screen_pos(new_cursor_pos)
+                            {
+                                new_drag_handler(this, new_pos)
+                            } else {
+                                Ok(DragOutcome::Continue)
+                            }
+                        } else {
+                            Ok(DragOutcome::Continue)
+                        }
+                    });
+
+                match c {
+                    SelectDragCommand::NewRect
+                    | SelectDragCommand::Resize { .. }
+                    | SelectDragCommand::ResizeToCell
+                    | SelectDragCommand::MoveSelection => {
+                        if config.hist.record_select {
+                            self.stop_running();
+                            self.record();
+                        }
+                    }
+                    SelectDragCommand::MoveCells => {
+                        self.stop_running();
+                        self.record();
+                    }
                 }
+
                 if let SelectDragCommand::NewRect = c {
+                    // Deselect immediately; don't wait for drag threshold.
                     self.deselect();
                 }
-                self.drag_handler = Some(new_drag_handler);
+
+                self.drag_handler = Some(new_drag_handler_with_threshold);
 
                 // Execute the drag handler once immediately.
                 self.continue_drag(cursor_start)?;
@@ -429,21 +480,51 @@ impl GridView2D {
     pub fn selection_rect(&self) -> Option<&BigRect2D> {
         self.selection.as_ref().map(|sel| &sel.rect)
     }
-    /// Deselect and set a new selection rectangle.
+    /// Deselects and sets a new selection rectangle.
     pub fn set_selection_rect(&mut self, new_selection_rect: Option<BigRect2D>) {
         self.set_selection(new_selection_rect.map(Selection2D::from))
     }
-    /// Deselect and set a new selection.
+    /// Deselects and sets a new selection.
     pub fn set_selection(&mut self, new_selection: Option<Selection2D>) {
         self.deselect();
         self.selection = new_selection;
     }
-    /// Deselect all.
-    pub fn deselect(&mut self) {
-        if let Some(sel) = self.selection.take() {
-            if let Some(_cells) = sel.cells {
-                todo!("deselect with cells");
+    /// Deselects all returns the old selection.
+    pub fn deselect(&mut self) -> Option<Selection2D> {
+        if let Some(sel) = self.selection.clone() {
+            if let Some(cells) = sel.cells {
+                self.record();
+                // Overwrite.
+                self.automaton.ndtree.paste_custom(
+                    cells,
+                    Region::Rect(sel.rect),
+                    |dest, src| {
+                        if dest.is_empty() {
+                            Some(src)
+                        } else if src.is_empty() {
+                            Some(dest)
+                        } else {
+                            None
+                        }
+                    },
+                    |dest, src| if src == 0_u8 { dest } else { src },
+                );
             }
+        }
+        self.selection.take()
+    }
+    /// Moves the cells in the selected region from the main grid into the
+    /// selection. Outputs a warning to the log if there is no selection. Does
+    /// nothing if the selection already contains cells.
+    pub fn grab_selected_cells(&mut self) {
+        if let Some(sel) = &mut self.selection {
+            if sel.cells.is_none() {
+                let region = Region::Rect(sel.rect.clone());
+                sel.cells = Some(self.automaton.ndtree.get_region(region.clone()));
+                self.automaton.ndtree.clear_region(region);
+            }
+        } else {
+            warn!("grab_selected_cells() called with no selection");
         }
     }
 

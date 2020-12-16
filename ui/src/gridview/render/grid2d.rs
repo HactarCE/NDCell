@@ -437,6 +437,17 @@ impl<'a> RenderInProgress<'a> {
                 display: MouseDisplay::Move,
             },
         );
+        // "Move selection" target.
+        self.add_mouse_target_quad(
+            ModifiersState::SHIFT,
+            visible_selection_rect.to_frect(),
+            MouseTargetData {
+                binding: Some(MouseDragBinding::Select(
+                    SelectDragCommand::MoveSelection.into(),
+                )),
+                display: MouseDisplay::Move,
+            },
+        );
 
         // "Resize selection" target.
         let click_target_width = self.params.config.ctrl.selection_resize_drag_target_width

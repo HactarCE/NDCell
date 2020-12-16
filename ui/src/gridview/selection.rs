@@ -63,6 +63,17 @@ impl<D: Dim> Selection<D> {
             Ok(None)
         }
     }
+
+    #[must_use = "This method returns a new value instead of mutating its input"]
+    pub fn move_by(&self, delta: BigVec<D>) -> Self {
+        Self {
+            rect: self.rect.clone() + &delta,
+            cells: self.cells.clone().map(|mut ndtree| {
+                ndtree.set_offset(ndtree.offset() + delta);
+                ndtree
+            }),
+        }
+    }
 }
 
 /// Resizes a selection given cursor movement from `drag_start_pos` to

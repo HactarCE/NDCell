@@ -2,8 +2,8 @@ use cgmath::prelude::*;
 use cgmath::{Deg, Matrix4};
 use std::convert::TryFrom;
 
-use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
+use Axis::{X, Y};
 
 pub type CellTransform2D = NdCellTransform<Dim2D>;
 pub type CellTransform3D = NdCellTransform<Dim3D>;

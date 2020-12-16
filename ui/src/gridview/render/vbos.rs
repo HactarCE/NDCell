@@ -2,8 +2,8 @@
 
 use glium::VertexBuffer;
 
-use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
+use Axis::{X, Y};
 
 use super::consts::{CELL_OVERLAY_BATCH_SIZE, MOUSE_TARGET_BATCH_SIZE};
 use super::vertices::*;

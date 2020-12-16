@@ -3,8 +3,8 @@ use cgmath::prelude::*;
 use cgmath::{Basis3, Decomposed, Deg, Matrix4};
 use log::warn;
 
-use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
+use Axis::{X, Y, Z};
 
 use super::{Camera, CellTransform3D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE};
 use crate::commands::{ViewCommand, ViewDragCommand};

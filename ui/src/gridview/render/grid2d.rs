@@ -28,8 +28,8 @@ use glium::{uniform, Surface};
 use itertools::Itertools;
 use std::cell::RefMut;
 
-use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
+use Axis::{X, Y};
 
 use super::consts::*;
 use super::shaders;

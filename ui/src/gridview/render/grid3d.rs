@@ -8,8 +8,8 @@ use cgmath::Matrix4;
 use glium::index::PrimitiveType;
 use glium::Surface;
 
-use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
+use Axis::{X, Y, Z};
 
 use super::shaders;
 use crate::gridview::*;

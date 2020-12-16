@@ -1,7 +1,7 @@
 use imgui::*;
 
-use ndcell_core::axis::{X, Y, Z};
 use ndcell_core::prelude::*;
+use Axis::{X, Y, Z};
 
 mod simulation;
 

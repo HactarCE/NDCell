@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use cgmath::Matrix4;
 use log::warn;
 
-use ndcell_core::axis::{X, Y};
 use ndcell_core::prelude::*;
+use Axis::{X, Y};
 
 use super::{Camera, CellTransform2D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE};
 use crate::commands::{ViewCommand, ViewDragCommand};

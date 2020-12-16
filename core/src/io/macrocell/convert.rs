@@ -35,15 +35,15 @@ impl CaFormatTrait for Macrocell {
 
     fn region<D: Dim>(&self) -> Region<D> {
         // Convert from 6D to ND.
-        let corner1 = BigVec::from_fn(|ax| self.offset[ax].clone());
+        let center = BigVec::from_fn(|ax| self.offset[ax].clone());
 
         let size = match self.nodes.last() {
-            None | Some(MacrocellNode::Empty) => BigVec::repeat(1.into()),
-            Some(MacrocellNode::Leaf8x8 { .. }) => BigVec::repeat(8.into()),
-            Some(MacrocellNode::NonLeaf { layer, .. }) => BigVec::repeat(layer.big_len()),
+            None | Some(MacrocellNode::Empty) => return Region::Empty,
+            Some(MacrocellNode::Leaf8x8 { .. }) => 8.into(),
+            Some(MacrocellNode::NonLeaf { layer, .. }) => layer.big_len(),
         };
 
-        Region::Rect(BigRect::with_size(corner1, size))
+        Region::Rect(BigRect::centered(center, &(size / 2)))
     }
 
     fn to_ndtree<D: Dim>(&self, node_pool: SharedNodePool<D>) -> Result<NdTree<D>, Self::Err> {

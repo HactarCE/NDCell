@@ -149,6 +149,15 @@ where
         self.size.clone()
     }
 
+    /// Returns the center of the rectangle, rounded down.
+    #[inline]
+    pub fn center(&self) -> NdVec<D, N>
+    where
+        N: Integer + From<u8>,
+    {
+         self.size.div_floor(&2.into()) + &self.start
+    }
+
     /// Returns the length of the rectangle along the given axis.
     #[inline]
     pub fn len(&self, axis: Axis) -> N {

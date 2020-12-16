@@ -7,7 +7,7 @@ use crate::axis::{Axis, AXES, U, V, W, X, Y, Z};
 use crate::dim::Dim;
 use crate::ndrect::BigRect;
 use crate::ndvec::{BigVec, BigVec6D, UVec, UVec6D};
-use crate::num::{BigInt, Zero};
+use crate::num::{BigInt, One, Zero};
 
 /// RLE contents.
 #[derive(Debug, Clone)]
@@ -51,6 +51,9 @@ impl Rle {
 
         // Convert from 6D to ND.
         let mut size = UVec::from_fn(|ax| self.header.size[ax]).to_bigvec();
+        // Decrement the size along each axis (fixes off-by-one error with
+        // `NdRect::span()`, which expects an inclusive range of cells).
+        size -= &BigInt::one();
         // Negate all axes except the X axis.
         for &ax in &D::axes()[1..] {
             size[ax] *= -1;

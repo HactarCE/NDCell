@@ -111,8 +111,7 @@ impl<'a> RenderInProgress<'a> {
             let tmp_global_visible_rect = BigRect2D::centered(origin.clone(), &half_diag.ceil().0);
 
             // Round to the nearest render cell.
-            global_visible_rect =
-                tmp_global_visible_rect.div_outward(&render_cell_len) * &render_cell_len;
+            global_visible_rect = render_cell_layer.round_rect(&tmp_global_visible_rect);
         }
 
         // Convert that rectangle of cells into a rectangle of render cells,

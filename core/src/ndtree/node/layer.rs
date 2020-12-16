@@ -262,6 +262,13 @@ impl Layer {
     pub fn modulo_pos<D: Dim>(self, pos: &BigVec<D>) -> BigVec<D> {
         pos & &(self.big_len() - 1)
     }
+    /// Rounds the given rectangle outward to the next node boundaries at this
+    /// layer.
+    #[inline]
+    pub fn round_rect<D: Dim>(self, rect: &BigRect<D>) -> BigRect<D> {
+        let len = self.big_len();
+        rect.div_outward(&len) * &len
+    }
 
     /// Returns the layer of the largest layer boundary a vector points to, or
     /// `None` if it is the origin vector (largest aligned layer would be

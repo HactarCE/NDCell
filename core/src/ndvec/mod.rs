@@ -25,7 +25,7 @@ pub use any::AnyDimVec;
 
 use crate::axis::Axis;
 use crate::dim::{Dim, DimFor};
-use crate::num::{r64, BigInt, FixedPoint, NdVecNum};
+use crate::num::{r64, BigInt, FixedPoint, NdVecNum, Signed};
 
 /// `D`-dimensional vector with coordinates of type `N`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -96,7 +96,8 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         }
         ret
     }
-    /// Creates a vector by evaluating `generator` for each axis, and returns `None` if any component is `None`.
+    /// Creates a vector by evaluating `generator` for each axis, and returns
+    /// `None` if any component is `None`.
     #[inline]
     pub fn try_from_fn(mut generator: impl FnMut(Axis) -> Option<N>) -> Option<Self> {
         let mut ret = Self::default();
@@ -116,6 +117,16 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     #[inline]
     pub fn repeat(value: N) -> Self {
         Self::from_fn(|_| value.clone())
+    }
+
+    /// Creates a vector by taking the absolute value of each component of this
+    /// one.
+    #[inline]
+    pub fn abs(&self) -> Self
+    where
+        N: Signed,
+    {
+        Self::from_fn(|ax| self[ax].abs())
     }
 
     /// Creates a vector by taking the minimum of the corresponding components
@@ -167,7 +178,6 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
             .max_by_key(|&&ax| key(ax, &self[ax]))
             .unwrap()
     }
-
     /// Returns the `Axis` of the component that is the most negative (or one of
     /// them, if there is a tie).
     #[inline]

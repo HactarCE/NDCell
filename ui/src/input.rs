@@ -218,6 +218,9 @@ impl FrameInProgress<'_> {
                                 self.config.sim.step_size = 1.into();
                             }
                         }
+                        Some(VirtualKeyCode::Delete) => {
+                            self.gridview.enqueue(SelectCommand::Delete)
+                        }
                         Some(k @ VirtualKeyCode::LBracket)
                         | Some(k @ VirtualKeyCode::RBracket)
                         | Some(k @ VirtualKeyCode::Key0)
@@ -268,6 +271,11 @@ impl FrameInProgress<'_> {
                         Some(VirtualKeyCode::R) => {
                             self.gridview.enqueue(HistoryCommand::UndoTo(0.into()))
                         }
+                        // Cut RLE.
+                        Some(VirtualKeyCode::X) => {
+                            self.gridview.enqueue(SelectCommand::Copy(CaFormat::Rle));
+                            self.gridview.enqueue(SelectCommand::Delete);
+                        }
                         // Copy RLE.
                         Some(VirtualKeyCode::C) => {
                             self.gridview.enqueue(SelectCommand::Copy(CaFormat::Rle))
@@ -306,6 +314,12 @@ impl FrameInProgress<'_> {
                     match virtual_keycode {
                         // Redo.
                         Some(VirtualKeyCode::Z) => self.gridview.enqueue(HistoryCommand::Redo),
+                        // Cut Macrocell.
+                        Some(VirtualKeyCode::X) => {
+                            self.gridview
+                                .enqueue(SelectCommand::Copy(CaFormat::Macrocell));
+                            self.gridview.enqueue(SelectCommand::Delete);
+                        }
                         // Copy Macrocell.
                         Some(VirtualKeyCode::C) => self
                             .gridview

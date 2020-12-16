@@ -281,6 +281,14 @@ impl GridViewTrait for GridView2D {
                     Err(errors) => warn!("Failed to load pattern: {:?}", errors),
                 }
             }
+            SelectCommand::Delete => {
+                if self.selection.is_some() {
+                    self.record();
+                    self.selection.as_mut().unwrap().cells = None;
+                    self.grab_selected_cells();
+                    self.selection.as_mut().unwrap().cells = None;
+                }
+            }
         }
         Ok(())
     }

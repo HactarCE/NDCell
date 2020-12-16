@@ -164,6 +164,7 @@ pub enum SelectCommand {
 
     Copy(CaFormat),
     Paste,
+    Delete,
 }
 impl_command_from!(Command::Select(SelectCommand));
 

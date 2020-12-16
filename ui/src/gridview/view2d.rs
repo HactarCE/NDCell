@@ -252,6 +252,7 @@ impl GridViewTrait for GridView2D {
             }
 
             SelectCommand::SelectAll => {
+                self.deselect(); // take into account pasted cells
                 self.set_selection(self.automaton.ndtree.bounding_rect().map(Selection2D::from))
             }
         }

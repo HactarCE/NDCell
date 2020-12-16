@@ -277,7 +277,10 @@ impl GridViewTrait for GridView2D {
                     let result =
                         Selection2D::from_str(&string_from_clipboard, self.automaton.ndtree.pool());
                     match result {
-                        Ok(sel) => self.set_selection(sel),
+                        Ok(sel) => {
+                            self.set_selection(sel);
+                            self.ensure_selection_visible();
+                        }
                         Err(errors) => warn!("Failed to load pattern: {:?}", errors),
                     }
                 }
@@ -525,6 +528,43 @@ impl GridView2D {
             }
         } else {
             warn!("grab_selected_cells() called with no selection");
+        }
+    }
+
+    /// Moves the selection to the center of the screen along each axis for
+    /// which it is outside the viewport.
+    pub fn ensure_selection_visible(&mut self) {
+        if let Some(mut sel) = self.selection.take() {
+            // The number of render cells of padding to ensure.
+            const PADDING: usize = 2;
+
+            let (render_cell_layer, _) = self.camera().render_cell_layer_and_scale();
+
+            // Convert to render cells.
+            let sel_rect = sel.rect.div_outward(&render_cell_layer.big_len());
+            let visible_rect = self
+                .camera()
+                .global_visible_rect()
+                .div_outward(&render_cell_layer.big_len());
+
+            let sel_min = sel_rect.min();
+            let sel_max = sel_rect.max();
+            let sel_center = sel_rect.center();
+            let visible_min = visible_rect.min();
+            let visible_max = visible_rect.max();
+            let visible_center = self.camera().pos().floor().0;
+
+            for &ax in Dim2D::axes() {
+                if sel_max[ax] < visible_min[ax].clone() + PADDING
+                    || visible_max[ax] < sel_min[ax].clone() + PADDING
+                {
+                    // Move to center of viewport along this axis.
+                    sel = sel
+                        .move_by(NdVec::unit(ax) * (visible_center[ax].clone() - &sel_center[ax]));
+                }
+            }
+
+            self.set_selection(Some(sel));
         }
     }
 

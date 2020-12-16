@@ -21,7 +21,6 @@ pub enum Command {
     View(ViewCommand),
     Draw(DrawCommand),
     Select(SelectCommand),
-    Clipboard(ClipboardCommand),
     GarbageCollect,
 
     ContinueDrag(FVec2D),
@@ -162,6 +161,9 @@ pub enum DrawShape {
 pub enum SelectCommand {
     Drag(SelectDragCommand, FVec2D),
     SelectAll,
+
+    Copy(CaFormat),
+    Paste,
 }
 impl_command_from!(Command::Select(SelectCommand));
 
@@ -173,10 +175,3 @@ pub enum SelectDragCommand {
     MoveSelection,
     MoveCells,
 }
-
-#[derive(Debug, Clone)]
-pub enum ClipboardCommand {
-    Copy(CaFormat),
-    Paste,
-}
-impl_command_from!(Command::Clipboard(ClipboardCommand));

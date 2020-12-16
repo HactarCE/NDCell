@@ -270,10 +270,10 @@ impl FrameInProgress<'_> {
                         }
                         // Copy RLE.
                         Some(VirtualKeyCode::C) => {
-                            self.gridview.enqueue(ClipboardCommand::Copy(CaFormat::Rle))
+                            self.gridview.enqueue(SelectCommand::Copy(CaFormat::Rle))
                         }
                         // Paste.
-                        Some(VirtualKeyCode::V) => self.gridview.enqueue(ClipboardCommand::Paste),
+                        Some(VirtualKeyCode::V) => self.gridview.enqueue(SelectCommand::Paste),
                         // Center view.
                         Some(VirtualKeyCode::M) => {
                             self.gridview.enqueue(match self.gridview {
@@ -309,7 +309,7 @@ impl FrameInProgress<'_> {
                         // Copy Macrocell.
                         Some(VirtualKeyCode::C) => self
                             .gridview
-                            .enqueue(ClipboardCommand::Copy(CaFormat::Macrocell)),
+                            .enqueue(SelectCommand::Copy(CaFormat::Macrocell)),
                         _ => (),
                     }
                 }

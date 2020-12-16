@@ -255,14 +255,9 @@ impl GridViewTrait for GridView2D {
                 self.deselect(); // take into account pasted cells
                 self.set_selection(self.automaton.ndtree.bounding_rect().map(Selection2D::from))
             }
-        }
-        Ok(())
-    }
-    fn do_clipboard_command(&mut self, command: ClipboardCommand, _config: &Config) -> Result<()> {
-        if !self.is_drawing() {
-            self.stop_running();
-            match command {
-                ClipboardCommand::Copy(format) => {
+
+            SelectCommand::Copy(format) => {
+                if self.selection.is_some() {
                     let result = self.export(format);
                     match result {
                         Ok(s) => {
@@ -271,19 +266,19 @@ impl GridViewTrait for GridView2D {
                         Err(msg) => warn!("Failed to generate {}: {}", format, msg),
                     }
                 }
-                ClipboardCommand::Paste => {
-                    self.record();
-                    let string_from_clipboard =
-                        clipboard_get().map_err(|_| anyhow!("Fetching clipboard contents"))?;
-                    let result =
-                        Selection2D::from_str(&string_from_clipboard, self.automaton.ndtree.pool());
-                    match result {
-                        Ok(sel) => {
-                            self.set_selection(sel);
-                            self.ensure_selection_visible();
-                        }
-                        Err(errors) => warn!("Failed to load pattern: {:?}", errors),
+            }
+            SelectCommand::Paste => {
+                self.record();
+                let string_from_clipboard =
+                    clipboard_get().map_err(|_| anyhow!("Fetching clipboard contents"))?;
+                let result =
+                    Selection2D::from_str(&string_from_clipboard, self.automaton.ndtree.pool());
+                match result {
+                    Ok(sel) => {
+                        self.set_selection(sel);
+                        self.ensure_selection_visible();
                     }
+                    Err(errors) => warn!("Failed to load pattern: {:?}", errors),
                 }
             }
         }

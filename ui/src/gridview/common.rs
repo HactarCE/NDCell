@@ -136,7 +136,6 @@ pub trait GridViewTrait:
             Command::View(c) => self.do_view_command(c, config),
             Command::Draw(c) => self.do_draw_command(c, config),
             Command::Select(c) => self.do_select_command(c, config),
-            Command::Clipboard(c) => self.do_clipboard_command(c, config),
             Command::GarbageCollect => Ok(self.schedule_gc()),
 
             Command::ContinueDrag(cursor_pos) => self.continue_drag(cursor_pos),
@@ -206,8 +205,6 @@ pub trait GridViewTrait:
     fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()>;
     /// Executes a `Select` command.
     fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()>;
-    /// Executes a `Clipboard` command.
-    fn do_clipboard_command(&mut self, command: ClipboardCommand, config: &Config) -> Result<()>;
     /// Executes a `ContinueDrag` command.
     fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()>;
     /// Executes a `StopDrag` command.

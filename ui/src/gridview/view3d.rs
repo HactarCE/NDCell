@@ -57,9 +57,6 @@ impl GridViewTrait for GridView3D {
     fn do_select_command(&mut self, _command: SelectCommand, _config: &Config) -> Result<()> {
         Err(anyhow!("unimplemented"))
     }
-    fn do_clipboard_command(&mut self, _command: ClipboardCommand, _config: &Config) -> Result<()> {
-        Err(anyhow!("unimplemented"))
-    }
     fn do_view_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
         let maybe_new_drag_handler = self
             .camera_interpolator

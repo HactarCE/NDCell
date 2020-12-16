@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::*;
 
-use ndcell_core::num::{r64, FixedPoint, Float, R64};
+use ndcell_core::prelude::*;
 
 /// Scale factor.
 ///
@@ -66,19 +66,31 @@ impl Scale {
             log2_factor: factor.log2(),
         }
     }
+    /// Returns the largest `Scale` at which a rectangle of cells fits entirely
+    /// on the target.
+    pub fn from_fit(cells_size: BigVec2D, target_size: (u32, u32)) -> Self {
+        let log2_cells_size =
+            FVec2D::from_fn(|ax| r64(FixedPoint::from(cells_size[ax].clone()).log2()));
+        let NdVec([log2_cells_w, log2_cells_h]) = log2_cells_size;
+
+        let log2_target_w: R64 = R64::from_u32(target_size.0).unwrap().log2();
+        let log2_target_h: R64 = R64::from_u32(target_size.1).unwrap().log2();
+
+        // Divide `cells_size` by `target_size` to get the number of cells per
+        // pixel (i.e. scale factor).
+        let log2_scale_factor =
+            R64::min(log2_target_w - log2_cells_w, log2_target_h - log2_cells_h);
+        Self::from_log2_factor(log2_scale_factor)
+    }
 
     /// Clamps the scale to the lower and upper limits. This is not
     /// automatically enforced by `Scale`; it must be called manually.
     #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn clamp(self) -> Self {
         if self.log2_factor < Self::LOWER_LIMIT {
-            Self {
-                log2_factor: r64(Self::LOWER_LIMIT),
-            }
+            Self::from_log2_factor(r64(Self::LOWER_LIMIT))
         } else if self.log2_factor > Self::UPPER_LIMIT {
-            Self {
-                log2_factor: r64(Self::UPPER_LIMIT),
-            }
+            Self::from_log2_factor(r64(Self::UPPER_LIMIT))
         } else {
             self
         }

@@ -86,6 +86,8 @@ pub enum ViewCommand {
         /// Optional invariant position.
         invariant_pos: Option<FVec2D>,
     },
+
+    FitView,
 }
 impl_command_from!(Command::View(ViewCommand));
 

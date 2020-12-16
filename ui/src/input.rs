@@ -274,7 +274,7 @@ impl FrameInProgress<'_> {
                         }
                         // Paste.
                         Some(VirtualKeyCode::V) => self.gridview.enqueue(ClipboardCommand::Paste),
-                        // Center pattern.
+                        // Center view.
                         Some(VirtualKeyCode::M) => {
                             self.gridview.enqueue(match self.gridview {
                                 GridView::View2D(_) => ViewCommand::GoTo2D {
@@ -296,6 +296,8 @@ impl FrameInProgress<'_> {
                             self.gridview
                                 .enqueue(ViewCommand::GoToScale(Scale::default()));
                         }
+                        // Fit view to pattern.
+                        Some(VirtualKeyCode::F) => self.gridview.enqueue(ViewCommand::FitView),
                         _ => (),
                     }
                 }

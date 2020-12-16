@@ -290,6 +290,28 @@ impl GridViewTrait for GridView2D {
         Ok(())
     }
     fn do_view_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
+        // Handle `FitView` specially.
+        if matches!(command, ViewCommand::FitView) {
+            if let Some(pattern_bounding_rect) = self.automaton.ndtree.bounding_rect() {
+                let NdVec([x, y]) = pattern_bounding_rect.center();
+                self.do_view_command(
+                    ViewCommand::GoTo2D {
+                        x: Some(x.into()),
+                        y: Some(y.into()),
+                        relative: false,
+                        scaled: false,
+                    },
+                    config,
+                )?;
+
+                let pattern_size = pattern_bounding_rect.size();
+                let target_size = self.camera().target_dimensions();
+                let scale = Scale::from_fit(pattern_size, target_size);
+                self.do_view_command(ViewCommand::GoToScale(scale.floor()), config)?;
+            }
+            return Ok(());
+        }
+
         let maybe_new_drag_handler = self
             .camera_interpolator
             .do_view_command(command, config)

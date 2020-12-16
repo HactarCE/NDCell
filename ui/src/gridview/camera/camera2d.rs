@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use cgmath::Matrix4;
 use log::warn;
 
@@ -278,6 +278,10 @@ impl Camera<Dim2D> for Camera2D {
                 }
                 Ok(None)
             }
+            ViewCommand::GoTo3D { .. } => {
+                warn!("Ignoring {:?} in Camera2D", command);
+                Ok(None)
+            }
             ViewCommand::GoToScale(scale) => {
                 self.set_scale(scale);
                 Ok(None)
@@ -309,10 +313,9 @@ impl Camera<Dim2D> for Camera2D {
                 Ok(None)
             }
 
-            ViewCommand::GoTo3D { .. } => {
-                warn!("Ignoring {:?} in Camera2D", command);
-                Ok(None)
-            }
+            ViewCommand::FitView => Err(anyhow!(
+                "FitView command received in Camera2D (must be converted to GoTo command)"
+            )),
         }
     }
 }

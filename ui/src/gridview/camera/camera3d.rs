@@ -295,6 +295,10 @@ impl Camera<Dim3D> for Camera3D {
                 ViewDragCommand::Scale => todo!("Scale using click & drag"),
             },
 
+            ViewCommand::GoTo2D { .. } => {
+                warn!("Ignoring {:?} in Camera3D", command);
+                Ok(None)
+            }
             ViewCommand::GoTo3D {
                 mut x,
                 mut y,
@@ -359,9 +363,8 @@ impl Camera<Dim3D> for Camera3D {
                 Ok(None)
             }
 
-            ViewCommand::GoTo2D { .. } => {
-                warn!("Ignoring {:?} in Camera3D", command);
-                Ok(None)
+            ViewCommand::FitView => {
+                todo!("fit view 3D");
             }
         }
     }

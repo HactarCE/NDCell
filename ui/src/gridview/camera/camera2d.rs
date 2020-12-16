@@ -78,6 +78,22 @@ impl Camera2D {
 
         render_cell_pos
     }
+
+    /// Returns a rectangle of cells that are at least partially visible.
+    pub fn global_visible_rect(&self) -> BigRect2D {
+        // Compute the width and height of individual cells that fit on the
+        // screen.
+        let (target_w, target_h) = self.target_dimensions();
+        let target_pixels_size: IVec2D = NdVec([target_w as isize, target_h as isize]);
+        let target_cells_size: FixedVec2D = self
+            .scale()
+            .units_to_cells(target_pixels_size.to_fixedvec());
+        // Compute the cell vector pointing from the camera center to the top right
+        // corner of the screen; i.e. the "half diagonal."
+        let half_diag: FixedVec2D = target_cells_size / 2.0;
+
+        BigRect2D::centered(self.pos().floor().0, &half_diag.ceil().0)
+    }
 }
 
 impl Camera<Dim2D> for Camera2D {

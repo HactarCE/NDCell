@@ -95,26 +95,10 @@ impl<'a> RenderInProgress<'a> {
 
         let origin = camera.pos().floor().0.div_floor(&render_cell_len) * &render_cell_len;
 
-        let (target_w, target_h) = camera.target_dimensions();
-        let target_pixels_size: IVec2D = NdVec([target_w as isize, target_h as isize]);
-
-        // Determine the rectangle of visible cells in global coordinate space.
-        let global_visible_rect: BigRect2D;
-        {
-            // Compute the width and height of individual cells that fit on
-            // the screen.
-            let target_cells_size: FixedVec2D = camera
-                .scale()
-                .units_to_cells(target_pixels_size.to_fixedvec());
-            // Compute the cell vector pointing from the origin to the top
-            // right corner of the screen; i.e. the "half diagonal."
-            let half_diag: FixedVec2D = target_cells_size / 2.0;
-
-            let tmp_global_visible_rect = BigRect2D::centered(origin.clone(), &half_diag.ceil().0);
-
-            // Round to the nearest render cell.
-            global_visible_rect = render_cell_layer.round_rect(&tmp_global_visible_rect);
-        }
+        // Determine the rectangle of visible cells in global coordinate space,
+        // rounded to the nearest render cell.
+        let global_visible_rect: BigRect2D =
+            render_cell_layer.round_rect(&camera.global_visible_rect());
 
         // Convert that rectangle of cells into a rectangle of render cells,
         // relative to `origin`.

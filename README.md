@@ -90,18 +90,21 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 - **Undo history**
   - Undo with <kbd>Ctrl</kbd>+<kbd>Z</kbd>
   - Redo with <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
-- **Import/export**
-  - Copy RLE with <kbd>Ctrl</kbd>+<kbd>C</kbd>
-  - Paste RLE with <kbd>Ctrl</kbd>+<kbd>V</kbd>
 - **Freeform drawing**
   - Toggle cells with left click
   - Select a cell state using <kbd>0</kbd>-<kbd>9</kbd>
   - Cycle selected cell state using <kbd>[</kbd>/<kbd>]</kbd>
 - **Rectangular selection** ([Demo video][selections-demo])
   - Select with left click while holding <kbd>Ctrl</kbd>
+  - Select all with <kbd>Ctrl</kbd>+<kbd>A</kbd>
   - Resize the selection with left click while holding <kbd>Ctrl</kbd>+<kbd>Shift</kbd>, or by dragging the edges of the selection
   - Move the selected cells with left click
   - Move the selection region with left click while holding <kbd>Shift</kbd>
+  - Delete selected cells with <kbd>Delete</kbd>
+- **Copy/paste**
+  - Cut/copy selection as RLE with <kbd>Ctrl</kbd>+<kbd>X</kbd>/<kbd>C</kbd>
+  - Cut/copy selection as Macrocell with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>/<kbd>C</kbd>
+  - Paste RLE or Macrocell with <kbd>Ctrl</kbd>+<kbd>V</kbd>
 - **Navigation**
   - Pan with arrow keys, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right mouse button (hold <kbd>Shift</kbd> to go faster)
   - Zoom with scroll wheel or <kbd>Q</kbd>/<kbd>Z</kbd> (hold <kbd>Shift</kbd> to go faster)

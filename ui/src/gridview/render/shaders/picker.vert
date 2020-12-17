@@ -3,7 +3,7 @@
 in vec3 pos;
 in uint target_id;
 
-out uint vId;
+flat out uint vId;
 
 uniform mat4 matrix;
 

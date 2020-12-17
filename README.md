@@ -19,7 +19,7 @@ _Any number of dimensions_
 _Any neighborhood range_  
 _Any computable transition function_
 
-**Simulate _any_ cellular automaton**
+**Simulate _any_ deterministic cellular automaton**
 
 An N-dimensional cellular automaton simulation program. Maybe. Someday.
 

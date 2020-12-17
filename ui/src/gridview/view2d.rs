@@ -55,7 +55,7 @@ impl AsMut<GridViewCommon> for GridView2D {
 }
 
 impl GridViewTrait for GridView2D {
-    fn do_draw_command(&mut self, command: DrawCommand, _config: &Config) -> Result<()> {
+    fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()> {
         // Don't draw if the scale is too small.
         if self.too_small_to_draw() {
             self.common.is_drawing = false;
@@ -115,6 +115,10 @@ impl GridViewTrait for GridView2D {
                 self.common.is_drawing = true;
                 new_drag_handler(self, cursor_start)?;
                 self.drag_handler = Some(new_drag_handler);
+            }
+            DrawCommand::Cancel => {
+                self.stop_drag()?;
+                self.do_history_command(HistoryCommand::Undo, config)?;
             }
         }
         Ok(())
@@ -261,6 +265,9 @@ impl GridViewTrait for GridView2D {
                 self.deselect(); // take into account pasted cells
                 self.set_selection(self.automaton.ndtree.bounding_rect().map(Selection2D::from))
             }
+            SelectCommand::Deselect => {
+                self.deselect();
+            }
 
             SelectCommand::Copy(format) => {
                 if self.selection.is_some() {
@@ -303,6 +310,16 @@ impl GridViewTrait for GridView2D {
                     self.selection.as_mut().unwrap().cells = None;
                     self.grab_selected_cells();
                     self.selection.as_mut().unwrap().cells = None;
+                }
+            }
+
+            SelectCommand::Cancel => {
+                if let Some(sel) = &self.selection {
+                    if sel.cells.is_some() {
+                        self.drop_selected_cells();
+                    } else {
+                        self.deselect();
+                    }
                 }
             }
         }
@@ -534,7 +551,7 @@ impl GridView2D {
         self.deselect();
         self.selection = new_selection;
     }
-    /// Deselects all returns the old selection.
+    /// Deselects all and returns the old selection.
     pub fn deselect(&mut self) -> Option<Selection2D> {
         if let Some(sel) = self.selection.clone() {
             if let Some(cells) = sel.cells {
@@ -557,6 +574,15 @@ impl GridView2D {
             }
         }
         self.selection.take()
+    }
+    /// Moves the selected cells from the selection to the main grid. Outputs a
+    /// warning in the log if there is no selection.
+    pub fn drop_selected_cells(&mut self) {
+        if let Some(sel) = self.deselect() {
+            self.set_selection_rect(Some(sel.rect));
+        } else {
+            warn!("drop_selected_cells() called with no selection");
+        }
     }
     /// Moves the cells in the selected region from the main grid into the
     /// selection. Outputs a warning to the log if there is no selection. Does

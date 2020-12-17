@@ -25,6 +25,8 @@ pub enum Command {
 
     ContinueDrag(FVec2D),
     StopDrag,
+
+    Cancel,
 }
 
 #[derive(Debug, Clone)]
@@ -110,6 +112,8 @@ pub enum ViewDragCommand {
 pub enum DrawCommand {
     SetState(u8),
     Drag(DrawDragCommand, FVec2D),
+
+    Cancel,
 }
 impl_command_from!(Command::Draw(DrawCommand));
 
@@ -161,10 +165,13 @@ pub enum DrawShape {
 pub enum SelectCommand {
     Drag(SelectDragCommand, FVec2D),
     SelectAll,
+    Deselect,
 
     Copy(CaFormat),
     Paste,
     Delete,
+
+    Cancel,
 }
 impl_command_from!(Command::Select(SelectCommand));
 

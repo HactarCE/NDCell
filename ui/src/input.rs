@@ -204,7 +204,7 @@ impl FrameInProgress<'_> {
                         Some(VirtualKeyCode::Return) => {
                             self.gridview.enqueue(SimCommand::ToggleRunning)
                         }
-                        Some(VirtualKeyCode::Escape) => self.gridview.enqueue(SimCommand::Cancel),
+                        Some(VirtualKeyCode::Escape) => self.gridview.enqueue(Command::Cancel),
                         Some(VirtualKeyCode::Equals) | Some(VirtualKeyCode::NumpadAdd) => {
                             self.config.sim.step_size *= 2;
                         }

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use enum_dispatch::enum_dispatch;
 use glium::glutin::event::ModifiersState;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::mpsc;
@@ -140,6 +140,16 @@ pub trait GridViewTrait:
 
             Command::ContinueDrag(cursor_pos) => self.continue_drag(cursor_pos),
             Command::StopDrag => self.stop_drag(),
+
+            Command::Cancel => {
+                if self.is_drawing() {
+                    self.do_draw_command(DrawCommand::Cancel, config)
+                } else if self.is_running() {
+                    self.do_sim_command(SimCommand::Cancel, config)
+                } else {
+                    self.do_select_command(SelectCommand::Cancel, config)
+                }
+            }
         }
     }
     /// Executes a `SimCommand`.
@@ -179,7 +189,7 @@ pub trait GridViewTrait:
     /// Executes a `HistoryCommand`.
     fn do_history_command(&mut self, command: HistoryCommand, config: &Config) -> Result<()> {
         if self.is_drawing() {
-            warn!("Ignoring {:?} command while drawing", command);
+            debug!("Ignoring {:?} command while drawing", command);
             return Ok(());
         }
         self.stop_running();

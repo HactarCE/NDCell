@@ -175,4 +175,5 @@ pub enum SelectDragCommand {
     ResizeToCell,
     MoveSelection,
     MoveCells,
+    CopyCells,
 }

@@ -187,20 +187,26 @@ impl GridViewTrait for GridView2D {
                             Ok(DragOutcome::Cancel)
                         }
                     }),
-                    SelectDragCommand::MoveCells => Box::new(move |this, new_pos| {
-                        initial_selection = initial_selection.take().or_else(|| {
-                            this.grab_selected_cells();
-                            this.selection.take()
-                        });
-                        if let Some(s) = &initial_selection {
-                            let delta = (new_pos.cell() - initial_pos.cell()).round();
-                            this.selection = Some(s.move_by(delta));
-                            Ok(DragOutcome::Continue)
-                        } else {
-                            // There is no selection to move.
-                            Ok(DragOutcome::Cancel)
-                        }
-                    }),
+                    SelectDragCommand::MoveCells | SelectDragCommand::CopyCells => {
+                        Box::new(move |this, new_pos| {
+                            initial_selection = initial_selection.take().or_else(|| {
+                                if matches!(c, SelectDragCommand::CopyCells) {
+                                    this.grab_copy_of_selected_cells();
+                                } else {
+                                    this.grab_selected_cells();
+                                }
+                                this.selection.take()
+                            });
+                            if let Some(s) = &initial_selection {
+                                let delta = (new_pos.cell() - initial_pos.cell()).round();
+                                this.selection = Some(s.move_by(delta));
+                                Ok(DragOutcome::Continue)
+                            } else {
+                                // There is no selection to move.
+                                Ok(DragOutcome::Cancel)
+                            }
+                        })
+                    }
                 };
 
                 // State variable to be moved into the closure and used by the
@@ -234,7 +240,7 @@ impl GridViewTrait for GridView2D {
                             self.record();
                         }
                     }
-                    SelectDragCommand::MoveCells => {
+                    SelectDragCommand::MoveCells | SelectDragCommand::CopyCells => {
                         self.stop_running();
                         self.record();
                     }
@@ -556,11 +562,22 @@ impl GridView2D {
     /// selection. Outputs a warning to the log if there is no selection. Does
     /// nothing if the selection already contains cells.
     pub fn grab_selected_cells(&mut self) {
+        self._grab_selected_cells(true)
+    }
+    /// Copies the cells in the selected region from the main grid into the
+    /// selection. Outputs a warning to the log if there is no selection. Does
+    /// nothing if the selection already contains cells.
+    pub fn grab_copy_of_selected_cells(&mut self) {
+        self._grab_selected_cells(false)
+    }
+    fn _grab_selected_cells(&mut self, clear_source: bool) {
         if let Some(sel) = &mut self.selection {
             if sel.cells.is_none() {
                 let region = Region::Rect(sel.rect.clone());
                 sel.cells = Some(self.automaton.ndtree.get_region(region.clone()));
-                self.automaton.ndtree.clear_region(region);
+                if clear_source {
+                    self.automaton.ndtree.clear_region(region);
+                }
             }
         } else {
             warn!("grab_selected_cells() called with no selection");

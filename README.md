@@ -11,6 +11,8 @@
 
 [NDCA docs]: https://ndcell.rtfd.io/
 
+<img src="https://raw.githubusercontent.com/HactarCE/NDCell/master/docs/img/ndcell_logo.svg?sanitize=true" alt="NDCell logo" width="150" align="right">
+
 _Any number of dimensions_  
 _Any neighborhood range_  
 _Any computable transition function_

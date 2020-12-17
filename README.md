@@ -6,7 +6,7 @@
 [Discord link]: https://discord.gg/vdJwHQF
 [Release badge]: https://img.shields.io/github/v/release/HactarCE/NDCell
 [Release link]: https://github.com/HactarCE/NDCell/releases/latest
-[Tests badge]: https://img.shields.io/github/workflow/status/HactarCE/NDCell/test "Test results"
+[Tests badge]: https://img.shields.io/github/workflow/status/HactarCE/NDCell/test?label=test "Test results"
 [Tests link]: https://github.com/HactarCE/NDCell/actions?query=workflow%3A%22test%22
 
 [NDCA docs]: https://ndcell.rtfd.io/

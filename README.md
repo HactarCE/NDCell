@@ -103,6 +103,7 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - Resize the selection with left click while holding <kbd>Ctrl</kbd>+<kbd>Shift</kbd>, or by dragging the edges of the selection
   - Move the selected cells with left click
   - Move the selection region with left click while holding <kbd>Shift</kbd>
+  - Duplicate the selected cells with left click while holding <kbd>Ctrl</kbd>
   - Delete selected cells with <kbd>Delete</kbd>
 - **Copy/paste**
   - Cut/copy selection as RLE with <kbd>Ctrl</kbd>+<kbd>X</kbd>/<kbd>C</kbd>

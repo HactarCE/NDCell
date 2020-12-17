@@ -21,22 +21,18 @@ _Any computable transition function_
 
 An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
-## Screenshots
-
-<img src="https://i.imgur.com/vRMLNYC.png" alt="Gosper's Glider Gun simulated for 57 generations" width="512" />
-<img src="https://i.imgur.com/uKiOxqy.png" alt="Catacryst simulated for almost 8 million generations" width="512" />
-
 ## Downloads
 
-**[Latest stable release][latest-stable-release]** (recommended)
-
-Builds are automatically generated for every push to the `master` branch. **To get the latest stable-ish development build, click [here][Builds link] and click on the first run with a green check mark, which will contain builds for Windows, Linux, and macOS.** You must be logged into GitHub for the link to be available. If you do not want to log into GitHub or you're having trouble with the latest build, join [the Discord server][Discord link] and ask for help.
+Download the **[latest release][Release link]**.
 
 On Linux and macOS, the file might not be executable by default -- to fix this, open a terminal in the same folder as the `ndcell` file and run `chmod a+x ndcell`.
 
 To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 
-[latest-stable-release]: https://github.com/HactarCE/NDCell/releases/latest
+## Screenshots
+
+<img src="https://i.imgur.com/vRMLNYC.png" alt="Gosper's Glider Gun simulated for 57 generations" width="512" />
+<img src="https://i.imgur.com/uKiOxqy.png" alt="Catacryst simulated for almost 8 million generations" width="512" />
 
 ## What works right now
 

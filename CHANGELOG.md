@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.1] Block (2020-12-17)
+
+### Fixed
+
+- Fix crash when selecting cells
+
 ## [0.1.0] Block (2020-12-17)
 
 ![Block](https://user-images.githubusercontent.com/6060305/102452302-21727f80-4008-11eb-891d-6a2ac2bd410f.png)

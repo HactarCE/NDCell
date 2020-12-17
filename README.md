@@ -30,11 +30,15 @@ An N-dimensional cellular automaton simulation program. Maybe. Someday.
 
 ## Downloads
 
-Builds are automatically generated for every push to the `master` branch. **To get the latest build, click [here][Builds link] and click on the first run with a green check mark, which will contain builds for Windows, Linux, and macOS.** You must be logged into GitHub for the link to be available. If you do not want to log into GitHub or you're having trouble with the latest build, join [the Discord server][Discord link] and ask for help.
+**[Latest stable release][latest-stable-release]** (recommended)
+
+Builds are automatically generated for every push to the `master` branch. **To get the latest stable-ish development build, click [here][Builds link] and click on the first run with a green check mark, which will contain builds for Windows, Linux, and macOS.** You must be logged into GitHub for the link to be available. If you do not want to log into GitHub or you're having trouble with the latest build, join [the Discord server][Discord link] and ask for help.
 
 On Linux and macOS, the file might not be executable by default -- to fix this, open a terminal in the same folder as the `ndcell` file and run `chmod a+x ndcell`.
 
 To build NDCell yourself, see [BUILDING.md](BUILDING.md).
+
+[latest-stable-release]: https://github.com/HactarCE/NDCell/releases/latest
 
 ## To-do list
 
@@ -90,48 +94,13 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 
 ## What works right now
 
-- **Edit and simulate Conway's Game of Life on an infinite 2D grid using HashLife**
-- **Custom rules** written in NDCA, a custom JIT-compiled programming language. Documentation in progress at [ndcell.rtfd.io][NDCA docs]. ([Demo video][custom-rules-demo])
-- **Undo history**
-  - Undo with <kbd>Ctrl</kbd>+<kbd>Z</kbd>
-  - Redo with <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
-- **Freeform drawing**
-  - Toggle cells with left click
-  - Select a cell state using <kbd>0</kbd>-<kbd>9</kbd>
-  - Cycle selected cell state using <kbd>[</kbd>/<kbd>]</kbd>
-- **Rectangular selection** ([Demo video][selections-demo])
-  - Select with left click while holding <kbd>Ctrl</kbd>
-  - Select all with <kbd>Ctrl</kbd>+<kbd>A</kbd>
-  - Resize the selection with left click while holding <kbd>Ctrl</kbd>+<kbd>Shift</kbd>, or by dragging the edges of the selection
-  - Move the selected cells with left click
-  - Move the selection region with left click while holding <kbd>Shift</kbd>
-  - Duplicate the selected cells with left click while holding <kbd>Ctrl</kbd>
-  - Delete selected cells with <kbd>Delete</kbd>
-- **Copy/paste**
-  - Cut/copy selection as RLE with <kbd>Ctrl</kbd>+<kbd>X</kbd>/<kbd>C</kbd>
-  - Cut/copy selection as Macrocell with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>/<kbd>C</kbd>
-  - Paste RLE or Macrocell with <kbd>Ctrl</kbd>+<kbd>V</kbd>
-- **Navigation**
-  - Pan with arrow keys, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right mouse button (hold <kbd>Shift</kbd> to go faster)
-  - Zoom with scroll wheel or <kbd>Q</kbd>/<kbd>Z</kbd> (hold <kbd>Shift</kbd> to go faster)
-- **Simulation**
-  - Step 1 generation with <kbd>Space</kbd>
-  - Step N generations with <kbd>Tab</kbd>
-  - Run continuously with <kbd>Enter</kbd>
-  - Set step size
-    - Double/halve step size with <kbd>+</kbd>/<kbd>-</kbd>
-  - Set breakpoint
-- **3D rendering**
-  - Partially working ([Demo video][3d-demo])
-
-[custom-rules-demo]: https://streamable.com/7yawnq
-[selections-demo]: https://streamable.com/1hj7lv
-[3d-demo]: https://streamable.com/7yp8ml
+See the [Changelog](CHANGELOG.md) for the latest list of features.
 
 ## What's planned for the future
 
 In roughly descending order of priority/likelihood:
 
+- **3D rendering** is planned for version 0.2 or 0.3.
 - **Arbitrary range and neighborhood** within a reasonable limit.
 - **Custom symmetries** with different cell states for each orientation. Any symmetry can be used in part or all of the transition function.
 - **Custom colors and icons** with several built-in presets and primitives.

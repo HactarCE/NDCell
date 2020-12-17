@@ -131,6 +131,10 @@ These are things that NDCell will probably never support, in rough order from le
 [Ready]: https://github.com/GollyGang/ready/
 [HashLife]: https://en.wikipedia.org/wiki/Hashlife
 
+## Contributing
+
+NDCell is currently under very rapid development, and a lot of things are in flux. Bug reports/fixes and minor feature requests are welcome, either via [Discord][Discord link] or the [issues tracker](https://github.com/HactarCE/NDCell/issues), but the project is currently not in a position to accept larger contributions. Ideas and feedback are always welcome on the Discord server.
+
 ## License
 
 Licensed under either of

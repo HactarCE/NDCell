@@ -1,4 +1,4 @@
-# NDCell [![Release badge]][Release link] [![Tests badge]][Tests link] [![Builds badge]][Builds link] [![Dependencies badge]][Dependencies status link] [![Discord badge]][Discord link]
+# NDCell [![Release badge]][Release link] [![Tests badge]][Tests link] [![Dependencies badge]][Dependencies status link] [![Discord badge]][Discord link]
 
 [Dependencies badge]: https://deps.rs/repo/github/HactarCE/NDCell/status.svg "Dependencies status"
 [Dependencies status link]: https://deps.rs/repo/github/HactarCE/NDCell "GitHub release (latest)"
@@ -6,10 +6,8 @@
 [Discord link]: https://discord.gg/vdJwHQF
 [Release badge]: https://img.shields.io/github/v/release/HactarCE/NDCell
 [Release link]: https://github.com/HactarCE/NDCell/releases/latest
-[Tests badge]: https://github.com/HactarCE/NDCell/workflows/test/badge.svg "Test results"
-[Tests link]: https://github.com/HactarCE/NDCell/actions?query=workflow%3A%22Run-tests%22
-[Builds badge]: https://github.com/HactarCE/NDCell/workflows/build/badge.svg "Download latest build"
-[Builds link]: https://github.com/HactarCE/NDCell/actions?query=workflow%3A%22Build-latest%22
+[Tests badge]: https://img.shields.io/github/workflow/status/HactarCE/NDCell/test "Test results"
+[Tests link]: https://github.com/HactarCE/NDCell/actions?query=workflow%3A%22test%22
 
 [NDCA docs]: https://ndcell.rtfd.io/
 

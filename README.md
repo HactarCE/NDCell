@@ -1,5 +1,7 @@
-# NDCell [![Tests badge]][Tests link] [![Builds badge]][Builds link] [![Discord badge]][Discord link]
+# NDCell [![Tests badge]][Tests link] [![Builds badge]][Builds link] [![Dependencies badge]][Dependencies status link] [![Discord badge]][Discord link]
 
+[Dependencies badge]: https://deps.rs/repo/github/HactarCE/NDCell/status.svg "Dependencies status"
+[Dependencies status link]: https://deps.rs/repo/github/HactarCE/NDCell
 [Discord badge]: https://img.shields.io/discord/560924453245288459.svg?colorB=7289DA "Discord server invite"
 [Discord link]: https://discord.gg/vdJwHQF
 [Tests badge]: https://github.com/HactarCE/NDCell/workflows/Run%20tests/badge.svg "Test results"

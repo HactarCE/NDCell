@@ -851,24 +851,6 @@ fn shrink_nonzero_bound<D: Dim, M: MinMax>(
         } else {
             None
         }
-
-        // // We will split each edge node into its children. Those that are closer
-        // // to the edge we want (e.g. if looking for minimum X bound, those with
-        // // a more negative X coordinate) will go in `new_edge_nodes`; those that
-        // // are farther from the edge we want (e.g. if looking for a minimum X
-        // // bound, those with a more positive X coordinate) will go in
-        // // `fallback_edge_nodes`.
-        // let mut new_edge_nodes = HashSet::new();
-        // let mut new_fallback_edge_nodes = HashSet::new();
-        // for (node, rect_within_node) in descendents_along_edge {
-        //     assert_eq!(layer, node.layer(), "Node layer mismatch");
-        //     node.as_non_leaf().unwrap();
-        //     match node.as_enum() {
-        //         // Base case: check cells individually.
-        //         NodeRefEnum::Leaf(node) => node.cells_with_positions(),
-        //         NodeRefEnum::NonLeaf(node) => {}
-        //     }
-        // }
     }
 }
 

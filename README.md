@@ -46,9 +46,8 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
   - [ ] Multithreaded simulation
   - [x] Reduce `BigInt` allocations
     - [x] Precompute HashLife time splits
-    - [ ] Cache `layer.big_len()`, `layer.big_rect()`, and maybe `layer.child_offset()` results
   - [x] Rewrite RLE import/export
-  - [ ] Macrocell import/export
+  - [x] Macrocell import/export
 - [ ] Render 3D
   - [ ] Cubes
   - [ ] Lighting
@@ -65,7 +64,7 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
     - [ ] Compile error from custom rule
     - [ ] Runtime error from custom rule
   - [x] Rectangular selection
-  - [ ] Copy/paste selection
+  - [x] Copy/paste selection
   - [ ] Rotate/reflect selection
   - [ ] Simulate in selection
   - [ ] Save/load patterns

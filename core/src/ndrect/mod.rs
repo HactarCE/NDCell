@@ -155,7 +155,7 @@ where
     where
         N: Integer + From<u8>,
     {
-         self.size.div_floor(&2.into()) + &self.start
+        self.size.div_floor(&2.into()) + &self.start
     }
 
     /// Returns the length of the rectangle along the given axis.

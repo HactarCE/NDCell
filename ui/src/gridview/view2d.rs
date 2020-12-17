@@ -216,6 +216,10 @@ impl GridViewTrait for GridView2D {
                 // State variable to be moved into the closure and used by the
                 // drag handler.
                 let mut past_drag_threshold: bool = false;
+                if matches!(c, SelectDragCommand::ResizeToCell) {
+                    // No drag threshold for absolute resize-to-cell.
+                    past_drag_threshold = true;
+                }
 
                 let new_drag_handler_with_threshold: DragHandler<Self> =
                     Box::new(move |this, new_cursor_pos| {

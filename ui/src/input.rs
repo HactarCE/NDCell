@@ -142,13 +142,9 @@ impl FrameInProgress<'_> {
                         }
                     }
                     WindowEvent::MouseWheel { delta, .. } if self.has_mouse => {
-                        let (_dx, dy) = match delta {
-                            MouseScrollDelta::LineDelta(x, y) => (*x as f64, *y as f64),
-                            MouseScrollDelta::PixelDelta(logical_position) => {
-                                let PhysicalPosition { x, y } =
-                                    logical_position.to_physical(self.dpi);
-                                (x, y)
-                            }
+                        let (_dx, dy) = match *delta {
+                            MouseScrollDelta::LineDelta(x, y) => (x as f64, y as f64),
+                            MouseScrollDelta::PixelDelta(PhysicalPosition { x, y }) => (x, y),
                         };
                         let speed = match (&self.gridview, delta) {
                             (GridView::View2D(_), MouseScrollDelta::LineDelta(_, _)) => {
@@ -209,10 +205,10 @@ impl FrameInProgress<'_> {
                             self.gridview.enqueue(SimCommand::ToggleRunning)
                         }
                         Some(VirtualKeyCode::Escape) => self.gridview.enqueue(SimCommand::Cancel),
-                        Some(VirtualKeyCode::Equals) | Some(VirtualKeyCode::Add) => {
+                        Some(VirtualKeyCode::Equals) | Some(VirtualKeyCode::NumpadAdd) => {
                             self.config.sim.step_size *= 2;
                         }
-                        Some(VirtualKeyCode::Minus) | Some(VirtualKeyCode::Subtract) => {
+                        Some(VirtualKeyCode::Minus) | Some(VirtualKeyCode::NumpadSubtract) => {
                             self.config.sim.step_size /= 2;
                             if self.config.sim.step_size < 1.into() {
                                 self.config.sim.step_size = 1.into();

@@ -10,7 +10,7 @@ itertools = "0.9"
 lazy_static = "1.4"
 regex = "1"
 seahash = "4.0"
-send_wrapper = "0.4"
+send_wrapper = "0.5"
 thread_local = "1.0"
 
 ndcell_core = { path = "../core" }

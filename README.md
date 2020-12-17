@@ -40,58 +40,6 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 
 [latest-stable-release]: https://github.com/HactarCE/NDCell/releases/latest
 
-## To-do list
-
-- [x] Render 2D
-- [x] Basic editing in 2D
-- [x] Basic custom rules
-  - [x] Implementation
-  - [ ] [Documentation][NDCA docs]
-- [ ] Improve performance
-  - [x] New ND-tree node cache
-    - [x] Garbage collection
-  - [x] Lazy population computation
-  - [ ] Multithreaded simulation
-  - [x] Reduce `BigInt` allocations
-    - [x] Precompute HashLife time splits
-  - [x] Rewrite RLE import/export
-  - [x] Macrocell import/export
-- [ ] Render 3D
-  - [ ] Cubes
-  - [ ] Lighting
-  - [ ] Gridlines
-  - [ ] Improve performance
-    - [ ] Limit visibility / implement render cells
-    - [ ] Reduce detail on distant octree nodes
-    - [ ] Hide occluded faces
-    - [ ] Merge adjacent faces
-- [ ] Basic editing in 3D
-- [ ] Improve UI
-  - [ ] Better error reporting
-    - [ ] RLE loading
-    - [ ] Compile error from custom rule
-    - [ ] Runtime error from custom rule
-  - [x] Rectangular selection
-  - [x] Copy/paste selection
-  - [ ] Rotate/reflect selection
-  - [ ] Simulate in selection
-  - [ ] Save/load patterns
-  - [ ] Select rule
-  - [ ] Preferences
-    - [ ] Tweak rendering parameters
-    - [ ] Customize default colors
-    - [ ] Customize gridlines
-    - [ ] Customize key bindings
-    - [ ] Customize mouse bindings
-- [ ] More custom rules features
-  - [ ] Finish documentation
-  - [ ] More methods (`.count`)
-  - [ ] More cell states
-  - [ ] Pattern masks
-  - [ ] Pattern matching
-  - [ ] Basic symmetries
-  - [ ] Spacetime residues
-
 ## What works right now
 
 See the [Changelog](CHANGELOG.md) for the latest list of features.
@@ -100,7 +48,7 @@ See the [Changelog](CHANGELOG.md) for the latest list of features.
 
 In roughly descending order of priority/likelihood:
 
-- **3D rendering** is planned for version 0.2 or 0.3.
+- **[Everything on the short-term to-do list](TODO.md)**, including **3D rendering/simulation**
 - **Arbitrary range and neighborhood** within a reasonable limit.
 - **Custom symmetries** with different cell states for each orientation. Any symmetry can be used in part or all of the transition function.
 - **Custom colors and icons** with several built-in presets and primitives.

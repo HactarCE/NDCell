@@ -1,0 +1,51 @@
+# Short-term to-do list
+
+- [x] Render 2D
+- [x] Basic editing in 2D
+- [x] Basic custom rules
+  - [x] Implementation
+  - [ ] [Documentation][NDCA docs]
+- [ ] Improve performance
+  - [x] New ND-tree node cache
+    - [x] Garbage collection
+  - [x] Lazy population computation
+  - [ ] Multithreaded simulation
+  - [x] Reduce `BigInt` allocations
+    - [x] Precompute HashLife time splits
+  - [x] Rewrite RLE import/export
+  - [x] Macrocell import/export
+- [ ] Render 3D
+  - [ ] Cubes
+  - [ ] Lighting
+  - [ ] Gridlines
+  - [ ] Improve performance
+    - [ ] Limit visibility / implement render cells
+    - [ ] Reduce detail on distant octree nodes
+    - [ ] Hide occluded faces
+    - [ ] Merge adjacent faces
+- [ ] Basic editing in 3D
+- [ ] Improve UI
+  - [ ] Better error reporting
+    - [ ] RLE loading
+    - [ ] Compile error from custom rule
+    - [ ] Runtime error from custom rule
+  - [x] Rectangular selection
+  - [x] Copy/paste selection
+  - [ ] Rotate/reflect selection
+  - [ ] Simulate in selection
+  - [ ] Save/load patterns
+  - [ ] Select rule
+  - [ ] Preferences
+    - [ ] Tweak rendering parameters
+    - [ ] Customize default colors
+    - [ ] Customize gridlines
+    - [ ] Customize key bindings
+    - [ ] Customize mouse bindings
+- [ ] More custom rules features
+  - [ ] Finish documentation
+  - [ ] More methods (`.count`)
+  - [ ] More cell states
+  - [ ] Pattern masks
+  - [ ] Pattern matching
+  - [ ] Basic symmetries
+  - [ ] Spacetime residues

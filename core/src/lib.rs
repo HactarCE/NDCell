@@ -95,7 +95,7 @@ pub mod prelude {
     pub use crate::num::{r64, BigInt, BigUint, FixedPoint, R64};
     pub use crate::sim::hashlife;
     pub use crate::sim::rule::aliases::*;
-    pub use crate::sim::rule::Rule;
+    pub use crate::sim::rule::{Rule, TransitionFunction};
 }
 
 #[cfg(test)]

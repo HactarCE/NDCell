@@ -1,1 +1,2 @@
+mod advent;
 mod cgol;

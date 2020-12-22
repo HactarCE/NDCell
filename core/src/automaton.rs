@@ -23,7 +23,7 @@ pub type Automaton6D = NdAutomaton<Dim6D>;
 
 /// Cellular automaton of any dimensionality.
 #[allow(missing_docs)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Automaton {
     Automaton1D(Automaton1D),
     Automaton2D(Automaton2D),

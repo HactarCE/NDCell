@@ -100,6 +100,12 @@ pub trait GridViewTrait:
                     if let Some(new_contents) = new_values.clipboard.clone() {
                         crate::clipboard_compat::clipboard_set(new_contents)?;
                     }
+                    if self.as_ref().work_type == Some(WorkType::SimContinuous) {
+                        self.as_mut().last_sim_times.push_back(new_values.elapsed);
+                        if self.as_mut().last_sim_times.len() > MAX_LAST_SIM_TIMES {
+                            self.as_mut().last_sim_times.pop_front();
+                        }
+                    }
                     self.set_new_values(new_values)?
                 }
             },

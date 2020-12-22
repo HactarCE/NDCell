@@ -14,11 +14,6 @@ use crate::commands::*;
 use crate::config::{Config, MouseDisplay};
 use crate::Scale;
 
-/// The number of render results to remember.
-const RENDER_RESULTS_COUNT: usize = 4;
-/// The number of previous simulation steps to track for counting UPS.
-const MAX_LAST_SIM_TIMES: usize = 4;
-
 /// Width of gridlines, in units of cells.
 const GRIDLINE_WIDTH: f64 = 1.0 / 32.0;
 

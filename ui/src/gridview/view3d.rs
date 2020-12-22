@@ -12,11 +12,6 @@ use super::DragHandler;
 use crate::commands::*;
 use crate::config::Config;
 
-/// The number of render results to remember.
-const RENDER_RESULTS_COUNT: usize = 4;
-/// The number of previous simulation steps to track for counting UPS.
-const MAX_LAST_SIM_TIMES: usize = 4;
-
 #[derive(Default)]
 pub struct GridView3D {
     common: GridViewCommon,

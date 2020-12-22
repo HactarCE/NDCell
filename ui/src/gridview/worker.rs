@@ -246,7 +246,7 @@ impl WorkerThread {
         let (lock, _condvar) = &*self.0;
         let mut state = lock.lock();
         match *state {
-            State::Idle => return true,
+            State::Idle => return false,
             State::WorkRequested(_) | State::Done(_) => *state = State::Idle,
             State::Working(_) => *state = State::Dropped,
             State::Dropped => unreachable!("reset() called on worker thread in dropped state"),
@@ -256,7 +256,7 @@ impl WorkerThread {
         // Reset the worker thread, so that a new task can be requested
         // immediately.
         *self = Self::new();
-        false
+        true
     }
 }
 

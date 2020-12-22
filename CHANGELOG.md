@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Advance one generation (<kbd>Space</kbd>)
   - Advance one "step" (<kbd>Tab</kbd>)
 
+### Changed
+
+- **GUI**
+  - Rename "UPS" (updates per second) to "step/sec" (steps per second)
+  - Display "RUNNING" or "STEPPING" accordingly instead of "SIMULATING"
+
 ### Fixed
 
 - Changing the step size while the simulation is running now takes effect immediately ([#6][i6])

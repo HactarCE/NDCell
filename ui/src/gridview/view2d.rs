@@ -10,7 +10,6 @@ use super::render::grid2d::{NdTreeDrawParameters, RenderInProgress};
 use super::selection::Selection2D;
 use super::worker::*;
 use super::{DragHandler, DragOutcome};
-use crate::clipboard_compat::{clipboard_get, clipboard_set};
 use crate::commands::*;
 use crate::config::{Config, MouseDisplay};
 use crate::Scale;
@@ -277,9 +276,7 @@ impl GridViewTrait for GridView2D {
                 if self.selection.is_some() {
                     let result = self.export(format);
                     match result {
-                        Ok(s) => {
-                            clipboard_set(s).map_err(|_| anyhow!("Setting clipboard contents"))?
-                        }
+                        Ok(s) => crate::clipboard_compat::clipboard_set(s)?,
                         Err(msg) => warn!("Failed to generate {}: {}", format, msg),
                     }
                 }
@@ -288,8 +285,7 @@ impl GridViewTrait for GridView2D {
                 let old_sel_rect = self.selection_rect().cloned();
 
                 self.record();
-                let string_from_clipboard =
-                    clipboard_get().map_err(|_| anyhow!("Fetching clipboard contents"))?;
+                let string_from_clipboard = crate::clipboard_compat::clipboard_get()?;
                 let result =
                     Selection2D::from_str(&string_from_clipboard, self.automaton.ndtree.pool());
                 match result {

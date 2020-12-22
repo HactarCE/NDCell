@@ -1,28 +1,31 @@
 //! Implementation of imgui::ClipboardBackend using the clipboard crate.
 
+use anyhow::{anyhow, Context, Result};
 use clipboard::{ClipboardContext, ClipboardProvider};
 use imgui;
 use log::warn;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 lazy_static! {
     static ref CTX: Mutex<Option<ClipboardContext>> = Mutex::new(ClipboardProvider::new().ok());
 }
 
-pub fn clipboard_get() -> Result<String, ()> {
+pub fn clipboard_get() -> Result<String> {
     CTX.lock()
-        .unwrap()
         .as_mut()
-        .ok_or(())
-        .and_then(|ctx| ctx.get_contents().map_err(|_| ()))
+        .ok_or(anyhow!("No clipboard provider"))?
+        .get_contents()
+        .map_err(|e| anyhow!("{}", e.to_string()))
+        .context("Getting clipboard contents")
 }
 
-pub fn clipboard_set(new_contents: String) -> Result<(), ()> {
+pub fn clipboard_set(new_contents: String) -> Result<()> {
     CTX.lock()
-        .unwrap()
         .as_mut()
-        .ok_or(())
-        .and_then(|ctx| ctx.set_contents(new_contents).map_err(|_| ()))
+        .ok_or(anyhow!("No clipboard provider"))?
+        .set_contents(new_contents)
+        .map_err(|e| anyhow!("{}", e.to_string()))
+        .context("Setting clipboard contents")
 }
 
 pub struct ClipboardCompat;

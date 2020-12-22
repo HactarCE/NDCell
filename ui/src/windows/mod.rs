@@ -38,11 +38,11 @@ impl MainWindow {
                 } else {
                     let avg_update_ms = total_update_ms / view2d.last_sim_times().len() as f64;
                     let ups = (1.0 / avg_update_ms) as usize;
-                    ui.text_colored(fps_color(ups), format!("Max sim speed = {} UPS", ups));
+                    ui.text_colored(fps_color(ups), format!("Max sim speed = {} step/sec", ups));
                 }
                 if view2d.is_drawing() {
                     ui.text_colored(BLUE, "DRAWING");
-                } else{
+                } else {
                     match view2d.work_type() {
                         Some(WorkType::SimStep) => ui.text_colored(YELLOW, "STEPPING"),
                         Some(WorkType::SimContinuous) => ui.text_colored(GREEN, "RUNNING"),

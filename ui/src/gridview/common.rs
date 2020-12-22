@@ -17,7 +17,8 @@ use crate::config::{Config, MouseDisplay, MouseDragBinding};
 
 /// The number of render results to remember.
 const RENDER_RESULTS_COUNT: usize = 4;
-/// The number of previous simulation steps to track for counting UPS.
+/// The number of previous simulation steps to track for counting simulation
+/// steps per second.
 const MAX_LAST_SIM_TIMES: usize = 4;
 
 /// Gridview functionality that does not depend on the number of dimensions.

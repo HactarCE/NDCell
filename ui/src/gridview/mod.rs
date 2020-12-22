@@ -18,13 +18,15 @@ use crate::commands::*;
 use crate::config::Config;
 pub use camera::*;
 use common::GridViewCommon;
-pub use common::{GridViewTrait, MouseState, MouseTargetData, RenderParams, RenderResult};
+pub use common::{
+    GridViewTrait, MouseState, MouseTargetData, RenderParams, RenderResult, WorkType,
+};
 pub use history::History;
 pub use render::post_frame_clean_render_cache;
 pub use selection::*;
 pub use view2d::GridView2D;
 pub use view3d::GridView3D;
-use worker::WorkerRequest;
+use worker::{NewGridViewValues, WorkFn};
 
 /// Handler for mouse drag events, when the user starts dragging and called for
 /// each cursor movement until released. Returns whether to continue or cancel

@@ -42,21 +42,12 @@ impl MainWindow {
                 }
                 if view2d.is_drawing() {
                     ui.text_colored(BLUE, "DRAWING");
-                } else if view2d.is_waiting() || view2d.is_running() {
-                    ui.text_colored(
-                        if view2d.is_running() {
-                            if view2d.is_waiting() {
-                                RED
-                            } else {
-                                GREEN
-                            }
-                        } else {
-                            YELLOW
-                        },
-                        "SIMULATING",
-                    );
-                } else {
-                    ui.text("");
+                } else{
+                    match view2d.work_type() {
+                        Some(WorkType::SimStep) => ui.text_colored(YELLOW, "STEPPING"),
+                        Some(WorkType::SimContinuous) => ui.text_colored(GREEN, "RUNNING"),
+                        None => ui.text(""),
+                    }
                 }
             }
             ui.text("");

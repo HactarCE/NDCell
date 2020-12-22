@@ -33,9 +33,13 @@ pub enum Command {
 pub enum SimCommand {
     Step(BigInt),
     StepStepSize,
+
     StartRunning,
     StopRunning,
     ToggleRunning,
+
+    UpdateStepSize,
+
     Cancel,
 }
 impl_command_from!(Command::Sim(SimCommand));
@@ -113,6 +117,7 @@ pub enum DrawCommand {
     SetState(u8),
     Drag(DrawDragCommand, FVec2D),
 
+    Confirm,
     Cancel,
 }
 impl_command_from!(Command::Draw(DrawCommand));

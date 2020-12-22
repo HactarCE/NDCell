@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use enum_dispatch::enum_dispatch;
 use glium::glutin::event::ModifiersState;
 use log::{debug, trace};
@@ -11,7 +11,7 @@ use ndcell_core::prelude::*;
 
 use super::camera::Interpolate;
 use super::history::History;
-use super::worker::WorkerRequest;
+use super::worker::*;
 use crate::commands::*;
 use crate::config::{Config, MouseDisplay, MouseDragBinding};
 
@@ -20,28 +20,24 @@ const RENDER_RESULTS_COUNT: usize = 4;
 /// The number of previous simulation steps to track for counting UPS.
 const MAX_LAST_SIM_TIMES: usize = 4;
 
-/// Shared fields common to all `GridView`s.
+/// Gridview functionality that does not depend on the number of dimensions.
 #[derive(Debug)]
 pub struct GridViewCommon {
     /// Queue of pending commands to be executed on the next frame.
-    pub command_queue: Mutex<Vec<Command>>,
+    command_queue: Mutex<VecDeque<Command>>,
+    /// Thread to offload long-running computations onto.
+    worker_thread: WorkerThread,
+    /// What kind of work the worker thread is doing right now.
+    work_type: Option<WorkType>,
 
     /// State of the mouse cursor.
     pub mouse: MouseState,
 
-    /// Whether the simulation is currently running.
-    pub is_running: bool,
     /// Whether the user is currently drawing.
     pub is_drawing: bool,
     /// Whether the user is currently dragging the viewport by holding down a
     /// mouse button.
     pub is_dragging_view: bool,
-
-    /// Whether a one-off simulation request is currently happening
-    /// concurrently.
-    ///
-    /// TODO: reconsider is_waiting
-    pub is_waiting: bool,
 
     /// Communication channel with the garbage collection thread.
     gc_channel: Option<mpsc::Receiver<()>>,
@@ -60,21 +56,27 @@ impl Default for GridViewCommon {
     fn default() -> Self {
         Self {
             command_queue: Default::default(),
+            worker_thread: Default::default(),
+            work_type: Default::default(),
+
             mouse: Default::default(),
-            is_running: Default::default(),
+
             is_drawing: Default::default(),
             is_dragging_view: Default::default(),
-            is_waiting: Default::default(),
+
             gc_channel: Default::default(),
+
             last_frame_times: Default::default(),
             last_sim_times: Default::default(),
             last_render_result: Default::default(),
+
             selected_cell_state: 1_u8,
         }
     }
 }
 
-/// Shared functionality for 2D and 3D gridviews.
+/// Common interface for 2D and 3D gridviews, with default implementations for
+/// methods that would be identical.
 #[enum_dispatch]
 pub trait GridViewTrait:
     Sized + AsSimulate + History + AsRef<GridViewCommon> + AsMut<GridViewCommon>
@@ -82,13 +84,36 @@ pub trait GridViewTrait:
     /// Enqueues a command to be executed on the next frame.
     ///
     /// This should be preferred to executing commands immediately.
-    fn enqueue<C: Into<Command>>(&self, command: C) {
-        self.as_ref().command_queue.lock().push(command.into());
+    fn enqueue(&self, command: impl Into<Command>) {
+        self.as_ref().command_queue.lock().push_back(command.into());
     }
 
     /// Does all the frame things: executes commands, advances the simulation,
     /// etc.
     fn do_frame(&mut self, config: &Config) -> Result<()> {
+        // Fetch result from worker thread.
+        match self.as_mut().worker_thread.take_data() {
+            Ok(WorkerData::None) => (),
+            Ok(WorkerData::Progress(progress)) => match progress {
+                WorkerProgressReport::NewValues(new_values) => {
+                    // TODO: reduce the repetition here
+                    if let Some(new_contents) = new_values.clipboard.clone() {
+                        crate::clipboard_compat::clipboard_set(new_contents)?;
+                    }
+                    self.set_new_values(new_values)?
+                }
+            },
+            Ok(WorkerData::Result(new_values)) => {
+                let new_values = new_values?;
+                if let Some(new_contents) = new_values.clipboard.clone() {
+                    crate::clipboard_compat::clipboard_set(new_contents)?;
+                }
+                self.set_new_values(new_values)?;
+                self.as_mut().work_type = None;
+            }
+            Err(WorkerIdle) => (),
+        }
+
         // Interpolate camera.
         let fps = self.fps(config);
         let interpolation = config.ctrl.interpolation;
@@ -96,7 +121,7 @@ pub trait GridViewTrait:
 
         // Execute commands.
         let old_command_queue =
-            std::mem::replace(&mut *self.as_mut().command_queue.get_mut(), vec![]);
+            std::mem::replace(self.as_mut().command_queue.get_mut(), VecDeque::new());
         for command in old_command_queue {
             self.do_command(command, config)?;
         }
@@ -106,12 +131,7 @@ pub trait GridViewTrait:
             && config.sim.use_breakpoint
             && self.generation_count() >= &config.sim.breakpoint_gen
         {
-            self.stop_running();
-        }
-
-        // Update simulation.
-        if self.is_running() {
-            self.run_step();
+            self.stop_running(config);
         }
 
         // Collect garbage if memory usage has gotten too high.
@@ -142,12 +162,12 @@ pub trait GridViewTrait:
             Command::StopDrag => self.stop_drag(),
 
             Command::Cancel => {
-                if self.is_drawing() {
-                    self.do_draw_command(DrawCommand::Cancel, config)
-                } else if self.is_running() {
-                    self.do_sim_command(SimCommand::Cancel, config)
+                if self.reset_worker_thread(config) {
+                    Ok(())
+                } else if self.is_drawing() {
+                    self.do_command(DrawCommand::Cancel, config)
                 } else {
-                    self.do_select_command(SelectCommand::Cancel, config)
+                    self.do_command(SelectCommand::Cancel, config)
                 }
             }
         }
@@ -156,32 +176,45 @@ pub trait GridViewTrait:
     fn do_sim_command(&mut self, command: SimCommand, config: &Config) -> Result<()> {
         match command {
             SimCommand::Step(step_size) => {
-                if self.is_running() {
-                    self.stop_running()
-                }
-                self.enqueue_worker_request(WorkerRequest::Step(step_size));
+                self.try_step(config, step_size)?;
             }
             SimCommand::StepStepSize => {
-                if self.is_running() {
-                    self.stop_running()
-                }
-                self.enqueue_worker_request(WorkerRequest::Step(config.sim.step_size.clone()));
+                self.try_step(config, config.sim.step_size.clone())?;
             }
+
             SimCommand::StartRunning => {
-                self.start_running(config);
+                // If this fails (e.g. because the user is drawing), ignore the
+                // error.
+                let _ = self.start_running(config);
             }
             SimCommand::StopRunning => {
-                self.stop_running();
+                self.stop_running(config);
             }
             SimCommand::ToggleRunning => {
                 if self.is_running() {
-                    self.stop_running()
+                    self.stop_running(config);
                 } else {
-                    self.start_running(config)
+                    // If this fails, ignore the error.
+                    let _ = self.start_running(config);
                 }
             }
+
+            SimCommand::UpdateStepSize => {
+                if self.is_running() {
+                    self.stop_running(config);
+                    // This should not fail.
+                    self.start_running(config)?;
+                }
+            }
+
             SimCommand::Cancel => {
-                self.stop_running();
+                if let Some(work_type) = self.as_ref().work_type {
+                    match work_type {
+                        WorkType::SimStep | WorkType::SimContinuous => {
+                            self.reset_worker_thread(config);
+                        }
+                    }
+                }
             }
         }
         Ok(())
@@ -189,16 +222,19 @@ pub trait GridViewTrait:
     /// Executes a `HistoryCommand`.
     fn do_history_command(&mut self, command: HistoryCommand, config: &Config) -> Result<()> {
         if self.is_drawing() {
-            debug!("Ignoring {:?} command while drawing", command);
+            trace!("Ignoring {:?} command while drawing", command);
             return Ok(());
         }
-        self.stop_running();
         match command {
             HistoryCommand::Undo => {
+                self.reset_worker_thread(config);
                 self.undo(config);
             }
             HistoryCommand::Redo => {
-                self.redo(config);
+                if self.can_redo() {
+                    self.reset_worker_thread(config);
+                    self.redo(config);
+                }
             }
             // TODO make this JumpTo instead of UndoTo
             HistoryCommand::UndoTo(gen) => {
@@ -220,32 +256,123 @@ pub trait GridViewTrait:
     /// Executes a `StopDrag` command.
     fn stop_drag(&mut self) -> Result<()>;
 
-    /// Enqueues a request to the simulation worker thread(s).
-    fn enqueue_worker_request(&mut self, request: WorkerRequest);
-    /// Resets the simulation worker thread(s).
-    fn reset_worker(&mut self);
+    /// Submits a request to the worker thread. Returns an error if the worker
+    /// thread is not idle or is in an invalid state.
+    fn do_on_worker_thread(&mut self, work_type: WorkType, work_fn: WorkFn) -> Result<()> {
+        self.as_mut().work_type = Some(work_type);
+        self.as_mut()
+            .worker_thread
+            .request(work_fn)
+            .context("Attempted to send request to worker thread")
+    }
+    /// Cancels any long-running operation on the worker thread. Returns `true`
+    /// if an operation was canceled, or `false` if it was not.
+    fn reset_worker_thread(&mut self, config: &Config) -> bool {
+        match self.as_mut().work_type.take() {
+            Some(WorkType::SimStep) => {
+                // Remove redundant history entry.
+                self.undo(config);
+            }
+            Some(WorkType::SimContinuous) => {
+                // Remove redundant history entry if zero generations were
+                // simulated.
+                let new_gens = self.automaton().generation_count().clone();
+                self.undo(config);
+                let old_gens = self.automaton().generation_count().clone();
+                if old_gens == new_gens {
+                    trace!("Removing redundant history entry from simulating zero generations");
+                } else {
+                    self.redo(config);
+                }
+            }
+            None => (),
+        }
+
+        self.as_mut().worker_thread.reset()
+    }
+    /// Requests a one-off simulation from the worker thread. Returns `true` if
+    /// successful, or false if another running operation prevented it (e.g.
+    /// drawing or continuous simulation).
+    fn try_step(&mut self, config: &Config, step_size: BigInt) -> Result<bool> {
+        if self.is_drawing() {
+            return Ok(false);
+        }
+        if self.is_running() {
+            self.reset_worker_thread(config);
+            return Ok(false);
+        }
+        self.reset_worker_thread(config);
+
+        let mut automaton = self.automaton();
+        self.do_on_worker_thread(
+            WorkType::SimStep,
+            Box::new(move |hook| {
+                let start = Instant::now();
+                automaton.step(&step_size);
+                let end = Instant::now();
+                Ok(NewGridViewValues {
+                    elapsed: end - start,
+                    automaton: Some(automaton),
+                    ..Default::default()
+                })
+            }),
+        )?;
+        self.record();
+        Ok(true)
+    }
+    /// Stops continuous simulation, if it is running; does nothing otherwise.
+    fn stop_running(&mut self, config: &Config) {
+        if self.is_running() {
+            self.reset_worker_thread(config);
+        }
+    }
+    /// Starts continuous simulation; does nothing if it is already running.
+    /// Returns an error if unsuccessful (e.g. the user is drawing).
+    fn start_running(&mut self, config: &Config) -> Result<()> {
+        if self.is_running() {
+            return Ok(());
+        } else if self.is_drawing() {
+            return Err(anyhow!("Cannot start simulation while drawing"));
+        }
+
+        self.reset_worker_thread(config);
+        let mut automaton = self.automaton();
+        let step_size = config.sim.step_size.clone();
+        self.do_on_worker_thread(
+            WorkType::SimContinuous,
+            Box::new(move |hook| loop {
+                if hook.wants_cancel() {
+                    break Ok(NewGridViewValues::default());
+                }
+
+                let start = Instant::now();
+                automaton.step(&step_size);
+                let end = Instant::now();
+
+                hook.progress_report_blocking(WorkerProgressReport::NewValues(NewGridViewValues {
+                    elapsed: end - start,
+                    automaton: Some(automaton.clone()),
+                    ..Default::default()
+                }));
+            }),
+        )?;
+        self.record();
+        Ok(())
+    }
+    /// Returns whether the simulation is running (i.e. stepping forward every
+    /// frame automatically with no user input).
+    fn is_running(&self) -> bool {
+        self.as_ref().work_type == Some(WorkType::SimContinuous)
+    }
+
+    /// Sets new values for various fields.
+    fn set_new_values(&mut self, new_values: NewGridViewValues) -> Result<()>;
 
     /// Exports the simulation to a string.
     fn export(&self, format: CaFormat) -> Result<String, CaFormatError>;
 
-    /// Returns whether the simulation is running (i.e. stepping forward every
-    /// frame automatically with no user input).
-    fn is_running(&self) -> bool {
-        self.as_ref().is_running
-    }
-    /// Starts automatically running the simulation.
-    fn start_running(&mut self, config: &Config) {
-        self.as_mut().is_running = true;
-        self.enqueue_worker_request(WorkerRequest::SimContinuous(config.sim.step_size.clone()));
-    }
-    /// Stops automatically running the simulation.
-    fn stop_running(&mut self) {
-        self.as_mut().is_running = false;
-        self.as_mut().is_waiting = false;
-        self.reset_worker();
-    }
-    /// Runs the simulation for one step.
-    fn run_step(&mut self);
+    /// Returns a copy of the underlying automaton.
+    fn automaton(&self) -> Automaton;
 
     /// Returns whether the user is currently drawing.
     fn is_drawing(&self) -> bool {
@@ -256,10 +383,9 @@ pub trait GridViewTrait:
     fn is_dragging_view(&self) -> bool {
         self.as_ref().is_dragging_view
     }
-    /// Returns whether a one-off simulation request is currently happening
-    /// concurrently.
-    fn is_waiting(&self) -> bool {
-        self.as_ref().is_waiting
+    /// Returns the type of operation currently happening in the background.
+    fn work_type(&self) -> Option<WorkType> {
+        self.as_ref().work_type
     }
     /// Returns the last several simulation times, with the most recent at the
     /// front.
@@ -283,6 +409,8 @@ pub trait GridViewTrait:
 
     /// Schedules garbage collection.
     fn schedule_gc(&mut self) {
+        // TODO: allow garbage collection during continuous simulation
+
         let old_memory_usage = self.as_sim().memory_usage();
         let (tx, rx) = mpsc::channel();
         self.as_mut().gc_channel = Some(rx);
@@ -392,4 +520,10 @@ pub struct MouseState {
     /// This determines the mouse cursor icon and how/whether to indicate the
     /// highlighted cell in the grid.
     pub display: MouseDisplay,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum WorkType {
+    SimStep,
+    SimContinuous,
 }

@@ -31,8 +31,6 @@ pub struct GridView3D {
     /// Camera interpolator.
     camera_interpolator: Interpolator<Dim3D, Camera3D>,
 
-    /// Communication channel with the simulation worker thread.
-    worker: Option<Worker<Automaton3D>>,
     /// Cached render data unique to this GridView.
     render_cache: Option<RenderCache>,
 
@@ -87,19 +85,32 @@ impl GridViewTrait for GridView3D {
         Ok(())
     }
 
-    fn enqueue_worker_request(&mut self, _request: WorkerRequest) {
-        todo!()
-    }
-    fn reset_worker(&mut self) {
-        todo!()
-    }
-
     fn export(&self, format: CaFormat) -> Result<String, CaFormatError> {
         ndcell_core::io::export_ndautomaton_to_string(&self.automaton, format, None)
     }
 
-    fn run_step(&mut self) {
-        todo!()
+    fn set_new_values(&mut self, new_values: NewGridViewValues) -> Result<()> {
+        let NewGridViewValues {
+            automaton,
+            selection_3d,
+            // The remaining fields have been handled by the caller or are
+            // irrelevant.
+            ..
+        } = new_values;
+
+        if let Some(Automaton::Automaton3D(a)) = automaton {
+            self.automaton = a;
+        }
+
+        // if let Some(new_selection) = selection_3d {
+        //     self.set_selection(new_selection);
+        // }
+
+        Ok(())
+    }
+
+    fn automaton(&self) -> Automaton {
+        self.automaton.clone().into()
     }
 
     fn camera_interpolator(&mut self) -> &mut dyn Interpolate {

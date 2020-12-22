@@ -1,5 +1,5 @@
-use anyhow::{anyhow, Context, Result};
-use log::{trace, warn};
+use anyhow::{Context, Result};
+use log::warn;
 
 use ndcell_core::prelude::*;
 
@@ -8,7 +8,7 @@ use super::common::{GridViewCommon, GridViewTrait, RenderParams, RenderResult};
 use super::history::{History, HistoryBase, HistoryManager};
 use super::render::grid2d::{NdTreeDrawParameters, RenderInProgress};
 use super::selection::Selection2D;
-use super::worker::*;
+use super::worker::NewGridViewValues;
 use super::{DragHandler, DragOutcome};
 use crate::commands::*;
 use crate::config::{Config, MouseDisplay};
@@ -35,9 +35,6 @@ pub struct GridView2D {
 
     /// Camera interpolator.
     camera_interpolator: Interpolator<Dim2D, Camera2D>,
-
-    /// Communication channel with the simulation worker thread.
-    worker: Option<Worker<Automaton2D>>,
 
     /// Mouse drag handler.
     drag_handler: Option<DragHandler<Self>>,
@@ -109,11 +106,16 @@ impl GridViewTrait for GridView2D {
                     }
                 };
 
-                self.stop_running();
+                self.reset_worker_thread(config);
                 self.record();
                 self.common.is_drawing = true;
                 new_drag_handler(self, cursor_start)?;
                 self.drag_handler = Some(new_drag_handler);
+            }
+            DrawCommand::Confirm => {
+                if self.is_drawing() {
+                    self.stop_drag()?;
+                }
             }
             DrawCommand::Cancel => {
                 if self.is_drawing() {
@@ -245,12 +247,12 @@ impl GridViewTrait for GridView2D {
                     | SelectDragCommand::ResizeToCell
                     | SelectDragCommand::MoveSelection => {
                         if config.hist.record_select {
-                            self.stop_running();
+                            self.reset_worker_thread(config);
                             self.record();
                         }
                     }
                     SelectDragCommand::MoveCells | SelectDragCommand::CopyCells => {
-                        self.stop_running();
+                        self.reset_worker_thread(config);
                         self.record();
                     }
                 }
@@ -383,16 +385,24 @@ impl GridViewTrait for GridView2D {
         Ok(())
     }
 
-    fn enqueue_worker_request(&mut self, request: WorkerRequest) {
-        match &request {
-            WorkerRequest::Step(_) => self.common.is_waiting = true,
-            WorkerRequest::SimContinuous(_) => (),
+    fn set_new_values(&mut self, new_values: NewGridViewValues) -> Result<()> {
+        let NewGridViewValues {
+            automaton,
+            selection_2d,
+            // The remaining fields have been handled by the caller or are
+            // irrelevant.
+            ..
+        } = new_values;
+
+        if let Some(Automaton::Automaton2D(a)) = automaton {
+            self.automaton = a;
         }
-        self.get_worker().request(request);
-    }
-    fn reset_worker(&mut self) {
-        self.worker = None;
-        trace!("Reset simulation worker thread");
+
+        if let Some(new_selection) = selection_2d {
+            self.set_selection(new_selection);
+        }
+
+        Ok(())
     }
 
     fn export(&self, format: CaFormat) -> Result<String, CaFormatError> {
@@ -406,27 +416,8 @@ impl GridViewTrait for GridView2D {
         ndcell_core::io::export_ndtree_to_string(ndtree, format, two_states, rect)
     }
 
-    fn run_step(&mut self) {
-        if let Some(worker) = self.worker.as_mut() {
-            if let Some(WorkerResult {
-                result,
-                record,
-                time,
-            }) = worker.take()
-            {
-                if !self.common.is_running {
-                    self.common.is_waiting = worker.get_request_count() > 0;
-                }
-                if record {
-                    self.record();
-                }
-                self.automaton = result;
-                self.common.last_sim_times.push_back(time);
-                if self.common.last_sim_times.len() > MAX_LAST_SIM_TIMES {
-                    self.common.last_sim_times.pop_front();
-                }
-            }
-        }
+    fn automaton(&self) -> Automaton {
+        self.automaton.clone().into()
     }
 
     fn camera_interpolator(&mut self) -> &mut dyn Interpolate {
@@ -659,13 +650,6 @@ impl GridView2D {
 
     pub fn mouse_pos(&self) -> Option<ScreenPos2D> {
         self.camera().pixel_to_screen_pos(self.mouse().pos?)
-    }
-
-    fn get_worker(&mut self) -> &mut Worker<Automaton2D> {
-        if let None = self.worker {
-            self.worker = Some(Worker::new(self.automaton.clone()));
-        }
-        self.worker.as_mut().unwrap()
     }
 }
 

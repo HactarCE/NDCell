@@ -116,8 +116,10 @@ impl GridViewTrait for GridView2D {
                 self.drag_handler = Some(new_drag_handler);
             }
             DrawCommand::Cancel => {
-                self.stop_drag()?;
-                self.do_history_command(HistoryCommand::Undo, config)?;
+                if self.is_drawing() {
+                    self.stop_drag()?;
+                    self.do_command(HistoryCommand::Undo, config)?;
+                }
             }
         }
         Ok(())
@@ -329,8 +331,9 @@ impl GridViewTrait for GridView2D {
         // Handle `FitView` specially.
         if matches!(command, ViewCommand::FitView) {
             if let Some(pattern_bounding_rect) = self.automaton.ndtree.bounding_rect() {
+                // Set position.
                 let NdVec([x, y]) = pattern_bounding_rect.center();
-                self.do_view_command(
+                self.do_command(
                     ViewCommand::GoTo2D {
                         x: Some(x.into()),
                         y: Some(y.into()),
@@ -340,10 +343,11 @@ impl GridViewTrait for GridView2D {
                     config,
                 )?;
 
+                // Set scale.
                 let pattern_size = pattern_bounding_rect.size();
                 let target_size = self.camera().target_dimensions();
                 let scale = Scale::from_fit(pattern_size, target_size);
-                self.do_view_command(ViewCommand::GoToScale(scale.floor()), config)?;
+                self.do_command(ViewCommand::GoToScale(scale.floor()), config)?;
             }
             return Ok(());
         }

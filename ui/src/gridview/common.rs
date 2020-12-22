@@ -129,8 +129,8 @@ pub trait GridViewTrait:
         Ok(())
     }
     /// Executes a `Command`.
-    fn do_command(&mut self, command: Command, config: &Config) -> Result<()> {
-        match command {
+    fn do_command(&mut self, command: impl Into<Command>, config: &Config) -> Result<()> {
+        match command.into() {
             Command::Sim(c) => self.do_sim_command(c, config),
             Command::History(c) => self.do_history_command(c, config),
             Command::View(c) => self.do_view_command(c, config),

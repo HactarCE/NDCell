@@ -4,7 +4,7 @@ use ndcell_core::prelude::*;
 
 use crate::commands::*;
 use crate::config::Config;
-use crate::gridview::{GridView, GridViewTrait};
+use crate::gridview::GridView;
 
 #[derive(Debug, Default)]
 pub struct SimulationWindow {

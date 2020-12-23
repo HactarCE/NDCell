@@ -1,29 +1,37 @@
 use anyhow::{anyhow, Context, Result};
-use enum_dispatch::enum_dispatch;
 use glium::glutin::event::ModifiersState;
-use log::{debug, trace};
+use glium::Surface;
+use log::{debug, trace, warn};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
+use std::convert::TryInto;
+use std::fmt;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use ndcell_core::prelude::*;
 
-use super::camera::Interpolate;
-use super::history::History;
+use super::camera::{Camera, Interpolate, Interpolator};
+use super::history::{History, HistoryBase, HistoryManager};
+use super::selection::Selection;
+use super::worker::NewGridViewValues;
 use super::worker::*;
+use super::{DragHandler, DragOutcome};
 use crate::commands::*;
 use crate::config::{Config, MouseDisplay, MouseDragBinding};
 
-/// The number of render results to remember.
-const RENDER_RESULTS_COUNT: usize = 4;
 /// The number of previous simulation steps to track for counting simulation
 /// steps per second.
 const MAX_LAST_SIM_TIMES: usize = 4;
 
-/// Gridview functionality that does not depend on the number of dimensions.
-#[derive(Debug)]
-pub struct GridViewCommon {
+/// Dimension-generic interactive cellular automaton interface.
+pub struct GenericGridView<G: GridViewDimension> {
+    pub automaton: NdAutomaton<G::D>,
+    pub selection: Option<Selection<G::D>>,
+    pub camera_interpolator: Interpolator<G::D, G::Camera>,
+    history: HistoryManager<HistoryEntry<G>>,
+    dimensionality: G,
+
     /// Queue of pending commands to be executed on the next frame.
     command_queue: Mutex<VecDeque<Command>>,
     /// Thread to offload long-running computations onto.
@@ -31,92 +39,130 @@ pub struct GridViewCommon {
     /// What kind of work the worker thread is doing right now.
     work_type: Option<WorkType>,
 
-    /// State of the mouse cursor.
-    pub mouse: MouseState,
-
-    /// Whether the user is currently drawing.
-    pub is_drawing: bool,
-    /// Whether the user is currently dragging the viewport by holding down a
-    /// mouse button.
-    pub is_dragging_view: bool,
-
     /// Communication channel with the garbage collection thread.
     gc_channel: Option<mpsc::Receiver<()>>,
 
+    /// State of the mouse cursor.
+    pub mouse: MouseState,
+    /// Mouse drag handler.
+    pub(super) drag_handler: Option<DragHandler<Self>>,
+    /// Whether the user is currently drawing.
+    pub(super) is_drawing: bool,
+    /// Whether the user is currently dragging the viewport by holding down a
+    /// mouse button.
+    pub(super) is_dragging_view: bool,
+
     /// Time that the last several frames completed.
-    pub last_frame_times: VecDeque<Instant>,
+    last_frame_times: VecDeque<Instant>,
     /// Last several simulation times, with the most recent at the front.
-    pub last_sim_times: VecDeque<Duration>,
+    last_sim_times: VecDeque<Duration>,
     /// Most recent render result.
-    pub last_render_result: RenderResult,
+    last_render_result: RenderResult,
 
     /// Selected cell state.
     pub selected_cell_state: u8,
 }
-impl Default for GridViewCommon {
+impl<G: GridViewDimension> From<NdAutomaton<G::D>> for GenericGridView<G> {
+    fn from(automaton: NdAutomaton<G::D>) -> Self {
+        Self {
+            automaton,
+            ..Default::default()
+        }
+    }
+}
+impl<G: GridViewDimension> Default for GenericGridView<G> {
     fn default() -> Self {
         Self {
+            automaton: Default::default(),
+            selection: Default::default(),
+            camera_interpolator: Default::default(),
+            history: Default::default(),
+            dimensionality: Default::default(),
+
             command_queue: Default::default(),
             worker_thread: Default::default(),
             work_type: Default::default(),
 
-            mouse: Default::default(),
+            gc_channel: Default::default(),
 
+            mouse: Default::default(),
+            drag_handler: Default::default(),
             is_drawing: Default::default(),
             is_dragging_view: Default::default(),
-
-            gc_channel: Default::default(),
 
             last_frame_times: Default::default(),
             last_sim_times: Default::default(),
             last_render_result: Default::default(),
 
+            // ... all that for one non-default attribute
             selected_cell_state: 1_u8,
         }
     }
 }
+impl<G: GridViewDimension> AsSimulate for GenericGridView<G> {
+    fn as_sim(&self) -> &dyn Simulate {
+        &self.automaton
+    }
+    fn as_sim_mut(&mut self) -> &mut dyn Simulate {
+        &mut self.automaton
+    }
+}
+impl<G: GridViewDimension> HistoryBase for GenericGridView<G> {
+    type Entry = HistoryEntry<G>;
 
-/// Common interface for 2D and 3D gridviews, with default implementations for
-/// methods that would be identical.
-#[enum_dispatch]
-pub trait GridViewTrait:
-    Sized + AsSimulate + History + AsRef<GridViewCommon> + AsMut<GridViewCommon>
-{
+    fn history_entry(&self) -> Self::Entry {
+        HistoryEntry {
+            automaton: self.automaton.clone(),
+            selection: self.selection.clone(),
+            camera: self.camera_interpolator.target.clone(),
+        }
+    }
+
+    fn restore_history_entry(&mut self, config: &Config, entry: Self::Entry) -> Self::Entry {
+        HistoryEntry {
+            automaton: std::mem::replace(&mut self.automaton, entry.automaton),
+            selection: Selection::restore_history_entry(
+                config,
+                &mut self.selection,
+                entry.selection,
+            ),
+            camera: if config.hist.record_view {
+                std::mem::replace(&mut self.camera_interpolator.target, entry.camera)
+            } else {
+                self.camera_interpolator.target.clone()
+            },
+        }
+    }
+
+    fn as_history(&self) -> &HistoryManager<Self::Entry> {
+        &self.history
+    }
+    fn as_history_mut(&mut self) -> &mut HistoryManager<Self::Entry> {
+        &mut self.history
+    }
+}
+impl<G: GridViewDimension> GenericGridView<G> {
     /// Enqueues a command to be executed on the next frame.
     ///
     /// This should be preferred to executing commands immediately.
-    fn enqueue(&self, command: impl Into<Command>) {
-        self.as_ref().command_queue.lock().push_back(command.into());
+    pub fn enqueue(&self, command: impl Into<Command>) {
+        self.command_queue.lock().push_back(command.into());
     }
 
     /// Does all the frame things: executes commands, advances the simulation,
     /// etc.
-    fn do_frame(&mut self, config: &Config) -> Result<()> {
+    pub fn do_frame(&mut self, config: &Config) -> Result<()> {
         // Fetch result from worker thread.
-        match self.as_mut().worker_thread.take_data() {
+        match self.worker_thread.take_data() {
             Ok(WorkerData::None) => (),
             Ok(WorkerData::Progress(progress)) => match progress {
                 WorkerProgressReport::NewValues(new_values) => {
-                    // TODO: reduce the repetition here
-                    if let Some(new_contents) = new_values.clipboard.clone() {
-                        crate::clipboard_compat::clipboard_set(new_contents)?;
-                    }
-                    if self.as_ref().work_type == Some(WorkType::SimContinuous) {
-                        self.as_mut().last_sim_times.push_back(new_values.elapsed);
-                        if self.as_mut().last_sim_times.len() > MAX_LAST_SIM_TIMES {
-                            self.as_mut().last_sim_times.pop_front();
-                        }
-                    }
-                    self.set_new_values(new_values)?
+                    self.set_new_values(new_values)?;
                 }
             },
             Ok(WorkerData::Result(new_values)) => {
-                let new_values = new_values?;
-                if let Some(new_contents) = new_values.clipboard.clone() {
-                    crate::clipboard_compat::clipboard_set(new_contents)?;
-                }
-                self.set_new_values(new_values)?;
-                self.as_mut().work_type = None;
+                self.set_new_values(new_values?)?;
+                self.work_type = None;
             }
             Err(WorkerIdle) => (),
         }
@@ -124,11 +170,10 @@ pub trait GridViewTrait:
         // Interpolate camera.
         let fps = self.fps(config);
         let interpolation = config.ctrl.interpolation;
-        self.camera_interpolator().advance(fps, interpolation);
+        self.camera_interpolator.advance(fps, interpolation);
 
         // Execute commands.
-        let old_command_queue =
-            std::mem::replace(self.as_mut().command_queue.get_mut(), VecDeque::new());
+        let old_command_queue = std::mem::replace(self.command_queue.get_mut(), VecDeque::new());
         for command in old_command_queue {
             self.do_command(command, config)?;
         }
@@ -156,7 +201,11 @@ pub trait GridViewTrait:
         Ok(())
     }
     /// Executes a `Command`.
-    fn do_command(&mut self, command: impl Into<Command>, config: &Config) -> Result<()> {
+    pub(super) fn do_command(
+        &mut self,
+        command: impl Into<Command>,
+        config: &Config,
+    ) -> Result<()> {
         match command.into() {
             Command::Sim(c) => self.do_sim_command(c, config),
             Command::History(c) => self.do_history_command(c, config),
@@ -215,7 +264,7 @@ pub trait GridViewTrait:
             }
 
             SimCommand::Cancel => {
-                if let Some(work_type) = self.as_ref().work_type {
+                if let Some(work_type) = self.work_type {
                     match work_type {
                         WorkType::SimStep | WorkType::SimContinuous => {
                             self.reset_worker_thread(config);
@@ -252,30 +301,55 @@ pub trait GridViewTrait:
         }
         Ok(())
     }
-    /// Executes a `Move` command.
-    fn do_view_command(&mut self, command: ViewCommand, config: &Config) -> Result<()>;
+    /// Executes a `View` command.
+    fn do_view_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
+        // `View` commands depend on the number of dimensions.
+        G::do_view_command(self, command, config)
+    }
     /// Executes a `Draw` command.
-    fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()>;
+    fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()> {
+        // `Draw` commands depend on the number of dimensions.
+        G::do_draw_command(self, command, config)
+    }
     /// Executes a `Select` command.
-    fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()>;
+    fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()> {
+        // `Select` commands depend on the number of dimensions.
+        G::do_select_command(self, command, config)
+    }
     /// Executes a `ContinueDrag` command.
-    fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()>;
+    pub fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()> {
+        if let Some(mut h) = self.drag_handler.take() {
+            match h(self, cursor_pos)? {
+                DragOutcome::Continue => self.drag_handler = Some(h),
+                DragOutcome::Cancel => self.stop_drag()?,
+            }
+        }
+        Ok(())
+    }
     /// Executes a `StopDrag` command.
-    fn stop_drag(&mut self) -> Result<()>;
+    pub fn stop_drag(&mut self) -> Result<()> {
+        self.drag_handler = None;
+        self.is_drawing = false;
+        self.is_dragging_view = false;
+        Ok(())
+    }
 
     /// Submits a request to the worker thread. Returns an error if the worker
     /// thread is not idle or is in an invalid state.
-    fn do_on_worker_thread(&mut self, work_type: WorkType, work_fn: WorkFn) -> Result<()> {
-        self.as_mut().work_type = Some(work_type);
-        self.as_mut()
-            .worker_thread
+    pub(super) fn do_on_worker_thread(
+        &mut self,
+        work_type: WorkType,
+        work_fn: WorkFn,
+    ) -> Result<()> {
+        self.work_type = Some(work_type);
+        self.worker_thread
             .request(work_fn)
             .context("Attempted to send request to worker thread")
     }
     /// Cancels any long-running operation on the worker thread. Returns `true`
     /// if an operation was canceled, or `false` if it was not.
-    fn reset_worker_thread(&mut self, config: &Config) -> bool {
-        match self.as_mut().work_type.take() {
+    pub(super) fn reset_worker_thread(&mut self, config: &Config) -> bool {
+        match self.work_type.take() {
             Some(WorkType::SimStep) => {
                 // Remove redundant history entry.
                 self.undo(config);
@@ -283,9 +357,9 @@ pub trait GridViewTrait:
             Some(WorkType::SimContinuous) => {
                 // Remove redundant history entry if zero generations were
                 // simulated.
-                let new_gens = self.automaton().generation_count().clone();
+                let new_gens = self.automaton.generation_count().clone();
                 self.undo(config);
-                let old_gens = self.automaton().generation_count().clone();
+                let old_gens = self.automaton.generation_count().clone();
                 if old_gens == new_gens {
                     trace!("Removing redundant history entry from simulating zero generations");
                 } else {
@@ -295,7 +369,7 @@ pub trait GridViewTrait:
             None => (),
         }
 
-        self.as_mut().worker_thread.reset()
+        self.worker_thread.reset()
     }
     /// Requests a one-off simulation from the worker thread. Returns `true` if
     /// successful, or false if another running operation prevented it (e.g.
@@ -310,7 +384,7 @@ pub trait GridViewTrait:
         }
         self.reset_worker_thread(config);
 
-        let mut automaton = self.automaton();
+        let mut automaton: Automaton = self.automaton.clone().into();
         self.do_on_worker_thread(
             WorkType::SimStep,
             Box::new(move |hook| {
@@ -343,7 +417,7 @@ pub trait GridViewTrait:
         }
 
         self.reset_worker_thread(config);
-        let mut automaton = self.automaton();
+        let mut automaton: Automaton = self.automaton.clone().into();
         let step_size = config.sim.step_size.clone();
         self.do_on_worker_thread(
             WorkType::SimContinuous,
@@ -368,50 +442,173 @@ pub trait GridViewTrait:
     }
     /// Returns whether the simulation is running (i.e. stepping forward every
     /// frame automatically with no user input).
-    fn is_running(&self) -> bool {
-        self.as_ref().work_type == Some(WorkType::SimContinuous)
+    pub fn is_running(&self) -> bool {
+        self.work_type == Some(WorkType::SimContinuous)
     }
 
     /// Sets new values for various fields.
-    fn set_new_values(&mut self, new_values: NewGridViewValues) -> Result<()>;
+    fn set_new_values(&mut self, new_values: NewGridViewValues) -> Result<()> {
+        let NewGridViewValues {
+            elapsed: _,
+
+            clipboard,
+            automaton,
+            selection_2d,
+            selection_3d,
+        } = new_values;
+
+        if let Some(new_contents) = clipboard {
+            crate::clipboard_compat::clipboard_set(new_contents)?;
+        }
+        if self.work_type == Some(WorkType::SimContinuous) {
+            self.last_sim_times.push_back(new_values.elapsed);
+            if self.last_sim_times.len() > MAX_LAST_SIM_TIMES {
+                self.last_sim_times.pop_front();
+            }
+        }
+
+        if let Some(a) = automaton {
+            self.automaton = a.try_into().map_err(|_| {
+                anyhow!("set_new_values() received Automaton of wrong dimensionality")
+            })?;
+        }
+
+        if let Some(new_selection) = selection_2d {
+            self.set_selection_nd(new_selection)?;
+        }
+        if let Some(new_selection) = selection_3d {
+            self.set_selection_nd(new_selection)?;
+        }
+
+        Ok(())
+    }
 
     /// Exports the simulation to a string.
-    fn export(&self, format: CaFormat) -> Result<String, CaFormatError>;
+    pub fn export(&self, format: CaFormat) -> Result<String, CaFormatError> {
+        let ndtree = self
+            .selection
+            .as_ref()
+            .and_then(|sel| sel.cells.as_ref())
+            .unwrap_or(&self.automaton.ndtree);
+        let two_states = TwoState::from_rule(&*self.automaton.rule);
+        let rect = self.selection_rect();
+        ndcell_core::io::export_ndtree_to_string(ndtree, format, two_states, rect)
+    }
 
-    /// Returns a copy of the underlying automaton.
-    fn automaton(&self) -> Automaton;
+    /// Sets the selection, or returns an error if the dimensionality of the
+    /// selection does not match the dimensionality of the gridview.
+    fn set_selection_nd<D: Dim>(&mut self, new_selection: Option<Selection<D>>) -> Result<()> {
+        if G::D::NDIM == D::NDIM {
+            self.set_selection(unsafe {
+                *std::mem::transmute::<Box<Option<Selection<D>>>, Box<Option<Selection<G::D>>>>(
+                    Box::new(new_selection),
+                )
+            });
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "set_selection_nd() received Selection of wrong dimensionality"
+            ))
+        }
+    }
+    /// Deselects and sets a new selection.
+    pub fn set_selection(&mut self, new_selection: Option<Selection<G::D>>) {
+        self.deselect();
+        self.selection = new_selection;
+    }
+    /// Deselects and sets a new selection rectangle.
+    pub fn set_selection_rect(&mut self, new_selection_rect: Option<BigRect<G::D>>) {
+        self.set_selection(new_selection_rect.map(Selection::from))
+    }
+    /// Returns the selection rectangle.
+    pub fn selection_rect(&self) -> Option<BigRect<G::D>> {
+        if let Some(s) = &self.selection {
+            Some(s.rect.clone())
+        } else {
+            None
+        }
+    }
+    /// Deselects all and returns the old selection.
+    pub fn deselect(&mut self) -> Option<Selection<G::D>> {
+        if let Some(sel) = self.selection.clone() {
+            if let Some(cells) = sel.cells {
+                self.record();
+                // Overwrite.
+                self.automaton.ndtree.paste_custom(
+                    cells,
+                    Region::Rect(sel.rect),
+                    |dest, src| {
+                        if dest.is_empty() {
+                            Some(src)
+                        } else if src.is_empty() {
+                            Some(dest)
+                        } else {
+                            None
+                        }
+                    },
+                    |dest, src| if src == 0_u8 { dest } else { src },
+                );
+            }
+        }
+        self.selection.take()
+    }
+    /// Moves the selected cells from the selection to the main grid. Outputs a
+    /// warning in the log if there is no selection.
+    pub fn drop_selected_cells(&mut self) {
+        if let Some(sel) = self.deselect() {
+            self.set_selection_rect(Some(sel.rect));
+        } else {
+            warn!("drop_selected_cells() called with no selection");
+        }
+    }
+    /// Moves the cells in the selected region from the main grid into the
+    /// selection. Outputs a warning to the log if there is no selection. Does
+    /// nothing if the selection already contains cells.
+    pub fn grab_selected_cells(&mut self) {
+        self._grab_selected_cells(true)
+    }
+    /// Copies the cells in the selected region from the main grid into the
+    /// selection. Outputs a warning to the log if there is no selection. Does
+    /// nothing if the selection already contains cells.
+    pub fn grab_copy_of_selected_cells(&mut self) {
+        self._grab_selected_cells(false)
+    }
+    fn _grab_selected_cells(&mut self, clear_source: bool) {
+        if let Some(sel) = &mut self.selection {
+            if sel.cells.is_none() {
+                let region = Region::Rect(sel.rect.clone());
+                sel.cells = Some(self.automaton.ndtree.get_region(region.clone()));
+                if clear_source {
+                    self.automaton.ndtree.clear_region(region);
+                }
+            }
+        } else {
+            warn!("grab_selected_cells() called with no selection");
+        }
+    }
 
     /// Returns whether the user is currently drawing.
-    fn is_drawing(&self) -> bool {
-        self.as_ref().is_drawing
+    pub fn is_drawing(&self) -> bool {
+        self.is_drawing
     }
     /// Returns whether the user is currently dragging the viewport by holding
     /// down a mouse button.
-    fn is_dragging_view(&self) -> bool {
-        self.as_ref().is_dragging_view
+    pub fn is_dragging_view(&self) -> bool {
+        self.is_dragging_view
     }
     /// Returns the type of operation currently happening in the background.
-    fn work_type(&self) -> Option<WorkType> {
-        self.as_ref().work_type
+    pub fn work_type(&self) -> Option<WorkType> {
+        self.work_type
     }
     /// Returns the last several simulation times, with the most recent at the
     /// front.
-    fn last_sim_times(&self) -> &VecDeque<Duration> {
-        &self.as_ref().last_sim_times
+    pub fn last_sim_times(&self) -> &VecDeque<Duration> {
+        &self.last_sim_times
     }
 
     /// Returns the selected cell state.
     fn selected_cell_state(&self) -> u8 {
-        self.as_ref().selected_cell_state
-    }
-
-    /// Updates state relating to the mouse cursor.
-    fn update_mouse_state(&mut self, new_state: MouseState) {
-        self.as_mut().mouse = new_state;
-    }
-    /// Returns state relating to the mouse cursor.
-    fn mouse(&self) -> MouseState {
-        self.as_ref().mouse
+        self.selected_cell_state
     }
 
     /// Schedules garbage collection.
@@ -420,7 +617,7 @@ pub trait GridViewTrait:
 
         let old_memory_usage = self.as_sim().memory_usage();
         let (tx, rx) = mpsc::channel();
-        self.as_mut().gc_channel = Some(rx);
+        self.gc_channel = Some(rx);
         trace!("Spawning GC thread ...");
         self.as_sim().schedule_gc(Box::new(
             move |nodes_dropped, nodes_kept, new_memory_usage| {
@@ -441,10 +638,10 @@ pub trait GridViewTrait:
     /// Returns `true` if garbage collection is queued or in progress, or
     /// `false` otherwise.
     fn gc_in_progress(&mut self) -> bool {
-        if let Some(chan) = &self.as_ref().gc_channel {
+        if let Some(chan) = &self.gc_channel {
             match chan.try_recv() {
                 Ok(_) => {
-                    self.as_mut().gc_channel = None;
+                    self.gc_channel = None;
                     false
                 }
                 Err(mpsc::TryRecvError::Disconnected) => panic!("GC thread panicked"),
@@ -458,24 +655,33 @@ pub trait GridViewTrait:
         }
     }
 
-    /// Returns the camera interpolator.
-    fn camera_interpolator(&mut self) -> &mut dyn Interpolate;
-    /// Updates the pixel size of the viewport.
-    fn update_target_dimensions(&mut self, target_dimensions: (u32, u32)) {
-        self.camera_interpolator()
-            .update_target_dimensions(target_dimensions);
+    /// Returns the current camera.
+    pub fn camera(&self) -> &G::Camera {
+        &self.camera_interpolator.current
     }
-    /// Renders the gridview.
-    fn render(&mut self, params: RenderParams<'_>) -> Result<&RenderResult>;
+    /// Updates camera parameters and renders the gridview, recording and
+    /// returning the result.
+    pub fn render(&mut self, params: RenderParams<'_>) -> Result<&RenderResult> {
+        // Update DPI.
+        self.camera_interpolator
+            .set_dpi(params.config.gfx.dpi as f32);
+        // Update the pixel size of the viewport.
+        self.camera_interpolator
+            .set_target_dimensions(params.target.get_dimensions());
+
+        // Render the grid to the viewport, then save and return the result.
+        self.last_render_result = G::render(self, params)?;
+        Ok(self.last_render_result())
+    }
     /// Returns data generated by the most recent render.
-    fn last_render_result(&self) -> &RenderResult {
-        &self.as_ref().last_render_result
+    pub fn last_render_result(&self) -> &RenderResult {
+        &self.last_render_result
     }
 
     /// Returns the framerate measured between the last two frames, or the
     /// user-configured FPS if that fails.
-    fn fps(&self, config: &Config) -> f64 {
-        let last_frame_times = &self.as_ref().last_frame_times;
+    pub fn fps(&self, config: &Config) -> f64 {
+        let last_frame_times = &self.last_frame_times;
         last_frame_times
             .get(0)
             .zip(last_frame_times.get(1))
@@ -486,13 +692,47 @@ pub trait GridViewTrait:
     }
 }
 
+pub trait GridViewDimension: fmt::Debug + Default {
+    type D: Dim;
+    type Camera: Camera<Self::D>;
+
+    /// Executes a `View` command.
+    fn do_view_command(
+        this: &mut GenericGridView<Self>,
+        command: ViewCommand,
+        config: &Config,
+    ) -> Result<()>;
+    /// Executes a `Draw` command.
+    fn do_draw_command(
+        this: &mut GenericGridView<Self>,
+        command: DrawCommand,
+        config: &Config,
+    ) -> Result<()>;
+    /// Executes a `Select` command.
+    fn do_select_command(
+        this: &mut GenericGridView<Self>,
+        command: SelectCommand,
+        config: &Config,
+    ) -> Result<()>;
+
+    /// Renders the gridview.
+    fn render(this: &mut GenericGridView<Self>, params: RenderParams<'_>) -> Result<RenderResult>;
+}
+
+#[derive(Debug, Clone)]
+pub struct HistoryEntry<G: GridViewDimension> {
+    automaton: NdAutomaton<G::D>,
+    selection: Option<Selection<G::D>>,
+    camera: G::Camera,
+}
+
 /// Parameters that may control the rendering process.
 pub struct RenderParams<'a> {
     /// Render target.
     pub target: &'a mut glium::Frame,
     /// User configuration.
     pub config: &'a Config,
-    /// Key modifiers.
+    /// Modifiers held on the keyboard.
     pub modifiers: ModifiersState,
 }
 

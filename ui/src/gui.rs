@@ -164,9 +164,8 @@ pub fn show_gui() -> ! {
 
                 let mut target = display.draw();
 
-                // Update the camera and run the simulation if necessary.
-                gridview.update_target_dimensions(target.get_dimensions());
-                gridview.update_mouse_state(input_state.mouse());
+                // Execute commands and run the simulation.
+                gridview.set_mouse_state(input_state.mouse());
                 gridview.do_frame(&config).expect("Unhandled exception!");
 
                 if target.get_dimensions() != (0, 0) {

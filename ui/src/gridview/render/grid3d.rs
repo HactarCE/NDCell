@@ -50,6 +50,11 @@ impl<'a> RenderInProgress<'a> {
         })
     }
 
+    /// Returns a `RenderResult` from this render.
+    pub fn finish(self) -> Result<RenderResult> {
+        Ok(RenderResult { mouse_target: None })
+    }
+
     pub fn cell_transform(&self) -> &CellTransform3D {
         &self.transform
     }

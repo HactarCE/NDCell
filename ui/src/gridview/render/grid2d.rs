@@ -126,7 +126,7 @@ impl<'a> RenderInProgress<'a> {
             cache,
 
             params,
-            mouse: g.mouse(),
+            mouse: g.mouse,
 
             camera,
             origin,

@@ -10,7 +10,7 @@ use ndcell_core::prelude::*;
 
 use crate::commands::*;
 use crate::config::{Config, MouseDisplay};
-use crate::gridview::{GridView, GridViewTrait, MouseState};
+use crate::gridview::{GridView, MouseState};
 use crate::Scale;
 
 const SHIFT: ModifiersState = ModifiersState::SHIFT;

@@ -42,9 +42,6 @@ impl<D: Dim, C: Camera<D>> From<C> for Interpolator<D, C> {
 ///
 /// This abstracts away dimensionality, so it can be used as a trait object.
 pub trait Interpolate: Any {
-    /// Sets the display scaling factor of the underlying camera.
-    fn set_dpi(&mut self, dpi: f32);
-
     /// Returns the distance between the current state and the target state.
     fn distance(&self) -> f64;
 
@@ -53,16 +50,12 @@ pub trait Interpolate: Any {
     /// Returns `true` if the target has been reached, or `false` otherwise.
     fn advance(&mut self, fps: f64, interpolation: Interpolation) -> bool;
 
+    /// Sets the display scaling factor of the underlying camera.
+    fn set_dpi(&mut self, dpi: f32);
     /// Update the pixel size of the viewport.
-    fn update_target_dimensions(&mut self, target_dimensions: (u32, u32));
+    fn set_target_dimensions(&mut self, target_dimensions: (u32, u32));
 }
-impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C>
-{
-    fn set_dpi(&mut self, dpi: f32) {
-        self.current.set_dpi(dpi);
-        self.target.set_dpi(dpi);
-    }
-
+impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
     fn distance(&self) -> f64 {
         C::distance(&self.current, &self.target)
             .to_f64()
@@ -92,7 +85,11 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C>
         }
     }
 
-    fn update_target_dimensions(&mut self, target_dimensions: (u32, u32)) {
+    fn set_dpi(&mut self, dpi: f32) {
+        self.current.set_dpi(dpi);
+        self.target.set_dpi(dpi);
+    }
+    fn set_target_dimensions(&mut self, target_dimensions: (u32, u32)) {
         self.target.set_target_dimensions(target_dimensions);
         self.current.set_target_dimensions(target_dimensions);
     }

@@ -30,18 +30,23 @@ impl From<CellTransform3D> for CellTransform {
         Self::Some3D(ct)
     }
 }
-impl<'a> TryFrom<&'a CellTransform> for &'a CellTransform2D {
+impl<'a, D: Dim> TryFrom<&'a CellTransform> for &'a NdCellTransform<D> {
     type Error = ();
 
     fn try_from(value: &'a CellTransform) -> Result<Self, Self::Error> {
-        value.as_2d().ok_or(())
-    }
-}
-impl<'a> TryFrom<&'a CellTransform> for &'a CellTransform3D {
-    type Error = ();
-
-    fn try_from(value: &'a CellTransform) -> Result<Self, Self::Error> {
-        value.as_3d().ok_or(())
+        match D::NDIM {
+            2 => Ok(unsafe {
+                std::mem::transmute::<&'a NdCellTransform<Dim2D>, &'a NdCellTransform<D>>(
+                    value.as_2d().ok_or(())?,
+                )
+            }),
+            3 => Ok(unsafe {
+                std::mem::transmute::<&'a NdCellTransform<Dim3D>, &'a NdCellTransform<D>>(
+                    value.as_3d().ok_or(())?,
+                )
+            }),
+            _ => Err(()),
+        }
     }
 }
 impl CellTransform {

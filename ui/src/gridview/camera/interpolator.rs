@@ -2,13 +2,12 @@
 
 use anyhow::Result;
 use std::any::Any;
-use std::convert::TryFrom;
 use std::fmt;
 use std::marker::PhantomData;
 
 use ndcell_core::prelude::*;
 
-use super::{Camera, CellTransform, DragHandler, DragOutcome, NdCellTransform};
+use super::{Camera, DragHandler, DragOutcome};
 use crate::commands::ViewCommand;
 use crate::config::{Config, Interpolation};
 
@@ -58,8 +57,6 @@ pub trait Interpolate: Any {
     fn update_target_dimensions(&mut self, target_dimensions: (u32, u32));
 }
 impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C>
-where
-    for<'a> &'a NdCellTransform<D>: TryFrom<&'a CellTransform>,
 {
     fn set_dpi(&mut self, dpi: f32) {
         self.current.set_dpi(dpi);

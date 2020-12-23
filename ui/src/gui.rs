@@ -14,7 +14,10 @@ use std::time::{Duration, Instant};
 use ndcell_core::io::{CaFormatTrait, Rle};
 
 use super::clipboard_compat::*;
-use super::gridview::*;
+use super::config::Config;
+use super::gridview::{self, GridView, GridView3D};
+use super::input;
+use super::windows;
 
 lazy_static! {
     static ref EVENT_LOOP: SendWrapper<RefCell<Option<EventLoop<()>>>> =
@@ -58,10 +61,10 @@ pub fn show_gui() -> ! {
     let display = &**DISPLAY;
 
     // Initialize runtime data.
-    let mut config = super::config::Config::default();
+    let mut config = Config::default();
     let mut gridview = make_default_gridview();
-    let mut main_window = super::windows::MainWindow::default();
-    let mut input_state = super::input::State::default();
+    let mut main_window = windows::MainWindow::default();
+    let mut input_state = input::State::default();
     let mut events_buffer = VecDeque::new();
 
     // Initialize imgui.
@@ -156,8 +159,12 @@ pub fn show_gui() -> ! {
                 // Prep imgui for rendering.
                 let imgui_has_mouse = imgui_io.want_capture_mouse;
                 let ui = imgui.frame();
-                main_window.build(&ui, &mut config, &gridview);
-
+                main_window.build(&mut windows::BuildParams {
+                    ui: &ui,
+                    config: &mut config,
+                    mouse: input_state.mouse(),
+                    gridview: &gridview,
+                });
                 if !imgui_has_mouse {
                     ui.set_mouse_cursor(input_state.mouse().display.cursor_icon());
                 }
@@ -165,15 +172,15 @@ pub fn show_gui() -> ! {
                 let mut target = display.draw();
 
                 // Execute commands and run the simulation.
-                gridview.set_mouse_state(input_state.mouse());
                 gridview.do_frame(&config).expect("Unhandled exception!");
 
                 if target.get_dimensions() != (0, 0) {
                     // Render the gridview.
                     gridview
-                        .render(RenderParams {
+                        .render(gridview::RenderParams {
                             target: &mut target,
                             config: &config,
+                            mouse: input_state.mouse(),
                             modifiers: input_state.modifiers(),
                         })
                         .expect("Unhandled exception!");

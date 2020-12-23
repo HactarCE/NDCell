@@ -3,8 +3,7 @@ use imgui::*;
 use ndcell_core::prelude::*;
 
 use crate::commands::*;
-use crate::config::Config;
-use crate::gridview::GridView;
+use crate::windows::BuildParams;
 
 #[derive(Debug, Default)]
 pub struct SimulationWindow {
@@ -12,7 +11,14 @@ pub struct SimulationWindow {
 }
 impl SimulationWindow {
     /// Builds the main window.
-    pub fn build(&mut self, ui: &imgui::Ui<'_>, config: &mut Config, gridview: &GridView) {
+    pub fn build(&mut self, params: &mut BuildParams<'_>) {
+        let BuildParams {
+            ui,
+            config,
+            mouse: _,
+            gridview,
+        } = params;
+
         if self.is_visible {
             Window::new(&ImString::new("Simulation")).build(&ui, || {
                 let mut width = ui.window_content_region_width();

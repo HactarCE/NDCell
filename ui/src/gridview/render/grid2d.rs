@@ -44,8 +44,6 @@ pub struct RenderInProgress<'a> {
 
     /// Render parameters.
     params: RenderParams<'a>,
-    /// Mouse cursor state.
-    mouse: MouseState,
 
     /// Camera to render the grid from.
     camera: Camera2D,
@@ -126,7 +124,6 @@ impl<'a> RenderInProgress<'a> {
             cache,
 
             params,
-            mouse: g.mouse,
 
             camera,
             origin,
@@ -183,6 +180,7 @@ impl<'a> RenderInProgress<'a> {
         }
 
         Ok(self
+            .params
             .mouse
             .pos
             // Convert mouse position to `u32`.

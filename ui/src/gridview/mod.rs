@@ -90,12 +90,6 @@ impl GridView {
         }
     }
 
-    pub fn set_mouse_state(&mut self, mouse: MouseState) {
-        match self {
-            GridView::View2D(view2d) => view2d.mouse = mouse,
-            GridView::View3D(view3d) => view3d.mouse = mouse,
-        }
-    }
     pub fn selected_cell_state(&self) -> u8 {
         match self {
             GridView::View2D(view2d) => view2d.selected_cell_state,

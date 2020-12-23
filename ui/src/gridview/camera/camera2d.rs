@@ -50,6 +50,9 @@ impl Camera2D {
             int_render_cell,
         })
     }
+    pub fn try_pixel_to_screen_pos(&self, maybe_pixel: Option<FVec2D>) -> Option<ScreenPos2D> {
+        maybe_pixel.and_then(|pixel| self.pixel_to_screen_pos(pixel))
+    }
 
     // Compute the position of the camera in render cell space, given a base
     // position near the camera center.

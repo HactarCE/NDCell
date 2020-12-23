@@ -74,11 +74,9 @@ impl GridViewDimension for GridViewDim3D {
 impl GridView3D {
     /// Returns the cell position underneath the cursor. Floor this to get an
     /// integer cell position.
-    pub fn hovered_cell_pos(&self) -> Option<FixedVec3D> {
+    pub fn hovered_cell_pos(&self, mouse_pos: Option<FVec2D>) -> Option<FixedVec3D> {
         // TODO: Raycast or something
         let z = Camera3D::DISTANCE_TO_PIVOT;
-        self.camera()
-            .cell_transform()
-            .pixel_to_global_cell(self.mouse.pos?, z)
+        mouse_pos.and_then(|pos| self.camera().cell_transform().pixel_to_global_cell(pos, z))
     }
 }

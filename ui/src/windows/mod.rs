@@ -21,7 +21,14 @@ pub struct MainWindow {
 }
 impl MainWindow {
     /// Builds the main window.
-    pub fn build(&mut self, ui: &imgui::Ui<'_>, config: &mut Config, gridview: &GridView) {
+    pub fn build(&mut self, params: &mut BuildParams<'_>) {
+        let BuildParams {
+            ui,
+            config,
+            mouse,
+            gridview,
+        } = params;
+
         Window::new(&ImString::new(crate::TITLE)).build(&ui, || {
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
             ui.text("");
@@ -67,7 +74,7 @@ impl MainWindow {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
                         }
                     }
-                    if let Some(mouse_pos) = view2d.mouse_pos() {
+                    if let Some(mouse_pos) = view2d.camera().try_pixel_to_screen_pos(mouse.pos) {
                         ui.text(format!(
                             "Cursor: X = {}, Y = {}",
                             mouse_pos.int_cell()[X],
@@ -91,7 +98,7 @@ impl MainWindow {
                     }
                     ui.text(format!("Pitch = {:.2?}°", cam.pitch().0));
                     ui.text(format!("Yaw = {:.2?}°", cam.yaw().0));
-                    if let Some(hover_pos) = view3d.hovered_cell_pos() {
+                    if let Some(hover_pos) = view3d.hovered_cell_pos(mouse.pos) {
                         ui.text(format!(
                             "Cursor: X = {}, Y = {}, Z = {}",
                             hover_pos[X].floor().0,
@@ -123,7 +130,8 @@ impl MainWindow {
             ui.text("");
             ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
         });
-        self.simulation.build(ui, config, gridview)
+
+        self.simulation.build(params);
     }
 }
 
@@ -138,4 +146,11 @@ fn fps_color(fps: usize) -> [f32; 4] {
         // Red
         [1.0, 0.0, 0.0, 1.0]
     }
+}
+
+pub struct BuildParams<'a> {
+    pub ui: &'a imgui::Ui<'a>,
+    pub config: &'a mut Config,
+    pub mouse: MouseState,
+    pub gridview: &'a GridView,
 }

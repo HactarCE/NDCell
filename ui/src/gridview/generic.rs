@@ -42,8 +42,6 @@ pub struct GenericGridView<G: GridViewDimension> {
     /// Communication channel with the garbage collection thread.
     gc_channel: Option<mpsc::Receiver<()>>,
 
-    /// State of the mouse cursor.
-    pub mouse: MouseState,
     /// Mouse drag handler.
     pub(super) drag_handler: Option<DragHandler<Self>>,
     /// Whether the user is currently drawing.
@@ -85,7 +83,6 @@ impl<G: GridViewDimension> Default for GenericGridView<G> {
 
             gc_channel: Default::default(),
 
-            mouse: Default::default(),
             drag_handler: Default::default(),
             is_drawing: Default::default(),
             is_dragging_view: Default::default(),
@@ -732,6 +729,8 @@ pub struct RenderParams<'a> {
     pub target: &'a mut glium::Frame,
     /// User configuration.
     pub config: &'a Config,
+    /// Mouse state.
+    pub mouse: MouseState,
     /// Modifiers held on the keyboard.
     pub modifiers: ModifiersState,
 }

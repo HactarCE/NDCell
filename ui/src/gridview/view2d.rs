@@ -258,6 +258,9 @@ impl GridViewDimension for GridViewDim2D {
     }
 
     fn render(this: &mut GridView2D, params: RenderParams<'_>) -> Result<RenderResult> {
+        let mouse = params.mouse;
+        let mouse_pos = this.camera().try_pixel_to_screen_pos(mouse.pos);
+
         let mut rip = RenderInProgress::new(this, params)?;
 
         // Draw main cells.
@@ -291,12 +294,12 @@ impl GridViewDimension for GridViewDim2D {
             .unwrap_or(1.0);
         rip.draw_gridlines(gridlines_width)?;
         // Draw mouse display.
-        if let Some(mouse_pos) = this.mouse_pos() {
-            match this.mouse.display {
+        if let Some(hovered_cell) = &mouse_pos {
+            match mouse.display {
                 MouseDisplay::Draw => {
                     if !this.too_small_to_draw() {
                         rip.draw_hover_highlight(
-                            mouse_pos.int_cell(),
+                            hovered_cell.int_cell(),
                             gridlines_width * 2.0,
                             crate::colors::HOVERED_DRAW,
                         )?;
@@ -304,7 +307,7 @@ impl GridViewDimension for GridViewDim2D {
                 }
                 MouseDisplay::Select => {
                     rip.draw_hover_highlight(
-                        mouse_pos.int_cell(),
+                        hovered_cell.int_cell(),
                         gridlines_width * 2.0,
                         crate::colors::HOVERED_SELECT,
                     )?;
@@ -321,10 +324,8 @@ impl GridViewDimension for GridViewDim2D {
             )?;
         }
         // Draw selection preview after drawing selection.
-        if this.mouse.display == MouseDisplay::ResizeSelectionAbsolute
-            && this.drag_handler.is_none()
-        {
-            if let Some((mouse_pos, s)) = this.mouse_pos().zip(this.selection.as_ref()) {
+        if mouse.display == MouseDisplay::ResizeSelectionAbsolute && this.drag_handler.is_none() {
+            if let (Some(mouse_pos), Some(s)) = (mouse_pos, this.selection.as_ref()) {
                 rip.draw_absolute_selection_resize_preview(
                     s.rect.clone(),
                     &mouse_pos,
@@ -533,9 +534,5 @@ impl GridView2D {
     /// `false` otherwise.
     fn too_small_to_draw(&self) -> bool {
         self.camera().scale() < Scale::from_factor(r64(1.0))
-    }
-
-    pub fn mouse_pos(&self) -> Option<ScreenPos2D> {
-        self.camera().pixel_to_screen_pos(self.mouse.pos?)
     }
 }

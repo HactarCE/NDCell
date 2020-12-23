@@ -1,5 +1,6 @@
 //! High-level CA interface.
 
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 use crate::dim::*;
@@ -39,27 +40,32 @@ impl Default for Automaton {
 }
 impl<D: Dim> From<NdAutomaton<D>> for Automaton {
     fn from(automaton: NdAutomaton<D>) -> Self {
-        let a = Box::new(automaton);
         match_ndim!(match D {
-            1 => Self::Automaton1D(unsafe {
-                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim1D>>>(a)
-            }),
-            2 => Self::Automaton2D(unsafe {
-                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim2D>>>(a)
-            }),
-            3 => Self::Automaton3D(unsafe {
-                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim3D>>>(a)
-            }),
-            4 => Self::Automaton4D(unsafe {
-                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim4D>>>(a)
-            }),
-            5 => Self::Automaton5D(unsafe {
-                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim5D>>>(a)
-            }),
-            6 => Self::Automaton6D(unsafe {
-                *std::mem::transmute::<Box<NdAutomaton<D>>, Box<NdAutomaton<Dim6D>>>(a)
-            }),
+            1 => Self::Automaton1D(NdAutomaton::transmute(automaton)),
+            2 => Self::Automaton2D(NdAutomaton::transmute(automaton)),
+            3 => Self::Automaton3D(NdAutomaton::transmute(automaton)),
+            4 => Self::Automaton4D(NdAutomaton::transmute(automaton)),
+            5 => Self::Automaton5D(NdAutomaton::transmute(automaton)),
+            6 => Self::Automaton6D(NdAutomaton::transmute(automaton)),
         })
+    }
+}
+impl<D: Dim> TryFrom<Automaton> for NdAutomaton<D> {
+    type Error = Automaton;
+
+    fn try_from(automaton: Automaton) -> Result<Self, Self::Error> {
+        if D::NDIM == automaton.ndim() {
+            Ok(match automaton {
+                Automaton::Automaton1D(a) => NdAutomaton::transmute(a),
+                Automaton::Automaton2D(a) => NdAutomaton::transmute(a),
+                Automaton::Automaton3D(a) => NdAutomaton::transmute(a),
+                Automaton::Automaton4D(a) => NdAutomaton::transmute(a),
+                Automaton::Automaton5D(a) => NdAutomaton::transmute(a),
+                Automaton::Automaton6D(a) => NdAutomaton::transmute(a),
+            })
+        } else {
+            Err(automaton)
+        }
     }
 }
 impl AsSimulate for Automaton {
@@ -171,5 +177,31 @@ impl<D: Dim> NdAutomaton<D> {
     /// Sets the rule of the automaton.
     pub fn set_rule(&mut self, new_rule: impl 'static + NdRule<D>) {
         self.rule = Arc::new(new_rule);
+    }
+}
+impl<D1: Dim> NdAutomaton<D1> {
+    /// Converts an `Automaton` between arbitrary dimensionalities, as long as
+    /// those dimensionalities are the same. This function is only really useful
+    /// with generic dimensionalities.
+    ///
+    /// This function is safe because it performs "runtime" checking that the
+    /// initial and final dimensionalities are the same, even though that
+    /// "runtime" checking is trivially compile-time-optimized away.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if the dimensionalities do not match.
+    #[inline]
+    pub fn transmute<D2: Dim>(automaton: Self) -> NdAutomaton<D2> {
+        assert_eq!(
+            D1::NDIM,
+            D2::NDIM,
+            "Cannot convert NdAutomaton<_, Dim{}D> into NdAutomaton<_, Dim{}D>",
+            D1::NDIM,
+            D2::NDIM,
+        );
+        unsafe {
+            *std::mem::transmute::<Box<NdAutomaton<D1>>, Box<NdAutomaton<D2>>>(Box::new(automaton))
+        }
     }
 }

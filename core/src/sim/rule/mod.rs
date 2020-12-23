@@ -46,25 +46,36 @@ impl fmt::Display for Rule {
 impl<D: Dim> From<Arc<dyn NdRule<D>>> for Rule {
     fn from(r: Arc<dyn NdRule<D>>) -> Self {
         match_ndim!(match D {
-            1 => Self::Rule1D(unsafe {
-                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim1D>>>(r)
-            }),
-            2 => Self::Rule2D(unsafe {
-                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim2D>>>(r)
-            }),
-            3 => Self::Rule3D(unsafe {
-                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim3D>>>(r)
-            }),
-            4 => Self::Rule4D(unsafe {
-                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim4D>>>(r)
-            }),
-            5 => Self::Rule5D(unsafe {
-                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim5D>>>(r)
-            }),
-            6 => Self::Rule6D(unsafe {
-                std::mem::transmute::<Arc<dyn NdRule<D>>, Arc<dyn NdRule<Dim6D>>>(r)
-            }),
+            1 => Self::Rule1D(Rule::transmute(r)),
+            2 => Self::Rule2D(Rule::transmute(r)),
+            3 => Self::Rule3D(Rule::transmute(r)),
+            4 => Self::Rule4D(Rule::transmute(r)),
+            5 => Self::Rule5D(Rule::transmute(r)),
+            6 => Self::Rule6D(Rule::transmute(r)),
         })
+    }
+}
+impl Rule {
+    /// Converts an `Arc<dyn NdRule>` between arbitrary dimensionalities, as
+    /// long as those dimensionalities are the same. This function is only
+    /// really useful with generic dimensionalities.
+    ///
+    /// This function is safe because it performs "runtime" checking that the
+    /// initial and final dimensionalities are the same, even though that
+    /// "runtime" checking is trivially compile-time-optimized away.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if the dimensionalities do not match.
+    pub fn transmute<D1: Dim, D2: Dim>(rule: Arc<dyn NdRule<D1>>) -> Arc<dyn NdRule<D2>> {
+        assert_eq!(
+            D1::NDIM,
+            D2::NDIM,
+            "Cannot convert Arc<dyn NdRule<_, Dim{}D>> into Arc<dyn NdRule<_, Dim{}D>>",
+            D1::NDIM,
+            D2::NDIM,
+        );
+        unsafe { std::mem::transmute::<Arc<dyn NdRule<D1>>, Arc<dyn NdRule<D2>>>(rule) }
     }
 }
 

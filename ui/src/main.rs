@@ -16,10 +16,10 @@ extern crate glium;
 #[macro_use]
 extern crate lazy_static;
 
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::sync::Arc;
 
-use ndcell_core::sim::rule::Rule2D;
+use ndcell_core::prelude::*;
 
 mod clipboard_compat;
 mod colors;
@@ -62,4 +62,52 @@ fn load_custom_rule_2d() -> Rule2D {
             )
         })
         .unwrap_or_else(|_| Arc::new(ndcell_core::sim::rule::LIFE))
+}
+fn load_custom_rule_3d() -> Rule3D {
+    use std::fs::File;
+    use std::io::Read;
+
+    File::open("rule.ndca")
+        .map(|mut file| -> Rule3D {
+            let mut source_code = String::new();
+            file.read_to_string(&mut source_code)
+                .expect("Error reading file");
+            Arc::new(
+                ndcell_lang::compile_blocking(Arc::new(source_code), None)
+                    .expect("Error compiling rule"),
+            )
+        })
+        .unwrap_or_else(|_| Arc::new(ndcell_core::sim::rule::DummyRule))
+}
+
+const DEFAULT_NDIM: usize = 3;
+const GOSPER_GLIDER_GUN_SYNTH_RLE: &str = "
+#CXRLE Gen=-31
+x = 47, y = 14, rule = Life
+16bo30b$16bobo16bo11b$16b2o17bobo9b$obo10bo21b2o10b$b2o11b2o31b$bo11b
+2o32b3$10b2o20b2o13b$11b2o19bobo9b3o$10bo21bo11bo2b$27bo17bob$27b2o18b
+$26bobo!
+";
+fn make_default_gridview(ndim: usize) -> gridview::GridView {
+    match ndim {
+        2 => Rle::from_string_to_ndautomaton(
+            GOSPER_GLIDER_GUN_SYNTH_RLE,
+            crate::load_custom_rule_2d().into(),
+        )
+        .unwrap_or_else(|_| {
+            warn!("Failed to load default pattern; using empty pattern instead");
+            Default::default()
+        })
+        .into(),
+        3 => Rle::from_string_to_ndautomaton(
+            GOSPER_GLIDER_GUN_SYNTH_RLE,
+            crate::load_custom_rule_3d().into(),
+        )
+        .unwrap_or_else(|_| {
+            warn!("Failed to load default pattern; using empty pattern instead");
+            Default::default()
+        })
+        .into(),
+        _ => panic!("Invalid number of dimensions passed to make_default_gridview()"),
+    }
 }

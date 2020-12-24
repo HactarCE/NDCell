@@ -5,19 +5,16 @@ use glium::Surface;
 use imgui::{Context, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use log::warn;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use ndcell_core::io::{CaFormatTrait, Rle};
-
-use super::clipboard_compat::*;
-use super::config::Config;
-use super::gridview::{self, GridView, GridView3D};
-use super::input;
-use super::windows;
+use crate::clipboard_compat::*;
+use crate::config::Config;
+use crate::gridview;
+use crate::input;
+use crate::windows;
 
 lazy_static! {
     static ref EVENT_LOOP: SendWrapper<RefCell<Option<EventLoop<()>>>> =
@@ -30,39 +27,13 @@ lazy_static! {
     });
 }
 
-const GOSPER_GLIDER_GUN_SYNTH_RLE: &str = "
-#CXRLE Gen=-31
-x = 47, y = 14, rule = Life
-16bo30b$16bobo16bo11b$16b2o17bobo9b$obo10bo21b2o10b$b2o11b2o31b$bo11b
-2o32b3$10b2o20b2o13b$11b2o19bobo9b3o$10bo21bo11bo2b$27bo17bob$27b2o18b
-$26bobo!
-";
-
-const DEFAULT_3D: bool = false;
-
-fn make_default_gridview() -> GridView {
-    if DEFAULT_3D {
-        GridView::View3D(GridView3D::default())
-    } else {
-        Rle::from_string_to_ndautomaton(
-            GOSPER_GLIDER_GUN_SYNTH_RLE,
-            crate::load_custom_rule_2d().into(),
-        )
-        .unwrap_or_else(|_| {
-            warn!("Failed to load default pattern; using empty pattern instaed");
-            Default::default()
-        })
-        .into()
-    }
-}
-
 /// Display the main application window.
 pub fn show_gui() -> ! {
     let display = &**DISPLAY;
 
     // Initialize runtime data.
     let mut config = Config::default();
-    let mut gridview = make_default_gridview();
+    let mut gridview = crate::make_default_gridview(crate::DEFAULT_NDIM);
     let mut main_window = windows::MainWindow::default();
     let mut input_state = input::State::default();
     let mut events_buffer = VecDeque::new();
@@ -163,7 +134,7 @@ pub fn show_gui() -> ! {
                     ui: &ui,
                     config: &mut config,
                     mouse: input_state.mouse(),
-                    gridview: &gridview,
+                    gridview: &mut gridview,
                 });
                 if !imgui_has_mouse {
                     ui.set_mouse_cursor(input_state.mouse().display.cursor_icon());

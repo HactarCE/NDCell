@@ -20,7 +20,7 @@ pub struct BuildParams<'a> {
     pub ui: &'a imgui::Ui<'a>,
     pub config: &'a mut Config,
     pub mouse: MouseState,
-    pub gridview: &'a GridView,
+    pub gridview: &'a mut GridView,
 }
 
 #[derive(Debug, Default)]
@@ -42,32 +42,43 @@ impl MainWindow {
             ui.text("");
             let fps = ui.io().framerate as usize;
             ui.text_colored(fps_color(fps), format!("Framerate = {} FPS", fps));
-            if let GridView::View2D(view2d) = gridview {
-                let total_update_ms: f64 = view2d
-                    .last_sim_times()
-                    .iter()
-                    .map(|duration| duration.as_secs_f64())
-                    .sum();
-                if total_update_ms == 0.0 {
-                    ui.text("");
-                } else {
-                    let avg_update_ms = total_update_ms / view2d.last_sim_times().len() as f64;
-                    let ups = (1.0 / avg_update_ms) as usize;
-                    ui.text_colored(fps_color(ups), format!("Max sim speed = {} step/sec", ups));
-                }
-                if view2d.is_drawing() {
-                    ui.text_colored(BLUE, "DRAWING");
-                } else {
-                    match view2d.work_type() {
-                        Some(WorkType::SimStep) => ui.text_colored(YELLOW, "STEPPING"),
-                        Some(WorkType::SimContinuous) => ui.text_colored(GREEN, "RUNNING"),
-                        None => ui.text(""),
-                    }
+            let total_update_ms: f64 = gridview
+                .last_sim_times()
+                .iter()
+                .map(|duration| duration.as_secs_f64())
+                .sum();
+            if total_update_ms == 0.0 {
+                ui.text("");
+            } else {
+                let avg_update_ms = total_update_ms / gridview.last_sim_times().len() as f64;
+                let ups = (1.0 / avg_update_ms) as usize;
+                ui.text_colored(fps_color(ups), format!("Max sim speed = {} step/sec", ups));
+            }
+            if gridview.is_drawing() {
+                ui.text_colored(BLUE, "DRAWING");
+            } else {
+                match gridview.work_type() {
+                    Some(WorkType::SimStep) => ui.text_colored(YELLOW, "STEPPING"),
+                    Some(WorkType::SimContinuous) => ui.text_colored(GREEN, "RUNNING"),
+                    None => ui.text(""),
                 }
             }
             ui.text("");
             ui.text(format!("Generations = {}", gridview.generation_count()));
             ui.text(format!("Population = {}", gridview.population()));
+            ui.text("");
+            {
+                let new_ndim = match gridview.ndim() {
+                    2 => 3,
+                    _ => 2,
+                };
+                if ui.button(
+                    &ImString::new(format!("Switch to {}D", new_ndim)),
+                    [ui.window_content_region_width(), 30.0],
+                ) {
+                    **gridview = crate::make_default_gridview(new_ndim);
+                }
+            }
             ui.text("");
             match &gridview {
                 GridView::View2D(view2d) => {

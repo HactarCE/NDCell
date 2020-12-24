@@ -1,5 +1,7 @@
 use anyhow::Result;
 use enum_dispatch::enum_dispatch;
+use std::collections::VecDeque;
+use std::time::Duration;
 
 use ndcell_core::prelude::*;
 
@@ -66,15 +68,12 @@ impl AsSimulate for GridView {
 }
 
 impl GridView {
-    /// Returns whether the `GridView` is 2D.
     pub fn is_2d(&self) -> bool {
         match self {
             GridView::View2D(_) => true,
             GridView::View3D(_) => false,
         }
     }
-
-    /// Returns whether the `GridView` is 3D.
     pub fn is_3d(&self) -> bool {
         match self {
             GridView::View2D(_) => false,
@@ -88,10 +87,36 @@ impl GridView {
             GridView::View3D(view3d) => view3d.selected_cell_state,
         }
     }
+
     pub fn fps(&self, config: &Config) -> f64 {
         match self {
             GridView::View2D(view2d) => view2d.fps(config),
             GridView::View3D(view3d) => view3d.fps(config),
+        }
+    }
+    pub fn last_render_result(&self) -> &RenderResult {
+        match self {
+            GridView::View2D(view2d) => view2d.last_render_result(),
+            GridView::View3D(view3d) => view3d.last_render_result(),
+        }
+    }
+    pub fn last_sim_times(&self) -> &VecDeque<Duration> {
+        match self {
+            GridView::View2D(view2d) => view2d.last_sim_times(),
+            GridView::View3D(view3d) => view3d.last_sim_times(),
+        }
+    }
+
+    pub fn work_type(&self) -> Option<WorkType> {
+        match self {
+            GridView::View2D(view2d) => view2d.work_type(),
+            GridView::View3D(view3d) => view3d.work_type(),
+        }
+    }
+    pub fn is_drawing(&self) -> bool {
+        match self {
+            GridView::View2D(view2d) => view2d.is_drawing(),
+            GridView::View3D(view3d) => view3d.is_drawing(),
         }
     }
     pub fn is_dragging_view(&self) -> bool {
@@ -104,12 +129,6 @@ impl GridView {
         match self {
             GridView::View2D(view2d) => view2d.is_running(),
             GridView::View3D(view3d) => view3d.is_running(),
-        }
-    }
-    pub fn last_render_result(&self) -> &RenderResult {
-        match self {
-            GridView::View2D(view2d) => view2d.last_render_result(),
-            GridView::View3D(view3d) => view3d.last_render_result(),
         }
     }
 

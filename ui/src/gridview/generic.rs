@@ -516,16 +516,16 @@ impl<G: GridViewDimension> GenericGridView<G> {
         }
     }
     /// Deselects and sets a new selection.
-    pub fn set_selection(&mut self, new_selection: Option<Selection<G::D>>) {
+    pub(super) fn set_selection(&mut self, new_selection: Option<Selection<G::D>>) {
         self.deselect();
         self.selection = new_selection;
     }
     /// Deselects and sets a new selection rectangle.
-    pub fn set_selection_rect(&mut self, new_selection_rect: Option<BigRect<G::D>>) {
+    pub(super) fn set_selection_rect(&mut self, new_selection_rect: Option<BigRect<G::D>>) {
         self.set_selection(new_selection_rect.map(Selection::from))
     }
     /// Returns the selection rectangle.
-    pub fn selection_rect(&self) -> Option<BigRect<G::D>> {
+    pub(super) fn selection_rect(&self) -> Option<BigRect<G::D>> {
         if let Some(s) = &self.selection {
             Some(s.rect.clone())
         } else {
@@ -533,7 +533,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
         }
     }
     /// Deselects all and returns the old selection.
-    pub fn deselect(&mut self) -> Option<Selection<G::D>> {
+    pub(super) fn deselect(&mut self) -> Option<Selection<G::D>> {
         if let Some(sel) = self.selection.clone() {
             if let Some(cells) = sel.cells {
                 self.record();
@@ -558,7 +558,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
     }
     /// Moves the selected cells from the selection to the main grid. Outputs a
     /// warning in the log if there is no selection.
-    pub fn drop_selected_cells(&mut self) {
+    pub(super) fn drop_selected_cells(&mut self) {
         if let Some(sel) = self.deselect() {
             self.set_selection_rect(Some(sel.rect));
         } else {
@@ -568,13 +568,13 @@ impl<G: GridViewDimension> GenericGridView<G> {
     /// Moves the cells in the selected region from the main grid into the
     /// selection. Outputs a warning to the log if there is no selection. Does
     /// nothing if the selection already contains cells.
-    pub fn grab_selected_cells(&mut self) {
+    pub(super) fn grab_selected_cells(&mut self) {
         self._grab_selected_cells(true)
     }
     /// Copies the cells in the selected region from the main grid into the
     /// selection. Outputs a warning to the log if there is no selection. Does
     /// nothing if the selection already contains cells.
-    pub fn grab_copy_of_selected_cells(&mut self) {
+    pub(super) fn grab_copy_of_selected_cells(&mut self) {
         self._grab_selected_cells(false)
     }
     fn _grab_selected_cells(&mut self, clear_source: bool) {

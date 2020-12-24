@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **Simulation**
   - Advance one generation (<kbd>Space</kbd>)
-  - Advance one "step" (<kbd>Tab</kbd>)
+  - Advance one step (<kbd>Tab</kbd>)
 
 ### Changed
 

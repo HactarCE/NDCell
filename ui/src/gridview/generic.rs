@@ -43,12 +43,9 @@ pub struct GenericGridView<G: GridViewDimension> {
     gc_channel: Option<mpsc::Receiver<()>>,
 
     /// Mouse drag handler.
-    pub(super) drag_handler: Option<DragHandler<Self>>,
-    /// Whether the user is currently drawing.
-    pub(super) is_drawing: bool,
-    /// Whether the user is currently dragging the viewport by holding down a
-    /// mouse button.
-    pub(super) is_dragging_view: bool,
+    drag_handler: Option<DragHandler<Self>>,
+    /// Type of mouse drag being handled.
+    drag_type: Option<DragType>,
 
     /// Time that the last several frames completed.
     last_frame_times: VecDeque<Instant>,
@@ -84,8 +81,7 @@ impl<G: GridViewDimension> Default for GenericGridView<G> {
             gc_channel: Default::default(),
 
             drag_handler: Default::default(),
-            is_drawing: Default::default(),
-            is_dragging_view: Default::default(),
+            drag_type: Default::default(),
 
             last_frame_times: Default::default(),
             last_sim_times: Default::default(),
@@ -212,7 +208,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
             Command::GarbageCollect => Ok(self.schedule_gc()),
 
             Command::ContinueDrag(cursor_pos) => self.continue_drag(cursor_pos),
-            Command::StopDrag => self.stop_drag(),
+            Command::StopDrag => Ok(self.stop_drag()),
 
             Command::Cancel => {
                 if self.reset_worker_thread(config) {
@@ -313,22 +309,33 @@ impl<G: GridViewDimension> GenericGridView<G> {
         // `Select` commands depend on the number of dimensions.
         G::do_select_command(self, command, config)
     }
-    /// Executes a `ContinueDrag` command.
-    pub fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()> {
-        if let Some(mut h) = self.drag_handler.take() {
-            match h(self, cursor_pos)? {
-                DragOutcome::Continue => self.drag_handler = Some(h),
-                DragOutcome::Cancel => self.stop_drag()?,
+
+    /// Starts a drag event.
+    ///
+    /// Do not call this method from within a drag handler.
+    pub(super) fn start_drag(&mut self, drag_type: DragType, drag_handler: DragHandler<Self>) {
+        self.drag_type = Some(drag_type);
+        self.drag_handler = Some(drag_handler);
+    }
+    /// Executes a `ContinueDrag` command, calling the drag handler.
+    ///
+    /// Do not call this method from within a drag handler.
+    pub(super) fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()> {
+        if let Some(mut drag_handler) = self.drag_handler.take() {
+            match drag_handler(self, cursor_pos)? {
+                DragOutcome::Continue => self.drag_handler = Some(drag_handler),
+                DragOutcome::Cancel => self.stop_drag(),
             }
         }
         Ok(())
     }
     /// Executes a `StopDrag` command.
-    pub fn stop_drag(&mut self) -> Result<()> {
+    ///
+    /// Do not call this method from within a drag handler; instead return
+    /// `DragOutcome::Cancel`.
+    pub(super) fn stop_drag(&mut self) {
+        self.drag_type = None;
         self.drag_handler = None;
-        self.is_drawing = false;
-        self.is_dragging_view = false;
-        Ok(())
     }
 
     /// Submits a request to the worker thread. Returns an error if the worker
@@ -586,13 +593,18 @@ impl<G: GridViewDimension> GenericGridView<G> {
 
     /// Returns whether the user is currently drawing.
     pub fn is_drawing(&self) -> bool {
-        self.is_drawing
+        self.drag_type == Some(DragType::Drawing)
     }
-    /// Returns whether the user is currently dragging the viewport by holding
-    /// down a mouse button.
+    /// Returns whether the user is currently moving the viewport by dragging
+    /// the mouse.
     pub fn is_dragging_view(&self) -> bool {
-        self.is_dragging_view
+        self.drag_type == Some(DragType::MovingView)
     }
+    /// Returns whether the user is currently dragging the mouse.
+    pub fn is_dragging(&self) -> bool {
+        self.drag_type.is_some()
+    }
+
     /// Returns the type of operation currently happening in the background.
     pub fn work_type(&self) -> Option<WorkType> {
         self.work_type
@@ -772,4 +784,11 @@ pub struct MouseState {
 pub enum WorkType {
     SimStep,
     SimContinuous,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum DragType {
+    MovingView,
+    Drawing,
+    Selecting,
 }

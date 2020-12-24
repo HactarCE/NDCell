@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use ndcell_core::prelude::*;
 
 use super::camera::{Camera, Camera3D};
-use super::generic::{GenericGridView, GridViewDimension, RenderParams, RenderResult};
+use super::generic::{DragType, GenericGridView, GridViewDimension, RenderParams, RenderResult};
 use super::render::grid3d::RenderInProgress;
 use super::DragHandler;
 use crate::commands::*;
@@ -18,19 +18,24 @@ impl GridViewDimension for GridViewDim3D {
     type Camera = Camera3D;
 
     fn do_view_command(this: &mut GridView3D, command: ViewCommand, config: &Config) -> Result<()> {
+        // Delegate to the camera.
         let maybe_new_drag_handler = this
             .camera_interpolator
             .do_view_command(command, config)
-            .context("Executing view command")?
-            .map(|mut interpolator_drag_handler| {
-                Box::new(move |gridview: &mut GridView3D, cursor_pos| {
-                    interpolator_drag_handler(&mut gridview.camera_interpolator, cursor_pos)
-                }) as DragHandler<GridView3D>
-            });
-        if maybe_new_drag_handler.is_some() && this.drag_handler.is_none() {
-            this.drag_handler = maybe_new_drag_handler;
-            this.is_dragging_view = true;
+            .context("Executing view command")?;
+
+        // Update drag handler, if the camera gave one.
+        if !this.is_dragging() {
+            if let Some(mut interpolator_drag_handler) = maybe_new_drag_handler {
+                this.start_drag(
+                    DragType::MovingView,
+                    Box::new(move |gridview: &mut GridView3D, cursor_pos| {
+                        interpolator_drag_handler(&mut gridview.camera_interpolator, cursor_pos)
+                    }) as DragHandler<GridView3D>,
+                );
+            }
         }
+
         Ok(())
     }
     fn do_draw_command(

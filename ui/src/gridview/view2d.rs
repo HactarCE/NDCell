@@ -4,7 +4,7 @@ use log::warn;
 use ndcell_core::prelude::*;
 
 use super::camera::{Camera, Camera2D, ScreenPos2D};
-use super::generic::{GenericGridView, GridViewDimension, RenderParams, RenderResult};
+use super::generic::{DragType, GenericGridView, GridViewDimension, RenderParams, RenderResult};
 use super::history::History;
 use super::render::grid2d::{NdTreeDrawParameters, RenderInProgress};
 use super::selection::Selection2D;
@@ -25,7 +25,8 @@ impl GridViewDimension for GridViewDim2D {
     type Camera = Camera2D;
 
     fn do_view_command(this: &mut GridView2D, command: ViewCommand, config: &Config) -> Result<()> {
-        // Handle `FitView` specially.
+        // Handle `FitView` specially because it depends on the cell contents of
+        // the automaton.
         if matches!(command, ViewCommand::FitView) {
             if let Some(pattern_bounding_rect) = this.automaton.ndtree.bounding_rect() {
                 // Set position.
@@ -49,34 +50,37 @@ impl GridViewDimension for GridViewDim2D {
             return Ok(());
         }
 
+        // Delegate to the camera.
         let maybe_new_drag_handler = this
             .camera_interpolator
             .do_view_command(command, config)
-            .context("Executing view command")?
-            .map(|mut interpolator_drag_handler| {
-                Box::new(move |gridview: &mut GridView2D, cursor_pos| {
-                    interpolator_drag_handler(&mut gridview.camera_interpolator, cursor_pos)
-                }) as DragHandler<GridView2D>
-            });
-        if maybe_new_drag_handler.is_some() && this.drag_handler.is_none() {
-            this.drag_handler = maybe_new_drag_handler;
-            this.is_dragging_view = true;
+            .context("Executing view command")?;
+
+        // Update drag handler, if the camera gave one.
+        if !this.is_dragging() {
+            if let Some(mut interpolator_drag_handler) = maybe_new_drag_handler {
+                this.start_drag(
+                    DragType::MovingView,
+                    Box::new(move |gridview: &mut GridView2D, cursor_pos| {
+                        interpolator_drag_handler(&mut gridview.camera_interpolator, cursor_pos)
+                    }) as DragHandler<GridView2D>,
+                );
+            }
         }
+
         Ok(())
     }
     fn do_draw_command(this: &mut GridView2D, command: DrawCommand, config: &Config) -> Result<()> {
-        // Don't draw if the scale is too small.
-        if this.too_small_to_draw() {
-            this.is_drawing = false;
-            this.drag_handler = None;
-            return Ok(());
-        }
-
         match command {
             DrawCommand::SetState(new_selected_cell_state) => {
                 this.selected_cell_state = new_selected_cell_state;
             }
             DrawCommand::Drag(c, cursor_start) => {
+                // Don't draw if the scale is too small.
+                if this.too_small_to_draw() {
+                    return Ok(());
+                }
+
                 let maybe_initial_pos = this.camera().pixel_to_screen_pos(cursor_start);
                 let initial_pos = match maybe_initial_pos {
                     Some(pos) => pos.int_cell().clone(),
@@ -88,7 +92,7 @@ impl GridViewDimension for GridViewDim2D {
                     this.selected_cell_state,
                 );
 
-                let mut new_drag_handler: DragHandler<GridView2D> = match c.shape {
+                let new_drag_handler: DragHandler<GridView2D> = match c.shape {
                     DrawShape::Freeform => {
                         make_freeform_draw_drag_handler(initial_pos, new_cell_state)
                     }
@@ -101,19 +105,17 @@ impl GridViewDimension for GridViewDim2D {
 
                 this.reset_worker_thread(config);
                 this.record();
-                this.is_drawing = true;
-                new_drag_handler(this, cursor_start)?;
-                this.drag_handler = Some(new_drag_handler);
+                this.start_drag(DragType::Drawing, new_drag_handler);
             }
             DrawCommand::Confirm => {
                 if this.is_drawing() {
-                    this.stop_drag()?;
+                    this.stop_drag();
                 }
             }
             DrawCommand::Cancel => {
                 if this.is_drawing() {
-                    this.stop_drag()?;
-                    this.do_command(HistoryCommand::Undo, config)?;
+                    this.stop_drag();
+                    this.undo(config);
                 }
             }
         }
@@ -189,10 +191,7 @@ impl GridViewDimension for GridViewDim2D {
                     this.deselect();
                 }
 
-                this.drag_handler = Some(new_drag_handler_with_threshold);
-
-                // Execute the drag handler once immediately.
-                this.continue_drag(cursor_start)?;
+                this.start_drag(DragType::Selecting, new_drag_handler_with_threshold);
             }
 
             SelectCommand::SelectAll => {
@@ -324,7 +323,7 @@ impl GridViewDimension for GridViewDim2D {
             )?;
         }
         // Draw selection preview after drawing selection.
-        if mouse.display == MouseDisplay::ResizeSelectionAbsolute && this.drag_handler.is_none() {
+        if mouse.display == MouseDisplay::ResizeSelectionAbsolute && !this.is_dragging() {
             if let (Some(mouse_pos), Some(s)) = (mouse_pos, this.selection.as_ref()) {
                 rip.draw_absolute_selection_resize_preview(
                     s.rect.clone(),

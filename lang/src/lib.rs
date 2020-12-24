@@ -7,8 +7,7 @@ extern crate lazy_static;
 
 use std::sync::{mpsc, Arc};
 
-use ndcell_core::prelude::{Dim2D, Vec2D};
-use ndcell_core::sim::rule::{NdRule, TransitionFunction};
+use ndcell_core::prelude::{Dim, NdRule, NdVec, TransitionFunction};
 
 #[macro_use]
 mod utils;
@@ -83,7 +82,7 @@ pub fn compile_blocking(
         .unwrap_or_else(|e| internal_error!("MPSC channel error: {:?}", e))
 }
 
-impl NdRule<Dim2D> for compiler::CompiledFunction {
+impl<D: Dim> NdRule<D> for compiler::CompiledFunction {
     fn radius(&self) -> usize {
         let (min, max) = self.rule_meta().nbhd_shape.bounds().min_and_max();
         min.into_iter()
@@ -92,7 +91,7 @@ impl NdRule<Dim2D> for compiler::CompiledFunction {
             .max()
             .unwrap()
     }
-    fn transition_function(&self) -> TransitionFunction<Dim2D> {
+    fn transition_function(&self) -> TransitionFunction<D> {
         let mut compiled_func = self.clone();
         Box::new(move |nbhd, rect| {
             ndcell_core::sim::rule::transition_cell_array(rect, |pos| {
@@ -103,7 +102,7 @@ impl NdRule<Dim2D> for compiler::CompiledFunction {
                         .bounds()
                         .iter()
                         .map(|offset| {
-                            let offset = Vec2D::from_fn(|ax| offset[ax as usize]);
+                            let offset = NdVec::from_fn(|ax| offset[ax as usize]);
                             nbhd[(pos.to_ivec() + offset).to_uvec()]
                         })
                         .collect(),

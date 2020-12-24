@@ -288,6 +288,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
             }
             // TODO make this JumpTo instead of UndoTo
             HistoryCommand::UndoTo(gen) => {
+                self.reset_worker_thread(config);
                 while self.generation_count() > &gen && self.can_undo() {
                     self.undo(config);
                 }

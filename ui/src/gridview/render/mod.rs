@@ -4,19 +4,25 @@ use glium::glutin::event::ModifiersState;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 
+use ndcell_core::prelude::*;
+
 use crate::config::{Config, MouseDragBinding};
 use crate::mouse::{MouseDisplay, MouseState};
 
+mod generic;
 mod gl_quadtree;
-pub(super) mod grid2d;
-pub(super) mod grid3d;
 mod ibos;
 mod picker;
+mod render2d;
+mod render3d;
 mod resizing;
 mod shaders;
 mod textures;
 mod vbos;
 mod vertices;
+
+pub(super) use render2d::GridViewRender2D;
+pub(super) use render3d::GridViewRender3D;
 
 mod consts {
     /// Exponential base to use when fading out gridlines. 16 = 16 small gridlines
@@ -73,6 +79,15 @@ pub struct RenderParams<'a> {
 pub struct RenderResult {
     /// Target under the mouse cursor, if any.
     pub mouse_target: Option<MouseTargetData>,
+}
+
+pub(super) struct CellDrawParams<'a, D: Dim> {
+    /// ND-tree to draw.
+    pub ndtree: &'a NdTree<D>,
+    /// Rectangular region of the ND-tree to draw.
+    pub rect: Option<&'a BigRect<D>>,
+    /// Alpha value for the whole ND-tree.
+    pub alpha: f32,
 }
 
 /// How to handle a mouse hover or click on a particular location on the screen.

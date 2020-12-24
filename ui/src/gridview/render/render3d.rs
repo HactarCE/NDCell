@@ -11,55 +11,27 @@ use glium::Surface;
 use ndcell_core::prelude::*;
 use Axis::{X, Y, Z};
 
+use super::generic::{GenericGridViewRender, GridViewRenderDimension};
 use super::shaders;
+use super::CellDrawParams;
 use crate::gridview::*;
 use crate::DISPLAY;
+
+pub(in crate::gridview) type GridViewRender3D<'a> = GenericGridViewRender<'a, RenderDim3D>;
 
 /// Number of cubes to render in each render batch.
 const CUBE_BATCH_SIZE: usize = 256;
 
 #[derive(Default)]
-pub struct RenderCache {}
-
-pub struct RenderInProgress<'a> {
-    octree: &'a NdTree3D,
-    /// Camera to render the scene from.
-    camera: &'a Camera3D,
-
-    /// Render parameters.
-    params: RenderParams<'a>,
-
-    /// Transform from `visible_octree` space (1 unit = 1 render cell; (0, 0) =
-    /// bottom left) to screen space ((-1, -1) = bottom left; (1, 1) = top
-    /// right) and pixel space (1 unit = 1 pixel; (0, 0) = top left).
-    transform: CellTransform3D,
+pub(in crate::gridview) struct RenderDim3D;
+impl GridViewRenderDimension<'_> for RenderDim3D {
+    type D = Dim3D;
+    type Camera = Camera3D;
 }
-impl<'a> RenderInProgress<'a> {
-    pub fn new(g: &'a GridView3D, params: RenderParams<'a>) -> Result<Self> {
-        params.target.clear_depth(f32::INFINITY);
-        let camera = g.camera();
-        let transform = camera.cell_transform_with_base(BigVec3D::origin())?;
 
-        Ok(Self {
-            octree: &g.automaton.ndtree,
-            camera,
-
-            params,
-
-            transform,
-        })
-    }
-
-    /// Returns a `RenderResult` from this render.
-    pub fn finish(self) -> Result<RenderResult> {
-        Ok(RenderResult { mouse_target: None })
-    }
-
-    pub fn cell_transform(&self) -> &CellTransform3D {
-        &self.transform
-    }
-
-    pub fn draw_cells(&mut self) {
+impl GridViewRender3D<'_> {
+    /// Draw an ND-tree to scale on the target.
+    pub fn draw_cells(&mut self, params: CellDrawParams<'_, Dim3D>) -> Result<()> {
         let rainbow_cube_matrix: [[f32; 4]; 4] = self.transform.gl_matrix();
         let cam_pos = self.camera.pos().floor().0;
         let selection_cube_matrix: [[f32; 4]; 4] = (self.transform.projection_transform
@@ -166,5 +138,7 @@ impl<'a> RenderInProgress<'a> {
                 },
             )
             .expect("Failed to draw cube");
+
+        Ok(())
     }
 }

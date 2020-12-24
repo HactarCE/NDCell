@@ -53,50 +53,6 @@ impl Camera2D {
     pub fn try_pixel_to_screen_pos(&self, maybe_pixel: Option<FVec2D>) -> Option<ScreenPos2D> {
         maybe_pixel.and_then(|pixel| self.pixel_to_screen_pos(pixel))
     }
-
-    // Compute the position of the camera in render cell space, given a base
-    // position near the camera center.
-    pub fn render_cell_pos(&self, base_cell_pos: &BigVec2D) -> FVec2D {
-        // Compute the layer of each "render cell."
-        let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
-
-        let cell_offset = self.pos() - base_cell_pos.to_fixedvec();
-        let mut render_cell_pos = (cell_offset >> render_cell_layer.to_u32()).to_fvec();
-
-        // This is the width of a pixel, measured in render cells.
-        let one_pixel = render_cell_scale.cells_per_unit();
-
-        // Round to the nearest pixel (disabled because it causes jiggling).
-        // render_cell_pos = (render_cell_pos / one_pixel).round() * one_pixel;
-
-        // Offset by half a pixel if the target dimensions are odd, so that
-        // cells boundaries always line up with pixel boundaries.
-        let (target_w, target_h) = self.target_dimensions();
-        if target_w % 2 == 1 {
-            render_cell_pos[X] += one_pixel / 2.0;
-        }
-        if target_h % 2 == 1 {
-            render_cell_pos[Y] += one_pixel / 2.0;
-        }
-
-        render_cell_pos
-    }
-
-    /// Returns a rectangle of cells that are at least partially visible.
-    pub fn global_visible_rect(&self) -> BigRect2D {
-        // Compute the width and height of individual cells that fit on the
-        // screen.
-        let (target_w, target_h) = self.target_dimensions();
-        let target_pixels_size: IVec2D = NdVec([target_w as isize, target_h as isize]);
-        let target_cells_size: FixedVec2D = self
-            .scale()
-            .units_to_cells(target_pixels_size.to_fixedvec());
-        // Compute the cell vector pointing from the camera center to the top right
-        // corner of the screen; i.e. the "half diagonal."
-        let half_diag: FixedVec2D = target_cells_size / 2.0;
-
-        BigRect2D::centered(self.pos().floor().0, &half_diag.ceil().0)
-    }
 }
 
 impl Camera<Dim2D> for Camera2D {
@@ -227,6 +183,46 @@ impl Camera<Dim2D> for Camera2D {
             render_cell_transform,
             (target_w as f32, target_h as f32),
         ))
+    }
+
+    fn render_cell_pos(&self, base_cell_pos: &BigVec2D) -> FVec2D {
+        // Compute the layer of each "render cell."
+        let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
+
+        let cell_offset = self.pos() - base_cell_pos.to_fixedvec();
+        let mut render_cell_pos = (cell_offset >> render_cell_layer.to_u32()).to_fvec();
+
+        // This is the width of a pixel, measured in render cells.
+        let one_pixel = render_cell_scale.cells_per_unit();
+
+        // Round to the nearest pixel (disabled because it causes jiggling).
+        // render_cell_pos = (render_cell_pos / one_pixel).round() * one_pixel;
+
+        // Offset by half a pixel if the target dimensions are odd, so that
+        // cells boundaries always line up with pixel boundaries.
+        let (target_w, target_h) = self.target_dimensions();
+        if target_w % 2 == 1 {
+            render_cell_pos[X] += one_pixel / 2.0;
+        }
+        if target_h % 2 == 1 {
+            render_cell_pos[Y] += one_pixel / 2.0;
+        }
+
+        render_cell_pos
+    }
+    fn global_visible_rect(&self) -> BigRect2D {
+        // Compute the width and height of individual cells that fit on the
+        // screen.
+        let (target_w, target_h) = self.target_dimensions();
+        let target_pixels_size: IVec2D = NdVec([target_w as isize, target_h as isize]);
+        let target_cells_size: FixedVec2D = self
+            .scale()
+            .units_to_cells(target_pixels_size.to_fixedvec());
+        // Compute the cell vector pointing from the camera center to the top right
+        // corner of the screen; i.e. the "half diagonal."
+        let half_diag: FixedVec2D = target_cells_size / 2.0;
+
+        BigRect2D::centered(self.pos().floor().0, &half_diag.ceil().0)
     }
 
     fn do_view_command(

@@ -6,8 +6,7 @@ use ndcell_core::prelude::*;
 use super::camera::{Camera, Camera2D, ScreenPos2D};
 use super::generic::{GenericGridView, GridViewDimension};
 use super::history::History;
-use super::render::grid2d::{NdTreeDrawParameters, RenderInProgress};
-use super::render::{RenderParams, RenderResult};
+use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
 use super::selection::Selection2D;
 use super::{DragHandler, DragOutcome, DragType};
 use crate::commands::*;
@@ -15,10 +14,10 @@ use crate::config::Config;
 use crate::mouse::MouseDisplay;
 use crate::Scale;
 
+pub type GridView2D = GenericGridView<GridViewDim2D>;
+
 /// Width of gridlines, in units of cells.
 const GRIDLINE_WIDTH: f64 = 1.0 / 32.0;
-
-pub type GridView2D = GenericGridView<GridViewDim2D>;
 
 #[derive(Debug, Default)]
 pub struct GridViewDim2D;
@@ -262,26 +261,22 @@ impl GridViewDimension for GridViewDim2D {
         let mouse = params.mouse;
         let mouse_pos = this.camera().try_pixel_to_screen_pos(mouse.pos);
 
-        let mut rip = RenderInProgress::new(this, params)?;
+        let mut frame = GridViewRender2D::new(params, this.camera())?;
 
         // Draw main cells.
-        rip.draw_cells(
-            &this.automaton.ndtree,
-            NdTreeDrawParameters {
-                alpha: 1.0,
-                rect: None,
-            },
-        )?;
+        frame.draw_cells(CellDrawParams {
+            ndtree: &this.automaton.ndtree,
+            alpha: 1.0,
+            rect: None,
+        })?;
         // Draw selection cells.
         if let Some(selection) = &this.selection {
-            if let Some(cells) = &selection.cells {
-                rip.draw_cells(
-                    cells,
-                    NdTreeDrawParameters {
-                        alpha: 1.0,
-                        rect: Some(&selection.rect),
-                    },
-                )?;
+            if let Some(ndtree) = &selection.cells {
+                frame.draw_cells(CellDrawParams {
+                    ndtree,
+                    alpha: 1.0,
+                    rect: Some(&selection.rect),
+                })?;
             }
         }
 
@@ -293,13 +288,13 @@ impl GridViewDimension for GridViewDim2D {
             .to_f64()
             .map(|x| x * GRIDLINE_WIDTH)
             .unwrap_or(1.0);
-        rip.draw_gridlines(gridlines_width)?;
+        frame.draw_gridlines(gridlines_width)?;
         // Draw mouse display.
         if let Some(hovered_cell) = &mouse_pos {
             match mouse.display {
                 MouseDisplay::Draw => {
                     if !this.too_small_to_draw() {
-                        rip.draw_hover_highlight(
+                        frame.draw_hover_highlight(
                             hovered_cell.int_cell(),
                             gridlines_width * 2.0,
                             crate::colors::HOVERED_DRAW,
@@ -307,7 +302,7 @@ impl GridViewDimension for GridViewDim2D {
                     }
                 }
                 MouseDisplay::Select => {
-                    rip.draw_hover_highlight(
+                    frame.draw_hover_highlight(
                         hovered_cell.int_cell(),
                         gridlines_width * 2.0,
                         crate::colors::HOVERED_SELECT,
@@ -318,7 +313,7 @@ impl GridViewDimension for GridViewDim2D {
         }
         // Draw selection highlight.
         if let Some(selection) = &this.selection {
-            rip.draw_selection_highlight(
+            frame.draw_selection_highlight(
                 selection.rect.clone(),
                 gridlines_width * 4.0,
                 selection.cells.is_none(),
@@ -327,7 +322,7 @@ impl GridViewDimension for GridViewDim2D {
         // Draw selection preview after drawing selection.
         if mouse.display == MouseDisplay::ResizeSelectionAbsolute && !this.is_dragging() {
             if let (Some(mouse_pos), Some(s)) = (mouse_pos, this.selection.as_ref()) {
-                rip.draw_absolute_selection_resize_preview(
+                frame.draw_absolute_selection_resize_preview(
                     s.rect.clone(),
                     &mouse_pos,
                     gridlines_width * 2.0,
@@ -335,7 +330,7 @@ impl GridViewDimension for GridViewDim2D {
             }
         }
 
-        rip.finish()
+        frame.finish()
     }
 }
 

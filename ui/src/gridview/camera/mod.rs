@@ -16,7 +16,7 @@ pub use camera3d::Camera3D;
 pub use interpolator::{Interpolate, Interpolator};
 pub use transform::{CellTransform, CellTransform2D, CellTransform3D, NdCellTransform};
 
-/// Minimum target width & height, to avoid a divide-by-zero error.
+/// Minimum target width & height, to avoid divide-by-zero errors.
 const MIN_TARGET_SIZE: u32 = 10;
 
 /// Number of pixels to pan that feels equivalent to scaling by a factor of 2.
@@ -36,6 +36,10 @@ const PIXELS_PER_2X_SCALE: f64 = 400.0;
 ///
 /// This one is completely arbitrary.
 const ROT_DEGREES_PER_2X_SCALE: f64 = PIXELS_PER_2X_SCALE;
+
+/// Radius of visible cells in 3D, measured in "scaled units". (See `Scale`
+/// docs.)
+const VIEW_RADIUS_3D: f64 = 100.0;
 
 /// Common functionality for 2D and 3D cameras.
 pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialEq {
@@ -181,6 +185,12 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
     /// Returns the cell transform for this camera with the given render target
     /// size and base position.
     fn cell_transform_with_base(&self, base_cell_pos: BigVec<D>) -> Result<NdCellTransform<D>>;
+
+    // Compute the position of the camera in render cell space, given a base
+    // position near the camera center.
+    fn render_cell_pos(&self, base_cell_pos: &BigVec<D>) -> FVec<D>;
+    /// Returns a rectangle of cells that are at least partially visible.
+    fn global_visible_rect(&self) -> BigRect<D>;
 
     /// Executes a movement command.
     fn do_view_command(

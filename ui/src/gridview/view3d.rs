@@ -4,8 +4,7 @@ use ndcell_core::prelude::*;
 
 use super::camera::{Camera, Camera3D};
 use super::generic::{GenericGridView, GridViewDimension};
-use super::render::grid3d::RenderInProgress;
-use super::render::{RenderParams, RenderResult};
+use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
 use super::{DragHandler, DragType};
 use crate::commands::*;
 use crate::config::Config;
@@ -55,10 +54,14 @@ impl GridViewDimension for GridViewDim3D {
     }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {
-        let mut rip = RenderInProgress::new(this, params)?;
-        rip.draw_cells();
+        let mut frame = GridViewRender3D::new(params, this.camera())?;
+        frame.draw_cells(CellDrawParams {
+            ndtree: &this.automaton.ndtree,
+            alpha: 1.0,
+            rect: None,
+        })?;
 
-        // let hover_pos = params.cursor_pos.map(|pos| rip.pixel_pos_to_cell_pos(pos));
+        // let hover_pos = params.cursor_pos.map(|pos| frame.pixel_pos_to_cell_pos(pos));
         // // Only allow drawing at 1:1 or bigger.
         // let draw_pos = if this.interpolating_viewport.zoom.power() >= 0.0 {
         //     hover_pos.clone()
@@ -68,13 +71,13 @@ impl GridViewDimension for GridViewDim3D {
 
         // // Draw gridlines.
         // let gridlines_width = this.interpolating_viewport.zoom.factor() / 32.0;
-        // rip.draw_gridlines(gridlines_width);
+        // frame.draw_gridlines(gridlines_width);
         // // Draw crosshairs.
         // if let Some(pos) = &draw_pos {
-        //     rip.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0);
+        //     frame.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0);
         // }
 
-        rip.finish()
+        frame.finish()
     }
 }
 impl GridView3D {

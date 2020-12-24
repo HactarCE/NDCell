@@ -6,7 +6,9 @@ use log::warn;
 use ndcell_core::prelude::*;
 use Axis::{X, Y, Z};
 
-use super::{Camera, CellTransform3D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE};
+use super::{
+    Camera, CellTransform3D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE, VIEW_RADIUS_3D,
+};
 use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::config::{Config, ForwardAxis3D, UpAxis3D};
 
@@ -238,6 +240,38 @@ impl Camera<Dim3D> for Camera3D {
             render_cell_transform,
             (target_w as f32, target_h as f32),
         ))
+    }
+
+    fn render_cell_pos(&self, base_cell_pos: &BigVec3D) -> FVec3D {
+        // Compute the layer of each "render cell."
+        let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
+
+        let cell_offset = self.pos() - base_cell_pos.to_fixedvec();
+        let mut render_cell_pos = (cell_offset >> render_cell_layer.to_u32()).to_fvec();
+
+        // This is the width of a pixel, measured in render cells.
+        let one_pixel = render_cell_scale.cells_per_unit();
+
+        // Round to the nearest pixel (disabled because it causes jiggling).
+        // render_cell_pos = (render_cell_pos / one_pixel).round() * one_pixel;
+
+        // Offset by half a pixel if the target dimensions are odd, so that
+        // cells boundaries always line up with pixel boundaries.
+        let (target_w, target_h) = self.target_dimensions();
+        if target_w % 2 == 1 {
+            render_cell_pos[X] += one_pixel / 2.0;
+        }
+        if target_h % 2 == 1 {
+            render_cell_pos[Y] += one_pixel / 2.0;
+        }
+
+        render_cell_pos
+    }
+    fn global_visible_rect(&self) -> BigRect3D {
+        BigRect3D::centered(
+            self.pos().floor().0,
+            &BigInt::from_f64(VIEW_RADIUS_3D).unwrap(),
+        )
     }
 
     fn do_view_command(

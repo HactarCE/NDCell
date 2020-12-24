@@ -6,7 +6,7 @@ use ndcell_core::prelude::*;
 mod camera;
 mod generic;
 mod history;
-mod render;
+pub mod render;
 mod selection;
 mod view2d;
 mod view3d;
@@ -15,11 +15,9 @@ mod worker;
 use crate::commands::*;
 use crate::config::Config;
 pub use camera::*;
-pub use generic::{
-    GenericGridView, MouseState, MouseTargetData, RenderParams, RenderResult, WorkType,
-};
+pub use generic::GenericGridView;
 pub use history::History;
-pub use render::post_frame_clean_render_cache;
+pub use render::{MouseTargetData, RenderParams, RenderResult};
 pub use selection::*;
 pub use view2d::GridView2D;
 pub use view3d::GridView3D;
@@ -32,12 +30,6 @@ pub use view3d::GridView3D;
 /// cursor position. If any initial state or mouse cursor history is relevant,
 /// the closure must maintain this information.
 pub type DragHandler<G> = Box<dyn FnMut(&mut G, FVec2D) -> Result<DragOutcome>>;
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum DragOutcome {
-    Continue,
-    Cancel,
-}
 
 /// Abstraction over 2D and 3D gridviews.
 #[enum_dispatch(History)]
@@ -144,4 +136,23 @@ impl GridView {
             GridView::View3D(view3d) => view3d.render(params),
         }
     }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum WorkType {
+    SimStep,
+    SimContinuous,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum DragType {
+    MovingView,
+    Drawing,
+    Selecting,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum DragOutcome {
+    Continue,
+    Cancel,
 }

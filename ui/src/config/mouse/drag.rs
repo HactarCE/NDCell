@@ -1,7 +1,7 @@
 use ndcell_core::ndvec::FVec2D;
 
 use crate::commands::*;
-use crate::config::MouseDisplay;
+use crate::mouse::MouseDisplay;
 
 #[derive(Debug, Copy, Clone)]
 pub enum MouseDragBinding {

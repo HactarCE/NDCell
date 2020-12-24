@@ -3,9 +3,10 @@ use anyhow::{anyhow, Context, Result};
 use ndcell_core::prelude::*;
 
 use super::camera::{Camera, Camera3D};
-use super::generic::{DragType, GenericGridView, GridViewDimension, RenderParams, RenderResult};
+use super::generic::{GenericGridView, GridViewDimension};
 use super::render::grid3d::RenderInProgress;
-use super::DragHandler;
+use super::render::{RenderParams, RenderResult};
+use super::{DragHandler, DragType};
 use crate::commands::*;
 use crate::config::Config;
 

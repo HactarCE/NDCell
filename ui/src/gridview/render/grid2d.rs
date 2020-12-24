@@ -34,8 +34,9 @@ use Axis::{X, Y};
 use super::consts::*;
 use super::shaders;
 use super::vertices::{MouseTargetVertex, RgbaVertex};
-use crate::config::{MouseDisplay, MouseDragBinding};
+use crate::config::MouseDragBinding;
 use crate::gridview::*;
+use crate::mouse::MouseDisplay;
 use crate::Scale;
 
 pub struct RenderInProgress<'a> {

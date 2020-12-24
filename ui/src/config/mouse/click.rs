@@ -1,4 +1,4 @@
-use crate::config::MouseDisplay;
+use crate::mouse::MouseDisplay;
 
 #[derive(Debug, Clone)]
 pub enum MouseClickBinding {}

@@ -9,8 +9,9 @@ use std::time::{Duration, Instant};
 use ndcell_core::prelude::*;
 
 use crate::commands::*;
-use crate::config::{Config, MouseDisplay};
-use crate::gridview::{GridView, MouseState};
+use crate::config::Config;
+use crate::gridview::GridView;
+use crate::mouse::{MouseDisplay, MouseState};
 use crate::Scale;
 
 const SHIFT: ModifiersState = ModifiersState::SHIFT;

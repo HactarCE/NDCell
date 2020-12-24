@@ -4,13 +4,15 @@ use log::warn;
 use ndcell_core::prelude::*;
 
 use super::camera::{Camera, Camera2D, ScreenPos2D};
-use super::generic::{DragType, GenericGridView, GridViewDimension, RenderParams, RenderResult};
+use super::generic::{GenericGridView, GridViewDimension};
 use super::history::History;
 use super::render::grid2d::{NdTreeDrawParameters, RenderInProgress};
+use super::render::{RenderParams, RenderResult};
 use super::selection::Selection2D;
-use super::{DragHandler, DragOutcome};
+use super::{DragHandler, DragOutcome, DragType};
 use crate::commands::*;
-use crate::config::{Config, MouseDisplay};
+use crate::config::Config;
+use crate::mouse::MouseDisplay;
 use crate::Scale;
 
 /// Width of gridlines, in units of cells.

@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Context, Result};
-use glium::glutin::event::ModifiersState;
 use glium::Surface;
 use log::{debug, trace, warn};
 use parking_lot::Mutex;
@@ -13,12 +12,12 @@ use ndcell_core::prelude::*;
 
 use super::camera::{Camera, Interpolate, Interpolator};
 use super::history::{History, HistoryBase, HistoryManager};
+use super::render::{RenderParams, RenderResult};
 use super::selection::Selection;
-use super::worker::NewGridViewValues;
 use super::worker::*;
-use super::{DragHandler, DragOutcome};
+use super::{DragHandler, DragOutcome, DragType, WorkType};
 use crate::commands::*;
-use crate::config::{Config, MouseDisplay, MouseDragBinding};
+use crate::config::Config;
 
 /// The number of previous simulation steps to track for counting simulation
 /// steps per second.
@@ -733,62 +732,4 @@ pub struct HistoryEntry<G: GridViewDimension> {
     automaton: NdAutomaton<G::D>,
     selection: Option<Selection<G::D>>,
     camera: G::Camera,
-}
-
-/// Parameters that may control the rendering process.
-pub struct RenderParams<'a> {
-    /// Render target.
-    pub target: &'a mut glium::Frame,
-    /// User configuration.
-    pub config: &'a Config,
-    /// Mouse state.
-    pub mouse: MouseState,
-    /// Modifiers held on the keyboard.
-    pub modifiers: ModifiersState,
-}
-
-/// Extra data generated when rendering a frame.
-#[derive(Debug, Default, Clone)]
-pub struct RenderResult {
-    /// Target under the mouse cursor, if any.
-    pub mouse_target: Option<MouseTargetData>,
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct MouseTargetData {
-    /// Mouse binding for clicking the left mouse button over the target and
-    /// dragging.
-    pub binding: Option<MouseDragBinding>,
-    /// Display mode for the cursor when hovering over the target or clicking on
-    /// it and dragging.
-    pub display: MouseDisplay,
-}
-
-#[derive(Debug, Default, Copy, Clone)]
-pub struct MouseState {
-    /// Pixel position of the mouse cursor from the top left of the area where
-    /// the gridview is being drawn.
-    pub pos: Option<FVec2D>,
-
-    /// Whether a mouse button is being held and dragged.
-    pub dragging: bool,
-
-    /// What to display for the mouse cursor.
-    ///
-    /// This determines the mouse cursor icon and how/whether to indicate the
-    /// highlighted cell in the grid.
-    pub display: MouseDisplay,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum WorkType {
-    SimStep,
-    SimContinuous,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum DragType {
-    MovingView,
-    Drawing,
-    Selecting,
 }

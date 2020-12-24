@@ -8,12 +8,20 @@ mod simulation;
 use crate::commands::Command;
 use crate::config::*;
 use crate::gridview::*;
+use crate::mouse::MouseState;
 use simulation::SimulationWindow;
 
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 const YELLOW: [f32; 4] = [1.0, 1.0, 0.0, 1.0];
 const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
 const BLUE: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
+
+pub struct BuildParams<'a> {
+    pub ui: &'a imgui::Ui<'a>,
+    pub config: &'a mut Config,
+    pub mouse: MouseState,
+    pub gridview: &'a GridView,
+}
 
 #[derive(Debug, Default)]
 pub struct MainWindow {
@@ -146,11 +154,4 @@ fn fps_color(fps: usize) -> [f32; 4] {
         // Red
         [1.0, 0.0, 0.0, 1.0]
     }
-}
-
-pub struct BuildParams<'a> {
-    pub ui: &'a imgui::Ui<'a>,
-    pub config: &'a mut Config,
-    pub mouse: MouseState,
-    pub gridview: &'a GridView,
 }

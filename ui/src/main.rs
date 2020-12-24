@@ -28,6 +28,7 @@ mod config;
 mod gridview;
 mod gui;
 mod input;
+mod mouse;
 mod scale;
 mod windows;
 

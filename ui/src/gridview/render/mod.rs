@@ -1,11 +1,15 @@
 //! 2D and 3D grid rendering.
 
+use glium::glutin::event::ModifiersState;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 
+use crate::config::{Config, MouseDragBinding};
+use crate::mouse::{MouseDisplay, MouseState};
+
 mod gl_quadtree;
-pub mod grid2d;
-pub mod grid3d;
+pub(super) mod grid2d;
+pub(super) mod grid3d;
 mod ibos;
 mod picker;
 mod resizing;
@@ -52,6 +56,36 @@ lazy_static! {
         SendWrapper::new(RefCell::new(RenderCache::default()));
 }
 
+/// Parameters that may control the rendering process.
+pub struct RenderParams<'a> {
+    /// Render target.
+    pub target: &'a mut glium::Frame,
+    /// User configuration.
+    pub config: &'a Config,
+    /// Mouse state.
+    pub mouse: MouseState,
+    /// Modifiers held on the keyboard.
+    pub modifiers: ModifiersState,
+}
+
+/// Data generated when rendering a frame.
+#[derive(Debug, Default, Clone)]
+pub struct RenderResult {
+    /// Target under the mouse cursor, if any.
+    pub mouse_target: Option<MouseTargetData>,
+}
+
+/// How to handle a mouse hover or click on a particular location on the screen.
+#[derive(Debug, Default, Clone)]
+pub struct MouseTargetData {
+    /// Mouse binding for clicking the left mouse button over the target and
+    /// dragging.
+    pub binding: Option<MouseDragBinding>,
+    /// Display mode for the cursor when hovering over the target or clicking on
+    /// it and dragging.
+    pub display: MouseDisplay,
+}
+
 #[derive(Default)]
 struct RenderCache {
     pub ibos: ibos::IboCache,
@@ -61,7 +95,7 @@ struct RenderCache {
     pub gl_quadtrees: gl_quadtree::GlQuadtreeCache,
 }
 
-pub fn post_frame_clean_render_cache() {
+pub fn post_frame_clean_cache() {
     let mut cache = CACHE.borrow_mut();
     cache.gl_quadtrees.post_frame_clean_cache();
 }

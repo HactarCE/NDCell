@@ -27,19 +27,22 @@ pub(in crate::gridview) struct RenderDim3D;
 impl GridViewRenderDimension<'_> for RenderDim3D {
     type D = Dim3D;
     type Camera = Camera3D;
+
+    const DEFAULT_COLOR: (f32, f32, f32, f32) = crate::colors::BACKGROUND_3D;
+    const DEFAULT_DEPTH: f32 = f32::INFINITY;
 }
 
 impl GridViewRender3D<'_> {
     /// Draw an ND-tree to scale on the target.
     pub fn draw_cells(&mut self, params: CellDrawParams<'_, Dim3D>) -> Result<()> {
         let rainbow_cube_matrix: [[f32; 4]; 4] = self.transform.gl_matrix();
-        let cam_pos = self.camera.pos().floor().0;
+        let camera_pos = self.camera.pos().floor().0 - &self.origin;
         let selection_cube_matrix: [[f32; 4]; 4] = (self.transform.projection_transform
             * self.transform.render_cell_transform
             * Matrix4::from_translation(cgmath::vec3(
-                cam_pos[X].to_f32().unwrap(),
-                cam_pos[Y].to_f32().unwrap(),
-                cam_pos[Z].to_f32().unwrap(),
+                camera_pos[X].to_f32().unwrap(),
+                camera_pos[Y].to_f32().unwrap(),
+                camera_pos[Z].to_f32().unwrap(),
             )))
         .into();
 
@@ -92,7 +95,6 @@ impl GridViewRender3D<'_> {
             ],
         )
         .unwrap();
-        self.params.target.clear_color_srgb(0.5, 0.5, 0.5, 1.0);
         self.params
             .target
             .draw(

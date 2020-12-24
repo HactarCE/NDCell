@@ -50,7 +50,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         // Initialize color and depth buffers.
         params
             .target
-            .clear_color_srgb_and_depth(crate::colors::BACKGROUND, 0.0);
+            .clear_color_srgb_and_depth(R::DEFAULT_COLOR, R::DEFAULT_DEPTH);
 
         // Initialize mouse picker.
         cache.picker.init(params.target.get_dimensions());
@@ -265,4 +265,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
 pub trait GridViewRenderDimension<'a>: Default {
     type D: Dim;
     type Camera: Camera<Self::D>;
+
+    const DEFAULT_COLOR: (f32, f32, f32, f32);
+    const DEFAULT_DEPTH: f32;
 }

@@ -47,6 +47,9 @@ pub(in crate::gridview) struct RenderDim2D;
 impl GridViewRenderDimension<'_> for RenderDim2D {
     type D = Dim2D;
     type Camera = Camera2D;
+
+    const DEFAULT_COLOR: (f32, f32, f32, f32) = crate::colors::BACKGROUND_2D;
+    const DEFAULT_DEPTH: f32 = 0.0;
 }
 
 impl GridViewRender2D<'_> {

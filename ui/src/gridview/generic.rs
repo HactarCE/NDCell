@@ -145,18 +145,20 @@ impl<G: GridViewDimension> GenericGridView<G> {
     /// etc.
     pub fn do_frame(&mut self, config: &Config) -> Result<()> {
         // Fetch result from worker thread.
-        match self.worker_thread.take_data() {
-            Ok(WorkerData::None) => (),
-            Ok(WorkerData::Progress(progress)) => match progress {
-                WorkerProgressReport::NewValues(new_values) => {
-                    self.set_new_values(new_values)?;
+        if let Some(work_type) = self.work_type {
+            match self.worker_thread.take_data() {
+                Ok(WorkerData::None) => (),
+                Ok(WorkerData::Progress(progress)) => match progress {
+                    WorkerProgressReport::NewValues(new_values) => {
+                        self.set_new_values(work_type, new_values)?;
+                    }
+                },
+                Ok(WorkerData::Result(new_values)) => {
+                    self.set_new_values(work_type, new_values?)?;
+                    self.work_type = None;
                 }
-            },
-            Ok(WorkerData::Result(new_values)) => {
-                self.set_new_values(new_values?)?;
-                self.work_type = None;
+                Err(WorkerIdle) => return Err(anyhow!("Worker is idle but work type is not None")),
             }
-            Err(WorkerIdle) => (),
         }
 
         // Interpolate camera.
@@ -450,9 +452,9 @@ impl<G: GridViewDimension> GenericGridView<G> {
     }
 
     /// Sets new values for various fields.
-    fn set_new_values(&mut self, new_values: NewGridViewValues) -> Result<()> {
+    fn set_new_values(&mut self, work_type: WorkType, new_values: NewGridViewValues) -> Result<()> {
         let NewGridViewValues {
-            elapsed: _,
+            elapsed,
 
             clipboard,
             automaton,
@@ -460,14 +462,17 @@ impl<G: GridViewDimension> GenericGridView<G> {
             selection_3d,
         } = new_values;
 
+        match work_type {
+            WorkType::SimStep | WorkType::SimContinuous => {
+                self.last_sim_times.push_back(elapsed);
+                if self.last_sim_times.len() > MAX_LAST_SIM_TIMES {
+                    self.last_sim_times.pop_front();
+                }
+            }
+        }
+
         if let Some(new_contents) = clipboard {
             crate::clipboard_compat::clipboard_set(new_contents)?;
-        }
-        if self.work_type == Some(WorkType::SimContinuous) {
-            self.last_sim_times.push_back(new_values.elapsed);
-            if self.last_sim_times.len() > MAX_LAST_SIM_TIMES {
-                self.last_sim_times.pop_front();
-            }
         }
 
         if let Some(a) = automaton {

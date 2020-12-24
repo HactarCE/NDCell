@@ -1269,10 +1269,8 @@ impl Compiler {
         let bounds = pattern.shape.bounds();
         let mask = pattern.shape.flat_mask();
 
-        // Check the number of dimensions.
-        if pos.get_type().get_size() != ndim as u32 {
-            internal_error!("Dimension mismatch for pattern coordinates");
-        }
+        // Cast to the correct number of dimensions.
+        let pos = self.build_vector_cast(Value::Vector(pos), ndim)?;
 
         // Check that the position is in bounds.
         let is_out_of_bounds: IntValue<'static>;
@@ -1406,6 +1404,11 @@ impl Compiler {
         pattern: &PatternValue,
         pos: VectorValue<'static>,
     ) -> LangResult<IntValue<'static>> {
+        let ndim = pattern.shape.ndim();
+
+        // Cast to the correct number of dimensions.
+        let pos = self.build_vector_cast(Value::Vector(pos), ndim)?;
+
         let cells_ptr = self
             .builder()
             .build_extract_value(pattern.value, 0, "cellArrayPtr")

@@ -393,9 +393,9 @@ impl<G: GridViewDimension> GenericGridView<G> {
         let mut automaton: Automaton = self.automaton.clone().into();
         self.do_on_worker_thread(
             WorkType::SimStep,
-            Box::new(move |hook| {
+            Box::new(move |_hook| {
                 let start = Instant::now();
-                automaton.step(&step_size);
+                automaton.step(&step_size); // TODO: pass in `hook`
                 let end = Instant::now();
                 Ok(NewGridViewValues {
                     elapsed: end - start,
@@ -433,7 +433,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
                 }
 
                 let start = Instant::now();
-                automaton.step(&step_size);
+                automaton.step(&step_size); // TODO: pass in `hook`
                 let end = Instant::now();
 
                 hook.progress_report_blocking(WorkerProgressReport::NewValues(NewGridViewValues {

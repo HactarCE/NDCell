@@ -38,7 +38,7 @@ impl<D: Dim> BigVec<D> {
         IVec::from_fn(|ax| {
             self[ax]
                 .to_isize()
-                .expect("Cannot convert this UVec into an IVec")
+                .expect("Cannot convert this UVec to an IVec")
         })
     }
     /// Converts the `BigVec` to a `UVec`.
@@ -51,7 +51,7 @@ impl<D: Dim> BigVec<D> {
         UVec::from_fn(|ax| {
             self[ax]
                 .to_usize()
-                .expect("Cannot convert this IVec into a UVec")
+                .expect("Cannot convert this IVec to a UVec")
         })
     }
     /// Converts the `BigVec` to an `FVec`.
@@ -65,7 +65,7 @@ impl<D: Dim> BigVec<D> {
             self[ax]
                 .to_f64()
                 .map(r64)
-                .expect("Cannot convert this UVec into an IVec")
+                .expect("Cannot convert this UVec to an IVec")
         })
     }
     /// Converts the `BigVec` to a `FixedVec`.
@@ -92,7 +92,7 @@ impl<D: Dim> FixedVec<D> {
             self[ax]
                 .to_f64()
                 .map(r64)
-                .expect("Cannot convert this FixedVec into an FVec")
+                .expect("Cannot convert this FixedVec to an FVec")
         })
     }
 }
@@ -108,7 +108,7 @@ impl<D: Dim> FVec<D> {
         IVec::from_fn(|ax| {
             self[ax]
                 .to_isize()
-                .expect("Cannot convert this FVec into an IVec")
+                .expect("Cannot convert this FVec to an IVec")
         })
     }
     /// Converts the `FVec` to a `BigVec`.
@@ -126,12 +126,12 @@ impl<D: Dim> FVec<D> {
 }
 
 impl<D: Dim> IVec<D> {
-    /// Converts the `IVec` into a `BigVec`.
+    /// Converts the `IVec` to a `BigVec`.
     #[inline]
     pub fn to_bigvec(&self) -> BigVec<D> {
         BigVec::from_fn(|ax| self[ax].into())
     }
-    /// Converts the `IVec` into a `FixedVec`.
+    /// Converts the `IVec` to a `FixedVec`.
     #[inline]
     pub fn to_fixedvec(&self) -> FixedVec<D> {
         self.to_bigvec().to_fixedvec()
@@ -146,7 +146,7 @@ impl<D: Dim> IVec<D> {
         UVec::from_fn(|ax| {
             self[ax]
                 .try_into()
-                .expect("Cannot convert this IVec into a UVec")
+                .expect("Cannot convert this IVec to a UVec")
         })
     }
     /// Converts the `IVec` to an `FVec`.
@@ -172,7 +172,7 @@ impl<D: Dim> UVec<D> {
         IVec::from_fn(|ax| {
             self[ax]
                 .try_into()
-                .expect("Cannot convert this UVec into an IVec")
+                .expect("Cannot convert this UVec to an IVec")
         })
     }
 }

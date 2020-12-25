@@ -175,4 +175,9 @@ impl<D: Dim> UVec<D> {
                 .expect("Cannot convert this UVec to an IVec")
         })
     }
+    /// Converts the `UVec` to an `FVec`.
+    #[inline]
+    pub fn to_fvec(&self) -> FVec<D> {
+        FVec::from_fn(|ax| r64(self[ax] as f64))
+    }
 }

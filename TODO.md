@@ -14,16 +14,20 @@
     - [x] Precompute HashLife time splits
   - [x] Rewrite RLE import/export
   - [x] Macrocell import/export
-- [ ] Render 3D
-  - [ ] Cubes
-  - [ ] Lighting
+- [x] Render 3D
+  - [x] Cubes
+  - [x] Lighting
   - [ ] Gridlines
   - [ ] Improve performance
-    - [ ] Limit visibility / implement render cells
+    - [x] Limit visibility / implement render cells
+    - [x] Hide occluded faces
+    - [ ] Traverse octree on GPU
     - [ ] Reduce detail on distant octree nodes
-    - [ ] Hide occluded faces
-    - [ ] Merge adjacent faces
 - [ ] Basic editing in 3D
+  - [ ] Selecting
+    - [ ] Resize selection
+    - [ ] Move selection
+  - [ ] Drawing
 - [ ] Improve UI
   - [ ] Better error reporting
     - [ ] RLE loading

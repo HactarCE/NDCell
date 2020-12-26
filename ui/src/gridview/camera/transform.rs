@@ -185,6 +185,20 @@ impl<D: Dim> NdCellTransform<D> {
         (self.projection_transform * self.render_cell_transform).into()
     }
 
+    pub fn global_cell_to_local_render_cell(&self, pos: &BigVec<D>) -> Option<IVec<D>> {
+        let local_render_cell = (pos - &self.global_cell_offset) >> self.render_cell_layer.to_u32();
+        IVec::try_from_fn(|ax| local_render_cell[ax].to_isize())
+    }
+    pub fn global_cell_to_local_render_cell_rect(&self, rect: &BigRect<D>) -> Option<IRect<D>> {
+        let min = self.global_cell_to_local_render_cell(&rect.min())?;
+        let max = self.global_cell_to_local_render_cell(&rect.max())?;
+        for &ax in D::axes() {
+            // Ensure the size of the rectangle won't overflow `isize`.
+            max[ax].checked_sub(min[ax])?.checked_add(1)?;
+        }
+        Some(IRect::span(min, max))
+    }
+
     fn pixel_transform(target_w: f32, target_h: f32) -> Matrix4<f32> {
         // Negate the vertical axis because Glutin measures window coordinates
         // from the top-left corner, but we want the Y coordinate increasing

@@ -245,34 +245,18 @@ impl Camera<Dim3D> for Camera3D {
 
     fn render_cell_pos(&self, base_cell_pos: &BigVec3D) -> FVec3D {
         // Compute the layer of each "render cell."
-        let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
+        let (render_cell_layer, _render_cell_scale) = self.render_cell_layer_and_scale();
 
         let cell_offset = self.pos() - base_cell_pos.to_fixedvec();
-        let mut render_cell_pos = (cell_offset >> render_cell_layer.to_u32()).to_fvec();
-
-        // This is the width of a pixel, measured in render cells.
-        let one_pixel = render_cell_scale.cells_per_unit();
-
-        // Round to the nearest pixel (disabled because it causes jiggling).
-        // render_cell_pos = (render_cell_pos / one_pixel).round() * one_pixel;
-
-        // Offset by half a pixel if the target dimensions are odd, so that
-        // cells boundaries always line up with pixel boundaries.
-        let (target_w, target_h) = self.target_dimensions();
-        if target_w % 2 == 1 {
-            render_cell_pos[X] += one_pixel / 2.0;
-        }
-        if target_h % 2 == 1 {
-            render_cell_pos[Y] += one_pixel / 2.0;
-        }
-
-        render_cell_pos
+        (cell_offset >> render_cell_layer.to_u32()).to_fvec()
     }
     fn global_visible_rect(&self) -> BigRect3D {
-        BigRect3D::centered(
-            self.pos().floor().0,
-            &BigInt::from_f64(VIEW_RADIUS_3D).unwrap(),
-        )
+        let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
+        let center = self.pos().floor().0;
+        let radius = BigInt::from(
+            (VIEW_RADIUS_3D * render_cell_scale.inv_factor().to_f64().unwrap()) as usize,
+        ) << render_cell_layer.to_u32();
+        BigRect3D::centered(center, &radius)
     }
 
     fn do_view_command(

@@ -38,8 +38,8 @@ mod consts {
     /// cells.
     pub const ZOOMED_OUT_MAX_GRID_ALPHA: f64 = 0.75;
 
-    /// Number of cell overlay rectangles in each render batch.
-    pub const CELL_OVERLAY_BATCH_SIZE: usize = 256;
+    /// Number of quads in each render batch.
+    pub const QUAD_BATCH_SIZE: usize = 4096;
     /// Number of mouse target rectangles in each render batch.
     pub const MOUSE_TARGET_BATCH_SIZE: usize = 256;
 
@@ -51,6 +51,13 @@ mod consts {
     pub const SELECTION_DEPTH: f32 = 0.3;
     /// Depth at which to render selection resize preview.
     pub const SELECTION_RESIZE_DEPTH: f32 = 0.4;
+
+    /// Direction that 3D light comes from (normalized in GLSL).
+    pub const LIGHT_DIRECTION: [f32; 3] = [1.0, 7.0, -3.0];
+    /// Proportion of 3D light that is ambient, as opposed to directional.
+    pub const LIGHT_AMBIENTNESS: f32 = 0.4;
+    /// Maximum 3D light level.
+    pub const MAX_LIGHT: f32 = 1.0;
 
     /// A small offset used to force correct Z order or align things at the
     /// sub-pixel scale.

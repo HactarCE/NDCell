@@ -33,7 +33,7 @@ use Axis::{X, Y};
 use super::consts::*;
 use super::generic::{GenericGridViewRender, GridViewRenderDimension};
 use super::shaders;
-use super::vertices::RgbaVertex;
+use super::vertices::Vertex2D;
 use super::CellDrawParams;
 use crate::config::MouseDragBinding;
 use crate::gridview::*;
@@ -55,33 +55,11 @@ impl GridViewRenderDimension<'_> for RenderDim2D {
 impl GridViewRender2D<'_> {
     /// Draw an ND-tree to scale on the target.
     pub fn draw_cells(&mut self, params: CellDrawParams<'_, Dim2D>) -> Result<()> {
-        // Clip the global rectangle of visible cells according to the draw
-        // parameters.
-        let global_visible_rect = match &params.rect {
-            Some(rect) => match self
-                .render_cell_layer
-                .round_rect(&rect)
-                .intersection(&self.global_visible_rect)
-            {
-                // Only draw the intersection of the viewport and the rectangle
-                // in the draw parameters.
-                Some(intersection) => intersection,
-                // The rectangle in the draw parameters does not intersect the
-                // viewport, so there is nothing to draw.
-                None => return Ok(()),
-            },
-            // There is no rectangle in the parameters, so draw everything in the viewport.
-            None => self.global_visible_rect.clone(),
-        };
-
-        // Get the `NdTreeSlice` containing all of the visible cells.
-        let visible_quadtree = params.ndtree.slice_containing(&global_visible_rect);
-
-        // Convert `global_visible_rect` from cells in global space to render
-        // cells relative to `visible_quadtree`.
-        let visible_rect = (global_visible_rect - &visible_quadtree.offset)
-            .div_outward(&self.render_cell_layer.big_len())
-            .to_irect();
+        let (visible_quadtree, visible_rect) =
+            match self.clip_ndtree_to_visible_render_cells(&params) {
+                Some(x) => x,
+                None => return Ok(()), // There is nothing to draw.
+            };
 
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
@@ -588,7 +566,7 @@ impl GridViewRender2D<'_> {
     fn draw_cell_overlay_rects(&mut self, rects: &[CellOverlayRect]) -> Result<()> {
         // Draw the rectangles in batches, because the VBO might not be able to
         // hold all the vertices at once.
-        for rect_batch in rects.chunks(CELL_OVERLAY_BATCH_SIZE) {
+        for rect_batch in rects.chunks(QUAD_BATCH_SIZE) {
             let count = rect_batch.len();
             // Generate vertices.
             let verts = rect_batch
@@ -602,15 +580,14 @@ impl GridViewRender2D<'_> {
             let vbos = &mut cache.vbos;
 
             // Put the data in a slice of the VBO.
-            let vbo = vbos.rgba_verts();
-            let vbo_slice = vbo.slice(0..(4 * count)).unwrap();
+            let vbo_slice = vbos.quad_verts_2d(count);
             vbo_slice.write(&verts);
             // Draw rectangles.
             self.params
                 .target
                 .draw(
                     vbo_slice,
-                    &ibos.rect_indices(count),
+                    &ibos.quad_indices(count),
                     &shaders::RGBA,
                     &uniform! { matrix: self.transform.gl_matrix() },
                     &glium::DrawParameters {
@@ -694,7 +671,7 @@ impl CellOverlayRect {
             line_params: None,
         }
     }
-    fn verts(self, render_cell_scale: Scale) -> [RgbaVertex; 4] {
+    fn verts(self, render_cell_scale: Scale) -> [Vertex2D; 4] {
         let mut a = self.start.to_fvec();
         let mut b = self.end.to_fvec();
         let mut colors = [
@@ -732,10 +709,10 @@ impl CellOverlayRect {
         let bx = b[X].to_f32().unwrap();
         let by = b[Y].to_f32().unwrap();
         [
-            RgbaVertex::from(([ax, ay, self.z], colors[0])),
-            RgbaVertex::from(([bx, ay, self.z], colors[1])),
-            RgbaVertex::from(([ax, by, self.z], colors[2])),
-            RgbaVertex::from(([bx, by, self.z], colors[3])),
+            Vertex2D::from(([ax, ay, self.z], colors[0])),
+            Vertex2D::from(([bx, ay, self.z], colors[1])),
+            Vertex2D::from(([ax, by, self.z], colors[2])),
+            Vertex2D::from(([bx, by, self.z], colors[3])),
         ]
     }
 }

@@ -1,11 +1,11 @@
 //! OpenGL vertex buffer objects.
 
-use glium::VertexBuffer;
+use glium::vertex::{VertexBuffer, VertexBufferSlice};
 
 use ndcell_core::prelude::*;
 use Axis::{X, Y};
 
-use super::consts::{CELL_OVERLAY_BATCH_SIZE, MOUSE_TARGET_BATCH_SIZE};
+use super::consts::{MOUSE_TARGET_BATCH_SIZE, QUAD_BATCH_SIZE};
 use super::vertices::*;
 use crate::DISPLAY;
 
@@ -16,7 +16,8 @@ fn empty_vbo<T: glium::Vertex>(size: usize) -> VertexBuffer<T> {
 pub struct VboCache {
     quadtree_quad: VertexBuffer<QuadtreePosVertex>,
     blit_quad: VertexBuffer<TexturePosVertex>,
-    rgba_verts: VertexBuffer<RgbaVertex>,
+    quad_verts_2d: VertexBuffer<Vertex2D>,
+    quad_int_verts_3d: VertexBuffer<IntVertex3D>,
     mouse_target_verts: VertexBuffer<MouseTargetVertex>,
 }
 impl Default for VboCache {
@@ -24,7 +25,8 @@ impl Default for VboCache {
         Self {
             quadtree_quad: empty_vbo(4),
             blit_quad: empty_vbo(4),
-            rgba_verts: empty_vbo(4 * CELL_OVERLAY_BATCH_SIZE),
+            quad_verts_2d: empty_vbo(4 * QUAD_BATCH_SIZE),
+            quad_int_verts_3d: empty_vbo(4 * QUAD_BATCH_SIZE),
             mouse_target_verts: empty_vbo(3 * MOUSE_TARGET_BATCH_SIZE),
         }
     }
@@ -88,11 +90,21 @@ impl VboCache {
         &mut self.blit_quad
     }
 
-    pub fn rgba_verts(&mut self) -> &mut VertexBuffer<RgbaVertex> {
-        &mut self.rgba_verts
+    pub fn quad_verts_2d<'a>(&'a mut self, quad_count: usize) -> VertexBufferSlice<'a, Vertex2D> {
+        self.quad_verts_2d.slice(..(4 * quad_count)).unwrap()
     }
 
-    pub fn mouse_target_verts(&mut self) -> &mut VertexBuffer<MouseTargetVertex> {
-        &mut self.mouse_target_verts
+    pub fn quad_int_verts_3d<'a>(
+        &'a mut self,
+        quad_count: usize,
+    ) -> VertexBufferSlice<'a, IntVertex3D> {
+        self.quad_int_verts_3d.slice(..(4 * quad_count)).unwrap()
+    }
+
+    pub fn mouse_target_verts<'a>(
+        &'a mut self,
+        count: usize,
+    ) -> VertexBufferSlice<'a, MouseTargetVertex> {
+        self.mouse_target_verts.slice(..(3 * count)).unwrap()
     }
 }

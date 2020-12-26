@@ -39,7 +39,7 @@ const ROT_DEGREES_PER_2X_SCALE: f64 = PIXELS_PER_2X_SCALE;
 
 /// Radius of visible cells in 3D, measured in "scaled units". (See `Scale`
 /// docs.)
-const VIEW_RADIUS_3D: f64 = 100.0;
+const VIEW_RADIUS_3D: f64 = 5000.0;
 
 /// Common functionality for 2D and 3D cameras.
 pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialEq {

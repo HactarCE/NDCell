@@ -20,23 +20,50 @@ implement_vertex!(QuadtreePosVertex, cell_coords, dest_coords);
 
 /// Vertex containing a 3D floating-point position and an RGBA color.
 #[derive(Debug, Default, Copy, Clone)]
-pub struct RgbaVertex {
+pub struct Vertex2D {
     pub pos: [f32; 3],
     pub color: [f32; 4],
 }
-implement_vertex!(RgbaVertex, pos, color);
-impl From<([isize; 2], f32, [f32; 4])> for RgbaVertex {
+implement_vertex!(Vertex2D, pos, color);
+impl From<([isize; 2], f32, [f32; 4])> for Vertex2D {
     fn from(pos_and_color: ([isize; 2], f32, [f32; 4])) -> Self {
         let ([x, y], z, color) = pos_and_color;
         Self::from(([x as f32, y as f32, z], color))
     }
 }
-impl From<([f32; 3], [f32; 4])> for RgbaVertex {
+impl From<([f32; 3], [f32; 4])> for Vertex2D {
     fn from(pos_and_color: ([f32; 3], [f32; 4])) -> Self {
         let (pos, color) = pos_and_color;
         Self { pos, color }
     }
 }
+
+/// Vertex containing a 3D integer position, normal vector, and an RGBA color.
+#[derive(Debug, Default, Copy, Clone)]
+pub struct IntVertex3D {
+    pub pos: [i16; 3],
+    pub normal: [i8; 3],
+    pub color: [u8; 3],
+}
+implement_vertex!(
+    IntVertex3D,
+    pos normalize(false),
+    normal normalize(true),
+    color normalize(true)
+);
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct Vertex3D {
+    pub pos: [f32; 3],
+    pub normal: [i8; 3],
+    pub color: [u8; 3],
+}
+implement_vertex!(
+    Vertex3D,
+    pos normalize(false),
+    normal normalize(true),
+    color normalize(true)
+);
 
 /// Vertex containing a 3D floating-point position and an ID, for use with the
 /// pixel buffer object to map out regions that the mouse cursor can interact

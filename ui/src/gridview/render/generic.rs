@@ -10,6 +10,7 @@ use Axis::{X, Y};
 use super::consts::*;
 use super::shaders;
 use super::vertices::MouseTargetVertex;
+use super::CellDrawParams;
 use crate::gridview::*;
 use crate::Scale;
 
@@ -20,8 +21,7 @@ pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
 
     /// Camera to render the grid from.
     pub(super) camera: &'a R::Camera,
-    /// Origin for "local" cell vectors. This is an integer in render cell
-    /// coordinates.
+    /// Global cell origin for "local" render cell vectors.
     pub(super) origin: BigVec<R::D>,
 
     /// Rectangle of cells in global space that is visible, rounded to render cell boundaries.
@@ -125,8 +125,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         for tri_batch in self.mouse_target_tris.chunks(MOUSE_TARGET_BATCH_SIZE * 3) {
             let count = tri_batch.len();
             // Put the data in a slice of the VBO.
-            let vbo = vbos.mouse_target_verts();
-            let vbo_slice = vbo.slice(0..count).unwrap();
+            let vbo_slice = vbos.mouse_target_verts(count / 3);
             vbo_slice.write(&tri_batch);
 
             picker_fbo
@@ -214,7 +213,6 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
 
         render_cell_pos.to_ivec()
     }
-
     /// Clips the edges of a rectangle using
     /// `clip_cell_pos_to_visible_render_cells()`.
     pub(super) fn clip_cell_rect_to_visible_render_cells(
@@ -225,6 +223,44 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             self.clip_cell_pos_to_visible_render_cells(&cells_rect.min()),
             self.clip_cell_pos_to_visible_render_cells(&cells_rect.max()),
         )
+    }
+
+    /// Clips an ND-tree to just the part that is visible, and returns the slice
+    /// of the ND-tree along with a rectangle of render cells relative to that
+    /// slice to render.
+    pub(super) fn clip_ndtree_to_visible_render_cells<'b>(
+        &self,
+        params: &'b CellDrawParams<'b, R::D>,
+    ) -> Option<(NdTreeSlice<'b, R::D>, IRect<R::D>)> {
+        // Clip the global rectangle of visible cells according to the draw
+        // parameters.
+        let global_visible_rect = match &params.rect {
+            Some(rect) => match self
+                .render_cell_layer
+                .round_rect(&rect)
+                .intersection(&self.global_visible_rect)
+            {
+                // Only draw the intersection of the viewport and the rectangle
+                // in the draw parameters.
+                Some(intersection) => intersection,
+                // The rectangle in the draw parameters does not intersect the
+                // viewport, so there is nothing to draw.
+                None => return None,
+            },
+            // There is no rectangle in the parameters, so draw everything in the viewport.
+            None => self.global_visible_rect.clone(),
+        };
+
+        // Get the `NdTreeSlice` containing all of the visible cells.
+        let visible_ndtree = params.ndtree.slice_containing(&global_visible_rect);
+
+        // Convert `global_visible_rect` from cells in global space to render
+        // cells relative to `visible_ndtree`.
+        let visible_rect = (global_visible_rect - &visible_ndtree.offset)
+            .div_outward(&self.render_cell_layer.big_len())
+            .to_irect();
+
+        Some((visible_ndtree, visible_rect))
     }
 
     /// Returns the color to represent an ND-tree node.

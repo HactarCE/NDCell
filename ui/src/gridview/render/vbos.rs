@@ -17,7 +17,7 @@ pub struct VboCache {
     quadtree_quad: VertexBuffer<QuadtreePosVertex>,
     blit_quad: VertexBuffer<TexturePosVertex>,
     quad_verts_2d: VertexBuffer<Vertex2D>,
-    quad_int_verts_3d: VertexBuffer<IntVertex3D>,
+    quad_verts_3d: VertexBuffer<Vertex3D>,
     mouse_target_verts: VertexBuffer<MouseTargetVertex>,
 }
 impl Default for VboCache {
@@ -26,7 +26,7 @@ impl Default for VboCache {
             quadtree_quad: empty_vbo(4),
             blit_quad: empty_vbo(4),
             quad_verts_2d: empty_vbo(4 * QUAD_BATCH_SIZE),
-            quad_int_verts_3d: empty_vbo(4 * QUAD_BATCH_SIZE),
+            quad_verts_3d: empty_vbo(4 * QUAD_BATCH_SIZE),
             mouse_target_verts: empty_vbo(3 * MOUSE_TARGET_BATCH_SIZE),
         }
     }
@@ -94,11 +94,8 @@ impl VboCache {
         self.quad_verts_2d.slice(..(4 * quad_count)).unwrap()
     }
 
-    pub fn quad_int_verts_3d<'a>(
-        &'a mut self,
-        quad_count: usize,
-    ) -> VertexBufferSlice<'a, IntVertex3D> {
-        self.quad_int_verts_3d.slice(..(4 * quad_count)).unwrap()
+    pub fn quad_verts_3d<'a>(&'a mut self, quad_count: usize) -> VertexBufferSlice<'a, Vertex3D> {
+        self.quad_verts_3d.slice(..(4 * quad_count)).unwrap()
     }
 
     pub fn mouse_target_verts<'a>(

@@ -18,7 +18,7 @@ use crate::gridview::*;
 
 pub(in crate::gridview) type GridViewRender3D<'a> = GenericGridViewRender<'a, RenderDim3D>;
 
-type QuadVerts = [IntVertex3D; 4];
+type QuadVerts = [Vertex3D; 4];
 type CuboidVerts = [Option<QuadVerts>; 6];
 
 #[derive(Default)]
@@ -45,7 +45,7 @@ impl GridViewRender3D<'_> {
             / FixedPoint::from(self.render_cell_layer.big_len()))
         .to_fvec();
 
-        let mut quad_verts: Vec<IntVertex3D> = vec![];
+        let mut quad_verts: Vec<Vertex3D> = vec![];
         let octree_offset = (visible_octree.offset - &self.origin)
             .div_floor(&self.render_cell_layer.big_len())
             .to_ivec();
@@ -63,7 +63,7 @@ impl GridViewRender3D<'_> {
 
     fn build_node_quads(
         &self,
-        buffer: &mut Vec<IntVertex3D>,
+        buffer: &mut Vec<Vertex3D>,
         octree_node: NodeRef<'_, Dim3D>,
         node_offset: IVec3D,
         mut visible_rect: Option<IRect3D>,
@@ -107,9 +107,9 @@ impl GridViewRender3D<'_> {
             // The node is small enough; build the vertices.
             let [r, g, b, _a] = Self::ndtree_node_color(octree_node);
             buffer.extend(
-                self.cuboid_verts(
+                cuboid_verts(
                     real_camera_pos,
-                    IRect3D::single_cell(node_offset),
+                    FRect3D::single_cell(node_offset.to_fvec()),
                     [r, g, b],
                 )
                 .iter()
@@ -120,7 +120,7 @@ impl GridViewRender3D<'_> {
         }
     }
 
-    fn draw_quads(&mut self, quad_verts: &[IntVertex3D]) -> Result<()> {
+    fn draw_quads(&mut self, quad_verts: &[Vertex3D]) -> Result<()> {
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
@@ -133,7 +133,7 @@ impl GridViewRender3D<'_> {
             let count = chunk.len() / 4;
 
             // Copy that into a VBO.
-            let vbo_slice = vbos.quad_int_verts_3d(count);
+            let vbo_slice = vbos.quad_verts_3d(count);
             vbo_slice.write(&chunk);
 
             self.params
@@ -165,88 +165,82 @@ impl GridViewRender3D<'_> {
 
         Ok(())
     }
-
-    fn cuboid_verts(
-        &self,
-        real_camera_pos: FVec3D,
-        cuboid: IRect3D,
-        color: [u8; 3],
-    ) -> CuboidVerts {
-        let make_face_verts =
-            |axis, sign| self.face_verts(real_camera_pos, cuboid, (axis, sign), color);
-        [
-            make_face_verts(X, Sign::Minus),
-            make_face_verts(X, Sign::Plus),
-            make_face_verts(Y, Sign::Minus),
-            make_face_verts(Y, Sign::Plus),
-            make_face_verts(Z, Sign::Minus),
-            make_face_verts(Z, Sign::Plus),
-        ]
-    }
-    fn face_verts(
-        &self,
-        real_camera_pos: FVec3D,
-        cuboid: IRect3D,
-        face: (Axis, Sign),
-        color: [u8; 3],
-    ) -> Option<QuadVerts> {
-        let (face_axis, face_sign) = face;
-
-        let normal = match face {
-            (X, Sign::Minus) => [i8::MIN, 0, 0],
-            (X, Sign::Plus) => [i8::MAX, 0, 0],
-            (Y, Sign::Minus) => [0, i8::MIN, 0],
-            (Y, Sign::Plus) => [0, i8::MAX, 0],
-            (Z, Sign::Minus) => [0, 0, i8::MIN],
-            (Z, Sign::Plus) => [0, 0, i8::MAX],
-            _ => return None,
-        };
-
-        let (mut ax1, mut ax2) = match face_axis {
-            X => (Y, Z),
-            Y => (Z, X),
-            Z => (X, Y),
-            _ => return None,
-        };
-        if face_sign == Sign::Plus {
-            std::mem::swap(&mut ax1, &mut ax2);
-        }
-
-        let mut pos0 = cuboid.min();
-        let mut pos3 = cuboid.max() + 1;
-
-        // Backface culling
-        if real_camera_pos[face_axis] < r64(pos0[face_axis] as f64) && face_sign == Sign::Plus {
-            // The camera is on the negative side, but this is the positive face.
-            return None;
-        }
-        if real_camera_pos[face_axis] > r64(pos3[face_axis] as f64) && face_sign == Sign::Minus {
-            // The camera is on the positive side, but this is the negative face.
-            return None;
-        }
-
-        match face_sign {
-            Sign::Minus => pos3[face_axis] = pos0[face_axis],
-            Sign::Plus => pos0[face_axis] = pos3[face_axis],
-            _ => return None,
-        }
-
-        let mut pos1 = pos0;
-        pos1[ax1] = pos3[ax1];
-
-        let mut pos2 = pos0;
-        pos2[ax2] = pos3[ax2];
-
-        let pos_to_vertex = |NdVec([x, y, z]): IVec3D| IntVertex3D {
-            pos: [x as i16, y as i16, z as i16],
-            normal,
-            color,
-        };
-        Some([
-            pos_to_vertex(pos0),
-            pos_to_vertex(pos1),
-            pos_to_vertex(pos2),
-            pos_to_vertex(pos3),
-        ])
-    }
 }
+
+fn cuboid_verts(real_camera_pos: FVec3D, cuboid: FRect3D, color: [u8; 3]) -> CuboidVerts {
+    let make_face_verts = |axis, sign| face_verts(real_camera_pos, cuboid, (axis, sign), color);
+    [
+        make_face_verts(X, Sign::Minus),
+        make_face_verts(X, Sign::Plus),
+        make_face_verts(Y, Sign::Minus),
+        make_face_verts(Y, Sign::Plus),
+        make_face_verts(Z, Sign::Minus),
+        make_face_verts(Z, Sign::Plus),
+    ]
+}
+fn face_verts(
+    real_camera_pos: FVec3D,
+    cuboid: FRect3D,
+    face: (Axis, Sign),
+    color: [u8; 3],
+) -> Option<QuadVerts> {
+    let (face_axis, face_sign) = face;
+
+    let normal = match face {
+        (X, Sign::Minus) => [i8::MIN, 0, 0],
+        (X, Sign::Plus) => [i8::MAX, 0, 0],
+        (Y, Sign::Minus) => [0, i8::MIN, 0],
+        (Y, Sign::Plus) => [0, i8::MAX, 0],
+        (Z, Sign::Minus) => [0, 0, i8::MIN],
+        (Z, Sign::Plus) => [0, 0, i8::MAX],
+        _ => return None,
+    };
+
+    let (mut ax1, mut ax2) = match face_axis {
+        X => (Y, Z),
+        Y => (Z, X),
+        Z => (X, Y),
+        _ => return None,
+    };
+    if face_sign == Sign::Plus {
+        std::mem::swap(&mut ax1, &mut ax2);
+    }
+
+    let mut pos0 = cuboid.min();
+    let mut pos3 = cuboid.max();
+
+    // Backface culling
+    if real_camera_pos[face_axis] < pos0[face_axis] && face_sign == Sign::Plus {
+        // The camera is on the negative side, but this is the positive face.
+        return None;
+    }
+    if real_camera_pos[face_axis] > pos3[face_axis] && face_sign == Sign::Minus {
+        // The camera is on the positive side, but this is the negative face.
+        return None;
+    }
+
+    match face_sign {
+        Sign::Minus => pos3[face_axis] = pos0[face_axis],
+        Sign::Plus => pos0[face_axis] = pos3[face_axis],
+        _ => return None,
+    }
+
+    let mut pos1 = pos0;
+    pos1[ax1] = pos3[ax1];
+
+    let mut pos2 = pos0;
+    pos2[ax2] = pos3[ax2];
+
+    let pos_to_vertex = |NdVec([x, y, z]): FVec3D| Vertex3D {
+        pos: [x.raw() as f32, y.raw() as f32, z.raw() as f32],
+        normal,
+        color,
+    };
+    Some([
+        pos_to_vertex(pos0),
+        pos_to_vertex(pos1),
+        pos_to_vertex(pos2),
+        pos_to_vertex(pos3),
+    ])
+}
+

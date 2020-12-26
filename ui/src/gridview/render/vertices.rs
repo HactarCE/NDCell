@@ -38,20 +38,7 @@ impl From<([f32; 3], [f32; 4])> for Vertex2D {
     }
 }
 
-/// Vertex containing a 3D integer position, normal vector, and an RGBA color.
-#[derive(Debug, Default, Copy, Clone)]
-pub struct IntVertex3D {
-    pub pos: [i16; 3],
-    pub normal: [i8; 3],
-    pub color: [u8; 3],
-}
-implement_vertex!(
-    IntVertex3D,
-    pos normalize(false),
-    normal normalize(true),
-    color normalize(true)
-);
-
+/// Vertex containing a 3D position, normal vector, and an RGBA color.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Vertex3D {
     pub pos: [f32; 3],

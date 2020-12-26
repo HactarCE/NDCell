@@ -20,6 +20,8 @@ imgui-winit-support = "0.6"
 lazy_static = "1.4"
 log = "0.4"
 mimalloc = { version = "*", default-features = false }
+optick = "1.3"
+optick-attr = "0.3"
 parking_lot = "0.11"
 # preferences = "1.1"
 send_wrapper = "0.5"

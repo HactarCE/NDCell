@@ -1120,6 +1120,8 @@ dependencies = [
  "mimalloc",
  "ndcell_core",
  "ndcell_lang",
+ "optick",
+ "optick-attr",
  "parking_lot 0.11.1",
  "send_wrapper",
  "simple_logger",
@@ -1397,6 +1399,23 @@ name = "oorandom"
 version = "11.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ab1bc2a289d34bd04a330323ac98a1b4bc82c9d9fcb1e66b63caa84da26b575"
+
+[[package]]
+name = "optick"
+version = "1.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7e7ab6068cdba9928db83674b18fe7aa2efbaa9920698d260ecbaf7906c6548"
+
+[[package]]
+name = "optick-attr"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79c60222acba5aa89351e413983ef7a932b51c2acceb40cc9fca64069320cd05"
+dependencies = [
+ "optick",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "osmesa-sys"

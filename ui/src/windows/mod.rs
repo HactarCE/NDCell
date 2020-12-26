@@ -148,6 +148,18 @@ impl MainWindow {
             ));
             ui.text("");
             ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
+            ui.text("");
+            if ui.button(im_str!("Start capture"),
+                [ui.window_content_region_width(), 20.0],
+            ) {
+                optick::start_capture();
+            }
+            if ui.button(im_str!("Stop capture"),
+                [ui.window_content_region_width(), 20.0],
+            ) {
+                optick::stop_capture("capture");
+            }
+
         });
 
         self.simulation.build(params);

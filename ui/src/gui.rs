@@ -66,6 +66,8 @@ pub fn show_gui() -> ! {
         .take()
         .unwrap()
         .run(move |event, _ev_loop, control_flow| {
+            optick::next_frame();
+
             // Decide whether to handle events and render everything.
             let do_frame = match event.to_static() {
                 Some(Event::NewEvents(cause)) => match cause {

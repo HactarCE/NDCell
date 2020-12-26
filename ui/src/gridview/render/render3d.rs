@@ -33,6 +33,7 @@ impl GridViewRenderDimension<'_> for RenderDim3D {
 
 impl GridViewRender3D<'_> {
     /// Draw an ND-tree to scale on the target.
+    #[optick_attr::profile]
     pub fn draw_cells(&mut self, params: CellDrawParams<'_, Dim3D>) -> Result<()> {
         let (visible_octree, visible_rect) = match self.clip_ndtree_to_visible_render_cells(&params)
         {
@@ -49,13 +50,16 @@ impl GridViewRender3D<'_> {
         let octree_offset = (visible_octree.offset - &self.origin)
             .div_floor(&self.render_cell_layer.big_len())
             .to_ivec();
-        self.build_node_quads(
-            &mut quad_verts,
-            visible_octree.root.as_ref(),
-            octree_offset,
-            Some(visible_rect + octree_offset),
-            real_camera_pos,
-        );
+        {
+            optick::event!("build node quads");
+            self.build_node_quads(
+                &mut quad_verts,
+                visible_octree.root.as_ref(),
+                octree_offset,
+                Some(visible_rect + octree_offset),
+                real_camera_pos,
+            );
+        }
         self.draw_quads(&quad_verts)?;
 
         Ok(())
@@ -106,20 +110,24 @@ impl GridViewRender3D<'_> {
         } else {
             // The node is small enough; build the vertices.
             let [r, g, b, _a] = Self::ndtree_node_color(octree_node);
-            buffer.extend(
-                self.cuboid_verts(
-                    real_camera_pos,
-                    IRect3D::single_cell(node_offset),
-                    [r, g, b],
-                )
-                .iter()
-                .flatten()
-                .flatten()
-                .copied(),
-            );
+            {
+                optick::event!("extending buffer");
+                buffer.extend(
+                    self.cuboid_verts(
+                        real_camera_pos,
+                        IRect3D::single_cell(node_offset),
+                        [r, g, b],
+                    )
+                    .iter()
+                    .flatten()
+                    .flatten()
+                    .copied(),
+                );
+            }
         }
     }
 
+    #[optick_attr::profile]
     fn draw_quads(&mut self, quad_verts: &[IntVertex3D]) -> Result<()> {
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
@@ -129,46 +137,46 @@ impl GridViewRender3D<'_> {
         let matrix: [[f32; 4]; 4] =
             (self.transform.projection_transform * self.transform.render_cell_transform).into();
 
-        println!(
-            "{} verts in {} draw calls",
-            quad_verts.len(),
-            (quad_verts.len() - 1) / (4 * QUAD_BATCH_SIZE) + 1,
-        );
         for chunk in quad_verts.chunks(4 * QUAD_BATCH_SIZE) {
             let count = chunk.len() / 4;
 
             // Copy that into a VBO.
             let vbo_slice = vbos.quad_int_verts_3d(count);
-            vbo_slice.write(&chunk);
+            {
+                optick::event!("writing to VBO");
+                vbo_slice.write(&chunk);
+            }
 
-            // let cube_ibo = ibos.cube_indices(1);
-            self.params
-                .target
-                .draw(
-                    vbo_slice,
-                    &ibos.quad_indices(count),
-                    &shaders::RGB3D,
-                    &uniform! {
-                        matrix: matrix,
+            {
+                optick::event!("draw call");
+                self.params
+                    .target
+                    .draw(
+                        vbo_slice,
+                        &ibos.quad_indices(count),
+                        &shaders::RGB3D,
+                        &uniform! {
+                            matrix: matrix,
 
-                        light_direction: LIGHT_DIRECTION,
-                        light_ambientness: LIGHT_AMBIENTNESS,
-                        max_light: MAX_LIGHT,
-                    },
-                    &glium::DrawParameters {
-                        depth: glium::Depth {
-                            test: glium::DepthTest::IfLessOrEqual,
-                            write: true,
-                            ..glium::Depth::default()
+                            light_direction: LIGHT_DIRECTION,
+                            light_ambientness: LIGHT_AMBIENTNESS,
+                            max_light: MAX_LIGHT,
                         },
-                        blend: glium::Blend::alpha_blending(),
-                        smooth: Some(glium::Smooth::Nicest),
-                        ..Default::default()
-                    },
-                )
-                .context("Drawing faces to target")?;
+                        &glium::DrawParameters {
+                            depth: glium::Depth {
+                                test: glium::DepthTest::IfLessOrEqual,
+                                write: true,
+                                ..glium::Depth::default()
+                            },
+                            blend: glium::Blend::alpha_blending(),
+                            polygon_mode: glium::PolygonMode::Line,
+                            smooth: Some(glium::Smooth::Nicest),
+                            ..Default::default()
+                        },
+                    )
+                    .context("Drawing faces to target")?;
+            }
         }
-
         Ok(())
     }
 

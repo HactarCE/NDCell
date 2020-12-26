@@ -12,6 +12,7 @@
 // Re-exporting them should make that less awkward.
 
 pub use noisy_float::prelude::{r64, R64};
+pub use num::bigint::Sign;
 pub use num::{
     BigInt, BigUint, Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero,
 };

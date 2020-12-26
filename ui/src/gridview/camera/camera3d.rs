@@ -91,8 +91,9 @@ impl Camera3D {
     }
     /// Returns the real position of the camera (not the pivot).
     pub fn camera_pos(&self) -> FixedVec3D {
-        let distance = self.scale.factor() * FixedPoint::from(r64(Self::DISTANCE_TO_PIVOT as f64));
-        &self.pivot + self.look_vector().to_fixedvec() * &distance
+        let distance =
+            self.scale.inv_factor() * FixedPoint::from(r64(Self::DISTANCE_TO_PIVOT as f64));
+        &self.pivot - self.look_vector().to_fixedvec() * &distance
     }
 
     /// Returns the unit vector for forward motion.

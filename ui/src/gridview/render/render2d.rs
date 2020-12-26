@@ -296,7 +296,7 @@ impl GridViewRender2D<'_> {
 
         // "Resize selection" target.
         let click_target_width = self.params.config.ctrl.selection_resize_drag_target_width
-            / self.render_cell_scale.factor().to_f64().unwrap();
+            * self.render_cell_scale.inv_factor().to_f64().unwrap();
         let (min, max) = (
             visible_selection_rect.min(),
             visible_selection_rect.max() + 1,

@@ -100,9 +100,9 @@ impl Scale {
     pub fn log2_factor(self) -> R64 {
         self.log2_factor
     }
-    /// Returns the scale factor (e.g. 0.25 = 4:1 scale).
-    pub fn factor(self) -> FixedPoint {
-        FixedPoint::from(self.log2_factor()).exp2()
+    /// Returns the inverse scale factor (e.g. 4.0 = 4:1 scale).
+    pub fn inv_factor(self) -> FixedPoint {
+        FixedPoint::from(-self.log2_factor()).exp2()
     }
 
     /// Returns the length of scaled units per cell, which is equivalent to the

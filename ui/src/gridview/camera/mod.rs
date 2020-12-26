@@ -133,7 +133,7 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
     fn distance(a: &Self, b: &Self) -> FixedPoint {
         let avg_scale = average_lerped_scale(a.scale(), b.scale());
         let total_cells_delta = (b.pos() - a.pos()).mag();
-        let total_pixels_delta = total_cells_delta * avg_scale.factor();
+        let total_pixels_delta = total_cells_delta / avg_scale.inv_factor();
         // Divide by a constant factor to bring translation and scale into the
         // same arbitrary units of optical flow.
         let panning_distance = total_pixels_delta / FixedPoint::from(r64(PIXELS_PER_2X_SCALE));

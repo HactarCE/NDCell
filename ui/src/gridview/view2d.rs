@@ -284,9 +284,9 @@ impl GridViewDimension for GridViewDim2D {
         let gridlines_width = this
             .camera()
             .scale()
-            .factor()
+            .inv_factor()
             .to_f64()
-            .map(|x| x * GRIDLINE_WIDTH)
+            .map(|inv_scale_factor| GRIDLINE_WIDTH / inv_scale_factor)
             .unwrap_or(1.0);
         frame.draw_gridlines(gridlines_width)?;
         // Draw mouse display.

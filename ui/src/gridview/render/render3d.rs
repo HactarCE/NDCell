@@ -129,11 +129,6 @@ impl GridViewRender3D<'_> {
         let matrix: [[f32; 4]; 4] =
             (self.transform.projection_transform * self.transform.render_cell_transform).into();
 
-        println!(
-            "{} verts in {} draw calls",
-            quad_verts.len(),
-            (quad_verts.len() - 1) / (4 * QUAD_BATCH_SIZE) + 1,
-        );
         for chunk in quad_verts.chunks(4 * QUAD_BATCH_SIZE) {
             let count = chunk.len() / 4;
 
@@ -141,7 +136,6 @@ impl GridViewRender3D<'_> {
             let vbo_slice = vbos.quad_int_verts_3d(count);
             vbo_slice.write(&chunk);
 
-            // let cube_ibo = ibos.cube_indices(1);
             self.params
                 .target
                 .draw(

@@ -210,11 +210,11 @@ fn face_verts(
     let mut pos3 = cuboid.max();
 
     // Backface culling
-    if real_camera_pos[face_axis] < pos0[face_axis] && face_sign == Sign::Plus {
+    if real_camera_pos[face_axis] < pos3[face_axis] && face_sign == Sign::Plus {
         // The camera is on the negative side, but this is the positive face.
         return None;
     }
-    if real_camera_pos[face_axis] > pos3[face_axis] && face_sign == Sign::Minus {
+    if real_camera_pos[face_axis] > pos0[face_axis] && face_sign == Sign::Minus {
         // The camera is on the positive side, but this is the negative face.
         return None;
     }

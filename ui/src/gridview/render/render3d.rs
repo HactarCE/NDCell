@@ -12,7 +12,7 @@ use Axis::{X, Y, Z};
 use super::consts::*;
 use super::generic::{GenericGridViewRender, GridViewRenderDimension};
 use super::shaders;
-use super::vertices::IntVertex3D;
+use super::vertices::Vertex3D;
 use super::CellDrawParams;
 use crate::gridview::*;
 
@@ -34,11 +34,11 @@ impl GridViewRenderDimension<'_> for RenderDim3D {
 impl GridViewRender3D<'_> {
     /// Draw an ND-tree to scale on the target.
     pub fn draw_cells(&mut self, params: CellDrawParams<'_, Dim3D>) -> Result<()> {
-        let (visible_octree, visible_rect) = match self.clip_ndtree_to_visible_render_cells(&params)
-        {
-            Some(x) => x,
-            None => return Ok(()), // There is nothing to draw.
-        };
+        let (visible_octree, visible_cuboid) =
+            match self.clip_ndtree_to_visible_render_cells(&params) {
+                Some(x) => x,
+                None => return Ok(()), // There is nothing to draw.
+            };
 
         // Position of the actual camera, not the camera pivot.
         let real_camera_pos = ((self.camera.camera_pos() - self.origin.to_fixedvec())
@@ -53,7 +53,7 @@ impl GridViewRender3D<'_> {
             &mut quad_verts,
             visible_octree.root.as_ref(),
             octree_offset,
-            Some(visible_rect + octree_offset),
+            Some(visible_cuboid + octree_offset),
             real_camera_pos,
         );
         self.draw_quads(&quad_verts)?;
@@ -66,7 +66,7 @@ impl GridViewRender3D<'_> {
         buffer: &mut Vec<Vertex3D>,
         octree_node: NodeRef<'_, Dim3D>,
         node_offset: IVec3D,
-        mut visible_rect: Option<IRect3D>,
+        mut visible_cuboid: Option<IRect3D>,
         real_camera_pos: FVec3D,
     ) {
         // Don't draw empty nodes.
@@ -78,7 +78,7 @@ impl GridViewRender3D<'_> {
             .len()
             .unwrap() as isize;
 
-        if let Some(vis_rect) = visible_rect {
+        if let Some(vis_rect) = visible_cuboid {
             let node_rect = IRect::with_size(node_offset, IVec::repeat(side_len));
             // Don't draw nodes outside the visible cuboid.
             if !vis_rect.intersects(&node_rect) {
@@ -87,7 +87,7 @@ impl GridViewRender3D<'_> {
             // Don't bother keeping track of the visible cuboid if this node is
             // completely inside it.
             if vis_rect.contains(&node_rect) {
-                visible_rect = None;
+                visible_cuboid = None;
             }
         }
 
@@ -99,7 +99,7 @@ impl GridViewRender3D<'_> {
                     buffer,
                     child,
                     node_offset + child_offset,
-                    visible_rect,
+                    visible_cuboid,
                     real_camera_pos,
                 )
             }
@@ -243,4 +243,3 @@ fn face_verts(
         pos_to_vertex(pos3),
     ])
 }
-

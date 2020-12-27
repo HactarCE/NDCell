@@ -687,7 +687,7 @@ impl CellOverlayRect {
         }) = self.line_params
         {
             let width = width.round().max(1.0);
-            // At this point, the rectangle should have zero width.
+            // At this point, the rectangle should have zero extra width.
             let cells_per_pixel = render_cell_scale.cells_per_unit();
             let offset = FVec::repeat(cells_per_pixel * width / 2.0) * (b - a).signum();
             // Expand it in all directions, so now it has the correct width and

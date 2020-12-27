@@ -59,7 +59,7 @@ mod consts {
     /// Maximum 3D light level.
     pub const MAX_LIGHT: f32 = 1.0;
 
-    /// A small offset used to force correct Z order or align things at the
+    /// Small offset used to force correct Z order or align things at the
     /// sub-pixel scale.
     pub const TINY_OFFSET: f32 = 1.0 / 16.0;
 }

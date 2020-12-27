@@ -5,27 +5,34 @@ use send_wrapper::SendWrapper;
 
 use crate::DISPLAY;
 
-/// Uses lazy_static!() to define a shader that is lazily loaded from the given
-/// filename.
+/// Uses `lazy_static!()` to define a shader that is lazily compiled from files.
 macro_rules! static_shader {
-    ($name:ident = { $filename:expr, $glsl_version:expr, srgb: $srgb:expr }) => {
+    ($name:ident = { $glsl_version:expr, srgb: $srgb:expr, vert: $vert_filename:expr, frag: $frag_filename:expr }) => {
         lazy_static! {
             pub static ref $name: SendWrapper<Program> = SendWrapper::new(
                 glium::program!(
                     &**DISPLAY,
                     $glsl_version => {
-                        vertex: include_str!(concat!($filename, ".vert")),
-                        fragment: include_str!(concat!($filename, ".frag")),
+                        vertex: include_str!(concat!($vert_filename, ".vert")),
+                        fragment: include_str!(concat!($frag_filename, ".frag")),
                         outputs_srgb: $srgb,
                     },
-                ).expect(&format!("Failed to compile '{}' shader in {}", $filename, std::module_path!()))
+                ).expect(&format!(
+                    "Failed to compile '{}'+'{}' shader in {}",
+                    $vert_filename,
+                    $frag_filename,
+                    std::module_path!(),
+                ))
             );
         }
     };
+    ($name:ident = { $glsl_version:expr, srgb: $srgb:expr, $filename:expr }) => {
+        static_shader!($name = { $glsl_version, srgb: $srgb, vert: $filename, frag: $filename });
+    };
 }
 
-static_shader!(PICKER    = { "picker",    140, srgb: false  });
-static_shader!(PIXMIX    = { "pixmix",    140, srgb: false });
-static_shader!(QUADTREE  = { "quadtree",  140, srgb: true  });
-static_shader!(RGBA      = { "rgba",      140, srgb: true  });
-static_shader!(RGB3D     = { "rgb3d",     140, srgb: true  });
+static_shader!(PICKER    = { 140, srgb: false, "picker" });
+static_shader!(PIXMIX    = { 140, srgb: false, "pixmix" });
+static_shader!(QUADTREE  = { 140, srgb: true,  "quadtree" });
+static_shader!(RGBA_2D   = { 140, srgb: true,  vert: "rgba_2d", frag: "color" });
+static_shader!(RGB_3D    = { 140, srgb: true,  vert: "rgb_3d",  frag: "color" });

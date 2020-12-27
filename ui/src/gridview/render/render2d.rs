@@ -588,7 +588,7 @@ impl GridViewRender2D<'_> {
                 .draw(
                     vbo_slice,
                     &ibos.quad_indices(count),
-                    &shaders::RGBA,
+                    &shaders::RGBA_2D,
                     &uniform! { matrix: self.transform.gl_matrix() },
                     &glium::DrawParameters {
                         blend: glium::Blend::alpha_blending(),

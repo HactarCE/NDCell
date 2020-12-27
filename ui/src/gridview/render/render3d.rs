@@ -141,7 +141,7 @@ impl GridViewRender3D<'_> {
                 .draw(
                     vbo_slice,
                     &ibos.quad_indices(count),
-                    &shaders::RGB3D,
+                    &shaders::RGB_3D,
                     &uniform! {
                         matrix: matrix,
 

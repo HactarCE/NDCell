@@ -48,7 +48,7 @@ impl Camera3D {
     pub const DISTANCE_TO_PIVOT: f32 = 512.0;
 
     pub const DEFAULT_PITCH: Deg<f32> = Deg(-30.0);
-    pub const DEFAULT_YAW: Deg<f32> = Deg(20.0);
+    pub const DEFAULT_YAW: Deg<f32> = Deg(-20.0);
 
     /// Returns the yaw of the camera.
     pub fn yaw(&self) -> Deg<f32> {

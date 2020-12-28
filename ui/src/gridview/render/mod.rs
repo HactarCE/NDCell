@@ -25,6 +25,15 @@ pub(super) use render2d::GridViewRender2D;
 pub(super) use render3d::GridViewRender3D;
 
 mod consts {
+    /// Width of gridlines, measured in cells.
+    pub const GRIDLINE_WIDTH: f64 = 1.0 / 32.0;
+    /// Width of hover outline, measured in cells.
+    pub const HOVER_HIGHLIGHT_WIDTH: f64 = 2.0 * GRIDLINE_WIDTH;
+    /// Width of selection outline, measured in cells.
+    pub const SELECTION_HIGHLIGHT_WIDTH: f64 = 4.0 * GRIDLINE_WIDTH;
+    /// Width of selection resize preview outline, measured in cells.
+    pub const SELECTION_RESIZE_PREVIEW_WIDTH: f64 = 2.0 * GRIDLINE_WIDTH;
+
     /// Exponential base to use when fading out gridlines. 16 = 16 small gridlines
     /// between each large gridline.
     pub const GRIDLINE_SPACING_BASE: usize = 16;

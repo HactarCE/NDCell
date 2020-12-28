@@ -25,7 +25,6 @@ use anyhow::{Context, Result};
 use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
-use itertools::Itertools;
 
 use ndcell_core::prelude::*;
 use Axis::{X, Y};
@@ -149,7 +148,7 @@ impl GridViewRender2D<'_> {
     /// Draws gridlines at varying opacity and spacing depending on scaling.
     ///
     /// TOOD: support arbitrary exponential base and factor (a*b^n for any a, b)
-    pub fn draw_gridlines(&mut self, width: f64) -> Result<()> {
+    pub fn draw_gridlines(&mut self) -> Result<()> {
         // Compute the minimum pixel spacing between maximum-opacity gridlines.
         let log2_max_pixel_spacing = r64(MAX_GRIDLINE_SPACING).log2();
         // Compute the cell spacing between the gridlines that will be drawn
@@ -186,7 +185,7 @@ impl GridViewRender2D<'_> {
                         .skip(offset[Y])
                         .step_by(spacing),
                     GRIDLINE_DEPTH,
-                    width,
+                    GRIDLINE_WIDTH,
                     color,
                 ),
             )
@@ -199,16 +198,11 @@ impl GridViewRender2D<'_> {
     }
 
     /// Draws a highlight on the render cell under the mouse cursor.
-    pub fn draw_hover_highlight(
-        &mut self,
-        cell_pos: &BigVec2D,
-        width: f64,
-        color: [f32; 4],
-    ) -> Result<()> {
+    pub fn draw_hover_highlight(&mut self, cell_pos: &BigVec2D, color: [f32; 4]) -> Result<()> {
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
             IRect2D::single_cell(self.clip_cell_pos_to_visible_render_cells(cell_pos)),
             CURSOR_DEPTH,
-            width,
+            HOVER_HIGHLIGHT_WIDTH,
             color,
             RectHighlightParams {
                 fill: true,
@@ -221,7 +215,6 @@ impl GridViewRender2D<'_> {
     pub fn draw_selection_highlight(
         &mut self,
         selection_rect: BigRect2D,
-        width: f64,
         fill: bool,
     ) -> Result<()> {
         let visible_selection_rect = self.clip_cell_rect_to_visible_render_cells(&selection_rect);
@@ -229,7 +222,7 @@ impl GridViewRender2D<'_> {
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
             visible_selection_rect,
             SELECTION_DEPTH,
-            width,
+            SELECTION_HIGHLIGHT_WIDTH,
             crate::colors::SELECTION,
             RectHighlightParams {
                 fill,
@@ -328,7 +321,6 @@ impl GridViewRender2D<'_> {
         &mut self,
         selection_rect: BigRect2D,
         mouse_pos: &ScreenPos2D,
-        width: f64,
     ) -> Result<()> {
         let selection_preview_rect = selection::resize_selection_absolute(
             &selection_rect,
@@ -340,7 +332,7 @@ impl GridViewRender2D<'_> {
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
             visible_selection_preview_rect,
             SELECTION_RESIZE_DEPTH,
-            width,
+            SELECTION_RESIZE_PREVIEW_WIDTH,
             crate::colors::SELECTION_RESIZE,
             RectHighlightParams {
                 fill: true,
@@ -564,15 +556,17 @@ impl GridViewRender2D<'_> {
 
     /// Draws a cell overlay.
     fn draw_cell_overlay_rects(&mut self, rects: &[CellOverlayRect]) -> Result<()> {
+        let mut verts = vec![];
+
         // Draw the rectangles in batches, because the VBO might not be able to
         // hold all the vertices at once.
         for rect_batch in rects.chunks(QUAD_BATCH_SIZE) {
             let count = rect_batch.len();
             // Generate vertices.
-            let verts = rect_batch
-                .iter()
-                .flat_map(|&rect| rect.verts(self.render_cell_scale).to_vec())
-                .collect_vec();
+            verts.clear();
+            for &rect in rect_batch {
+                verts.extend_from_slice(&self.make_cell_overlay_verts(rect));
+            }
 
             // Reborrow is necessary in order to split borrow.
             let cache = &mut *self.cache;
@@ -603,6 +597,55 @@ impl GridViewRender2D<'_> {
                 .context("Drawing cell-aligned rectangles")?;
         }
         Ok(())
+    }
+
+    fn make_cell_overlay_verts(&self, rect: CellOverlayRect) -> [Vertex2D; 4] {
+        let mut a = rect.start.to_fvec();
+        let mut b = rect.end.to_fvec();
+        let mut colors = [
+            rect.start_color,
+            rect.start_color,
+            rect.end_color,
+            rect.end_color,
+        ];
+        if let Some(LineParams {
+            width,
+            include_endpoints,
+            axis,
+        }) = rect.line_params
+        {
+            // At this point, the rectangle should have zero extra width.
+            let min_width = self.render_cell_scale.cells_per_unit(); // 1 pixel
+            let width = if self.render_cell_layer == Layer(0) {
+                std::cmp::max(r64(width), min_width)
+            } else {
+                min_width
+            };
+            let offset = FVec::repeat(width / 2.0) * (b - a).signum();
+            // Expand it in all directions, so now it has the correct width and
+            // includes its endpoints.
+            a -= offset;
+            b += offset;
+            // Now exclude the endpoints, if requested.
+            if !include_endpoints {
+                a[axis] += offset[axis] * 2.0;
+                b[axis] -= offset[axis] * 2.0;
+            }
+            if axis == X {
+                // Use horizontal gradient instead of vertical gradient.
+                colors.swap(1, 2);
+            }
+        }
+        let ax = a[X].to_f32().unwrap();
+        let ay = a[Y].to_f32().unwrap();
+        let bx = b[X].to_f32().unwrap();
+        let by = b[Y].to_f32().unwrap();
+        [
+            Vertex2D::from(([ax, ay, rect.z], colors[0])),
+            Vertex2D::from(([bx, ay, rect.z], colors[1])),
+            Vertex2D::from(([ax, by, rect.z], colors[2])),
+            Vertex2D::from(([bx, by, rect.z], colors[3])),
+        ]
     }
 }
 
@@ -670,50 +713,6 @@ impl CellOverlayRect {
             end_color: color,
             line_params: None,
         }
-    }
-    fn verts(self, render_cell_scale: Scale) -> [Vertex2D; 4] {
-        let mut a = self.start.to_fvec();
-        let mut b = self.end.to_fvec();
-        let mut colors = [
-            self.start_color,
-            self.start_color,
-            self.end_color,
-            self.end_color,
-        ];
-        if let Some(LineParams {
-            width,
-            include_endpoints,
-            axis,
-        }) = self.line_params
-        {
-            let width = width.round().max(1.0);
-            // At this point, the rectangle should have zero extra width.
-            let cells_per_pixel = render_cell_scale.cells_per_unit();
-            let offset = FVec::repeat(cells_per_pixel * width / 2.0) * (b - a).signum();
-            // Expand it in all directions, so now it has the correct width and
-            // includes its endpoints.
-            a -= offset;
-            b += offset;
-            // Now exclude the endpoints, if requested.
-            if !include_endpoints {
-                a[axis] += offset[axis] * 2.0;
-                b[axis] -= offset[axis] * 2.0;
-            }
-            if axis == X {
-                // Use horizontal gradient instead of vertical gradient.
-                colors.swap(1, 2);
-            }
-        }
-        let ax = a[X].to_f32().unwrap();
-        let ay = a[Y].to_f32().unwrap();
-        let bx = b[X].to_f32().unwrap();
-        let by = b[Y].to_f32().unwrap();
-        [
-            Vertex2D::from(([ax, ay, self.z], colors[0])),
-            Vertex2D::from(([bx, ay, self.z], colors[1])),
-            Vertex2D::from(([ax, by, self.z], colors[2])),
-            Vertex2D::from(([bx, by, self.z], colors[3])),
-        ]
     }
 }
 

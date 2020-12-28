@@ -16,9 +16,6 @@ use crate::Scale;
 
 pub type GridView2D = GenericGridView<GridViewDim2D>;
 
-/// Width of gridlines, in units of cells.
-const GRIDLINE_WIDTH: f64 = 1.0 / 32.0;
-
 #[derive(Debug, Default)]
 pub struct GridViewDim2D;
 impl GridViewDimension for GridViewDim2D {
@@ -281,14 +278,8 @@ impl GridViewDimension for GridViewDim2D {
         }
 
         // Draw gridlines.
-        let gridlines_width = this
-            .camera()
-            .scale()
-            .inv_factor()
-            .to_f64()
-            .map(|inv_scale_factor| GRIDLINE_WIDTH / inv_scale_factor)
-            .unwrap_or(1.0);
-        frame.draw_gridlines(gridlines_width)?;
+        frame.draw_gridlines()?;
+
         // Draw mouse display.
         if let Some(hovered_cell) = &mouse_pos {
             match mouse.display {
@@ -296,7 +287,6 @@ impl GridViewDimension for GridViewDim2D {
                     if !this.too_small_to_draw() {
                         frame.draw_hover_highlight(
                             hovered_cell.int_cell(),
-                            gridlines_width * 2.0,
                             crate::colors::HOVERED_DRAW,
                         )?;
                     }
@@ -304,7 +294,6 @@ impl GridViewDimension for GridViewDim2D {
                 MouseDisplay::Select => {
                     frame.draw_hover_highlight(
                         hovered_cell.int_cell(),
-                        gridlines_width * 2.0,
                         crate::colors::HOVERED_SELECT,
                     )?;
                 }
@@ -313,20 +302,12 @@ impl GridViewDimension for GridViewDim2D {
         }
         // Draw selection highlight.
         if let Some(selection) = &this.selection {
-            frame.draw_selection_highlight(
-                selection.rect.clone(),
-                gridlines_width * 4.0,
-                selection.cells.is_none(),
-            )?;
+            frame.draw_selection_highlight(selection.rect.clone(), selection.cells.is_none())?;
         }
         // Draw selection preview after drawing selection.
         if mouse.display == MouseDisplay::ResizeSelectionAbsolute && !this.is_dragging() {
             if let (Some(mouse_pos), Some(s)) = (mouse_pos, this.selection.as_ref()) {
-                frame.draw_absolute_selection_resize_preview(
-                    s.rect.clone(),
-                    &mouse_pos,
-                    gridlines_width * 2.0,
-                )?;
+                frame.draw_absolute_selection_resize_preview(s.rect.clone(), &mouse_pos)?;
             }
         }
 

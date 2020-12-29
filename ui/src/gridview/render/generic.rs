@@ -175,10 +175,10 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             NdVec([x1, y2]),
             NdVec([x2, y2]),
         ];
-        self._add_mouse_target_tri(modifiers, [corners[0], corners[1], corners[2]], target_id);
-        self._add_mouse_target_tri(modifiers, [corners[3], corners[2], corners[1]], target_id);
+        self.add_mouse_target_tri(modifiers, [corners[0], corners[1], corners[2]], target_id);
+        self.add_mouse_target_tri(modifiers, [corners[3], corners[2], corners[1]], target_id);
     }
-    pub(super) fn _add_mouse_target_tri(
+    fn add_mouse_target_tri(
         &mut self,
         modifiers: ModifiersState,
         points: [FVec2D; 3],

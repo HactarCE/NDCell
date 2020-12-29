@@ -43,7 +43,7 @@ impl From<([f32; 3], [f32; 4])> for Vertex2D {
 pub struct Vertex3D {
     pub pos: [f32; 3],
     pub normal: [i8; 3],
-    pub color: [u8; 3],
+    pub color: [u8; 4],
 }
 implement_vertex!(
     Vertex3D,

@@ -31,8 +31,9 @@ macro_rules! static_shader {
     };
 }
 
-static_shader!(PICKER    = { 140, srgb: false, "picker" });
-static_shader!(PIXMIX    = { 140, srgb: false, "pixmix" });
-static_shader!(QUADTREE  = { 140, srgb: true,  "quadtree" });
-static_shader!(RGBA_2D   = { 140, srgb: true,  vert: "rgba_2d", frag: "color" });
-static_shader!(RGB_3D    = { 140, srgb: true,  vert: "rgb_3d",  frag: "color" });
+static_shader!(PICKER      = { 140, srgb: false, "picker" });
+static_shader!(PIXMIX      = { 140, srgb: false, "pixmix" });
+static_shader!(QUADTREE    = { 140, srgb: true,  "quadtree" });
+static_shader!(RGBA_2D     = { 140, srgb: true,  vert: "rgba_2d", frag: "color" });
+static_shader!(RGBA_3D     = { 140, srgb: true,  vert: "rgba_3d", frag: "color" });
+static_shader!(RGBA_3D_FOG = { 140, srgb: true,  vert: "rgba_3d", frag: "fog" });

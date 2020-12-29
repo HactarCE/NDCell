@@ -68,6 +68,9 @@ mod consts {
     /// Maximum 3D light level.
     pub const MAX_LIGHT: f32 = 1.0;
 
+    /// Proportional radius of the visible area beyond which there is fog.
+    pub const FOG_START_FACTOR: f32 = 0.8;
+
     /// Small offset used to force correct Z order or align things at the
     /// sub-pixel scale.
     pub const TINY_OFFSET: f32 = 1.0 / 16.0;

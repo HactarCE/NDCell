@@ -19,8 +19,8 @@ pub const SELECTION: [f32; 4] = [0.6, 0.6, 0.6, 0.8];
 /// 2D cell background color. This will be configurable in the future.
 pub const BACKGROUND_2D: (f32, f32, f32, f32) = (0.0, 0.0, 0.0, 1.0);
 
-/// 3D cell background color.
-pub const BACKGROUND_3D: (f32, f32, f32, f32) = (0.5, 0.5, 0.5, 1.0);
+/// 3D cell background color. This will be configurable in the future.
+pub const BACKGROUND_3D: (f32, f32, f32, f32) = (0.0, 0.0, 0.0, 1.0);
 
 /// Color for dead cells. This will be configurable in the future.
 pub const DEAD: [u8; 4] = [0, 0, 0, 0];

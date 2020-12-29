@@ -129,6 +129,10 @@ impl GridViewRender3D<'_> {
         let matrix: [[f32; 4]; 4] =
             (self.transform.projection_transform * self.transform.render_cell_transform).into();
 
+        let camera_pos = ((self.camera.pos() - self.origin.to_fixedvec())
+            / &FixedPoint::from(self.render_cell_layer.big_len()))
+            .to_fvec();
+
         for chunk in quad_verts.chunks(4 * QUAD_BATCH_SIZE) {
             let count = chunk.len() / 4;
 
@@ -141,13 +145,22 @@ impl GridViewRender3D<'_> {
                 .draw(
                     vbo_slice,
                     &ibos.quad_indices(count),
-                    &shaders::RGB_3D,
+                    &shaders::RGBA_3D_FOG,
                     &uniform! {
                         matrix: matrix,
 
                         light_direction: LIGHT_DIRECTION,
                         light_ambientness: LIGHT_AMBIENTNESS,
                         max_light: MAX_LIGHT,
+
+                        fog_color: crate::colors::BACKGROUND_3D,
+                        fog_center: [
+                            camera_pos[X].raw() as f32,
+                            camera_pos[Y].raw() as f32,
+                            camera_pos[Z].raw() as f32,
+                        ],
+                        fog_start: FOG_START_FACTOR * 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
+                        fog_end: 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
                     },
                     &glium::DrawParameters {
                         depth: glium::Depth {
@@ -230,6 +243,9 @@ fn face_verts(
 
     let mut pos2 = pos0;
     pos2[ax2] = pos3[ax2];
+
+    let [r, g, b] = color;
+    let color = [r, g, b, u8::MAX];
 
     let pos_to_vertex = |NdVec([x, y, z]): FVec3D| Vertex3D {
         pos: [x.raw() as f32, y.raw() as f32, z.raw() as f32],

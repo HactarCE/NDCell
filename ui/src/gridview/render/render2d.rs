@@ -4,7 +4,7 @@
 //! the future.
 //!
 //! Not including preliminary computations and extra effects like gridlines,
-//! there are four main stages to rendering a grid of cells:
+//! there are three main stages of rendering a grid of cells:
 //!
 //! 1. Create an indexed quadtree of render cells encoded in an OpenGL texture.
 //!    (A "render cell" is a node of the quadtree which is rendered as single
@@ -149,52 +149,88 @@ impl GridViewRender2D<'_> {
     ///
     /// TOOD: support arbitrary exponential base and factor (a*b^n for any a, b)
     pub fn draw_gridlines(&mut self) -> Result<()> {
-        // Compute the minimum pixel spacing between maximum-opacity gridlines.
-        let log2_max_pixel_spacing = r64(MAX_GRIDLINE_SPACING).log2();
-        // Compute the cell spacing between the gridlines that will be drawn
-        // with the maximum opacity.
-        let log2_cell_spacing = log2_max_pixel_spacing - self.camera.scale().log2_factor();
-        // Round up to the nearest power of GRIDLINE_SPACING_BASE.
-        let log2_spacing_base = (GRIDLINE_SPACING_BASE as f64).log2();
-        let log2_cell_spacing = (log2_cell_spacing / log2_spacing_base).ceil() * log2_spacing_base;
-        // Convert from cells to render cells.
-        let log2_render_cell_spacing = log2_cell_spacing - self.render_cell_layer.to_u32() as f64;
-        let mut spacing = log2_render_cell_spacing.exp2().raw() as usize;
-        // Convert from render cells to pixels.
-        let mut pixel_spacing = spacing as f64 * self.render_cell_scale.units_per_cell().raw();
+        let mut gridline_overlay_rects = vec![];
 
-        let cell_offset = -self
-            .global_visible_rect
-            .min()
-            .div_floor(&self.render_cell_layer.big_len());
-        while spacing > 0 && pixel_spacing > MIN_GRIDLINE_SPACING {
-            // Compute grid color, including alpha.
-            let mut color = crate::colors::GRIDLINES;
-            let alpha = gridline_alpha(pixel_spacing, self.camera.scale()) as f32;
-            color[3] *= alpha;
-            // Draw gridlines with the given spacing.
-            let offset = cell_offset.mod_floor(&BigInt::from(spacing)).to_uvec();
-            self.draw_cell_overlay_rects(
-                &self.generate_solid_cell_borders(
-                    self.visible_rect
-                        .axis_range(X)
-                        .skip(offset[X])
-                        .step_by(spacing),
-                    self.visible_rect
-                        .axis_range(Y)
-                        .skip(offset[Y])
-                        .step_by(spacing),
-                    GRIDLINE_DEPTH,
-                    GRIDLINE_WIDTH,
-                    color,
-                ),
-            )
-            .context("Drawing gridlines")?;
-            // Decrease the spacing.
-            spacing /= GRIDLINE_SPACING_BASE;
-            pixel_spacing /= GRIDLINE_SPACING_BASE as f64;
+        let max_cell_spacing_exponent = self.gridline_cell_spacing_exponent(MAX_GRIDLINE_SPACING);
+        let min_cell_spacing_exponent = self.gridline_cell_spacing_exponent(MIN_GRIDLINE_SPACING);
+        let range = (min_cell_spacing_exponent..=max_cell_spacing_exponent).rev();
+
+        for cell_spacing_exponent in range {
+            gridline_overlay_rects.extend(self.generate_gridlines(cell_spacing_exponent, X, Y));
+            gridline_overlay_rects.extend(self.generate_gridlines(cell_spacing_exponent, Y, X));
         }
-        Ok(())
+
+        self.draw_cell_overlay_rects(&gridline_overlay_rects)
+            .context("Drawing gridlines")
+    }
+    fn gridline_cell_spacing_exponent(&self, max_pixel_spacing: f64) -> u32 {
+        // Compute the global cell spacing between gridlines.
+        let log2_max_pixel_spacing = r64(max_pixel_spacing).log2();
+        let log2_max_cell_spacing = log2_max_pixel_spacing - self.camera.scale().log2_factor();
+
+        // Undo the `a * b^n` formula, rounding up to the nearest power of
+        // `GRIDLINE_SPACING_BASE`.
+        let log2_a = (GRIDLINE_SPACING_COEFF as f64).log2();
+        let log2_b = (GRIDLINE_SPACING_BASE as f64).log2();
+        ((log2_max_cell_spacing - log2_a) / log2_b)
+            .ceil()
+            .to_u32()
+            .unwrap_or(0)
+    }
+    /// Generate gridlines overlay at one exponential power along one axis.
+    fn generate_gridlines(
+        &mut self,
+        cell_spacing_exponent: u32,
+        parallel_axis: Axis,
+        perpendicular_axis: Axis,
+    ) -> impl Iterator<Item = CellOverlayRect> {
+        let alpha = gridline_alpha(cell_spacing_exponent, self.camera.scale());
+        let mut color = crate::colors::GRIDLINES;
+        color[3] *= alpha as f32;
+
+        let cell_spacing = BigInt::from(GRIDLINE_SPACING_COEFF)
+            * BigInt::from(GRIDLINE_SPACING_BASE).pow(cell_spacing_exponent);
+
+        // Compute the coordinate of the first gridline by rounding to the
+        // nearest multiple of `cell_spacing`.
+        let cell_start_coord = self.global_visible_rect.min()[perpendicular_axis]
+            .div_ceil(&cell_spacing)
+            * &cell_spacing;
+        let cell_end_coord = self.global_visible_rect.max()[perpendicular_axis].clone();
+
+        let cell_coords = itertools::iterate(cell_start_coord, move |coord| coord + &cell_spacing)
+            .take_while(move |coord| *coord <= cell_end_coord);
+
+        let mut start = self.visible_rect.min();
+        let mut end = self.visible_rect.max() + 1;
+
+        let render_cell_len = self.render_cell_layer.big_len();
+        let origin_coordinate = self.origin[perpendicular_axis].clone();
+
+        let render_cell_coords = cell_coords.map(move |cell_coordinate| {
+            (FixedPoint::from(cell_coordinate - &origin_coordinate) / &render_cell_len)
+                .to_isize()
+                .unwrap()
+        });
+
+        render_cell_coords.map(move |render_cell_coordinate| {
+            // Generate an individual line.
+            start[perpendicular_axis] = render_cell_coordinate;
+            end[perpendicular_axis] = render_cell_coordinate;
+
+            CellOverlayRect {
+                start,
+                end,
+                z: GRIDLINE_DEPTH,
+                start_color: color,
+                end_color: color,
+                line_params: Some(LineParams {
+                    width: GRIDLINE_WIDTH,
+                    include_endpoints: true,
+                    axis: parallel_axis,
+                }),
+            }
+        })
     }
 
     /// Draws a highlight on the render cell under the mouse cursor.
@@ -649,8 +685,14 @@ impl GridViewRender2D<'_> {
     }
 }
 
-fn gridline_alpha(pixel_spacing: f64, scale: Scale) -> f64 {
-    // Fade maximum grid alpha as zooming out beyond 1 cell per pixel.
+fn gridline_alpha(cell_spacing_exponent: u32, scale: Scale) -> f64 {
+    // Logarithms turn multiplication into addition and exponentiation into
+    // multiplication.
+    let log2_cell_spacing = (GRIDLINE_SPACING_COEFF as f64).log2()
+        + (GRIDLINE_SPACING_BASE as f64).log2() * cell_spacing_exponent as f64;
+    let log2_pixel_spacing = log2_cell_spacing + scale.log2_factor().raw();
+
+    // Fade maximum grid alpha as zooming out beyond 1:1.
     let max_alpha = clamped_interpolate(
         scale.log2_factor().raw(),
         0.0,
@@ -659,18 +701,14 @@ fn gridline_alpha(pixel_spacing: f64, scale: Scale) -> f64 {
         1.0,
     );
     let alpha = clamped_interpolate(
-        pixel_spacing.log2(),
-        (MIN_GRIDLINE_SPACING).log2(),
-        (MAX_GRIDLINE_SPACING).log2(),
+        log2_pixel_spacing,
+        MIN_GRIDLINE_SPACING.log2(),
+        MAX_GRIDLINE_SPACING.log2(),
         0.0,
-        1.0,
+        max_alpha,
     );
-    // Clamp to max alpha.
-    if alpha > max_alpha {
-        max_alpha
-    } else {
-        alpha
-    }
+
+    alpha
 }
 
 fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: f64) -> f64 {

@@ -34,17 +34,22 @@ mod consts {
     /// Width of selection resize preview outline, measured in cells.
     pub const SELECTION_RESIZE_PREVIEW_WIDTH: f64 = 2.0 * GRIDLINE_WIDTH;
 
-    /// Exponential base to use when fading out gridlines. 16 = 16 small gridlines
-    /// between each large gridline.
-    pub const GRIDLINE_SPACING_BASE: usize = 16;
-    /// Minimum number of pixels between gridlines.
-    pub const MIN_GRIDLINE_SPACING: f64 = 4.0;
-    /// Minimum number of pixels between gridlines with full opacity.
-    pub const MAX_GRIDLINE_SPACING: f64 = 256.0;
-    /// Maximum opacity of gridlines when zoomed out beyond one cell per pixel.
+    /// Coefficient to use for gridline spacing.
     ///
-    /// This is so that gridlines do not completely obscure the presence of
-    /// cells.
+    /// `a` in `a * b^n`
+    pub const GRIDLINE_SPACING_COEFF: usize = 1;
+    /// Exponential base to use for fading out smaller gridlines.
+    ///
+    /// `b` in `a * b^n` (`n` varies based on zoom level)
+    pub const GRIDLINE_SPACING_BASE: usize = 8;
+    /// Minimum number of units (pixels in 2D) between gridlines.
+    pub const MIN_GRIDLINE_SPACING: f64 = 4.0;
+    /// Minimum number of units (pixels in 2D) between gridlines with full opacity.
+    pub const MAX_GRIDLINE_SPACING: f64 = 256.0;
+    /// Maximum opacity of gridlines when zoomed out beyond 1:1.
+    ///
+    /// This is less than 1.0 so that gridlines do not completely obscure the
+    /// presence of cells.
     pub const ZOOMED_OUT_MAX_GRID_ALPHA: f64 = 0.75;
 
     /// Number of quads in each render batch.

@@ -195,8 +195,12 @@ impl Camera<Dim2D> for Camera2D {
         // This is the width of a pixel, measured in render cells.
         let one_pixel = render_cell_scale.cells_per_unit();
 
-        // Round to the nearest pixel (disabled because it causes jiggling).
-        // render_cell_pos = (render_cell_pos / one_pixel).round() * one_pixel;
+        // Round to the nearest pixel whne the scale factor is exactly a power
+        // of two. This is disabled otherwise because it causes jiggling between
+        // pixels during interpolation.
+        if render_cell_scale.log2_factor().fract().is_zero() {
+            render_cell_pos = (render_cell_pos / one_pixel).round() * one_pixel;
+        }
 
         // Offset by half a pixel if the target dimensions are odd, so that
         // cells boundaries always line up with pixel boundaries.

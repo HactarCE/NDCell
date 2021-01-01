@@ -65,7 +65,7 @@ impl GridViewRender2D<'_> {
         let vbos = &mut cache.vbos;
 
         // Steps #1: encode the quadtree as a texture.
-        let gl_quadtree = cache.gl_quadtrees.gl_quadtree_from_node(
+        let gl_quadtree = cache.gl_quadtrees.gl_ndtree_from_node(
             (&visible_quadtree.root).into(),
             self.render_cell_layer,
             Self::ndtree_node_color,
@@ -78,13 +78,18 @@ impl GridViewRender2D<'_> {
             cache.textures.cells(cells_w, cells_h);
         cells_fbo
             .draw(
-                &*vbos.quadtree_quad_with_quadtree_coords(visible_rect),
+                vbos.ndtree_quad(),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::QUADTREE,
                 &uniform! {
                     quadtree_texture: &gl_quadtree.texture,
                     layer_count: gl_quadtree.layers as i32,
                     root_idx: gl_quadtree.root_idx as u32,
+
+                    offset_into_quadtree: [
+                        visible_rect.min()[X] as i32,
+                        visible_rect.min()[Y] as i32,
+                    ],
                 },
                 &glium::DrawParameters {
                     viewport: Some(cells_texture_viewport),

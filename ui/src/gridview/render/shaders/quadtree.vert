@@ -1,11 +1,10 @@
 #version 140
 
-in vec2 cell_pos;
-in vec2 dest_pos;
+in vec2 pos;
 
-out vec2 vCellPos;
+out vec2 screen_pos;
 
 void main() {
-    gl_Position = vec4(dest_pos, 0.0, 1.0);
-    vCellPos = cell_pos;
+    gl_Position = vec4(pos, 0.0, 1.0);
+    screen_pos = pos;
 }

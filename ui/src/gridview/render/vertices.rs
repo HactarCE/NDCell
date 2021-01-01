@@ -2,6 +2,13 @@
 
 use glium::implement_vertex;
 
+/// Vertex containing only a 2D screen space position.
+#[derive(Debug, Default, Copy, Clone)]
+pub struct PosVertex2D {
+    pub pos: [f32; 2],
+}
+implement_vertex!(PosVertex2D, pos);
+
 /// Vertex containing a 2D floating-point position and a 2D texture position.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct TexturePosVertex {
@@ -9,14 +16,6 @@ pub struct TexturePosVertex {
     pub dest_coords: [f32; 2],
 }
 implement_vertex!(TexturePosVertex, src_coords, dest_coords);
-
-/// Vertex containing a 2D screen space position and a 2D cell position.
-#[derive(Debug, Default, Copy, Clone)]
-pub struct QuadtreePosVertex {
-    pub cell_pos: [i32; 2],
-    pub dest_pos: [f32; 2],
-}
-implement_vertex!(QuadtreePosVertex, cell_pos, dest_pos);
 
 /// Vertex containing a 3D floating-point position and an RGBA color.
 #[derive(Debug, Default, Copy, Clone)]

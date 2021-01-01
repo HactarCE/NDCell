@@ -14,7 +14,8 @@ fn empty_vbo<T: glium::Vertex>(size: usize) -> VertexBuffer<T> {
 }
 
 pub struct VboCache {
-    quadtree_quad: VertexBuffer<QuadtreePosVertex>,
+    ndtree_quad: VertexBuffer<PosVertex2D>,
+
     blit_quad: VertexBuffer<TexturePosVertex>,
     quad_verts_2d: VertexBuffer<Vertex2D>,
     quad_verts_3d: VertexBuffer<Vertex3D>,
@@ -23,7 +24,17 @@ pub struct VboCache {
 impl Default for VboCache {
     fn default() -> Self {
         Self {
-            quadtree_quad: empty_vbo(4),
+            ndtree_quad: VertexBuffer::immutable(
+                &**DISPLAY,
+                &[
+                    PosVertex2D { pos: [-1.0, -1.0] },
+                    PosVertex2D { pos: [1.0, -1.0] },
+                    PosVertex2D { pos: [-1.0, 1.0] },
+                    PosVertex2D { pos: [1.0, 1.0] },
+                ],
+            )
+            .expect("Failed to create vertex buffer"),
+
             blit_quad: empty_vbo(4),
             quad_verts_2d: empty_vbo(4 * QUAD_BATCH_SIZE),
             quad_verts_3d: empty_vbo(4 * QUAD_BATCH_SIZE),
@@ -32,33 +43,8 @@ impl Default for VboCache {
     }
 }
 impl VboCache {
-    pub fn quadtree_quad_with_quadtree_coords(
-        &mut self,
-        rect: IRect2D,
-    ) -> &mut VertexBuffer<QuadtreePosVertex> {
-        let left = rect.min()[X] as i32;
-        let right = rect.max()[X] as i32;
-        let bottom = rect.min()[Y] as i32;
-        let top = rect.max()[Y] as i32;
-        self.quadtree_quad.write(&[
-            QuadtreePosVertex {
-                cell_pos: [left, bottom],
-                dest_pos: [-1.0, -1.0],
-            },
-            QuadtreePosVertex {
-                cell_pos: [right, bottom],
-                dest_pos: [1.0, -1.0],
-            },
-            QuadtreePosVertex {
-                cell_pos: [left, top],
-                dest_pos: [-1.0, 1.0],
-            },
-            QuadtreePosVertex {
-                cell_pos: [right, top],
-                dest_pos: [1.0, 1.0],
-            },
-        ]);
-        &mut self.quadtree_quad
+    pub fn ndtree_quad(&self) -> &VertexBuffer<PosVertex2D> {
+        &self.ndtree_quad
     }
 
     pub fn blit_quad_with_src_coords(

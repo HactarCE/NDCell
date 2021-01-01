@@ -10,7 +10,7 @@ use crate::config::{Config, MouseDragBinding};
 use crate::mouse::{MouseDisplay, MouseState};
 
 mod generic;
-mod gl_quadtree;
+mod gl_ndtree;
 mod ibos;
 mod picker;
 mod render2d;
@@ -131,7 +131,7 @@ struct RenderCache {
     pub vbos: vbos::VboCache,
     pub textures: textures::TextureCache,
     pub picker: picker::MousePicker,
-    pub gl_quadtrees: gl_quadtree::GlQuadtreeCache,
+    pub gl_quadtrees: gl_ndtree::GlQuadtreeCache,
 }
 
 pub fn post_frame_clean_cache() {

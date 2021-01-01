@@ -1,4 +1,4 @@
-//! Quadtrees encoded in OpenGL textures.
+//! Quadtrees and octrees encoded in OpenGL textures.
 
 use anyhow::{Context, Result};
 use glium::texture::unsigned_texture2d::UnsignedTexture2d;
@@ -25,20 +25,23 @@ static WARN_TEXTURE_SIZE: Once = Once::new();
 
 // TODO: does all this caching stuff actually help perf?
 
-/// Several cached quadtrees encoded in OpenGL textures, which dropped if unused
-/// for one frame.
+pub type GlQuadtreeCache = GlNdTreeCache<Dim2D>;
+pub type GlOctreeCache = GlNdTreeCache<Dim3D>;
+
+/// Several cached ND-trees encoded in OpenGL textures, which are dropped if
+/// unused for one frame.
 #[derive(Default)]
-pub struct GlQuadtreeCache {
-    used: HashMap<(ArcNode<Dim2D>, Layer), GlQuadtree>,
-    unused: HashMap<(ArcNode<Dim2D>, Layer), GlQuadtree>,
+pub struct GlNdTreeCache<D: Dim> {
+    used: HashMap<(ArcNode<D>, Layer), GlNdTree>,
+    unused: HashMap<(ArcNode<D>, Layer), GlNdTree>,
 }
-impl GlQuadtreeCache {
-    pub fn gl_quadtree_from_node(
+impl<D: Dim> GlNdTreeCache<D> {
+    pub fn gl_ndtree_from_node(
         &mut self,
-        node: ArcNode<Dim2D>,
+        node: ArcNode<D>,
         min_layer: Layer,
-        pixelator: impl FnMut(NodeRef<'_, Dim2D>) -> [u8; 4],
-    ) -> Result<&GlQuadtree> {
+        pixelator: impl FnMut(NodeRef<'_, D>) -> [u8; 4],
+    ) -> Result<&GlNdTree> {
         let key = (node, min_layer);
 
         // There's some unnecessary mutation of the `HashMap` here, but this
@@ -53,7 +56,7 @@ impl GlQuadtreeCache {
         } else {
             // We DO need to regenerate the texture.
             let node_ref = key.0.as_ref_with_guard();
-            GlQuadtree::from_node(&node_ref, min_layer, pixelator)?
+            GlNdTree::from_node(&node_ref, min_layer, pixelator)?
         };
         Ok(self.used.entry(key).or_insert(ret))
     }
@@ -70,24 +73,24 @@ impl GlQuadtreeCache {
     }
 }
 
-/// Quadtree encoded in an OpenGL texture.
-pub struct GlQuadtree {
+/// ND-tree encoded in an OpenGL texture.
+pub struct GlNdTree {
     pub texture: UnsignedTexture2d,
     pub layers: usize,
     pub root_idx: usize,
 }
-impl GlQuadtree {
-    /// Constructs a GlQuadtree from a node and a function to turn a node into a
+impl GlNdTree {
+    /// Constructs a `GlNdTree` from a node and a function to turn a node into a
     /// solid color.
-    pub fn from_node<'n>(
-        node: impl NodeRefTrait<'n, D = Dim2D>,
+    pub fn from_node<'n, N: NodeRefTrait<'n>>(
+        node: N,
         min_layer: Layer,
-        mut pixelator: impl FnMut(NodeRef<'n, Dim2D>) -> [u8; 4],
+        mut pixelator: impl FnMut(NodeRef<'n, N::D>) -> [u8; 4],
     ) -> Result<Self> {
         // Use the parent layer because we want to store four pixels (each
         // representing a node at `min_layer`) inside one index.
-        let indexed_tree = FlatNdTree2D::from_node(node, min_layer.parent_layer(), |node| node);
-        let mut pixel_vec: Vec<u32> = indexed_tree
+        let flat_ndtree = FlatNdTree::from_node(node, min_layer.parent_layer(), |node| node);
+        let mut pixel_data: Vec<u32> = flat_ndtree
             .nodes()
             .iter()
             .flat_map(|indexed_node| match indexed_node {
@@ -108,30 +111,32 @@ impl GlQuadtree {
         // instead make a square texture that is as small as possible. Even this
         // might exceed the maximum texture size, but that's less likely. If it
         // does happen, we'll propogate the error up.
-        let width = ((pixel_vec.len() / 4) as f64).sqrt().ceil() as usize;
-        if width > WARN_TEXTURE_SIZE_THRESHOLD {
+        const UINTS_PER_PIXEL: usize = 4;
+        let pixel_count = pixel_data.len().div_ceil(&UINTS_PER_PIXEL);
+        let pixel_width = (pixel_count as f64).sqrt().ceil() as usize;
+        if pixel_width > WARN_TEXTURE_SIZE_THRESHOLD {
             WARN_TEXTURE_SIZE.call_once(|| {
                 warn!(
-                    "Texture encoding quadtree has exceeded {}x{}; this may crash older graphics cards",
+                    "Texture encoding ND-tree has exceeded {}x{}; this may crash older graphics cards",
                     WARN_TEXTURE_SIZE_THRESHOLD,
                     WARN_TEXTURE_SIZE_THRESHOLD,
                 )
             });
         }
-        assert!(width * width * 4 >= pixel_vec.len());
-        pixel_vec.resize(width * width * 4, 0);
+        assert!(pixel_width * pixel_width * UINTS_PER_PIXEL >= pixel_data.len());
+        pixel_data.resize(pixel_width * pixel_width * UINTS_PER_PIXEL, 0);
         let raw_image: RawImage2d<'_, u32> = RawImage2d {
-            data: Cow::Owned(pixel_vec),
-            width: width as u32,
-            height: width as u32,
-            format: ClientFormat::U32U32U32U32,
+            data: Cow::Owned(pixel_data),
+            width: pixel_width as u32,
+            height: pixel_width as u32,
+            format: ClientFormat::U32U32U32U32, // UNITS_PER_PIXEL = 4
         };
         let texture = UnsignedTexture2d::new(&**DISPLAY, raw_image)
-            .with_context(|| format!("Quadtree texture too big: {}x{}", width, width))?;
+            .with_context(|| format!("ND-tree texture too big: {}x{}", pixel_width, pixel_width))?;
         Ok(Self {
             texture,
-            layers: indexed_tree.layers(),
-            root_idx: indexed_tree.root_idx(),
+            layers: flat_ndtree.layers(),
+            root_idx: flat_ndtree.root_idx(),
         })
     }
 }

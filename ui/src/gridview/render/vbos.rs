@@ -42,20 +42,20 @@ impl VboCache {
         let top = rect.max()[Y] as i32;
         self.quadtree_quad.write(&[
             QuadtreePosVertex {
-                cell_coords: [left, bottom],
-                dest_coords: [-1.0, -1.0],
+                cell_pos: [left, bottom],
+                dest_pos: [-1.0, -1.0],
             },
             QuadtreePosVertex {
-                cell_coords: [right, bottom],
-                dest_coords: [1.0, -1.0],
+                cell_pos: [right, bottom],
+                dest_pos: [1.0, -1.0],
             },
             QuadtreePosVertex {
-                cell_coords: [left, top],
-                dest_coords: [-1.0, 1.0],
+                cell_pos: [left, top],
+                dest_pos: [-1.0, 1.0],
             },
             QuadtreePosVertex {
-                cell_coords: [right, top],
-                dest_coords: [1.0, 1.0],
+                cell_pos: [right, top],
+                dest_pos: [1.0, 1.0],
             },
         ]);
         &mut self.quadtree_quad

@@ -10,13 +10,13 @@ pub struct TexturePosVertex {
 }
 implement_vertex!(TexturePosVertex, src_coords, dest_coords);
 
-/// Vertex containing a 2D floating-point position and a 2D cell position.
+/// Vertex containing a 2D screen space position and a 2D cell position.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct QuadtreePosVertex {
-    pub cell_coords: [i32; 2],
-    pub dest_coords: [f32; 2],
+    pub cell_pos: [i32; 2],
+    pub dest_pos: [f32; 2],
 }
-implement_vertex!(QuadtreePosVertex, cell_coords, dest_coords);
+implement_vertex!(QuadtreePosVertex, cell_pos, dest_pos);
 
 /// Vertex containing a 3D floating-point position and an RGBA color.
 #[derive(Debug, Default, Copy, Clone)]

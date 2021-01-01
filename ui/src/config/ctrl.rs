@@ -84,7 +84,7 @@ pub enum ForwardAxis3D {
 }
 impl Default for ForwardAxis3D {
     fn default() -> Self {
-        Self::FlatAligned
+        Self::Flat
     }
 }
 

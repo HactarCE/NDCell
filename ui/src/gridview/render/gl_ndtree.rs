@@ -101,7 +101,7 @@ impl GlNdTree {
                     .unwrap()
                     .into_iter()
                     .map(&mut pixelator)
-                    .map(u32::from_le_bytes) // shader expects little-endian
+                    .map(u32::from_be_bytes) // shader expects big-endian
                     .collect_vec(),
                 FlatNdTreeNode::NonLeaf(indices, _) => {
                     indices.into_iter().map(|&i| i as u32).collect_vec()

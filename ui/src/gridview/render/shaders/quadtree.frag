@@ -37,10 +37,10 @@ void main() {
         bvec2 which_child = bvec2(cell_pos & (1 << child_layer));
         node = getNodeChild(node, which_child);
     }
-    // RGBA, little-endian; convert from 0-255 to 0.0-1.0
-    float r = float( node        & 255u) / 255.0;
-    float g = float((node >>  8) & 255u) / 255.0;
-    float b = float((node >> 16) & 255u) / 255.0;
-    float a = float((node >> 24) & 255u) / 255.0;
+    // RGBA, big-endian; convert from 0-255 to 0.0-1.0
+    float r = float((node >> 24) & 255u) / 255.0;
+    float g = float((node >> 16) & 255u) / 255.0;
+    float b = float((node >>  8) & 255u) / 255.0;
+    float a = float( node        & 255u) / 255.0;
     color = vec4(r, g, b, a);
 }

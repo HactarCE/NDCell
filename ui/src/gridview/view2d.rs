@@ -324,7 +324,7 @@ fn make_freeform_draw_drag_handler(
             .camera()
             .cell_transform()
             .pixel_to_global_cell(new_cursor_pos)
-            .map(|pos| pos.floor().0);
+            .map(|pos| pos.floor());
         if let Some(pos2) = &pos2 {
             for pos in ndcell_core::math::bresenham(pos1.clone(), pos2.clone()) {
                 this.automaton.ndtree.set_cell(&pos, new_cell_state);
@@ -481,7 +481,7 @@ impl GridView2D {
             let sel_center = sel_rect.center();
             let visible_min = visible_rect.min();
             let visible_max = visible_rect.max();
-            let visible_center = self.camera().pos().floor().0;
+            let visible_center = self.camera().pos().floor();
 
             for &ax in Dim2D::axes() {
                 if sel_max[ax] < visible_min[ax].clone() + PADDING

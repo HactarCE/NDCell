@@ -38,7 +38,7 @@ impl Camera2D {
     pub fn pixel_to_screen_pos(&self, pixel: FVec2D) -> Option<ScreenPos2D> {
         let transform = self.cell_transform();
         let cell = transform.pixel_to_global_cell(pixel)?;
-        let int_cell = cell.floor().0;
+        let int_cell = cell.floor();
         let render_cell = transform.pixel_to_local_render_cell(pixel)?;
         let int_render_cell = render_cell.floor().to_ivec();
 
@@ -80,7 +80,7 @@ impl Camera<Dim2D> for Camera2D {
     }
     fn snap_pos(&mut self) {
         if CONFIG.lock().ctrl.snap_center_2d {
-            self.center = self.center.floor().0.to_fixedvec() + 0.5;
+            self.center = self.center.floor().to_fixedvec() + 0.5;
         } else {
             self.center = self.center.round().to_fixedvec();
         }
@@ -226,7 +226,7 @@ impl Camera<Dim2D> for Camera2D {
         // corner of the screen; i.e. the "half diagonal."
         let half_diag: FixedVec2D = target_cells_size / 2.0;
 
-        BigRect2D::centered(self.pos().floor().0, &half_diag.ceil().0)
+        BigRect2D::centered(self.pos().floor(), &half_diag.ceil())
     }
 
     fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {

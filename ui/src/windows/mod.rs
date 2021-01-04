@@ -124,9 +124,9 @@ impl MainWindow {
                     if let Some(hover_pos) = view3d.hovered_cell_pos(mouse.pos) {
                         ui.text(format!(
                             "Cursor: X = {}, Y = {}, Z = {}",
-                            hover_pos[X].floor().0,
-                            hover_pos[Y].floor().0,
-                            hover_pos[Z].floor().0,
+                            hover_pos[X].floor(),
+                            hover_pos[Y].floor(),
+                            hover_pos[Z].floor(),
                         ));
                     } else {
                         ui.text("");

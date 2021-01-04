@@ -92,7 +92,7 @@ pub fn resize_selection_relative<D: Dim>(
     // position.
     let delta = drag_end_pos - drag_start_pos;
     for axis in axes {
-        pos2[axis] += delta[axis].round().0;
+        pos2[axis] += delta[axis].round();
     }
 
     NdRect::span(pos1, pos2)
@@ -113,7 +113,7 @@ pub fn resize_selection_absolute<D: Dim>(
 
     let axes = absolute_selection_resize_axes(&initial_selection, drag_start_pos);
     for axis in axes {
-        pos2[axis] = drag_end_pos[axis].floor().0;
+        pos2[axis] = drag_end_pos[axis].floor();
     }
 
     NdRect::span(pos1, pos2)

@@ -62,7 +62,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         // Compute the width of cells represented by each render cell.
         let render_cell_len = render_cell_layer.big_len();
 
-        let origin = camera.pos().floor().0.div_floor(&render_cell_len) * &render_cell_len;
+        let origin = camera.pos().floor().div_floor(&render_cell_len) * &render_cell_len;
 
         // Determine the rectangle of visible cells in global coordinate space,
         // rounded to the nearest render cell.

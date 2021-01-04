@@ -156,7 +156,7 @@ impl Camera<Dim3D> for Camera3D {
         self.pivot = pos
     }
     fn snap_pos(&mut self) {
-        self.pivot = self.pivot.floor().0.to_fixedvec() + 0.5;
+        self.pivot = self.pivot.round().to_fixedvec();
     }
 
     fn scale(&self) -> Scale {
@@ -253,7 +253,7 @@ impl Camera<Dim3D> for Camera3D {
     }
     fn global_visible_rect(&self) -> BigRect3D {
         let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
-        let center = self.pos().floor().0;
+        let center = self.pos().floor();
         let inv_render_cell_scale_factor = render_cell_scale.inv_factor().to_f64().unwrap();
         let render_cell_radius = 0.5 + VIEW_RADIUS_3D * inv_render_cell_scale_factor;
         let render_cell_radius = render_cell_radius.ceil() as usize;

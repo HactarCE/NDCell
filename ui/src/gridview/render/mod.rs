@@ -132,6 +132,7 @@ struct RenderCache {
     pub textures: textures::TextureCache,
     pub picker: picker::MousePicker,
     pub gl_quadtrees: gl_ndtree::GlQuadtreeCache,
+    pub gl_octrees: gl_ndtree::GlOctreeCache,
 }
 
 pub fn post_frame_clean_cache() {

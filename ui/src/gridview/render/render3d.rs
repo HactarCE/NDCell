@@ -4,6 +4,7 @@
 //! models and maybe textures in the future.
 
 use anyhow::{Context, Result};
+use glium::index::PrimitiveType;
 use glium::Surface;
 
 use ndcell_core::prelude::*;
@@ -34,90 +35,79 @@ impl GridViewRenderDimension<'_> for RenderDim3D {
 impl GridViewRender3D<'_> {
     /// Draw an ND-tree to scale on the target.
     pub fn draw_cells(&mut self, params: CellDrawParams<'_, Dim3D>) -> Result<()> {
-        let (visible_octree, visible_cuboid) =
+        let (visible_octree, _visible_cuboid) =
             match self.clip_ndtree_to_visible_render_cells(&params) {
                 Some(x) => x,
                 None => return Ok(()), // There is nothing to draw.
             };
 
-        // Position of the actual camera, not the camera pivot.
-        let real_camera_pos = ((self.camera.camera_pos() - self.origin.to_fixedvec())
+        let fog_center = ((self.camera.pos() - self.origin.to_fixedvec())
             / FixedPoint::from(self.render_cell_layer.big_len()))
         .to_fvec();
 
-        let mut quad_verts: Vec<Vertex3D> = vec![];
         let octree_offset = (visible_octree.offset - &self.origin)
             .div_floor(&self.render_cell_layer.big_len())
             .to_ivec();
-        self.build_node_quads(
-            &mut quad_verts,
-            visible_octree.root.as_ref(),
-            octree_offset,
-            Some(visible_cuboid + octree_offset),
-            real_camera_pos,
-        );
-        self.draw_quads(&quad_verts)?;
+
+        // Reborrow is necessary in order to split borrow.
+        let cache = &mut *self.cache;
+        let vbos = &mut cache.vbos;
+
+        let gl_octree = cache.gl_octrees.gl_ndtree_from_node(
+            (&visible_octree.root).into(),
+            self.render_cell_layer,
+            Self::ndtree_node_color,
+        )?;
+
+        self.params
+            .target
+            .draw(
+                &*vbos.ndtree_quad(),
+                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
+                &shaders::OCTREE,
+                &uniform! {
+                    matrix: self.transform.gl_matrix(),
+
+                    octree_texture: &gl_octree.texture,
+                    layer_count: gl_octree.layers,
+                    root_idx: gl_octree.root_idx,
+                    // empty_node_idxs: &gl_octree.empty_node_idxs,
+
+                    offset_into_octree: [
+                        octree_offset[X] as i32,
+                        octree_offset[Y] as i32,
+                        octree_offset[Z] as i32,
+                    ],
+
+                    perf_view: false,
+
+                    light_direction: LIGHT_DIRECTION,
+                    light_ambientness: LIGHT_AMBIENTNESS,
+                    max_light: MAX_LIGHT,
+
+                    fog_color: crate::colors::BACKGROUND_3D,
+                    fog_center: [
+                        fog_center[X].raw() as f32,
+                        fog_center[Y].raw() as f32,
+                        fog_center[Z].raw() as f32,
+                    ],
+                    fog_start: FOG_START_FACTOR * 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
+                    fog_end: 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
+                },
+                &glium::DrawParameters {
+                    depth: glium::Depth {
+                        test: glium::DepthTest::IfLessOrEqual,
+                        write: true,
+                        ..glium::Depth::default()
+                    },
+                    blend: glium::Blend::alpha_blending(),
+                    smooth: Some(glium::Smooth::Nicest),
+                    ..Default::default()
+                },
+            )
+            .context("Drawing cells")?;
 
         Ok(())
-    }
-
-    fn build_node_quads(
-        &self,
-        buffer: &mut Vec<Vertex3D>,
-        octree_node: NodeRef<'_, Dim3D>,
-        node_offset: IVec3D,
-        mut visible_cuboid: Option<IRect3D>,
-        real_camera_pos: FVec3D,
-    ) {
-        // Don't draw empty nodes.
-        if octree_node.is_empty() {
-            return;
-        }
-
-        let side_len = (octree_node.layer() - self.render_cell_layer)
-            .len()
-            .unwrap() as isize;
-
-        if let Some(vis_rect) = visible_cuboid {
-            let node_rect = IRect::with_size(node_offset, IVec::repeat(side_len));
-            // Don't draw nodes outside the visible cuboid.
-            if !vis_rect.intersects(&node_rect) {
-                return;
-            }
-            // Don't bother keeping track of the visible cuboid if this node is
-            // completely inside it.
-            if vis_rect.contains(&node_rect) {
-                visible_cuboid = None;
-            }
-        }
-
-        if octree_node.layer() > self.render_cell_layer {
-            // The node is too big; subdivide and recurse.
-            for (i, child) in octree_node.subdivide().unwrap().into_iter().enumerate() {
-                let child_offset = Layer(1).child_offset(i).unwrap().to_ivec() * (side_len / 2);
-                self.build_node_quads(
-                    buffer,
-                    child,
-                    node_offset + child_offset,
-                    visible_cuboid,
-                    real_camera_pos,
-                )
-            }
-        } else {
-            // The node is small enough; build the vertices.
-            let [r, g, b, _a] = Self::ndtree_node_color(octree_node);
-            buffer.extend(
-                cuboid_verts(
-                    real_camera_pos,
-                    FRect3D::single_cell(node_offset.to_fvec()),
-                    [r, g, b],
-                )
-                .iter()
-                .flatten()
-                .flatten()
-                .copied(),
-            );
-        }
     }
 
     fn draw_quads(&mut self, quad_verts: &[Vertex3D]) -> Result<()> {
@@ -125,9 +115,6 @@ impl GridViewRender3D<'_> {
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
         let ibos = &mut cache.ibos;
-
-        let matrix: [[f32; 4]; 4] =
-            (self.transform.projection_transform * self.transform.render_cell_transform).into();
 
         let camera_pos = ((self.camera.pos() - self.origin.to_fixedvec())
             / &FixedPoint::from(self.render_cell_layer.big_len()))
@@ -147,7 +134,7 @@ impl GridViewRender3D<'_> {
                     &ibos.quad_indices(count),
                     &shaders::RGBA_3D_FOG,
                     &uniform! {
-                        matrix: matrix,
+                        matrix: self.transform.gl_matrix(),
 
                         light_direction: LIGHT_DIRECTION,
                         light_ambientness: LIGHT_AMBIENTNESS,

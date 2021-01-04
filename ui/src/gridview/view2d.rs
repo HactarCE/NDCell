@@ -10,9 +10,8 @@ use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult
 use super::selection::Selection2D;
 use super::{DragHandler, DragOutcome, DragType};
 use crate::commands::*;
-use crate::config::Config;
 use crate::mouse::MouseDisplay;
-use crate::Scale;
+use crate::{Scale, CONFIG};
 
 pub type GridView2D = GenericGridView<GridViewDim2D>;
 
@@ -22,28 +21,25 @@ impl GridViewDimension for GridViewDim2D {
     type D = Dim2D;
     type Camera = Camera2D;
 
-    fn do_view_command(this: &mut GridView2D, command: ViewCommand, config: &Config) -> Result<()> {
+    fn do_view_command(this: &mut GridView2D, command: ViewCommand) -> Result<()> {
         // Handle `FitView` specially because it depends on the cell contents of
         // the automaton.
         if matches!(command, ViewCommand::FitView) {
             if let Some(pattern_bounding_rect) = this.automaton.ndtree.bounding_rect() {
                 // Set position.
                 let NdVec([x, y]) = pattern_bounding_rect.center();
-                this.do_command(
-                    ViewCommand::GoTo2D {
-                        x: Some(x.into()),
-                        y: Some(y.into()),
-                        relative: false,
-                        scaled: false,
-                    },
-                    config,
-                )?;
+                this.do_command(ViewCommand::GoTo2D {
+                    x: Some(x.into()),
+                    y: Some(y.into()),
+                    relative: false,
+                    scaled: false,
+                })?;
 
                 // Set scale.
                 let pattern_size = pattern_bounding_rect.size();
                 let target_size = this.camera().target_dimensions();
                 let scale = Scale::from_fit(pattern_size, target_size);
-                this.do_command(ViewCommand::GoToScale(scale.floor()), config)?;
+                this.do_command(ViewCommand::GoToScale(scale.floor()))?;
             }
             return Ok(());
         }
@@ -51,7 +47,7 @@ impl GridViewDimension for GridViewDim2D {
         // Delegate to the camera.
         let maybe_new_drag_handler = this
             .camera_interpolator
-            .do_view_command(command, config)
+            .do_view_command(command)
             .context("Executing view command")?;
 
         // Update drag handler, if the camera gave one.
@@ -68,7 +64,7 @@ impl GridViewDimension for GridViewDim2D {
 
         Ok(())
     }
-    fn do_draw_command(this: &mut GridView2D, command: DrawCommand, config: &Config) -> Result<()> {
+    fn do_draw_command(this: &mut GridView2D, command: DrawCommand) -> Result<()> {
         match command {
             DrawCommand::SetState(new_selected_cell_state) => {
                 this.selected_cell_state = new_selected_cell_state;
@@ -101,7 +97,7 @@ impl GridViewDimension for GridViewDim2D {
                     }
                 };
 
-                this.reset_worker_thread(config);
+                this.reset_worker_thread();
                 this.record();
                 this.start_drag(DragType::Drawing, new_drag_handler);
             }
@@ -113,17 +109,13 @@ impl GridViewDimension for GridViewDim2D {
             DrawCommand::Cancel => {
                 if this.is_drawing() {
                     this.stop_drag();
-                    this.undo(config);
+                    this.undo();
                 }
             }
         }
         Ok(())
     }
-    fn do_select_command(
-        this: &mut GridView2D,
-        command: SelectCommand,
-        config: &Config,
-    ) -> Result<()> {
+    fn do_select_command(this: &mut GridView2D, command: SelectCommand) -> Result<()> {
         match command {
             SelectCommand::Drag(c, cursor_start) => {
                 let maybe_initial_pos = this.camera().pixel_to_screen_pos(cursor_start);
@@ -162,7 +154,6 @@ impl GridViewDimension for GridViewDim2D {
 
                 let new_drag_handler_with_threshold: DragHandler<GridView2D> =
                     make_selection_drag_handler_with_threshold(
-                        config,
                         cursor_start,
                         wait_for_drag_threshold,
                         new_drag_handler,
@@ -173,13 +164,13 @@ impl GridViewDimension for GridViewDim2D {
                     | SelectDragCommand::Resize { .. }
                     | SelectDragCommand::ResizeToCell
                     | SelectDragCommand::MoveSelection => {
-                        if config.hist.record_select {
-                            this.reset_worker_thread(config);
+                        if CONFIG.lock().hist.record_select {
+                            this.reset_worker_thread();
                             this.record();
                         }
                     }
                     SelectDragCommand::MoveCells | SelectDragCommand::CopyCells => {
-                        this.reset_worker_thread(config);
+                        this.reset_worker_thread();
                         this.record();
                     }
                 }
@@ -349,12 +340,11 @@ fn make_freeform_draw_drag_handler(
 type SelectionDragHandler = Box<dyn FnMut(&mut GridView2D, ScreenPos2D) -> Result<DragOutcome>>;
 
 fn make_selection_drag_handler_with_threshold(
-    config: &Config,
     cursor_start: FVec2D,
     wait_for_drag_threshold: bool,
     mut inner_drag_handler: SelectionDragHandler,
 ) -> DragHandler<GridView2D> {
-    let drag_threshold = r64(config.mouse.drag_threshold);
+    let drag_threshold = r64(CONFIG.lock().mouse.drag_threshold);
 
     // State variable to be moved into the closure and used by the
     // drag handler.

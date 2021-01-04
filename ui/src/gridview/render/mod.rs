@@ -6,7 +6,7 @@ use std::cell::RefCell;
 
 use ndcell_core::prelude::*;
 
-use crate::config::{Config, MouseDragBinding};
+use crate::config::MouseDragBinding;
 use crate::mouse::{MouseDisplay, MouseState};
 
 mod generic;
@@ -90,8 +90,6 @@ lazy_static! {
 pub struct RenderParams<'a> {
     /// Render target.
     pub target: &'a mut glium::Frame,
-    /// User configuration.
-    pub config: &'a Config,
     /// Mouse state.
     pub mouse: MouseState,
     /// Modifiers held on the keyboard.

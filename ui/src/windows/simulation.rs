@@ -4,6 +4,7 @@ use ndcell_core::prelude::*;
 
 use crate::commands::*;
 use crate::windows::BuildParams;
+use crate::CONFIG;
 
 #[derive(Debug, Default)]
 pub struct SimulationWindow {
@@ -14,13 +15,14 @@ impl SimulationWindow {
     pub fn build(&mut self, params: &mut BuildParams<'_>) {
         let BuildParams {
             ui,
-            config,
             mouse: _,
             gridview,
         } = params;
 
         if self.is_visible {
             Window::new(&ImString::new("Simulation")).build(&ui, || {
+                let mut config = CONFIG.lock();
+
                 let mut width = ui.window_content_region_width();
                 if width < 100.0 {
                     width = 200.0;

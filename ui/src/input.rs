@@ -9,10 +9,10 @@ use std::time::{Duration, Instant};
 use ndcell_core::prelude::*;
 
 use crate::commands::*;
-use crate::config::Config;
 use crate::gridview::GridView;
 use crate::mouse::{MouseDisplay, MouseState};
 use crate::Scale;
+use crate::CONFIG;
 
 const SHIFT: ModifiersState = ModifiersState::SHIFT;
 const CTRL: ModifiersState = ModifiersState::CTRL;
@@ -77,7 +77,6 @@ impl State {
 
     pub fn frame<'a>(
         &'a mut self,
-        config: &'a mut Config,
         gridview: &'a GridView,
         imgui_io: &imgui::Io,
         platform: &WinitPlatform,
@@ -89,7 +88,6 @@ impl State {
         }
         FrameInProgress {
             state: self,
-            config,
             gridview,
 
             has_keyboard,
@@ -103,7 +101,6 @@ impl State {
 #[must_use = "call finish()"]
 pub struct FrameInProgress<'a> {
     state: &'a mut State,
-    config: &'a mut Config,
     gridview: &'a GridView,
 
     /// Whether to handle keyboard input (false if it is captured by imgui).
@@ -147,18 +144,19 @@ impl FrameInProgress<'_> {
                             MouseScrollDelta::LineDelta(x, y) => (x as f64, y as f64),
                             MouseScrollDelta::PixelDelta(PhysicalPosition { x, y }) => (x, y),
                         };
+                        let config = CONFIG.lock();
                         let speed = match (&self.gridview, delta) {
                             (GridView::View2D(_), MouseScrollDelta::LineDelta(_, _)) => {
-                                self.config.ctrl.discrete_scale_speed_2d
+                                config.ctrl.discrete_scale_speed_2d
                             }
                             (GridView::View2D(_), MouseScrollDelta::PixelDelta(_)) => {
-                                self.config.ctrl.smooth_scroll_speed_2d
+                                config.ctrl.smooth_scroll_speed_2d
                             }
                             (GridView::View3D(_), MouseScrollDelta::LineDelta(_, _)) => {
-                                self.config.ctrl.discrete_scale_speed_3d
+                                config.ctrl.discrete_scale_speed_3d
                             }
                             (GridView::View3D(_), MouseScrollDelta::PixelDelta(_)) => {
-                                self.config.ctrl.smooth_scroll_speed_3d
+                                config.ctrl.smooth_scroll_speed_3d
                             }
                         };
                         self.gridview.enqueue(ViewCommand::Scale {
@@ -183,6 +181,8 @@ impl FrameInProgress<'_> {
     }
 
     fn handle_key(&mut self, input: &KeyboardInput) {
+        let mut config = CONFIG.lock();
+
         match input {
             // Handle key press.
             KeyboardInput {
@@ -207,13 +207,13 @@ impl FrameInProgress<'_> {
                         }
                         Some(VirtualKeyCode::Escape) => self.gridview.enqueue(Command::Cancel),
                         Some(VirtualKeyCode::Equals) | Some(VirtualKeyCode::NumpadAdd) => {
-                            self.config.sim.step_size *= 2;
+                            config.sim.step_size *= 2;
                             self.gridview.enqueue(SimCommand::UpdateStepSize);
                         }
                         Some(VirtualKeyCode::Minus) | Some(VirtualKeyCode::NumpadSubtract) => {
-                            self.config.sim.step_size /= 2;
-                            if self.config.sim.step_size < 1.into() {
-                                self.config.sim.step_size = 1.into();
+                            config.sim.step_size /= 2;
+                            if config.sim.step_size < 1.into() {
+                                config.sim.step_size = 1.into();
                             }
                             self.gridview.enqueue(SimCommand::UpdateStepSize);
                         }
@@ -333,6 +333,8 @@ impl FrameInProgress<'_> {
     }
 
     fn handle_mouse_press(&mut self, button: MouseButton) {
+        let config = CONFIG.lock();
+
         // Ignore mouse press if we are already dragging.
         if self.state.dragging_button.is_some() {
             return;
@@ -346,7 +348,7 @@ impl FrameInProgress<'_> {
 
         let ndim = self.gridview.ndim();
         let mods = self.state.modifiers;
-        let (click_binding, drag_binding) = self.config.mouse.get_bindings(ndim, mods, button);
+        let (click_binding, drag_binding) = config.mouse.get_bindings(ndim, mods, button);
 
         let maybe_mouse_target = self.gridview.last_render_result().mouse_target.as_ref();
         if button == MouseButton::Left && maybe_mouse_target.is_some() {
@@ -380,10 +382,12 @@ impl FrameInProgress<'_> {
     }
 
     fn update_mouse_state(&mut self) {
+        let config = CONFIG.lock();
+
         self.state.mouse.dragging = self.state.dragging_button.is_some();
 
         if !self.state.mouse.dragging {
-            let (click_binding, drag_binding) = self.config.mouse.get_bindings(
+            let (click_binding, drag_binding) = config.mouse.get_bindings(
                 self.gridview.ndim(),
                 self.state.modifiers,
                 MouseButton::Left,
@@ -402,9 +406,11 @@ impl FrameInProgress<'_> {
     pub fn finish(mut self) {
         self.update_mouse_state();
 
+        let mut config = CONFIG.lock();
+
         // Update DPI in config.
 
-        self.config.gfx.dpi = self.dpi;
+        config.gfx.dpi = self.dpi;
 
         // Move the viewport in one step.
 
@@ -417,7 +423,7 @@ impl FrameInProgress<'_> {
         }
 
         let distance_per_second = if self.state.modifiers.shift() {
-            self.config.ctrl.speed_modifier
+            config.ctrl.speed_modifier
         } else {
             1.0
         };
@@ -455,7 +461,7 @@ impl FrameInProgress<'_> {
         if self.has_keyboard && !self.state.modifiers.intersects(CTRL | ALT | LOGO) {
             match self.gridview {
                 GridView::View2D(view2d) => {
-                    let move_speed = self.config.ctrl.keybd_move_speed_2d * speed * self.dpi;
+                    let move_speed = config.ctrl.keybd_move_speed_2d * speed * self.dpi;
                     let pan_x = if pan_left { -move_speed } else { 0.0 }
                         + if pan_right { move_speed } else { 0.0 };
                     let pan_y = if pan_south { -move_speed } else { 0.0 }
@@ -470,7 +476,7 @@ impl FrameInProgress<'_> {
                         moved = true;
                     }
 
-                    let scale_speed = self.config.ctrl.keybd_scale_speed_2d * speed;
+                    let scale_speed = config.ctrl.keybd_scale_speed_2d * speed;
                     let log2_factor = if zoom_in { scale_speed } else { 0.0 }
                         + if zoom_out { -scale_speed } else { 0.0 };
                     if log2_factor != 0.0 {
@@ -484,7 +490,7 @@ impl FrameInProgress<'_> {
                 }
 
                 GridView::View3D(view3d) => {
-                    let move_speed = self.config.ctrl.keybd_move_speed_3d * speed * self.dpi;
+                    let move_speed = config.ctrl.keybd_move_speed_3d * speed * self.dpi;
                     let x = if move_left { -move_speed } else { 0.0 }
                         + if move_right { move_speed } else { 0.0 };
                     let y = if move_down { -move_speed } else { 0.0 }
@@ -507,8 +513,8 @@ impl FrameInProgress<'_> {
             }
         }
         if !moved
-            && ((self.gridview.is_2d() && self.config.ctrl.snap_pos_2d)
-                || (self.gridview.is_3d() && self.config.ctrl.snap_pos_3d))
+            && ((self.gridview.is_2d() && config.ctrl.snap_pos_2d)
+                || (self.gridview.is_3d() && config.ctrl.snap_pos_3d))
         {
             // Snap to the nearest position.
             self.gridview.enqueue(ViewCommand::SnapPos);
@@ -520,8 +526,8 @@ impl FrameInProgress<'_> {
         let time_to_snap_scale = self.state.scale_snap_cooldown.is_none()
             || (Instant::now() >= self.state.scale_snap_cooldown.unwrap());
         if time_to_snap_scale
-            && ((self.gridview.is_2d() && self.config.ctrl.snap_scale_2d)
-                || (self.gridview.is_3d() && self.config.ctrl.snap_scale_3d))
+            && ((self.gridview.is_2d() && config.ctrl.snap_scale_2d)
+                || (self.gridview.is_3d() && config.ctrl.snap_scale_3d))
         {
             // Snap to the nearest power-of-2 scale.
             self.gridview.enqueue(ViewCommand::SnapScale {

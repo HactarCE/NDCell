@@ -15,7 +15,6 @@ mod view3d;
 mod worker;
 
 use crate::commands::*;
-use crate::config::Config;
 pub use camera::*;
 pub use generic::GenericGridView;
 pub use history::History;
@@ -88,7 +87,7 @@ impl GridView {
         }
     }
 
-    pub fn frame_duration(&self) ->Option< Duration> {
+    pub fn frame_duration(&self) -> Option<Duration> {
         match self {
             GridView::View2D(view2d) => view2d.frame_duration(),
             GridView::View3D(view3d) => view3d.frame_duration(),
@@ -141,10 +140,10 @@ impl GridView {
     }
     /// Does all the frame things: executes commands, advances the simulation,
     /// etc.
-    pub fn do_frame(&mut self, config: &Config) -> Result<()> {
+    pub fn do_frame(&mut self) -> Result<()> {
         match self {
-            GridView::View2D(view2d) => view2d.do_frame(config),
-            GridView::View3D(view3d) => view3d.do_frame(config),
+            GridView::View2D(view2d) => view2d.do_frame(),
+            GridView::View3D(view3d) => view3d.do_frame(),
         }
     }
     /// Updates camera parameters and renders the gridview, recording and

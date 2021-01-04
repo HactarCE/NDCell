@@ -7,7 +7,6 @@ use super::generic::{GenericGridView, GridViewDimension};
 use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
 use super::{DragHandler, DragType};
 use crate::commands::*;
-use crate::config::Config;
 
 pub type GridView3D = GenericGridView<GridViewDim3D>;
 
@@ -17,11 +16,11 @@ impl GridViewDimension for GridViewDim3D {
     type D = Dim3D;
     type Camera = Camera3D;
 
-    fn do_view_command(this: &mut GridView3D, command: ViewCommand, config: &Config) -> Result<()> {
+    fn do_view_command(this: &mut GridView3D, command: ViewCommand) -> Result<()> {
         // Delegate to the camera.
         let maybe_new_drag_handler = this
             .camera_interpolator
-            .do_view_command(command, config)
+            .do_view_command(command)
             .context("Executing view command")?;
 
         // Update drag handler, if the camera gave one.
@@ -38,18 +37,10 @@ impl GridViewDimension for GridViewDim3D {
 
         Ok(())
     }
-    fn do_draw_command(
-        _this: &mut GridView3D,
-        _command: DrawCommand,
-        _config: &Config,
-    ) -> Result<()> {
+    fn do_draw_command(_this: &mut GridView3D, _command: DrawCommand) -> Result<()> {
         Err(anyhow!("unimplemented"))
     }
-    fn do_select_command(
-        _this: &mut GridView3D,
-        _command: SelectCommand,
-        _config: &Config,
-    ) -> Result<()> {
+    fn do_select_command(_this: &mut GridView3D, _command: SelectCommand) -> Result<()> {
         Err(anyhow!("unimplemented"))
     }
 

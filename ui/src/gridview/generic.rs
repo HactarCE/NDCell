@@ -17,7 +17,7 @@ use super::selection::Selection;
 use super::worker::*;
 use super::{DragHandler, DragOutcome, DragType, WorkType};
 use crate::commands::*;
-use crate::config::Config;
+use crate::CONFIG;
 
 /// Number of previous frame times to track. If this is too low, camera
 /// interpolation may not work.
@@ -113,15 +113,11 @@ impl<G: GridViewDimension> HistoryBase for GenericGridView<G> {
         }
     }
 
-    fn restore_history_entry(&mut self, config: &Config, entry: Self::Entry) -> Self::Entry {
+    fn restore_history_entry(&mut self, entry: Self::Entry) -> Self::Entry {
         HistoryEntry {
             automaton: std::mem::replace(&mut self.automaton, entry.automaton),
-            selection: Selection::restore_history_entry(
-                config,
-                &mut self.selection,
-                entry.selection,
-            ),
-            camera: if config.hist.record_view {
+            selection: Selection::restore_history_entry(&mut self.selection, entry.selection),
+            camera: if CONFIG.lock().hist.record_view {
                 std::mem::replace(&mut self.camera_interpolator.target, entry.camera)
             } else {
                 self.camera_interpolator.target.clone()
@@ -146,7 +142,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
 
     /// Does all the frame things: executes commands, advances the simulation,
     /// etc.
-    pub fn do_frame(&mut self, config: &Config) -> Result<()> {
+    pub fn do_frame(&mut self) -> Result<()> {
         // Update frame times.
         self.last_frame_times.push_front(Instant::now());
         if self.last_frame_times.len() > MAX_LAST_FRAME_TIMES {
@@ -173,30 +169,30 @@ impl<G: GridViewDimension> GenericGridView<G> {
         // Interpolate camera.
         if let Some(elapsed) = self.frame_duration() {
             self.camera_interpolator
-                .advance(elapsed, config.ctrl.interpolation);
+                .advance(elapsed, CONFIG.lock().ctrl.interpolation);
         }
 
         // Execute commands.
         let old_command_queue = std::mem::replace(self.command_queue.get_mut(), VecDeque::new());
         for command in old_command_queue {
-            self.do_command(command, config)?;
+            self.do_command(command)?;
         }
 
         // Trigger breakpoint.
         if self.is_running()
-            && config.sim.use_breakpoint
-            && self.generation_count() >= &config.sim.breakpoint_gen
+            && CONFIG.lock().sim.use_breakpoint
+            && self.generation_count() >= &CONFIG.lock().sim.breakpoint_gen
         {
-            self.stop_running(config);
+            self.stop_running();
         }
 
         // Collect garbage if memory usage has gotten too high.
         if !self.gc_in_progress() {
-            if self.as_sim().memory_usage() > config.sim.max_memory {
+            if self.as_sim().memory_usage() > CONFIG.lock().sim.max_memory {
                 trace!(
                     "Memory usage reached {} bytes; max is {}",
                     self.as_sim().memory_usage(),
-                    config.sim.max_memory
+                    CONFIG.lock().sim.max_memory
                 );
                 self.schedule_gc();
             }
@@ -205,65 +201,61 @@ impl<G: GridViewDimension> GenericGridView<G> {
         Ok(())
     }
     /// Executes a `Command`.
-    pub(super) fn do_command(
-        &mut self,
-        command: impl Into<Command>,
-        config: &Config,
-    ) -> Result<()> {
+    pub(super) fn do_command(&mut self, command: impl Into<Command>) -> Result<()> {
         match command.into() {
-            Command::Sim(c) => self.do_sim_command(c, config),
-            Command::History(c) => self.do_history_command(c, config),
-            Command::View(c) => self.do_view_command(c, config),
-            Command::Draw(c) => self.do_draw_command(c, config),
-            Command::Select(c) => self.do_select_command(c, config),
+            Command::Sim(c) => self.do_sim_command(c),
+            Command::History(c) => self.do_history_command(c),
+            Command::View(c) => self.do_view_command(c),
+            Command::Draw(c) => self.do_draw_command(c),
+            Command::Select(c) => self.do_select_command(c),
             Command::GarbageCollect => Ok(self.schedule_gc()),
 
             Command::ContinueDrag(cursor_pos) => self.continue_drag(cursor_pos),
             Command::StopDrag => Ok(self.stop_drag()),
 
             Command::Cancel => {
-                if self.reset_worker_thread(config) {
+                if self.reset_worker_thread() {
                     Ok(())
                 } else if self.is_drawing() {
-                    self.do_command(DrawCommand::Cancel, config)
+                    self.do_command(DrawCommand::Cancel)
                 } else {
-                    self.do_command(SelectCommand::Cancel, config)
+                    self.do_command(SelectCommand::Cancel)
                 }
             }
         }
     }
     /// Executes a `SimCommand`.
-    fn do_sim_command(&mut self, command: SimCommand, config: &Config) -> Result<()> {
+    fn do_sim_command(&mut self, command: SimCommand) -> Result<()> {
         match command {
             SimCommand::Step(step_size) => {
-                self.try_step(config, step_size)?;
+                self.try_step(step_size)?;
             }
             SimCommand::StepStepSize => {
-                self.try_step(config, config.sim.step_size.clone())?;
+                self.try_step(CONFIG.lock().sim.step_size.clone())?;
             }
 
             SimCommand::StartRunning => {
                 // If this fails (e.g. because the user is drawing), ignore the
                 // error.
-                let _ = self.start_running(config);
+                let _ = self.start_running();
             }
             SimCommand::StopRunning => {
-                self.stop_running(config);
+                self.stop_running();
             }
             SimCommand::ToggleRunning => {
                 if self.is_running() {
-                    self.stop_running(config);
+                    self.stop_running();
                 } else {
                     // If this fails, ignore the error.
-                    let _ = self.start_running(config);
+                    let _ = self.start_running();
                 }
             }
 
             SimCommand::UpdateStepSize => {
                 if self.is_running() {
-                    self.stop_running(config);
+                    self.stop_running();
                     // This should not fail.
-                    self.start_running(config)?;
+                    self.start_running()?;
                 }
             }
 
@@ -271,7 +263,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
                 if let Some(work_type) = self.work_type {
                     match work_type {
                         WorkType::SimStep | WorkType::SimContinuous => {
-                            self.reset_worker_thread(config);
+                            self.reset_worker_thread();
                         }
                     }
                 }
@@ -280,46 +272,46 @@ impl<G: GridViewDimension> GenericGridView<G> {
         Ok(())
     }
     /// Executes a `HistoryCommand`.
-    fn do_history_command(&mut self, command: HistoryCommand, config: &Config) -> Result<()> {
+    fn do_history_command(&mut self, command: HistoryCommand) -> Result<()> {
         if self.is_drawing() {
             trace!("Ignoring {:?} command while drawing", command);
             return Ok(());
         }
         match command {
             HistoryCommand::Undo => {
-                self.reset_worker_thread(config);
-                self.undo(config);
+                self.reset_worker_thread();
+                self.undo();
             }
             HistoryCommand::Redo => {
                 if self.can_redo() {
-                    self.reset_worker_thread(config);
-                    self.redo(config);
+                    self.reset_worker_thread();
+                    self.redo();
                 }
             }
             // TODO make this JumpTo instead of UndoTo
             HistoryCommand::UndoTo(gen) => {
-                self.reset_worker_thread(config);
+                self.reset_worker_thread();
                 while self.generation_count() > &gen && self.can_undo() {
-                    self.undo(config);
+                    self.undo();
                 }
             }
         }
         Ok(())
     }
     /// Executes a `View` command.
-    fn do_view_command(&mut self, command: ViewCommand, config: &Config) -> Result<()> {
+    fn do_view_command(&mut self, command: ViewCommand) -> Result<()> {
         // `View` commands depend on the number of dimensions.
-        G::do_view_command(self, command, config)
+        G::do_view_command(self, command)
     }
     /// Executes a `Draw` command.
-    fn do_draw_command(&mut self, command: DrawCommand, config: &Config) -> Result<()> {
+    fn do_draw_command(&mut self, command: DrawCommand) -> Result<()> {
         // `Draw` commands depend on the number of dimensions.
-        G::do_draw_command(self, command, config)
+        G::do_draw_command(self, command)
     }
     /// Executes a `Select` command.
-    fn do_select_command(&mut self, command: SelectCommand, config: &Config) -> Result<()> {
+    fn do_select_command(&mut self, command: SelectCommand) -> Result<()> {
         // `Select` commands depend on the number of dimensions.
-        G::do_select_command(self, command, config)
+        G::do_select_command(self, command)
     }
 
     /// Starts a drag event.
@@ -364,22 +356,22 @@ impl<G: GridViewDimension> GenericGridView<G> {
     }
     /// Cancels any long-running operation on the worker thread. Returns `true`
     /// if an operation was canceled, or `false` if it was not.
-    pub(super) fn reset_worker_thread(&mut self, config: &Config) -> bool {
+    pub(super) fn reset_worker_thread(&mut self) -> bool {
         match self.work_type.take() {
             Some(WorkType::SimStep) => {
                 // Remove redundant history entry.
-                self.undo(config);
+                self.undo();
             }
             Some(WorkType::SimContinuous) => {
                 // Remove redundant history entry if zero generations were
                 // simulated.
                 let new_gens = self.automaton.generation_count().clone();
-                self.undo(config);
+                self.undo();
                 let old_gens = self.automaton.generation_count().clone();
                 if old_gens == new_gens {
                     trace!("Removing redundant history entry from simulating zero generations");
                 } else {
-                    self.redo(config);
+                    self.redo();
                 }
             }
             None => (),
@@ -390,15 +382,15 @@ impl<G: GridViewDimension> GenericGridView<G> {
     /// Requests a one-off simulation from the worker thread. Returns `true` if
     /// successful, or false if another running operation prevented it (e.g.
     /// drawing or continuous simulation).
-    fn try_step(&mut self, config: &Config, step_size: BigInt) -> Result<bool> {
+    fn try_step(&mut self, step_size: BigInt) -> Result<bool> {
         if self.is_drawing() {
             return Ok(false);
         }
         if self.is_running() {
-            self.reset_worker_thread(config);
+            self.reset_worker_thread();
             return Ok(false);
         }
-        self.reset_worker_thread(config);
+        self.reset_worker_thread();
 
         let mut automaton: Automaton = self.automaton.clone().into();
         self.do_on_worker_thread(
@@ -418,23 +410,23 @@ impl<G: GridViewDimension> GenericGridView<G> {
         Ok(true)
     }
     /// Stops continuous simulation, if it is running; does nothing otherwise.
-    fn stop_running(&mut self, config: &Config) {
+    fn stop_running(&mut self) {
         if self.is_running() {
-            self.reset_worker_thread(config);
+            self.reset_worker_thread();
         }
     }
     /// Starts continuous simulation; does nothing if it is already running.
     /// Returns an error if unsuccessful (e.g. the user is drawing).
-    fn start_running(&mut self, config: &Config) -> Result<()> {
+    fn start_running(&mut self) -> Result<()> {
         if self.is_running() {
             return Ok(());
         } else if self.is_drawing() {
             return Err(anyhow!("Cannot start simulation while drawing"));
         }
 
-        self.reset_worker_thread(config);
+        self.reset_worker_thread();
         let mut automaton: Automaton = self.automaton.clone().into();
-        let step_size = config.sim.step_size.clone();
+        let step_size = CONFIG.lock().sim.step_size.clone();
         self.do_on_worker_thread(
             WorkType::SimContinuous,
             Box::new(move |hook| loop {
@@ -688,7 +680,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
     pub fn render(&mut self, params: RenderParams<'_>) -> Result<&RenderResult> {
         // Update DPI.
         self.camera_interpolator
-            .set_dpi(params.config.gfx.dpi as f32);
+            .set_dpi(CONFIG.lock().gfx.dpi as f32);
         // Update the pixel size of the viewport.
         self.camera_interpolator
             .set_target_dimensions(params.target.get_dimensions());
@@ -718,23 +710,11 @@ pub trait GridViewDimension: fmt::Debug + Default {
     type Camera: Camera<Self::D>;
 
     /// Executes a `View` command.
-    fn do_view_command(
-        this: &mut GenericGridView<Self>,
-        command: ViewCommand,
-        config: &Config,
-    ) -> Result<()>;
+    fn do_view_command(this: &mut GenericGridView<Self>, command: ViewCommand) -> Result<()>;
     /// Executes a `Draw` command.
-    fn do_draw_command(
-        this: &mut GenericGridView<Self>,
-        command: DrawCommand,
-        config: &Config,
-    ) -> Result<()>;
+    fn do_draw_command(this: &mut GenericGridView<Self>, command: DrawCommand) -> Result<()>;
     /// Executes a `Select` command.
-    fn do_select_command(
-        this: &mut GenericGridView<Self>,
-        command: SelectCommand,
-        config: &Config,
-    ) -> Result<()>;
+    fn do_select_command(this: &mut GenericGridView<Self>, command: SelectCommand) -> Result<()>;
 
     /// Renders the gridview.
     fn render(this: &mut GenericGridView<Self>, params: RenderParams<'_>) -> Result<RenderResult>;

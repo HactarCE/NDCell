@@ -11,10 +11,10 @@ use std::collections::VecDeque;
 use std::time::Instant;
 
 use crate::clipboard_compat::*;
-use crate::config::Config;
 use crate::gridview;
 use crate::input;
 use crate::windows;
+use crate::CONFIG;
 
 lazy_static! {
     static ref EVENT_LOOP: SendWrapper<RefCell<Option<EventLoop<()>>>> =
@@ -32,7 +32,6 @@ pub fn show_gui() -> ! {
     let display = &**DISPLAY;
 
     // Initialize runtime data.
-    let mut config = Config::default();
     let mut gridview = crate::make_default_gridview(crate::DEFAULT_NDIM);
     let mut main_window = windows::MainWindow::default();
     let mut input_state = input::State::default();
@@ -49,7 +48,7 @@ pub fn show_gui() -> ! {
     platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
 
     // Initialize imgui fonts.
-    let font_size = config.gfx.font_size as f32;
+    let font_size = CONFIG.lock().gfx.font_size as f32;
     imgui.fonts().add_font(&[FontSource::TtfData {
         data: include_bytes!("../resources/font/NotoSans-Regular.ttf"),
         size_pixels: font_size,
@@ -98,10 +97,10 @@ pub fn show_gui() -> ! {
             };
 
             if do_frame && next_frame_time <= now {
-                next_frame_time = now + config.gfx.frame_duration();
+                next_frame_time = now + CONFIG.lock().gfx.frame_duration();
                 if next_frame_time < Instant::now() {
                     // Skip a frame (or several).
-                    next_frame_time = Instant::now() + config.gfx.frame_duration();
+                    next_frame_time = Instant::now() + CONFIG.lock().gfx.frame_duration();
                 }
                 *control_flow = ControlFlow::WaitUntil(next_frame_time);
 
@@ -117,8 +116,7 @@ pub fn show_gui() -> ! {
                 last_frame_time = now;
 
                 // Prep the gridview for event handling.
-                let mut input_frame =
-                    input_state.frame(&mut config, &gridview, &imgui_io, &platform);
+                let mut input_frame = input_state.frame(&gridview, &imgui_io, &platform);
 
                 for ev in events_buffer.drain(..) {
                     // Let imgui handle events.
@@ -144,7 +142,6 @@ pub fn show_gui() -> ! {
                 let ui = imgui.frame();
                 main_window.build(&mut windows::BuildParams {
                     ui: &ui,
-                    config: &mut config,
                     mouse: input_state.mouse(),
                     gridview: &mut gridview,
                 });
@@ -155,14 +152,13 @@ pub fn show_gui() -> ! {
                 let mut target = display.draw();
 
                 // Execute commands and run the simulation.
-                gridview.do_frame(&config).expect("Unhandled exception!");
+                gridview.do_frame().expect("Unhandled exception!");
 
                 if target.get_dimensions() != (0, 0) {
                     // Render the gridview.
                     gridview
                         .render(gridview::RenderParams {
                             target: &mut target,
-                            config: &config,
                             mouse: input_state.mouse(),
                             modifiers: input_state.modifiers(),
                         })

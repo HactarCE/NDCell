@@ -7,9 +7,9 @@ use Axis::{X, Y, Z};
 mod simulation;
 
 use crate::commands::Command;
-use crate::config::*;
 use crate::gridview::*;
 use crate::mouse::MouseState;
+use crate::CONFIG;
 use simulation::SimulationWindow;
 
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
@@ -19,7 +19,6 @@ const BLUE: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
 
 pub struct BuildParams<'a> {
     pub ui: &'a imgui::Ui<'a>,
-    pub config: &'a mut Config,
     pub mouse: MouseState,
     pub gridview: &'a mut GridView,
 }
@@ -33,12 +32,13 @@ impl MainWindow {
     pub fn build(&mut self, params: &mut BuildParams<'_>) {
         let BuildParams {
             ui,
-            config,
             mouse,
             gridview,
         } = params;
 
         Window::new(&ImString::new(crate::TITLE)).build(&ui, || {
+            let config = CONFIG.lock();
+
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
             ui.text("");
             let fps = ui.io().framerate.ceil() as usize;

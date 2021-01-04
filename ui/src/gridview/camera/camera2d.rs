@@ -7,7 +7,7 @@ use Axis::{X, Y};
 
 use super::{Camera, CellTransform2D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE};
 use crate::commands::{ViewCommand, ViewDragCommand};
-use crate::config::Config;
+use crate::CONFIG;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Camera2D {
@@ -78,8 +78,8 @@ impl Camera<Dim2D> for Camera2D {
     fn set_pos(&mut self, pos: FixedVec<Dim2D>) {
         self.center = pos;
     }
-    fn snap_pos(&mut self, config: &Config) {
-        if config.ctrl.snap_center_2d {
+    fn snap_pos(&mut self) {
+        if CONFIG.lock().ctrl.snap_center_2d {
             self.center = self.center.floor().0.to_fixedvec() + 0.5;
         } else {
             self.center = self.center.round().to_fixedvec();
@@ -229,11 +229,7 @@ impl Camera<Dim2D> for Camera2D {
         BigRect2D::centered(self.pos().floor().0, &half_diag.ceil().0)
     }
 
-    fn do_view_command(
-        &mut self,
-        command: ViewCommand,
-        config: &Config,
-    ) -> Result<Option<DragHandler<Self>>> {
+    fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
         match command {
             ViewCommand::Drag(c, cursor_start) => match c {
                 ViewDragCommand::Orbit => {
@@ -304,7 +300,7 @@ impl Camera<Dim2D> for Camera2D {
             }
 
             ViewCommand::SnapPos => {
-                self.snap_pos(config);
+                self.snap_pos();
                 Ok(None)
             }
             ViewCommand::SnapScale { invariant_pos } => {

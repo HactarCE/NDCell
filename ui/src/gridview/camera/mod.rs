@@ -8,7 +8,6 @@ mod interpolator;
 mod transform;
 
 use crate::commands::ViewCommand;
-use crate::config::Config;
 use crate::gridview::{DragHandler, DragOutcome};
 use crate::Scale;
 pub use camera2d::{Camera2D, ScreenPos2D};
@@ -58,7 +57,7 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
     /// Sets the position the camera is looking at/from.
     fn set_pos(&mut self, pos: FixedVec<D>);
     /// Snap to the nearest integer cell position.
-    fn snap_pos(&mut self, config: &Config);
+    fn snap_pos(&mut self);
 
     /// Returns the scale of the camera.
     fn scale(&self) -> Scale;
@@ -193,11 +192,7 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
     fn global_visible_rect(&self) -> BigRect<D>;
 
     /// Executes a movement command.
-    fn do_view_command(
-        &mut self,
-        command: ViewCommand,
-        config: &Config,
-    ) -> Result<Option<DragHandler<Self>>>;
+    fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>>;
 }
 
 /// Returns the "average" scale between the two cameras, averaging scale

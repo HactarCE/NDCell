@@ -10,7 +10,7 @@ use ndcell_core::prelude::*;
 
 use super::{Camera, DragHandler, DragOutcome};
 use crate::commands::ViewCommand;
-use crate::config::{Config, Interpolation};
+use crate::config::Interpolation;
 
 /// Distance beneath which to "snap" to the target, for interpolation strategies
 /// like exponential decay that never actually reach their target.
@@ -102,14 +102,10 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
 
 impl<D: Dim, C: Camera<D>> Interpolator<D, C> {
     /// Executes a movement command, interpolating if necessary.
-    pub fn do_view_command(
-        &mut self,
-        command: ViewCommand,
-        config: &Config,
-    ) -> Result<Option<DragHandler<Self>>> {
+    pub fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
         Ok(self
             .target
-            .do_view_command(command, config)?
+            .do_view_command(command)?
             // Turn the DragHandler<C> into a DragHandler<Interpolator<D, C>>.
             .map(|mut camera_drag_handler| -> DragHandler<Self> {
                 Box::new(move |this, cursor_pos| {

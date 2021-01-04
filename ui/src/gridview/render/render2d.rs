@@ -37,7 +37,7 @@ use super::CellDrawParams;
 use crate::config::MouseDragBinding;
 use crate::gridview::*;
 use crate::mouse::MouseDisplay;
-use crate::Scale;
+use crate::{Scale, CONFIG};
 
 pub(in crate::gridview) type GridViewRender2D<'a> = GenericGridViewRender<'a, RenderDim2D>;
 
@@ -307,7 +307,7 @@ impl GridViewRender2D<'_> {
         );
 
         // "Resize selection" target.
-        let click_target_width = self.params.config.ctrl.selection_resize_drag_target_width
+        let click_target_width = CONFIG.lock().ctrl.selection_resize_drag_target_width
             * self.render_cell_scale.inv_factor().to_f64().unwrap();
         let (min, max) = (
             visible_selection_rect.min(),

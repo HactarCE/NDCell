@@ -10,7 +10,8 @@ use super::{
     Camera, CellTransform3D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE, VIEW_RADIUS_3D,
 };
 use crate::commands::{ViewCommand, ViewDragCommand};
-use crate::config::{Config, ForwardAxis3D, UpAxis3D};
+use crate::config::{ForwardAxis3D, UpAxis3D};
+use crate::CONFIG;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Camera3D {
@@ -154,7 +155,7 @@ impl Camera<Dim3D> for Camera3D {
     fn set_pos(&mut self, pos: FixedVec<Dim3D>) {
         self.pivot = pos
     }
-    fn snap_pos(&mut self, _config: &Config) {
+    fn snap_pos(&mut self) {
         self.pivot = self.pivot.floor().0.to_fixedvec() + 0.5;
     }
 
@@ -260,11 +261,9 @@ impl Camera<Dim3D> for Camera3D {
         BigRect3D::centered(center, &cell_radius)
     }
 
-    fn do_view_command(
-        &mut self,
-        command: ViewCommand,
-        config: &Config,
-    ) -> Result<Option<DragHandler<Self>>> {
+    fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
+        let config = CONFIG.lock();
+
         match command {
             ViewCommand::Drag(c, cursor_start) => match c {
                 ViewDragCommand::Orbit => {
@@ -375,7 +374,7 @@ impl Camera<Dim3D> for Camera3D {
             }
 
             ViewCommand::SnapPos => {
-                self.snap_pos(config);
+                self.snap_pos();
                 Ok(None)
             }
             ViewCommand::SnapScale { invariant_pos: _ } => {

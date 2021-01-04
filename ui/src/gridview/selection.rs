@@ -1,6 +1,6 @@
 use ndcell_core::prelude::*;
 
-use crate::config::Config;
+use crate::CONFIG;
 
 pub type Selection2D = Selection<Dim2D>;
 pub type Selection3D = Selection<Dim3D>;
@@ -12,14 +12,13 @@ pub struct Selection<D: Dim> {
 }
 impl<D: Dim> Selection<D> {
     pub fn restore_history_entry(
-        config: &Config,
         mut current: &mut Option<Self>,
         entry: Option<Self>,
     ) -> Option<Self> {
         let current_has_cells = current.as_ref().and_then(|s| s.cells.as_ref()).is_some();
         let entry_has_cells = entry.as_ref().and_then(|s| s.cells.as_ref()).is_some();
 
-        if config.hist.record_select || entry_has_cells {
+        if CONFIG.lock().hist.record_select || entry_has_cells {
             std::mem::replace(&mut current, entry)
         } else if current_has_cells {
             std::mem::replace(&mut current, None)

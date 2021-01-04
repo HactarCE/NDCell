@@ -17,6 +17,7 @@ extern crate glium;
 extern crate lazy_static;
 
 use log::{debug, info, warn};
+use parking_lot::Mutex;
 use std::sync::Arc;
 
 use ndcell_core::prelude::*;
@@ -32,11 +33,16 @@ mod mouse;
 mod scale;
 mod windows;
 
+use config::Config;
 use gui::DISPLAY;
 use scale::Scale;
 
 /// The title of the window (both the OS window, and the main imgui window).
 const TITLE: &str = "NDCell";
+
+lazy_static! {
+    static ref CONFIG: Mutex<Config> = Mutex::new(Config::default());
+}
 
 fn main() {
     simple_logger::SimpleLogger::new()

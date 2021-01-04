@@ -253,10 +253,11 @@ impl Camera<Dim3D> for Camera3D {
     fn global_visible_rect(&self) -> BigRect3D {
         let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
         let center = self.pos().floor().0;
-        let radius = BigInt::from(
-            (VIEW_RADIUS_3D * render_cell_scale.inv_factor().to_f64().unwrap()) as usize,
-        ) << render_cell_layer.to_u32();
-        BigRect3D::centered(center, &radius)
+        let inv_render_cell_scale_factor = render_cell_scale.inv_factor().to_f64().unwrap();
+        let render_cell_radius = 0.5 + VIEW_RADIUS_3D * inv_render_cell_scale_factor;
+        let render_cell_radius = render_cell_radius.ceil() as usize;
+        let cell_radius = BigInt::from(render_cell_radius) << render_cell_layer.to_u32();
+        BigRect3D::centered(center, &cell_radius)
     }
 
     fn do_view_command(

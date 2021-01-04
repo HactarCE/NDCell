@@ -34,6 +34,7 @@ void main() {
     ivec2 cell_pos = ivec2(floor(gl_FragCoord.xy)) + offset_into_quadtree;
     uint node = root_idx;
     for (int child_layer = layer_count - 1; child_layer >= 0; child_layer--) {
+        if (node == 0u) break; // The node is empty.
         bvec2 which_child = bvec2(cell_pos & (1 << child_layer));
         node = getNodeChild(node, which_child);
     }

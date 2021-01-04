@@ -18,11 +18,10 @@
   - [x] Cubes
   - [x] Lighting
   - [ ] Gridlines
-  - [ ] Improve performance
+  - [x] Improve performance
     - [x] Limit visibility / implement render cells
     - [x] Hide occluded faces
-    - [ ] Traverse octree on GPU
-    - [ ] Reduce detail on distant octree nodes
+    - [x] Traverse octree on GPU
 - [ ] Basic editing in 3D
   - [ ] Selecting
     - [ ] Resize selection

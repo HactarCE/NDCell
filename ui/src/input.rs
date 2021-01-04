@@ -416,12 +416,16 @@ impl FrameInProgress<'_> {
             scaled = true;
         }
 
-        let speed_per_second = if self.state.modifiers.shift() {
+        let distance_per_second = if self.state.modifiers.shift() {
             self.config.ctrl.speed_modifier
         } else {
             1.0
         };
-        let speed = speed_per_second / self.gridview.fps(&self.config);
+        let frame_duration = self
+            .gridview
+            .frame_duration()
+            .unwrap_or(Duration::default()); // .unwrap_or(Duration::zero());
+        let speed = distance_per_second * frame_duration.as_secs_f64();
 
         let keys = &self.state.keys;
 

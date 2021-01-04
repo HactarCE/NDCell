@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::any::Any;
 use std::fmt;
 use std::marker::PhantomData;
+use std::time::Duration;
 
 use ndcell_core::prelude::*;
 
@@ -48,7 +49,7 @@ pub trait Interpolate: Any {
     /// Advances the state by one frame using the given interpolation strategy.
     ///
     /// Returns `true` if the target has been reached, or `false` otherwise.
-    fn advance(&mut self, fps: f64, interpolation: Interpolation) -> bool;
+    fn advance(&mut self, frame_duration: Duration, interpolation: Interpolation) -> bool;
 
     /// Sets the display scaling factor of the underlying camera.
     fn set_dpi(&mut self, dpi: f32);
@@ -62,7 +63,9 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
             .unwrap_or(f64::MAX)
     }
 
-    fn advance(&mut self, fps: f64, interpolation: Interpolation) -> bool {
+    fn advance(&mut self, frame_duration: Duration, interpolation: Interpolation) -> bool {
+        let seconds_elapsed = frame_duration.as_secs_f64();
+
         if self.current == self.target {
             true
         } else if self.distance() < DISTANCE_THRESHOLD {
@@ -71,8 +74,10 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
         } else {
             let t = match interpolation {
                 Interpolation::None => 1.0,
-                Interpolation::Linear { speed } => speed / fps / self.distance(),
-                Interpolation::Exponential { decay_constant } => 1.0 / fps / decay_constant,
+                Interpolation::Linear {
+                    speed: distance_per_second,
+                } => distance_per_second * seconds_elapsed / self.distance(),
+                Interpolation::Exponential { decay_constant } => seconds_elapsed / decay_constant,
             };
             self.current = C::lerp(
                 &self.current,

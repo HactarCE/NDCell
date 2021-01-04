@@ -88,10 +88,10 @@ impl GridView {
         }
     }
 
-    pub fn fps(&self, config: &Config) -> f64 {
+    pub fn frame_duration(&self) ->Option< Duration> {
         match self {
-            GridView::View2D(view2d) => view2d.fps(config),
-            GridView::View3D(view3d) => view3d.fps(config),
+            GridView::View2D(view2d) => view2d.frame_duration(),
+            GridView::View3D(view3d) => view3d.frame_duration(),
         }
     }
     pub fn last_render_result(&self) -> &RenderResult {

@@ -13,3 +13,9 @@ impl Default for GfxConfig {
         }
     }
 }
+impl GfxConfig {
+    /// Returns the duration of one frame based on the configured FPS value.
+    pub fn frame_duration(&self) -> std::time::Duration {
+        std::time::Duration::from_secs_f64(1.0 / self.fps)
+    }
+}

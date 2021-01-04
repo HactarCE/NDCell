@@ -1,4 +1,5 @@
 use imgui::*;
+use std::time::Duration;
 
 use ndcell_core::prelude::*;
 use Axis::{X, Y, Z};
@@ -40,19 +41,22 @@ impl MainWindow {
         Window::new(&ImString::new(crate::TITLE)).build(&ui, || {
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
             ui.text("");
-            let fps = ui.io().framerate as usize;
+            let fps = ui.io().framerate.ceil() as usize;
             ui.text_colored(fps_color(fps), format!("Framerate = {} FPS", fps));
-            let total_update_ms: f64 = gridview
+            let total_sim_time: Duration = gridview
                 .last_sim_times()
                 .iter()
-                .map(|duration| duration.as_secs_f64())
+                .map(|duration| duration)
                 .sum();
-            if total_update_ms == 0.0 {
+            if total_sim_time == Duration::default() {
+                // .is_zero()
                 ui.text("");
             } else {
-                let avg_update_ms = total_update_ms / gridview.last_sim_times().len() as f64;
-                let ups = (1.0 / avg_update_ms) as usize;
-                ui.text_colored(fps_color(ups), format!("Max sim speed = {} step/sec", ups));
+                let avg_sim_time = total_sim_time / gridview.last_sim_times().len() as u32;
+                ui.text_colored(
+                    fps_color((1.0 / avg_sim_time.as_secs_f64()) as usize),
+                    format!("Avg. sim time = {:.1?}", avg_sim_time),
+                );
             }
             if gridview.is_drawing() {
                 ui.text_colored(BLUE, "DRAWING");

@@ -19,7 +19,10 @@ use super::{DragHandler, DragOutcome, DragType, WorkType};
 use crate::commands::*;
 use crate::config::Config;
 
-/// The number of previous simulation steps to track for counting simulation
+/// Number of previous frame times to track. If this is too low, camera
+/// interpolation may not work.
+const MAX_LAST_FRAME_TIMES: usize = 2;
+/// Number of previous simulation steps to track for counting simulation
 /// steps per second.
 const MAX_LAST_SIM_TIMES: usize = 4;
 
@@ -144,6 +147,12 @@ impl<G: GridViewDimension> GenericGridView<G> {
     /// Does all the frame things: executes commands, advances the simulation,
     /// etc.
     pub fn do_frame(&mut self, config: &Config) -> Result<()> {
+        // Update frame times.
+        self.last_frame_times.push_front(Instant::now());
+        if self.last_frame_times.len() > MAX_LAST_FRAME_TIMES {
+            self.last_frame_times.pop_back();
+        }
+
         // Fetch result from worker thread.
         if let Some(work_type) = self.work_type {
             match self.worker_thread.take_data() {
@@ -162,9 +171,10 @@ impl<G: GridViewDimension> GenericGridView<G> {
         }
 
         // Interpolate camera.
-        let fps = self.fps(config);
-        let interpolation = config.ctrl.interpolation;
-        self.camera_interpolator.advance(fps, interpolation);
+        if let Some(elapsed) = self.frame_duration() {
+            self.camera_interpolator
+                .advance(elapsed, config.ctrl.interpolation);
+        }
 
         // Execute commands.
         let old_command_queue = std::mem::replace(self.command_queue.get_mut(), VecDeque::new());
@@ -692,17 +702,14 @@ impl<G: GridViewDimension> GenericGridView<G> {
         &self.last_render_result
     }
 
-    /// Returns the framerate measured between the last two frames, or the
-    /// user-configured FPS if that fails.
-    pub fn fps(&self, config: &Config) -> f64 {
+    /// Returns the time duration measured between the last two frames, or
+    /// `None` if there is not enough data.
+    pub fn frame_duration(&self) -> Option<Duration> {
         let last_frame_times = &self.last_frame_times;
         last_frame_times
             .get(0)
             .zip(last_frame_times.get(1))
-            .and_then(|(latest, &prior)| latest.checked_duration_since(prior))
-            .and_then(|duration| R64::try_new(1.0 / duration.as_secs_f64()))
-            .map(R64::raw)
-            .unwrap_or(config.gfx.fps)
+            .and_then(|(&latest, &prior)| latest.checked_duration_since(prior))
     }
 }
 

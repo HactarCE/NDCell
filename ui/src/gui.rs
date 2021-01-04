@@ -8,7 +8,7 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::clipboard_compat::*;
 use crate::config::Config;
@@ -61,36 +61,48 @@ pub fn show_gui() -> ! {
 
     // Main loop
     let mut last_frame_time = Instant::now();
+    let mut next_frame_time = Instant::now();
     EVENT_LOOP
         .borrow_mut()
         .take()
         .unwrap()
         .run(move |event, _ev_loop, control_flow| {
-            // Decide whether to handle events and render everything.
-            let do_frame = match event.to_static() {
+            // Handle events.
+            let mut now = Instant::now();
+            let mut do_frame = false;
+            match event.to_static() {
                 Some(Event::NewEvents(cause)) => match cause {
-                    StartCause::ResumeTimeReached { .. } | StartCause::Init => true,
-                    _ => false,
+                    StartCause::ResumeTimeReached {
+                        start: _,
+                        requested_resume,
+                    } => {
+                        now = requested_resume;
+                        do_frame = true;
+                    }
+                    StartCause::Init => {
+                        next_frame_time = now;
+                        do_frame = true;
+                    }
+                    _ => (),
                 },
-                Some(Event::LoopDestroyed) => {
-                    // The program is about to exit.
-                    false
-                }
-                Some(ev) => {
-                    // Queue the event to be handled next time we render
-                    // everything.
-                    events_buffer.push_back(ev);
-                    false
-                }
-                None => {
-                    // Ignore this event.
-                    false
-                }
+
+                // The program is about to exit.
+                Some(Event::LoopDestroyed) => (),
+
+                // Queue the event to be handled next time we render
+                // everything.
+                Some(ev) => events_buffer.push_back(ev),
+
+                // Ignore this event.
+                None => (),
             };
 
-            if do_frame {
-                let current_time = Instant::now();
-                let next_frame_time = current_time + Duration::from_secs_f64(1.0 / config.gfx.fps);
+            if do_frame && next_frame_time <= now {
+                next_frame_time = now + config.gfx.frame_duration();
+                if next_frame_time < Instant::now() {
+                    // Skip a frame (or several).
+                    next_frame_time = Instant::now() + config.gfx.frame_duration();
+                }
                 *control_flow = ControlFlow::WaitUntil(next_frame_time);
 
                 // Prep imgui for event handling.
@@ -99,10 +111,10 @@ pub fn show_gui() -> ! {
                     .prepare_frame(imgui_io, gl_window.window())
                     .expect("Failed to start frame");
 
-                if let Some(delta) = Instant::now().checked_duration_since(last_frame_time) {
+                if let Some(delta) = now.checked_duration_since(last_frame_time) {
                     imgui_io.update_delta_time(delta);
                 }
-                last_frame_time = Instant::now();
+                last_frame_time = now;
 
                 // Prep the gridview for event handling.
                 let mut input_frame =

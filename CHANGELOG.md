@@ -11,6 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Simulation**
   - Advance one generation (<kbd>Space</kbd>)
   - Advance one step (<kbd>Tab</kbd>)
+  - 3D rendering and simulation
+- **Navigation**
+  - 3D orbit (right mouse drag)
+  - 3D pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or middle mouse drag)
+  - 3D pan horizontally (middle mouse drag with <kbd>Shift</kbd>)
 
 ### Changed
 
@@ -47,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - Blue for drawing
     - White for selecting
 - **Navigation**
-  - Pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right/middle mouse drag)
+  - 2D pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right/middle mouse drag)
   - Zoom (scroll wheel or <kbd>Q</kbd>/<kbd>Z</kbd>)
   - Pan/zoom faster while holding <kbd>Shift</kbd>
   - Reset viewport (<kbd>Ctrl</kbd>+<kbd>M</kbd>)

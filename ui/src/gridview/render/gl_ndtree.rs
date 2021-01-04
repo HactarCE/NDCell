@@ -90,6 +90,8 @@ impl GlNdTree {
         // Use the parent layer because we want to store four pixels (each
         // representing a node at `min_layer`) inside one index.
         let flat_ndtree = FlatNdTree::from_node(node, min_layer.parent_layer(), |node| node);
+        let layer_count = 1 + flat_ndtree.layers();
+        assert_eq!(layer_count, (node.layer() - min_layer).to_usize());
         let mut pixel_data: Vec<u32> = flat_ndtree
             .nodes()
             .iter()

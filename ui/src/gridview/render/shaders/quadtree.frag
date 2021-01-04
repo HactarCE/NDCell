@@ -33,8 +33,8 @@ uint getNodeChild(uint node, bvec2 which_child) {
 void main() {
     ivec2 cell_pos = ivec2(floor(gl_FragCoord.xy)) + offset_into_quadtree;
     uint node = root_idx;
-    for (int layer = layer_count; layer >= 0; layer--) {
-        bvec2 which_child = bvec2(cell_pos & (1 << layer));
+    for (int child_layer = layer_count - 1; child_layer >= 0; child_layer--) {
+        bvec2 which_child = bvec2(cell_pos & (1 << child_layer));
         node = getNodeChild(node, which_child);
     }
     // RGBA, little-endian; convert from 0-255 to 0.0-1.0

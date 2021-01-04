@@ -83,8 +83,8 @@ impl GridViewRender2D<'_> {
                 &shaders::QUADTREE,
                 &uniform! {
                     quadtree_texture: &gl_quadtree.texture,
-                    layer_count: gl_quadtree.layers as i32,
-                    root_idx: gl_quadtree.root_idx as u32,
+                    layer_count: gl_quadtree.layers,
+                    root_idx: gl_quadtree.root_idx,
 
                     offset_into_quadtree: [
                         visible_rect.min()[X] as i32,

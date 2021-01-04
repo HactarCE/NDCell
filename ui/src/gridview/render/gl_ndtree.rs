@@ -76,8 +76,8 @@ impl<D: Dim> GlNdTreeCache<D> {
 /// ND-tree encoded in an OpenGL texture.
 pub struct GlNdTree {
     pub texture: UnsignedTexture2d,
-    pub layers: usize,
-    pub root_idx: usize,
+    pub layers: i32,
+    pub root_idx: u32,
 }
 impl GlNdTree {
     /// Constructs a `GlNdTree` from a node and a function to turn a node into a
@@ -135,10 +135,11 @@ impl GlNdTree {
         };
         let texture = UnsignedTexture2d::new(&**DISPLAY, raw_image)
             .with_context(|| format!("ND-tree texture too big: {}x{}", pixel_width, pixel_width))?;
+
         Ok(Self {
             texture,
-            layers: flat_ndtree.layers(),
-            root_idx: flat_ndtree.root_idx(),
+            layers: layer_count as i32,
+            root_idx: flat_ndtree.root_idx() as u32,
         })
     }
 }

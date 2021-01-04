@@ -10,7 +10,7 @@ out vec4 vColor;
 uniform mat4 matrix;
 
 // This line includes another file in this GLSL program. See `shaders/mod.rs`.
-//#include lib/lighting.frag
+//#include util/lighting.frag
 
 void main() {
     gl_Position = matrix * vec4(pos, 1.0);

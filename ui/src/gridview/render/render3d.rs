@@ -64,7 +64,7 @@ impl GridViewRender3D<'_> {
             .draw(
                 &*vbos.ndtree_quad(),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::OCTREE,
+                &shaders::OCTREE.load(),
                 &uniform! {
                     matrix: self.transform.gl_matrix(),
 
@@ -132,7 +132,7 @@ impl GridViewRender3D<'_> {
                 .draw(
                     vbo_slice,
                     &ibos.quad_indices(count),
-                    &shaders::RGBA_3D,
+                    &shaders::GRIDLINES_3D.load(),
                     &uniform! {
                         matrix: self.transform.gl_matrix(),
 

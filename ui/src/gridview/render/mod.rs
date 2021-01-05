@@ -137,3 +137,7 @@ pub fn post_frame_clean_cache() {
     let mut cache = CACHE.borrow_mut();
     cache.gl_quadtrees.post_frame_clean_cache();
 }
+
+pub fn hot_reload_shaders() {
+    shaders::hot_reload_all();
+}

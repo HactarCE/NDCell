@@ -132,7 +132,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
                 .draw(
                     vbo_slice,
                     &glium::index::NoIndices(PrimitiveType::TrianglesList),
-                    &shaders::PICKER,
+                    &shaders::PICKER.load(),
                     &uniform! { matrix: self.transform.gl_matrix() },
                     &glium::DrawParameters {
                         depth: glium::Depth {

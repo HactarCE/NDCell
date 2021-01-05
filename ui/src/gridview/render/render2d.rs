@@ -80,7 +80,7 @@ impl GridViewRender2D<'_> {
             .draw(
                 vbos.ndtree_quad(),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::QUADTREE,
+                &shaders::QUADTREE.load(),
                 &uniform! {
                     quadtree_texture: &gl_quadtree.texture,
                     layer_count: gl_quadtree.layers,
@@ -112,7 +112,7 @@ impl GridViewRender2D<'_> {
             .draw(
                 &*vbos.blit_quad_with_src_coords(texture_coords_rect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::PIXMIX,
+                &shaders::PIXMIX.load(),
                 &uniform! {
                     alpha: params.alpha,
                     src_texture: cells_texture.sampled(),
@@ -623,7 +623,7 @@ impl GridViewRender2D<'_> {
                 .draw(
                     vbo_slice,
                     &ibos.quad_indices(count),
-                    &shaders::RGBA_2D,
+                    &shaders::RGBA_2D.load(),
                     &uniform! { matrix: self.transform.gl_matrix() },
                     &glium::DrawParameters {
                         blend: glium::Blend::alpha_blending(),

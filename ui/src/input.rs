@@ -323,6 +323,11 @@ impl FrameInProgress<'_> {
                         Some(VirtualKeyCode::C) => self
                             .gridview
                             .enqueue(SelectCommand::Copy(CaFormat::Macrocell)),
+
+                        // Reload shaders (debug build only).
+                        #[cfg(debug_assertions)]
+                        Some(VirtualKeyCode::R) => crate::gridview::render::hot_reload_shaders(),
+
                         _ => (),
                     }
                 }

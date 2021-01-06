@@ -189,6 +189,9 @@ void main() {
                 if (vec3_min(t1) < 0) {
                     // This node is completely behind the camera; skip it.
                     continue;
+                } else if (vec3_max(t0) < 0 && layer == 1) {
+                    // This is a leaf node and the camera is inside it; skip it.
+                    continue;
                 }
 
                 bvec3 tmp_child_index = notEqual(next_child, invert_mask); // logical XOR

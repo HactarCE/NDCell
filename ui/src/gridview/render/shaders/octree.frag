@@ -88,6 +88,7 @@ uint exitAxis(vec3 t1) {
 
 void main() {
     color = vec4(0.0); // Assume transparent.
+    gl_FragDepth = 1.0; // Assume far plane.
 
     // Compute the ray for this pixel. (based on
     // https://stackoverflow.com/a/42634961)
@@ -131,7 +132,7 @@ void main() {
     // If we enter AFTER we exit, or exit at a negative `t` ...
     if (max_t0 >= min_t1 || 0 > min_t1) {
         // ... then the ray does not intersect with the root node.
-        color = vec4(0.5, 0.5, 0.5, 1);
+        discard;
     } else {
         // Otherwise, the ray does intersect with the root node.
 
@@ -227,6 +228,15 @@ void main() {
                     vec3 pos = original_start + original_delta * vec3_max(t0);
                     color = foggify_color(pos, color);
 
+                    // Compute depth buffer value.
+                    vec4 clip_pos = matrix * vec4(pos, 1.0);
+                    float ndc_depth = clip_pos.z / clip_pos.w;
+                    gl_FragDepth = 0.5 * (
+                        gl_DepthRange.diff * ndc_depth
+                            + gl_DepthRange.near
+                            + gl_DepthRange.far
+                    );
+
                     break; // Break out of the loop.
                 }
             }
@@ -244,6 +254,11 @@ void main() {
                 color.rgb += 0.5;
             }
             color.a = max(color.a, 0.5);
+        }
+
+        // The ray did not intersect any cell.
+        if (layer > layer_count) {
+            discard;
         }
     }
 }

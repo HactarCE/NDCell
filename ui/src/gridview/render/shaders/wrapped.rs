@@ -11,7 +11,6 @@ impl StaticWrappedShader {
 }
 
 pub struct DynamicWrappedShader {
-    pub glsl_version: u32,
     pub vert_name: &'static str,
     pub frag_name: &'static str,
     pub vert_filename: &'static str,
@@ -30,7 +29,6 @@ impl DynamicWrappedShader {
             .map_err(|e| error!("{}", e))
             .ok()?;
         super::compile_shader(
-            self.glsl_version,
             self.srgb,
             self.vert_name,
             self.frag_name,

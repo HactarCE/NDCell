@@ -19,14 +19,14 @@ type WrappedShader = DynamicWrappedShader;
 #[cfg(not(debug_assertions))]
 type WrappedShader = StaticWrappedShader;
 
-shader!(RGBA_2D      = { 140, srgb: true,  "rgba_2d" });
-shader!(RGBA_3D      = { 140, srgb: true,  "rgba_3d" });
+shader!(RGBA_2D      = { srgb: true,  "rgba_2d" });
+shader!(RGBA_3D      = { srgb: true,  "rgba_3d" });
 
-shader!(QUADTREE     = { 140, srgb: true,  vert: "screen_pos", frag: "quadtree"     });
-shader!(OCTREE       = { 140, srgb: true,  vert: "screen_pos", frag: "octree"       });
+shader!(QUADTREE     = { srgb: true,  vert: "screen_pos", frag: "quadtree" });
+shader!(OCTREE       = { srgb: true,  vert: "screen_pos", frag: "octree" });
 
-shader!(PICKER       = { 140, srgb: false, "picker" });
-shader!(PIXMIX       = { 140, srgb: false, "pixmix" });
+shader!(PICKER       = { srgb: false, "picker" });
+shader!(PIXMIX       = { srgb: false, "pixmix" });
 
 pub fn hot_reload_all() {
     #[cfg(debug_assertions)]
@@ -48,7 +48,6 @@ pub fn hot_reload_all() {
 }
 
 fn compile_shader(
-    glsl_version: u32,
     srgb: bool,
     vert_name: &str,
     frag_name: &str,
@@ -57,7 +56,7 @@ fn compile_shader(
 ) -> Option<Program> {
     glium::program!(
         &**DISPLAY,
-        glsl_version => {
+        140 => {
             vertex: &preprocess_glsl(vert_contents),
             fragment: &preprocess_glsl(frag_contents),
             outputs_srgb: srgb,

@@ -1,6 +1,5 @@
 //! GLSL shader programs.
 
-use anyhow::Context;
 use glium::Program;
 use log::error;
 use send_wrapper::SendWrapper;
@@ -62,8 +61,12 @@ fn compile_shader(
             outputs_srgb: srgb,
         },
     )
-    .with_context(|| format!("Compiling {:?}+{:?} shader", vert_name, frag_name))
-    .map_err(|e| error!("{}", e))
+    .map_err(|e| {
+        error!(
+            "Error compiling {:?}+{:?} shader:\n\n{}",
+            vert_name, frag_name, e,
+        )
+    })
     .ok()
 }
 

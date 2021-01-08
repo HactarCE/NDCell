@@ -56,19 +56,19 @@ impl FixedPoint {
     /// Returns the largest integer less than or equal to the number.
     #[inline]
     pub fn floor(&self) -> BigInt {
-        self.trunc() + self.fract().floor() as u32
+        self.trunc() + self.fract().floor() as i32
     }
 
     /// Returns the smallest integer greater than or equal to the number.
     #[inline]
     pub fn ceil(&self) -> BigInt {
-        self.trunc() + self.fract().ceil() as u32
+        self.trunc() + self.fract().ceil() as i32
     }
 
     /// Returns the smallest integer greater than or equal to the number.
     #[inline]
     pub fn round(&self) -> BigInt {
-        self.trunc() + self.fract().round() as u32
+        self.trunc() + self.fract().round() as i32
     }
 
     /// Returns the square root.

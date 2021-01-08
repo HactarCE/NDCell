@@ -305,3 +305,13 @@ pub trait GridViewRenderDimension<'a>: Default {
     const DEFAULT_COLOR: (f32, f32, f32, f32);
     const DEFAULT_DEPTH: f32;
 }
+
+#[derive(Debug, Copy, Clone)]
+pub(super) struct LineParams {
+    /// Line width.
+    pub width: f64,
+    /// Whether to include the squares at the endpoints of this line.
+    pub include_endpoints: bool,
+    /// The axis this line is along.
+    pub axis: Axis,
+}

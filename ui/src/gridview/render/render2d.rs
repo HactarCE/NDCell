@@ -30,7 +30,7 @@ use ndcell_core::prelude::*;
 use Axis::{X, Y};
 
 use super::consts::*;
-use super::generic::{GenericGridViewRender, GridViewRenderDimension};
+use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineParams};
 use super::shaders;
 use super::vertices::Vertex2D;
 use super::CellDrawParams;
@@ -757,16 +757,6 @@ impl CellOverlayRect {
             line_params: None,
         }
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-struct LineParams {
-    /// Line width.
-    pub width: f64,
-    /// Whether to include the squares at the endpoints of this line.
-    pub include_endpoints: bool,
-    /// The axis this line is along.
-    pub axis: Axis,
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -9,5 +9,6 @@ uniform float fog_end;   // radius at which fog reaches maximum
 vec4 foggify_color(vec3 pos, vec4 unfogged_color) {
     float dist = distance(pos, fog_center);
     float visibility = 1 - smoothstep(fog_start, fog_end, dist);
-    return mix(fog_color, unfogged_color, visibility);
+    vec3 rgb = mix(fog_color.rgb, unfogged_color.rgb, visibility);
+    return vec4(rgb, unfogged_color.a);
 }

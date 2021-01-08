@@ -16,6 +16,7 @@ use super::shaders;
 use super::vertices::Vertex3D;
 use super::CellDrawParams;
 use crate::gridview::*;
+use crate::CONFIG;
 
 pub(in crate::gridview) type GridViewRender3D<'a> = GenericGridViewRender<'a, RenderDim3D>;
 
@@ -105,6 +106,78 @@ impl GridViewRender3D<'_> {
                 },
             )
             .context("Drawing cells")?;
+
+        Ok(())
+    }
+
+    pub fn draw_gridlines(&mut self) -> Result<()> {
+        let camera_pos = ((self.camera.pos() - self.origin.to_fixedvec())
+            >> self.render_cell_layer.to_u32())
+        .to_fvec();
+
+        // Reborrow is necessary in order to split borrow.
+        let cache = &mut *self.cache;
+        let vbos = &mut cache.vbos;
+        let ibos = &mut cache.ibos;
+
+        let mut min = self.visible_rect.min().to_fvec();
+        let mut max = self.visible_rect.max().to_fvec();
+        min[Z] = r64(0.0);
+        max[Z] = r64(0.0);
+        let rect = FRect2D::span(NdVec([min[X], min[Y]]), NdVec([max[X], max[Y]]));
+
+        // TODO: NOT GOOD
+        let grid_origin = (-self.origin.div_floor(&self.render_cell_layer.big_len())).to_fvec();
+
+        self.params
+            .target
+            .draw(
+                &*vbos.gridlines_quad(rect),
+                &ibos.quad_indices(1),
+                &shaders::GRIDLINES_3D.load(),
+                &uniform! {
+                    matrix: self.transform.gl_matrix(),
+
+                    grid_axes: [0_i32, 1],
+                    grid_color: crate::colors::GRIDLINES,
+                    grid_origin: [
+                        grid_origin[X].raw() as f32,
+                        grid_origin[Y].raw() as f32,
+                        grid_origin[Z].raw() as f32,
+                    ],
+                    grid_coefficient: GRIDLINE_SPACING_COEFF as f32,
+                    grid_base: GRIDLINE_SPACING_BASE as i32,
+                    min_line_spacing: GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING as f32,
+                    max_line_spacing: GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING as f32,
+                    line_width: if self.render_cell_layer == Layer(0) {
+                        GRIDLINE_WIDTH as f32
+                    } else {
+                        0.0 // minimum width of one pixel
+                    },
+
+                    fog_color: crate::colors::BACKGROUND_3D,
+                    fog_center: [
+                        camera_pos[X].raw() as f32,
+                        camera_pos[Y].raw() as f32,
+                        camera_pos[Z].raw() as f32,
+                    ],
+                    fog_start: FOG_START_FACTOR
+                        * 5000.0
+                        * self.render_cell_scale.inv_factor().to_f32().unwrap(),
+                    fog_end: 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
+                },
+                &glium::DrawParameters {
+                    depth: glium::Depth {
+                        test: glium::DepthTest::IfLessOrEqual,
+                        write: true,
+                        ..glium::Depth::default()
+                    },
+                    blend: glium::Blend::alpha_blending(),
+                    backface_culling: glium::BackfaceCullingMode::CullingDisabled,
+                    ..Default::default()
+                },
+            )
+            .context("Drawing gridlines")?;
 
         Ok(())
     }

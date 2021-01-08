@@ -60,12 +60,11 @@ impl GridViewDimension for GridViewDim3D {
         //     None
         // };
 
-        // // Draw gridlines.
-        // let gridlines_width = this.interpolating_viewport.zoom.factor() / 32.0;
-        // frame.draw_gridlines(gridlines_width);
+        // Draw gridlines.
+        frame.draw_gridlines()?;
         // // Draw crosshairs.
         // if let Some(pos) = &draw_pos {
-        //     frame.draw_blue_cursor_highlight(&pos.floor().0, gridlines_width * 2.0);
+        //     frame.draw_blue_cursor_highlight(&pos.floor());
         // }
 
         frame.finish()

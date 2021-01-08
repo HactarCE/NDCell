@@ -15,6 +15,7 @@ fn empty_vbo<T: glium::Vertex>(size: usize) -> VertexBuffer<T> {
 
 pub struct VboCache {
     ndtree_quad: VertexBuffer<PosVertex2D>,
+    gridlines_quad: VertexBuffer<PosVertex2D>,
 
     blit_quad: VertexBuffer<TexturePosVertex>,
     quad_verts_2d: VertexBuffer<Vertex2D>,
@@ -34,6 +35,7 @@ impl Default for VboCache {
                 ],
             )
             .expect("Failed to create vertex buffer"),
+            gridlines_quad: empty_vbo(4),
 
             blit_quad: empty_vbo(4),
             quad_verts_2d: empty_vbo(4 * QUAD_BATCH_SIZE),
@@ -45,6 +47,22 @@ impl Default for VboCache {
 impl VboCache {
     pub fn ndtree_quad(&self) -> &VertexBuffer<PosVertex2D> {
         &self.ndtree_quad
+    }
+
+    pub fn gridlines_quad(&mut self, rect: FRect2D) -> &mut VertexBuffer<PosVertex2D> {
+        let min = rect.min();
+        let max = rect.max();
+        let x0 = min[X].raw() as f32;
+        let y0 = min[Y].raw() as f32;
+        let x1 = max[X].raw() as f32;
+        let y1 = max[Y].raw() as f32;
+        self.gridlines_quad.write(&[
+            PosVertex2D { pos: [x0, y0] },
+            PosVertex2D { pos: [x1, y0] },
+            PosVertex2D { pos: [x0, y1] },
+            PosVertex2D { pos: [x1, y1] },
+        ]);
+        &mut self.gridlines_quad
     }
 
     pub fn blit_quad_with_src_coords(

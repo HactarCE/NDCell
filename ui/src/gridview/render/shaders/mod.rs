@@ -24,6 +24,8 @@ shader!(RGBA_3D      = { srgb: true,  "rgba_3d" });
 shader!(QUADTREE     = { srgb: true,  vert: "screen_pos", frag: "quadtree" });
 shader!(OCTREE       = { srgb: true,  vert: "screen_pos", frag: "octree" });
 
+shader!(GRIDLINES_3D = { srgb: true,  "gridlines_3d" });
+
 shader!(PICKER       = { srgb: false, "picker" });
 shader!(PIXMIX       = { srgb: false, "pixmix" });
 
@@ -37,6 +39,8 @@ pub fn hot_reload_all() {
 
         QUADTREE.try_reload();
         OCTREE.try_reload();
+
+        GRIDLINES_3D.try_reload();
 
         PICKER.try_reload();
         PIXMIX.try_reload();

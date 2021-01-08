@@ -7,24 +7,21 @@ in vec2 screen_pos; // -1.0 ... +1.0 (same as `gl_Position`)
 
 out vec4 color;
 
+uniform mat4 matrix;
+mat4 inv_matrix = inverse(matrix);
+
 // One "render cell" per node; each pixel contains four uints (2 pixels per node).
 uniform usampler2D octree_texture;
 uniform int layer_count;
 uniform uint root_idx;
-// uniform uint[32] empty_node_idxs;
 
 uniform ivec3 offset_into_octree;
-
 uint texture_width = uint(textureSize(octree_texture, 0).x);
 float octree_side_len = (1 << layer_count);
 
-uniform mat4 matrix;
-
-mat4 inv_matrix = inverse(matrix);
-
 uniform bool perf_view;
 
-// These lines includes other files in this GLSL program. See `shaders/mod.rs`.
+// These lines include other files in this GLSL program. See `shaders/mod.rs`.
 //#include util/fog.frag
 //#include util/lighting.frag
 
@@ -246,22 +243,24 @@ void main() {
         }
 
         if (perf_view) {
-            color /= 2;
-            if (count < 50) {
-                color.r += 0.5;
-            } else if (count < 100) {
-                color.g += 0.5;
-            } else if (count < 150) {
-                color.b += 0.5;
-            } else {
-                color.rgb += 0.5;
-            }
+            color /= 2.0;
+            if (count < 50.0)
+                color.r += 0.25 + count / 100.0;
+            else if (count < 100.0)
+                color.g += 0.25 + (count - 50.0) / 100.0;
+            else if (count < 150.0)
+                color.b += 0.25 + (count - 100.0) / 100.0;
+            else
+                color.rgb += vec3(0.5);
             color.a = max(color.a, 0.5);
         }
 
         // The ray did not intersect any cell.
         if (layer > layer_count) {
-            discard;
+            if (perf_view)
+                color.rgb /= 2.0;
+            else
+                discard;
         }
     }
 }

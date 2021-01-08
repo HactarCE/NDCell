@@ -3,6 +3,8 @@ pub struct GfxConfig {
     pub dpi: f64,
     pub fps: f64,
     pub font_size: f32,
+
+    pub octree_perf_view: bool,
 }
 impl Default for GfxConfig {
     fn default() -> Self {
@@ -10,6 +12,8 @@ impl Default for GfxConfig {
             dpi: 1.0,
             fps: 60.0,
             font_size: 16.0,
+
+            octree_perf_view: false,
         }
     }
 }

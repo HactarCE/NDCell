@@ -71,7 +71,6 @@ impl GridViewRender3D<'_> {
                     octree_texture: &gl_octree.texture,
                     layer_count: gl_octree.layers,
                     root_idx: gl_octree.root_idx,
-                    // empty_node_idxs: &gl_octree.empty_node_idxs,
 
                     offset_into_octree: [
                         octree_offset[X] as i32,
@@ -79,7 +78,7 @@ impl GridViewRender3D<'_> {
                         octree_offset[Z] as i32,
                     ],
 
-                    perf_view: false,
+                    perf_view: CONFIG.lock().gfx.octree_perf_view,
 
                     light_direction: LIGHT_DIRECTION,
                     light_ambientness: LIGHT_AMBIENTNESS,

@@ -156,8 +156,10 @@ impl GridViewRender2D<'_> {
     pub fn draw_gridlines(&mut self) -> Result<()> {
         let mut gridline_overlay_rects = vec![];
 
-        let max_cell_spacing_exponent = self.gridline_cell_spacing_exponent(MAX_GRIDLINE_SPACING);
-        let min_cell_spacing_exponent = self.gridline_cell_spacing_exponent(MIN_GRIDLINE_SPACING);
+        let min_cell_spacing_exponent =
+            self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING);
+        let max_cell_spacing_exponent =
+            self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING);
         let range = (min_cell_spacing_exponent..=max_cell_spacing_exponent).rev();
 
         for cell_spacing_exponent in range {
@@ -702,13 +704,13 @@ fn gridline_alpha(cell_spacing_exponent: u32, scale: Scale) -> f64 {
         scale.log2_factor().raw(),
         0.0,
         1.0,
-        ZOOMED_OUT_MAX_GRID_ALPHA,
+        GRIDLINE_ALPHA_ZOOMED_OUT_MULT_2D,
         1.0,
     );
     let alpha = clamped_interpolate(
         log2_pixel_spacing,
-        MIN_GRIDLINE_SPACING.log2(),
-        MAX_GRIDLINE_SPACING.log2(),
+        GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING.log2(),
+        GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING.log2(),
         0.0,
         max_alpha,
     );

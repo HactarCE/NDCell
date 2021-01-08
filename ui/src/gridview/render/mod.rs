@@ -38,19 +38,25 @@ mod consts {
     ///
     /// `a` in `a * b^n`
     pub const GRIDLINE_SPACING_COEFF: usize = 1;
-    /// Exponential base to use for fading out smaller gridlines.
+    /// Exponential base to use for gridline spacing.
     ///
-    /// `b` in `a * b^n` (`n` varies based on zoom level)
+    /// `b` in `a * b^n`
+    ///
+    /// The value of `n` linearly influences the pixel spacing between
+    /// gridlines, which is used to determine their opacity via GLSL
+    /// `smoothstep()`; see `GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING` and
+    /// `GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING`.
     pub const GRIDLINE_SPACING_BASE: usize = 8;
-    /// Minimum number of units (pixels in 2D) between gridlines.
-    pub const MIN_GRIDLINE_SPACING: f64 = 4.0;
-    /// Minimum number of units (pixels in 2D) between gridlines with full opacity.
-    pub const MAX_GRIDLINE_SPACING: f64 = 256.0;
-    /// Maximum opacity of gridlines when zoomed out beyond 1:1.
+    /// Maximum pixel spacing between gridlines with zero opacity (low end of
+    /// gradient).
+    pub const GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING: f64 = 4.0;
+    /// Minimum pixel spacing between gridlines with full opacity (high end of
+    /// gradient).
+    pub const GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING: f64 = 256.0;
+    /// 2D gridline opacity multiplier when zoomed out beyond 1:1.
     ///
-    /// This is less than 1.0 so that gridlines do not completely obscure the
-    /// presence of cells.
-    pub const ZOOMED_OUT_MAX_GRID_ALPHA: f64 = 0.75;
+    /// This prevents gridlines from completely obscuring the presence of cells.
+    pub const GRIDLINE_ALPHA_ZOOMED_OUT_MULT_2D: f64 = 0.75;
 
     /// Number of quads in each render batch.
     pub const QUAD_BATCH_SIZE: usize = 4096;

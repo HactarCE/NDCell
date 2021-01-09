@@ -178,10 +178,6 @@ fn advance_inner_node<'pool, D: Dim>(
         // We already checked that this node's children (at layer `L-1`) are
         // not leaf nodes, but its grandchildren (at layer `L-2`) might be.
 
-        // TODO: Note that the use of NdArray here assumes that NdRect
-        // iterates in the same order as NdArray; this probably shouldn't be
-        // relied upon.
-
         // 1. Make a 4^D array of nodes at layer `L-2` of the original node
         //    at time `0`.
         let unsimmed_quarter_size_nodes: NdArray<NodeRef<'pool, D>, D> = NdArray::from_flat_slice(

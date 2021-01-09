@@ -8,9 +8,6 @@
 //! This module re-exports all of them for convenience, plus some traits from
 //! the `num` crate.
 
-// TODO: Only use `num-traits` and `num-bigint` instead of whole `num`.
-// Re-exporting them should make that less awkward.
-
 pub use noisy_float::prelude::{r64, R64};
 pub use num::bigint::Sign;
 pub use num::{

@@ -26,7 +26,7 @@ pub fn bresenham<D: Dim>(
 ) -> impl Iterator<Item = BigVec<D>> {
     let mut delta = &end - &start;
 
-    let longest_axis = delta.max_axis(|_, val| val.abs());
+    let longest_axis = delta.abs().max_axis();
     // Ensure that delta[longest_axis] is positive.
     let negate = delta[longest_axis].is_negative();
     if negate {
@@ -94,7 +94,7 @@ mod tests {
         let f_end: FVec<D> = end.to_fvec();
 
         let mut delta = f_end - &f_start;
-        let longest_axis = delta.max_axis(|_, val| val.abs());
+        let longest_axis = delta.abs().max_axis();
         delta /= delta[longest_axis].abs();
         let mut f_current = f_start.clone();
         let mut max_positive_error = r64(0.0);
@@ -109,10 +109,8 @@ mod tests {
 
             assert!(rect.contains(&p));
 
-            max_positive_error =
-                std::cmp::max(max_positive_error, diff[diff.max_axis(|_, val| *val)]);
-            max_negative_error =
-                std::cmp::min(max_negative_error, diff[diff.min_axis(|_, val| *val)]);
+            max_positive_error = std::cmp::max(max_positive_error, *diff.max_component());
+            max_negative_error = std::cmp::min(max_negative_error, *diff.max_component());
 
             f_current += &delta;
 

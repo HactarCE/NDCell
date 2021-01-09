@@ -107,7 +107,7 @@ impl Camera3D {
         match config {
             ForwardAxis3D::Camera | ForwardAxis3D::Flat => look,
             ForwardAxis3D::Aligned | ForwardAxis3D::FlatAligned => {
-                let ax = look.max_axis(|_ax, component| component.abs());
+                let ax = look.abs().max_axis();
                 FVec3D::unit(ax) * look[ax].signum()
             }
         }
@@ -125,7 +125,7 @@ impl Camera3D {
         match config {
             ForwardAxis3D::Camera | ForwardAxis3D::Flat => look,
             ForwardAxis3D::Aligned | ForwardAxis3D::FlatAligned => {
-                let ax = look.max_axis(|_ax, component| component.abs());
+                let ax = look.abs().max_axis();
                 FVec3D::unit(ax) * look[ax].signum()
             }
         }

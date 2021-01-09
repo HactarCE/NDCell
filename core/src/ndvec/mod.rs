@@ -172,20 +172,31 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     /// Returns the `Axis` of the component that is the most positive (or one of
     /// them, if there is a tie).
     #[inline]
-    pub fn max_axis<'a, X: std::cmp::Ord>(&'a self, key: impl Fn(Axis, &'a N) -> X) -> Axis {
+    pub fn max_axis<'a>(&'a self) -> Axis {
         *D::Dim::axes()
             .into_iter()
-            .max_by_key(|&&ax| key(ax, &self[ax]))
+            .max_by_key(|&&ax| &self[ax])
             .unwrap()
     }
     /// Returns the `Axis` of the component that is the most negative (or one of
     /// them, if there is a tie).
     #[inline]
-    pub fn min_axis<'a, X: std::cmp::Ord>(&'a self, key: impl Fn(Axis, &'a N) -> X) -> Axis {
+    pub fn min_axis<'a>(&'a self) -> Axis {
         *D::Dim::axes()
             .into_iter()
-            .min_by_key(|&&ax| key(ax, &self[ax]))
+            .min_by_key(|&&ax| &self[ax])
             .unwrap()
+    }
+
+    /// Returns the component that is the most positive.
+    #[inline]
+    pub fn max_component<'a>(&'a self) -> &N {
+        &self[self.max_axis()]
+    }
+    /// Returns the component that is the most negative.
+    #[inline]
+    pub fn min_component<'a>(&'a self) -> &N {
+        &self[self.min_axis()]
     }
 }
 

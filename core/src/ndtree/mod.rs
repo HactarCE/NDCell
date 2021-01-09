@@ -21,7 +21,7 @@ mod slice;
 use crate::dim::*;
 use crate::ndrect::{BigRect, CanContain, URect};
 use crate::ndvec::BigVec;
-use crate::num::{BigInt, Signed};
+use crate::num::BigInt;
 pub use aliases::*;
 pub use flat::{FlatNdTree, FlatNdTreeNode};
 pub use node::*;
@@ -427,7 +427,7 @@ impl<D: Dim> NdTree<D> {
     /// of a large power of 2 (relative to pattern size).
     pub fn recenter(&mut self, new_center: &BigVec<D>) {
         let delta = new_center - self.center();
-        let max_abs_delta = delta[delta.max_axis(|_, x| x.abs())].abs();
+        let max_abs_delta = delta.abs().max_component().clone();
 
         self.offset += &delta;
         assert_eq!(*new_center, self.center());

@@ -139,7 +139,7 @@ pub fn absolute_selection_resize_axes<D: Dim>(
     if edge_distances < NdVec::origin() {
         // If all edge distances are negative, the cursor is inside the
         // selection. In this case, resize along whichever is most positive.
-        AxisSet::single(edge_distances.max_axis(|_, val| val))
+        AxisSet::single(edge_distances.max_axis())
     } else {
         // If any edge distance is positive, resize along the positive ones.
         AxisSet::from_fn(D::NDIM, |ax| edge_distances[ax].is_positive())

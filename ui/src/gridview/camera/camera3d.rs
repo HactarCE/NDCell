@@ -389,7 +389,7 @@ impl Camera<Dim3D> for Camera3D {
     }
 }
 
-fn fvec3d_from_basis3(axis: Axis, rot: impl Rotation3<f32>) -> FVec3D {
+fn fvec3d_from_basis3(axis: Axis, rot: impl Rotation3<Scalar = f32>) -> FVec3D {
     let unit_vec = match axis {
         X => cgmath::Vector3::unit_x(),
         Y => cgmath::Vector3::unit_y(),

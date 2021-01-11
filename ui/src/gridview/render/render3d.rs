@@ -15,6 +15,7 @@ use super::generic::{GenericGridViewRender, GridViewRenderDimension};
 use super::shaders;
 use super::vertices::Vertex3D;
 use super::CellDrawParams;
+use crate::ext::*;
 use crate::gridview::*;
 use crate::CONFIG;
 
@@ -37,11 +38,11 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim3D {
     const DEFAULT_DEPTH: f32 = f32::INFINITY;
 
     fn init(mut this: GridViewRender3D<'a>) -> GridViewRender3D<'a> {
-        let NdVec([x, y, z]) = this
+        this.dim.fog_center = this
             .xform
             .global_to_local_float(this.viewpoint.center())
-            .unwrap();
-        this.dim.fog_center = [x.raw() as f32, y.raw() as f32, z.raw() as f32];
+            .unwrap()
+            .to_f32_array();
 
         let inv_scale_factor = this.xform.render_cell_scale.inv_factor().to_f32().unwrap();
         this.dim.fog_end = Viewpoint3D::VIEW_RADIUS * inv_scale_factor;
@@ -150,11 +151,7 @@ impl GridViewRender3D<'_> {
 
                     grid_axes: [0_i32, 1],
                     grid_color: crate::colors::GRIDLINES,
-                    grid_origin: [
-                        grid_origin[X].raw() as f32,
-                        grid_origin[Y].raw() as f32,
-                        grid_origin[Z].raw() as f32,
-                    ],
+                    grid_origin: grid_origin.to_f32_array(),
                     grid_coefficient: GRIDLINE_SPACING_COEFF as f32,
                     grid_base: GRIDLINE_SPACING_BASE as i32,
                     min_line_spacing: GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING as f32,

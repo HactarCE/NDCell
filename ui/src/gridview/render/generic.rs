@@ -11,6 +11,7 @@ use super::consts::*;
 use super::shaders;
 use super::vertices::MouseTargetVertex;
 use super::CellDrawParams;
+use crate::ext::*;
 use crate::gridview::*;
 
 pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
@@ -155,8 +156,9 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         if self.params.modifiers == modifiers {
             let z = 0.0;
             for &point in &points {
+                let [x, y] = point.to_f32_array();
                 self.mouse_target_tris.push(MouseTargetVertex {
-                    pos: [point[X].raw() as f32, point[Y].raw() as f32, z],
+                    pos: [x, y, z],
                     target_id,
                 })
             }

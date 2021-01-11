@@ -3,8 +3,8 @@ use cgmath::{Deg, Matrix4};
 use std::convert::TryFrom;
 
 use ndcell_core::prelude::*;
-use Axis::{X, Y, Z};
 
+use crate::ext::*;
 use crate::Scale;
 
 pub type CellTransform2D = NdCellTransform<Dim2D>;
@@ -200,14 +200,10 @@ impl<D: Dim> NdCellTransform<D> {
             >> render_cell_layer.to_u32())
         .to_fvec();
         let offset = -local_viewport_center;
-        Matrix4::from_translation(match D::NDIM {
-            1 => cgmath::vec3(offset[X].raw() as f32, 0.0, 0.0),
-            2 => cgmath::vec3(offset[X].raw() as f32, offset[Y].raw() as f32, 0.0),
-            3 => cgmath::vec3(
-                offset[X].raw() as f32,
-                offset[Y].raw() as f32,
-                offset[Z].raw() as f32,
-            ),
+        Matrix4::from_translation(match AnyDimFVec::from(offset) {
+            AnyDimVec::Vec1D(v) => v.to_cgmath_vec3(),
+            AnyDimVec::Vec2D(v) => v.to_cgmath_vec3(),
+            AnyDimVec::Vec3D(v) => v.to_cgmath_vec3(),
             _ => unimplemented!(),
         })
     }
@@ -301,7 +297,7 @@ impl CellTransform2D {
     /// Returns the local position at the given pixel position on the screen.
     pub fn pixel_to_local_pos(&self, pixel: FVec2D) -> Option<FVec2D> {
         // Convert to `cgmath` type for matrix math.
-        let pixel = cgmath::Point3::new(pixel[X].raw() as f32, pixel[Y].raw() as f32, 0.0);
+        let pixel = pixel.to_cgmath_point3();
         // Convert from pixels to screen space to camera space to local space.
         let local_pos =
             (self.pixel_transform * self.projection_transform * self.render_cell_transform)
@@ -314,8 +310,7 @@ impl CellTransform2D {
     }
     pub fn screen_to_local_pos(&self, screen_pos: FVec2D) -> Option<FVec2D> {
         // Convert to `cgmath` type for matrix math.
-        let screen_pos =
-            cgmath::Point3::new(screen_pos[X].raw() as f32, screen_pos[Y].raw() as f32, 0.0);
+        let screen_pos = screen_pos.to_cgmath_point3();
         // Convert from pixels to screen space.
         let local_pos = (self.projection_transform * self.render_cell_transform)
             .inverse_transform()?
@@ -339,14 +334,14 @@ impl CellTransform3D {
     /// Returns the local position at the given pixel position on the screen at
     /// the given scaled-unit Z coordinate.
     pub fn pixel_to_local_pos(&self, pixel: FVec2D, z: f32) -> Option<FVec3D> {
+        // Convert to `cgmath` type for matrix math.
+        let mut pixel = pixel.to_cgmath_point3();
         // Apply the perspective transformation to the Z coordinate to see where
         // it ends up.
-        let z = self
+        pixel.z = self
             .projection_transform
             .transform_point(cgmath::Point3::new(0.0, 0.0, z))
             .z;
-        // Convert to `cgmath` type for matrix math.
-        let pixel = cgmath::Point3::new(pixel[X].raw() as f32, pixel[Y].raw() as f32, z);
         // Convert from pixels to screen space to camera space to local space.
         let local_pos =
             (self.pixel_transform * self.projection_transform * self.render_cell_transform)

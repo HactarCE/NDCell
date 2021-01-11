@@ -26,6 +26,7 @@ mod clipboard_compat;
 mod colors;
 mod commands;
 mod config;
+mod ext;
 mod gridview;
 mod gui;
 mod input;

@@ -7,6 +7,7 @@ use Axis::{X, Y};
 
 use super::consts::{MOUSE_TARGET_BATCH_SIZE, QUAD_BATCH_SIZE};
 use super::vertices::*;
+use crate::ext::*;
 use crate::DISPLAY;
 
 fn empty_vbo<T: glium::Vertex>(size: usize) -> VertexBuffer<T> {
@@ -50,12 +51,8 @@ impl VboCache {
     }
 
     pub fn gridlines_quad(&mut self, rect: FRect2D) -> &mut VertexBuffer<PosVertex2D> {
-        let min = rect.min();
-        let max = rect.max();
-        let x0 = min[X].raw() as f32;
-        let y0 = min[Y].raw() as f32;
-        let x1 = max[X].raw() as f32;
-        let y1 = max[Y].raw() as f32;
+        let [x0, y0] = rect.min().to_f32_array();
+        let [x1, y1] = rect.max().to_f32_array();
         self.gridlines_quad.write(&[
             PosVertex2D { pos: [x0, y0] },
             PosVertex2D { pos: [x1, y0] },

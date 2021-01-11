@@ -24,13 +24,32 @@ type QuadVerts = [Vertex3D; 4];
 type CuboidVerts = [Option<QuadVerts>; 6];
 
 #[derive(Default)]
-pub(in crate::gridview) struct RenderDim3D;
-impl GridViewRenderDimension<'_> for RenderDim3D {
+pub(in crate::gridview) struct RenderDim3D {
+    fog_center: [f32; 3],
+    fog_start: f32,
+    fog_end: f32,
+}
+impl<'a> GridViewRenderDimension<'a> for RenderDim3D {
     type D = Dim3D;
     type Viewpoint = Viewpoint3D;
 
     const DEFAULT_COLOR: (f32, f32, f32, f32) = crate::colors::BACKGROUND_3D;
     const DEFAULT_DEPTH: f32 = f32::INFINITY;
+
+    fn init(mut this: GridViewRender3D<'a>) -> GridViewRender3D<'a> {
+        let NdVec([x, y, z]) = this
+            .xform
+            .global_to_local_float(this.viewpoint.center())
+            .unwrap();
+        this.dim.fog_center = [x.raw() as f32, y.raw() as f32, z.raw() as f32];
+
+        let inv_scale_factor = this.xform.render_cell_scale.inv_factor().to_f32().unwrap();
+        this.dim.fog_end = Viewpoint3D::VIEW_RADIUS * inv_scale_factor;
+
+        this.dim.fog_start = FOG_START_FACTOR * this.dim.fog_end;
+
+        this
+    }
 }
 
 impl GridViewRender3D<'_> {
@@ -45,10 +64,6 @@ impl GridViewRender3D<'_> {
             .xform
             .global_to_local_int(&visible_octree.offset)
             .unwrap();
-
-        let fog_center = self.fog_center();
-        let fog_start = self.fog_start();
-        let fog_end = self.fog_end();
 
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
@@ -86,9 +101,9 @@ impl GridViewRender3D<'_> {
                     max_light: MAX_LIGHT,
 
                     fog_color: crate::colors::BACKGROUND_3D,
-                    fog_center: fog_center,
-                    fog_start: fog_start,
-                    fog_end: fog_end,
+                    fog_center: self.dim.fog_center,
+                    fog_start: self.dim.fog_start,
+                    fog_end: self.dim.fog_end,
                 },
                 &glium::DrawParameters {
                     depth: glium::Depth {
@@ -107,10 +122,6 @@ impl GridViewRender3D<'_> {
     }
 
     pub fn draw_gridlines(&mut self) -> Result<()> {
-        let fog_center = self.fog_center();
-        let fog_start = self.fog_start();
-        let fog_end = self.fog_end();
-
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
@@ -155,9 +166,9 @@ impl GridViewRender3D<'_> {
                     },
 
                     fog_color: crate::colors::BACKGROUND_3D,
-                    fog_center: fog_center,
-                    fog_start: fog_start,
-                    fog_end: fog_end,
+                    fog_center: self.dim.fog_center,
+                    fog_start: self.dim.fog_start,
+                    fog_end: self.dim.fog_end,
                 },
                 &glium::DrawParameters {
                     depth: glium::Depth {
@@ -176,10 +187,6 @@ impl GridViewRender3D<'_> {
     }
 
     fn draw_quads(&mut self, quad_verts: &[Vertex3D]) -> Result<()> {
-        let fog_center = self.fog_center();
-        let fog_start = self.fog_start();
-        let fog_end = self.fog_end();
-
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
@@ -206,9 +213,9 @@ impl GridViewRender3D<'_> {
                         max_light: MAX_LIGHT,
 
                         fog_color: crate::colors::BACKGROUND_3D,
-                        fog_center: fog_center,
-                        fog_start: fog_start,
-                        fog_end: fog_end,
+                        fog_center: self.dim.fog_center,
+                        fog_start: self.dim.fog_start,
+                        fog_end: self.dim.fog_end,
                     },
                     &glium::DrawParameters {
                         depth: glium::Depth {
@@ -225,20 +232,6 @@ impl GridViewRender3D<'_> {
         }
 
         Ok(())
-    }
-
-    fn fog_center(&self) -> [f32; 3] {
-        let NdVec([x, y, z]) = self
-            .xform
-            .global_to_local_float(self.viewpoint.center())
-            .unwrap();
-        [x.raw() as f32, y.raw() as f32, z.raw() as f32]
-    }
-    fn fog_start(&self) -> f32 {
-        FOG_START_FACTOR * self.fog_end()
-    }
-    fn fog_end(&self) -> f32 {
-        Viewpoint3D::VIEW_RADIUS * self.xform.render_cell_scale.inv_factor().to_f32().unwrap()
     }
 }
 

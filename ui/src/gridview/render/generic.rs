@@ -16,7 +16,7 @@ use crate::gridview::*;
 pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
     pub(super) cache: RefMut<'a, super::RenderCache>,
     pub(super) params: RenderParams<'a>,
-    pub(super) dimensionality: R,
+    pub(super) dim: R,
 
     /// Viewpoint to render the grid from.
     pub(super) viewpoint: &'a R::Viewpoint,
@@ -60,10 +60,10 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             .global_to_local_int_rect(&global_visible_rect)
             .expect("Unreasonable visible rectangle");
 
-        Self {
+        R::init(Self {
             cache,
             params,
-            dimensionality: R::default(),
+            dim: R::default(),
 
             viewpoint,
             xform,
@@ -72,7 +72,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
 
             mouse_targets: vec![],
             mouse_target_tris: vec![],
-        }
+        })
     }
 
     /// Returns a `RenderResult` from this render.
@@ -261,6 +261,10 @@ pub trait GridViewRenderDimension<'a>: Default {
 
     const DEFAULT_COLOR: (f32, f32, f32, f32);
     const DEFAULT_DEPTH: f32;
+
+    fn init(this: GenericGridViewRender<'a, Self>) -> GenericGridViewRender<'a, Self> {
+        this
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

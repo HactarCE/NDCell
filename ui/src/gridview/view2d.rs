@@ -3,11 +3,11 @@ use log::warn;
 
 use ndcell_core::prelude::*;
 
-use super::camera::{Camera, Camera2D, ScreenPos2D};
 use super::generic::{GenericGridView, GridViewDimension};
 use super::history::History;
 use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
 use super::selection::Selection2D;
+use super::viewpoint::{ScreenPos2D, Viewpoint, Viewpoint2D};
 use super::{DragHandler, DragOutcome, DragType};
 use crate::commands::*;
 use crate::mouse::MouseDisplay;
@@ -19,7 +19,7 @@ pub type GridView2D = GenericGridView<GridViewDim2D>;
 pub struct GridViewDim2D;
 impl GridViewDimension for GridViewDim2D {
     type D = Dim2D;
-    type Camera = Camera2D;
+    type Viewpoint = Viewpoint2D;
 
     fn do_view_command(this: &mut GridView2D, command: ViewCommand) -> Result<()> {
         // Handle `FitView` specially because it depends on the cell contents of
@@ -37,26 +37,26 @@ impl GridViewDimension for GridViewDim2D {
 
                 // Set scale.
                 let pattern_size = pattern_bounding_rect.size();
-                let target_size = this.camera().target_dimensions();
+                let target_size = this.viewpoint().target_dimensions();
                 let scale = Scale::from_fit(pattern_size, target_size);
                 this.do_command(ViewCommand::GoToScale(scale.floor()))?;
             }
             return Ok(());
         }
 
-        // Delegate to the camera.
+        // Delegate to the viewpoint.
         let maybe_new_drag_handler = this
-            .camera_interpolator
+            .viewpoint_interpolator
             .do_view_command(command)
             .context("Executing view command")?;
 
-        // Update drag handler, if the camera gave one.
+        // Update drag handler, if the viewpoint gave one.
         if !this.is_dragging() {
             if let Some(mut interpolator_drag_handler) = maybe_new_drag_handler {
                 this.start_drag(
                     DragType::MovingView,
                     Box::new(move |gridview: &mut GridView2D, cursor_pos| {
-                        interpolator_drag_handler(&mut gridview.camera_interpolator, cursor_pos)
+                        interpolator_drag_handler(&mut gridview.viewpoint_interpolator, cursor_pos)
                     }) as DragHandler<GridView2D>,
                 );
             }
@@ -75,7 +75,7 @@ impl GridViewDimension for GridViewDim2D {
                     return Ok(());
                 }
 
-                let maybe_initial_pos = this.camera().pixel_to_screen_pos(cursor_start);
+                let maybe_initial_pos = this.viewpoint().pixel_to_screen_pos(cursor_start);
                 let initial_pos = match maybe_initial_pos {
                     Some(pos) => pos.int_cell().clone(),
                     None => return Ok(()),
@@ -118,7 +118,7 @@ impl GridViewDimension for GridViewDim2D {
     fn do_select_command(this: &mut GridView2D, command: SelectCommand) -> Result<()> {
         match command {
             SelectCommand::Drag(c, cursor_start) => {
-                let maybe_initial_pos = this.camera().pixel_to_screen_pos(cursor_start);
+                let maybe_initial_pos = this.viewpoint().pixel_to_screen_pos(cursor_start);
                 let initial_pos = match maybe_initial_pos {
                     Some(pos) => pos,
                     None => return Ok(()),
@@ -247,9 +247,9 @@ impl GridViewDimension for GridViewDim2D {
 
     fn render(this: &mut GridView2D, params: RenderParams<'_>) -> Result<RenderResult> {
         let mouse = params.mouse;
-        let mouse_pos = this.camera().try_pixel_to_screen_pos(mouse.pos);
+        let mouse_pos = this.viewpoint().try_pixel_to_screen_pos(mouse.pos);
 
-        let mut frame = GridViewRender2D::new(params, this.camera())?;
+        let mut frame = GridViewRender2D::new(params, this.viewpoint());
 
         // Draw main cells.
         frame.draw_cells(CellDrawParams {
@@ -308,8 +308,8 @@ impl GridViewDimension for GridViewDim2D {
 
 /// Returns `true` if the scale is too small to draw individual cells, or
 /// `false` otherwise.
-fn is_too_small_to_draw(camera: &Camera2D) -> bool {
-    camera.scale() < Scale::from_factor(r64(1.0))
+fn is_too_small_to_draw(viewpoint: &Viewpoint2D) -> bool {
+    viewpoint.scale() < Scale::from_factor(r64(1.0))
 }
 
 fn make_freeform_draw_drag_handler(
@@ -321,9 +321,9 @@ fn make_freeform_draw_drag_handler(
             return Ok(DragOutcome::Cancel);
         }
         let pos2 = this
-            .camera()
+            .viewpoint()
             .cell_transform()
-            .pixel_to_global_cell(new_cursor_pos)
+            .pixel_to_global_pos(new_cursor_pos)
             .map(|pos| pos.floor());
         if let Some(pos2) = &pos2 {
             for pos in ndcell_core::math::bresenham(pos1.clone(), pos2.clone()) {
@@ -358,7 +358,7 @@ fn make_selection_drag_handler_with_threshold(
             past_drag_threshold = true;
         }
         if past_drag_threshold {
-            if let Some(new_pos) = this.camera().pixel_to_screen_pos(new_cursor_pos) {
+            if let Some(new_pos) = this.viewpoint().pixel_to_screen_pos(new_cursor_pos) {
                 inner_drag_handler(this, new_pos)
             } else {
                 Ok(DragOutcome::Continue)
@@ -467,12 +467,12 @@ impl GridView2D {
             // The number of render cells of padding to ensure.
             const PADDING: usize = 2;
 
-            let (render_cell_layer, _) = self.camera().render_cell_layer_and_scale();
+            let (render_cell_layer, _) = self.viewpoint().render_cell_layer_and_scale();
 
             // Convert to render cells.
             let sel_rect = sel.rect.div_outward(&render_cell_layer.big_len());
             let visible_rect = self
-                .camera()
+                .viewpoint()
                 .global_visible_rect()
                 .div_outward(&render_cell_layer.big_len());
 
@@ -481,15 +481,15 @@ impl GridView2D {
             let sel_center = sel_rect.center();
             let visible_min = visible_rect.min();
             let visible_max = visible_rect.max();
-            let visible_center = self.camera().pos().floor();
+            let view_center = self.viewpoint().center().floor();
 
             for &ax in Dim2D::axes() {
                 if sel_max[ax] < visible_min[ax].clone() + PADDING
                     || visible_max[ax] < sel_min[ax].clone() + PADDING
                 {
-                    // Move to center of viewport along this axis.
-                    sel = sel
-                        .move_by(NdVec::unit(ax) * (visible_center[ax].clone() - &sel_center[ax]));
+                    // Move selection to center along this axis.
+                    sel =
+                        sel.move_by(NdVec::unit(ax) * (view_center[ax].clone() - &sel_center[ax]));
                 }
             }
 
@@ -500,6 +500,6 @@ impl GridView2D {
     /// Returns `true` if the scale is too small to draw individual cells, or
     /// `false` otherwise.
     fn too_small_to_draw(&self) -> bool {
-        self.camera().scale() < Scale::from_factor(r64(1.0))
+        self.viewpoint().scale() < Scale::from_factor(r64(1.0))
     }
 }

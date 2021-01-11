@@ -10,16 +10,16 @@ use std::time::{Duration, Instant};
 
 use ndcell_core::prelude::*;
 
-use super::camera::{Camera, Interpolate, Interpolator};
 use super::history::{History, HistoryBase, HistoryManager};
 use super::render::{RenderParams, RenderResult};
 use super::selection::Selection;
+use super::viewpoint::{Interpolate, Interpolator, Viewpoint};
 use super::worker::*;
 use super::{DragHandler, DragOutcome, DragType, WorkType};
 use crate::commands::*;
 use crate::CONFIG;
 
-/// Number of previous frame times to track. If this is too low, camera
+/// Number of previous frame times to track. If this is too low, viewpoint
 /// interpolation may not work.
 const MAX_LAST_FRAME_TIMES: usize = 2;
 /// Number of previous simulation steps to track for counting simulation
@@ -30,7 +30,7 @@ const MAX_LAST_SIM_TIMES: usize = 4;
 pub struct GenericGridView<G: GridViewDimension> {
     pub automaton: NdAutomaton<G::D>,
     pub selection: Option<Selection<G::D>>,
-    pub camera_interpolator: Interpolator<G::D, G::Camera>,
+    pub viewpoint_interpolator: Interpolator<G::D, G::Viewpoint>,
     history: HistoryManager<HistoryEntry<G>>,
     dimensionality: G,
 
@@ -72,7 +72,7 @@ impl<G: GridViewDimension> Default for GenericGridView<G> {
         Self {
             automaton: Default::default(),
             selection: Default::default(),
-            camera_interpolator: Default::default(),
+            viewpoint_interpolator: Default::default(),
             history: Default::default(),
             dimensionality: Default::default(),
 
@@ -109,7 +109,7 @@ impl<G: GridViewDimension> HistoryBase for GenericGridView<G> {
         HistoryEntry {
             automaton: self.automaton.clone(),
             selection: self.selection.clone(),
-            camera: self.camera_interpolator.target.clone(),
+            viewpoint: self.viewpoint_interpolator.target.clone(),
         }
     }
 
@@ -117,10 +117,10 @@ impl<G: GridViewDimension> HistoryBase for GenericGridView<G> {
         HistoryEntry {
             automaton: std::mem::replace(&mut self.automaton, entry.automaton),
             selection: Selection::restore_history_entry(&mut self.selection, entry.selection),
-            camera: if CONFIG.lock().hist.record_view {
-                std::mem::replace(&mut self.camera_interpolator.target, entry.camera)
+            viewpoint: if CONFIG.lock().hist.record_view {
+                std::mem::replace(&mut self.viewpoint_interpolator.target, entry.viewpoint)
             } else {
-                self.camera_interpolator.target.clone()
+                self.viewpoint_interpolator.target.clone()
             },
         }
     }
@@ -166,9 +166,9 @@ impl<G: GridViewDimension> GenericGridView<G> {
             }
         }
 
-        // Interpolate camera.
+        // Interpolate viewpoint.
         if let Some(elapsed) = self.frame_duration() {
-            self.camera_interpolator
+            self.viewpoint_interpolator
                 .advance(elapsed, CONFIG.lock().ctrl.interpolation);
         }
 
@@ -602,7 +602,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
     pub fn is_drawing(&self) -> bool {
         self.drag_type == Some(DragType::Drawing)
     }
-    /// Returns whether the user is currently moving the viewport by dragging
+    /// Returns whether the user is currently moving the viewpoint by dragging
     /// the mouse.
     pub fn is_dragging_view(&self) -> bool {
         self.drag_type == Some(DragType::MovingView)
@@ -671,21 +671,21 @@ impl<G: GridViewDimension> GenericGridView<G> {
         }
     }
 
-    /// Returns the current camera.
-    pub fn camera(&self) -> &G::Camera {
-        &self.camera_interpolator.current
+    /// Returns the current viewpoint.
+    pub fn viewpoint(&self) -> &G::Viewpoint {
+        &self.viewpoint_interpolator.current
     }
-    /// Updates camera parameters and renders the gridview, recording and
+    /// Updates viewpoint parameters and renders the gridview, recording and
     /// returning the result.
     pub fn render(&mut self, params: RenderParams<'_>) -> Result<&RenderResult> {
         // Update DPI.
-        self.camera_interpolator
+        self.viewpoint_interpolator
             .set_dpi(CONFIG.lock().gfx.dpi as f32);
-        // Update the pixel size of the viewport.
-        self.camera_interpolator
+        // Update the pixel size of the render target.
+        self.viewpoint_interpolator
             .set_target_dimensions(params.target.get_dimensions());
 
-        // Render the grid to the viewport, then save and return the result.
+        // Render the grid to the target, then save and return the result.
         self.last_render_result = G::render(self, params)?;
         Ok(self.last_render_result())
     }
@@ -707,7 +707,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
 
 pub trait GridViewDimension: fmt::Debug + Default {
     type D: Dim;
-    type Camera: Camera<Self::D>;
+    type Viewpoint: Viewpoint<Self::D>;
 
     /// Executes a `View` command.
     fn do_view_command(this: &mut GenericGridView<Self>, command: ViewCommand) -> Result<()>;
@@ -724,5 +724,5 @@ pub trait GridViewDimension: fmt::Debug + Default {
 pub struct HistoryEntry<G: GridViewDimension> {
     automaton: NdAutomaton<G::D>,
     selection: Option<Selection<G::D>>,
-    camera: G::Camera,
+    viewpoint: G::Viewpoint,
 }

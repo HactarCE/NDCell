@@ -12,30 +12,22 @@ use super::shaders;
 use super::vertices::MouseTargetVertex;
 use super::CellDrawParams;
 use crate::gridview::*;
-use crate::Scale;
 
 pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
     pub(super) cache: RefMut<'a, super::RenderCache>,
     pub(super) params: RenderParams<'a>,
     pub(super) dimensionality: R,
 
-    /// Camera to render the grid from.
-    pub(super) camera: &'a R::Camera,
-    /// Global cell origin for "local" render cell vectors.
-    pub(super) origin: BigVec<R::D>,
-
-    /// Rectangle of cells in global space that is visible, rounded to render cell boundaries.
+    /// Viewpoint to render the grid from.
+    pub(super) viewpoint: &'a R::Viewpoint,
+    /// Transform from global space to local space (1 unit = 1 render cell; (0,
+    /// 0) = `origin`), to screen space ((-1, -1) = bottom left; (1, 1) = top
+    /// right), and to pixel space (1 unit = 1 pixel; (0, 0) = top left).
+    pub(super) xform: NdCellTransform<R::D>,
+    /// Global rectangle of visible cells, rounded to render cell boundaries.
     pub(super) global_visible_rect: BigRect<R::D>,
-    /// Rectangle of render cells relative to `origin` that is visible.
-    pub(super) visible_rect: IRect<R::D>,
-    /// Node layer of a render cell.
-    pub(super) render_cell_layer: Layer,
-    /// Scale to draw render cells at.
-    pub(super) render_cell_scale: Scale,
-    /// Transform from global cell space to render cell space (1 unit = 1 render
-    /// cell; (0, 0) = `origin`), screen space ((-1, -1) = bottom left; (1, 1) =
-    /// top right), and pixel space (1 unit = 1 pixel; (0, 0) = top left).
-    pub(super) transform: NdCellTransform<R::D>,
+    /// Local rectangle of visible render cells.
+    pub(super) local_visible_rect: IRect<R::D>,
 
     /// Mouse targets, indexed by ID.
     mouse_targets: Vec<MouseTargetData>,
@@ -44,7 +36,7 @@ pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
 }
 impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
     /// Creates a `GridViewRender` for a gridview.
-    pub fn new(params: RenderParams<'a>, camera: &'a R::Camera) -> Result<Self> {
+    pub fn new(params: RenderParams<'a>, viewpoint: &'a R::Viewpoint) -> Self {
         let mut cache = super::CACHE.borrow_mut();
 
         // Initialize color and depth buffers.
@@ -55,56 +47,32 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         // Initialize mouse picker.
         cache.picker.init(params.target.get_dimensions());
 
-        // Determine the lowest layer of the quadtree that we must visited,
-        // which is the layer of a "render cell," a quadtree node that is
-        // rendered as one unit (one pixel in step #1).
-        let (render_cell_layer, render_cell_scale) = camera.render_cell_layer_and_scale();
-        // Compute the width of cells represented by each render cell.
-        let render_cell_len = render_cell_layer.big_len();
-
-        let origin = camera.pos().floor().div_floor(&render_cell_len) * &render_cell_len;
+        // Compute the transformation from individual cells all the way to
+        // pixels.
+        let xform = viewpoint.cell_transform();
 
         // Determine the rectangle of visible cells in global coordinate space,
         // rounded to the nearest render cell.
-        let global_visible_rect: BigRect<R::D> =
-            render_cell_layer.round_rect(&camera.global_visible_rect());
+        let global_visible_rect: BigRect<R::D> = xform
+            .render_cell_layer
+            .round_rect(&viewpoint.global_visible_rect());
+        let local_visible_rect: IRect<R::D> = xform
+            .global_to_local_int_rect(&global_visible_rect)
+            .expect("Unreasonable visible rectangle");
 
-        // Convert that rectangle of cells into a rectangle of render cells,
-        // relative to `origin`.
-        let visible_rect: IRect<R::D>;
-        {
-            // Get the rectangle of visible cells relative to the origin.
-            let tmp_visible_rect = global_visible_rect.clone() - &origin;
-            // Divide by `render_cell_len` to get the rectangle of visible
-            // render cells relative to the origin.
-            let tmp_visible_rect = tmp_visible_rect.div_outward(&render_cell_len);
-            // Now it is safe to convert from `BigInt` to `isize`, because the
-            // extent of visible render cells from the origin must be
-            // reasonable.
-            visible_rect = tmp_visible_rect.to_irect();
-        }
-
-        // Compute the transformation from individual cells all the way to
-        // pixels.
-        let transform = camera.cell_transform_with_base(origin.clone())?;
-
-        Ok(Self {
+        Self {
             cache,
             params,
             dimensionality: R::default(),
 
-            camera,
-            origin,
-
+            viewpoint,
+            xform,
             global_visible_rect,
-            visible_rect,
-            render_cell_layer,
-            render_cell_scale,
-            transform,
+            local_visible_rect,
 
             mouse_targets: vec![],
             mouse_target_tris: vec![],
-        })
+        }
     }
 
     /// Returns a `RenderResult` from this render.
@@ -133,7 +101,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
                     vbo_slice,
                     &glium::index::NoIndices(PrimitiveType::TrianglesList),
                     &shaders::PICKER.load(),
-                    &uniform! { matrix: self.transform.gl_matrix() },
+                    &uniform! { matrix: self.xform.gl_matrix() },
                     &glium::DrawParameters {
                         depth: glium::Depth {
                             test: glium::DepthTest::Overwrite,
@@ -195,47 +163,41 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         }
     }
 
-    /// Returns the render cell position containing the global cell position if
-    /// the cell is visible; otherwise, returns the position of the nearest
-    /// render cell that is just off-screen.
-    pub(super) fn clip_cell_pos_to_visible_render_cells(
-        &self,
-        cell_pos: &BigVec<R::D>,
-    ) -> IVec<R::D> {
-        let render_cell_pos =
-            (cell_pos - &self.origin).div_floor(&self.render_cell_layer.big_len());
-        // Clip to lower edge minus 2 cells for padding.
-        let render_cell_pos =
-            NdVec::max(&render_cell_pos, &(self.visible_rect.min() - 2).to_bigvec());
-        // Clip to upper edge plus 2 cells for padding.
-        let render_cell_pos =
-            NdVec::min(&render_cell_pos, &(self.visible_rect.max() + 2).to_bigvec());
+    /// Converts a global position to a local position, clamping it to the
+    /// visible rectangle plus a few cells on each side for padding. This method
+    /// always returns a local position that is either within the visible
+    /// rectangle or just barely outside it.
+    pub(super) fn clamp_int_pos_to_visible(&self, global_pos: &BigVec<R::D>) -> IVec<R::D> {
+        // Padding = 2 render cells
+        let padding = self.xform.render_cell_layer.big_len() * 2;
 
-        render_cell_pos.to_ivec()
+        let lower = self.global_visible_rect.min() - &padding;
+        let global_pos = NdVec::max(global_pos, &lower);
+        let upper = self.global_visible_rect.max() + &padding;
+        let global_pos = NdVec::min(&global_pos, &upper);
+
+        self.xform.global_to_local_int(&global_pos).unwrap()
     }
-    /// Clips the edges of a rectangle using
-    /// `clip_cell_pos_to_visible_render_cells()`.
-    pub(super) fn clip_cell_rect_to_visible_render_cells(
-        &self,
-        cells_rect: &BigRect<R::D>,
-    ) -> IRect<R::D> {
+    /// Converts a global rectangle to local space using
+    /// `clamp_int_pos_to_visible()`.
+    pub(super) fn clip_int_rect_to_visible(&self, cells_rect: &BigRect<R::D>) -> IRect<R::D> {
         NdRect::span(
-            self.clip_cell_pos_to_visible_render_cells(&cells_rect.min()),
-            self.clip_cell_pos_to_visible_render_cells(&cells_rect.max()),
+            self.clamp_int_pos_to_visible(&cells_rect.min()),
+            self.clamp_int_pos_to_visible(&cells_rect.max()),
         )
     }
 
-    /// Clips an ND-tree to just the part that is visible, and returns the slice
-    /// of the ND-tree along with a rectangle of render cells relative to that
-    /// slice to render.
-    pub(super) fn clip_ndtree_to_visible_render_cells<'b>(
+    /// Returns a slice of an ND-tree encompassing the visible area. It is safe
+    /// to convert the offset of that slice to local coordinates.
+    pub(super) fn clip_ndtree_to_visible<'b>(
         &self,
         params: &'b CellDrawParams<'b, R::D>,
-    ) -> Option<(NdTreeSlice<'b, R::D>, IRect<R::D>)> {
+    ) -> Option<NdTreeSlice<'b, R::D>> {
         // Clip the global rectangle of visible cells according to the draw
         // parameters.
         let global_visible_rect = match &params.rect {
             Some(rect) => match self
+                .xform
                 .render_cell_layer
                 .round_rect(&rect)
                 .intersection(&self.global_visible_rect)
@@ -247,20 +209,15 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
                 // viewport, so there is nothing to draw.
                 None => return None,
             },
-            // There is no rectangle in the parameters, so draw everything in the viewport.
+            // There is no rectangle in the parameters, so draw everything in
+            // the viewport.
             None => self.global_visible_rect.clone(),
         };
 
         // Get the `NdTreeSlice` containing all of the visible cells.
         let visible_ndtree = params.ndtree.slice_containing(&global_visible_rect);
 
-        // Convert `global_visible_rect` from cells in global space to render
-        // cells relative to `visible_ndtree`.
-        let visible_rect = (global_visible_rect - &visible_ndtree.offset)
-            .div_outward(&self.render_cell_layer.big_len())
-            .to_irect();
-
-        Some((visible_ndtree, visible_rect))
+        Some(visible_ndtree)
     }
 
     /// Returns the color to represent an ND-tree node.
@@ -300,7 +257,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
 
 pub trait GridViewRenderDimension<'a>: Default {
     type D: Dim;
-    type Camera: Camera<Self::D>;
+    type Viewpoint: Viewpoint<Self::D>;
 
     const DEFAULT_COLOR: (f32, f32, f32, f32);
     const DEFAULT_DEPTH: f32;

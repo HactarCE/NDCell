@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use cgmath::prelude::*;
 use cgmath::{Basis3, Decomposed, Deg, Matrix4};
 use log::warn;
@@ -7,15 +7,15 @@ use ndcell_core::prelude::*;
 use Axis::{X, Y, Z};
 
 use super::{
-    Camera, CellTransform3D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE, VIEW_RADIUS_3D,
+    CellTransform3D, DragHandler, DragOutcome, ProjectionType, Scale, Viewpoint, MIN_TARGET_SIZE,
 };
 use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::config::{ForwardAxis3D, UpAxis3D};
 use crate::CONFIG;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Camera3D {
-    /// Width and height of the viewport.
+pub struct Viewpoint3D {
+    /// Width and height of the render target.
     target_dimensions: (u32, u32),
     /// Display scaling factor.
     dpi: f32,
@@ -26,11 +26,11 @@ pub struct Camera3D {
     yaw: Deg<f32>,
     /// Pitch (-90..+90).
     pitch: Deg<f32>,
-    /// Translation.
+    /// Cell coordinates at the center of the viewpoint.
     pivot: FixedVec3D,
 }
 
-impl Default for Camera3D {
+impl Default for Viewpoint3D {
     fn default() -> Self {
         Self {
             target_dimensions: (MIN_TARGET_SIZE, MIN_TARGET_SIZE),
@@ -44,12 +44,15 @@ impl Default for Camera3D {
     }
 }
 
-impl Camera3D {
+impl Viewpoint3D {
     /// Number of scaled units away from the pivot to position the camera.
     pub const DISTANCE_TO_PIVOT: f32 = 512.0;
 
     pub const DEFAULT_PITCH: Deg<f32> = Deg(-30.0);
     pub const DEFAULT_YAW: Deg<f32> = Deg(-20.0);
+
+    /// Radius of visible cells, measured in "scaled units". (See `Scale` docs.)
+    pub const VIEW_RADIUS: f32 = 5000.0;
 
     /// Returns the yaw of the camera.
     pub fn yaw(&self) -> Deg<f32> {
@@ -90,7 +93,7 @@ impl Camera3D {
     pub fn look_vector(&self) -> FVec3D {
         fvec3d_from_basis3(Z, self.orientation())
     }
-    /// Returns the real position of the camera (not the pivot).
+    /// Returns the position of the camera (not the pivot).
     pub fn camera_pos(&self) -> FixedVec3D {
         let distance =
             self.scale.inv_factor() * FixedPoint::from(r64(Self::DISTANCE_TO_PIVOT as f64));
@@ -132,7 +135,7 @@ impl Camera3D {
     }
 }
 
-impl Camera<Dim3D> for Camera3D {
+impl Viewpoint<Dim3D> for Viewpoint3D {
     fn target_dimensions(&self) -> (u32, u32) {
         self.target_dimensions
     }
@@ -149,7 +152,7 @@ impl Camera<Dim3D> for Camera3D {
         self.dpi = dpi;
     }
 
-    fn pos(&self) -> &FixedVec<Dim3D> {
+    fn center(&self) -> &FixedVec<Dim3D> {
         &self.pivot
     }
     fn set_pos(&mut self, pos: FixedVec<Dim3D>) {
@@ -180,7 +183,7 @@ impl Camera<Dim3D> for Camera3D {
         let mut ret = a.clone();
 
         // The math to interpolate scale and translation is exactly the same as
-        // in `Camera2D::lerp()`, so read the comments there.
+        // in `Viewpoint2D::lerp()`, so read the comments there.
 
         let delta_scale_factor = b.scale / a.scale;
         ret.scale_by_factor(delta_scale_factor.powf(t), None);
@@ -207,58 +210,32 @@ impl Camera<Dim3D> for Camera3D {
         ret
     }
 
-    fn cell_transform_with_base(&self, base_cell_pos: BigVec3D) -> Result<CellTransform3D> {
-        // Compute the layer of each "render cell."
+    fn cell_transform(&self) -> CellTransform3D {
         let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
-
-        // Compute the render cell transform; see `NdCellTransform` docs.
-        let render_cell_offset = self.pos() - base_cell_pos.to_fixedvec();
-        let render_cell_translate_matrix = Matrix4::from_translation(-cgmath::vec3(
-            render_cell_offset[X]
-                .to_f32()
-                .context("Base cell position is too far from camera position")?,
-            render_cell_offset[Y]
-                .to_f32()
-                .context("Base cell position is too far from camera position")?,
-            render_cell_offset[Z]
-                .to_f32()
-                .context("Base cell position is too far from camera position")?,
-        ));
-        let render_cell_scale = render_cell_scale.units_per_cell().raw() as f32;
-        let render_cell_view_matrix = Matrix4::from(Decomposed {
-            scale: render_cell_scale,
+        let camera_transform = Matrix4::from(Decomposed {
+            scale: 1.0,
             rot: self.orientation(),
             disp: cgmath::vec3(0.0, 0.0, Self::DISTANCE_TO_PIVOT),
         });
-        // The offset is measured in render cells, so we must apply the offest
-        // before scaling.
-        let render_cell_transform = render_cell_view_matrix * render_cell_translate_matrix;
 
-        let (target_w, target_h) = self.target_dimensions();
-
-        Ok(CellTransform3D::new_perspective(
-            base_cell_pos,
+        CellTransform3D::new(
+            self.pivot.clone(),
             render_cell_layer,
-            render_cell_transform,
-            (target_w as f32, target_h as f32),
-        ))
+            render_cell_scale,
+            camera_transform,
+            ProjectionType::Perspective,
+            self.target_dimensions(),
+        )
     }
 
-    fn render_cell_pos(&self, base_cell_pos: &BigVec3D) -> FVec3D {
-        // Compute the layer of each "render cell."
-        let (render_cell_layer, _render_cell_scale) = self.render_cell_layer_and_scale();
-
-        let cell_offset = self.pos() - base_cell_pos.to_fixedvec();
-        (cell_offset >> render_cell_layer.to_u32()).to_fvec()
-    }
     fn global_visible_rect(&self) -> BigRect3D {
         let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
-        let center = self.pos().floor();
-        let inv_render_cell_scale_factor = render_cell_scale.inv_factor().to_f64().unwrap();
-        let render_cell_radius = 0.5 + VIEW_RADIUS_3D * inv_render_cell_scale_factor;
+        let pivot = self.center().floor();
+        let inv_render_cell_scale_factor = render_cell_scale.inv_factor().to_f32().unwrap();
+        let render_cell_radius = 0.5 + Self::VIEW_RADIUS * inv_render_cell_scale_factor;
         let render_cell_radius = render_cell_radius.ceil() as usize;
         let cell_radius = BigInt::from(render_cell_radius) << render_cell_layer.to_u32();
-        BigRect3D::centered(center, &cell_radius)
+        BigRect3D::centered(pivot, &cell_radius)
     }
 
     fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
@@ -270,21 +247,21 @@ impl Camera<Dim3D> for Camera3D {
                     let orbit_factor = r64(config.ctrl.mouse_orbit_speed / config.gfx.dpi);
                     let old_yaw = self.yaw();
                     let old_pitch = self.pitch();
-                    Ok(Some(Box::new(move |cam, cursor_end| {
+                    Ok(Some(Box::new(move |vp, cursor_end| {
                         let delta = (cursor_start - cursor_end) * orbit_factor;
-                        cam.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
-                        cam.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
+                        vp.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
+                        vp.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
                         Ok(DragOutcome::Continue)
                     })))
                 }
 
                 ViewDragCommand::Pan => {
                     let z = Self::DISTANCE_TO_PIVOT;
-                    let start = self.cell_transform().pixel_to_global_cell(cursor_start, z);
-                    Ok(Some(Box::new(move |cam, cursor_end| {
-                        let end = cam.cell_transform().pixel_to_global_cell(cursor_end, z);
+                    let start = self.cell_transform().pixel_to_global_pos(cursor_start, z);
+                    Ok(Some(Box::new(move |vp, cursor_end| {
+                        let end = vp.cell_transform().pixel_to_global_pos(cursor_end, z);
                         if let (Some(start), Some(end)) = (&start, &end) {
-                            cam.pivot += start - end;
+                            vp.pivot += start - end;
                         }
                         Ok(DragOutcome::Continue)
                     })))
@@ -299,13 +276,13 @@ impl Camera<Dim3D> for Camera3D {
                     let y = self.pivot[Y].clone();
                     let start = self
                         .cell_transform()
-                        .pixel_to_global_cell_in_plane(cursor_start, (Y, &y));
-                    Ok(Some(Box::new(move |cam, cursor_end| {
-                        let end = cam
+                        .pixel_to_global_pos_in_plane(cursor_start, (Y, &y));
+                    Ok(Some(Box::new(move |vp, cursor_end| {
+                        let end = vp
                             .cell_transform()
-                            .pixel_to_global_cell_in_plane(cursor_end, (Y, &y));
+                            .pixel_to_global_pos_in_plane(cursor_end, (Y, &y));
                         if let (Some(start), Some(end)) = (&start, &end) {
-                            cam.pivot += start - end;
+                            vp.pivot += start - end;
                         }
                         Ok(DragOutcome::Continue)
                     })))
@@ -315,7 +292,7 @@ impl Camera<Dim3D> for Camera3D {
             },
 
             ViewCommand::GoTo2D { .. } => {
-                warn!("Ignoring {:?} in Camera3D", command);
+                warn!("Ignoring {:?} in Viewpoint3D", command);
                 Ok(None)
             }
             ViewCommand::GoTo3D {

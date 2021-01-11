@@ -1,28 +1,30 @@
 use anyhow::{anyhow, Context, Result};
-use cgmath::Matrix4;
+use cgmath::{Matrix4, SquareMatrix};
 use log::warn;
 
 use ndcell_core::prelude::*;
 use Axis::{X, Y};
 
-use super::{Camera, CellTransform2D, DragHandler, DragOutcome, Scale, MIN_TARGET_SIZE};
+use super::{
+    CellTransform2D, DragHandler, DragOutcome, ProjectionType, Scale, Viewpoint, MIN_TARGET_SIZE,
+};
 use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::CONFIG;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Camera2D {
-    /// Width and height of the viewport.
+pub struct Viewpoint2D {
+    /// Width and height of the render target.
     target_dimensions: (u32, u32),
     /// Display scaling factor.
     dpi: f32,
 
-    /// Cell coordinates at the center of the camera.
+    /// Cell coordinates at the center of the viewpoint.
     center: FixedVec2D,
     /// The scale factor.
     scale: Scale,
 }
 
-impl Default for Camera2D {
+impl Default for Viewpoint2D {
     fn default() -> Self {
         Self {
             target_dimensions: (MIN_TARGET_SIZE, MIN_TARGET_SIZE),
@@ -34,20 +36,21 @@ impl Default for Camera2D {
     }
 }
 
-impl Camera2D {
+impl Viewpoint2D {
     pub fn pixel_to_screen_pos(&self, pixel: FVec2D) -> Option<ScreenPos2D> {
         let transform = self.cell_transform();
-        let cell = transform.pixel_to_global_cell(pixel)?;
+
+        let cell = transform.pixel_to_global_pos(pixel)?;
         let int_cell = cell.floor();
-        let render_cell = transform.pixel_to_local_render_cell(pixel)?;
-        let int_render_cell = render_cell.floor().to_ivec();
+        let local_pos = transform.pixel_to_local_pos(pixel)?;
+        let local_int_pos = local_pos.floor().to_ivec();
 
         Some(ScreenPos2D {
             pixel,
             cell,
             int_cell,
-            render_cell,
-            int_render_cell,
+            local_pos,
+            local_int_pos,
         })
     }
     pub fn try_pixel_to_screen_pos(&self, maybe_pixel: Option<FVec2D>) -> Option<ScreenPos2D> {
@@ -55,7 +58,7 @@ impl Camera2D {
     }
 }
 
-impl Camera<Dim2D> for Camera2D {
+impl Viewpoint<Dim2D> for Viewpoint2D {
     fn target_dimensions(&self) -> (u32, u32) {
         self.target_dimensions
     }
@@ -72,7 +75,7 @@ impl Camera<Dim2D> for Camera2D {
         self.dpi = dpi;
     }
 
-    fn pos(&self) -> &FixedVec<Dim2D> {
+    fn center(&self) -> &FixedVec<Dim2D> {
         &self.center
     }
     fn set_pos(&mut self, pos: FixedVec<Dim2D>) {
@@ -143,77 +146,40 @@ impl Camera<Dim2D> for Camera2D {
         ret
     }
 
-    fn cell_transform_with_base(&self, base_cell_pos: BigVec2D) -> Result<CellTransform2D> {
-        // Compute the layer of each "render cell."
+    fn cell_transform(&self) -> CellTransform2D {
         let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
+        let camera_transform = Matrix4::identity();
+        let viewpoint_center = if render_cell_scale.log2_factor().fract().is_zero() {
+            // When the scale factor is an exact power of two, round to the
+            // nearest pixel to make the final image more crisp. This is
+            // disabled otherwise because it causes noticeable jiggling during
+            // interpolation.
+            let mut center_in_pixel_units = self.scale.cells_to_units(&self.center);
+            center_in_pixel_units = center_in_pixel_units.round().to_fixedvec();
+            // Offset by half a pixel if the target dimensions are odd, so that
+            // cells boundaries line up with pixel boundaries.
+            let (target_w, target_h) = self.target_dimensions();
+            if target_w % 2 == 1 {
+                center_in_pixel_units[X] -= 0.5_f64;
+            }
+            if target_h % 2 == 1 {
+                center_in_pixel_units[Y] -= 0.5_f64;
+            }
+            self.scale.units_to_cells(center_in_pixel_units)
+        } else {
+            self.center.clone()
+        };
 
-        // Compute the render cell translation matrix.
-        let mut render_cell_pos = self.render_cell_pos(&base_cell_pos);
-        // Offset by a quarter of a pixel so that OpenGL rounds consistently
-        // when drawing things that are right on a cell boundary, such as
-        // 1-pixel-wide gridlines.
-        render_cell_pos -= render_cell_scale.cells_per_unit() / 4.0;
-        // This sub-pixel offest is in the opposite direction of the in
-        // render_cell_pos() so that they partially cancel, and never offset the
-        // whole image by more than half a pixel.
-
-        let render_cell_translate_matrix = Matrix4::from_translation(-cgmath::vec3(
-            render_cell_pos[X]
-                .to_f32()
-                .context("Base cell position is too far from camera position")?,
-            render_cell_pos[Y]
-                .to_f32()
-                .context("Base cell position is too far from camera position")?,
-            0.0,
-        ));
-        // Compute scale factor for render cells, relative to pixels.
-        let render_cell_scale = render_cell_scale.units_per_cell().raw() as f32;
-        let render_cell_scale_matrix =
-            Matrix4::from_nonuniform_scale(render_cell_scale, render_cell_scale, 1.0);
-        // Compute the render cell transform; see `NdCellTransform` docs. The
-        // offset is measured in render cells, so we must apply the offset
-        // before scaling.
-        let render_cell_transform = render_cell_scale_matrix * render_cell_translate_matrix;
-
-        let (target_w, target_h) = self.target_dimensions();
-
-        Ok(CellTransform2D::new_ortho(
-            base_cell_pos,
+        CellTransform2D::new(
+            viewpoint_center,
             render_cell_layer,
-            render_cell_transform,
-            (target_w as f32, target_h as f32),
-        ))
+            render_cell_scale,
+            camera_transform,
+            ProjectionType::Orthographic,
+            self.target_dimensions(),
+        )
     }
 
-    fn render_cell_pos(&self, base_cell_pos: &BigVec2D) -> FVec2D {
-        // Compute the layer of each "render cell."
-        let (render_cell_layer, render_cell_scale) = self.render_cell_layer_and_scale();
-
-        let cell_offset = self.pos() - base_cell_pos.to_fixedvec();
-        let mut render_cell_pos = (cell_offset >> render_cell_layer.to_u32()).to_fvec();
-
-        // This is the width of a pixel, measured in render cells.
-        let one_pixel = render_cell_scale.cells_per_unit();
-
-        // Round to the nearest pixel whne the scale factor is exactly a power
-        // of two. This is disabled otherwise because it causes jiggling between
-        // pixels during interpolation.
-        if render_cell_scale.log2_factor().fract().is_zero() {
-            render_cell_pos = (render_cell_pos / one_pixel).round() * one_pixel;
-        }
-
-        // Offset by half a pixel if the target dimensions are odd, so that
-        // cells boundaries always line up with pixel boundaries.
-        let (target_w, target_h) = self.target_dimensions();
-        if target_w % 2 == 1 {
-            render_cell_pos[X] += one_pixel / 2.0;
-        }
-        if target_h % 2 == 1 {
-            render_cell_pos[Y] += one_pixel / 2.0;
-        }
-
-        render_cell_pos
-    }
     fn global_visible_rect(&self) -> BigRect2D {
         // Compute the width and height of individual cells that fit on the
         // screen.
@@ -222,18 +188,18 @@ impl Camera<Dim2D> for Camera2D {
         let target_cells_size: FixedVec2D = self
             .scale()
             .units_to_cells(target_pixels_size.to_fixedvec());
-        // Compute the cell vector pointing from the camera center to the top right
-        // corner of the screen; i.e. the "half diagonal."
+        // Compute the cell vector pointing from the center of the screen to the
+        // top right corner; i.e. the "half diagonal."
         let half_diag: FixedVec2D = target_cells_size / 2.0;
 
-        BigRect2D::centered(self.pos().floor(), &half_diag.ceil())
+        BigRect2D::centered(self.center().floor(), &half_diag.ceil())
     }
 
     fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
         match command {
             ViewCommand::Drag(c, cursor_start) => match c {
                 ViewDragCommand::Orbit => {
-                    warn!("Ignoring {:?} in Camera2D", command);
+                    warn!("Ignoring {:?} in Viewpoint2D", command);
                     Ok(None)
                 }
 
@@ -241,11 +207,11 @@ impl Camera<Dim2D> for Camera2D {
                 | ViewDragCommand::PanAligned
                 | ViewDragCommand::PanAlignedVertical
                 | ViewDragCommand::PanHorizontal => {
-                    let start = self.cell_transform().pixel_to_global_cell(cursor_start);
-                    Ok(Some(Box::new(move |cam, cursor_end| {
-                        let end = cam.cell_transform().pixel_to_global_cell(cursor_end);
+                    let start = self.cell_transform().pixel_to_global_pos(cursor_start);
+                    Ok(Some(Box::new(move |vp, cursor_end| {
+                        let end = vp.cell_transform().pixel_to_global_pos(cursor_end);
                         if let (Some(start), Some(end)) = (&start, &end) {
-                            cam.center += start - end;
+                            vp.center += start - end;
                         }
                         Ok(DragOutcome::Continue)
                     })))
@@ -278,7 +244,7 @@ impl Camera<Dim2D> for Camera2D {
                 Ok(None)
             }
             ViewCommand::GoTo3D { .. } => {
-                warn!("Ignoring {:?} in Camera2D", command);
+                warn!("Ignoring {:?} in Viewpoint2D", command);
                 Ok(None)
             }
             ViewCommand::GoToScale(scale) => {
@@ -292,9 +258,8 @@ impl Camera<Dim2D> for Camera2D {
             } => {
                 self.scale_by_log2_factor(
                     R64::try_new(log2_factor).context("Invalid scale factor")?,
-                    invariant_pos.and_then(|pixel_pos| {
-                        self.cell_transform().pixel_to_global_cell(pixel_pos)
-                    }),
+                    invariant_pos
+                        .and_then(|pixel_pos| self.cell_transform().pixel_to_global_pos(pixel_pos)),
                 );
                 Ok(None)
             }
@@ -305,15 +270,14 @@ impl Camera<Dim2D> for Camera2D {
             }
             ViewCommand::SnapScale { invariant_pos } => {
                 self.snap_scale(
-                    invariant_pos.and_then(|pixel_pos| {
-                        self.cell_transform().pixel_to_global_cell(pixel_pos)
-                    }),
+                    invariant_pos
+                        .and_then(|pixel_pos| self.cell_transform().pixel_to_global_pos(pixel_pos)),
                 );
                 Ok(None)
             }
 
             ViewCommand::FitView => Err(anyhow!(
-                "FitView command received in Camera2D (must be converted to GoTo command)"
+                "FitView command received in Viewpoint2D (must be converted to GoTo command)"
             )),
         }
     }
@@ -324,8 +288,8 @@ pub struct ScreenPos2D {
     pixel: FVec2D,
     cell: FixedVec2D,
     int_cell: BigVec2D,
-    render_cell: FVec2D,
-    int_render_cell: IVec2D,
+    local_pos: FVec2D,
+    local_int_pos: IVec2D,
 }
 impl ScreenPos2D {
     pub fn pixel(&self) -> FVec2D {
@@ -337,10 +301,10 @@ impl ScreenPos2D {
     pub fn int_cell(&self) -> &BigVec2D {
         &self.int_cell
     }
-    pub fn render_cell(&self) -> FVec2D {
-        self.render_cell
+    pub fn local_pos(&self) -> FVec2D {
+        self.local_pos
     }
-    pub fn int_render_cell(&self) -> IVec2D {
-        self.int_render_cell
+    pub fn local_int_pos(&self) -> IVec2D {
+        self.local_int_pos
     }
 }

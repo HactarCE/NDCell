@@ -1,4 +1,4 @@
-//! Camera interpolation.
+//! Viewpoint interpolation.
 
 use anyhow::Result;
 use std::any::Any;
@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use ndcell_core::prelude::*;
 
-use super::{Camera, DragHandler, DragOutcome};
+use super::{DragHandler, DragOutcome, Viewpoint};
 use crate::commands::ViewCommand;
 use crate::config::Interpolation;
 
@@ -17,22 +17,22 @@ use crate::config::Interpolation;
 const DISTANCE_THRESHOLD: f64 = 0.001;
 
 #[derive(Default)]
-pub struct Interpolator<D, C> {
-    pub current: C,
-    pub target: C,
+pub struct Interpolator<D, V> {
+    pub current: V,
+    pub target: V,
     state: (),
     _marker: PhantomData<D>,
 }
-impl<D: Dim, C: Camera<D>> fmt::Debug for Interpolator<D, C> {
+impl<D: Dim, V: Viewpoint<D>> fmt::Debug for Interpolator<D, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.current, f)
     }
 }
-impl<D: Dim, C: Camera<D>> From<C> for Interpolator<D, C> {
-    fn from(camera: C) -> Self {
+impl<D: Dim, V: Viewpoint<D>> From<V> for Interpolator<D, V> {
+    fn from(viewpoint: V) -> Self {
         Self {
-            current: camera.clone(),
-            target: camera.clone(),
+            current: viewpoint.clone(),
+            target: viewpoint.clone(),
             state: (),
             _marker: PhantomData,
         }
@@ -51,14 +51,14 @@ pub trait Interpolate: Any {
     /// Returns `true` if the target has been reached, or `false` otherwise.
     fn advance(&mut self, frame_duration: Duration, interpolation: Interpolation) -> bool;
 
-    /// Sets the display scaling factor of the underlying camera.
+    /// Sets the display scaling factor of the underlying viewpoint.
     fn set_dpi(&mut self, dpi: f32);
-    /// Update the pixel size of the viewport.
+    /// Updates the target dimensions.
     fn set_target_dimensions(&mut self, target_dimensions: (u32, u32));
 }
-impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
+impl<D: Dim, V: Viewpoint<D>> Interpolate for Interpolator<D, V> {
     fn distance(&self) -> f64 {
-        C::distance(&self.current, &self.target)
+        V::distance(&self.current, &self.target)
             .to_f64()
             .unwrap_or(f64::MAX)
     }
@@ -79,7 +79,7 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
                 } => distance_per_second * seconds_elapsed / self.distance(),
                 Interpolation::Exponential { decay_constant } => seconds_elapsed / decay_constant,
             };
-            self.current = C::lerp(
+            self.current = V::lerp(
                 &self.current,
                 &self.target,
                 // Clamp to 0 <= t <= 1. `min()` comes first so that `NaN`s will
@@ -100,18 +100,18 @@ impl<D: Dim, C: Camera<D>> Interpolate for Interpolator<D, C> {
     }
 }
 
-impl<D: Dim, C: Camera<D>> Interpolator<D, C> {
+impl<D: Dim, V: Viewpoint<D>> Interpolator<D, V> {
     /// Executes a movement command, interpolating if necessary.
     pub fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
         Ok(self
             .target
             .do_view_command(command)?
-            // Turn the DragHandler<C> into a DragHandler<Interpolator<D, C>>.
-            .map(|mut camera_drag_handler| -> DragHandler<Self> {
+            // Turn the DragHandler<V> into a DragHandler<Interpolator<D, V>>.
+            .map(|mut viewpoint_drag_handler| -> DragHandler<Self> {
                 Box::new(move |this, cursor_pos| {
                     // Skip interpolation for dragging.
-                    camera_drag_handler(&mut this.target, cursor_pos)?;
-                    camera_drag_handler(&mut this.current, cursor_pos)?;
+                    viewpoint_drag_handler(&mut this.target, cursor_pos)?;
+                    viewpoint_drag_handler(&mut this.current, cursor_pos)?;
                     Ok(DragOutcome::Continue)
                 })
             }))

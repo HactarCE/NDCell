@@ -7,7 +7,7 @@ use ndcell_core::prelude::*;
 ///
 /// In 2D, this is the width or height of a cell in "scaled units," which are
 /// pixels in 2D and abstract units in 3D, where the camera is always a fixed
-/// number of "units" away from the pivot point.
+/// number of "units" away from the viewpoint pivot.
 ///
 /// When zoomed in close, the scale factor is large, and the base-2 logarithm of
 /// the scale factor is positive. When zoomed out far away, the scale factor is
@@ -116,7 +116,7 @@ impl Scale {
     }
     /// Converts a length of cells to a length of scaled units.
     pub fn cells_to_units<X: Div<FixedPoint>>(self, cells: X) -> X::Output {
-        cells / FixedPoint::from(-self.log2_factor()).exp2()
+        cells / self.inv_factor()
     }
 
     /// Returns the length of cells per scaled unit, which is equivalent to the

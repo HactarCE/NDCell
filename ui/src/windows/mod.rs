@@ -86,18 +86,18 @@ impl MainWindow {
             ui.text("");
             match &gridview {
                 GridView::View2D(view2d) => {
-                    let cam = view2d.camera();
+                    let vp = view2d.viewpoint();
                     ui.text("2D");
-                    ui.text(format!("Scale = {}", cam.scale()));
+                    ui.text(format!("Scale = {}", vp.scale()));
                     for &ax in Dim2D::axes() {
-                        let value = &cam.pos()[ax];
+                        let value = &vp.center()[ax];
                         if format!("{:.1}", value).ends_with("0") {
                             ui.text(format!("{} = {:.0}", ax.name(), value));
                         } else {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
                         }
                     }
-                    if let Some(mouse_pos) = view2d.camera().try_pixel_to_screen_pos(mouse.pos) {
+                    if let Some(mouse_pos) = view2d.viewpoint().try_pixel_to_screen_pos(mouse.pos) {
                         ui.text(format!(
                             "Cursor: X = {}, Y = {}",
                             mouse_pos.int_cell()[X],
@@ -108,19 +108,19 @@ impl MainWindow {
                     }
                 }
                 GridView::View3D(view3d) => {
-                    let cam = view3d.camera();
+                    let vp = view3d.viewpoint();
                     ui.text("3D");
-                    ui.text(format!("Scale = {}", cam.scale()));
+                    ui.text(format!("Scale = {}", vp.scale()));
                     for &ax in Dim3D::axes() {
-                        let value = &cam.pos()[ax];
+                        let value = &vp.center()[ax];
                         if format!("{:.1}", value).ends_with("0") {
                             ui.text(format!("{} = {:.0}", ax.name(), value));
                         } else {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
                         }
                     }
-                    ui.text(format!("Pitch = {:.2?}°", cam.pitch().0));
-                    ui.text(format!("Yaw = {:.2?}°", cam.yaw().0));
+                    ui.text(format!("Pitch = {:.2?}°", vp.pitch().0));
+                    ui.text(format!("Yaw = {:.2?}°", vp.yaw().0));
                     if let Some(hover_pos) = view3d.hovered_cell_pos(mouse.pos) {
                         ui.text(format!(
                             "Cursor: X = {}, Y = {}, Z = {}",

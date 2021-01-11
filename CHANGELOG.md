@@ -55,8 +55,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - 2D pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right/middle mouse drag)
   - Zoom (scroll wheel or <kbd>Q</kbd>/<kbd>Z</kbd>)
   - Pan/zoom faster while holding <kbd>Shift</kbd>
-  - Reset viewport (<kbd>Ctrl</kbd>+<kbd>M</kbd>)
-  - Fit pattern in viewport (<kbd>Ctrl</kbd>+<kbd>F</kbd>)
+  - Reset view (<kbd>Ctrl</kbd>+<kbd>M</kbd>)
+  - Fit pattern in view (<kbd>Ctrl</kbd>+<kbd>F</kbd>)
 - **Drawing**
   - Toggle cells (left mouse click/drag)
   - Select numbered cell state (<kbd>0</kbd>-<kbd>9</kbd>)
@@ -87,7 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Display estimated maximum simulation update rate (with color)
   - Display generation count
   - Display total population
-  - Display viewport scale and position
+  - Display view scale and position
   - Display cursor position
   - Display estimated HashLife node pool memory usage
   - Display selected cell state

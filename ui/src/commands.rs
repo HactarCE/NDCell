@@ -84,9 +84,9 @@ pub enum ViewCommand {
         invariant_pos: Option<FVec2D>,
     },
 
-    /// Snap camera to the nearest integer cell position.
+    /// Snap viewpoint to the nearest integer cell position.
     SnapPos,
-    /// Snap camera to the nearest power-of-2 scale factor.
+    /// Snap viewpoint to the nearest power-of-2 scale factor.
     SnapScale {
         /// Optional invariant position.
         invariant_pos: Option<FVec2D>,
@@ -98,7 +98,7 @@ impl_command_from!(Command::View(ViewCommand));
 
 #[derive(Debug, Copy, Clone)]
 pub enum ViewDragCommand {
-    /// Rotates the 3D view around the pivot.
+    /// Rotates the 3D view around the viewpoint pivot.
     Orbit,
     /// Pans in the plane of the camera.
     Pan,

@@ -5,23 +5,23 @@ use std::time::Duration;
 
 use ndcell_core::prelude::*;
 
-mod camera;
 mod generic;
 mod history;
 pub mod render;
 mod selection;
 mod view2d;
 mod view3d;
+mod viewpoint;
 mod worker;
 
 use crate::commands::*;
-pub use camera::*;
 pub use generic::GenericGridView;
 pub use history::History;
 pub use render::{MouseTargetData, RenderParams, RenderResult};
 pub use selection::*;
 pub use view2d::GridView2D;
 pub use view3d::GridView3D;
+pub use viewpoint::*;
 
 /// Handler for mouse drag events, when the user starts dragging and called for
 /// each cursor movement until released. Returns whether to continue or cancel
@@ -146,7 +146,7 @@ impl GridView {
             GridView::View3D(view3d) => view3d.do_frame(),
         }
     }
-    /// Updates camera parameters and renders the gridview, recording and
+    /// Updates viewpoint parameters and renders the gridview, recording and
     /// returning the result.
     pub fn render(&mut self, params: RenderParams<'_>) -> Result<&RenderResult> {
         match self {

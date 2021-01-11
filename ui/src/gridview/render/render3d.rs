@@ -27,7 +27,7 @@ type CuboidVerts = [Option<QuadVerts>; 6];
 pub(in crate::gridview) struct RenderDim3D;
 impl GridViewRenderDimension<'_> for RenderDim3D {
     type D = Dim3D;
-    type Camera = Camera3D;
+    type Viewpoint = Viewpoint3D;
 
     const DEFAULT_COLOR: (f32, f32, f32, f32) = crate::colors::BACKGROUND_3D;
     const DEFAULT_DEPTH: f32 = f32::INFINITY;
@@ -36,19 +36,19 @@ impl GridViewRenderDimension<'_> for RenderDim3D {
 impl GridViewRender3D<'_> {
     /// Draw an ND-tree to scale on the target.
     pub fn draw_cells(&mut self, params: CellDrawParams<'_, Dim3D>) -> Result<()> {
-        let (visible_octree, _visible_cuboid) =
-            match self.clip_ndtree_to_visible_render_cells(&params) {
-                Some(x) => x,
-                None => return Ok(()), // There is nothing to draw.
-            };
+        let visible_octree = match self.clip_ndtree_to_visible(&params) {
+            Some(x) => x,
+            None => return Ok(()), // There is nothing to draw.
+        };
 
-        let fog_center = ((self.camera.pos() - self.origin.to_fixedvec())
-            / FixedPoint::from(self.render_cell_layer.big_len()))
-        .to_fvec();
+        let octree_offset = self
+            .xform
+            .global_to_local_int(&visible_octree.offset)
+            .unwrap();
 
-        let octree_offset = (visible_octree.offset - &self.origin)
-            .div_floor(&self.render_cell_layer.big_len())
-            .to_ivec();
+        let fog_center = self.fog_center();
+        let fog_start = self.fog_start();
+        let fog_end = self.fog_end();
 
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
@@ -56,7 +56,7 @@ impl GridViewRender3D<'_> {
 
         let gl_octree = cache.gl_octrees.gl_ndtree_from_node(
             (&visible_octree.root).into(),
-            self.render_cell_layer,
+            self.xform.render_cell_layer,
             Self::ndtree_node_color,
         )?;
 
@@ -67,7 +67,7 @@ impl GridViewRender3D<'_> {
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::OCTREE.load(),
                 &uniform! {
-                    matrix: self.transform.gl_matrix(),
+                    matrix: self.xform.gl_matrix(),
 
                     octree_texture: &gl_octree.texture,
                     layer_count: gl_octree.layers,
@@ -86,13 +86,9 @@ impl GridViewRender3D<'_> {
                     max_light: MAX_LIGHT,
 
                     fog_color: crate::colors::BACKGROUND_3D,
-                    fog_center: [
-                        fog_center[X].raw() as f32,
-                        fog_center[Y].raw() as f32,
-                        fog_center[Z].raw() as f32,
-                    ],
-                    fog_start: FOG_START_FACTOR * 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
-                    fog_end: 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
+                    fog_center: fog_center,
+                    fog_start: fog_start,
+                    fog_end: fog_end,
                 },
                 &glium::DrawParameters {
                     depth: glium::Depth {
@@ -111,23 +107,26 @@ impl GridViewRender3D<'_> {
     }
 
     pub fn draw_gridlines(&mut self) -> Result<()> {
-        let camera_pos = ((self.camera.pos() - self.origin.to_fixedvec())
-            >> self.render_cell_layer.to_u32())
-        .to_fvec();
+        let fog_center = self.fog_center();
+        let fog_start = self.fog_start();
+        let fog_end = self.fog_end();
 
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
         let ibos = &mut cache.ibos;
 
-        let mut min = self.visible_rect.min().to_fvec();
-        let mut max = self.visible_rect.max().to_fvec();
+        let mut min = self.local_visible_rect.min().to_fvec();
+        let mut max = self.local_visible_rect.max().to_fvec();
         min[Z] = r64(0.0);
         max[Z] = r64(0.0);
         let rect = FRect2D::span(NdVec([min[X], min[Y]]), NdVec([max[X], max[Y]]));
 
-        // TODO: NOT GOOD
-        let grid_origin = (-self.origin.div_floor(&self.render_cell_layer.big_len())).to_fvec();
+        // TODO: Proper local grid origin
+        let grid_origin = self
+            .xform
+            .global_to_local_float(&FixedVec::origin())
+            .expect("Gridline origin is not implemented correctly");
 
         self.params
             .target
@@ -136,7 +135,7 @@ impl GridViewRender3D<'_> {
                 &ibos.quad_indices(1),
                 &shaders::GRIDLINES_3D.load(),
                 &uniform! {
-                    matrix: self.transform.gl_matrix(),
+                    matrix: self.xform.gl_matrix(),
 
                     grid_axes: [0_i32, 1],
                     grid_color: crate::colors::GRIDLINES,
@@ -149,22 +148,16 @@ impl GridViewRender3D<'_> {
                     grid_base: GRIDLINE_SPACING_BASE as i32,
                     min_line_spacing: GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING as f32,
                     max_line_spacing: GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING as f32,
-                    line_width: if self.render_cell_layer == Layer(0) {
+                    line_width: if self.xform.render_cell_layer == Layer(0) {
                         GRIDLINE_WIDTH as f32
                     } else {
                         0.0 // minimum width of one pixel
                     },
 
                     fog_color: crate::colors::BACKGROUND_3D,
-                    fog_center: [
-                        camera_pos[X].raw() as f32,
-                        camera_pos[Y].raw() as f32,
-                        camera_pos[Z].raw() as f32,
-                    ],
-                    fog_start: FOG_START_FACTOR
-                        * 5000.0
-                        * self.render_cell_scale.inv_factor().to_f32().unwrap(),
-                    fog_end: 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
+                    fog_center: fog_center,
+                    fog_start: fog_start,
+                    fog_end: fog_end,
                 },
                 &glium::DrawParameters {
                     depth: glium::Depth {
@@ -183,14 +176,14 @@ impl GridViewRender3D<'_> {
     }
 
     fn draw_quads(&mut self, quad_verts: &[Vertex3D]) -> Result<()> {
+        let fog_center = self.fog_center();
+        let fog_start = self.fog_start();
+        let fog_end = self.fog_end();
+
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
         let ibos = &mut cache.ibos;
-
-        let camera_pos = ((self.camera.pos() - self.origin.to_fixedvec())
-            / &FixedPoint::from(self.render_cell_layer.big_len()))
-            .to_fvec();
 
         for chunk in quad_verts.chunks(4 * QUAD_BATCH_SIZE) {
             let count = chunk.len() / 4;
@@ -206,20 +199,16 @@ impl GridViewRender3D<'_> {
                     &ibos.quad_indices(count),
                     &shaders::GRIDLINES_3D.load(),
                     &uniform! {
-                        matrix: self.transform.gl_matrix(),
+                        matrix: self.xform.gl_matrix(),
 
                         light_direction: LIGHT_DIRECTION,
                         light_ambientness: LIGHT_AMBIENTNESS,
                         max_light: MAX_LIGHT,
 
                         fog_color: crate::colors::BACKGROUND_3D,
-                        fog_center: [
-                            camera_pos[X].raw() as f32,
-                            camera_pos[Y].raw() as f32,
-                            camera_pos[Z].raw() as f32,
-                        ],
-                        fog_start: FOG_START_FACTOR * 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
-                        fog_end: 5000.0 * self.render_cell_scale.inv_factor().to_f32().unwrap(),
+                        fog_center: fog_center,
+                        fog_start: fog_start,
+                        fog_end: fog_end,
                     },
                     &glium::DrawParameters {
                         depth: glium::Depth {
@@ -237,8 +226,23 @@ impl GridViewRender3D<'_> {
 
         Ok(())
     }
+
+    fn fog_center(&self) -> [f32; 3] {
+        let NdVec([x, y, z]) = self
+            .xform
+            .global_to_local_float(self.viewpoint.center())
+            .unwrap();
+        [x.raw() as f32, y.raw() as f32, z.raw() as f32]
+    }
+    fn fog_start(&self) -> f32 {
+        FOG_START_FACTOR * self.fog_end()
+    }
+    fn fog_end(&self) -> f32 {
+        Viewpoint3D::VIEW_RADIUS * self.xform.render_cell_scale.inv_factor().to_f32().unwrap()
+    }
 }
 
+/*
 fn cuboid_verts(real_camera_pos: FVec3D, cuboid: FRect3D, color: [u8; 3]) -> CuboidVerts {
     let make_face_verts = |axis, sign| face_verts(real_camera_pos, cuboid, (axis, sign), color);
     [
@@ -318,3 +322,4 @@ fn face_verts(
         pos_to_vertex(pos3),
     ])
 }
+*/

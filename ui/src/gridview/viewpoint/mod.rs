@@ -2,18 +2,20 @@ use anyhow::Result;
 
 use ndcell_core::prelude::*;
 
-mod camera2d;
-mod camera3d;
 mod interpolator;
 mod transform;
+mod viewpoint2d;
+mod viewpoint3d;
 
 use crate::commands::ViewCommand;
 use crate::gridview::{DragHandler, DragOutcome};
 use crate::Scale;
-pub use camera2d::{Camera2D, ScreenPos2D};
-pub use camera3d::Camera3D;
 pub use interpolator::{Interpolate, Interpolator};
-pub use transform::{CellTransform, CellTransform2D, CellTransform3D, NdCellTransform};
+pub use transform::{
+    CellTransform, CellTransform2D, CellTransform3D, NdCellTransform, ProjectionType,
+};
+pub use viewpoint2d::{ScreenPos2D, Viewpoint2D};
+pub use viewpoint3d::Viewpoint3D;
 
 /// Minimum target width & height, to avoid divide-by-zero errors.
 const MIN_TARGET_SIZE: u32 = 10;
@@ -36,15 +38,11 @@ const PIXELS_PER_2X_SCALE: f64 = 400.0;
 /// This one is completely arbitrary.
 const ROT_DEGREES_PER_2X_SCALE: f64 = PIXELS_PER_2X_SCALE;
 
-/// Radius of visible cells in 3D, measured in "scaled units". (See `Scale`
-/// docs.)
-const VIEW_RADIUS_3D: f64 = 5000.0;
-
-/// Common functionality for 2D and 3D cameras.
-pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialEq {
-    /// Returns the width and height of the viewport.
+/// Common functionality for 2D and 3D viewpoints.
+pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialEq {
+    /// Returns the width and height of the render target.
     fn target_dimensions(&self) -> (u32, u32);
-    /// Sets the width and height of the viewport.
+    /// Sets the width and height of the render target.
     fn set_target_dimensions(&mut self, target_dimensions: (u32, u32));
     /// Returns the display scaling factor, which does not affect rendering of
     /// cells but may affect other UI elements.
@@ -53,38 +51,36 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
     fn set_dpi(&mut self, dpi: f32);
 
     /// Returns the position the camera is looking at/from.
-    fn pos(&self) -> &FixedVec<D>;
+    fn center(&self) -> &FixedVec<D>;
     /// Sets the position the camera is looking at/from.
     fn set_pos(&mut self, pos: FixedVec<D>);
     /// Snap to the nearest integer cell position.
     fn snap_pos(&mut self);
 
-    /// Returns the scale of the camera.
+    /// Returns the visual scale of cells.
     fn scale(&self) -> Scale;
-    /// Sets the scale of the camera.
+    /// Sets the visual scale of cells.
     fn set_scale(&mut self, scale: Scale);
 
-    /// Sets the scale of the camera, keeping one point at the same location in
-    /// screen space.
+    /// Sets the visual scale of cells, keeping one point at the same location
+    /// in screen space.
     ///
-    /// If `invariant_pos` is `None`, then the value returned by `pos()` is
-    /// invariant.
+    /// If `invariant_pos` is `None`, then the value returned by `center()` is
+    /// used instead.
     fn scale_to(&mut self, scale: Scale, invariant_pos: Option<FixedVec<D>>) {
         // Scale, keeping the center position invariant.
         let old_scale = self.scale();
         self.set_scale(scale);
         let new_scale = self.scale(); // `.clamp()`ed in `set_scale()`
 
-        // Compute cell offset of `invariant_pos` from the camera position.
+        // Compute cell offset of `invariant_pos` from the center.
         let invariant_pos_offset = invariant_pos
-            .map(|invar_pos| invar_pos - self.pos())
+            .map(|invar_pos| invar_pos - self.center())
             .unwrap_or_default();
 
-        // Compute the old scaled offset of `invariant_pos` from the camera
-        // position.
+        // Compute the old scaled offset of `invariant_pos` from the center.
         let invariant_pos_old_scaled_offset = old_scale.cells_to_units(&invariant_pos_offset);
-        // Compute the new scaled offset of `invariant_pos` from the camera
-        // position.
+        // Compute the new scaled offset of `invariant_pos` from the center.
         let invariant_pos_new_scaled_offset = new_scale.cells_to_units(&invariant_pos_offset);
 
         // Compute the difference between those scaled offsets.
@@ -92,7 +88,7 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
 
         // Apply that offset so that the point goes back to the same scaled
         // location as before.
-        self.set_pos(self.pos() + new_scale.units_to_cells(delta_pixel_offset));
+        self.set_pos(self.center() + new_scale.units_to_cells(delta_pixel_offset));
     }
     /// Scales by 2^`log2_factor`, keeping one invariant point at the same
     /// location in screen space.
@@ -128,10 +124,10 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
         self.set_scale(self.scale().round()); // Fix any potential rounding error.
     }
 
-    /// Returns the abstract "distance" between two cameras.
+    /// Returns the abstract "distance" between two viewpoints.
     fn distance(a: &Self, b: &Self) -> FixedPoint {
         let avg_scale = average_lerped_scale(a.scale(), b.scale());
-        let total_cells_delta = (b.pos() - a.pos()).mag();
+        let total_cells_delta = (b.center() - a.center()).mag();
         let total_pixels_delta = total_cells_delta / avg_scale.inv_factor();
         // Divide by a constant factor to bring translation and scale into the
         // same arbitrary units of optical flow.
@@ -150,9 +146,10 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
         FixedPoint::zero()
     }
 
-    /// Returns a camera that is some fraction 0.0 <= t <= 1.0 of the distance
-    /// between two cameras using linear interpolation that preserves the fixed
-    /// point of the transformation from one camera to the other.
+    /// Returns a viewpoint that is some fraction 0.0 <= t <= 1.0 of the
+    /// distance between two viewpoints using linear interpolation that
+    /// preserves the fixed point of the transformation from one viewpoint to
+    /// the other.
     ///
     /// This function attempts to interpolate linearly with respect to the
     /// apparent motion experienced by the user, so it linearly interpolates 2D
@@ -165,7 +162,7 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
     fn render_cell_layer_and_scale(&self) -> (Layer, Scale) {
         let layer = Layer((-self.scale().round().log2_factor()).to_u32().unwrap_or(0));
 
-        // Multiply the camera scale factor by the size of a render cell, except
+        // Multiply the cell scale factor by the size of a render cell, except
         // it's addition because we're actually using logarithms.
         let scale = Scale::from_log2_factor(self.scale().log2_factor() + layer.to_u32() as f64);
         // The render cell scale factor should be greater than 1/2 (since 1/2 or
@@ -175,19 +172,9 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
 
         (layer, scale)
     }
-    /// Returns the cell transform for this camera with the given render target
-    /// size and a base position near the camera center.
-    fn cell_transform(&self) -> NdCellTransform<D> {
-        self.cell_transform_with_base(self.pos().round())
-            .expect("Camera::cell_transform() failed")
-    }
-    /// Returns the cell transform for this camera with the given render target
-    /// size and base position.
-    fn cell_transform_with_base(&self, base_cell_pos: BigVec<D>) -> Result<NdCellTransform<D>>;
+    /// Returns the cell transform for this viewpoint.
+    fn cell_transform(&self) -> NdCellTransform<D>;
 
-    // Compute the position of the camera in render cell space, given a base
-    // position near the camera center.
-    fn render_cell_pos(&self, base_cell_pos: &BigVec<D>) -> FVec<D>;
     /// Returns a rectangle of cells that are at least partially visible.
     fn global_visible_rect(&self) -> BigRect<D>;
 
@@ -195,15 +182,15 @@ pub trait Camera<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialE
     fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>>;
 }
 
-/// Returns the "average" scale between the two cameras, averaging scale
-/// factor linearly with respect to time during a linear interpolation,
-/// where scale factor is interpolated logarithmically.
+/// Returns the "average" scale between the two viewpoints, averaging scale
+/// factor linearly with respect to time during a linear interpolation, where
+/// scale factor is interpolated logarithmically.
 ///
 /// Read source comments to see how this is relevant.
 fn average_lerped_scale(s1: Scale, s2: Scale) -> Scale {
     let s1 = s1.log2_factor();
     let s2 = s2.log2_factor();
-    // Read the comments in the first half of `Camera2D::lerp()` before
+    // Read the comments in the first half of `Viewpoint2D::lerp()` before
     // proceeding.
     //
     // We want to find the total number of pixels to travel. The logarithm of

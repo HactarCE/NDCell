@@ -2,9 +2,9 @@ use anyhow::{anyhow, Context, Result};
 
 use ndcell_core::prelude::*;
 
-use super::camera::{Camera, Camera3D};
 use super::generic::{GenericGridView, GridViewDimension};
 use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
+use super::viewpoint::{Viewpoint, Viewpoint3D};
 use super::{DragHandler, DragType};
 use crate::commands::*;
 
@@ -14,22 +14,22 @@ pub type GridView3D = GenericGridView<GridViewDim3D>;
 pub struct GridViewDim3D;
 impl GridViewDimension for GridViewDim3D {
     type D = Dim3D;
-    type Camera = Camera3D;
+    type Viewpoint = Viewpoint3D;
 
     fn do_view_command(this: &mut GridView3D, command: ViewCommand) -> Result<()> {
-        // Delegate to the camera.
+        // Delegate to the viewpoint.
         let maybe_new_drag_handler = this
-            .camera_interpolator
+            .viewpoint_interpolator
             .do_view_command(command)
             .context("Executing view command")?;
 
-        // Update drag handler, if the camera gave one.
+        // Update drag handler, if the viewpoint gave one.
         if !this.is_dragging() {
             if let Some(mut interpolator_drag_handler) = maybe_new_drag_handler {
                 this.start_drag(
                     DragType::MovingView,
                     Box::new(move |gridview: &mut GridView3D, cursor_pos| {
-                        interpolator_drag_handler(&mut gridview.camera_interpolator, cursor_pos)
+                        interpolator_drag_handler(&mut gridview.viewpoint_interpolator, cursor_pos)
                     }) as DragHandler<GridView3D>,
                 );
             }
@@ -45,7 +45,7 @@ impl GridViewDimension for GridViewDim3D {
     }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {
-        let mut frame = GridViewRender3D::new(params, this.camera())?;
+        let mut frame = GridViewRender3D::new(params, this.viewpoint());
         frame.draw_cells(CellDrawParams {
             ndtree: &this.automaton.ndtree,
             alpha: 1.0,
@@ -75,7 +75,11 @@ impl GridView3D {
     /// integer cell position.
     pub fn hovered_cell_pos(&self, mouse_pos: Option<FVec2D>) -> Option<FixedVec3D> {
         // TODO: Raycast or something
-        let z = Camera3D::DISTANCE_TO_PIVOT;
-        mouse_pos.and_then(|pos| self.camera().cell_transform().pixel_to_global_cell(pos, z))
+        let z = Viewpoint3D::DISTANCE_TO_PIVOT;
+        mouse_pos.and_then(|pos| {
+            self.viewpoint()
+                .cell_transform()
+                .pixel_to_global_pos(pos, z)
+        })
     }
 }

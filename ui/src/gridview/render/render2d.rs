@@ -15,11 +15,6 @@
 //! 3. Blit that texture onto the screen using the "pixel mixing" scaling
 //!    technique; see http://entropymine.com/imageworsener/pixelmixing/ for more
 //!    info.
-//!
-//! There is also some subpixel adjustment happening in `Camera2D`. The position
-//! is offset by 0.5 pixels when the viewport dimensions are odd, and everything
-//! except cells are offset by 0.25 pixels to force consistent rounding behavior
-//! for features that are directly between cells.
 
 use anyhow::{Context, Result};
 use glium::glutin::event::ModifiersState;
@@ -45,7 +40,7 @@ pub(in crate::gridview) type GridViewRender2D<'a> = GenericGridViewRender<'a, Re
 pub(in crate::gridview) struct RenderDim2D;
 impl GridViewRenderDimension<'_> for RenderDim2D {
     type D = Dim2D;
-    type Camera = Camera2D;
+    type Viewpoint = Viewpoint2D;
 
     const DEFAULT_COLOR: (f32, f32, f32, f32) = crate::colors::BACKGROUND_2D;
     const DEFAULT_DEPTH: f32 = 0.0;
@@ -54,11 +49,10 @@ impl GridViewRenderDimension<'_> for RenderDim2D {
 impl GridViewRender2D<'_> {
     /// Draw an ND-tree to scale on the target.
     pub fn draw_cells(&mut self, params: CellDrawParams<'_, Dim2D>) -> Result<()> {
-        let (visible_quadtree, visible_rect) =
-            match self.clip_ndtree_to_visible_render_cells(&params) {
-                Some(x) => x,
-                None => return Ok(()), // There is nothing to draw.
-            };
+        let visible_quadtree = match self.clip_ndtree_to_visible(&params) {
+            Some(x) => x,
+            None => return Ok(()), // There is nothing to draw.
+        };
 
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
@@ -67,15 +61,20 @@ impl GridViewRender2D<'_> {
         // Steps #1: encode the quadtree as a texture.
         let gl_quadtree = cache.gl_quadtrees.gl_ndtree_from_node(
             (&visible_quadtree.root).into(),
-            self.render_cell_layer,
+            self.xform.render_cell_layer,
             Self::ndtree_node_color,
         )?;
-        // Step #2: draw at 1 pixel per render cell, including only the cells
-        // inside `visible_rect`.
-        let cells_w = visible_rect.len(X) as u32;
-        let cells_h = visible_rect.len(Y) as u32;
+        // Step #2: draw at 1 pixel per render cell, including only the render
+        // cells inside `self.local_visible_rect`.
+        let cells_w = self.local_visible_rect.len(X) as u32;
+        let cells_h = self.local_visible_rect.len(Y) as u32;
         let (cells_texture, mut cells_fbo, cells_texture_viewport) =
             cache.textures.cells(cells_w, cells_h);
+        let local_quadtree_offset = self
+            .xform
+            .global_to_local_int(&visible_quadtree.offset)
+            .unwrap();
+        let offset_into_quadtree = self.local_visible_rect.min() - local_quadtree_offset;
         cells_fbo
             .draw(
                 vbos.ndtree_quad(),
@@ -87,8 +86,8 @@ impl GridViewRender2D<'_> {
                     root_idx: gl_quadtree.root_idx,
 
                     offset_into_quadtree: [
-                        visible_rect.min()[X] as i32,
-                        visible_rect.min()[Y] as i32,
+                        offset_into_quadtree[X] as i32,
+                        offset_into_quadtree[Y] as i32,
                     ],
                 },
                 &glium::DrawParameters {
@@ -99,13 +98,9 @@ impl GridViewRender2D<'_> {
             .context("cells_fbo.draw()")?;
 
         // Step #3: scale and render that onto the screen.
-        let (target_w, target_h) = self.params.target.get_dimensions();
-        let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
-        let render_cells_size = target_size / self.render_cell_scale.units_per_cell();
-        let render_cells_center =
-            self.camera.render_cell_pos(&visible_quadtree.offset) - visible_rect.min().to_fvec();
-        let render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size / 2.0);
-        let texture_coords_rect = render_cells_rect / visible_rect.size().to_fvec();
+        let local_screen_rect = self.xform.local_screen_rect();
+        let vis_rect = self.local_visible_rect.to_frect();
+        let texture_coords_rect = (local_screen_rect - vis_rect.min()) / vis_rect.size();
 
         self.params
             .target
@@ -116,7 +111,7 @@ impl GridViewRender2D<'_> {
                 &uniform! {
                     alpha: params.alpha,
                     src_texture: cells_texture.sampled(),
-                    scale_factor: self.render_cell_scale.units_per_cell().raw() as f32,
+                    scale_factor: self.xform.render_cell_scale.units_per_cell().raw() as f32,
                     active_tex_size: (cells_w as f32, cells_h as f32)
                 },
                 &glium::DrawParameters {
@@ -173,7 +168,7 @@ impl GridViewRender2D<'_> {
     fn gridline_cell_spacing_exponent(&self, max_pixel_spacing: f64) -> u32 {
         // Compute the global cell spacing between gridlines.
         let log2_max_pixel_spacing = r64(max_pixel_spacing).log2();
-        let log2_max_cell_spacing = log2_max_pixel_spacing - self.camera.scale().log2_factor();
+        let log2_max_cell_spacing = log2_max_pixel_spacing - self.viewpoint.scale().log2_factor();
 
         // Undo the `a * b^n` formula, rounding up to the nearest power of
         // `GRIDLINE_SPACING_BASE`.
@@ -191,7 +186,7 @@ impl GridViewRender2D<'_> {
         parallel_axis: Axis,
         perpendicular_axis: Axis,
     ) -> impl Iterator<Item = CellOverlayRect> {
-        let alpha = gridline_alpha(cell_spacing_exponent, self.camera.scale());
+        let alpha = gridline_alpha(cell_spacing_exponent, self.viewpoint.scale());
         let mut color = crate::colors::GRIDLINES;
         color[3] *= alpha as f32;
 
@@ -208,11 +203,11 @@ impl GridViewRender2D<'_> {
         let cell_coords = itertools::iterate(cell_start_coord, move |coord| coord + &cell_spacing)
             .take_while(move |coord| *coord <= cell_end_coord);
 
-        let mut start = self.visible_rect.min();
-        let mut end = self.visible_rect.max() + 1;
+        let mut start = self.local_visible_rect.min();
+        let mut end = self.local_visible_rect.max() + 1;
 
-        let render_cell_len = self.render_cell_layer.big_len();
-        let origin_coordinate = self.origin[perpendicular_axis].clone();
+        let render_cell_len = self.xform.render_cell_layer.big_len();
+        let origin_coordinate = self.xform.origin[perpendicular_axis].clone();
 
         let render_cell_coords = cell_coords.map(move |cell_coordinate| {
             (FixedPoint::from(cell_coordinate - &origin_coordinate) / &render_cell_len)
@@ -243,7 +238,7 @@ impl GridViewRender2D<'_> {
     /// Draws a highlight on the render cell under the mouse cursor.
     pub fn draw_hover_highlight(&mut self, cell_pos: &BigVec2D, color: [f32; 4]) -> Result<()> {
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-            IRect2D::single_cell(self.clip_cell_pos_to_visible_render_cells(cell_pos)),
+            IRect2D::single_cell(self.clamp_int_pos_to_visible(cell_pos)),
             CURSOR_DEPTH,
             HOVER_HIGHLIGHT_WIDTH,
             color,
@@ -260,7 +255,7 @@ impl GridViewRender2D<'_> {
         selection_rect: BigRect2D,
         fill: bool,
     ) -> Result<()> {
-        let visible_selection_rect = self.clip_cell_rect_to_visible_render_cells(&selection_rect);
+        let visible_selection_rect = self.clip_int_rect_to_visible(&selection_rect);
 
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
             visible_selection_rect,
@@ -310,7 +305,7 @@ impl GridViewRender2D<'_> {
 
         // "Resize selection" target.
         let click_target_width = CONFIG.lock().ctrl.selection_resize_drag_target_width
-            * self.render_cell_scale.inv_factor().to_f64().unwrap();
+            * self.xform.render_cell_scale.inv_factor().to_f64().unwrap();
         let (min, max) = (
             visible_selection_rect.min(),
             visible_selection_rect.max() + 1,
@@ -370,8 +365,7 @@ impl GridViewRender2D<'_> {
             mouse_pos.cell(),
             mouse_pos.cell(),
         );
-        let visible_selection_preview_rect =
-            self.clip_cell_rect_to_visible_render_cells(&selection_preview_rect);
+        let visible_selection_preview_rect = self.clip_int_rect_to_visible(&selection_preview_rect);
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
             visible_selection_preview_rect,
             SELECTION_RESIZE_DEPTH,
@@ -406,13 +400,13 @@ impl GridViewRender2D<'_> {
         fill_color[2] *= 0.5;
         fill_color[3] *= 0.75;
 
-        let NdVec([min_x, min_y]) = self.visible_rect.min();
-        let NdVec([max_x, max_y]) = self.visible_rect.max() + 1;
+        let NdVec([min_x, min_y]) = self.local_visible_rect.min();
+        let NdVec([max_x, max_y]) = self.local_visible_rect.max() + 1;
 
         // If there are more than 1.5 pixels per render cell, the upper boundary
         // should be *between* cells (+1). If there are fewer, the upper
         // boundary should be *on* the cell (+0).
-        let pixels_per_cell = self.render_cell_scale.units_per_cell();
+        let pixels_per_cell = self.xform.render_cell_scale.units_per_cell();
         let a = rect.min();
         let b = rect.max() + (pixels_per_cell > 1.5) as isize;
         let NdVec([ax, ay]) = a;
@@ -506,8 +500,8 @@ impl GridViewRender2D<'_> {
         width: f64,
         color: [f32; 4],
     ) -> Vec<CellOverlayRect> {
-        let min = self.visible_rect.min();
-        let max = self.visible_rect.max() + 1;
+        let min = self.local_visible_rect.min();
+        let max = self.local_visible_rect.max() + 1;
         let min_x = min[X];
         let min_y = min[Y];
         let max_x = max[X];
@@ -524,7 +518,7 @@ impl GridViewRender2D<'_> {
             axis: Y,
         });
 
-        let mut ret = Vec::with_capacity(4 * self.visible_rect.size().sum() as usize);
+        let mut ret = Vec::with_capacity(4 * self.local_visible_rect.size().sum() as usize);
         for x in columns {
             ret.push(CellOverlayRect {
                 start: NdVec([x, min_y]),
@@ -626,7 +620,7 @@ impl GridViewRender2D<'_> {
                     vbo_slice,
                     &ibos.quad_indices(count),
                     &shaders::RGBA_2D.load(),
-                    &uniform! { matrix: self.transform.gl_matrix() },
+                    &uniform! { matrix: self.xform.gl_matrix_with_subpixel_offset() },
                     &glium::DrawParameters {
                         blend: glium::Blend::alpha_blending(),
                         depth: glium::Depth {
@@ -658,8 +652,8 @@ impl GridViewRender2D<'_> {
         }) = rect.line_params
         {
             // At this point, the rectangle should have zero extra width.
-            let min_width = self.render_cell_scale.cells_per_unit(); // 1 pixel
-            let width = if self.render_cell_layer == Layer(0) {
+            let min_width = self.xform.render_cell_scale.cells_per_unit(); // 1 pixel
+            let width = if self.xform.render_cell_layer == Layer(0) {
                 std::cmp::max(r64(width), min_width)
             } else {
                 min_width

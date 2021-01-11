@@ -294,8 +294,8 @@ impl FrameInProgress<'_> {
                                     x: Some(r64(0.0).into()),
                                     y: Some(r64(0.0).into()),
                                     z: Some(r64(0.0).into()),
-                                    yaw: Some(crate::gridview::Camera3D::DEFAULT_YAW.into()),
-                                    pitch: Some(crate::gridview::Camera3D::DEFAULT_PITCH.into()),
+                                    yaw: Some(crate::gridview::Viewpoint3D::DEFAULT_YAW.into()),
+                                    pitch: Some(crate::gridview::Viewpoint3D::DEFAULT_PITCH.into()),
                                     relative: false,
                                     scaled: false,
                                 },
@@ -417,7 +417,7 @@ impl FrameInProgress<'_> {
 
         config.gfx.dpi = self.dpi;
 
-        // Move the viewport in one step.
+        // Move the viewpoint in one step.
 
         let mut moved = false;
         let mut scaled = false;
@@ -562,7 +562,7 @@ struct KeysPressed {
     virtual_keycodes: HashSet<VirtualKeyCode>,
 }
 impl KeysPressed {
-    /// Update internal key state based on a KeyboardInput event.
+    /// Updates internal key state based on a KeyboardInput event.
     pub fn update(&mut self, input: &KeyboardInput) {
         match input.state {
             ElementState::Pressed => {

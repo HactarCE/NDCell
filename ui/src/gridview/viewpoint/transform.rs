@@ -169,20 +169,20 @@ impl<D: Dim> NdCellTransform<D> {
             render_cell_layer,
             render_cell_scale,
             render_cell_transform: camera_transform
-                * Self::scale_transform(render_cell_scale)
-                * Self::translate_transform(viewpoint_center, origin, render_cell_layer),
+                * Self::make_scale_matrix(render_cell_scale)
+                * Self::make_translate_matrix(viewpoint_center, origin, render_cell_layer),
             projection_transform: match projection_type {
-                ProjectionType::Orthographic => Self::orthographic_projection(w, h),
-                ProjectionType::Perspective => Self::perspective_projection(w, h),
+                ProjectionType::Orthographic => Self::make_ortho_proj_matrix(w, h),
+                ProjectionType::Perspective => Self::make_persp_proj_matrix(w, h),
             },
-            pixel_transform: Self::pixel_transform(w, h),
+            pixel_transform: Self::make_pixel_matrix(w, h),
 
             target_w: w,
             target_h: h,
         }
     }
 
-    fn scale_transform(scale: Scale) -> Matrix4<f32> {
+    fn make_scale_matrix(scale: Scale) -> Matrix4<f32> {
         let factor = scale.units_per_cell().raw() as f32;
         match D::NDIM {
             1 => Matrix4::from_nonuniform_scale(factor, 1.0, 1.0),
@@ -191,7 +191,7 @@ impl<D: Dim> NdCellTransform<D> {
             _ => unimplemented!(),
         }
     }
-    fn translate_transform(
+    fn make_translate_matrix(
         global_viewpoint_center: FixedVec<D>,
         origin: BigVec<D>,
         render_cell_layer: Layer,
@@ -207,11 +207,11 @@ impl<D: Dim> NdCellTransform<D> {
             _ => unimplemented!(),
         })
     }
-    fn orthographic_projection(target_w: f32, target_h: f32) -> Matrix4<f32> {
+    fn make_ortho_proj_matrix(target_w: f32, target_h: f32) -> Matrix4<f32> {
         // Scale to GL normalized device coordinates.
         Matrix4::from_nonuniform_scale(2.0 / target_w, 2.0 / target_h, 1.0)
     }
-    fn perspective_projection(target_w: f32, target_h: f32) -> Matrix4<f32> {
+    fn make_persp_proj_matrix(target_w: f32, target_h: f32) -> Matrix4<f32> {
         Matrix4::from(cgmath::PerspectiveFov {
             fovy: FOV.into(),
             aspect: target_w / target_h,
@@ -219,7 +219,7 @@ impl<D: Dim> NdCellTransform<D> {
             far: FAR_PLANE,
         })
     }
-    fn pixel_transform(target_w: f32, target_h: f32) -> Matrix4<f32> {
+    fn make_pixel_matrix(target_w: f32, target_h: f32) -> Matrix4<f32> {
         // Negate the vertical axis because Glutin measures window coordinates
         // from the top-left corner, but we want the Y coordinate increasing
         // upwards. Also, offset by half a pixel because OpenGL considers pixels

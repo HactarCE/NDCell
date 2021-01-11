@@ -17,7 +17,7 @@
 - [x] Render 3D
   - [x] Cubes
   - [x] Lighting
-  - [ ] Gridlines
+  - [x] Gridlines
   - [x] Improve performance
     - [x] Limit visibility / implement render cells
     - [x] Hide occluded faces

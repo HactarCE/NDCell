@@ -119,37 +119,89 @@ impl GridViewRender3D<'_> {
     }
 
     pub fn draw_gridlines(&mut self) -> Result<()> {
-        // Reborrow is necessary in order to split borrow.
-        let cache = &mut *self.cache;
-        let vbos = &mut cache.vbos;
-        let ibos = &mut cache.ibos;
+        let (grid_x, grid_y) = (X, Y);
+        let perpendicular_axis = Z;
+        let perpendicular_coordinate = BigInt::zero();
 
         let mut min = self.local_visible_rect.min().to_fvec();
         let mut max = self.local_visible_rect.max().to_fvec();
         min[Z] = r64(0.0);
         max[Z] = r64(0.0);
-        let rect = FRect2D::span(NdVec([min[X], min[Y]]), NdVec([max[X], max[Y]]));
+        let quad = FRect2D::span(
+            NdVec([min[grid_x], min[grid_y]]),
+            NdVec([max[grid_x], max[grid_y]]),
+        );
 
-        // TODO: Proper local grid origin
-        let grid_origin = self
+        // Compute the coefficient for the smallest visible gridlines.
+        let log2_cell_spacing = (GRIDLINE_SPACING_BASE as f32).log2()
+            * (self.gridline_cell_spacing_exponent(1.0) as f32)
+            + (GRIDLINE_SPACING_COEFF as f32).log2();
+        let log2_render_cell_spacing =
+            log2_cell_spacing - (self.xform.render_cell_layer.to_u32() as f32);
+        let coefficient = log2_render_cell_spacing.exp2();
+
+        let mut global_grid_origin: BigVec3D;
+        let mut max_exponents: IVec3D;
+        {
+            // Compute the largest gridline spacing that fits within the visible
+            // area.
+            let max_visible_exponent =
+                self.gridline_cell_spacing_exponent(Viewpoint3D::VIEW_RADIUS as f64 * 2.0);
+            let max_visible_spacing = BigInt::from(GRIDLINE_SPACING_BASE)
+                .pow(max_visible_exponent + 1)
+                * GRIDLINE_SPACING_COEFF;
+            // Round to nearest multiple of that spacing.
+            global_grid_origin =
+                self.xform.origin.div_floor(&max_visible_spacing) * &max_visible_spacing;
+
+            // Compute the maximum exponent that will be visible for each axis.
+            // There is a similar loop in the 3D gridlines fragment shader.
+            let spacing_coefficient: BigInt = GRIDLINE_SPACING_COEFF.into();
+            let spacing_base: BigInt = GRIDLINE_SPACING_BASE.into();
+            let mut tmp = global_grid_origin.div_floor(&spacing_coefficient);
+            max_exponents = IVec3D::repeat(0);
+            for &ax in &[grid_x, grid_y] {
+                const LARGE_EXPONENT: isize = 100;
+                if tmp[ax].is_zero() {
+                    max_exponents[ax] = LARGE_EXPONENT;
+                } else {
+                    while tmp[ax].mod_floor(&spacing_base).is_zero()
+                        && max_exponents[ax] < LARGE_EXPONENT
+                    {
+                        tmp[ax] /= GRIDLINE_SPACING_BASE;
+                        max_exponents[ax] += 1;
+                    }
+                }
+            }
+        }
+        global_grid_origin[perpendicular_axis] = perpendicular_coordinate;
+        let max_exponents: IVec2D = NdVec([max_exponents[grid_x], max_exponents[grid_y]]);
+
+        let local_grid_origin = self
             .xform
-            .global_to_local_float(&FixedVec::origin())
-            .expect("Gridline origin is not implemented correctly");
+            .global_to_local_float(&global_grid_origin.to_fixedvec())
+            .unwrap();
+
+        // Reborrow is necessary in order to split borrow.
+        let cache = &mut *self.cache;
+        let vbos = &mut cache.vbos;
+        let ibos = &mut cache.ibos;
 
         self.params
             .target
             .draw(
-                &*vbos.gridlines_quad(rect),
+                &*vbos.gridlines_quad(quad),
                 &ibos.quad_indices(1),
                 &shaders::GRIDLINES_3D.load(),
                 &uniform! {
                     matrix: self.xform.gl_matrix(),
 
-                    grid_axes: [0_i32, 1],
+                    grid_axes: [grid_x as i32, grid_y as i32],
                     grid_color: crate::colors::GRIDLINES,
-                    grid_origin: grid_origin.to_f32_array(),
-                    grid_coefficient: GRIDLINE_SPACING_COEFF as f32,
+                    grid_origin: local_grid_origin.to_f32_array(),
+                    grid_coefficient: coefficient,
                     grid_base: GRIDLINE_SPACING_BASE as i32,
+                    grid_max_exponents: max_exponents.to_i32_array(),
                     min_line_spacing: GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING as f32,
                     max_line_spacing: GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING as f32,
                     line_width: if self.xform.render_cell_layer == Layer(0) {

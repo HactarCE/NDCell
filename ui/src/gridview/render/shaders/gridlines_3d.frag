@@ -8,6 +8,7 @@ out vec4 color;
 uniform vec4 grid_color;
 
 uniform int grid_base; // exponential base
+uniform ivec2 grid_max_exponents;
 
 uniform float min_line_spacing;
 uniform float max_line_spacing;
@@ -25,32 +26,31 @@ ivec2 gridline_exponent(ivec2 nearest_line) {
     // because the sum of the reciprocals of powers of N>=2 converges; each
     // `i`th term in the infinite sum represents the proportion of gridlines
     // that reach the `i`th iteration of the loop.
-    const int LARGE_INTEGER = 100;
     ivec2 exponent = ivec2(0);
     int tmp;
 
-    tmp = nearest_line.x;
+    tmp = abs(nearest_line.x);
     if (grid_base >= 2 && tmp != 0) {
-        while (tmp % grid_base == 0 && exponent.x < LARGE_INTEGER) {
+        while (tmp % grid_base == 0 && exponent.x < grid_max_exponents.x) {
             tmp /= grid_base;
             exponent.x++;
         }
     } else {
         // In this case we already know that the `tmp % grid_base == 0`
         // condition will always be true.
-        exponent.x = LARGE_INTEGER;
+        exponent.x = grid_max_exponents.x;
     }
 
-    tmp = nearest_line.y;
+    tmp = abs(nearest_line.y);
     if (grid_base >= 2 && tmp != 0) {
-        while (tmp % grid_base == 0 && exponent.y < LARGE_INTEGER) {
+        while (tmp % grid_base == 0 && exponent.y < grid_max_exponents.y) {
             tmp /= grid_base;
             exponent.y++;
         }
     } else {
         // In this case we already know that the `tmp % grid_base == 0`
         // condition will always be true.
-        exponent.y = LARGE_INTEGER;
+        exponent.y = grid_max_exponents.y;
     }
 
     return exponent;
@@ -67,8 +67,8 @@ void main() {
     // Convert `min`/`max_line_spacing` from pixels to cells, and then take the
     // `grid_base`th root (which we can do using division in logarithm land).
     float log2_grid_base = log2(grid_base);
-    vec2 min_exponent = log2(min_line_spacing * delta) / vec2(log2_grid_base);
-    vec2 max_exponent = log2(max_line_spacing * delta) / vec2(log2_grid_base);
+    vec2 min_exponent = log2(min_line_spacing * delta) / log2_grid_base;
+    vec2 max_exponent = log2(max_line_spacing * delta) / log2_grid_base;
 
     // Compute the exponent of the smallest possible gridline that would be
     // visible. The exponent must be positive, because we never show gridlines
@@ -78,9 +78,10 @@ void main() {
     // possible gridlines.
     vec2 min_cell_spacing = pow(vec2(grid_base), int_min_exponent);
     // Round the position to the nearest of those smallest possible gridlines.
-    ivec2 nearest_line = ivec2(round(grid_pos / min_cell_spacing) * min_cell_spacing);
+    vec2 int_nearest_line = round(grid_pos / min_cell_spacing);
+    vec2 nearest_line = int_nearest_line * min_cell_spacing;
     // Compute the distance of this fragment from that nearest gridline.
-    vec2 dist_from_line = abs(vec2(nearest_line) - grid_pos);
+    vec2 dist_from_line = abs(nearest_line - grid_pos);
     // And use that distance along with the desired line width to determine the
     // opacity of the this particular fragment. This `smoothstep()` call defines
     // a range equivalent to the size of one fragment, centered on this current
@@ -94,8 +95,8 @@ void main() {
     // Now find the largest possible exponent for this particular gridline,
     // which will help determine its opacity at this point. This function is
     // defined above.
-    ivec2 exponent = gridline_exponent(nearest_line);
-    alpha *= smoothstep(min_exponent, max_exponent, vec2(exponent));
+    vec2 exponent = int_min_exponent + vec2(gridline_exponent(ivec2(int_nearest_line)));
+    alpha *= smoothstep(min_exponent, max_exponent, exponent);
 
     color = grid_color;
     color.a *= max(alpha.x, alpha.y);

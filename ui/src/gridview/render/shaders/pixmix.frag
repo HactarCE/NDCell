@@ -54,10 +54,10 @@ void main() {
     // Compute the signed distance from that pixel boundary.
     vec2 uv_f = uv - uv_i;
     // See https://www.desmos.com/calculator/sogqxjzxiw.
-    uv = uv_i + clamp(uv_f * p, -0.5, 0.5);
+    vec2 new_uv = uv_i + clamp(uv_f * p, -0.5, 0.5);
 
     // Convert back from pixels to the range [0, 1].
-    vec2 new_tex_coords = uv / tex_size;
+    vec2 new_tex_coords = new_uv / tex_size;
 
     // Sample the point using linear interpolation.
     color = texture(src_texture, new_tex_coords).rgba;

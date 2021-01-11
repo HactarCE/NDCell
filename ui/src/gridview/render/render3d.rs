@@ -61,9 +61,9 @@ impl GridViewRender3D<'_> {
             None => return Ok(()), // There is nothing to draw.
         };
 
-        let offset_into_octree = self
+        let octree_offset = self
             .xform
-            .global_to_local_int(&visible_octree.offset)
+            .global_to_local_int(&visible_octree.base_pos)
             .unwrap();
 
         // Reborrow is necessary in order to split borrow.
@@ -89,7 +89,7 @@ impl GridViewRender3D<'_> {
                     layer_count: gl_octree.layers,
                     root_idx: gl_octree.root_idx,
 
-                    offset_into_octree: offset_into_octree.to_i32_array(),
+                    octree_offset: octree_offset.to_i32_array(),
 
                     perf_view: CONFIG.lock().gfx.octree_perf_view,
 

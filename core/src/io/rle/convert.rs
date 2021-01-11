@@ -112,7 +112,7 @@ impl CaFormatTrait for Rle {
                 gen: BigInt::zero(),
             });
 
-            let bounding_rect = bounding_rect - ndtree.offset();
+            let bounding_rect = bounding_rect - ndtree.base_pos();
             let row_rect_min = bounding_rect.min();
             let mut row_rect_max = bounding_rect.max();
             row_rect_max[X] = row_rect_min[X].clone();

@@ -68,7 +68,7 @@ impl<D: Dim> Selection<D> {
         Self {
             rect: self.rect.clone() + &delta,
             cells: self.cells.clone().map(|mut ndtree| {
-                ndtree.set_offset(ndtree.offset() + delta);
+                ndtree.set_base_pos(ndtree.base_pos() + delta);
                 ndtree
             }),
         }

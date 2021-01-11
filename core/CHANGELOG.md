@@ -17,6 +17,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The `FixedPoint` methods `floor()`, `ceil()`, and `round()` now return `BigInt` instead of `(BigInt, f64)`
 - The `FixedVec` methods `floor()` and `ceil()` now return `BigVec` instead of `(BigVec, FVec)`
 - The `NdVec` methods `min_axis()` and `max_axis()` now longer take a closure; the identity function is used instead
+- Renamed the `NdTree` methods `offset` and `set_offset()` to `base_pos()` and `set_base_pos()`
+- Renamed the `NdTree` methods `center` and `set_center()` to `center_pos()` and `set_center_pos()`
+- Renamed the `NdTreeSlice` field `offset` to `base_pos`
 
 ## [0.1.0] - 2020-12-17
 

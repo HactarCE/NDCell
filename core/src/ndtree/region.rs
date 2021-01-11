@@ -62,9 +62,9 @@ impl<D: Dim> Region<D> {
                 // rewritten.
                 let root = ret.root_ref();
                 let new_root = root.recursive_modify_with_offset(
-                    ret.offset(),
-                    &mut |node_offset, node| {
-                        let node_rect = node.big_rect() + node_offset;
+                    ret.base_pos(),
+                    &mut |node_pos, node| {
+                        let node_rect = node.big_rect() + node_pos;
                         if rect.contains(&node_rect) {
                             Some(*full_nodes.get(node.layer().to_usize()))
                         } else if rect.intersects(&node_rect) {
@@ -117,7 +117,7 @@ mod tests {
 
             let region = Region::Rect(rect.to_bigrect());
             let ndtree = region.clone().into_ndtree(center.clone());
-            assert_eq!(center, ndtree.center());
+            assert_eq!(center, ndtree.center_pos());
 
             for pos in cells_to_check {
                 let expected = rect.contains(&pos);

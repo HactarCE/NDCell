@@ -15,7 +15,7 @@ uniform usampler2D octree_texture;
 uniform int layer_count;
 uniform uint root_idx;
 
-uniform ivec3 offset_into_octree;
+uniform ivec3 octree_offset;
 uint texture_width = uint(textureSize(octree_texture, 0).x);
 float octree_side_len = (1 << layer_count);
 
@@ -108,7 +108,7 @@ void main() {
     // positive and also mirror the quadtree along that axis using
     // `invert_mask`, which will flip bits of child indices.
     bvec3 invert_mask = lessThan(delta, vec3(0));
-    start -= offset_into_octree;
+    start -= octree_offset;
     start = mix(start, octree_side_len - start, invert_mask);
     delta = mix(delta, -delta, invert_mask);
 

@@ -118,7 +118,7 @@ impl CellTransform {
 /// from global space to local space cannot be done using floating-point
 /// numbers; all other conversions use `cgmath::Matrix4<f32>`, which can be
 /// easily converted to `[[f32; 4]; 4]` to pass to OpenGL. To convert from
-/// global space to local space, we subtract the global cell offset and divide
+/// global space to local space, we subtract the global cell origin and divide
 /// by the size of a render cell (equivalent to a right-shift by the render cell
 /// layer).
 ///

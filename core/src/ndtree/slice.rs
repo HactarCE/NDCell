@@ -16,7 +16,7 @@ pub struct NdTreeSlice<'pool, D: Dim> {
     /// Root node.
     pub root: NodeRefWithGuard<'pool, D>,
     /// Position of the lower bound of the root node.
-    pub offset: BigVec<D>,
+    pub base_pos: BigVec<D>,
 }
 
 impl fmt::Display for NdTreeSlice<'_, Dim2D> {
@@ -42,22 +42,22 @@ impl fmt::Display for NdTreeSlice<'_, Dim2D> {
 }
 
 impl<'pool, D: Dim> NdTreeSlice<'pool, D> {
-    /// Returns a rectangle encompassing the grid.
+    /// Returns a rectangle encompassing the slice.
     #[inline]
     pub fn rect(&self) -> BigRect<D> {
-        self.root.big_rect() + &self.offset
+        self.root.big_rect() + &self.base_pos
     }
-    /// Returns the minimum position in the slice's rectangle.
+    /// Returns the minimum position in the slice's node.
     #[inline]
     pub fn min(&self) -> BigVec<D> {
-        self.offset.clone()
+        self.base_pos.clone()
     }
-    /// Returns the maximum position in the slice's rectangle.
+    /// Returns the maximum position in the slice's node.
     #[inline]
     pub fn max(&self) -> BigVec<D> {
         self.rect().max()
     }
-    /// Returns the vector size of the slice's rectangle.
+    /// Returns the vector size of the slice's node.
     #[inline]
     pub fn size(&self) -> BigVec<D> {
         self.rect().size()
@@ -67,7 +67,7 @@ impl<'pool, D: Dim> NdTreeSlice<'pool, D> {
     /// of the slice.
     pub fn get_cell(&self, pos: &BigVec<D>) -> Option<u8> {
         if self.rect().contains(pos) {
-            Some(self.root.cell_at_pos(&(pos - &self.offset)))
+            Some(self.root.cell_at_pos(&(pos - &self.base_pos)))
         } else {
             None
         }
@@ -83,10 +83,10 @@ impl<'pool, D: Dim> NdTreeSlice<'pool, D> {
                 .enumerate()
                 .map(|(i, child)| Self {
                     root: NodeRefWithGuard::from(child),
-                    offset: self.root.layer().big_child_offset(i) + &self.offset,
+                    base_pos: self.root.layer().big_child_offset(i) + &self.base_pos,
                 })
                 .collect_vec()),
-            Err(cell_state) => Err((cell_state, &self.offset)),
+            Err(cell_state) => Err((cell_state, &self.base_pos)),
         }
     }
 }

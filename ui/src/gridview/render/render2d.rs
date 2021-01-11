@@ -71,11 +71,11 @@ impl GridViewRender2D<'_> {
         let cells_h = self.local_visible_rect.len(Y) as u32;
         let (cells_texture, mut cells_fbo, cells_texture_viewport) =
             cache.textures.cells(cells_w, cells_h);
-        let local_quadtree_offset = self
+        let local_quadtree_base = self
             .xform
-            .global_to_local_int(&visible_quadtree.offset)
+            .global_to_local_int(&visible_quadtree.base_pos)
             .unwrap();
-        let offset_into_quadtree = self.local_visible_rect.min() - local_quadtree_offset;
+        let quadtree_offset = self.local_visible_rect.min() - local_quadtree_base;
         cells_fbo
             .draw(
                 vbos.ndtree_quad(),
@@ -86,7 +86,7 @@ impl GridViewRender2D<'_> {
                     layer_count: gl_quadtree.layers,
                     root_idx: gl_quadtree.root_idx,
 
-                    offset_into_quadtree: offset_into_quadtree.to_i32_array(),
+                    quadtree_offset: quadtree_offset.to_i32_array(),
                 },
                 &glium::DrawParameters {
                     viewport: Some(cells_texture_viewport),

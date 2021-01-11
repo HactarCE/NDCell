@@ -48,8 +48,8 @@ impl Viewpoint3D {
     /// Number of scaled units away from the pivot to position the camera.
     pub const DISTANCE_TO_PIVOT: f32 = 512.0;
 
-    pub const DEFAULT_PITCH: Deg<f32> = Deg(-30.0);
-    pub const DEFAULT_YAW: Deg<f32> = Deg(-20.0);
+    pub const DEFAULT_PITCH: Deg<f32> = Deg(30.0);
+    pub const DEFAULT_YAW: Deg<f32> = Deg(20.0);
 
     /// Radius of visible cells, measured in "scaled units". (See `Scale` docs.)
     pub const VIEW_RADIUS: f32 = 5000.0;
@@ -97,7 +97,7 @@ impl Viewpoint3D {
     pub fn camera_pos(&self) -> FixedVec3D {
         let distance =
             self.scale.inv_factor() * FixedPoint::from(r64(Self::DISTANCE_TO_PIVOT as f64));
-        &self.pivot - self.look_vector().to_fixedvec() * &distance
+        &self.pivot + self.look_vector().to_fixedvec() * &distance
     }
 
     /// Returns the unit vector for forward motion.
@@ -215,7 +215,7 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
         let camera_transform = Matrix4::from(Decomposed {
             scale: 1.0,
             rot: self.orientation(),
-            disp: cgmath::vec3(0.0, 0.0, Self::DISTANCE_TO_PIVOT),
+            disp: cgmath::vec3(0.0, 0.0, -Self::DISTANCE_TO_PIVOT),
         });
 
         CellTransform3D::new(
@@ -248,7 +248,7 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
                     let old_yaw = self.yaw();
                     let old_pitch = self.pitch();
                     Ok(Some(Box::new(move |vp, cursor_end| {
-                        let delta = (cursor_start - cursor_end) * orbit_factor;
+                        let delta = (cursor_end - cursor_start) * orbit_factor;
                         vp.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
                         vp.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
                         Ok(DragOutcome::Continue)

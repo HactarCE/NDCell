@@ -212,14 +212,12 @@ impl<D: Dim> NdCellTransform<D> {
         Matrix4::from_nonuniform_scale(2.0 / target_w, 2.0 / target_h, 1.0)
     }
     fn perspective_projection(target_w: f32, target_h: f32) -> Matrix4<f32> {
-        let perspective_transform = Matrix4::from(cgmath::PerspectiveFov {
+        Matrix4::from(cgmath::PerspectiveFov {
             fovy: FOV.into(),
             aspect: target_w / target_h,
             near: NEAR_PLANE,
             far: FAR_PLANE,
-        });
-        // Negate Z axis, so that +Z is forward.
-        perspective_transform * Matrix4::from_nonuniform_scale(1.0, 1.0, -1.0)
+        })
     }
     fn pixel_transform(target_w: f32, target_h: f32) -> Matrix4<f32> {
         // Negate the vertical axis because Glutin measures window coordinates
@@ -331,8 +329,8 @@ impl CellTransform2D {
 }
 
 impl CellTransform3D {
-    /// Returns the local position at the given pixel position on the screen at
-    /// the given scaled-unit Z coordinate.
+    /// Returns the local position at a local Z distance from the camera that
+    /// appears at the given pixel position on the screen.
     pub fn pixel_to_local_pos(&self, pixel: FVec2D, z: f32) -> Option<FVec3D> {
         // Convert to `cgmath` type for matrix math.
         let mut pixel = pixel.to_cgmath_point3();
@@ -340,7 +338,7 @@ impl CellTransform3D {
         // it ends up.
         pixel.z = self
             .projection_transform
-            .transform_point(cgmath::Point3::new(0.0, 0.0, z))
+            .transform_point(cgmath::Point3::new(0.0, 0.0, -z))
             .z;
         // Convert from pixels to screen space to camera space to local space.
         let local_pos =
@@ -353,15 +351,15 @@ impl CellTransform3D {
             R64::try_new(local_pos.z as f64)?,
         ]))
     }
-    /// Returns the global position at the given pixel position on the screen at
-    /// the given scaled-unit Z coordiniate.
+    /// Returns the global position at a local Z distance from the camera that
+    /// appears at the given pixel position on the screen.
     pub fn pixel_to_global_pos(&self, pixel: FVec2D, z: f32) -> Option<FixedVec3D> {
         let local_pos = self.pixel_to_local_pos(pixel, z)?;
         Some(self.local_to_global_float(local_pos))
     }
 
-    /// Returns the global position at the given pixel position on the screen
-    /// intersecting an axis-aligned plane.
+    /// Returns the global position on an axis-aligned plane that appears at the
+    /// given pixel position on the screen.
     pub fn pixel_to_global_pos_in_plane(
         &self,
         pixel: FVec2D,

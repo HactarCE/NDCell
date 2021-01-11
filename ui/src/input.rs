@@ -500,8 +500,8 @@ impl FrameInProgress<'_> {
                         + if move_right { move_speed } else { 0.0 };
                     let y = if move_down { -move_speed } else { 0.0 }
                         + if move_up { move_speed } else { 0.0 };
-                    let z = if move_back { -move_speed } else { 0.0 }
-                        + if move_fwd { move_speed } else { 0.0 };
+                    let z = if move_fwd { -move_speed } else { 0.0 }
+                        + if move_back { move_speed } else { 0.0 };
                     if (x, y, z) != (0.0, 0.0, 0.0) {
                         view3d.enqueue(ViewCommand::GoTo3D {
                             x: Some(r64(x).into()),

@@ -222,6 +222,21 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         Some(visible_ndtree)
     }
 
+    pub(super) fn gridline_cell_spacing_exponent(&self, max_pixel_spacing: f64) -> u32 {
+        // Compute the global cell spacing between gridlines.
+        let log2_max_pixel_spacing = r64(max_pixel_spacing).log2();
+        let log2_max_cell_spacing = log2_max_pixel_spacing - self.viewpoint.scale().log2_factor();
+
+        // Undo the `a * b^n` formula, rounding up to the nearest power of
+        // `GRIDLINE_SPACING_BASE`.
+        let log2_a = (GRIDLINE_SPACING_COEFF as f64).log2();
+        let log2_b = (GRIDLINE_SPACING_BASE as f64).log2();
+        ((log2_max_cell_spacing - log2_a) / log2_b)
+            .ceil()
+            .to_u32()
+            .unwrap_or(0)
+    }
+
     /// Returns the color to represent an ND-tree node.
     pub(super) fn ndtree_node_color(node: NodeRef<'_, R::D>) -> [u8; 4] {
         if let Some(cell_state) = node.single_state() {

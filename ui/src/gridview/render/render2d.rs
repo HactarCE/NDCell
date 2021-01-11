@@ -144,52 +144,36 @@ impl GridViewRender2D<'_> {
     }
 
     /// Draws gridlines at varying opacity and spacing depending on scaling.
-    ///
-    /// TOOD: support arbitrary exponential base and factor (a*b^n for any a, b)
     pub fn draw_gridlines(&mut self) -> Result<()> {
         let mut gridline_overlay_rects = vec![];
 
-        let min_cell_spacing_exponent =
+        let min_gridline_exponent =
             self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING);
-        let max_cell_spacing_exponent =
+        let max_gridline_exponent =
             self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING);
-        let range = (min_cell_spacing_exponent..=max_cell_spacing_exponent).rev();
+        let range = (min_gridline_exponent..=max_gridline_exponent).rev();
 
-        for cell_spacing_exponent in range {
-            gridline_overlay_rects.extend(self.generate_gridlines(cell_spacing_exponent, X, Y));
-            gridline_overlay_rects.extend(self.generate_gridlines(cell_spacing_exponent, Y, X));
+        for gridline_exponent in range {
+            gridline_overlay_rects.extend(self.generate_gridlines(gridline_exponent, X, Y));
+            gridline_overlay_rects.extend(self.generate_gridlines(gridline_exponent, Y, X));
         }
 
         self.draw_cell_overlay_rects(&gridline_overlay_rects)
             .context("Drawing gridlines")
     }
-    fn gridline_cell_spacing_exponent(&self, max_pixel_spacing: f64) -> u32 {
-        // Compute the global cell spacing between gridlines.
-        let log2_max_pixel_spacing = r64(max_pixel_spacing).log2();
-        let log2_max_cell_spacing = log2_max_pixel_spacing - self.viewpoint.scale().log2_factor();
-
-        // Undo the `a * b^n` formula, rounding up to the nearest power of
-        // `GRIDLINE_SPACING_BASE`.
-        let log2_a = (GRIDLINE_SPACING_COEFF as f64).log2();
-        let log2_b = (GRIDLINE_SPACING_BASE as f64).log2();
-        ((log2_max_cell_spacing - log2_a) / log2_b)
-            .ceil()
-            .to_u32()
-            .unwrap_or(0)
-    }
     /// Generate gridlines overlay at one exponential power along one axis.
     fn generate_gridlines(
         &mut self,
-        cell_spacing_exponent: u32,
+        gridline_exponent: u32,
         parallel_axis: Axis,
         perpendicular_axis: Axis,
     ) -> impl Iterator<Item = CellOverlayRect> {
-        let alpha = gridline_alpha(cell_spacing_exponent, self.viewpoint.scale());
+        let alpha = gridline_alpha(gridline_exponent, self.viewpoint.scale());
         let mut color = crate::colors::GRIDLINES;
         color[3] *= alpha as f32;
 
         let cell_spacing = BigInt::from(GRIDLINE_SPACING_COEFF)
-            * BigInt::from(GRIDLINE_SPACING_BASE).pow(cell_spacing_exponent);
+            * BigInt::from(GRIDLINE_SPACING_BASE).pow(gridline_exponent);
 
         // Compute the coordinate of the first gridline by rounding to the
         // nearest multiple of `cell_spacing`.

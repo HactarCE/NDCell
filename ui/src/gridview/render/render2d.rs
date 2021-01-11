@@ -152,9 +152,9 @@ impl GridViewRender2D<'_> {
         let mut gridline_overlay_rects = vec![];
 
         let min_cell_spacing_exponent =
-            self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING);
-        let max_cell_spacing_exponent =
             self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING);
+        let max_cell_spacing_exponent =
+            self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING);
         let range = (min_cell_spacing_exponent..=max_cell_spacing_exponent).rev();
 
         for cell_spacing_exponent in range {

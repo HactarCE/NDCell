@@ -4,12 +4,16 @@ use std::time::Duration;
 use ndcell_core::prelude::*;
 use Axis::{X, Y, Z};
 
+#[cfg(debug_assertions)]
+mod debug;
 mod simulation;
 
 use crate::commands::Command;
 use crate::gridview::*;
 use crate::mouse::MouseState;
 use crate::CONFIG;
+#[cfg(debug_assertions)]
+use debug::DebugWindow;
 use simulation::SimulationWindow;
 
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
@@ -26,9 +30,11 @@ pub struct BuildParams<'a> {
 #[derive(Debug, Default)]
 pub struct MainWindow {
     simulation: SimulationWindow,
+    #[cfg(debug_assertions)]
+    debug: DebugWindow,
 }
 impl MainWindow {
-    /// Builds the main window.
+    /// Builds the window.
     pub fn build(&mut self, params: &mut BuildParams<'_>) {
         let BuildParams {
             ui,
@@ -152,9 +158,13 @@ impl MainWindow {
             ));
             ui.text("");
             ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
+            #[cfg(debug_assertions)]
+            ui.checkbox(im_str!("Debug values"), &mut self.debug.is_visible);
         });
 
         self.simulation.build(params);
+        #[cfg(debug_assertions)]
+        self.debug.build(params);
     }
 }
 

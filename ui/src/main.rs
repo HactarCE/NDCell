@@ -22,6 +22,8 @@ use std::sync::Arc;
 
 use ndcell_core::prelude::*;
 
+#[macro_use]
+mod debug;
 mod clipboard_compat;
 mod colors;
 mod commands;

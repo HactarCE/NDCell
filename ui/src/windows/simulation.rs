@@ -11,7 +11,7 @@ pub struct SimulationWindow {
     pub is_visible: bool,
 }
 impl SimulationWindow {
-    /// Builds the main window.
+    /// Builds the window.
     pub fn build(&mut self, params: &mut BuildParams<'_>) {
         let BuildParams {
             ui,

@@ -5,7 +5,7 @@ use cgmath::EuclideanSpace;
 use ndcell_core::prelude::*;
 use Axis::{X, Y, Z};
 
-pub trait NdVecConvertExt: Sized {
+pub trait FVecConvertExt: Sized {
     type F32Array;
 
     fn to_cgmath_point3(self) -> cgmath::Point3<f32>;
@@ -14,8 +14,7 @@ pub trait NdVecConvertExt: Sized {
     }
     fn to_f32_array(self) -> Self::F32Array;
 }
-
-impl NdVecConvertExt for FVec1D {
+impl FVecConvertExt for FVec1D {
     type F32Array = f32;
 
     fn to_cgmath_point3(self) -> cgmath::Point3<f32> {
@@ -26,7 +25,7 @@ impl NdVecConvertExt for FVec1D {
         self[X].raw() as f32
     }
 }
-impl NdVecConvertExt for FVec2D {
+impl FVecConvertExt for FVec2D {
     type F32Array = [f32; 2];
 
     fn to_cgmath_point3(self) -> cgmath::Point3<f32> {
@@ -37,7 +36,7 @@ impl NdVecConvertExt for FVec2D {
         [self[X].raw() as f32, self[Y].raw() as f32]
     }
 }
-impl NdVecConvertExt for FVec3D {
+impl FVecConvertExt for FVec3D {
     type F32Array = [f32; 3];
 
     fn to_cgmath_point3(self) -> cgmath::Point3<f32> {
@@ -50,5 +49,25 @@ impl NdVecConvertExt for FVec3D {
             self[Y].raw() as f32,
             self[Z].raw() as f32,
         ]
+    }
+}
+
+pub trait IVecConvertExt {
+    type I32Array;
+
+    fn to_i32_array(self) -> Self::I32Array;
+}
+impl IVecConvertExt for IVec2D {
+    type I32Array = [i32; 2];
+
+    fn to_i32_array(self) -> Self::I32Array {
+        [self[X] as i32, self[Y] as i32]
+    }
+}
+impl IVecConvertExt for IVec3D {
+    type I32Array = [i32; 3];
+
+    fn to_i32_array(self) -> Self::I32Array {
+        [self[X] as i32, self[Y] as i32, self[Z] as i32]
     }
 }

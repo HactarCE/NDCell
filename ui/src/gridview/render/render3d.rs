@@ -61,7 +61,7 @@ impl GridViewRender3D<'_> {
             None => return Ok(()), // There is nothing to draw.
         };
 
-        let octree_offset = self
+        let offset_into_octree = self
             .xform
             .global_to_local_int(&visible_octree.offset)
             .unwrap();
@@ -89,11 +89,7 @@ impl GridViewRender3D<'_> {
                     layer_count: gl_octree.layers,
                     root_idx: gl_octree.root_idx,
 
-                    offset_into_octree: [
-                        octree_offset[X] as i32,
-                        octree_offset[Y] as i32,
-                        octree_offset[Z] as i32,
-                    ],
+                    offset_into_octree: offset_into_octree.to_i32_array(),
 
                     perf_view: CONFIG.lock().gfx.octree_perf_view,
 

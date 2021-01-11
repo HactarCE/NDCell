@@ -30,6 +30,7 @@ use super::shaders;
 use super::vertices::Vertex2D;
 use super::CellDrawParams;
 use crate::config::MouseDragBinding;
+use crate::ext::*;
 use crate::gridview::*;
 use crate::mouse::MouseDisplay;
 use crate::{Scale, CONFIG};
@@ -85,10 +86,7 @@ impl GridViewRender2D<'_> {
                     layer_count: gl_quadtree.layers,
                     root_idx: gl_quadtree.root_idx,
 
-                    offset_into_quadtree: [
-                        offset_into_quadtree[X] as i32,
-                        offset_into_quadtree[Y] as i32,
-                    ],
+                    offset_into_quadtree: offset_into_quadtree.to_i32_array(),
                 },
                 &glium::DrawParameters {
                     viewport: Some(cells_texture_viewport),

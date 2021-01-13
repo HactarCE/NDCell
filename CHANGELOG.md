@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Changing the step size while the simulation is running now takes effect immediately ([#6][i6])
+- Selected cells no longer appear to be tiled infinitely
 
 [i6]: https://github.com/HactarCE/NDCell/issues/6
 

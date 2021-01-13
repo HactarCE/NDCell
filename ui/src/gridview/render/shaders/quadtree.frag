@@ -12,6 +12,7 @@ uniform uint root_idx;
 uniform ivec2 quadtree_offset;
 
 uint texture_width = uint(textureSize(quadtree_texture, 0).x);
+int quadtree_len = 1 << layer_count;
 
 // Returns the value of the given child of the given node. `node` is the index
 // of the node; `which_child` describes the position of the child along the X
@@ -32,6 +33,10 @@ uint getNodeChild(uint node, bvec2 which_child) {
 
 void main() {
     ivec2 cell_pos = ivec2(floor(gl_FragCoord.xy)) + quadtree_offset;
+
+    if (cell_pos.x < 0 || cell_pos.x > quadtree_len) discard;
+    if (cell_pos.y < 0 || cell_pos.y > quadtree_len) discard;
+
     uint node = root_idx;
     for (int child_layer = layer_count - 1; child_layer >= 0; child_layer--) {
         if (node == 0u) break; // The node is empty.

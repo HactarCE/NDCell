@@ -118,19 +118,23 @@ impl GridViewRender3D<'_> {
         Ok(())
     }
 
-    pub fn draw_gridlines(&mut self) -> Result<()> {
-        let (grid_x, grid_y) = (X, Y);
-        let perpendicular_axis = Z;
-        let perpendicular_coordinate = BigInt::zero();
+    pub fn draw_gridlines(
+        &mut self,
+        perpendicular_axis: Axis,
+        perpendicular_coordinate: BigInt,
+    ) -> Result<()> {
+        let (ax1, ax2) = match perpendicular_axis {
+            X => (Y, Z),
+            Y => (Z, X),
+            Z => (X, Y),
+            _ => unreachable!(),
+        };
 
         let mut min = self.local_visible_rect.min().to_fvec();
         let mut max = self.local_visible_rect.max().to_fvec();
-        min[Z] = r64(0.0);
-        max[Z] = r64(0.0);
-        let quad = FRect2D::span(
-            NdVec([min[grid_x], min[grid_y]]),
-            NdVec([max[grid_x], max[grid_y]]),
-        );
+        min[perpendicular_axis] = r64(0.0);
+        max[perpendicular_axis] = r64(0.0);
+        let quad = FRect2D::span(NdVec([min[ax1], min[ax2]]), NdVec([max[ax1], max[ax2]]));
 
         // Compute the coefficient for the smallest visible gridlines.
         let log2_cell_spacing = (GRIDLINE_SPACING_BASE as f32).log2()
@@ -160,7 +164,7 @@ impl GridViewRender3D<'_> {
             let spacing_base: BigInt = GRIDLINE_SPACING_BASE.into();
             let mut tmp = global_grid_origin.div_floor(&spacing_coefficient);
             max_exponents = IVec3D::repeat(0);
-            for &ax in &[grid_x, grid_y] {
+            for &ax in &[ax1, ax2] {
                 const LARGE_EXPONENT: isize = 100;
                 if tmp[ax].is_zero() {
                     max_exponents[ax] = LARGE_EXPONENT;
@@ -175,7 +179,7 @@ impl GridViewRender3D<'_> {
             }
         }
         global_grid_origin[perpendicular_axis] = perpendicular_coordinate;
-        let max_exponents: IVec2D = NdVec([max_exponents[grid_x], max_exponents[grid_y]]);
+        let max_exponents: IVec2D = NdVec([max_exponents[ax1], max_exponents[ax2]]);
 
         let local_grid_origin = self
             .xform
@@ -196,7 +200,7 @@ impl GridViewRender3D<'_> {
                 &uniform! {
                     matrix: self.xform.gl_matrix(),
 
-                    grid_axes: [grid_x as i32, grid_y as i32],
+                    grid_axes: [ax1 as i32, ax2 as i32],
                     grid_color: crate::colors::GRIDLINES,
                     grid_origin: local_grid_origin.to_f32_array(),
                     grid_coefficient: coefficient,

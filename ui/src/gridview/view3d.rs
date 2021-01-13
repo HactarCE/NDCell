@@ -62,7 +62,7 @@ impl GridViewDimension for GridViewDim3D {
         // };
 
         // Draw gridlines.
-        frame.draw_gridlines()?;
+        frame.draw_gridlines(Axis::Z, BigInt::zero())?;
         // // Draw crosshairs.
         // if let Some(pos) = &draw_pos {
         //     frame.draw_blue_cursor_highlight(&pos.floor());

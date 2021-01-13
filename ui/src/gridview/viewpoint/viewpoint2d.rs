@@ -38,20 +38,8 @@ impl Default for Viewpoint2D {
 
 impl Viewpoint2D {
     pub fn pixel_to_screen_pos(&self, pixel: FVec2D) -> Option<ScreenPos2D> {
-        let transform = self.cell_transform();
-
-        let cell = transform.pixel_to_global_pos(pixel)?;
-        let int_cell = cell.floor();
-        let local_pos = transform.pixel_to_local_pos(pixel)?;
-        let local_int_pos = local_pos.floor().to_ivec();
-
-        Some(ScreenPos2D {
-            pixel,
-            cell,
-            int_cell,
-            local_pos,
-            local_int_pos,
-        })
+        let pos = self.cell_transform().pixel_to_global_pos(pixel)?;
+        Some(ScreenPos2D { pixel, pos })
     }
     pub fn try_pixel_to_screen_pos(&self, maybe_pixel: Option<FVec2D>) -> Option<ScreenPos2D> {
         maybe_pixel.and_then(|pixel| self.pixel_to_screen_pos(pixel))
@@ -286,25 +274,16 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
 #[derive(Debug, Clone)]
 pub struct ScreenPos2D {
     pixel: FVec2D,
-    cell: FixedVec2D,
-    int_cell: BigVec2D,
-    local_pos: FVec2D,
-    local_int_pos: IVec2D,
+    pos: FixedVec2D,
 }
 impl ScreenPos2D {
     pub fn pixel(&self) -> FVec2D {
         self.pixel
     }
-    pub fn cell(&self) -> &FixedVec2D {
-        &self.cell
+    pub fn pos(&self) -> FixedVec2D {
+        self.pos.clone()
     }
-    pub fn int_cell(&self) -> &BigVec2D {
-        &self.int_cell
-    }
-    pub fn local_pos(&self) -> FVec2D {
-        self.local_pos
-    }
-    pub fn local_int_pos(&self) -> IVec2D {
-        self.local_int_pos
+    pub fn cell(&self) -> BigVec2D {
+        self.pos.floor()
     }
 }

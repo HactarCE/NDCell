@@ -75,20 +75,19 @@ impl GridViewDimension for GridViewDim2D {
                     return Ok(());
                 }
 
-                let maybe_initial_pos = this.viewpoint().pixel_to_screen_pos(cursor_start);
-                let initial_pos = match maybe_initial_pos {
-                    Some(pos) => pos.int_cell().clone(),
+                let initial_cell = match this.viewpoint().pixel_to_screen_pos(cursor_start) {
+                    Some(pos) => pos.cell(),
                     None => return Ok(()),
                 };
 
                 let new_cell_state = c.mode.cell_state(
-                    this.automaton.ndtree.get_cell(&initial_pos),
+                    this.automaton.ndtree.get_cell(&initial_cell),
                     this.selected_cell_state,
                 );
 
                 let new_drag_handler: DragHandler<GridView2D> = match c.shape {
                     DrawShape::Freeform => {
-                        make_freeform_draw_drag_handler(initial_pos, new_cell_state)
+                        make_freeform_draw_drag_handler(initial_cell, new_cell_state)
                     }
                     DrawShape::Line => {
                         // TODO: implement drawing straight line
@@ -277,14 +276,14 @@ impl GridViewDimension for GridViewDim2D {
                 MouseDisplay::Draw => {
                     if !this.too_small_to_draw() {
                         frame.draw_hover_highlight(
-                            hovered_cell.int_cell(),
+                            &hovered_cell.cell(),
                             crate::colors::HOVERED_DRAW,
                         )?;
                     }
                 }
                 MouseDisplay::Select => {
                     frame.draw_hover_highlight(
-                        hovered_cell.int_cell(),
+                        &hovered_cell.cell(),
                         crate::colors::HOVERED_SELECT,
                     )?;
                 }
@@ -371,10 +370,7 @@ fn make_selection_drag_handler_with_threshold(
 
 fn make_new_rect_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler {
     Box::new(move |this, new_pos| {
-        this.set_selection_rect(Some(NdRect::span(
-            initial_pos.int_cell().clone(),
-            new_pos.int_cell().clone(),
-        )));
+        this.set_selection_rect(Some(NdRect::span(initial_pos.cell(), new_pos.cell())));
         Ok(DragOutcome::Continue)
     })
 }
@@ -389,8 +385,8 @@ fn make_resize_selection_drag_handler(
         if let Some(s) = &initial_selection {
             this.set_selection_rect(Some(super::selection::resize_selection_relative(
                 &s.rect,
-                initial_pos.cell(),
-                new_pos.cell(),
+                &initial_pos.pos(),
+                &new_pos.pos(),
                 axes,
             )));
             Ok(DragOutcome::Continue)
@@ -408,8 +404,8 @@ fn make_resize_selection_to_cell_drag_handler(initial_pos: ScreenPos2D) -> Selec
         if let Some(s) = &initial_selection {
             this.set_selection_rect(Some(super::selection::resize_selection_absolute(
                 &s.rect,
-                initial_pos.cell(),
-                new_pos.cell(),
+                &initial_pos.pos(),
+                &new_pos.pos(),
             )));
             Ok(DragOutcome::Continue)
         } else {
@@ -424,7 +420,7 @@ fn make_move_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHa
     Box::new(move |this, new_pos| {
         initial_selection = initial_selection.take().or_else(|| this.deselect());
         if let Some(s) = &initial_selection {
-            let delta = (new_pos.cell() - initial_pos.cell()).round();
+            let delta = (new_pos.pos() - initial_pos.pos()).round();
             this.set_selection_rect(Some(s.rect.clone() + delta));
             Ok(DragOutcome::Continue)
         } else {
@@ -449,7 +445,7 @@ fn make_move_or_copy_selected_cells_drag_handler(
             this.selection.take()
         });
         if let Some(s) = &initial_selection {
-            let delta = (new_pos.cell() - initial_pos.cell()).round();
+            let delta = (new_pos.pos() - initial_pos.pos()).round();
             this.selection = Some(s.move_by(delta));
             Ok(DragOutcome::Continue)
         } else {

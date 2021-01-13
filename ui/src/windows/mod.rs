@@ -106,8 +106,8 @@ impl MainWindow {
                     if let Some(mouse_pos) = view2d.viewpoint().try_pixel_to_screen_pos(mouse.pos) {
                         ui.text(format!(
                             "Cursor: X = {}, Y = {}",
-                            mouse_pos.int_cell()[X],
-                            mouse_pos.int_cell()[Y],
+                            mouse_pos.cell()[X],
+                            mouse_pos.cell()[Y],
                         ));
                     } else {
                         ui.text("");

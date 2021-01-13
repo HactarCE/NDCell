@@ -96,7 +96,7 @@ impl CellTransform {
 ///     - Origin: camera center
 ///     - Orientation: relative to camera (+Z = forward)
 ///     - Numeric type: floating-point
-/// 4. Screen space (normalized device coordinates)
+/// 4. Normalized device coordinates (NDC)
 ///     - Unit: half-target (render target X & Y range from -1.0 to +1.0)
 ///     - Origin: center of render target
 ///     - Orientation: relative to render target (+Z = backward; +Y = up)
@@ -107,8 +107,8 @@ impl CellTransform {
 ///     - Orientation: relative to render target (+Z = backward; +Y = down)
 ///     - Numeric type: floating-point
 ///
-/// In 3D, pixel space and screen space have the perspective transformation
-/// applied while camera space does not.
+/// In 3D, pixel space and NDC have the perspective transformation applied while
+/// camera space does not.
 ///
 /// When displaying large patterns, individual cells may be smaller than a
 /// single pixel, so we group cells into "render cells;" each render cell is a
@@ -123,8 +123,8 @@ impl CellTransform {
 /// layer).
 ///
 /// `render_cell_transform` converts from local space to camera space,
-/// `projection_transform` converts from camera space to screen space, and
-/// `pixel_transform` converts from screen space to pixel space.
+/// `projection_transform` converts from camera space to NDC, and
+/// `pixel_transform` converts from NDC to pixel space.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NdCellTransform<D: Dim> {
     /// Cell origin for "local" local space.
@@ -136,9 +136,9 @@ pub struct NdCellTransform<D: Dim> {
     /// Transformation matrix from local space to camera space (including
     /// scale).
     pub render_cell_transform: Matrix4<f32>,
-    /// Transformation matrix from camera space to screen space.
+    /// Transformation matrix from camera space to NDC.
     pub projection_transform: Matrix4<f32>,
-    /// Transformation matrix from screen space to pixel space.
+    /// Transformation matrix from NDC to pixel space.
     pub pixel_transform: Matrix4<f32>,
 
     /// Width of the render target.
@@ -230,24 +230,24 @@ impl<D: Dim> NdCellTransform<D> {
     }
 
     /// Returns a GL-compatible matrix representing the transformation from
-    /// local space to screen space.
+    /// local space to NDC.
     pub fn gl_matrix(&self) -> [[f32; 4]; 4] {
         (self.projection_transform * self.render_cell_transform).into()
     }
     /// Returns a GL-compatible matrix representing the transformation from
-    /// local space to screen space, plus a quarter-pixel offset to align
-    /// elements that would otherwise land on a pixel boundary (such as
-    /// single-pixel-wide gridlines).
+    /// local space to NDC, plus a quarter-pixel offset to align elements that
+    /// would otherwise land on a pixel boundary (such as single-pixel-wide
+    /// gridlines).
     pub fn gl_matrix_with_subpixel_offset(&self) -> [[f32; 4]; 4] {
-        let local_to_screen_transform = self.projection_transform * self.render_cell_transform;
+        let local_to_ndc_transform = self.projection_transform * self.render_cell_transform;
 
         let quarter_pixel = self.render_cell_scale.cells_per_unit().raw() as f32 / 4.0;
         let subpixel_translation = cgmath::vec3(quarter_pixel, quarter_pixel, 0.0);
         let subpixel_translation = Matrix4::from_translation(
-            local_to_screen_transform.transform_vector(subpixel_translation),
+            local_to_ndc_transform.transform_vector(subpixel_translation),
         );
 
-        (subpixel_translation * local_to_screen_transform).into()
+        (subpixel_translation * local_to_ndc_transform).into()
     }
 
     /// Converts a fixed-point position in global space to a floating-point
@@ -296,7 +296,7 @@ impl CellTransform2D {
     pub fn pixel_to_local_pos(&self, pixel: FVec2D) -> Option<FVec2D> {
         // Convert to `cgmath` type for matrix math.
         let pixel = pixel.to_cgmath_point3();
-        // Convert from pixels to screen space to camera space to local space.
+        // Convert from pixels to NDC to camera space to local space.
         let local_pos =
             (self.pixel_transform * self.projection_transform * self.render_cell_transform)
                 .inverse_transform()?
@@ -306,10 +306,10 @@ impl CellTransform2D {
             R64::try_new(local_pos.y as f64)?,
         ]))
     }
-    pub fn screen_to_local_pos(&self, screen_pos: FVec2D) -> Option<FVec2D> {
+    pub fn ndc_to_local_pos(&self, ndc_pos: FVec2D) -> FVec2D {
         // Convert to `cgmath` type for matrix math.
-        let screen_pos = screen_pos.to_cgmath_point3();
-        // Convert from pixels to screen space.
+        let ndc_pos = ndc_pos.to_cgmath_point3();
+        // Convert from pixels to NDC.
         let local_pos = (self.projection_transform * self.render_cell_transform)
             .inverse_transform()?
             .transform_point(screen_pos);
@@ -322,8 +322,8 @@ impl CellTransform2D {
     /// Returns the local rectangle spanning the screen.
     pub fn local_screen_rect(&self) -> FRect2D {
         FRect::span(
-            self.screen_to_local_pos(FVec2D::repeat(r64(-1.0))).unwrap(),
-            self.screen_to_local_pos(FVec2D::repeat(r64(1.0))).unwrap(),
+            self.ndc_to_local_pos(FVec2D::repeat(r64(-1.0))).unwrap(),
+            self.ndc_to_local_pos(FVec2D::repeat(r64(1.0))).unwrap(),
         )
     }
 }
@@ -340,7 +340,7 @@ impl CellTransform3D {
             .projection_transform
             .transform_point(cgmath::Point3::new(0.0, 0.0, -z))
             .z;
-        // Convert from pixels to screen space to camera space to local space.
+        // Convert from pixels to NDC to camera space to local space.
         let local_pos =
             (self.pixel_transform * self.projection_transform * self.render_cell_transform)
                 .inverse_transform()?

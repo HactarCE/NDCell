@@ -2,7 +2,7 @@
 
 use glium::implement_vertex;
 
-/// Vertex containing only a 2D screen space position.
+/// Vertex containing only a 2D NDC position.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct PosVertex2D {
     pub pos: [f32; 2],

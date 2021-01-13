@@ -22,8 +22,8 @@ pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
     /// Viewpoint to render the grid from.
     pub(super) viewpoint: &'a R::Viewpoint,
     /// Transform from global space to local space (1 unit = 1 render cell; (0,
-    /// 0) = `origin`), to screen space ((-1, -1) = bottom left; (1, 1) = top
-    /// right), and to pixel space (1 unit = 1 pixel; (0, 0) = top left).
+    /// 0) = `origin`), to NDC ((-1, -1) = bottom left; (1, 1) = top right), and
+    ///    to pixel space (1 unit = 1 pixel; (0, 0) = top left).
     pub(super) xform: NdCellTransform<R::D>,
     /// Global rectangle of visible cells, rounded to render cell boundaries.
     pub(super) global_visible_rect: BigRect<R::D>,

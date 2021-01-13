@@ -63,7 +63,7 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
     fn set_scale(&mut self, scale: Scale);
 
     /// Sets the visual scale of cells, keeping one point at the same location
-    /// in screen space.
+    /// on the screen.
     ///
     /// If `invariant_pos` is `None`, then the value returned by `center()` is
     /// used instead.
@@ -91,7 +91,7 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
         self.set_pos(self.center() + new_scale.units_to_cells(delta_pixel_offset));
     }
     /// Scales by 2^`log2_factor`, keeping one invariant point at the same
-    /// location in screen space.
+    /// location on the screen.
     ///
     /// If `invariant_pos` is `None`, then the value returned by `pos()` is
     /// invariant.
@@ -102,7 +102,7 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
         );
     }
     /// Scales by the given factor, keeping one invariant point at the same
-    /// location in screen space.
+    /// location on the screen.
     ///
     /// If `invariant_pos` is `None`, then the value returned by `pos()` is
     /// invariant.
@@ -115,7 +115,7 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
         self.scale_by_log2_factor(factor.log2(), invariant_pos)
     }
     /// Snaps to the nearest power-of-2 scale factor, keeping one invariant
-    /// point at the same location in screen space.
+    /// point at the same location on the screen.
     ///
     /// If `invariant_pos` is `None`, then the value returned by `pos()` is
     /// invariant.

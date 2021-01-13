@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use cgmath::prelude::*;
 use cgmath::{Basis3, Decomposed, Deg, Matrix4};
 use log::warn;
@@ -360,6 +360,10 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
             ViewCommand::FitView => {
                 todo!("fit view 3D");
             }
+
+            ViewCommand::FocusPixel(_) => Err(anyhow!(
+                "FocusPixel command received in Viewpoint3D (must be converted to GoTo command)"
+            )),
         }
     }
 }

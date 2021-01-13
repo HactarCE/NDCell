@@ -93,6 +93,8 @@ pub enum ViewCommand {
     },
 
     FitView,
+
+    FocusPixel(FVec2D),
 }
 impl_command_from!(Command::View(ViewCommand));
 

@@ -32,6 +32,7 @@ mod sc {
     pub const S: u32 = 1;
     pub const D: u32 = 2;
     pub const Q: u32 = 12;
+    pub const E: u32 = 14;
     pub const Z: u32 = 6;
 }
 #[cfg(not(any(target_os = "macos")))]
@@ -41,6 +42,7 @@ mod sc {
     pub const S: u32 = 31;
     pub const D: u32 = 32;
     pub const Q: u32 = 16;
+    pub const E: u32 = 18;
     pub const Z: u32 = 44;
 }
 
@@ -188,6 +190,7 @@ impl FrameInProgress<'_> {
             KeyboardInput {
                 state: ElementState::Pressed,
                 virtual_keycode,
+                scancode,
                 ..
             } => {
                 // We don't care about left vs. right modifiers, so just extract
@@ -254,7 +257,14 @@ impl FrameInProgress<'_> {
                                 _ => unreachable!(),
                             }));
                         }
-                        _ => (),
+                        _ => match *scancode {
+                            sc::E => {
+                                if let Some(mouse_pos) = self.state.mouse.pos {
+                                    self.gridview.enqueue(ViewCommand::FocusPixel(mouse_pos));
+                                }
+                            }
+                            _ => (),
+                        },
                     }
                 }
 

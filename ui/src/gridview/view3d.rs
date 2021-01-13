@@ -11,13 +11,48 @@ use crate::math::raycast;
 
 pub type GridView3D = GenericGridView<GridViewDim3D>;
 
-#[derive(Debug, Default)]
-pub struct GridViewDim3D;
+#[derive(Debug)]
+pub struct GridViewDim3D {
+    grid_axis: Axis,
+    grid_coord: BigInt,
+}
+impl Default for GridViewDim3D {
+    fn default() -> Self {
+        Self {
+            grid_axis: Axis::Z,
+            grid_coord: BigInt::zero(),
+        }
+    }
+}
 impl GridViewDimension for GridViewDim3D {
     type D = Dim3D;
     type Viewpoint = Viewpoint3D;
 
     fn do_view_command(this: &mut GridView3D, command: ViewCommand) -> Result<()> {
+        // Handle `FocusPixel` specially because it depends on the cell contents
+        // of the automaton.
+        if let ViewCommand::FocusPixel(pixel) = command {
+            if let Some(hit) = this.screen_pos(pixel).raycast() {
+                // Set grid axes.
+                let (axis, _sign) = hit.face;
+                this.set_grid(axis, hit.pos[axis].round());
+
+                // Set position.
+                let NdVec([x, y, z]) = hit.pos;
+                this.do_command(ViewCommand::GoTo3D {
+                    x: Some(x),
+                    y: Some(y),
+                    z: Some(z),
+                    yaw: None,
+                    pitch: None,
+                    relative: false,
+                    scaled: false,
+                })?;
+            }
+
+            return Ok(());
+        }
+
         // Delegate to the viewpoint.
         let maybe_new_drag_handler = this
             .viewpoint_interpolator
@@ -62,7 +97,7 @@ impl GridViewDimension for GridViewDim3D {
         // };
 
         // Draw gridlines.
-        frame.draw_gridlines(Axis::Z, BigInt::zero())?;
+        frame.draw_gridlines(this.dim.grid_axis, this.dim.grid_coord.clone())?;
         // // Draw crosshairs.
         // if let Some(pos) = &draw_pos {
         //     frame.draw_blue_cursor_highlight(&pos.floor());
@@ -107,6 +142,14 @@ impl GridView3D {
             raycast_hit,
         }
     }
+
+    pub fn set_grid(&mut self, axis: Axis, coord: BigInt) {
+        self.dim.grid_axis = axis;
+        self.dim.grid_coord = coord;
+    }
+    pub fn grid(&self) -> (Axis, &BigInt) {
+        (self.dim.grid_axis, &self.dim.grid_coord)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -141,6 +184,7 @@ impl ScreenPos3D {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct RaycastHit {
     /// Point of intersection between ray and cell.
     pub pos: FixedVec3D,

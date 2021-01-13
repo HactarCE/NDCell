@@ -258,6 +258,11 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
             ViewCommand::FitView => Err(anyhow!(
                 "FitView command received in Viewpoint2D (must be converted to GoTo command)"
             )),
+
+            ViewCommand::FocusPixel(pixel) => {
+                self.set_pos(self.cell_transform().pixel_to_global_pos(pixel));
+                Ok(None)
+            }
         }
     }
 }

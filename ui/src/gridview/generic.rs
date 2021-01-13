@@ -32,7 +32,8 @@ pub struct GenericGridView<G: GridViewDimension> {
     pub selection: Option<Selection<G::D>>,
     pub viewpoint_interpolator: Interpolator<G::D, G::Viewpoint>,
     history: HistoryManager<HistoryEntry<G>>,
-    dimensionality: G,
+    /// Dimension-specific data.
+    pub(super) dim: G,
 
     /// Queue of pending commands to be executed on the next frame.
     command_queue: Mutex<VecDeque<Command>>,
@@ -74,7 +75,7 @@ impl<G: GridViewDimension> Default for GenericGridView<G> {
             selection: Default::default(),
             viewpoint_interpolator: Default::default(),
             history: Default::default(),
-            dimensionality: Default::default(),
+            dim: Default::default(),
 
             command_queue: Default::default(),
             worker_thread: Default::default(),

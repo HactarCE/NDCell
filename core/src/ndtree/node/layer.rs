@@ -116,7 +116,7 @@ impl Layer {
     /// `None` if it does not fit in a `usize`.
     #[inline]
     pub fn len(self) -> Option<usize> {
-        crate::math::try_pow_2(self.to_usize())
+        try_pow_2(self.to_usize())
     }
     /// Returns the number of cells along each axis of a node at this layer as a
     /// `BigInt`.
@@ -134,7 +134,7 @@ impl Layer {
     /// it does not fit in a `usize`.
     #[inline]
     pub fn num_cells<D: Dim>(self) -> Option<usize> {
-        crate::math::try_pow_2(self.to_usize() * D::NDIM)
+        try_pow_2(self.to_usize() * D::NDIM)
     }
     /// Returns the total number of cells of a node at this layer as a `BigInt`.
     #[inline]
@@ -295,6 +295,16 @@ impl Layer {
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub struct LayerTooSmall;
 
+/// Returns `1 << pow` if the result fits in a `usize`, or `None` if it does
+/// not.
+fn try_pow_2(pow: usize) -> Option<usize> {
+    if pow < 8 * std::mem::size_of::<usize>() {
+        Some(1 << pow)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,5 +377,16 @@ mod tests {
 
         assert_eq!(gcl(2, 8), Some(Layer(1))); // 2
         assert_eq!(gcl(8, 2), Some(Layer(1))); // 2
+    }
+
+    #[test]
+    fn test_try_pow_2() {
+        let bits = 8 * std::mem::size_of::<usize>();
+        for pow in 0..bits {
+            assert_eq!(Some(1 << pow), try_pow_2(pow));
+        }
+        assert_eq!(None, try_pow_2(bits));
+        assert_eq!(None, try_pow_2(bits + 1));
+        assert_eq!(None, try_pow_2(bits + 2));
     }
 }

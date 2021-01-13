@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Renamed the `NdTree` methods `center` and `set_center()` to `center_pos()` and `set_center_pos()`
 - Renamed the `NdTreeSlice` field `offset` to `base_pos`
 
+### Removed
+
+- `math::try_pow_2()`
+
 ## [0.1.0] - 2020-12-17
 
 ### Added

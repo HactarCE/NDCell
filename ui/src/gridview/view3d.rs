@@ -13,13 +13,13 @@ pub type GridView3D = GenericGridView<GridViewDim3D>;
 
 #[derive(Debug)]
 pub struct GridViewDim3D {
-    grid_axis: Axis,
+    grid_axis: Option<Axis>,
     grid_coord: BigInt,
 }
 impl Default for GridViewDim3D {
     fn default() -> Self {
         Self {
-            grid_axis: Axis::Z,
+            grid_axis: None,
             grid_coord: BigInt::zero(),
         }
     }
@@ -35,7 +35,7 @@ impl GridViewDimension for GridViewDim3D {
             if let Some(hit) = this.screen_pos(pixel).raycast() {
                 // Set grid axes.
                 let (axis, _sign) = hit.face;
-                this.set_grid(axis, hit.pos[axis].round());
+                this.show_grid(axis, hit.pos[axis].round());
 
                 // Set position.
                 let NdVec([x, y, z]) = hit.pos;
@@ -48,6 +48,9 @@ impl GridViewDimension for GridViewDim3D {
                     relative: false,
                     scaled: false,
                 })?;
+            } else {
+                // Hide grid.
+                this.hide_grid();
             }
 
             return Ok(());
@@ -97,7 +100,9 @@ impl GridViewDimension for GridViewDim3D {
         // };
 
         // Draw gridlines.
-        frame.draw_gridlines(this.dim.grid_axis, this.dim.grid_coord.clone())?;
+        if let Some((axis, coord)) = this.grid() {
+            frame.draw_gridlines(axis, coord.clone())?;
+        }
         // // Draw crosshairs.
         // if let Some(pos) = &draw_pos {
         //     frame.draw_blue_cursor_highlight(&pos.floor());
@@ -143,12 +148,18 @@ impl GridView3D {
         }
     }
 
-    pub fn set_grid(&mut self, axis: Axis, coord: BigInt) {
-        self.dim.grid_axis = axis;
+    pub fn show_grid(&mut self, axis: Axis, coord: BigInt) {
+        self.dim.grid_axis = Some(axis);
         self.dim.grid_coord = coord;
     }
-    pub fn grid(&self) -> (Axis, &BigInt) {
-        (self.dim.grid_axis, &self.dim.grid_coord)
+    pub fn hide_grid(&mut self) {
+        self.dim.grid_axis = None;
+    }
+    pub fn grid(&self) -> Option<(Axis, &BigInt)> {
+        match self.dim.grid_axis {
+            Some(axis) => Some((axis, &self.dim.grid_coord)),
+            None => None,
+        }
     }
 }
 

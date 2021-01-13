@@ -131,6 +131,14 @@ where
         Self::with_size(NdVec::origin(), NdVec::repeat(size.into()))
     }
 
+    /// Creates an `NdRect` spanning both of the given rectangles (inclusive).
+    pub fn span_rects(a: Self, b: Self) -> Self {
+        Self::span(
+            NdVec::min(&a.min(), &b.min()),
+            NdVec::max(&a.max(), &b.max()),
+        )
+    }
+
     /// Returns the minimum (most negative) corner of the rectangle.
     #[inline]
     pub fn min(&self) -> NdVec<D, N> {

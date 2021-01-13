@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - `NdVec` methods `min_component()` and `max_component()`
+- `NdRect` method `span_rects()`
 
 ### Changed
 

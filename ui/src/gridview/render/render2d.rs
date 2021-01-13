@@ -342,9 +342,11 @@ impl GridViewRender2D<'_> {
         selection_rect: BigRect2D,
         mouse_pos: &ScreenPos2D,
     ) -> Result<()> {
-        let pos = mouse_pos.pos();
-        let selection_preview_rect =
-            selection::resize_selection_absolute(&selection_rect, &pos, &pos);
+        let selection_preview_rect = selection::resize_selection_absolute(
+            &selection_rect,
+            &mouse_pos.pos(),
+            &mouse_pos.rect(),
+        );
         let visible_selection_preview_rect = self.clip_int_rect_to_visible(&selection_preview_rect);
         self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
             visible_selection_preview_rect,

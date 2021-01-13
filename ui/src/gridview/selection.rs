@@ -104,7 +104,7 @@ pub fn resize_selection_relative<D: Dim>(
 pub fn resize_selection_absolute<D: Dim>(
     initial_selection: &BigRect<D>,
     drag_start_pos: &FixedVec<D>,
-    drag_end_pos: &FixedVec<D>,
+    drag_end_render_cell: &BigRect<D>,
 ) -> BigRect<D> {
     // Farthest corner stays fixed.
     let pos1 = initial_selection.farthest_corner(drag_start_pos);
@@ -112,8 +112,14 @@ pub fn resize_selection_absolute<D: Dim>(
     let mut pos2 = initial_selection.closest_corner(drag_start_pos);
 
     let axes = absolute_selection_resize_axes(&initial_selection, drag_start_pos);
-    for axis in axes {
-        pos2[axis] = drag_end_pos[axis].floor();
+    let drag_end_min = drag_end_render_cell.min();
+    let drag_end_max = drag_end_render_cell.max();
+    for ax in axes {
+        pos2[ax] = if drag_end_max[ax] > pos1[ax] {
+            drag_end_max[ax].clone()
+        } else {
+            drag_end_min[ax].clone()
+        };
     }
 
     NdRect::span(pos1, pos2)

@@ -339,7 +339,7 @@ fn make_selection_drag_handler_with_threshold(
 
 fn make_new_rect_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler {
     Box::new(move |this, new_pos| {
-        this.set_selection_rect(Some(NdRect::span(initial_pos.cell(), new_pos.cell())));
+        this.set_selection_rect(Some(NdRect::span_rects(initial_pos.rect(), new_pos.rect())));
         Ok(DragOutcome::Continue)
     })
 }
@@ -374,7 +374,7 @@ fn make_resize_selection_to_cell_drag_handler(initial_pos: ScreenPos2D) -> Selec
             this.set_selection_rect(Some(super::selection::resize_selection_absolute(
                 &s.rect,
                 &initial_pos.pos(),
-                &new_pos.pos(),
+                &new_pos.rect(),
             )));
             Ok(DragOutcome::Continue)
         } else {
@@ -464,10 +464,12 @@ impl GridView2D {
 
     pub fn screen_pos(&self, pixel: FVec2D) -> ScreenPos2D {
         let pos = self.viewpoint().cell_transform().pixel_to_global_pos(pixel);
+        let layer = self.viewpoint().render_cell_layer();
         let can_draw = !self.viewpoint().too_small_to_draw();
         ScreenPos2D {
             pixel,
             pos,
+            layer,
             can_draw,
         }
     }
@@ -477,6 +479,7 @@ impl GridView2D {
 pub struct ScreenPos2D {
     pixel: FVec2D,
     pos: FixedVec2D,
+    layer: Layer,
     can_draw: bool,
 }
 impl ScreenPos2D {
@@ -488,12 +491,19 @@ impl ScreenPos2D {
     pub fn pos(&self) -> FixedVec2D {
         self.pos.clone()
     }
-    /// Returns the global cell coordinates at the mouse cursor.
+    /// Returns the global cell coordinates at the pixel.
     pub fn cell(&self) -> BigVec2D {
         self.pos.floor()
     }
-    /// Returns the global cell coordinates at the mouse cursor, or `None` if
-    /// the scale is too small to draw.
+    /// Returns the global cell rectangle of cells inside the pixel.
+    pub fn rect(&self) -> BigRect2D {
+        let render_cell_len = self.layer.big_len();
+        // Round to render cell.
+        let base_pos = self.cell().div_floor(&render_cell_len) * render_cell_len;
+        self.layer.big_rect() + base_pos
+    }
+    /// Returns the global cell coordinates at the pixel, or `None` if the scale
+    /// is too small to draw.
     pub fn draw_cell(&self) -> Option<BigVec2D> {
         if self.can_draw {
             Some(self.cell())

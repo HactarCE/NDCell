@@ -2,7 +2,6 @@ use imgui::*;
 use std::time::Duration;
 
 use ndcell_core::prelude::*;
-use Axis::{X, Y, Z};
 
 #[cfg(debug_assertions)]
 mod debug;
@@ -105,7 +104,7 @@ impl MainWindow {
                     }
                     if let Some(pixel) = mouse.pos {
                         let cell = view2d.screen_pos(pixel).cell();
-                        ui.text(format!("Cursor: X = {}, Y = {}", cell[X], cell[Y]));
+                        ui.text(format!("Cursor: {}", cell));
                     } else {
                         ui.text("");
                     }
@@ -124,13 +123,17 @@ impl MainWindow {
                     }
                     ui.text(format!("Pitch = {:.2?}°", vp.pitch().0));
                     ui.text(format!("Yaw = {:.2?}°", vp.yaw().0));
-                    if let Some(hover_pos) = view3d.hovered_cell_pos(mouse.pos) {
-                        ui.text(format!(
-                            "Cursor: X = {}, Y = {}, Z = {}",
-                            hover_pos[X].floor(),
-                            hover_pos[Y].floor(),
-                            hover_pos[Z].floor(),
-                        ));
+                    if let Some(hit) = mouse
+                        .pos
+                        .and_then(|pixel| view3d.screen_pos(pixel).raycast())
+                    {
+                        let (axis, sign) = hit.face;
+                        let sign = match sign {
+                            Sign::Minus => "-",
+                            Sign::NoSign => "",
+                            Sign::Plus => "+",
+                        };
+                        ui.text(format!("Cursor: {} {}{:?}", hit.cell, sign, axis));
                     } else {
                         ui.text("");
                     }

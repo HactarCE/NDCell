@@ -169,8 +169,7 @@ void main() {
                 t1 = mix(tm_stack[layer], t1_stack[layer], next_child);
                 tm = (t0 + t1) / 2.0;
 
-                // Compute the next sibling of `next_child` to visit after this
-                // one.
+                // Compute the sibling of `next_child` to visit after this one.
                 uint exit_axis = exitAxis(t1);
                 // `== true` is required to work around a bug in AMD drivers.
                 // Yes this is cursed.

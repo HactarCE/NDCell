@@ -36,16 +36,6 @@ impl Default for Viewpoint2D {
     }
 }
 
-impl Viewpoint2D {
-    pub fn pixel_to_screen_pos(&self, pixel: FVec2D) -> Option<ScreenPos2D> {
-        let pos = self.cell_transform().pixel_to_global_pos(pixel)?;
-        Some(ScreenPos2D { pixel, pos })
-    }
-    pub fn try_pixel_to_screen_pos(&self, maybe_pixel: Option<FVec2D>) -> Option<ScreenPos2D> {
-        maybe_pixel.and_then(|pixel| self.pixel_to_screen_pos(pixel))
-    }
-}
-
 impl Viewpoint<Dim2D> for Viewpoint2D {
     fn target_dimensions(&self) -> (u32, u32) {
         self.target_dimensions
@@ -196,11 +186,9 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
                 | ViewDragCommand::PanAlignedVertical
                 | ViewDragCommand::PanHorizontal => {
                     let start = self.cell_transform().pixel_to_global_pos(cursor_start);
-                    Ok(Some(Box::new(move |vp, cursor_end| {
-                        let end = vp.cell_transform().pixel_to_global_pos(cursor_end);
-                        if let (Some(start), Some(end)) = (&start, &end) {
-                            vp.center += start - end;
-                        }
+                    Ok(Some(Box::new(move |this, cursor_end| {
+                        let end = this.cell_transform().pixel_to_global_pos(cursor_end);
+                        this.center += start.clone() - end;
                         Ok(DragOutcome::Continue)
                     })))
                 }
@@ -246,8 +234,7 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
             } => {
                 self.scale_by_log2_factor(
                     R64::try_new(log2_factor).context("Invalid scale factor")?,
-                    invariant_pos
-                        .and_then(|pixel_pos| self.cell_transform().pixel_to_global_pos(pixel_pos)),
+                    invariant_pos.map(|pixel| self.cell_transform().pixel_to_global_pos(pixel)),
                 );
                 Ok(None)
             }
@@ -258,8 +245,7 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
             }
             ViewCommand::SnapScale { invariant_pos } => {
                 self.snap_scale(
-                    invariant_pos
-                        .and_then(|pixel_pos| self.cell_transform().pixel_to_global_pos(pixel_pos)),
+                    invariant_pos.map(|pixel| self.cell_transform().pixel_to_global_pos(pixel)),
                 );
                 Ok(None)
             }
@@ -268,22 +254,5 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
                 "FitView command received in Viewpoint2D (must be converted to GoTo command)"
             )),
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ScreenPos2D {
-    pixel: FVec2D,
-    pos: FixedVec2D,
-}
-impl ScreenPos2D {
-    pub fn pixel(&self) -> FVec2D {
-        self.pixel
-    }
-    pub fn pos(&self) -> FixedVec2D {
-        self.pos.clone()
-    }
-    pub fn cell(&self) -> BigVec2D {
-        self.pos.floor()
     }
 }

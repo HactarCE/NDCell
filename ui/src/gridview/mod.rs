@@ -19,7 +19,7 @@ pub use generic::GenericGridView;
 pub use history::History;
 pub use render::{MouseTargetData, RenderParams, RenderResult};
 pub use selection::*;
-pub use view2d::GridView2D;
+pub use view2d::{GridView2D, ScreenPos2D};
 pub use view3d::GridView3D;
 pub use viewpoint::*;
 

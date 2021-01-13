@@ -103,12 +103,9 @@ impl MainWindow {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
                         }
                     }
-                    if let Some(mouse_pos) = view2d.viewpoint().try_pixel_to_screen_pos(mouse.pos) {
-                        ui.text(format!(
-                            "Cursor: X = {}, Y = {}",
-                            mouse_pos.cell()[X],
-                            mouse_pos.cell()[Y],
-                        ));
+                    if let Some(pixel) = mouse.pos {
+                        let cell = view2d.screen_pos(pixel).cell();
+                        ui.text(format!("Cursor: X = {}, Y = {}", cell[X], cell[Y]));
                     } else {
                         ui.text("");
                     }

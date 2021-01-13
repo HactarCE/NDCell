@@ -288,42 +288,44 @@ impl<D: Dim> NdCellTransform<D> {
 
 impl CellTransform2D {
     /// Returns the global position at the given pixel position on the screen.
-    pub fn pixel_to_global_pos(&self, pixel: FVec2D) -> Option<FixedVec2D> {
-        let local_pos = self.pixel_to_local_pos(pixel)?;
-        Some(self.local_to_global_float(local_pos))
+    pub fn pixel_to_global_pos(&self, pixel: FVec2D) -> FixedVec2D {
+        let local_pos = self.pixel_to_local_pos(pixel);
+        self.local_to_global_float(local_pos)
     }
     /// Returns the local position at the given pixel position on the screen.
-    pub fn pixel_to_local_pos(&self, pixel: FVec2D) -> Option<FVec2D> {
+    pub fn pixel_to_local_pos(&self, pixel: FVec2D) -> FVec2D {
         // Convert to `cgmath` type for matrix math.
         let pixel = pixel.to_cgmath_point3();
         // Convert from pixels to NDC to camera space to local space.
         let local_pos =
             (self.pixel_transform * self.projection_transform * self.render_cell_transform)
-                .inverse_transform()?
+                .inverse_transform()
+                .unwrap_or(Matrix4::zero()) // Return zero in case of error.
                 .transform_point(pixel);
-        Some(NdVec([
-            R64::try_new(local_pos.x as f64)?,
-            R64::try_new(local_pos.y as f64)?,
-        ]))
+        NdVec([
+            R64::try_new(local_pos.x as f64).unwrap_or_default(), // Return zero in case of error.
+            R64::try_new(local_pos.y as f64).unwrap_or_default(), // Return zero in case of error.
+        ])
     }
     pub fn ndc_to_local_pos(&self, ndc_pos: FVec2D) -> FVec2D {
         // Convert to `cgmath` type for matrix math.
         let ndc_pos = ndc_pos.to_cgmath_point3();
         // Convert from pixels to NDC.
         let local_pos = (self.projection_transform * self.render_cell_transform)
-            .inverse_transform()?
-            .transform_point(screen_pos);
-        Some(NdVec([
-            R64::try_new(local_pos.x as f64)?,
-            R64::try_new(local_pos.y as f64)?,
-        ]))
+            .inverse_transform()
+            .unwrap_or(Matrix4::zero()) // Return zero in case of error.
+            .transform_point(ndc_pos);
+        NdVec([
+            R64::try_new(local_pos.x as f64).unwrap_or_default(), // Return zero in case of error.
+            R64::try_new(local_pos.y as f64).unwrap_or_default(), // Return zero in case of error.
+        ])
     }
 
     /// Returns the local rectangle spanning the screen.
     pub fn local_screen_rect(&self) -> FRect2D {
         FRect::span(
-            self.ndc_to_local_pos(FVec2D::repeat(r64(-1.0))).unwrap(),
-            self.ndc_to_local_pos(FVec2D::repeat(r64(1.0))).unwrap(),
+            self.ndc_to_local_pos(FVec2D::repeat(r64(-1.0))),
+            self.ndc_to_local_pos(FVec2D::repeat(r64(1.0))),
         )
     }
 }

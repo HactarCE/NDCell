@@ -7,7 +7,7 @@ use super::generic::{GenericGridView, GridViewDimension};
 use super::history::History;
 use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
 use super::selection::Selection2D;
-use super::viewpoint::{ScreenPos2D, Viewpoint, Viewpoint2D};
+use super::viewpoint::{Viewpoint, Viewpoint2D};
 use super::{DragHandler, DragOutcome, DragType};
 use crate::commands::*;
 use crate::mouse::MouseDisplay;
@@ -70,14 +70,9 @@ impl GridViewDimension for GridViewDim2D {
                 this.selected_cell_state = new_selected_cell_state;
             }
             DrawCommand::Drag(c, cursor_start) => {
-                // Don't draw if the scale is too small.
-                if this.too_small_to_draw() {
-                    return Ok(());
-                }
-
-                let initial_cell = match this.viewpoint().pixel_to_screen_pos(cursor_start) {
-                    Some(pos) => pos.cell(),
-                    None => return Ok(()),
+                let initial_cell = match this.screen_pos(cursor_start).draw_cell() {
+                    Some(cell_pos) => cell_pos,
+                    None => return Ok(()), // Don't draw if the scale is too small.
                 };
 
                 let new_cell_state = c.mode.cell_state(
@@ -117,11 +112,7 @@ impl GridViewDimension for GridViewDim2D {
     fn do_select_command(this: &mut GridView2D, command: SelectCommand) -> Result<()> {
         match command {
             SelectCommand::Drag(c, cursor_start) => {
-                let maybe_initial_pos = this.viewpoint().pixel_to_screen_pos(cursor_start);
-                let initial_pos = match maybe_initial_pos {
-                    Some(pos) => pos,
-                    None => return Ok(()),
-                };
+                let initial_pos = this.screen_pos(cursor_start);
 
                 let new_drag_handler = match c {
                     SelectDragCommand::NewRect => make_new_rect_selection_drag_handler(initial_pos),
@@ -246,7 +237,7 @@ impl GridViewDimension for GridViewDim2D {
 
     fn render(this: &mut GridView2D, params: RenderParams<'_>) -> Result<RenderResult> {
         let mouse = params.mouse;
-        let mouse_pos = this.viewpoint().try_pixel_to_screen_pos(mouse.pos);
+        let mouse_pos = mouse.pos.map(|pixel| this.screen_pos(pixel));
 
         let mut frame = GridViewRender2D::new(params, this.viewpoint());
 
@@ -271,21 +262,16 @@ impl GridViewDimension for GridViewDim2D {
         frame.draw_gridlines()?;
 
         // Draw mouse display.
-        if let Some(hovered_cell) = &mouse_pos {
+        if let Some(screen_pos) = &mouse_pos {
             match mouse.display {
                 MouseDisplay::Draw => {
-                    if !this.too_small_to_draw() {
-                        frame.draw_hover_highlight(
-                            &hovered_cell.cell(),
-                            crate::colors::HOVERED_DRAW,
-                        )?;
+                    if let Some(cell_pos) = screen_pos.draw_cell() {
+                        frame.draw_hover_highlight(&cell_pos, crate::colors::HOVERED_DRAW)?;
                     }
                 }
                 MouseDisplay::Select => {
-                    frame.draw_hover_highlight(
-                        &hovered_cell.cell(),
-                        crate::colors::HOVERED_SELECT,
-                    )?;
+                    let cell_pos = screen_pos.cell();
+                    frame.draw_hover_highlight(&cell_pos, crate::colors::HOVERED_SELECT)?;
                 }
                 _ => (),
             }
@@ -305,34 +291,20 @@ impl GridViewDimension for GridViewDim2D {
     }
 }
 
-/// Returns `true` if the scale is too small to draw individual cells, or
-/// `false` otherwise.
-fn is_too_small_to_draw(viewpoint: &Viewpoint2D) -> bool {
-    viewpoint.scale() < Scale::from_factor(r64(1.0))
-}
-
 fn make_freeform_draw_drag_handler(
     mut pos1: BigVec2D,
     new_cell_state: u8,
 ) -> DragHandler<GridView2D> {
     Box::new(move |this, new_cursor_pos| {
-        if this.too_small_to_draw() {
-            return Ok(DragOutcome::Cancel);
+        let pos2 = match this.screen_pos(new_cursor_pos).draw_cell() {
+            Some(cell_pos) => cell_pos,
+            None => return Ok(DragOutcome::Cancel), // Don't draw if the scale is too small.
+        };
+        for pos in ndcell_core::math::bresenham(pos1.clone(), pos2.clone()) {
+            this.automaton.ndtree.set_cell(&pos, new_cell_state);
         }
-        let pos2 = this
-            .viewpoint()
-            .cell_transform()
-            .pixel_to_global_pos(new_cursor_pos)
-            .map(|pos| pos.floor());
-        if let Some(pos2) = &pos2 {
-            for pos in ndcell_core::math::bresenham(pos1.clone(), pos2.clone()) {
-                this.automaton.ndtree.set_cell(&pos, new_cell_state);
-            }
-            pos1 = pos2.clone();
-            Ok(DragOutcome::Continue)
-        } else {
-            Ok(DragOutcome::Cancel)
-        }
+        pos1 = pos2.clone();
+        Ok(DragOutcome::Continue)
     })
 }
 
@@ -357,11 +329,8 @@ fn make_selection_drag_handler_with_threshold(
             past_drag_threshold = true;
         }
         if past_drag_threshold {
-            if let Some(new_pos) = this.viewpoint().pixel_to_screen_pos(new_cursor_pos) {
-                inner_drag_handler(this, new_pos)
-            } else {
-                Ok(DragOutcome::Continue)
-            }
+            let screen_pos = this.screen_pos(new_cursor_pos);
+            inner_drag_handler(this, screen_pos)
         } else {
             Ok(DragOutcome::Continue)
         }
@@ -493,9 +462,43 @@ impl GridView2D {
         }
     }
 
-    /// Returns `true` if the scale is too small to draw individual cells, or
-    /// `false` otherwise.
-    fn too_small_to_draw(&self) -> bool {
-        self.viewpoint().scale() < Scale::from_factor(r64(1.0))
+    pub fn screen_pos(&self, pixel: FVec2D) -> ScreenPos2D {
+        let pos = self.viewpoint().cell_transform().pixel_to_global_pos(pixel);
+        let can_draw = !self.viewpoint().too_small_to_draw();
+        ScreenPos2D {
+            pixel,
+            pos,
+            can_draw,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ScreenPos2D {
+    pixel: FVec2D,
+    pos: FixedVec2D,
+    can_draw: bool,
+}
+impl ScreenPos2D {
+    /// Returns the position of the mouse in pixel space.
+    pub fn pixel(&self) -> FVec2D {
+        self.pixel
+    }
+    /// Returns the global cell position of the mouse.
+    pub fn pos(&self) -> FixedVec2D {
+        self.pos.clone()
+    }
+    /// Returns the global cell coordinates at the mouse cursor.
+    pub fn cell(&self) -> BigVec2D {
+        self.pos.floor()
+    }
+    /// Returns the global cell coordinates at the mouse cursor, or `None` if
+    /// the scale is too small to draw.
+    pub fn draw_cell(&self) -> Option<BigVec2D> {
+        if self.can_draw {
+            Some(self.cell())
+        } else {
+            None
+        }
     }
 }

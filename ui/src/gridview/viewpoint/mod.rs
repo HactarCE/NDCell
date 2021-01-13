@@ -14,7 +14,7 @@ pub use interpolator::{Interpolate, Interpolator};
 pub use transform::{
     CellTransform, CellTransform2D, CellTransform3D, NdCellTransform, ProjectionType,
 };
-pub use viewpoint2d::{ScreenPos2D, Viewpoint2D};
+pub use viewpoint2d::Viewpoint2D;
 pub use viewpoint3d::Viewpoint3D;
 
 /// Minimum target width & height, to avoid divide-by-zero errors.
@@ -122,6 +122,11 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
     fn snap_scale(&mut self, invariant_pos: Option<FixedVec<D>>) {
         self.scale_by_factor(self.scale().round() / self.scale(), invariant_pos);
         self.set_scale(self.scale().round()); // Fix any potential rounding error.
+    }
+    /// Returns `true` if the scale is too small to draw individual cells, or
+    /// `false` otherwise.
+    fn too_small_to_draw(&self) -> bool {
+        self.scale() < Scale::from_factor(r64(1.0))
     }
 
     /// Returns the abstract "distance" between two viewpoints.

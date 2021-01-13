@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{bail, Context, Result};
 
 use ndcell_core::prelude::*;
 
@@ -74,10 +74,10 @@ impl GridViewDimension for GridViewDim3D {
         Ok(())
     }
     fn do_draw_command(_this: &mut GridView3D, _command: DrawCommand) -> Result<()> {
-        Err(anyhow!("unimplemented"))
+        bail!("unimplemented")
     }
     fn do_select_command(_this: &mut GridView3D, _command: SelectCommand) -> Result<()> {
-        Err(anyhow!("unimplemented"))
+        bail!("unimplemented")
     }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {

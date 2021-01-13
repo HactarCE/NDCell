@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use glium::Surface;
 use log::{debug, trace, warn};
 use parking_lot::Mutex;
@@ -163,7 +163,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
                     self.set_new_values(work_type, new_values?)?;
                     self.work_type = None;
                 }
-                Err(WorkerIdle) => return Err(anyhow!("Worker is idle but work type is not None")),
+                Err(WorkerIdle) => bail!("Worker is idle but work type is not None"),
             }
         }
 
@@ -422,7 +422,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
         if self.is_running() {
             return Ok(());
         } else if self.is_drawing() {
-            return Err(anyhow!("Cannot start simulation while drawing"));
+            bail!("Cannot start simulation while drawing");
         }
 
         self.reset_worker_thread();
@@ -510,18 +510,17 @@ impl<G: GridViewDimension> GenericGridView<G> {
     /// Sets the selection, or returns an error if the dimensionality of the
     /// selection does not match the dimensionality of the gridview.
     fn set_selection_nd<D: Dim>(&mut self, new_selection: Option<Selection<D>>) -> Result<()> {
-        if G::D::NDIM == D::NDIM {
-            self.set_selection(unsafe {
-                *std::mem::transmute::<Box<Option<Selection<D>>>, Box<Option<Selection<G::D>>>>(
-                    Box::new(new_selection),
-                )
-            });
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "set_selection_nd() received Selection of wrong dimensionality"
-            ))
-        }
+        ensure!(
+            G::D::NDIM == D::NDIM,
+            "set_selection_nd() received Selection of wrong dimensionality",
+        );
+
+        self.set_selection(unsafe {
+            *std::mem::transmute::<Box<Option<Selection<D>>>, Box<Option<Selection<G::D>>>>(
+                Box::new(new_selection),
+            )
+        });
+        Ok(())
     }
     /// Deselects and sets a new selection.
     pub(super) fn set_selection(&mut self, new_selection: Option<Selection<G::D>>) {

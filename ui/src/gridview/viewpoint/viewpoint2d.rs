@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{bail, Context, Result};
 use cgmath::{Matrix4, SquareMatrix};
 use log::warn;
 
@@ -255,9 +255,9 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
                 Ok(None)
             }
 
-            ViewCommand::FitView => Err(anyhow!(
-                "FitView command received in Viewpoint2D (must be converted to GoTo command)"
-            )),
+            ViewCommand::FitView => {
+                bail!("FitView command received in Viewpoint2D (must be converted to GoTo command)")
+            }
 
             ViewCommand::FocusPixel(pixel) => {
                 self.set_pos(self.cell_transform().pixel_to_global_pos(pixel));

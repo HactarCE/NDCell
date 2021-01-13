@@ -235,7 +235,7 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
         let render_cell_radius = 0.5 + Self::VIEW_RADIUS * inv_render_cell_scale_factor;
         let render_cell_radius = render_cell_radius.ceil() as usize;
         let cell_radius = BigInt::from(render_cell_radius) << render_cell_layer.to_u32();
-        BigRect3D::centered(pivot, &cell_radius)
+        render_cell_layer.round_rect(&BigRect3D::centered(pivot, &cell_radius))
     }
 
     fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {

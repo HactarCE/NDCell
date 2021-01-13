@@ -54,9 +54,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
 
         // Determine the rectangle of visible cells in global coordinate space,
         // rounded to the nearest render cell.
-        let global_visible_rect: BigRect<R::D> = xform
-            .render_cell_layer
-            .round_rect(&viewpoint.global_visible_rect());
+        let global_visible_rect: BigRect<R::D> = viewpoint.global_visible_rect();
         let local_visible_rect: IRect<R::D> = xform
             .global_to_local_int_rect(&global_visible_rect)
             .expect("Unreasonable visible rectangle");
@@ -198,15 +196,10 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         // Clip the global rectangle of visible cells according to the draw
         // parameters.
         let global_visible_rect = match &params.rect {
-            Some(rect) => match self
-                .xform
-                .render_cell_layer
-                .round_rect(&rect)
-                .intersection(&self.global_visible_rect)
-            {
+            Some(rect) => match rect.intersection(&self.global_visible_rect) {
                 // Only draw the intersection of the viewport and the rectangle
                 // in the draw parameters.
-                Some(intersection) => intersection,
+                Some(intersection) => self.xform.render_cell_layer.round_rect(&intersection),
                 // The rectangle in the draw parameters does not intersect the
                 // viewport, so there is nothing to draw.
                 None => return None,

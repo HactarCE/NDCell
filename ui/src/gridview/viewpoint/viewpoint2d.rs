@@ -170,7 +170,12 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
         // top right corner; i.e. the "half diagonal."
         let half_diag: FixedVec2D = target_cells_size / 2.0;
 
-        BigRect2D::centered(self.center().floor(), &half_diag.ceil())
+        // Round to render cell boundaries.
+        let render_cell_layer = self.render_cell_layer();
+        render_cell_layer.round_rect(&BigRect2D::centered(
+            self.center().floor(),
+            &half_diag.ceil(),
+        ))
     }
 
     fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {

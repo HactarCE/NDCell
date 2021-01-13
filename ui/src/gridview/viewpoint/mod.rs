@@ -163,9 +163,13 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
     #[must_use = "This method returns a new value instead of mutating its input"]
     fn lerp(a: &Self, b: &Self, t: R64) -> Self;
 
+    /// Returns the layer of render cells.
+    fn render_cell_layer(&self) -> Layer {
+        Layer((-self.scale().round().log2_factor()).to_u32().unwrap_or(0))
+    }
     /// Returns the layer and scale factor of render cells.
     fn render_cell_layer_and_scale(&self) -> (Layer, Scale) {
-        let layer = Layer((-self.scale().round().log2_factor()).to_u32().unwrap_or(0));
+        let layer = self.render_cell_layer();
 
         // Multiply the cell scale factor by the size of a render cell, except
         // it's addition because we're actually using logarithms.
@@ -180,7 +184,8 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
     /// Returns the cell transform for this viewpoint.
     fn cell_transform(&self) -> NdCellTransform<D>;
 
-    /// Returns a rectangle of cells that are at least partially visible.
+    /// Returns a rectangle of cells that are at least partially visible,
+    /// rounded outward to the nearest render cell.
     fn global_visible_rect(&self) -> BigRect<D>;
 
     /// Executes a movement command.

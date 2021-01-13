@@ -10,11 +10,13 @@ lazy_static! {
 
 #[allow(unused_macros)]
 macro_rules! printlnd {
+    () => {
+        #[cfg(debug_assertions)]
+        crate::debug::FRAME_DEBUG_INFO.lock().push('\n');
+    };
     ($($arg:tt)+) => {
         #[cfg(debug_assertions)]
-        {
-            crate::debug::FRAME_DEBUG_INFO.lock().push_str(&format!($($arg)+));
-            crate::debug::FRAME_DEBUG_INFO.lock().push('\n');
-        }
+        crate::debug::FRAME_DEBUG_INFO.lock().push_str(&format!($($arg)+));
+        printlnd!();
     };
 }

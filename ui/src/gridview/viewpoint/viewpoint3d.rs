@@ -247,10 +247,10 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
                     let orbit_factor = r64(config.ctrl.mouse_orbit_speed / config.gfx.dpi);
                     let old_yaw = self.yaw();
                     let old_pitch = self.pitch();
-                    Ok(Some(Box::new(move |vp, cursor_end| {
+                    Ok(Some(Box::new(move |this, cursor_end| {
                         let delta = (cursor_end - cursor_start) * orbit_factor;
-                        vp.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
-                        vp.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
+                        this.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
+                        this.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
                         Ok(DragOutcome::Continue)
                     })))
                 }
@@ -258,11 +258,9 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
                 ViewDragCommand::Pan => {
                     let z = Self::DISTANCE_TO_PIVOT;
                     let start = self.cell_transform().pixel_to_global_pos(cursor_start, z);
-                    Ok(Some(Box::new(move |vp, cursor_end| {
-                        let end = vp.cell_transform().pixel_to_global_pos(cursor_end, z);
-                        if let (Some(start), Some(end)) = (&start, &end) {
-                            vp.pivot += start - end;
-                        }
+                    Ok(Some(Box::new(move |this, cursor_end| {
+                        let end = this.cell_transform().pixel_to_global_pos(cursor_end, z);
+                        this.pivot += &start - &end;
                         Ok(DragOutcome::Continue)
                     })))
                 }
@@ -277,12 +275,12 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
                     let start = self
                         .cell_transform()
                         .pixel_to_global_pos_in_plane(cursor_start, (Y, &y));
-                    Ok(Some(Box::new(move |vp, cursor_end| {
-                        let end = vp
+                    Ok(Some(Box::new(move |this, cursor_end| {
+                        let end = this
                             .cell_transform()
                             .pixel_to_global_pos_in_plane(cursor_end, (Y, &y));
                         if let (Some(start), Some(end)) = (&start, &end) {
-                            vp.pivot += start - end;
+                            this.pivot += start - end;
                         }
                         Ok(DragOutcome::Continue)
                     })))

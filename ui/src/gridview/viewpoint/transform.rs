@@ -331,33 +331,52 @@ impl CellTransform2D {
 }
 
 impl CellTransform3D {
-    /// Returns the local position at a local Z distance from the camera that
+    /// Returns the local position at a specific camera-space Z depth that
     /// appears at the given pixel position on the screen.
-    pub fn pixel_to_local_pos(&self, pixel: FVec2D, z: f32) -> Option<FVec3D> {
+    pub fn pixel_to_local_pos(&self, pixel: FVec2D, scaled_depth: f32) -> FVec3D {
         // Convert to `cgmath` type for matrix math.
         let mut pixel = pixel.to_cgmath_point3();
         // Apply the perspective transformation to the Z coordinate to see where
         // it ends up.
         pixel.z = self
             .projection_transform
-            .transform_point(cgmath::Point3::new(0.0, 0.0, -z))
+            .transform_point(cgmath::Point3::new(0.0, 0.0, -scaled_depth))
             .z;
         // Convert from pixels to NDC to camera space to local space.
         let local_pos =
             (self.pixel_transform * self.projection_transform * self.render_cell_transform)
-                .inverse_transform()?
+                .inverse_transform()
+                .unwrap_or(Matrix4::zero()) // Return zero in case of error.
                 .transform_point(pixel);
-        Some(NdVec([
-            R64::try_new(local_pos.x as f64)?,
-            R64::try_new(local_pos.y as f64)?,
-            R64::try_new(local_pos.z as f64)?,
-        ]))
+        NdVec([
+            R64::try_new(local_pos.x as f64).unwrap_or_default(), // Return zero in case of error.
+            R64::try_new(local_pos.y as f64).unwrap_or_default(), // Return zero in case of error.
+            R64::try_new(local_pos.z as f64).unwrap_or_default(), // Return zero in case of error.
+        ])
     }
-    /// Returns the global position at a local Z distance from the camera that
+    /// Returns the global position at a specific camera-space Z depth that
     /// appears at the given pixel position on the screen.
-    pub fn pixel_to_global_pos(&self, pixel: FVec2D, z: f32) -> Option<FixedVec3D> {
-        let local_pos = self.pixel_to_local_pos(pixel, z)?;
-        Some(self.local_to_global_float(local_pos))
+    pub fn pixel_to_global_pos(&self, pixel: FVec2D, z: f32) -> FixedVec3D {
+        let local_pos = self.pixel_to_local_pos(pixel, z);
+        self.local_to_global_float(local_pos)
+    }
+
+    /// Returns a local start position and normalized direction vector
+    /// representing the 3D ray from the given pixel.
+    pub fn pixel_to_local_ray(&self, pixel: FVec2D) -> (FVec3D, FVec3D) {
+        let start = self.pixel_to_local_pos(pixel, NEAR_PLANE);
+        let end = self.pixel_to_local_pos(pixel, FAR_PLANE);
+        let delta = (end - start).normalized();
+        (start, delta)
+    }
+    /// Returns a global start position and direction vector representing the 3D
+    /// ray from the given pixel. The direction vector is normalized in local
+    /// space (not global space).
+    pub fn pixel_to_global_ray(&self, pixel: FVec2D) -> (FixedVec3D, FixedVec3D) {
+        let (start, delta) = self.pixel_to_local_ray(pixel);
+        let start = self.local_to_global_float(start);
+        let delta = delta.to_fixedvec() << self.render_cell_layer.to_u32();
+        (start, delta)
     }
 
     /// Returns the global position on an axis-aligned plane that appears at the
@@ -368,9 +387,7 @@ impl CellTransform3D {
         plane: (Axis, &FixedPoint),
     ) -> Option<FixedVec3D> {
         let (plane_axis, plane_pos) = plane;
-        let global_cell_0 = self.pixel_to_global_pos(pixel, NEAR_PLANE)?;
-        let global_cell_1 = self.pixel_to_global_pos(pixel, FAR_PLANE)?;
-        let delta = global_cell_1 - &global_cell_0;
+        let (start, delta) = self.pixel_to_global_ray(pixel);
 
         if delta[plane_axis].is_zero() {
             // The delta vector is parallel to the plane.
@@ -378,13 +395,13 @@ impl CellTransform3D {
         }
 
         // How many times do we have to add `delta` to reach the plane?
-        let t = (plane_pos - &global_cell_0[plane_axis]) / &delta[plane_axis];
+        let t = (plane_pos - &start[plane_axis]) / &delta[plane_axis];
 
         if !t.is_positive() {
             // The plane is behind the camera.
             return None;
         }
 
-        Some(global_cell_0 + delta * t)
+        Some(start + delta * t)
     }
 }

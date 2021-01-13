@@ -300,7 +300,7 @@ fn make_freeform_draw_drag_handler(
             Some(cell_pos) => cell_pos,
             None => return Ok(DragOutcome::Cancel), // Don't draw if the scale is too small.
         };
-        for pos in ndcell_core::math::bresenham(pos1.clone(), pos2.clone()) {
+        for pos in crate::math::bresenham::line(pos1.clone(), pos2.clone()) {
             this.automaton.ndtree.set_cell(&pos, new_cell_state);
         }
         pos1 = pos2.clone();

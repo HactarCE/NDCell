@@ -32,6 +32,7 @@ mod ext;
 mod gridview;
 mod gui;
 mod input;
+mod math;
 mod mouse;
 mod scale;
 mod windows;

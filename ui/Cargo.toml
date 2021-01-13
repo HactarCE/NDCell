@@ -27,3 +27,6 @@ simple_logger = "1.11"
 
 ndcell_core = { path = "../core" }
 ndcell_lang = { path = "../lang" }
+
+[dev-dependencies]
+proptest = "0.10"

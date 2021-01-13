@@ -1128,6 +1128,7 @@ dependencies = [
  "ndcell_core",
  "ndcell_lang",
  "parking_lot 0.11.1",
+ "proptest",
  "send_wrapper",
  "simple_logger",
 ]

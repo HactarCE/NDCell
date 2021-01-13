@@ -11,7 +11,8 @@
 pub use noisy_float::prelude::{r64, R64};
 pub use num::bigint::Sign;
 pub use num::{
-    BigInt, BigUint, Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive, Zero,
+    cast, iter, pow, BigInt, BigUint, Float, FromPrimitive, Integer, Num, One, Signed, ToPrimitive,
+    Zero,
 };
 use std::fmt;
 use std::hash::Hash;

@@ -30,6 +30,9 @@ pub fn octree_raycast(
 ) -> Option<Hit> {
     let node_len = r64((node.layer() - min_layer).big_len().to_f64().unwrap());
 
+    let original_start = start;
+    let original_delta = delta;
+
     // Check each component of the delta vector to see if it's negative. If it
     // is, then mirror the ray along that axis so that the delta vector is
     // positive and also mirror the quadtree along that axis using
@@ -60,7 +63,32 @@ pub fn octree_raycast(
         return None;
     } else {
         // Otherwise, the ray does intersect with the root node.
-        return raycast_node_child(start, delta, t0, t1, min_layer, node, invert_mask);
+        raycast_node_child(start, delta, t0, t1, min_layer, node, invert_mask).map(|(t0, t1)| {
+            let tm = (t0 + t1) / 2.0;
+
+            let pos_int = (original_start + original_delta * tm).floor().to_ivec();
+            let pos_float = original_start + original_delta * t0.max_component();
+            let face_axis = entry_axis(t0);
+            let face_sign = if invert_mask & face_axis.bit() == 0 {
+                Sign::Minus // ray is positive; hit negative face of cell
+            } else {
+                Sign::Plus // ray is negative; hit positive face of cell
+            };
+
+            Hit {
+                start,
+                delta,
+
+                t0: *t0.max_component(),
+                t1: *t1.min_component(),
+
+                pos_int,
+                pos_float,
+
+                face_axis,
+                face_sign,
+            }
+        })
     }
 }
 
@@ -72,7 +100,7 @@ fn raycast_node_child(
     min_layer: Layer,
     node: NodeRef<'_, Dim3D>,
     invert_mask: usize,
-) -> Option<Hit> {
+) -> Option<(FVec3D, FVec3D)> {
     if *t1.min_component() < r64(0.0) {
         // This node is completely behind the ray; skip it.
         return None;
@@ -92,28 +120,7 @@ fn raycast_node_child(
 
     if node.layer() <= min_layer {
         // This is a nonzero leaf node, so return a hit.
-        let pos_int = (start + delta * tm).floor().to_ivec();
-        let pos_float = start + delta * t0;
-        let face_axis = entry_axis(t0);
-        let face_sign = if invert_mask & face_axis.bit() == 0 {
-            Sign::Minus // ray is positive; hit negative face of cell
-        } else {
-            Sign::Plus // ray is negative; hit positive face of cell
-        };
-
-        return Some(Hit {
-            start,
-            delta,
-
-            t0: *t0.max_component(),
-            t1: *t1.min_component(),
-
-            pos_int,
-            pos_float,
-
-            face_axis,
-            face_sign,
-        });
+        return Some((t0, t1));
     }
 
     let children = node.subdivide().unwrap();

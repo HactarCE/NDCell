@@ -101,15 +101,15 @@ mod tests {
         /// point implementation.
         #[test]
         fn test_bresenham(
-            x0 in -100..=100_isize,
-            y0 in -100..=100_isize,
-            z0 in -100..=100_isize,
             x1 in -100..=100_isize,
             y1 in -100..=100_isize,
             z1 in -100..=100_isize,
+            x2 in -100..=100_isize,
+            y2 in -100..=100_isize,
+            z2 in -100..=100_isize,
         ) {
-            let start: IVec3D = NdVec([x0, y0, z0]);
-            let end: IVec3D = NdVec([x1, y1, z1]);
+            let start: IVec3D = NdVec([x1, y1, z1]);
+            let end: IVec3D = NdVec([x2, y2, z2]);
             test_bresenham_single_line(start, end);
         }
     }

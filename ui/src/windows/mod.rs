@@ -170,13 +170,10 @@ impl MainWindow {
 
 fn fps_color(fps: usize) -> [f32; 4] {
     if fps >= 58 {
-        // Green
-        [0.0, 1.0, 0.0, 1.0]
+        GREEN
     } else if fps >= 29 {
-        // Yellow
-        [1.0, 1.0, 0.0, 1.0]
+        YELLOW
     } else {
-        // Red
-        [1.0, 0.0, 0.0, 1.0]
+        RED
     }
 }

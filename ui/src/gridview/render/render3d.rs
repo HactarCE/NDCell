@@ -35,7 +35,7 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim3D {
     type Viewpoint = Viewpoint3D;
     type OverlayQuad = ();
 
-    const DEFAULT_COLOR: (f32, f32, f32, f32) = crate::colors::BACKGROUND_3D;
+    const DEFAULT_COLOR: [f32; 4] = crate::colors::BACKGROUND_3D;
     const DEFAULT_DEPTH: f32 = f32::INFINITY;
 
     fn init(mut this: GridViewRender3D<'a>) -> GridViewRender3D<'a> {

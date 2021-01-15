@@ -46,7 +46,7 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim2D {
     type Viewpoint = Viewpoint2D;
     type OverlayQuad = OverlayQuad;
 
-    const DEFAULT_COLOR: (f32, f32, f32, f32) = crate::colors::BACKGROUND_2D;
+    const DEFAULT_COLOR: [f32; 4] = crate::colors::BACKGROUND_2D;
     const DEFAULT_DEPTH: f32 = 0.0;
 
     fn draw_overlay_quads(this: &mut GridViewRender2D<'a>) -> Result<()> {

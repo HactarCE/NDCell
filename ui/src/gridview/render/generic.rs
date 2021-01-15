@@ -44,9 +44,10 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         let mut cache = super::CACHE.borrow_mut();
 
         // Initialize color and depth buffers.
+        let [r, g, b, a] = R::DEFAULT_COLOR; // convert array to tuple
         params
             .target
-            .clear_color_srgb_and_depth(R::DEFAULT_COLOR, R::DEFAULT_DEPTH);
+            .clear_color_srgb_and_depth((r, g, b, a), R::DEFAULT_DEPTH);
 
         // Initialize mouse picker.
         cache.picker.init(params.target.get_dimensions());
@@ -276,7 +277,7 @@ pub trait GridViewRenderDimension<'a>: Default {
     type Viewpoint: Viewpoint<Self::D>;
     type OverlayQuad: Copy;
 
-    const DEFAULT_COLOR: (f32, f32, f32, f32);
+    const DEFAULT_COLOR: [f32; 4];
     const DEFAULT_DEPTH: f32;
 
     fn init(this: GenericGridViewRender<'a, Self>) -> GenericGridViewRender<'a, Self> {

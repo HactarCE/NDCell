@@ -189,10 +189,6 @@ impl ScreenPos3D {
             face: (hit.face_axis, hit.face_sign),
         })
     }
-    /// Returns the global position of the cell visible at the mouse cursor.
-    pub fn raycast_face(&self) -> Option<(Axis, Sign)> {
-        self.raycast_hit.map(|hit| (hit.face_axis, hit.face_sign))
-    }
 }
 
 #[derive(Debug, Clone)]

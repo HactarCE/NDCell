@@ -63,15 +63,6 @@ mod consts {
     /// Number of mouse target rectangles in each render batch.
     pub const MOUSE_TARGET_BATCH_SIZE: usize = 256;
 
-    /// Depth at which to render gridlines.
-    pub const GRIDLINE_DEPTH: f32 = 0.1;
-    /// Depth at which to render highlight/crosshairs.
-    pub const CURSOR_DEPTH: f32 = 0.2;
-    /// Depth at which to render selection rectangle.
-    pub const SELECTION_DEPTH: f32 = 0.3;
-    /// Depth at which to render selection resize preview.
-    pub const SELECTION_RESIZE_DEPTH: f32 = 0.4;
-
     /// Direction that 3D light comes from (normalized in GLSL).
     pub const LIGHT_DIRECTION: [f32; 3] = [1.0, 7.0, -3.0];
     /// Proportion of 3D light that is ambient, as opposed to directional.
@@ -81,10 +72,6 @@ mod consts {
 
     /// Proportional radius of the visible area beyond which there is fog.
     pub const FOG_START_FACTOR: f32 = 0.5;
-
-    /// Small offset used to force correct Z order or align things at the
-    /// sub-pixel scale.
-    pub const TINY_OFFSET: f32 = 1.0 / 16.0;
 }
 
 lazy_static! {

@@ -34,6 +34,9 @@ pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
     mouse_targets: Vec<MouseTargetData>,
     /// Vertex data for mouse targets.
     mouse_target_tris: Vec<MouseTargetVertex>,
+
+    /// Overlay rectangles to draw batched for performance and transparency.
+    pub(super) overlay_quads: Vec<R::OverlayQuad>,
 }
 impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
     /// Creates a `GridViewRender` for a gridview.
@@ -71,11 +74,14 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
 
             mouse_targets: vec![],
             mouse_target_tris: vec![],
+
+            overlay_quads: vec![],
         })
     }
 
     /// Returns a `RenderResult` from this render.
     pub fn finish(mut self) -> Result<RenderResult> {
+        R::draw_overlay_quads(&mut self).context("Drawing overlay")?;
         Ok(RenderResult {
             mouse_target: self.render_mouse_targets()?,
         })
@@ -268,6 +274,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
 pub trait GridViewRenderDimension<'a>: Default {
     type D: Dim;
     type Viewpoint: Viewpoint<Self::D>;
+    type OverlayQuad: Copy;
 
     const DEFAULT_COLOR: (f32, f32, f32, f32);
     const DEFAULT_DEPTH: f32;
@@ -275,6 +282,8 @@ pub trait GridViewRenderDimension<'a>: Default {
     fn init(this: GenericGridViewRender<'a, Self>) -> GenericGridViewRender<'a, Self> {
         this
     }
+
+    fn draw_overlay_quads(this: &mut GenericGridViewRender<'a, Self>) -> Result<()>;
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -259,31 +259,32 @@ impl GridViewDimension for GridViewDim2D {
         }
 
         // Draw gridlines.
-        frame.draw_gridlines()?;
+        frame.add_gridline_overlay();
 
         // Draw mouse display.
         if let Some(screen_pos) = &mouse_pos {
             match mouse.display {
                 MouseDisplay::Draw => {
                     if let Some(cell_pos) = screen_pos.draw_cell() {
-                        frame.draw_hover_highlight(&cell_pos, crate::colors::HOVERED_DRAW)?;
+                        frame.add_hover_highlight_overlay(&cell_pos, crate::colors::HOVERED_DRAW);
                     }
                 }
                 MouseDisplay::Select => {
                     let cell_pos = screen_pos.cell();
-                    frame.draw_hover_highlight(&cell_pos, crate::colors::HOVERED_SELECT)?;
+                    frame.add_hover_highlight_overlay(&cell_pos, crate::colors::HOVERED_SELECT);
                 }
                 _ => (),
             }
         }
         // Draw selection highlight.
         if let Some(selection) = &this.selection {
-            frame.draw_selection_highlight(selection.rect.clone(), selection.cells.is_none())?;
+            frame
+                .add_selection_highlight_overlay(selection.rect.clone(), selection.cells.is_none());
         }
         // Draw selection preview after drawing selection.
         if mouse.display == MouseDisplay::ResizeSelectionAbsolute && !this.is_dragging() {
             if let (Some(mouse_pos), Some(s)) = (mouse_pos, this.selection.as_ref()) {
-                frame.draw_absolute_selection_resize_preview(s.rect.clone(), &mouse_pos)?;
+                frame.add_selection_resize_preview_overlay(s.rect.clone(), &mouse_pos);
             }
         }
 

@@ -33,6 +33,7 @@ pub(in crate::gridview) struct RenderDim3D {
 impl<'a> GridViewRenderDimension<'a> for RenderDim3D {
     type D = Dim3D;
     type Viewpoint = Viewpoint3D;
+    type OverlayQuad = ();
 
     const DEFAULT_COLOR: (f32, f32, f32, f32) = crate::colors::BACKGROUND_3D;
     const DEFAULT_DEPTH: f32 = f32::INFINITY;
@@ -50,6 +51,10 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim3D {
         this.dim.fog_start = FOG_START_FACTOR * this.dim.fog_end;
 
         this
+    }
+
+    fn draw_overlay_quads(this: &mut GridViewRender3D<'a>) -> Result<()> {
+        todo!()
     }
 }
 

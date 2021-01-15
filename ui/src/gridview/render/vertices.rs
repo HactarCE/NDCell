@@ -20,19 +20,12 @@ implement_vertex!(TexturePosVertex, src_coords, dest_coords);
 /// Vertex containing a 3D floating-point position and an RGBA color.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Vertex2D {
-    pub pos: [f32; 3],
-    pub color: [f32; 4],
+    pub pos: [f32; 2],
+    pub color: [u8; 4],
 }
-implement_vertex!(Vertex2D, pos, color);
-impl From<([isize; 2], f32, [f32; 4])> for Vertex2D {
-    fn from(pos_and_color: ([isize; 2], f32, [f32; 4])) -> Self {
-        let ([x, y], z, color) = pos_and_color;
-        Self::from(([x as f32, y as f32, z], color))
-    }
-}
-impl From<([f32; 3], [f32; 4])> for Vertex2D {
-    fn from(pos_and_color: ([f32; 3], [f32; 4])) -> Self {
-        let (pos, color) = pos_and_color;
+implement_vertex!(Vertex2D, pos normalize(false), color normalize(true));
+impl Vertex2D {
+    pub fn new(pos: [f32; 2], color: [u8; 4]) -> Self {
         Self { pos, color }
     }
 }

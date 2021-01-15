@@ -119,10 +119,6 @@ where
 mod tests {
     use super::*;
 
-    fn replace<'a, T>(state: &'a mut T) -> impl 'a + FnMut(T) -> T {
-        move |x| std::mem::replace(state, x)
-    }
-
     struct HistoryTester {
         /// Current value.
         curr: i32,

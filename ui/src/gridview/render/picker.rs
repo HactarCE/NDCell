@@ -1,7 +1,6 @@
 //! OpenGL pixel buffer objects to detect what the mouse is hovering over.
 
 use glium::framebuffer::{DepthRenderBuffer, SimpleFrameBuffer};
-use glium::texture::pixel_buffer::PixelBuffer;
 use glium::texture::{DepthFormat, MipmapsOption, UncompressedUintFormat, UnsignedTexture2d};
 use glium::Surface;
 
@@ -10,13 +9,11 @@ use crate::DISPLAY;
 
 /// Pixel buffer object that tells which target the cursor is hovering over.
 pub struct MousePicker {
-    pbo: PixelBuffer<u32>,
     attachments: Resizing<(UnsignedTexture2d, DepthRenderBuffer)>,
 }
 impl Default for MousePicker {
     fn default() -> Self {
         Self {
-            pbo: PixelBuffer::new_empty(&**DISPLAY, 1),
             attachments: Resizing::with_generator(|w, h| {
                 let texture = UnsignedTexture2d::empty_with_format(
                     &**DISPLAY,

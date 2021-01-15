@@ -1,4 +1,4 @@
-#version 140
+#version 150
 
 in vec3 pos_3d;
 in vec2 grid_pos;

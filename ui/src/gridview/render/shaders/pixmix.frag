@@ -1,4 +1,4 @@
-#version 140
+#version 150
 
 /*
  * Pixel Mixing filter, also called Area Averaging Scale Filter and many other

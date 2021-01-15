@@ -1,4 +1,4 @@
-#version 140
+#version 150
 
 in vec3 pos;
 in uint target_id;

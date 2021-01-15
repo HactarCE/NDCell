@@ -1,7 +1,7 @@
 // Octree traversal algorithm based on An Efficient Parametric Algorithm for
 // Octree Traversal by J. Revelles, C. Ureña, M. Lastra.
 
-#version 140
+#version 150
 
 in vec2 screen_pos; // -1.0 ... +1.0 (same as `gl_Position`)
 

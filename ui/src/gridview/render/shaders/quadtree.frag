@@ -1,4 +1,4 @@
-#version 140
+#version 150
 
 in vec2 screen_pos; // 0.0 ... 1.0
 

@@ -1,7 +1,7 @@
 // This file is included in shader programs using an awful hack.
 // See `shaders/mod.rs`.
 
-layout(std140) uniform LightParams {
+layout(std140) uniform LightingParams {
     vec3 light_direction;    // normalized vector
     float light_ambientness; // 0.0 ... 1.0
     float light_multiplier;  // 0.0 ... 1.0

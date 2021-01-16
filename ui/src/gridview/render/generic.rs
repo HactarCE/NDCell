@@ -17,7 +17,7 @@ use crate::gridview::*;
 pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
     pub(super) cache: RefMut<'a, super::RenderCache>,
     pub(super) params: RenderParams<'a>,
-    pub(super) dim: R,
+    pub(super) dim: Option<R>,
 
     /// Viewpoint to render the grid from.
     pub(super) viewpoint: &'a R::Viewpoint,
@@ -63,10 +63,10 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             .global_to_local_int_rect(&global_visible_rect)
             .expect("Unreasonable visible rectangle");
 
-        R::init(Self {
+        let mut ret = Self {
             cache,
             params,
-            dim: R::default(),
+            dim: None,
 
             viewpoint,
             xform,
@@ -77,7 +77,9 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             mouse_target_tris: vec![],
 
             overlay_quads: vec![],
-        })
+        };
+        ret.dim = Some(R::init(&ret));
+        ret
     }
 
     /// Returns a `RenderResult` from this render.
@@ -272,7 +274,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
     }
 }
 
-pub trait GridViewRenderDimension<'a>: Default {
+pub trait GridViewRenderDimension<'a>: Sized {
     type D: Dim;
     type Viewpoint: Viewpoint<Self::D>;
     type OverlayQuad: Copy;
@@ -280,9 +282,7 @@ pub trait GridViewRenderDimension<'a>: Default {
     const DEFAULT_COLOR: [f32; 4];
     const DEFAULT_DEPTH: f32;
 
-    fn init(this: GenericGridViewRender<'a, Self>) -> GenericGridViewRender<'a, Self> {
-        this
-    }
+    fn init(gvr: &GenericGridViewRender<'a, Self>) -> Self;
 
     fn draw_overlay_quads(this: &mut GenericGridViewRender<'a, Self>) -> Result<()>;
 }

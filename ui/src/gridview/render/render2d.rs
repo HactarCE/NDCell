@@ -39,7 +39,6 @@ use crate::{Scale, CONFIG};
 
 pub(in crate::gridview) type GridViewRender2D<'a> = GenericGridViewRender<'a, RenderDim2D>;
 
-#[derive(Default)]
 pub(in crate::gridview) struct RenderDim2D;
 impl<'a> GridViewRenderDimension<'a> for RenderDim2D {
     type D = Dim2D;
@@ -48,6 +47,10 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim2D {
 
     const DEFAULT_COLOR: [f32; 4] = crate::colors::BACKGROUND_2D;
     const DEFAULT_DEPTH: f32 = 0.0;
+
+    fn init(_: &GridViewRender2D<'a>) -> Self {
+        Self
+    }
 
     fn draw_overlay_quads(this: &mut GridViewRender2D<'a>) -> Result<()> {
         // Reborrow is necessary in order to split borrow.

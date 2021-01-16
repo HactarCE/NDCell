@@ -126,7 +126,6 @@ impl GridView3D {
 
             // Compute the ray, relative to the root node of the octree slice.
             let (mut start, delta) = xform.pixel_to_local_ray(pixel);
-            printlnd!("octree off {}", local_octree_base_pos);
             start -= local_octree_base_pos.to_fvec();
 
             let layer = xform.render_cell_layer;

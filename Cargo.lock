@@ -1131,6 +1131,7 @@ dependencies = [
  "proptest",
  "send_wrapper",
  "simple_logger",
+ "sloth",
 ]
 
 [[package]]
@@ -1879,6 +1880,12 @@ name = "slab"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
+
+[[package]]
+name = "sloth"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7c30017141f49ee0d60d30c378052d8cccee245f0ea2bb37492a26ac61a60f8"
 
 [[package]]
 name = "smallvec"

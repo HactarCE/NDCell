@@ -67,8 +67,8 @@ mod consts {
     pub const LIGHT_DIRECTION: [f32; 3] = [1.0, 7.0, -3.0];
     /// Proportion of 3D light that is ambient, as opposed to directional.
     pub const LIGHT_AMBIENTNESS: f32 = 0.4;
-    /// Maximum 3D light level.
-    pub const MAX_LIGHT: f32 = 1.0;
+    /// Constant 3D lighting multiplier.
+    pub const LIGHT_MULTIPLIER: f32 = 1.0;
 
     /// Proportional radius of the visible area beyond which there is fog.
     pub const FOG_START_FACTOR: f32 = 0.5;

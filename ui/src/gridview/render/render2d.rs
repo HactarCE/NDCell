@@ -194,8 +194,8 @@ impl GridViewRender2D<'_> {
         Ok(())
     }
 
-    /// Adds gridlines at varying opacity and spacing depending on scaling.
-    pub fn add_gridline_overlay(&mut self) {
+    /// Adds gridlines to the overlay.
+    pub fn add_gridlines_overlay(&mut self) {
         let min_gridline_exponent =
             self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING);
         let max_gridline_exponent =

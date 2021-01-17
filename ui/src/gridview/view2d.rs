@@ -259,7 +259,7 @@ impl GridViewDimension for GridViewDim2D {
         }
 
         // Draw gridlines.
-        frame.add_gridline_overlay();
+        frame.add_gridlines_overlay();
 
         // Draw mouse display.
         if let Some(screen_pos) = &mouse_pos {

@@ -286,13 +286,3 @@ pub trait GridViewRenderDimension<'a>: Sized {
 
     fn draw_overlay_quads(this: &mut GenericGridViewRender<'a, Self>) -> Result<()>;
 }
-
-#[derive(Debug, Copy, Clone)]
-pub(super) struct LineParams {
-    /// Line width.
-    pub width: f64,
-    /// Whether to include the squares at the endpoints of this line.
-    pub include_endpoints: bool,
-    /// The axis this line is along.
-    pub axis: Axis,
-}

@@ -1,14 +1,13 @@
 #version 150
 
-in vec2 pos;
+in vec3 pos;
+in vec3 normal;
+in vec4 color; // ignored
 
-out vec3 pos_3d;
+out vec3 pos_3d; // XYZ coordinates in local space
 out vec2 grid_pos; // XY coordinates on 2D grid
 
 uniform mat4 matrix;
-
-uniform ivec2 grid_axes;
-uniform float other_coordinate;
 
 layout(std140) uniform GridlineParams {
     vec4 grid_color;
@@ -25,18 +24,19 @@ layout(std140) uniform GridlineParams {
     float grid_min_spacing;
 };
 
-const float epsilon = 1.0 / 256.0;
+const float EPSILON = 1.0 / 256.0;
 
 void main() {
-    int ax1 = grid_axes.x;
-    int ax2 = grid_axes.y;
+    gl_Position = matrix * vec4(pos, 1.0);
+    gl_Position.z -= EPSILON; // Gridlines appear in front of cells.
 
-    pos_3d = vec3(other_coordinate);
-    pos_3d[ax1] = pos.x;
-    pos_3d[ax2] = pos.y;
+    // Identify the axes that are parallel to the plane.
+    int ax1; if (normal.x == 0.0) { ax1 = 0; } else { ax1 = 1; }
+    int ax2; if (normal.z == 0.0) { ax2 = 2; } else { ax2 = 1; }
 
-    gl_Position = matrix * vec4(pos_3d, 1.0);
-    gl_Position.z -= epsilon; // Gridlines appear in front of cells.
+    pos_3d = pos;
 
-    grid_pos = (pos - vec2(grid_origin[ax1], grid_origin[ax2])) / grid_coefficient;
+    vec2 pos_2d = vec2(pos[ax1], pos[ax2]);
+    vec2 origin_2d = vec2(grid_origin[ax1], grid_origin[ax2]);
+    grid_pos = (pos_2d - origin_2d) / grid_coefficient;
 }

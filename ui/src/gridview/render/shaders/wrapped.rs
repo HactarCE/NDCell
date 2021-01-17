@@ -4,6 +4,12 @@ use log::error;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 
 pub struct StaticWrappedShader(pub Program);
+impl PartialEq for StaticWrappedShader {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+impl Eq for StaticWrappedShader {}
 impl StaticWrappedShader {
     pub fn load(&self) -> &Program {
         &self.0
@@ -18,6 +24,12 @@ pub struct DynamicWrappedShader {
     pub srgb: bool,
     pub program: Mutex<Option<Program>>,
 }
+impl PartialEq for DynamicWrappedShader {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+impl Eq for DynamicWrappedShader {}
 impl DynamicWrappedShader {
     fn _load(&self) -> Option<Program> {
         let vert_contents = std::fs::read_to_string(self.vert_filename)

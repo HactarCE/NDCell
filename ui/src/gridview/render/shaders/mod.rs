@@ -14,9 +14,9 @@ mod wrapped;
 use wrapped::*;
 
 #[cfg(debug_assertions)]
-type WrappedShader = DynamicWrappedShader;
+pub type WrappedShader = DynamicWrappedShader;
 #[cfg(not(debug_assertions))]
-type WrappedShader = StaticWrappedShader;
+pub type WrappedShader = StaticWrappedShader;
 
 shader!(RGBA_2D      = { srgb: true,  "rgba_2d" });
 shader!(RGBA_3D      = { srgb: true,  "rgba_3d" });

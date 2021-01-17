@@ -101,7 +101,7 @@ impl GridViewDimension for GridViewDim3D {
 
         // Draw gridlines.
         if let Some((axis, coord)) = this.grid() {
-            frame.draw_gridlines(axis, coord.clone())?;
+            frame.add_gridlines_overlay(axis, coord.clone());
         }
         // // Draw crosshairs.
         // if let Some(pos) = &draw_pos {

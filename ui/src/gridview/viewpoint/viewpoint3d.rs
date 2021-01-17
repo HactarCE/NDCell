@@ -93,7 +93,7 @@ impl Viewpoint3D {
     pub fn look_vector(&self) -> FVec3D {
         fvec3d_from_basis3(Z, self.orientation())
     }
-    /// Returns the position of the camera (not the pivot).
+    /// Returns the global position of the camera (not the pivot).
     pub fn camera_pos(&self) -> FixedVec3D {
         let distance =
             self.scale.inv_factor() * FixedPoint::from(r64(Self::DISTANCE_TO_PIVOT as f64));

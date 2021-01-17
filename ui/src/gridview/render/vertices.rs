@@ -37,12 +37,12 @@ pub struct Vertex3D {
     pub normal: [i8; 3],
     pub color: [u8; 4],
 }
-implement_vertex!(
-    Vertex3D,
-    pos normalize(false),
-    normal normalize(true),
-    color normalize(true)
-);
+implement_vertex!(Vertex3D, pos normalize(false), normal normalize(false), color normalize(true));
+impl Vertex3D {
+    pub fn new(pos: [f32; 3], normal: [i8; 3], color: [u8; 4]) -> Self {
+        Self { pos, normal, color }
+    }
+}
 
 /// Vertex containing a 3D floating-point position and an ID, for use with the
 /// pixel buffer object to map out regions that the mouse cursor can interact

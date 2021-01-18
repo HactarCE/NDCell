@@ -246,8 +246,8 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
                 0_u8 => crate::colors::DEAD,
                 1_u8 => crate::colors::LIVE,
                 i => {
-                    let [r, g, b] = colorous::TURBO
-                        .eval_rational(257 - i as usize, 256)
+                    let [r, g, b] = colorous::SPECTRAL
+                        .eval_rational(i as usize - 2, 255)
                         .as_array();
                     [r, g, b, 255]
                 }

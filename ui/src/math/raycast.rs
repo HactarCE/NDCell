@@ -5,6 +5,8 @@
 
 use ndcell_core::prelude::*;
 
+use super::Face;
+
 #[derive(Debug, Copy, Clone)]
 pub struct Hit {
     pub start: FVec3D,
@@ -15,9 +17,7 @@ pub struct Hit {
 
     pub pos_int: IVec3D,
     pub pos_float: FVec3D,
-
-    pub face_axis: Axis,
-    pub face_sign: Sign,
+    pub face: Face,
 }
 
 /// Computes a 3D octree raycast. `start` and `delta` are both in units of
@@ -68,11 +68,11 @@ pub fn octree_raycast(
 
             let pos_int = (original_start + original_delta * tm).floor().to_ivec();
             let pos_float = original_start + original_delta * t0.max_component();
-            let face_axis = entry_axis(t0);
-            let face_sign = if invert_mask & face_axis.bit() == 0 {
-                Sign::Minus // ray is positive; hit negative face of cell
+            let entry_axis = entry_axis(t0);
+            let face = if invert_mask & entry_axis.bit() == 0 {
+                Face::negative(entry_axis) // ray is positive; hit negative face of cell
             } else {
-                Sign::Plus // ray is negative; hit positive face of cell
+                Face::positive(entry_axis) // ray is negative; hit positive face of cell
             };
 
             Hit {
@@ -84,9 +84,7 @@ pub fn octree_raycast(
 
                 pos_int,
                 pos_float,
-
-                face_axis,
-                face_sign,
+                face,
             }
         })
     }

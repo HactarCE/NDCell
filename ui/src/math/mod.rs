@@ -1,5 +1,8 @@
 pub mod bresenham;
+mod face;
 pub mod raycast;
+
+pub use face::Face;
 
 pub fn f32_color_to_u8([r, g, b, a]: [f32; 4]) -> [u8; 4] {
     [

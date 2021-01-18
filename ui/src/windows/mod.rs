@@ -127,13 +127,7 @@ impl MainWindow {
                         .pos
                         .and_then(|pixel| view3d.screen_pos(pixel).raycast())
                     {
-                        let (axis, sign) = hit.face;
-                        let sign = match sign {
-                            Sign::Minus => "-",
-                            Sign::NoSign => "",
-                            Sign::Plus => "+",
-                        };
-                        ui.text(format!("Cursor: {} {}{:?}", hit.cell, sign, axis));
+                        ui.text(format!("Cursor: {} {}", hit.cell, hit.face));
                     } else {
                         ui.text("");
                     }

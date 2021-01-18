@@ -7,7 +7,7 @@ use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult
 use super::viewpoint::{CellTransform3D, Viewpoint, Viewpoint3D};
 use super::{DragHandler, DragType};
 use crate::commands::*;
-use crate::math::raycast;
+use crate::math::{raycast, Face};
 
 pub type GridView3D = GenericGridView<GridViewDim3D>;
 
@@ -34,7 +34,7 @@ impl GridViewDimension for GridViewDim3D {
         if let ViewCommand::FocusPixel(pixel) = command {
             if let Some(hit) = this.screen_pos(pixel).raycast() {
                 // Set grid axes.
-                let (axis, _sign) = hit.face;
+                let axis = hit.face.normal_axis();
                 this.show_grid(axis, hit.pos[axis].round());
 
                 // Set position.
@@ -185,7 +185,7 @@ impl ScreenPos3D {
         self.raycast_hit.map(|hit| RaycastHit {
             pos: self.xform.local_to_global_float(hit.pos_float),
             cell: self.xform.local_to_global_int(hit.pos_int),
-            face: (hit.face_axis, hit.face_sign),
+            face: hit.face,
         })
     }
 }
@@ -197,5 +197,5 @@ pub struct RaycastHit {
     /// Position of intersected cell.
     pub cell: BigVec3D,
     /// Face of cell intersected.
-    pub face: (Axis, Sign),
+    pub face: Face,
 }

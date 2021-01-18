@@ -70,10 +70,11 @@ impl GridViewDimension for GridViewDim2D {
                 this.selected_cell_state = new_selected_cell_state;
             }
             DrawCommand::Drag(c, cursor_start) => {
-                let initial_cell = match this.screen_pos(cursor_start).draw_cell() {
-                    Some(cell_pos) => cell_pos,
-                    None => return Ok(()), // Don't draw if the scale is too small.
-                };
+                if this.viewpoint().too_small_to_draw() {
+                    return Ok(());
+                }
+
+                let initial_cell = this.screen_pos(cursor_start).cell();
 
                 let new_cell_state = c.mode.cell_state(
                     this.automaton.ndtree.get_cell(&initial_cell),
@@ -237,7 +238,7 @@ impl GridViewDimension for GridViewDim2D {
 
     fn render(this: &mut GridView2D, params: RenderParams<'_>) -> Result<RenderResult> {
         let mouse = params.mouse;
-        let mouse_pos = mouse.pos.map(|pixel| this.screen_pos(pixel));
+        let screen_pos = mouse.pos.map(|pixel| this.screen_pos(pixel));
 
         let mut frame = GridViewRender2D::new(params, this.viewpoint());
 
@@ -262,15 +263,13 @@ impl GridViewDimension for GridViewDim2D {
         frame.add_gridlines_overlay();
 
         // Draw mouse display.
-        if let Some(screen_pos) = &mouse_pos {
+        if let Some(screen_pos) = &screen_pos {
+            let cell_pos = screen_pos.cell();
             match mouse.display {
-                MouseDisplay::Draw => {
-                    if let Some(cell_pos) = screen_pos.draw_cell() {
-                        frame.add_hover_highlight_overlay(&cell_pos, crate::colors::HOVERED_DRAW);
-                    }
+                MouseDisplay::Draw if !this.viewpoint().too_small_to_draw() => {
+                    frame.add_hover_highlight_overlay(&cell_pos, crate::colors::HOVERED_DRAW);
                 }
                 MouseDisplay::Select => {
-                    let cell_pos = screen_pos.cell();
                     frame.add_hover_highlight_overlay(&cell_pos, crate::colors::HOVERED_SELECT);
                 }
                 _ => (),
@@ -283,8 +282,8 @@ impl GridViewDimension for GridViewDim2D {
         }
         // Draw selection preview after drawing selection.
         if mouse.display == MouseDisplay::ResizeSelectionAbsolute && !this.is_dragging() {
-            if let (Some(mouse_pos), Some(s)) = (mouse_pos, this.selection.as_ref()) {
-                frame.add_selection_resize_preview_overlay(s.rect.clone(), &mouse_pos);
+            if let (Some(s), Some(screen_pos)) = (this.selection.as_ref(), screen_pos) {
+                frame.add_selection_resize_preview_overlay(s.rect.clone(), &screen_pos);
             }
         }
 
@@ -297,10 +296,10 @@ fn make_freeform_draw_drag_handler(
     new_cell_state: u8,
 ) -> DragHandler<GridView2D> {
     Box::new(move |this, new_cursor_pos| {
-        let pos2 = match this.screen_pos(new_cursor_pos).draw_cell() {
-            Some(cell_pos) => cell_pos,
-            None => return Ok(DragOutcome::Cancel), // Don't draw if the scale is too small.
-        };
+        if this.viewpoint().too_small_to_draw() {
+            return Ok(DragOutcome::Cancel);
+        }
+        let pos2 = this.screen_pos(new_cursor_pos).cell();
         for pos in crate::math::bresenham::line(pos1.clone(), pos2.clone()) {
             this.automaton.ndtree.set_cell(&pos, new_cell_state);
         }
@@ -466,13 +465,7 @@ impl GridView2D {
     pub fn screen_pos(&self, pixel: FVec2D) -> ScreenPos2D {
         let pos = self.viewpoint().cell_transform().pixel_to_global_pos(pixel);
         let layer = self.viewpoint().render_cell_layer();
-        let can_draw = !self.viewpoint().too_small_to_draw();
-        ScreenPos2D {
-            pixel,
-            pos,
-            layer,
-            can_draw,
-        }
+        ScreenPos2D { pixel, pos, layer }
     }
 }
 
@@ -481,7 +474,6 @@ pub struct ScreenPos2D {
     pixel: FVec2D,
     pos: FixedVec2D,
     layer: Layer,
-    can_draw: bool,
 }
 impl ScreenPos2D {
     /// Returns the position of the mouse in pixel space.
@@ -502,14 +494,5 @@ impl ScreenPos2D {
         // Round to render cell.
         let base_pos = self.cell().div_floor(&render_cell_len) * render_cell_len;
         self.layer.big_rect() + base_pos
-    }
-    /// Returns the global cell coordinates at the pixel, or `None` if the scale
-    /// is too small to draw.
-    pub fn draw_cell(&self) -> Option<BigVec2D> {
-        if self.can_draw {
-            Some(self.cell())
-        } else {
-            None
-        }
     }
 }

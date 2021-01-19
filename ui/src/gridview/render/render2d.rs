@@ -444,6 +444,11 @@ impl GridViewRender2D<'_> {
             crate::colors::CROSSHAIR_OPACITY_2D,
         ));
 
+        let gradient_len = std::cmp::max(
+            r64(CROSSHAIR_GRADIENT_MIN_PIXEL_LEN) * self.xform.render_cell_scale.cells_per_unit(),
+            r64(CROSSHAIR_GRADIENT_MIN_CELL_LEN),
+        );
+
         let (pos1, pos2, pos3, pos4, pos5, pos6);
         {
             let visible_rect = self.local_visible_rect.to_frect();
@@ -453,10 +458,10 @@ impl GridViewRender2D<'_> {
                 ret
             };
             pos1 = pos_along_line(visible_rect.min()[parallel_axis]);
-            pos2 = pos_along_line(a - r64(1.0));
+            pos2 = pos_along_line(a - gradient_len);
             pos3 = pos_along_line(a);
             pos4 = pos_along_line(b);
-            pos5 = pos_along_line(b + r64(1.0));
+            pos5 = pos_along_line(b + gradient_len);
             pos6 = pos_along_line(visible_rect.max()[parallel_axis]);
         }
 

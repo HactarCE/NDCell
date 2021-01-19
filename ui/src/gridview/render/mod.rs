@@ -25,6 +25,11 @@ pub(super) use render2d::GridViewRender2D;
 pub(super) use render3d::GridViewRender3D;
 
 mod consts {
+    /// Minimum pixel length of the crosshair gradient.
+    pub const CROSSHAIR_GRADIENT_MIN_PIXEL_LEN: f64 = 16.0;
+    /// Minimum render cell length of the crosshair gradient.
+    pub const CROSSHAIR_GRADIENT_MIN_CELL_LEN: f64 = 1.0;
+
     /// Width of gridlines, measured in cells.
     pub const GRIDLINE_WIDTH: f64 = 1.0 / 32.0;
     /// Width of hover outline, measured in cells.

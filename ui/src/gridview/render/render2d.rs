@@ -34,7 +34,6 @@ use super::CellDrawParams;
 use crate::config::MouseDragBinding;
 use crate::ext::*;
 use crate::gridview::*;
-use crate::mouse::MouseDisplay;
 use crate::{Scale, CONFIG};
 
 pub(in crate::gridview) type GridViewRender2D<'a> = GenericGridViewRender<'a, RenderDim2D>;
@@ -303,35 +302,26 @@ impl GridViewRender2D<'_> {
 
         // "Move selected cells" target.
         self.add_mouse_target_quad(
-            ModifiersState::empty(),
             local_rect,
+            ModifiersState::empty(),
             MouseTargetData {
-                binding: Some(MouseDragBinding::Select(
-                    SelectDragCommand::MoveCells.into(),
-                )),
-                display: MouseDisplay::Move,
+                binding: MouseDragBinding::Select(SelectDragCommand::MoveCells.into()),
             },
         );
         // "Move selection" target.
         self.add_mouse_target_quad(
-            ModifiersState::SHIFT,
             local_rect,
+            ModifiersState::SHIFT,
             MouseTargetData {
-                binding: Some(MouseDragBinding::Select(
-                    SelectDragCommand::MoveSelection.into(),
-                )),
-                display: MouseDisplay::Move,
+                binding: MouseDragBinding::Select(SelectDragCommand::MoveSelection.into()),
             },
         );
         // "Move copy of cells" target.
         self.add_mouse_target_quad(
-            ModifiersState::CTRL,
             local_rect,
+            ModifiersState::CTRL,
             MouseTargetData {
-                binding: Some(MouseDragBinding::Select(
-                    SelectDragCommand::CopyCells.into(),
-                )),
-                display: MouseDisplay::Move,
+                binding: MouseDragBinding::Select(SelectDragCommand::CopyCells.into()),
             },
         );
 
@@ -351,33 +341,16 @@ impl GridViewRender2D<'_> {
             max[Y] - click_target_width * 0.25,
             max[Y] + click_target_width * 0.75,
         ];
-        let x_indices = vec![0, 1, 2, 0, 2, 0, 1, 2];
-        let y_indices = vec![0, 0, 0, 1, 1, 2, 2, 2];
-        let mouse_displays = vec![
-            MouseDisplay::ResizeNESW,
-            MouseDisplay::ResizeNS,
-            MouseDisplay::ResizeNWSE,
-            MouseDisplay::ResizeEW,
-            MouseDisplay::ResizeEW,
-            MouseDisplay::ResizeNWSE,
-            MouseDisplay::ResizeNS,
-            MouseDisplay::ResizeNESW,
-        ];
-        for ((xi, yi), display) in x_indices.into_iter().zip(y_indices).zip(mouse_displays) {
-            let mut axes = AxisSet::empty();
-            if xi != 1 {
-                axes.add(X);
-            }
-            if yi != 1 {
-                axes.add(Y);
-            }
-            let binding = Some(MouseDragBinding::Select(
-                SelectDragCommand::Resize { axes, plane: None }.into(),
-            ));
+        for &direction in &crate::DIRECTIONS {
+            let binding = MouseDragBinding::Select(SelectDragCommand::Resize2D(direction).into());
+            let NdVec([dx, dy]) = direction.vector();
             self.add_mouse_target_quad(
+                FRect::span(
+                    NdVec([xs[(dx + 1) as usize], ys[(dy + 1) as usize]]),
+                    NdVec([xs[(dx + 2) as usize], ys[(dy + 2) as usize]]),
+                ),
                 ModifiersState::empty(),
-                FRect::span(NdVec([xs[xi], ys[yi]]), NdVec([xs[xi + 1], ys[yi + 1]])),
-                MouseTargetData { binding, display },
+                MouseTargetData { binding },
             );
         }
     }

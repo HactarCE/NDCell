@@ -11,7 +11,7 @@ use super::viewpoint::{Viewpoint, Viewpoint2D};
 use super::{DragHandler, DragOutcome, DragType};
 use crate::commands::*;
 use crate::mouse::MouseDisplay;
-use crate::{Scale, CONFIG};
+use crate::{Direction, Scale, CONFIG};
 
 pub type GridView2D = GenericGridView<GridViewDim2D>;
 
@@ -117,8 +117,8 @@ impl GridViewDimension for GridViewDim2D {
 
                 let new_drag_handler = match c {
                     SelectDragCommand::NewRect => make_new_rect_selection_drag_handler(initial_pos),
-                    SelectDragCommand::Resize { axes, .. } => {
-                        make_resize_selection_drag_handler(initial_pos, axes)
+                    SelectDragCommand::Resize2D(direction) => {
+                        make_resize_selection_drag_handler(initial_pos, direction)
                     }
                     SelectDragCommand::ResizeToCell => {
                         make_resize_selection_to_cell_drag_handler(initial_pos)
@@ -136,7 +136,7 @@ impl GridViewDimension for GridViewDim2D {
 
                 let wait_for_drag_threshold = match c {
                     SelectDragCommand::NewRect => true,
-                    SelectDragCommand::Resize { .. } => true,
+                    SelectDragCommand::Resize2D { .. } => true,
                     SelectDragCommand::ResizeToCell => false,
                     SelectDragCommand::MoveSelection => true,
                     SelectDragCommand::MoveCells => true,
@@ -152,7 +152,7 @@ impl GridViewDimension for GridViewDim2D {
 
                 match c {
                     SelectDragCommand::NewRect
-                    | SelectDragCommand::Resize { .. }
+                    | SelectDragCommand::Resize2D { .. }
                     | SelectDragCommand::ResizeToCell
                     | SelectDragCommand::MoveSelection => {
                         if CONFIG.lock().hist.record_select {
@@ -361,7 +361,7 @@ fn make_new_rect_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDr
 }
 fn make_resize_selection_drag_handler(
     initial_pos: ScreenPos2D,
-    axes: AxisSet,
+    direction: Direction,
 ) -> SelectionDragHandler {
     let mut initial_selection = None;
 
@@ -372,7 +372,7 @@ fn make_resize_selection_drag_handler(
                 &s.rect,
                 &initial_pos.pos(),
                 &new_pos.pos(),
-                axes,
+                direction.vector(),
             )));
             Ok(DragOutcome::Continue)
         } else {

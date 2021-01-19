@@ -369,12 +369,9 @@ impl FrameInProgress<'_> {
         if button == MouseButton::Left && maybe_mouse_target.is_some() {
             // Possibility #1: Drag mouse target (left mouse button only)
             let mouse_target_data = maybe_mouse_target.unwrap();
-            // Possibility #1: Drag mouse target
-            if let Some(b) = &mouse_target_data.binding {
-                self.state.dragging_button = Some(button);
-                self.state.mouse.display = mouse_target_data.display;
-                self.gridview.enqueue(b.to_command(cursor_pos));
-            }
+            let binding = &mouse_target_data.binding;
+            self.state.dragging_button = Some(button);
+            self.gridview.enqueue(binding.to_command(cursor_pos));
         } else if let Some(b) = click_binding {
             // Possibility #2: Click
             match b {
@@ -385,7 +382,6 @@ impl FrameInProgress<'_> {
         } else if let Some(b) = drag_binding {
             // Possibility #3: Drag
             self.state.dragging_button = Some(button);
-            self.state.mouse.display = b.display();
             self.gridview.enqueue(b.to_command(cursor_pos));
         }
     }
@@ -408,7 +404,7 @@ impl FrameInProgress<'_> {
                 MouseButton::Left,
             );
             if let Some(mouse_target_data) = &self.gridview.last_render_result().mouse_target {
-                self.state.mouse.display = mouse_target_data.display;
+                self.state.mouse.display = mouse_target_data.binding.display();
             } else {
                 self.state.mouse.display = None
                     .or(click_binding.as_ref().map(|b| b.display()))

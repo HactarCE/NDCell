@@ -77,22 +77,32 @@ impl<D: Dim> Selection<D> {
 
 /// Resizes a selection given cursor movement from `drag_start_pos` to
 /// `drag_end_pos` based on the distance covered during the drag.
+///
+/// `resize_vector` is a vector where the sign of each component indicates the
+/// direction to resize along that axis, with zero for axes where the selection
+/// rectangle is not resized.
 pub fn resize_selection_relative<D: Dim>(
     initial_selection: &BigRect<D>,
     drag_start_pos: &FixedVec<D>,
     drag_end_pos: &FixedVec<D>,
-    axes: AxisSet,
+    resize_vector: IVec<D>,
 ) -> BigRect<D> {
-    // Farthest corner stays fixed.
-    let pos1 = initial_selection.farthest_corner(drag_start_pos);
-    // Closest corner varies.
-    let mut pos2 = initial_selection.closest_corner(drag_start_pos);
+    // `pos1` stays fixed; `pos2` varies.
+    let mut pos1 = initial_selection.min();
+    let mut pos2 = initial_selection.max();
+    for &ax in D::axes() {
+        if resize_vector[ax] < 0 {
+            std::mem::swap(&mut pos1[ax], &mut pos2[ax]);
+        }
+    }
 
     // Use delta from original cursor position to new cursor
     // position.
     let delta = drag_end_pos - drag_start_pos;
-    for axis in axes {
-        pos2[axis] += delta[axis].round();
+    for &ax in D::axes() {
+        if resize_vector[ax] != 0 {
+            pos2[ax] += delta[ax].round();
+        }
     }
 
     NdRect::span(pos1, pos2)

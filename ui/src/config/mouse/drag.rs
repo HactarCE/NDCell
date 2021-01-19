@@ -17,7 +17,7 @@ impl MouseDragBinding {
                 use SelectDragCommand::*;
                 match s.0 {
                     NewRect => MouseDisplay::Select,
-                    Resize { .. } => MouseDisplay::Normal,
+                    Resize2D(direction) => MouseDisplay::ResizeSelectionRelative(direction),
                     ResizeToCell => MouseDisplay::ResizeSelectionAbsolute,
                     MoveSelection | MoveCells | CopyCells => MouseDisplay::Move,
                 }
@@ -25,9 +25,9 @@ impl MouseDragBinding {
             Self::View(v) => {
                 use ViewDragCommand::*;
                 match v.0 {
-                    Orbit => MouseDisplay::Normal, // TODO: better mouse icon
+                    Orbit => MouseDisplay::Orbit,
                     Pan | PanAligned | PanAlignedVertical | PanHorizontal => MouseDisplay::Pan,
-                    Scale => MouseDisplay::ResizeNS, // TODO: better mouse icon
+                    Scale => MouseDisplay::Scale,
                 }
             }
         }

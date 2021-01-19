@@ -139,14 +139,14 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
     }
     pub(super) fn add_mouse_target_quad(
         &mut self,
+        rect: FRect2D,
         modifiers: ModifiersState,
-        cells: FRect2D,
         data: MouseTargetData,
     ) {
         self.mouse_targets.push(data);
         let target_id = self.mouse_targets.len() as u32; // IDs start at 1
-        let NdVec([x1, y1]) = cells.min();
-        let NdVec([x2, y2]) = cells.max();
+        let NdVec([x1, y1]) = rect.min();
+        let NdVec([x2, y2]) = rect.max();
         let corners = [
             NdVec([x1, y1]),
             NdVec([x2, y1]),

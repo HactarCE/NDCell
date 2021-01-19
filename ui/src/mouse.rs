@@ -2,6 +2,8 @@ use imgui::MouseCursor;
 
 use ndcell_core::ndvec::FVec2D;
 
+use crate::Direction;
+
 /// What to display for the mouse cursor.
 ///
 /// This determines the mouse cursor icon and how/whether to indicate the
@@ -10,12 +12,11 @@ use ndcell_core::ndvec::FVec2D;
 pub enum MouseDisplay {
     Normal,
     Pan,
+    Orbit,
+    Scale,
     Draw,
     Select,
-    ResizeEW,
-    ResizeNS,
-    ResizeNESW,
-    ResizeNWSE,
+    ResizeSelectionRelative(Direction),
     ResizeSelectionAbsolute,
     Move,
 }
@@ -28,13 +29,17 @@ impl MouseDisplay {
     pub fn cursor_icon(self) -> Option<MouseCursor> {
         use MouseCursor::*;
         match self {
-            Self::Pan => Some(Arrow),    // TODO: open palm hand
-            Self::Draw => Some(Arrow),   // TODO: pencil
-            Self::Select => Some(Arrow), // TODO: crosshairs/plus
-            Self::ResizeEW => Some(ResizeEW),
-            Self::ResizeNS => Some(ResizeNS),
-            Self::ResizeNESW => Some(ResizeNESW),
-            Self::ResizeNWSE => Some(ResizeNWSE),
+            Self::Pan => Some(Arrow),      // TODO: open palm hand
+            Self::Orbit => Some(Arrow),    // TODO: some better icon?
+            Self::Scale => Some(ResizeNS), // TODO: some better icon?
+            Self::Draw => Some(Arrow),     // TODO: pencil
+            Self::Select => Some(Arrow),   // TODO: crosshairs/plus
+            Self::ResizeSelectionRelative(direction) => match direction {
+                Direction::N | Direction::S => Some(ResizeNS),
+                Direction::NE | Direction::SW => Some(ResizeNESW),
+                Direction::E | Direction::W => Some(ResizeEW),
+                Direction::SE | Direction::NW => Some(ResizeNWSE),
+            },
             Self::Move => Some(ResizeAll),
             _ => Some(Arrow),
         }

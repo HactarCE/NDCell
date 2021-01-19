@@ -2,7 +2,7 @@ use cgmath::Deg;
 
 use ndcell_core::prelude::*;
 
-use crate::Scale;
+use crate::{Direction, Scale};
 
 macro_rules! impl_command_from {
     ( Command::$command_variant:ident($inner:ty) ) => {
@@ -185,7 +185,7 @@ impl_command_from!(Command::Select(SelectCommand));
 #[derive(Debug, Copy, Clone)]
 pub enum SelectDragCommand {
     NewRect,
-    Resize { axes: AxisSet, plane: Option<Axis> },
+    Resize2D(Direction),
     ResizeToCell,
     MoveSelection,
     MoveCells,

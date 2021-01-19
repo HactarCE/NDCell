@@ -28,6 +28,7 @@ mod clipboard_compat;
 mod colors;
 mod commands;
 mod config;
+mod direction;
 mod ext;
 mod gridview;
 mod gui;
@@ -38,6 +39,7 @@ mod scale;
 mod windows;
 
 use config::Config;
+use direction::{Direction, DIRECTIONS};
 use gui::DISPLAY;
 use scale::Scale;
 

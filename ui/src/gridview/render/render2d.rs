@@ -27,7 +27,7 @@ use ndcell_core::prelude::*;
 use Axis::{X, Y};
 
 use super::consts::*;
-use super::generic::{GenericGridViewRender, GridViewRenderDimension};
+use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoint2D};
 use super::shaders;
 use super::vertices::Vertex2D;
 use super::CellDrawParams;
@@ -249,8 +249,8 @@ impl GridViewRender2D<'_> {
             b[perpendicular_axis] = coordinate;
 
             self.add_line_overlay(
-                LineEndpoint::include(a, color),
-                LineEndpoint::include(b, color),
+                LineEndpoint2D::include(a, color),
+                LineEndpoint2D::include(b, color),
                 r64(GRIDLINE_WIDTH),
             );
         }
@@ -379,8 +379,8 @@ impl GridViewRender2D<'_> {
                 _ => continue,
             };
             self.add_line_overlay(
-                LineEndpoint::include(min, color),
-                LineEndpoint::include(max, color),
+                LineEndpoint2D::include(min, color),
+                LineEndpoint2D::include(max, color),
                 r64(SELECTION_HIGHLIGHT_WIDTH),
             );
         }
@@ -408,8 +408,8 @@ impl GridViewRender2D<'_> {
 
         for (&corner1, &corner2) in corners.iter().circular_tuple_windows() {
             self.add_line_overlay(
-                LineEndpoint::include(corner1, color),
-                LineEndpoint::include(corner2, color),
+                LineEndpoint2D::include(corner1, color),
+                LineEndpoint2D::include(corner2, color),
                 width,
             );
         }
@@ -459,32 +459,32 @@ impl GridViewRender2D<'_> {
         }
 
         self.add_line_overlay(
-            LineEndpoint::include(pos1, dull_color),
-            LineEndpoint::include(pos2, dull_color),
+            LineEndpoint2D::include(pos1, dull_color),
+            LineEndpoint2D::include(pos2, dull_color),
             width,
         );
         self.add_line_overlay(
-            LineEndpoint::exclude(pos2, dull_color),
-            LineEndpoint::exclude(pos3, bright_color),
+            LineEndpoint2D::exclude(pos2, dull_color),
+            LineEndpoint2D::exclude(pos3, bright_color),
             width,
         );
         self.add_line_overlay(
-            LineEndpoint::include(pos3, bright_color),
-            LineEndpoint::include(pos4, bright_color),
+            LineEndpoint2D::include(pos3, bright_color),
+            LineEndpoint2D::include(pos4, bright_color),
             width,
         );
         self.add_line_overlay(
-            LineEndpoint::exclude(pos4, bright_color),
-            LineEndpoint::exclude(pos5, dull_color),
+            LineEndpoint2D::exclude(pos4, bright_color),
+            LineEndpoint2D::exclude(pos5, dull_color),
             width,
         );
         self.add_line_overlay(
-            LineEndpoint::include(pos5, dull_color),
-            LineEndpoint::include(pos6, dull_color),
+            LineEndpoint2D::include(pos5, dull_color),
+            LineEndpoint2D::include(pos6, dull_color),
             width,
         );
     }
-    fn add_line_overlay(&mut self, mut start: LineEndpoint, mut end: LineEndpoint, width: R64) {
+    fn add_line_overlay(&mut self, mut start: LineEndpoint2D, mut end: LineEndpoint2D, width: R64) {
         let min_width = self.xform.render_cell_scale.cells_per_unit(); // 1 pixel
         let width = if self.xform.render_cell_layer == Layer(0) {
             std::cmp::max(width, min_width)
@@ -564,29 +564,6 @@ fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: 
     }
     let progress = (x - min) / (max - min);
     min_result + (max_result - min_result) * progress
-}
-
-#[derive(Debug, Copy, Clone)]
-struct LineEndpoint {
-    pub pos: FVec2D,
-    pub color: Srgba,
-    pub include_endpoint: bool,
-}
-impl LineEndpoint {
-    pub fn include(pos: FVec2D, color: impl Into<Srgba>) -> Self {
-        Self {
-            pos,
-            color: color.into(),
-            include_endpoint: true,
-        }
-    }
-    pub fn exclude(pos: FVec2D, color: impl Into<Srgba>) -> Self {
-        Self {
-            pos,
-            color: color.into(),
-            include_endpoint: false,
-        }
-    }
 }
 
 /// Simple rectangle in a cell overlay.

@@ -286,3 +286,30 @@ pub trait GridViewRenderDimension<'a>: Sized {
 
     fn draw_overlay_quads(this: &mut GenericGridViewRender<'a, Self>) -> Result<()>;
 }
+
+pub type LineEndpoint2D = LineEndpoint<Dim2D>;
+pub type LineEndpoint3D = LineEndpoint<Dim3D>;
+
+#[derive(Debug, Clone)]
+struct LineEndpoint<D: Dim> {
+    pub pos: FVec<D>,
+    pub color: Srgba,
+    pub include_endpoint: bool,
+}
+impl<D: Dim> Copy for LineEndpoint<D> where FVec<D>: Copy {}
+impl<D: Dim> LineEndpoint<D> {
+    pub fn include(pos: FVec<D>, color: impl Into<Srgba>) -> Self {
+        Self {
+            pos,
+            color: color.into(),
+            include_endpoint: true,
+        }
+    }
+    pub fn exclude(pos: FVec<D>, color: impl Into<Srgba>) -> Self {
+        Self {
+            pos,
+            color: color.into(),
+            include_endpoint: false,
+        }
+    }
+}

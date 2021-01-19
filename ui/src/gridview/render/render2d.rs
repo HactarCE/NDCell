@@ -89,6 +89,7 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim2D {
                             write: true,
                             ..Default::default()
                         },
+                        multisampling: false,
                         ..Default::default()
                     },
                 )
@@ -165,6 +166,7 @@ impl GridViewRender2D<'_> {
                 },
                 &glium::DrawParameters {
                     blend: glium::Blend::alpha_blending(),
+                    multisampling: false,
                     ..Default::default()
                 },
             )

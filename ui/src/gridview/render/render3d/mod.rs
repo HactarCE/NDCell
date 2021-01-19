@@ -193,6 +193,7 @@ impl GridViewRender3D<'_> {
                 &glium::DrawParameters {
                     depth: DEPTH_TEST,
                     blend: glium::Blend::alpha_blending(),
+                    multisampling: false,
                     ..Default::default()
                 },
             )

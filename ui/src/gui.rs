@@ -21,7 +21,9 @@ lazy_static! {
         SendWrapper::new(RefCell::new(Some(EventLoop::new())));
     pub static ref DISPLAY: SendWrapper<glium::Display> = SendWrapper::new({
         let wb = WindowBuilder::new().with_title(super::TITLE.to_owned());
-        let cb = ContextBuilder::new().with_vsync(true);
+        let cb = ContextBuilder::new()
+            .with_vsync(true)
+            .with_multisampling(CONFIG.lock().gfx.msaa as u16);
         glium::Display::new(wb, cb, EVENT_LOOP.borrow().as_ref().unwrap())
             .expect("Failed to initialize display")
     });

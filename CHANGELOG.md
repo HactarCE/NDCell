@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Simulation**
   - Cells align better to pixel boundaries when zoomed out, appearing crisper
   - Optimized 2D rendering of empty areas
+  - Tweaked colors
 - **GUI**
   - Rename "UPS" (updates per second) to "step/sec" (steps per second)
   - Display "RUNNING" or "STEPPING" accordingly instead of "SIMULATING"

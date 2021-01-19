@@ -101,7 +101,7 @@ impl From<&GridViewRender3D<'_>> for GridlineParams {
         };
 
         Self {
-            grid_color: crate::colors::GRIDLINES,
+            grid_color: crate::colors::GRIDLINES.into_raw(),
             grid_width: line_width,
 
             grid_origin: local_gridline_origin.to_f32_array(),

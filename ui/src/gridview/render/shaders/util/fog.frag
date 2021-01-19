@@ -2,9 +2,9 @@
 // See `shaders/mod.rs`.
 
 layout(std140) uniform FogParams {
-    vec4 fog_color;
-    vec3 fog_center; // center of fog sphere
+    vec3 fog_color;
     float fog_start; // radius at which fog starts
+    vec3 fog_center; // center of fog sphere
     float fog_end;   // radius at which fog reaches maximum
 };
 

@@ -5,6 +5,7 @@ use glium::texture::unsigned_texture2d::UnsignedTexture2d;
 use glium::texture::{ClientFormat, RawImage2d};
 use itertools::Itertools;
 use log::warn;
+use palette::{Pixel, Srgba};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Once;
@@ -40,7 +41,7 @@ impl<D: Dim> GlNdTreeCache<D> {
         &mut self,
         node: ArcNode<D>,
         min_layer: Layer,
-        pixelator: impl FnMut(NodeRef<'_, D>) -> [u8; 4],
+        pixelator: impl FnMut(NodeRef<'_, D>) -> Srgba,
     ) -> Result<&GlNdTree> {
         let key = (node, min_layer);
 
@@ -85,7 +86,7 @@ impl GlNdTree {
     pub fn from_node<'n, N: NodeRefTrait<'n>>(
         node: N,
         min_layer: Layer,
-        mut pixelator: impl FnMut(NodeRef<'n, N::D>) -> [u8; 4],
+        mut pixelator: impl FnMut(NodeRef<'n, N::D>) -> Srgba,
     ) -> Result<Self> {
         // Use the parent layer because we want to store four pixels (each
         // representing a node at `min_layer`) inside one index.
@@ -100,8 +101,9 @@ impl GlNdTree {
                     .subdivide()
                     .unwrap()
                     .into_iter()
-                    .map(&mut pixelator)
-                    .map(u32::from_be_bytes) // shader expects big-endian
+                    .map(&mut pixelator) // `NodeRef` to `Srgba`
+                    .map(|color| color.into_format::<u8, u8>().into_raw()) // `Srgba` to `[u8; 4]`
+                    .map(u32::from_be_bytes) // `[u8; 4]` to `u32` (shader expects big-endian)
                     .collect_vec(),
                 FlatNdTreeNode::NonLeaf(indices, _) => {
                     indices.into_iter().map(|&i| i as u32).collect_vec()

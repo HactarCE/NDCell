@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use glium::index::PrimitiveType;
 use glium::uniforms::UniformBuffer;
 use glium::Surface;
+use palette::{Pixel, Srgb, Srgba};
 use sloth::Lazy;
 
 use ndcell_core::prelude::*;
@@ -23,7 +24,7 @@ use super::vertices::Vertex3D;
 use super::CellDrawParams;
 use crate::ext::*;
 use crate::gridview::*;
-use crate::math::{f32_color_to_u8, Face};
+use crate::math::Face;
 use crate::{CONFIG, DISPLAY};
 use fog::FogParams;
 use gridlines::GridlineParams;
@@ -53,7 +54,7 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim3D {
     type Viewpoint = Viewpoint3D;
     type OverlayQuad = OverlayQuad;
 
-    const DEFAULT_COLOR: [f32; 4] = crate::colors::BACKGROUND_3D;
+    const DEFAULT_COLOR: Srgb = crate::colors::BACKGROUND_3D;
     const DEFAULT_DEPTH: f32 = f32::INFINITY;
 
     fn init(gvr3d: &GridViewRender3D<'a>) -> Self {
@@ -274,7 +275,7 @@ impl OverlayQuad {
     pub fn is_opaque(self) -> bool {
         match self.fill {
             OverlayFill::Gridlines => false,
-            OverlayFill::Solid([_r, _g, _b, a]) => a == 1.0,
+            OverlayFill::Solid(color) => color.alpha >= 1.0,
         }
     }
     /// Returns `true` if the front of the quad faces the camera, or `false` if
@@ -364,8 +365,8 @@ impl OverlayQuad {
         let normal = self.face.normal();
 
         let color = match self.fill {
-            OverlayFill::Gridlines => [0, 0, 0, 0], // ignored in vertex shader
-            OverlayFill::Solid(color) => f32_color_to_u8(color),
+            OverlayFill::Gridlines => Srgba::new(0.0, 0.0, 0.0, 0.0), // ignored in vertex shader
+            OverlayFill::Solid(color) => color,
         };
 
         [
@@ -389,7 +390,7 @@ impl OverlayQuad {
 #[derive(Debug, Copy, Clone)]
 pub enum OverlayFill {
     Gridlines,
-    Solid([f32; 4]),
+    Solid(Srgba),
 }
 
 /// Axis-aligned plane in local space.

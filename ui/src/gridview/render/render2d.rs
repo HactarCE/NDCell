@@ -21,6 +21,7 @@ use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
 use itertools::Itertools;
+use palette::{Mix, Srgb, Srgba};
 
 use ndcell_core::prelude::*;
 use Axis::{X, Y};
@@ -33,7 +34,6 @@ use super::CellDrawParams;
 use crate::config::MouseDragBinding;
 use crate::ext::*;
 use crate::gridview::*;
-use crate::math::f32_color_to_u8;
 use crate::mouse::MouseDisplay;
 use crate::{Scale, CONFIG};
 
@@ -45,7 +45,7 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim2D {
     type Viewpoint = Viewpoint2D;
     type OverlayQuad = OverlayQuad;
 
-    const DEFAULT_COLOR: [f32; 4] = crate::colors::BACKGROUND_2D;
+    const DEFAULT_COLOR: Srgb = crate::colors::BACKGROUND_2D;
     const DEFAULT_DEPTH: f32 = 0.0;
 
     fn init(_: &GridViewRender2D<'a>) -> Self {
@@ -236,56 +236,70 @@ impl GridViewRender2D<'_> {
         let cell_coords = itertools::iterate(cell_start_coord, |&coord| coord + local_spacing)
             .take_while(|&coord| coord <= cell_end_coord);
 
+        let visible_rect = self.local_visible_rect.to_frect();
+
         for coordinate in cell_coords {
             // Generate an individual line.
-            self.add_single_gridline_overlay(
-                perpendicular_axis,
-                coordinate,
+            let mut color = crate::colors::GRIDLINES;
+            color.alpha *= alpha; // (Alpha channel is linear according to OpenGL.)
+
+            let mut a = visible_rect.min();
+            let mut b = visible_rect.max();
+            a[perpendicular_axis] = coordinate;
+            b[perpendicular_axis] = coordinate;
+
+            self.add_line_overlay(
+                LineEndpoint::include(a, color),
+                LineEndpoint::include(b, color),
                 r64(GRIDLINE_WIDTH),
-                alpha,
             );
         }
     }
-    /// Adds a single gridline.
-    fn add_single_gridline_overlay(
-        &mut self,
-        perpendicular_axis: Axis,
-        perpendicular_coord: R64,
-        width: R64,
-        alpha: f32,
-    ) {
-        let mut color = crate::colors::GRIDLINES;
-        color[3] *= alpha;
 
-        let visible_rect = self.local_visible_rect.to_frect();
-        let mut a = visible_rect.min();
-        let mut b = visible_rect.max();
-        a[perpendicular_axis] = perpendicular_coord;
-        b[perpendicular_axis] = perpendicular_coord;
-
-        self.add_line_overlay(
-            LineEndpoint::include(a, color),
-            LineEndpoint::include(b, color),
-            width,
-        );
+    /// Adds a highlight on the render cell under the mouse cursor when using
+    /// the drawing tool.
+    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec2D) {
+        use crate::colors::hover::*;
+        self.add_hover_overlay(cell_pos, DRAW_FILL, DRAW_OUTLINE);
     }
-
+    /// Adds a highlight on the render cell under the mouse cursor when using
+    /// the selection tool.
+    pub fn add_hover_select_overlay(&mut self, cell_pos: &BigVec2D) {
+        use crate::colors::hover::*;
+        self.add_hover_overlay(cell_pos, SELECT_FILL, SELECT_OUTLINE);
+    }
     /// Adds a highlight on the render cell under the mouse cursor.
-    pub fn add_hover_highlight_overlay(&mut self, cell_pos: &BigVec2D, color: [f32; 4]) {
-        let local_rect = FRect::single_cell(self.clamp_int_pos_to_visible(cell_pos).to_fvec());
+    fn add_hover_overlay(&mut self, cell_pos: &BigVec2D, fill_color: Srgba, outline_color: Srgb) {
+        let local_rect = IRect::single_cell(self.clamp_int_pos_to_visible(cell_pos));
         let width = r64(HOVER_HIGHLIGHT_WIDTH);
-        self.add_rect_fill_overlay(local_rect, color);
-        self.add_rect_crosshairs_overlay(local_rect, width, color);
+        self.add_rect_fill_overlay(local_rect, fill_color);
+        self.add_rect_crosshairs_overlay(local_rect, outline_color, width);
     }
-    /// Adds a highlight around the selected rectangle.
-    pub fn add_selection_highlight_overlay(&mut self, selection_rect: BigRect2D, fill: bool) {
-        let local_rect = self.clip_int_rect_to_visible(&selection_rect).to_frect();
+
+    /// Adds a highlight around the selection when the selection includes cells.
+    pub fn add_selection_cells_highlight_overlay(&mut self, selection_rect: &BigRect2D) {
+        use crate::colors::selection::*;
+        self.add_selection_highlight_overlay(selection_rect, CELLS_FILL, CELLS_OUTLINE)
+    }
+    /// Adds a highlight around the selection when the selection does not
+    /// include cells.
+    pub fn add_selection_region_highlight_overlay(&mut self, selection_rect: &BigRect2D) {
+        use crate::colors::selection::*;
+        self.add_selection_highlight_overlay(selection_rect, REGION_FILL, REGION_OUTLINE)
+    }
+    /// Adds a highlight around the selection.
+    fn add_selection_highlight_overlay(
+        &mut self,
+        selection_rect: &BigRect2D,
+        fill_color: Srgba,
+        outline_color: Srgb,
+    ) {
+        let local_rect = self.clip_int_rect_to_visible(selection_rect);
         let width = r64(SELECTION_HIGHLIGHT_WIDTH);
-        let color = crate::colors::SELECTION;
-        if fill {
-            self.add_rect_fill_overlay(local_rect, color);
-        }
-        self.add_rect_outline_overlay(local_rect, width, color);
+        self.add_rect_fill_overlay(local_rect, fill_color);
+        self.add_rect_outline_overlay(local_rect, outline_color, width);
+
+        let local_rect = local_rect.to_frect();
 
         // "Move selected cells" target.
         self.add_mouse_target_quad(
@@ -370,37 +384,29 @@ impl GridViewRender2D<'_> {
     /// Adds a highlight indicating how the selection will be resized.
     pub fn add_selection_resize_preview_overlay(
         &mut self,
-        selection_rect: BigRect2D,
+        selection_rect: &BigRect2D,
         mouse_pos: &ScreenPos2D,
     ) {
         let selection_preview_rect = selection::resize_selection_absolute(
-            &selection_rect,
+            selection_rect,
             &mouse_pos.pos(),
             &mouse_pos.rect(),
         );
-        let local_rect = self
-            .clip_int_rect_to_visible(&selection_preview_rect)
-            .to_frect();
+        let local_rect = self.clip_int_rect_to_visible(&selection_preview_rect);
         let width = r64(SELECTION_RESIZE_PREVIEW_WIDTH);
-        let color = crate::colors::SELECTION_RESIZE;
-        self.add_rect_fill_overlay(local_rect, color);
-        self.add_rect_outline_overlay(local_rect, width, color);
+        self.add_rect_fill_overlay(local_rect, crate::colors::selection::RESIZE_FILL);
+        self.add_rect_outline_overlay(local_rect, crate::colors::selection::RESIZE_OUTLINE, width);
     }
 
-    /// Adds a filled-in rectangle with a solid color made partially transparent.
-    fn add_rect_fill_overlay(&mut self, rect: FRect2D, mut color: [f32; 4]) {
-        let rect = self._adjust_rect_for_overlay(rect);
-
-        color[0] *= 0.5;
-        color[1] *= 0.5;
-        color[2] *= 0.5;
-        color[3] *= 0.75;
-        let fill = OverlayFill::Solid(color);
-
-        self.overlay_quads.push(OverlayQuad { rect, fill });
+    /// Adds a filled-in rectangle with a solid color.
+    fn add_rect_fill_overlay(&mut self, rect: IRect2D, color: Srgba) {
+        self.overlay_quads.push(OverlayQuad {
+            rect: self._adjust_rect_for_overlay(rect),
+            fill: OverlayFill::Solid(color),
+        });
     }
     /// Adds a rectangular outline with a solid color.
-    fn add_rect_outline_overlay(&mut self, rect: FRect2D, width: R64, color: [f32; 4]) {
+    fn add_rect_outline_overlay(&mut self, rect: IRect2D, color: Srgb, width: R64) {
         let rect = self._adjust_rect_for_overlay(rect);
         let NdVec([ax, ay]) = rect.min();
         let NdVec([bx, by]) = rect.max();
@@ -422,7 +428,7 @@ impl GridViewRender2D<'_> {
     }
     /// Adds crosshairs around a rectangle with a solid color that fades into
     /// the gridline color toward the edges.
-    fn add_rect_crosshairs_overlay(&mut self, rect: FRect2D, width: R64, color: [f32; 4]) {
+    fn add_rect_crosshairs_overlay(&mut self, rect: IRect2D, color: Srgb, width: R64) {
         let rect = self._adjust_rect_for_overlay(rect);
         let NdVec([ax, ay]) = rect.min();
         let NdVec([bx, by]) = rect.max();
@@ -439,12 +445,14 @@ impl GridViewRender2D<'_> {
         b: R64,
         perpendicular_coord: R64,
         width: R64,
-        color: [f32; 4],
+        color: Srgb,
     ) {
         let bright_color = color;
-        // TODO: color mixing using gridlines color
-        let mut dull_color = color;
-        dull_color[3] *= 0.25;
+        let dull_color = Srgb::from_linear(Mix::mix(
+            &color.into_linear(),
+            &crate::colors::BACKGROUND_2D.into_linear(),
+            crate::colors::CROSSHAIR_OPACITY_2D,
+        ));
 
         let (pos1, pos2, pos3, pos4, pos5, pos6);
         {
@@ -523,13 +531,13 @@ impl GridViewRender2D<'_> {
         self.overlay_quads.push(OverlayQuad { rect, fill })
     }
 
-    fn _adjust_rect_for_overlay(&self, rect: FRect2D) -> FRect2D {
+    fn _adjust_rect_for_overlay(&self, rect: IRect2D) -> FRect2D {
         // If there are more than 1.5 pixels per render cell, the upper outline
         // should be *between* cells (+0.0). If there are fewer, the upper
         // outline should be *on* the cell below (-1.0).
         let pix_per_cell = self.xform.render_cell_scale.units_per_cell();
         let upper_offset = if pix_per_cell > 1.5 { 0.0 } else { -1.0 };
-        rect.offset_min_max(r64(0.0), r64(upper_offset))
+        rect.to_frect().offset_min_max(r64(0.0), r64(upper_offset))
     }
 }
 
@@ -570,23 +578,24 @@ fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: 
     min_result + (max_result - min_result) * progress
 }
 
+#[derive(Debug, Copy, Clone)]
 struct LineEndpoint {
-    pos: FVec2D,
-    color: [f32; 4],
-    include_endpoint: bool,
+    pub pos: FVec2D,
+    pub color: Srgba,
+    pub include_endpoint: bool,
 }
 impl LineEndpoint {
-    pub fn include(pos: FVec2D, color: [f32; 4]) -> Self {
+    pub fn include(pos: FVec2D, color: impl Into<Srgba>) -> Self {
         Self {
             pos,
-            color,
+            color: color.into(),
             include_endpoint: true,
         }
     }
-    pub fn exclude(pos: FVec2D, color: [f32; 4]) -> Self {
+    pub fn exclude(pos: FVec2D, color: impl Into<Srgba>) -> Self {
         Self {
             pos,
-            color,
+            color: color.into(),
             include_endpoint: false,
         }
     }
@@ -609,21 +618,21 @@ impl OverlayQuad {
         let [x2, y2] = self.rect.max().to_f32_array();
         let colors = self.fill.vertex_colors();
         [
-            Vertex2D::new([x1, y1], f32_color_to_u8(colors[0])),
-            Vertex2D::new([x2, y1], f32_color_to_u8(colors[1])),
-            Vertex2D::new([x1, y2], f32_color_to_u8(colors[2])),
-            Vertex2D::new([x2, y2], f32_color_to_u8(colors[3])),
+            Vertex2D::new([x1, y1], colors[0]),
+            Vertex2D::new([x2, y1], colors[1]),
+            Vertex2D::new([x1, y2], colors[2]),
+            Vertex2D::new([x2, y2], colors[3]),
         ]
     }
 }
 
 #[derive(Debug, Copy, Clone)]
 enum OverlayFill {
-    Solid([f32; 4]),
-    Gradient(Axis, [f32; 4], [f32; 4]),
+    Solid(Srgba),
+    Gradient(Axis, Srgba, Srgba),
 }
 impl OverlayFill {
-    fn vertex_colors(self) -> [[f32; 4]; 4] {
+    fn vertex_colors(self) -> [Srgba; 4] {
         match self {
             OverlayFill::Solid(color) => [color; 4],
             OverlayFill::Gradient(gradient_axis, c1, c2) => match gradient_axis {

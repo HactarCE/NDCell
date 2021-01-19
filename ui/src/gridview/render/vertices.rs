@@ -1,6 +1,7 @@
 //! OpenGL vertex types.
 
 use glium::implement_vertex;
+use palette::{Pixel, Srgba};
 
 /// Vertex containing only a 2D NDC position.
 #[derive(Debug, Default, Copy, Clone)]
@@ -17,29 +18,31 @@ pub struct TexturePosVertex {
 }
 implement_vertex!(TexturePosVertex, src_coords, dest_coords);
 
-/// Vertex containing a 3D floating-point position and an RGBA color.
+/// Vertex containing a 3D floating-point position and an sRGBA color.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Vertex2D {
-    pub pos: [f32; 2],
-    pub color: [u8; 4],
+    pos: [f32; 2],
+    color: [u8; 4],
 }
 implement_vertex!(Vertex2D, pos normalize(false), color normalize(true));
 impl Vertex2D {
-    pub fn new(pos: [f32; 2], color: [u8; 4]) -> Self {
+    pub fn new(pos: [f32; 2], color: Srgba) -> Self {
+        let color = color.into_format().into_raw();
         Self { pos, color }
     }
 }
 
-/// Vertex containing a 3D position, normal vector, and an RGBA color.
+/// Vertex containing a 3D position, normal vector, and an sRGBA color.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Vertex3D {
-    pub pos: [f32; 3],
-    pub normal: [i8; 3],
-    pub color: [u8; 4],
+    pos: [f32; 3],
+    normal: [i8; 3],
+    color: [u8; 4],
 }
 implement_vertex!(Vertex3D, pos normalize(false), normal normalize(false), color normalize(true));
 impl Vertex3D {
-    pub fn new(pos: [f32; 3], normal: [i8; 3], color: [u8; 4]) -> Self {
+    pub fn new(pos: [f32; 3], normal: [i8; 3], color: Srgba) -> Self {
+        let color = color.into_format().into_raw();
         Self { pos, normal, color }
     }
 }

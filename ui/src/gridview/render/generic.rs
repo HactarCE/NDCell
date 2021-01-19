@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
+use palette::{Mix, Srgb, Srgba};
 use std::cell::RefMut;
 
 use ndcell_core::prelude::*;
@@ -44,10 +45,11 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         let mut cache = super::CACHE.borrow_mut();
 
         // Initialize color and depth buffers.
-        let [r, g, b, a] = R::DEFAULT_COLOR; // convert array to tuple
-        params
-            .target
-            .clear_color_srgb_and_depth((r, g, b, a), R::DEFAULT_DEPTH);
+        let color = R::DEFAULT_COLOR;
+        params.target.clear_color_srgb_and_depth(
+            (color.red, color.green, color.blue, 1.0),
+            R::DEFAULT_DEPTH,
+        );
 
         // Initialize mouse picker.
         cache.picker.init(params.target.get_dimensions());
@@ -240,36 +242,34 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
     }
 
     /// Returns the color to represent an ND-tree node.
-    pub(super) fn ndtree_node_color(node: NodeRef<'_, R::D>) -> [u8; 4] {
+    pub(super) fn ndtree_node_color(node: NodeRef<'_, R::D>) -> Srgba {
         if let Some(cell_state) = node.single_state() {
             match cell_state {
-                0_u8 => crate::colors::DEAD,
-                1_u8 => crate::colors::LIVE,
+                0_u8 => crate::colors::cells::DEAD,
+                1_u8 => crate::colors::cells::LIVE,
                 i => {
-                    let [r, g, b] = colorous::SPECTRAL
-                        .eval_rational(i as usize - 2, 255)
-                        .as_array();
-                    [r, g, b, 255]
+                    let c = colorous::SPECTRAL.eval_rational(i as usize - 2, 255);
+                    Srgba::new(c.r, c.g, c.b, u8::MAX).into_format()
                 }
             }
+        } else if node.is_empty() {
+            crate::colors::cells::DEAD
         } else {
-            let ratio = if node.is_empty() {
-                0.0
-            } else {
-                // Multiply then divide by 255 to keep some precision.
-                let population_ratio = (node.population() * 255_usize / node.big_num_cells())
-                    .to_f64()
-                    .unwrap()
-                    / 255.0;
-                // Bias so that 50% is the minimum brightness if there are any
-                // live cells.
-                (population_ratio / 2.0) + 0.5
-            };
+            // Multiply then divide by 255 to keep some precision.
+            let population_ratio = (node.population() * 255_usize / node.big_num_cells())
+                .to_f32()
+                .unwrap()
+                / 255.0;
+            // Bias so that 50% is the minimum brightness if there are any
+            // live cells.
+            let mix_factor = (population_ratio / 2.0) + 0.5;
 
-            // Set alpha to live:dead ratio.
-            let mut color = crate::colors::LIVE;
-            color[3] = (color[3] as f64 * ratio) as u8;
-            color
+            // Mix colors for state #0 and #1 using proportion of live cells.
+            Srgba::from_linear(Mix::mix(
+                &crate::colors::cells::DEAD.into_linear(),
+                &crate::colors::cells::LIVE.into_linear(),
+                mix_factor,
+            ))
         }
     }
 }
@@ -279,7 +279,7 @@ pub trait GridViewRenderDimension<'a>: Sized {
     type Viewpoint: Viewpoint<Self::D>;
     type OverlayQuad: Copy;
 
-    const DEFAULT_COLOR: [f32; 4];
+    const DEFAULT_COLOR: Srgb;
     const DEFAULT_DEPTH: f32;
 
     fn init(gvr: &GenericGridViewRender<'a, Self>) -> Self;

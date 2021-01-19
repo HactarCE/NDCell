@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Cells align better to pixel boundaries when zoomed out, appearing crisper
   - Optimized 2D rendering of empty areas
 - **GUI**
-  - Rename "UPS" (updates per second) to "step/sec" (steps per second)
+  - Replaced inaccurate maximum simulation speed with average simulation time.
   - Display "RUNNING" or "STEPPING" accordingly instead of "SIMULATING"
 - Tweaked colors
 

@@ -102,6 +102,13 @@ pub fn resize_selection_relative<D: Dim>(
     for &ax in D::axes() {
         if resize_vector[ax] != 0 {
             pos2[ax] += delta[ax].round();
+
+            // Clamp to `pos1`; prevent the selection from turning "inside out."
+            if resize_vector[ax] > 0 && pos1[ax] > pos2[ax]
+                || resize_vector[ax] < 0 && pos1[ax] < pos2[ax]
+            {
+                pos2[ax] = pos1[ax].clone()
+            }
         }
     }
 

@@ -24,6 +24,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Simulation**
   - Cells align better to pixel boundaries when zoomed out, appearing crisper
   - Optimized 2D rendering of empty areas
+- **Selection**
+  - Selection edge resizing now clamps to the opposite corner
 - **GUI**
   - Replaced inaccurate maximum simulation speed with average simulation time.
   - Display "RUNNING" or "STEPPING" accordingly instead of "SIMULATING"

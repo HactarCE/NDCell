@@ -47,6 +47,7 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim2D {
 
     const DEFAULT_COLOR: Srgb = crate::colors::BACKGROUND_2D;
     const DEFAULT_DEPTH: f32 = 0.0;
+    const LINE_MIN_PIXEL_WIDTH: f64 = LINE_MIN_PIXEL_WIDTH_2D;
 
     fn init(_: &GridViewRender2D<'a>) -> Self {
         Self
@@ -492,30 +493,7 @@ impl GridViewRender2D<'_> {
         );
     }
     fn add_line_overlay(&mut self, mut start: LineEndpoint2D, mut end: LineEndpoint2D, width: R64) {
-        let min_width = self.xform.render_cell_scale.cells_per_unit(); // 1 pixel
-        let width = if self.xform.render_cell_layer == Layer(0) {
-            std::cmp::max(width, min_width)
-        } else {
-            min_width
-        };
-
-        let mut rect = FRect::span(start.pos, end.pos);
-        let axis = rect.size().max_axis();
-        if start.pos[axis] > end.pos[axis] {
-            std::mem::swap(&mut start, &mut end);
-        }
-
-        {
-            let mut min_offset = NdVec::repeat(-width / 2.0);
-            let mut max_offset = NdVec::repeat(width / 2.0);
-            if !start.include_endpoint {
-                min_offset[axis] *= -1.0;
-            }
-            if !end.include_endpoint {
-                max_offset[axis] *= -1.0;
-            }
-            rect = rect.offset_min_max(min_offset, max_offset);
-        }
+        let (rect, axis) = self.make_line_ndrect(&mut start, &mut end, width);
 
         let fill = if start.color == end.color {
             OverlayFill::Solid(start.color)

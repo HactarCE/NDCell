@@ -272,6 +272,41 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             ))
         }
     }
+
+    /// Returns an `FRect` for the line, swapping the endpoints if necessary so
+    /// that `start[line_axis] < end[line_axis]`.
+    pub(super) fn make_line_ndrect(
+        &mut self,
+        start: &mut LineEndpoint<R::D>,
+        end: &mut LineEndpoint<R::D>,
+        width: R64,
+    ) -> (FRect<R::D>, Axis)
+    where
+        FVec<R::D>: Copy,
+    {
+        let min_width = self.xform.render_cell_scale.cells_per_unit() * R::LINE_MIN_PIXEL_WIDTH;
+        let width = if self.xform.render_cell_layer == Layer(0) {
+            std::cmp::max(width, min_width)
+        } else {
+            min_width
+        };
+
+        let rect = FRect::span(start.pos, end.pos);
+        let axis = rect.size().max_axis();
+        if start.pos[axis] > end.pos[axis] {
+            std::mem::swap(start, end);
+        }
+
+        let mut min_offset = NdVec::repeat(-width / 2.0);
+        let mut max_offset = NdVec::repeat(width / 2.0);
+        if !start.include_endpoint {
+            min_offset[axis] *= -1.0;
+        }
+        if !end.include_endpoint {
+            max_offset[axis] *= -1.0;
+        }
+        (rect.offset_min_max(min_offset, max_offset), axis)
+    }
 }
 
 pub trait GridViewRenderDimension<'a>: Sized {
@@ -281,17 +316,18 @@ pub trait GridViewRenderDimension<'a>: Sized {
 
     const DEFAULT_COLOR: Srgb;
     const DEFAULT_DEPTH: f32;
+    const LINE_MIN_PIXEL_WIDTH: f64;
 
     fn init(gvr: &GenericGridViewRender<'a, Self>) -> Self;
 
     fn draw_overlay_quads(this: &mut GenericGridViewRender<'a, Self>) -> Result<()>;
 }
 
-pub type LineEndpoint2D = LineEndpoint<Dim2D>;
-pub type LineEndpoint3D = LineEndpoint<Dim3D>;
+pub(super) type LineEndpoint2D = LineEndpoint<Dim2D>;
+pub(super) type LineEndpoint3D = LineEndpoint<Dim3D>;
 
 #[derive(Debug, Clone)]
-struct LineEndpoint<D: Dim> {
+pub(super) struct LineEndpoint<D: Dim> {
     pub pos: FVec<D>,
     pub color: Srgba,
     pub include_endpoint: bool,

@@ -25,6 +25,11 @@ pub(super) use render2d::GridViewRender2D;
 pub(super) use render3d::GridViewRender3D;
 
 mod consts {
+    /// Minimum pixel width of 2D lines.
+    pub const LINE_MIN_PIXEL_WIDTH_2D: f64 = 1.0;
+    /// Minimum pixel width of 3D lines.
+    pub const LINE_MIN_PIXEL_WIDTH_3D: f64 = 0.75;
+
     /// Minimum pixel length of the crosshair gradient.
     pub const CROSSHAIR_GRADIENT_MIN_PIXEL_LEN: f64 = 16.0;
     /// Minimum render cell length of the crosshair gradient.

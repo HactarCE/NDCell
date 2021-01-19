@@ -16,7 +16,7 @@ pub enum MouseDisplay {
     Scale,
     Draw,
     Select,
-    ResizeSelectionRelative(Direction),
+    ResizeSelectionEdge(Direction),
     ResizeSelectionAbsolute,
     Move,
 }
@@ -34,7 +34,7 @@ impl MouseDisplay {
             Self::Scale => Some(ResizeNS), // TODO: some better icon?
             Self::Draw => Some(Arrow),     // TODO: pencil
             Self::Select => Some(Arrow),   // TODO: crosshairs/plus
-            Self::ResizeSelectionRelative(direction) => match direction {
+            Self::ResizeSelectionEdge(direction) => match direction {
                 Direction::N | Direction::S => Some(ResizeNS),
                 Direction::NE | Direction::SW => Some(ResizeNESW),
                 Direction::E | Direction::W => Some(ResizeEW),

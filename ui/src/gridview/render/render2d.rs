@@ -34,7 +34,7 @@ use super::CellDrawParams;
 use crate::config::MouseDragBinding;
 use crate::ext::*;
 use crate::gridview::*;
-use crate::{Scale, CONFIG};
+use crate::{Direction, Scale, CONFIG};
 
 pub(in crate::gridview) type GridViewRender2D<'a> = GenericGridViewRender<'a, RenderDim2D>;
 
@@ -360,6 +360,29 @@ impl GridViewRender2D<'_> {
         let width = r64(SELECTION_RESIZE_PREVIEW_WIDTH);
         self.add_rect_fill_overlay(local_rect, crate::colors::selection::RESIZE_FILL);
         self.add_rect_outline_overlay(local_rect, crate::colors::selection::RESIZE_OUTLINE, width);
+    }
+    /// Adds a highlight indicating which edge(s) of the selection will be resized.
+    pub fn add_selection_edge_resize_overlay(
+        &mut self,
+        selection_rect: &BigRect2D,
+        direction: Direction,
+    ) {
+        let color = crate::colors::selection::RESIZE_OUTLINE;
+        let rect = self._adjust_rect_for_overlay(self.clip_int_rect_to_visible(selection_rect));
+        for &ax in Dim2D::axes() {
+            let mut min = rect.min();
+            let mut max = rect.max();
+            match direction.vector()[ax] {
+                -1 => max[ax] = min[ax],
+                1 => min[ax] = max[ax],
+                _ => continue,
+            };
+            self.add_line_overlay(
+                LineEndpoint::include(min, color),
+                LineEndpoint::include(max, color),
+                r64(SELECTION_HIGHLIGHT_WIDTH),
+            );
+        }
     }
 
     /// Adds a filled-in rectangle with a solid color.

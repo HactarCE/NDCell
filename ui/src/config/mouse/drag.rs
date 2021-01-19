@@ -17,7 +17,7 @@ impl MouseDragBinding {
                 use SelectDragCommand::*;
                 match s.0 {
                     NewRect => MouseDisplay::Select,
-                    Resize2D(direction) => MouseDisplay::ResizeSelectionRelative(direction),
+                    Resize2D(direction) => MouseDisplay::ResizeSelectionEdge(direction),
                     ResizeToCell => MouseDisplay::ResizeSelectionAbsolute,
                     MoveSelection | MoveCells | CopyCells => MouseDisplay::Move,
                 }

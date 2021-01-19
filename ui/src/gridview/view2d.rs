@@ -283,7 +283,7 @@ impl GridViewDimension for GridViewDim2D {
                 frame.add_selection_region_highlight_overlay(&selection.rect);
             }
         }
-        // Draw selection preview after drawing selection.
+        // Draw absolute selection resize preview after drawing selection.
         if mouse.display == MouseDisplay::ResizeSelectionAbsolute {
             if let (Some(current_selection), Some(screen_pos)) = (&this.selection, &screen_pos) {
                 let resize_preview_rect = if this.is_dragging() {
@@ -300,6 +300,12 @@ impl GridViewDimension for GridViewDim2D {
                     )
                 };
                 frame.add_selection_resize_preview_overlay(&resize_preview_rect);
+            }
+        }
+        // Draw relative selection resize preview after drawing selection.
+        if let MouseDisplay::ResizeSelectionEdge(direction) = mouse.display {
+            if let Some(current_selection) = &this.selection {
+                frame.add_selection_edge_resize_overlay(&current_selection.rect, direction);
             }
         }
 

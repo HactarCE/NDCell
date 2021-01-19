@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Advance one generation (<kbd>Space</kbd>)
   - Advance one step (<kbd>Tab</kbd>)
   - 3D rendering and simulation
+- **Selection**
+  - Added edge resize indicator
 - **Navigation**
   - 3D orbit (right mouse drag)
   - 3D pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or middle mouse drag)
@@ -22,10 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Simulation**
   - Cells align better to pixel boundaries when zoomed out, appearing crisper
   - Optimized 2D rendering of empty areas
-  - Tweaked colors
 - **GUI**
   - Rename "UPS" (updates per second) to "step/sec" (steps per second)
   - Display "RUNNING" or "STEPPING" accordingly instead of "SIMULATING"
+- Tweaked colors
 
 ### Fixed
 

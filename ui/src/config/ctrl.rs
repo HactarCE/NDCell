@@ -50,7 +50,7 @@ impl Default for CtrlConfig {
 
             interpolation: Interpolation::default(),
 
-            selection_resize_drag_target_width: 8.0,
+            selection_resize_drag_target_width: 12.0,
         }
     }
 }

@@ -285,8 +285,21 @@ impl GridViewDimension for GridViewDim2D {
         }
         // Draw selection preview after drawing selection.
         if mouse.display == MouseDisplay::ResizeSelectionAbsolute {
-            if let (Some(s), Some(screen_pos)) = (&this.selection, &screen_pos) {
-                frame.add_selection_resize_preview_overlay(&s.rect, screen_pos);
+            if let (Some(current_selection), Some(screen_pos)) = (&this.selection, &screen_pos) {
+                let resize_preview_rect = if this.is_dragging() {
+                    // We are already resizing the selection; just use the
+                    // current selection.
+                    current_selection.rect.clone()
+                } else {
+                    // Show what *would* happen if the user resized the
+                    // selection.
+                    super::selection::resize_selection_absolute(
+                        &current_selection.rect,
+                        &screen_pos.pos(),
+                        &screen_pos.rect(),
+                    )
+                };
+                frame.add_selection_resize_preview_overlay(&resize_preview_rect);
             }
         }
 

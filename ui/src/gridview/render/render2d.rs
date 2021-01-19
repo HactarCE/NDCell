@@ -382,16 +382,7 @@ impl GridViewRender2D<'_> {
         }
     }
     /// Adds a highlight indicating how the selection will be resized.
-    pub fn add_selection_resize_preview_overlay(
-        &mut self,
-        selection_rect: &BigRect2D,
-        mouse_pos: &ScreenPos2D,
-    ) {
-        let selection_preview_rect = selection::resize_selection_absolute(
-            selection_rect,
-            &mouse_pos.pos(),
-            &mouse_pos.rect(),
-        );
+    pub fn add_selection_resize_preview_overlay(&mut self, selection_preview_rect: &BigRect2D) {
         let local_rect = self.clip_int_rect_to_visible(&selection_preview_rect);
         let width = r64(SELECTION_RESIZE_PREVIEW_WIDTH);
         self.add_rect_fill_overlay(local_rect, crate::colors::selection::RESIZE_FILL);

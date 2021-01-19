@@ -32,9 +32,10 @@ use super::shaders;
 use super::vertices::Vertex2D;
 use super::CellDrawParams;
 use crate::config::MouseDragBinding;
+use crate::direction::{Direction, DIRECTIONS};
 use crate::ext::*;
 use crate::gridview::*;
-use crate::{Direction, Scale, CONFIG};
+use crate::{Scale, CONFIG};
 
 pub(in crate::gridview) type GridViewRender2D<'a> = GenericGridViewRender<'a, RenderDim2D>;
 
@@ -341,7 +342,7 @@ impl GridViewRender2D<'_> {
             max[Y] - click_target_width * 0.25,
             max[Y] + click_target_width * 0.75,
         ];
-        for &direction in &crate::DIRECTIONS {
+        for &direction in &DIRECTIONS {
             let binding = MouseDragBinding::Select(SelectDragCommand::Resize2D(direction).into());
             let NdVec([dx, dy]) = direction.vector();
             self.add_mouse_target_quad(

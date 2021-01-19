@@ -39,7 +39,6 @@ mod scale;
 mod windows;
 
 use config::Config;
-use direction::{Direction, DIRECTIONS};
 use gui::DISPLAY;
 use scale::Scale;
 

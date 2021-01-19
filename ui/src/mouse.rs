@@ -2,7 +2,7 @@ use imgui::MouseCursor;
 
 use ndcell_core::ndvec::FVec2D;
 
-use crate::Direction;
+use crate::direction::Direction;
 
 /// What to display for the mouse cursor.
 ///

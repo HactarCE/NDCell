@@ -5,11 +5,11 @@ use ndcell_core::prelude::*;
 use super::algorithms::raycast;
 use super::generic::{GenericGridView, GridViewDimension};
 use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
-use super::viewpoint::{CellTransform3D, Viewpoint, Viewpoint3D};
+use super::screenpos::{RaycastHit, RaycastHitThing, ScreenPos3D};
+use super::viewpoint::{Viewpoint, Viewpoint3D};
 use super::{DragHandler, DragType};
 use crate::commands::*;
 use crate::mouse::MouseDisplay;
-use crate::Face;
 
 pub type GridView3D = GenericGridView<GridViewDim3D>;
 
@@ -35,7 +35,7 @@ impl GridViewDimension for GridViewDim3D {
         // Handle `FocusPixel` specially because it depends on the cell contents
         // of the automaton.
         if let ViewCommand::FocusPixel(pixel) = command {
-            if let Some(hit) = this.screen_pos(pixel).raycast() {
+            if let Some(hit) = this.screen_pos(pixel).raycast {
                 // Set grid axes.
                 let axis = hit.face.normal_axis();
                 this.show_grid(axis, hit.pos[axis].round());
@@ -79,16 +79,13 @@ impl GridViewDimension for GridViewDim3D {
 
         Ok(())
     }
-    fn do_draw_command(_this: &mut GridView3D, _command: DrawCommand) -> Result<()> {
-        bail!("unimplemented")
-    }
     fn do_select_command(_this: &mut GridView3D, _command: SelectCommand) -> Result<()> {
         bail!("unimplemented")
     }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {
         let mouse = params.mouse;
-        let mouse_raycast = mouse.pos.and_then(|pixel| this.screen_pos(pixel).raycast());
+        let mouse_raycast = mouse.pos.and_then(|pixel| this.screen_pos(pixel).raycast);
 
         let mut frame = GridViewRender3D::new(params, this.viewpoint());
         frame.draw_cells(CellDrawParams {
@@ -118,6 +115,8 @@ impl GridViewDimension for GridViewDim3D {
     }
 
     fn screen_pos(this: &GridView3D, pixel: FVec2D) -> ScreenPos3D {
+        let layer = this.viewpoint().render_cell_layer();
+
         let vp = this.viewpoint();
         let xform = vp.cell_transform();
 
@@ -151,9 +150,24 @@ impl GridViewDimension for GridViewDim3D {
         });
         let raycast_selection_hit = None; // TODO
 
+        // Choose the ONE RAYCAST TO RULE THEM ALL (the one that is shortest).
+        let raycast = [
+            raycast_octree_hit.as_ref(),
+            raycast_gridlines_hit.as_ref(),
+            raycast_selection_hit.as_ref(),
+        ]
+        .iter()
+        .copied()
+        .flatten() // Remove `Option<T>` layer.
+        .min() // Select minimum by distance.
+        .cloned();
+
         ScreenPos3D {
             pixel,
+            layer,
             xform,
+
+            raycast,
             raycast_octree_hit,
             raycast_gridlines_hit,
             raycast_selection_hit,
@@ -174,76 +188,4 @@ impl GridView3D {
             None => None,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct ScreenPos3D {
-    pixel: FVec2D,
-    xform: CellTransform3D,
-    pub raycast_octree_hit: Option<RaycastHit>,
-    pub raycast_gridlines_hit: Option<RaycastHit>,
-    pub raycast_selection_hit: Option<RaycastHit>,
-}
-impl ScreenPos3D {
-    /// Returns the position of the mouse in pixel space.
-    pub fn pixel(&self) -> FVec2D {
-        self.pixel
-    }
-    /// Returns the global cell position at the mouse cursor in the plane parallel
-    /// to the screen at the distance of the viewpoint pivot.
-    pub fn global_pos_at_pivot_depth(&self) -> FixedVec3D {
-        self.xform
-            .pixel_to_global_pos(self.pixel, Viewpoint3D::DISTANCE_TO_PIVOT)
-    }
-
-    /// Returns the global position of the closest iteractive thing visible at
-    /// the mouse cursor.
-    pub fn raycast(&self) -> Option<RaycastHit> {
-        // Select closest raycast.
-        [
-            &self.raycast_octree_hit,
-            &self.raycast_gridlines_hit,
-            &self.raycast_selection_hit,
-        ]
-        .iter()
-        .min_by_key(|h| match h {
-            Some(hit) => hit.distance,
-            None => R64::max_value(),
-        })
-        .cloned()
-        .cloned()
-        .flatten()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RaycastHit {
-    /// Point of intersection between ray and cell.
-    pub pos: FixedVec3D,
-    /// Position of intersected cell.
-    pub cell: BigVec3D,
-    /// Face of cell intersected.
-    pub face: Face,
-    /// Type of thing hit.
-    pub thing: RaycastHitThing,
-    /// Abstract distance to intersection.
-    distance: R64,
-}
-impl RaycastHit {
-    fn new(xform: &CellTransform3D, hit: raycast::Hit, thing: RaycastHitThing) -> Self {
-        Self {
-            pos: xform.local_to_global_float(hit.pos_float),
-            cell: xform.local_to_global_int(hit.pos_int),
-            face: hit.face,
-            thing: thing,
-            distance: hit.t0,
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum RaycastHitThing {
-    Cell,
-    Gridlines,
-    Selelction,
 }

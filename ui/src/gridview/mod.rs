@@ -9,6 +9,7 @@ mod algorithms;
 mod generic;
 mod history;
 pub mod render;
+mod screenpos;
 mod selection;
 mod view2d;
 mod view3d;
@@ -19,8 +20,9 @@ use crate::commands::*;
 pub use generic::GenericGridView;
 pub use history::History;
 pub use render::{MouseTargetData, RenderParams, RenderResult};
+pub use screenpos::*;
 pub use selection::*;
-pub use view2d::{GridView2D, ScreenPos2D};
+pub use view2d::GridView2D;
 pub use view3d::GridView3D;
 pub use viewpoint::*;
 

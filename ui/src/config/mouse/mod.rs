@@ -27,12 +27,12 @@ impl Default for MouseConfig {
         use MouseButton::{Left, Middle, Right};
         use MouseDragBinding::{Draw, Select, View};
 
-        let freeform_2d: DrawDragBinding = DrawDragCommand {
+        let draw_freeform: DrawDragBinding = DrawDragCommand {
             mode: DrawMode::Replace,
             shape: DrawShape::Freeform,
         }
         .into();
-        let line_2d: DrawDragBinding = DrawDragCommand {
+        let draw_line: DrawDragBinding = DrawDragCommand {
             mode: DrawMode::Replace,
             shape: DrawShape::Line,
         }
@@ -42,8 +42,8 @@ impl Default for MouseConfig {
             click_bindings_2d: vec![].into_iter().collect(),
             click_bindings_3d: vec![].into_iter().collect(),
             drag_bindings_2d: vec![
-                (NONE, Left, Draw(freeform_2d)),
-                (SHIFT, Left, Draw(line_2d)),
+                (NONE, Left, Draw(draw_freeform)),
+                (SHIFT, Left, Draw(draw_line)),
                 (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
                 (
                     CTRL | SHIFT,
@@ -57,6 +57,8 @@ impl Default for MouseConfig {
             .into_iter()
             .collect(),
             drag_bindings_3d: vec![
+                (NONE, Left, Draw(draw_freeform)),
+                (SHIFT, Left, Draw(draw_line)),
                 (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
                 (NONE, Right, View(ViewDragCommand::Orbit.into())),
                 (CTRL, Right, View(ViewDragCommand::Scale.into())),

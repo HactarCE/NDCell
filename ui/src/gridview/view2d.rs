@@ -7,6 +7,7 @@ use super::algorithms::bresenham;
 use super::generic::{GenericGridView, GridViewDimension};
 use super::history::History;
 use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
+use super::screenpos::ScreenPos2D;
 use super::selection::Selection2D;
 use super::viewpoint::{Viewpoint, Viewpoint2D};
 use super::{DragHandler, DragOutcome, DragType};
@@ -64,52 +65,6 @@ impl GridViewDimension for GridViewDim2D {
             }
         }
 
-        Ok(())
-    }
-    fn do_draw_command(this: &mut GridView2D, command: DrawCommand) -> Result<()> {
-        match command {
-            DrawCommand::SetState(new_selected_cell_state) => {
-                this.selected_cell_state = new_selected_cell_state;
-            }
-            DrawCommand::Drag(c, cursor_start) => {
-                if this.viewpoint().too_small_to_draw() {
-                    return Ok(());
-                }
-
-                let initial_cell = this.screen_pos(cursor_start).cell();
-
-                let new_cell_state = c.mode.cell_state(
-                    this.automaton.ndtree.get_cell(&initial_cell),
-                    this.selected_cell_state,
-                );
-
-                let new_drag_handler: DragHandler<GridView2D> = match c.shape {
-                    DrawShape::Freeform => {
-                        make_freeform_draw_drag_handler(initial_cell, new_cell_state)
-                    }
-                    DrawShape::Line => {
-                        // TODO: implement drawing straight line
-                        warn!("Line drawing is not yet implemented!");
-                        return Ok(());
-                    }
-                };
-
-                this.reset_worker_thread();
-                this.record();
-                this.start_drag(DragType::Drawing, new_drag_handler);
-            }
-            DrawCommand::Confirm => {
-                if this.is_drawing() {
-                    this.stop_drag();
-                }
-            }
-            DrawCommand::Cancel => {
-                if this.is_drawing() {
-                    this.stop_drag();
-                    this.undo();
-                }
-            }
-        }
         Ok(())
     }
     fn do_select_command(this: &mut GridView2D, command: SelectCommand) -> Result<()> {
@@ -315,9 +270,9 @@ impl GridViewDimension for GridViewDim2D {
     }
 
     fn screen_pos(this: &GridView2D, pixel: FVec2D) -> ScreenPos2D {
-        let pos = this.viewpoint().cell_transform().pixel_to_global_pos(pixel);
         let layer = this.viewpoint().render_cell_layer();
-        ScreenPos2D { pixel, pos, layer }
+        let pos = this.viewpoint().cell_transform().pixel_to_global_pos(pixel);
+        ScreenPos2D { pixel, layer, pos }
     }
 }
 impl GridView2D {
@@ -356,34 +311,6 @@ impl GridView2D {
 
             self.set_selection(Some(sel));
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ScreenPos2D {
-    pixel: FVec2D,
-    pos: FixedVec2D,
-    layer: Layer,
-}
-impl ScreenPos2D {
-    /// Returns the position of the mouse in pixel space.
-    pub fn pixel(&self) -> FVec2D {
-        self.pixel
-    }
-    /// Returns the global cell position of the mouse.
-    pub fn pos(&self) -> FixedVec2D {
-        self.pos.clone()
-    }
-    /// Returns the global cell coordinates at the pixel.
-    pub fn cell(&self) -> BigVec2D {
-        self.pos.floor()
-    }
-    /// Returns the global cell rectangle of cells inside the pixel.
-    pub fn rect(&self) -> BigRect2D {
-        let render_cell_len = self.layer.big_len();
-        // Round to render cell.
-        let base_pos = self.cell().div_floor(&render_cell_len) * render_cell_len;
-        self.layer.big_rect() + base_pos
     }
 }
 

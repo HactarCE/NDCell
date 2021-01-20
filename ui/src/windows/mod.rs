@@ -123,9 +123,7 @@ impl MainWindow {
                     }
                     ui.text(format!("Pitch = {:.2?}°", vp.pitch().0));
                     ui.text(format!("Yaw = {:.2?}°", vp.yaw().0));
-                    if let Some(hit) = mouse
-                        .pos
-                        .and_then(|pixel| view3d.screen_pos(pixel).raycast())
+                    if let Some(hit) = mouse.pos.and_then(|pixel| view3d.screen_pos(pixel).raycast)
                     {
                         ui.text(format!("Cursor: {} {}", hit.cell, hit.face));
                     } else {

@@ -10,8 +10,10 @@ use std::time::{Duration, Instant};
 
 use ndcell_core::prelude::*;
 
+use super::algorithms::bresenham;
 use super::history::{History, HistoryBase, HistoryManager};
 use super::render::{RenderParams, RenderResult};
+use super::screenpos::ScreenPos;
 use super::selection::Selection;
 use super::viewpoint::{Interpolate, Interpolator, Viewpoint};
 use super::worker::*;
@@ -306,8 +308,60 @@ impl<G: GridViewDimension> GenericGridView<G> {
     }
     /// Executes a `Draw` command.
     fn do_draw_command(&mut self, command: DrawCommand) -> Result<()> {
-        // `Draw` commands depend on the number of dimensions.
-        G::do_draw_command(self, command)
+        match command {
+            DrawCommand::SetState(new_selected_cell_state) => {
+                self.selected_cell_state = new_selected_cell_state;
+            }
+            DrawCommand::Drag(c, cursor_start) => {
+                let initial_cell = match self.screen_pos(cursor_start).draw_cell(c.mode) {
+                    Some(cell) => cell,
+                    None => return Ok(()),
+                };
+
+                let new_cell_state = c.mode.cell_state(
+                    self.automaton.ndtree.get_cell(&initial_cell),
+                    self.selected_cell_state,
+                );
+
+                let new_drag_handler: DragHandler<Self> = match c.shape {
+                    DrawShape::Freeform => {
+                        let mut pos1 = initial_cell;
+                        Box::new(move |this, pixel| {
+                            let pos2 = match this.screen_pos(pixel).draw_cell(c.mode) {
+                                Some(cell) => cell,
+                                None => return Ok(DragOutcome::Cancel),
+                            };
+                            for pos in bresenham::line(pos1.clone(), pos2.clone()) {
+                                this.automaton.ndtree.set_cell(&pos, new_cell_state);
+                            }
+                            pos1 = pos2;
+                            Ok(DragOutcome::Continue)
+                        })
+                    }
+                    DrawShape::Line => {
+                        // TODO: implement drawing straight line
+                        warn!("Line drawing is not yet implemented!");
+                        return Ok(());
+                    }
+                };
+
+                self.reset_worker_thread();
+                self.record();
+                self.start_drag(DragType::Drawing, new_drag_handler);
+            }
+            DrawCommand::Confirm => {
+                if self.is_drawing() {
+                    self.stop_drag();
+                }
+            }
+            DrawCommand::Cancel => {
+                if self.is_drawing() {
+                    self.stop_drag();
+                    self.undo();
+                }
+            }
+        }
+        Ok(())
     }
     /// Executes a `Select` command.
     fn do_select_command(&mut self, command: SelectCommand) -> Result<()> {
@@ -712,12 +766,10 @@ impl<G: GridViewDimension> GenericGridView<G> {
 pub trait GridViewDimension: fmt::Debug + Default {
     type D: Dim;
     type Viewpoint: Viewpoint<Self::D>;
-    type ScreenPos;
+    type ScreenPos: ScreenPos<D = Self::D>;
 
     /// Executes a `View` command.
     fn do_view_command(this: &mut GenericGridView<Self>, command: ViewCommand) -> Result<()>;
-    /// Executes a `Draw` command.
-    fn do_draw_command(this: &mut GenericGridView<Self>, command: DrawCommand) -> Result<()>;
     /// Executes a `Select` command.
     fn do_select_command(this: &mut GenericGridView<Self>, command: SelectCommand) -> Result<()>;
 

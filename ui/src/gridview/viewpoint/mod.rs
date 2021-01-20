@@ -38,6 +38,10 @@ const PIXELS_PER_2X_SCALE: f64 = 400.0;
 /// This one is completely arbitrary.
 const ROT_DEGREES_PER_2X_SCALE: f64 = PIXELS_PER_2X_SCALE;
 
+/// Radius of visible cells in 3D, measured in "scaled units". (See `Scale`
+/// docs.)
+const VIEW_RADIUS_3D: f32 = 5000.0;
+
 /// Common functionality for 2D and 3D viewpoints.
 pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialEq {
     /// Returns the width and height of the render target.

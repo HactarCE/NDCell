@@ -284,6 +284,24 @@ impl<D: Dim> NdCellTransform<D> {
         }
         Some(IRect::span(min, max))
     }
+
+    /// Converts a single coordinate from global space to local space, if the
+    /// point is inside the visible area. Returns `None` if the point is outside
+    /// the visible area.
+    pub fn global_to_local_visible_coord(&self, axis: Axis, coordinate: &BigInt) -> Option<isize> {
+        let big_local_coord = (coordinate - &self.origin[axis]) >> self.render_cell_layer.to_u32();
+        if let Some(local_coord) = big_local_coord.to_isize() {
+            let cell_view_radius =
+                self.render_cell_scale.cells_per_unit().raw() as f32 * super::VIEW_RADIUS_3D;
+            if local_coord.abs() < cell_view_radius.ceil() as isize {
+                Some(local_coord)
+            } else {
+                None // The coordinate is outside the visible area.
+            }
+        } else {
+            None // The coordinate is outside the visible area.
+        }
+    }
 }
 
 impl CellTransform2D {

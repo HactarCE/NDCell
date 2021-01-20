@@ -52,7 +52,7 @@ impl Viewpoint3D {
     pub const DEFAULT_YAW: Deg<f32> = Deg(20.0);
 
     /// Radius of visible cells, measured in "scaled units". (See `Scale` docs.)
-    pub const VIEW_RADIUS: f32 = 5000.0;
+    pub const VIEW_RADIUS: f32 = super::VIEW_RADIUS_3D;
 
     /// Returns the yaw of the camera.
     pub fn yaw(&self) -> Deg<f32> {

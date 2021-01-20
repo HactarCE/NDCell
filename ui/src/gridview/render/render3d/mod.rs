@@ -209,17 +209,12 @@ impl GridViewRender3D<'_> {
         perpendicular_axis: Axis,
         perpendicular_coordinate: BigInt,
     ) {
-        // Convert `perpendicular_coordinate` to local space (still
-        // `FixedPoint`, because this number may be very large).
-        let mut tmp_global_pos = self.xform.origin.clone();
-        tmp_global_pos[perpendicular_axis] = perpendicular_coordinate;
-        let local_perpendicular_coordinate: R64;
-        if let Some(tmp_local_pos) = self.xform.global_to_local_int(&tmp_global_pos) {
-            if self.local_visible_rect.contains(&tmp_local_pos) {
-                local_perpendicular_coordinate = r64(tmp_local_pos[perpendicular_axis] as f64);
-            } else {
-                return; // The gridline plane isn't even visible.
-            }
+        let local_perpendicular_coordinate;
+        if let Some(local_coord) = self
+            .xform
+            .global_to_local_visible_coord(perpendicular_axis, &perpendicular_coordinate)
+        {
+            local_perpendicular_coordinate = r64(local_coord as f64);
         } else {
             return; // The gridline plane isn't even visible.
         };

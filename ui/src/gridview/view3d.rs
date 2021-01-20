@@ -29,6 +29,7 @@ impl Default for GridViewDim3D {
 impl GridViewDimension for GridViewDim3D {
     type D = Dim3D;
     type Viewpoint = Viewpoint3D;
+    type ScreenPos = ScreenPos3D;
 
     fn do_view_command(this: &mut GridView3D, command: ViewCommand) -> Result<()> {
         // Handle `FocusPixel` specially because it depends on the cell contents
@@ -115,10 +116,9 @@ impl GridViewDimension for GridViewDim3D {
         }
         frame.finish()
     }
-}
-impl GridView3D {
-    pub fn screen_pos(&self, pixel: FVec2D) -> ScreenPos3D {
-        let vp = self.viewpoint();
+
+    fn screen_pos(this: &GridView3D, pixel: FVec2D) -> ScreenPos3D {
+        let vp = this.viewpoint();
         let xform = vp.cell_transform();
 
         let (start, delta) = xform.pixel_to_local_ray(pixel);
@@ -127,7 +127,7 @@ impl GridView3D {
         {
             // Get the `NdTreeSlice` containing all of the visible cells.
             let global_visible_rect = vp.global_visible_rect();
-            let visible_octree = self.automaton.ndtree.slice_containing(&global_visible_rect);
+            let visible_octree = this.automaton.ndtree.slice_containing(&global_visible_rect);
             let local_octree_base_pos =
                 xform.global_to_local_int(&visible_octree.base_pos).unwrap();
 
@@ -144,14 +144,12 @@ impl GridView3D {
                 .map(|h| RaycastHit::new(&xform, h, RaycastHitThing::Cell));
         }
 
-        let raycast_gridlines_hit = self.grid().and_then(|(grid_axis, grid_coord)| {
+        let raycast_gridlines_hit = this.grid().and_then(|(grid_axis, grid_coord)| {
             let grid_coord = xform.global_to_local_visible_coord(grid_axis, &grid_coord)?;
             raycast::intersect_plane(start, delta, grid_axis, r64(grid_coord as f64))
                 .map(|h| RaycastHit::new(&xform, h, RaycastHitThing::Gridlines))
         });
         let raycast_selection_hit = None; // TODO
-
-        printlnd!("gridl {:?}", raycast_gridlines_hit);
 
         ScreenPos3D {
             pixel,
@@ -161,7 +159,8 @@ impl GridView3D {
             raycast_selection_hit,
         }
     }
-
+}
+impl GridView3D {
     pub fn show_grid(&mut self, axis: Axis, coord: BigInt) {
         self.dim.grid_axis = Some(axis);
         self.dim.grid_coord = coord;

@@ -693,6 +693,10 @@ impl<G: GridViewDimension> GenericGridView<G> {
     pub fn last_render_result(&self) -> &RenderResult {
         &self.last_render_result
     }
+    /// Returns a useful representation of a pixel position on the screen.
+    pub fn screen_pos(&self, pixel: FVec2D) -> G::ScreenPos {
+        G::screen_pos(self, pixel)
+    }
 
     /// Returns the time duration measured between the last two frames, or
     /// `None` if there is not enough data.
@@ -708,6 +712,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
 pub trait GridViewDimension: fmt::Debug + Default {
     type D: Dim;
     type Viewpoint: Viewpoint<Self::D>;
+    type ScreenPos;
 
     /// Executes a `View` command.
     fn do_view_command(this: &mut GenericGridView<Self>, command: ViewCommand) -> Result<()>;
@@ -718,6 +723,9 @@ pub trait GridViewDimension: fmt::Debug + Default {
 
     /// Renders the gridview.
     fn render(this: &mut GenericGridView<Self>, params: RenderParams<'_>) -> Result<RenderResult>;
+
+    /// Returns a useful representation of a pixel position on the screen.
+    fn screen_pos(this: &GenericGridView<Self>, pixel: FVec2D) -> Self::ScreenPos;
 }
 
 #[derive(Debug, Clone)]

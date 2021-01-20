@@ -21,6 +21,7 @@ pub struct GridViewDim2D;
 impl GridViewDimension for GridViewDim2D {
     type D = Dim2D;
     type Viewpoint = Viewpoint2D;
+    type ScreenPos = ScreenPos2D;
 
     fn do_view_command(this: &mut GridView2D, command: ViewCommand) -> Result<()> {
         // Handle `FitView` specially because it depends on the cell contents of
@@ -312,6 +313,78 @@ impl GridViewDimension for GridViewDim2D {
 
         frame.finish()
     }
+
+    fn screen_pos(this: &GridView2D, pixel: FVec2D) -> ScreenPos2D {
+        let pos = this.viewpoint().cell_transform().pixel_to_global_pos(pixel);
+        let layer = this.viewpoint().render_cell_layer();
+        ScreenPos2D { pixel, pos, layer }
+    }
+}
+impl GridView2D {
+    /// Moves the selection to the center of the screen along each axis for
+    /// which it is outside the viewport.
+    fn ensure_selection_visible(&mut self) {
+        if let Some(mut sel) = self.selection.take() {
+            // The number of render cells of padding to ensure.
+            const PADDING: usize = 2;
+
+            let (render_cell_layer, _) = self.viewpoint().render_cell_layer_and_scale();
+
+            // Convert to render cells.
+            let sel_rect = sel.rect.div_outward(&render_cell_layer.big_len());
+            let visible_rect = self
+                .viewpoint()
+                .global_visible_rect()
+                .div_outward(&render_cell_layer.big_len());
+
+            let sel_min = sel_rect.min();
+            let sel_max = sel_rect.max();
+            let sel_center = sel_rect.center();
+            let visible_min = visible_rect.min();
+            let visible_max = visible_rect.max();
+            let view_center = self.viewpoint().center().floor();
+
+            for &ax in Dim2D::axes() {
+                if sel_max[ax] < visible_min[ax].clone() + PADDING
+                    || visible_max[ax] < sel_min[ax].clone() + PADDING
+                {
+                    // Move selection to center along this axis.
+                    sel =
+                        sel.move_by(NdVec::unit(ax) * (view_center[ax].clone() - &sel_center[ax]));
+                }
+            }
+
+            self.set_selection(Some(sel));
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ScreenPos2D {
+    pixel: FVec2D,
+    pos: FixedVec2D,
+    layer: Layer,
+}
+impl ScreenPos2D {
+    /// Returns the position of the mouse in pixel space.
+    pub fn pixel(&self) -> FVec2D {
+        self.pixel
+    }
+    /// Returns the global cell position of the mouse.
+    pub fn pos(&self) -> FixedVec2D {
+        self.pos.clone()
+    }
+    /// Returns the global cell coordinates at the pixel.
+    pub fn cell(&self) -> BigVec2D {
+        self.pos.floor()
+    }
+    /// Returns the global cell rectangle of cells inside the pixel.
+    pub fn rect(&self) -> BigRect2D {
+        let render_cell_len = self.layer.big_len();
+        // Round to render cell.
+        let base_pos = self.cell().div_floor(&render_cell_len) * render_cell_len;
+        self.layer.big_rect() + base_pos
+    }
 }
 
 fn make_freeform_draw_drag_handler(
@@ -445,77 +518,4 @@ fn make_move_or_copy_selected_cells_drag_handler(
             Ok(DragOutcome::Cancel)
         }
     })
-}
-
-impl GridView2D {
-    /// Moves the selection to the center of the screen along each axis for
-    /// which it is outside the viewport.
-    fn ensure_selection_visible(&mut self) {
-        if let Some(mut sel) = self.selection.take() {
-            // The number of render cells of padding to ensure.
-            const PADDING: usize = 2;
-
-            let (render_cell_layer, _) = self.viewpoint().render_cell_layer_and_scale();
-
-            // Convert to render cells.
-            let sel_rect = sel.rect.div_outward(&render_cell_layer.big_len());
-            let visible_rect = self
-                .viewpoint()
-                .global_visible_rect()
-                .div_outward(&render_cell_layer.big_len());
-
-            let sel_min = sel_rect.min();
-            let sel_max = sel_rect.max();
-            let sel_center = sel_rect.center();
-            let visible_min = visible_rect.min();
-            let visible_max = visible_rect.max();
-            let view_center = self.viewpoint().center().floor();
-
-            for &ax in Dim2D::axes() {
-                if sel_max[ax] < visible_min[ax].clone() + PADDING
-                    || visible_max[ax] < sel_min[ax].clone() + PADDING
-                {
-                    // Move selection to center along this axis.
-                    sel =
-                        sel.move_by(NdVec::unit(ax) * (view_center[ax].clone() - &sel_center[ax]));
-                }
-            }
-
-            self.set_selection(Some(sel));
-        }
-    }
-
-    pub fn screen_pos(&self, pixel: FVec2D) -> ScreenPos2D {
-        let pos = self.viewpoint().cell_transform().pixel_to_global_pos(pixel);
-        let layer = self.viewpoint().render_cell_layer();
-        ScreenPos2D { pixel, pos, layer }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ScreenPos2D {
-    pixel: FVec2D,
-    pos: FixedVec2D,
-    layer: Layer,
-}
-impl ScreenPos2D {
-    /// Returns the position of the mouse in pixel space.
-    pub fn pixel(&self) -> FVec2D {
-        self.pixel
-    }
-    /// Returns the global cell position of the mouse.
-    pub fn pos(&self) -> FixedVec2D {
-        self.pos.clone()
-    }
-    /// Returns the global cell coordinates at the pixel.
-    pub fn cell(&self) -> BigVec2D {
-        self.pos.floor()
-    }
-    /// Returns the global cell rectangle of cells inside the pixel.
-    pub fn rect(&self) -> BigRect2D {
-        let render_cell_len = self.layer.big_len();
-        // Round to render cell.
-        let base_pos = self.cell().div_floor(&render_cell_len) * render_cell_len;
-        self.layer.big_rect() + base_pos
-    }
 }

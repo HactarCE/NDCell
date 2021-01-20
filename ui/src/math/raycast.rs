@@ -53,9 +53,7 @@ pub fn octree_raycast(
             delta[ax] = -delta[ax];
         }
         // Please don't crash on division by zero!
-        if delta[ax] < std::f32::EPSILON as f64 {
-            delta[ax] = r64(std::f32::EPSILON as f64);
-        }
+        ensure_nonzero_delta(&mut delta);
     }
 
     // At what `t` does the ray enter the root node (considering only one axis
@@ -233,4 +231,15 @@ fn entry_axis(t0: FVec3D) -> Axis {
 // returns the axis along which the ray exits the node.
 fn exit_axis(t1: FVec3D) -> Axis {
     t1.min_axis()
+}
+
+/// Ensure that each component of the delta vector is nonzero by adjusting them
+/// slightly if necessary.
+fn ensure_nonzero_delta(delta: &mut FVec3D) {
+    const EPSILON: f64 = std::f32::EPSILON as f64;
+    for &ax in Dim3D::axes() {
+        if delta[ax].abs() < EPSILON {
+            delta[ax] = r64(EPSILON);
+        }
+    }
 }

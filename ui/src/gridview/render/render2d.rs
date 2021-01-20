@@ -21,13 +21,13 @@ use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
 use itertools::Itertools;
-use palette::{Mix, Srgb, Srgba};
+use palette::{Srgb, Srgba};
 
 use ndcell_core::prelude::*;
 use Axis::{X, Y};
 
 use super::consts::*;
-use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoint2D};
+use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoint2D, OverlayFill};
 use super::shaders;
 use super::vertices::Vertex2D;
 use super::CellDrawParams;
@@ -35,6 +35,7 @@ use crate::config::MouseDragBinding;
 use crate::direction::{Direction, DIRECTIONS};
 use crate::ext::*;
 use crate::gridview::*;
+use crate::math::Face;
 use crate::{Scale, CONFIG};
 
 pub(in crate::gridview) type GridViewRender2D<'a> = GenericGridViewRender<'a, RenderDim2D>;
@@ -438,70 +439,37 @@ impl GridViewRender2D<'_> {
         width: R64,
         color: Srgb,
     ) {
-        let bright_color = color;
-        let dull_color = Srgb::from_linear(Mix::mix(
-            &color.into_linear(),
-            &crate::colors::BACKGROUND_2D.into_linear(),
-            crate::colors::CROSSHAIR_OPACITY_2D,
-        ));
-
-        let gradient_len = std::cmp::max(
-            r64(CROSSHAIR_GRADIENT_MIN_PIXEL_LEN) * self.xform.render_cell_scale.cells_per_unit(),
-            r64(CROSSHAIR_GRADIENT_MIN_CELL_LEN),
-        );
-
-        let (pos1, pos2, pos3, pos4, pos5, pos6);
-        {
-            let visible_rect = self.local_visible_rect.to_frect();
-            let pos_along_line = |coord| {
-                let mut ret = FVec2D::repeat(perpendicular_coord);
-                ret[parallel_axis] = coord;
-                ret
-            };
-            pos1 = pos_along_line(visible_rect.min()[parallel_axis]);
-            pos2 = pos_along_line(a - gradient_len);
-            pos3 = pos_along_line(a);
-            pos4 = pos_along_line(b);
-            pos5 = pos_along_line(b + gradient_len);
-            pos6 = pos_along_line(visible_rect.max()[parallel_axis]);
+        let mut pos = NdVec::repeat(perpendicular_coord);
+        pos[parallel_axis] = a;
+        let endpoint_pairs = self.make_crosshair_endpoints(parallel_axis, a, b, pos, color);
+        for [start, end] in endpoint_pairs {
+            self.add_line_overlay(start, end, width);
         }
-
-        self.add_line_overlay(
-            LineEndpoint2D::include(pos1, dull_color),
-            LineEndpoint2D::include(pos2, dull_color),
-            width,
-        );
-        self.add_line_overlay(
-            LineEndpoint2D::exclude(pos2, dull_color),
-            LineEndpoint2D::exclude(pos3, bright_color),
-            width,
-        );
-        self.add_line_overlay(
-            LineEndpoint2D::include(pos3, bright_color),
-            LineEndpoint2D::include(pos4, bright_color),
-            width,
-        );
-        self.add_line_overlay(
-            LineEndpoint2D::exclude(pos4, bright_color),
-            LineEndpoint2D::exclude(pos5, dull_color),
-            width,
-        );
-        self.add_line_overlay(
-            LineEndpoint2D::include(pos5, dull_color),
-            LineEndpoint2D::include(pos6, dull_color),
-            width,
-        );
     }
     fn add_line_overlay(&mut self, mut start: LineEndpoint2D, mut end: LineEndpoint2D, width: R64) {
         let (rect, axis) = self.make_line_ndrect(&mut start, &mut end, width);
-
-        let fill = if start.color == end.color {
-            OverlayFill::Solid(start.color)
-        } else {
-            OverlayFill::Gradient(axis, start.color, end.color)
-        };
-
+        let fill = OverlayFill::gradient(axis, start.color, end.color);
         self.overlay_quads.push(OverlayQuad { rect, fill })
+    }
+
+    fn add_mouse_target_quad(
+        &mut self,
+        rect: FRect2D,
+        modifiers: ModifiersState,
+        data: MouseTargetData,
+    ) {
+        let NdVec([x1, y1]) = rect.min();
+        let NdVec([x2, y2]) = rect.max();
+        let z = r64(0.0);
+        let corners = [
+            NdVec([x1, y1, z]),
+            NdVec([x2, y1, z]),
+            NdVec([x1, y2, z]),
+            NdVec([x2, y2, z]),
+        ];
+        let target_id = self.add_mouse_target(data);
+        self.add_mouse_target_tri(modifiers, [corners[0], corners[1], corners[2]], target_id);
+        self.add_mouse_target_tri(modifiers, [corners[3], corners[2], corners[1]], target_id);
     }
 
     fn _adjust_rect_for_overlay(&self, rect: IRect2D) -> FRect2D {
@@ -566,30 +534,12 @@ impl OverlayQuad {
     fn verts(self) -> [Vertex2D; 4] {
         let [x1, y1] = self.rect.min().to_f32_array();
         let [x2, y2] = self.rect.max().to_f32_array();
-        let colors = self.fill.vertex_colors();
+        let colors = self.fill.vertex_colors(Face::PosZ);
         [
             Vertex2D::new([x1, y1], colors[0]),
             Vertex2D::new([x2, y1], colors[1]),
             Vertex2D::new([x1, y2], colors[2]),
             Vertex2D::new([x2, y2], colors[3]),
         ]
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-enum OverlayFill {
-    Solid(Srgba),
-    Gradient(Axis, Srgba, Srgba),
-}
-impl OverlayFill {
-    fn vertex_colors(self) -> [Srgba; 4] {
-        match self {
-            OverlayFill::Solid(color) => [color; 4],
-            OverlayFill::Gradient(gradient_axis, c1, c2) => match gradient_axis {
-                X => [c1, c2, c1, c2],
-                Y => [c1, c1, c2, c2],
-                other => panic!("Gradient axis {:?} is not in XY plane", other),
-            },
-        }
     }
 }

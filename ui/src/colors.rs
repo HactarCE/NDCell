@@ -31,8 +31,8 @@ pub const BACKGROUND_3D: Srgb = rgb!(0.0, 0.0, 0.0);
 /// Color of the gridlines.
 pub const GRIDLINES: Srgba = rgba!(0.25, 0.25, 0.25, 1.0);
 
-/// Opacity of 2D crosshairs.
-pub const CROSSHAIR_OPACITY_2D: f32 = 0.75;
+/// Crosshair opacity change.
+pub const CROSSHAIR_OPACITY: f32 = 0.2;
 
 pub mod hover {
     use super::*;

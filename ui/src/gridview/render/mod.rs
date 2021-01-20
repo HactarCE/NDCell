@@ -35,6 +35,9 @@ mod consts {
     /// Minimum render cell length of the crosshair gradient.
     pub const CROSSHAIR_GRADIENT_MIN_CELL_LEN: f64 = 1.0;
 
+    /// Small value for avoiding Z fighting.
+    pub const Z_EPSILON: f64 = 1.0 / 256.0;
+
     /// Width of gridlines, measured in cells.
     pub const GRIDLINE_WIDTH: f64 = 1.0 / 32.0;
     /// Width of hover outline, measured in cells.

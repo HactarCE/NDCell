@@ -11,20 +11,20 @@ use palette::{Pixel, Srgb, Srgba};
 use sloth::Lazy;
 
 use ndcell_core::prelude::*;
-use Axis::{X, Y, Z};
 
 mod fog;
 mod gridlines;
 mod lighting;
 
 use super::consts::*;
-use super::generic::{GenericGridViewRender, GridViewRenderDimension};
+use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoint3D, OverlayFill};
 use super::shaders;
 use super::vertices::Vertex3D;
 use super::CellDrawParams;
+use crate::config::MouseDragBinding;
 use crate::ext::*;
 use crate::gridview::*;
-use crate::math::Face;
+use crate::math::{Face, FACES};
 use crate::{CONFIG, DISPLAY};
 use fog::FogParams;
 use gridlines::GridlineParams;
@@ -56,6 +56,7 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim3D {
 
     const DEFAULT_COLOR: Srgb = crate::colors::BACKGROUND_3D;
     const DEFAULT_DEPTH: f32 = f32::INFINITY;
+    const LINE_MIN_PIXEL_WIDTH: f64 = LINE_MIN_PIXEL_WIDTH_3D;
 
     fn init(gvr3d: &GridViewRender3D<'a>) -> Self {
         let fog_params = FogParams::from(gvr3d);
@@ -228,21 +229,102 @@ impl GridViewRender3D<'_> {
         {
             let mut min = self.local_visible_rect.min().to_fvec();
             let mut max = self.local_visible_rect.max().to_fvec();
-            min[perpendicular_axis] = local_perpendicular_coordinate;
-            max[perpendicular_axis] = local_perpendicular_coordinate;
+            min[perpendicular_axis] = local_perpendicular_coordinate - Z_EPSILON;
+            max[perpendicular_axis] = local_perpendicular_coordinate + Z_EPSILON;
             rect = NdRect::span(min, max);
         }
 
         self.overlay_quads.push(OverlayQuad {
             rect,
             face: Face::positive(perpendicular_axis),
-            fill: OverlayFill::Gridlines,
+            fill: OverlayFill::Gridlines3D,
         });
         self.overlay_quads.push(OverlayQuad {
             rect,
             face: Face::negative(perpendicular_axis),
-            fill: OverlayFill::Gridlines,
+            fill: OverlayFill::Gridlines3D,
         });
+
+    /// Adds a highlight on the render cell face under the mouse cursor when
+    /// using the drawing tool.
+    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec3D, face: Face) {
+        use crate::colors::hover::*;
+        self.add_hover_overlay(cell_pos, face, DRAW_FILL, DRAW_OUTLINE);
+    }
+    /// Adds a highlight on the render cell face under the mouse cursor when
+    /// using the selection tool.
+    pub fn add_hover_select_overlay(&mut self, cell_pos: &BigVec3D, face: Face) {
+        use crate::colors::hover::*;
+        self.add_hover_overlay(cell_pos, face, SELECT_FILL, SELECT_OUTLINE);
+    }
+    /// Adds a highlight on the render cell under the mouse cursor.
+    fn add_hover_overlay(
+        &mut self,
+        cell_pos: &BigVec3D,
+        face: Face,
+        fill_color: Srgba,
+        outline_color: Srgb,
+    ) {
+        let local_rect = IRect::single_cell(self.clamp_int_pos_to_visible(cell_pos));
+        let local_rect = self._adjust_rect_for_overlay(local_rect);
+        let width = r64(HOVER_HIGHLIGHT_WIDTH);
+        self.add_face_fill_overlay(local_rect, face, fill_color);
+        self.add_face_crosshairs_overlay(local_rect, face, outline_color, width);
+    }
+
+    /// Adds all six faces of a filled-in cuboid with a solid color.
+    fn add_cuboid_fill_overlay(&mut self, cuboid: FRect3D, fill: impl Copy + Into<OverlayFill>) {
+        for &face in &FACES {
+            self.add_face_fill_overlay(cuboid, face, fill);
+        }
+    }
+    /// Adds a filled-in face of a cuboid with a solid color.
+    fn add_face_fill_overlay(&mut self, cuboid: FRect3D, face: Face, fill: impl Into<OverlayFill>) {
+        let rect = face.of(cuboid);
+        let fill = fill.into();
+        self.overlay_quads.push(OverlayQuad { rect, face, fill });
+    }
+    /// Adds crosshairs around a face of a cuboid with a solid color that fades into
+    /// the gridline color toward the edges.
+    fn add_face_crosshairs_overlay(
+        &mut self,
+        cuboid: FRect3D,
+        face: Face,
+        color: Srgb,
+        width: R64,
+    ) {
+        let rect = face.of(cuboid);
+        let min = rect.min();
+        let max = rect.max();
+        let [ax1, ax2] = face.plane_axes();
+        let a1 = min[ax1];
+        let a2 = min[ax2];
+        let b1 = max[ax1];
+        let b2 = max[ax2];
+
+        self.add_single_crosshair_overlay(ax1, a1, b1, min, width, color); // bottom
+        self.add_single_crosshair_overlay(ax1, a1, b1, max, width, color); // top
+        self.add_single_crosshair_overlay(ax2, a2, b2, min, width, color); // left
+        self.add_single_crosshair_overlay(ax2, a2, b2, max, width, color); // right
+    }
+    fn add_single_crosshair_overlay(
+        &mut self,
+        parallel_axis: Axis,
+        a: R64,
+        b: R64,
+        position: FVec3D,
+        width: R64,
+        color: Srgb,
+    ) {
+        let endpoint_pairs = self.make_crosshair_endpoints(parallel_axis, a, b, position, color);
+        for [start, end] in endpoint_pairs {
+            self.add_line_overlay(start, end, width);
+        }
+    }
+    fn add_line_overlay(&mut self, mut start: LineEndpoint3D, mut end: LineEndpoint3D, width: R64) {
+        let (rect, axis) = self.make_line_ndrect(&mut start, &mut end, width);
+        let fill = OverlayFill::gradient(axis, start.color, end.color);
+        self.add_cuboid_fill_overlay(rect, fill);
     }
 
     /// Remove quads that are not visible from the current camera position.
@@ -257,7 +339,13 @@ impl GridViewRender3D<'_> {
     }
     /// Sort quads by depth, splitting as necessary.
     fn depth_sort_quads(&mut self) {
-        // TODO
+        self.overlay_quads.sort_by_key(|quad| !quad.is_opaque());
+    }
+
+    fn _adjust_rect_for_overlay(&self, rect: IRect3D) -> FRect3D {
+        // Avoid Z fighting with cells by expanding the rectangle a tiny bit.
+        rect.to_frect()
+            .offset_min_max(r64(-Z_EPSILON), r64(Z_EPSILON))
     }
 }
 
@@ -275,8 +363,9 @@ impl OverlayQuad {
     /// Returns `true` if the quad is definitely 100% opaque.
     pub fn is_opaque(self) -> bool {
         match self.fill {
-            OverlayFill::Gridlines => false,
             OverlayFill::Solid(color) => color.alpha >= 1.0,
+            OverlayFill::Gradient(_, c1, c2) => c1.alpha >= 1.0 && c2.alpha >= 1.0,
+            OverlayFill::Gridlines3D => false,
         }
     }
     /// Returns `true` if the front of the quad faces the camera, or `false` if
@@ -364,34 +453,22 @@ impl OverlayQuad {
         positions[3][ax2] = max[ax2];
 
         let normal = self.face.normal();
-
-        let color = match self.fill {
-            OverlayFill::Gridlines => Srgba::new(0.0, 0.0, 0.0, 0.0), // ignored in vertex shader
-            OverlayFill::Solid(color) => color,
-        };
-
+        let colors = self.fill.vertex_colors(self.face);
         [
-            Vertex3D::new(positions[0].to_f32_array(), normal, color),
-            Vertex3D::new(positions[1].to_f32_array(), normal, color),
-            Vertex3D::new(positions[2].to_f32_array(), normal, color),
-            Vertex3D::new(positions[3].to_f32_array(), normal, color),
+            Vertex3D::new(positions[0].to_f32_array(), normal, colors[0]),
+            Vertex3D::new(positions[1].to_f32_array(), normal, colors[1]),
+            Vertex3D::new(positions[2].to_f32_array(), normal, colors[2]),
+            Vertex3D::new(positions[3].to_f32_array(), normal, colors[3]),
         ]
     }
     /// Returns the shader program that should be used to render the quad:
     /// either `RGBA_3D` or `GRIDLINES`.
     pub fn shader_program(self) -> &'static shaders::WrappedShader {
         match self.fill {
-            OverlayFill::Gridlines => &*shaders::GRIDLINES_3D,
-            OverlayFill::Solid(_) => &*shaders::RGBA_3D,
+            OverlayFill::Solid(_) | OverlayFill::Gradient(_, _, _) => &*shaders::RGBA_3D,
+            OverlayFill::Gridlines3D => &*shaders::GRIDLINES_3D,
         }
     }
-}
-
-/// Fill style for an overlay quad.
-#[derive(Debug, Copy, Clone)]
-pub enum OverlayFill {
-    Gridlines,
-    Solid(Srgba),
 }
 
 /// Axis-aligned plane in local space.

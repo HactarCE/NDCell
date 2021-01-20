@@ -14,6 +14,7 @@ use super::vertices::MouseTargetVertex;
 use super::CellDrawParams;
 use crate::ext::*;
 use crate::gridview::*;
+use crate::math::Face;
 
 pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
     pub(super) cache: RefMut<'a, super::RenderCache>,
@@ -273,6 +274,69 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         }
     }
 
+    /// Returns the endpoint pairs for a single crosshair.
+    pub(super) fn make_crosshair_endpoints(
+        &mut self,
+        parallel_axis: Axis,
+        a: R64,
+        b: R64,
+        position: FVec<R::D>,
+        color: Srgb,
+    ) -> Vec<[LineEndpoint<R::D>; 2]>
+    where
+        FVec<R::D>: Copy,
+    {
+        let bright_color = color;
+        let dull_color = Srgb::from_linear(Mix::mix(
+            &R::DEFAULT_COLOR.into_linear(),
+            &color.into_linear(),
+            crate::colors::CROSSHAIR_OPACITY,
+        ));
+
+        let gradient_len = std::cmp::max(
+            r64(CROSSHAIR_GRADIENT_MIN_PIXEL_LEN) * self.xform.render_cell_scale.cells_per_unit(),
+            r64(CROSSHAIR_GRADIENT_MIN_CELL_LEN),
+        );
+
+        let (pos1, pos2, pos3, pos4, pos5, pos6);
+        {
+            let visible_rect = self.local_visible_rect.to_frect();
+            let pos_along_line = |coord| {
+                let mut ret = position;
+                ret[parallel_axis] = coord;
+                ret
+            };
+            pos1 = pos_along_line(visible_rect.min()[parallel_axis]);
+            pos2 = pos_along_line(a - gradient_len);
+            pos3 = pos_along_line(a);
+            pos4 = pos_along_line(b);
+            pos5 = pos_along_line(b + gradient_len);
+            pos6 = pos_along_line(visible_rect.max()[parallel_axis]);
+        }
+
+        vec![
+            [
+                LineEndpoint::include(pos1, dull_color),
+                LineEndpoint::include(pos2, dull_color),
+            ],
+            [
+                LineEndpoint::exclude(pos2, dull_color),
+                LineEndpoint::exclude(pos3, bright_color),
+            ],
+            [
+                LineEndpoint::include(pos3, bright_color),
+                LineEndpoint::include(pos4, bright_color),
+            ],
+            [
+                LineEndpoint::exclude(pos4, bright_color),
+                LineEndpoint::exclude(pos5, dull_color),
+            ],
+            [
+                LineEndpoint::include(pos5, dull_color),
+                LineEndpoint::include(pos6, dull_color),
+            ],
+        ]
+    }
     /// Returns an `FRect` for the line, swapping the endpoints if necessary so
     /// that `start[line_axis] < end[line_axis]`.
     pub(super) fn make_line_ndrect(
@@ -346,6 +410,48 @@ impl<D: Dim> LineEndpoint<D> {
             pos,
             color: color.into(),
             include_endpoint: false,
+        }
+    }
+}
+
+/// Fill style for an overlay quad.
+#[derive(Debug, Copy, Clone)]
+pub(super) enum OverlayFill {
+    Solid(Srgba),
+    Gradient(Axis, Srgba, Srgba),
+    Gridlines3D,
+}
+impl From<Srgba> for OverlayFill {
+    fn from(color: Srgba) -> Self {
+        Self::Solid(color)
+    }
+}
+impl OverlayFill {
+    pub fn gradient(axis: Axis, color1: Srgba, color2: Srgba) -> Self {
+        if color1 == color2 {
+            Self::Solid(color1)
+        } else {
+            Self::Gradient(axis, color1, color2)
+        }
+    }
+    pub fn vertex_colors(self, face: Face) -> [Srgba; 4] {
+        match self {
+            OverlayFill::Gridlines3D => [Srgba::new(0.0, 0.0, 0.0, 0.0); 4], // ignored in vertex shader
+            OverlayFill::Solid(color) => [color; 4],
+            OverlayFill::Gradient(gradient_axis, c1, c2) => {
+                let [ax1, ax2] = face.plane_axes();
+                if gradient_axis == ax1 {
+                    [c1, c2, c1, c2]
+                } else if gradient_axis == ax2 {
+                    [c1, c1, c2, c2]
+                } else {
+                    match face.sign() {
+                        Sign::Minus => [c1; 4],
+                        Sign::NoSign => unreachable!(),
+                        Sign::Plus => [c2; 4],
+                    }
+                }
+            }
         }
     }
 }

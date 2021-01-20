@@ -4,6 +4,7 @@
 //! models and maybe textures in the future.
 
 use anyhow::{Context, Result};
+use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::uniforms::UniformBuffer;
 use glium::Surface;
@@ -240,6 +241,23 @@ impl GridViewRender3D<'_> {
             fill: OverlayFill::Gridlines3D,
         });
 
+        // "Freeform draw" target.
+        self.add_mouse_target_quad(
+            rect,
+            perpendicular_axis,
+            ModifiersState::empty(),
+            MouseTargetData {
+                binding: MouseDragBinding::Draw(
+                    DrawDragCommand {
+                        mode: DrawMode::Replace,
+                        shape: DrawShape::Freeform,
+                    }
+                    .into(),
+                ),
+            },
+        );
+    }
+
     /// Adds a highlight on the render cell face under the mouse cursor when
     /// using the drawing tool.
     pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec3D, face: Face) {
@@ -335,6 +353,26 @@ impl GridViewRender3D<'_> {
     /// Sort quads by depth, splitting as necessary.
     fn depth_sort_quads(&mut self) {
         self.overlay_quads.sort_by_key(|quad| !quad.is_opaque());
+    }
+
+    fn add_mouse_target_quad(
+        &mut self,
+        rect: FRect3D,
+        axis: Axis,
+        modifiers: ModifiersState,
+        data: MouseTargetData,
+    ) {
+        let [ax1, ax2] = Face::positive(axis).plane_axes();
+        let min = rect.min();
+        let max = rect.max();
+        let mut corners = [min; 4];
+        corners[1][ax1] = max[ax1];
+        corners[2][ax2] = max[ax2];
+        corners[3][ax1] = max[ax1];
+        corners[3][ax2] = max[ax2];
+        let target_id = self.add_mouse_target(data);
+        self.add_mouse_target_tri(modifiers, [corners[0], corners[1], corners[2]], target_id);
+        self.add_mouse_target_tri(modifiers, [corners[3], corners[2], corners[1]], target_id);
     }
 
     fn _adjust_rect_for_overlay(&self, rect: IRect3D) -> FRect3D {

@@ -138,39 +138,21 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             .and_then(|i| self.mouse_targets.get(i.checked_sub(1)?))
             .cloned())
     }
-    pub(super) fn add_mouse_target_quad(
-        &mut self,
-        rect: FRect2D,
-        modifiers: ModifiersState,
-        data: MouseTargetData,
-    ) {
+    pub(super) fn add_mouse_target(&mut self, data: MouseTargetData) -> u32 {
         self.mouse_targets.push(data);
-        let target_id = self.mouse_targets.len() as u32; // IDs start at 1
-        let NdVec([x1, y1]) = rect.min();
-        let NdVec([x2, y2]) = rect.max();
-        let corners = [
-            NdVec([x1, y1]),
-            NdVec([x2, y1]),
-            NdVec([x1, y2]),
-            NdVec([x2, y2]),
-        ];
-        self.add_mouse_target_tri(modifiers, [corners[0], corners[1], corners[2]], target_id);
-        self.add_mouse_target_tri(modifiers, [corners[3], corners[2], corners[1]], target_id);
+        self.mouse_targets.len() as u32 // IDs start at 1
     }
-    fn add_mouse_target_tri(
+    pub(super) fn add_mouse_target_tri(
         &mut self,
         modifiers: ModifiersState,
-        points: [FVec2D; 3],
+        points: [FVec3D; 3],
         target_id: u32,
     ) {
         if self.params.modifiers == modifiers {
-            let z = 0.0;
             for &point in &points {
-                let [x, y] = point.to_f32_array();
-                self.mouse_target_tris.push(MouseTargetVertex {
-                    pos: [x, y, z],
-                    target_id,
-                })
+                let pos = point.to_f32_array();
+                self.mouse_target_tris
+                    .push(MouseTargetVertex { pos, target_id })
             }
         }
     }

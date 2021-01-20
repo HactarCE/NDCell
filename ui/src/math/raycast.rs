@@ -7,7 +7,7 @@ use ndcell_core::prelude::*;
 
 use super::Face;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Hit {
     pub start: FVec3D,
     pub delta: FVec3D,
@@ -19,9 +19,17 @@ pub struct Hit {
     pub pos_float: FVec3D,
     pub face: Face,
 }
+impl Hit {
+    pub fn add_base_pos(mut self, base_pos: IVec3D) -> Self {
+        self.start += base_pos.to_fvec();
+        self.pos_int += base_pos;
+        self.pos_float += base_pos.to_fvec();
+        self
+    }
+}
 
-/// Computes a 3D octree raycast. `start` and `delta` are both in units of
-/// `min_layer` nodes, and `start` is relative to the lower corner of `node`.
+/// Computes a 3D raycast into an octree. `start` and `delta` are both in units
+/// of `min_layer` nodes, and `start` is relative to the lower corner of `node`.
 pub fn octree_raycast(
     mut start: FVec3D,
     mut delta: FVec3D,
@@ -43,6 +51,10 @@ pub fn octree_raycast(
             invert_mask |= ax.bit();
             start[ax] = -start[ax] + node_len;
             delta[ax] = -delta[ax];
+        }
+        // Please don't crash on division by zero!
+        if delta[ax] < std::f32::EPSILON as f64 {
+            delta[ax] = r64(std::f32::EPSILON as f64);
         }
     }
 
@@ -158,6 +170,43 @@ fn raycast_node_child(
             child_index |= exit_axis.bit();
         }
     }
+}
+
+/// Computes the intersection of a 3D raycast and a plane.
+pub fn plane_raycast(
+    start: FVec3D,
+    delta: FVec3D,
+    perpendicular_axis: Axis,
+    perpendicular_coordinate: R64,
+) -> Option<Hit> {
+    if delta[perpendicular_axis].is_zero() {
+        return None; // The delta vector is parallel to the plane.
+    }
+
+    let t = (perpendicular_coordinate - start[perpendicular_axis]) / delta[perpendicular_axis];
+    if t <= 0.0 {
+        return None; // The plane is behind the vector.
+    }
+
+    let face = if delta[perpendicular_axis] > 0.0 {
+        Face::negative(perpendicular_axis)
+    } else {
+        Face::positive(perpendicular_axis)
+    };
+    let pos_float = start + delta * t;
+    let pos_int = (pos_float - face.normal_fvec() / 2.0).floor().to_ivec();
+
+    Some(Hit {
+        start,
+        delta,
+
+        t0: t,
+        t1: t,
+
+        pos_int,
+        pos_float,
+        face,
+    })
 }
 
 // Given the parameters `t0` at which the ray enters a node along each axis and

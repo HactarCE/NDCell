@@ -84,6 +84,9 @@ impl GridViewDimension for GridViewDim3D {
     }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {
+        let mouse = params.mouse;
+        let mouse_raycast = mouse.pos.and_then(|pixel| this.screen_pos(pixel).raycast());
+
         let mut frame = GridViewRender3D::new(params, this.viewpoint());
         frame.draw_cells(CellDrawParams {
             ndtree: &this.automaton.ndtree,
@@ -91,23 +94,23 @@ impl GridViewDimension for GridViewDim3D {
             rect: None,
         })?;
 
-        // let hover_pos = params.cursor_pos.map(|pos| frame.pixel_pos_to_cell_pos(pos));
-        // // Only allow drawing at 1:1 or bigger.
-        // let draw_pos = if this.interpolating_viewport.zoom.power() >= 0.0 {
-        //     hover_pos.clone()
-        // } else {
-        //     None
-        // };
-
         // Draw gridlines.
         if let Some((axis, coord)) = this.grid() {
             frame.add_gridlines_overlay(axis, coord.clone());
         }
-        // // Draw crosshairs.
-        // if let Some(pos) = &draw_pos {
-        //     frame.draw_blue_cursor_highlight(&pos.floor());
-        // }
 
+        // Draw mouse display.
+        if let Some(hit) = mouse_raycast {
+            match mouse.display {
+                MouseDisplay::Draw if !this.viewpoint().too_small_to_draw() => {
+                    frame.add_hover_draw_overlay(&hit.cell, hit.face);
+                }
+                MouseDisplay::Select => {
+                    frame.add_hover_select_overlay(&hit.cell, hit.face);
+                }
+                _ => (),
+            }
+        }
         frame.finish()
     }
 }
@@ -116,7 +119,9 @@ impl GridView3D {
         let vp = self.viewpoint();
         let xform = vp.cell_transform();
 
-        let mut raycast_hit;
+        let (start, delta) = xform.pixel_to_local_ray(pixel);
+
+        let raycast_octree_hit;
         {
             // Get the `NdTreeSlice` containing all of the visible cells.
             let global_visible_rect = vp.global_visible_rect();
@@ -125,25 +130,34 @@ impl GridView3D {
                 xform.global_to_local_int(&visible_octree.base_pos).unwrap();
 
             // Compute the ray, relative to the root node of the octree slice.
-            let (mut start, delta) = xform.pixel_to_local_ray(pixel);
-            start -= local_octree_base_pos.to_fvec();
+            let octree_start = start - local_octree_base_pos.to_fvec();
 
             let layer = xform.render_cell_layer;
             let node = visible_octree.root.as_ref();
-            raycast_hit = crate::math::raycast::octree_raycast(start, delta, layer, node);
 
-            // Convert coordinates back from octree node space into local space.
-            if let Some(hit) = &mut raycast_hit {
-                hit.start += local_octree_base_pos.to_fvec();
-                hit.pos_int += local_octree_base_pos;
-                hit.pos_float += local_octree_base_pos.to_fvec();
-            }
-        };
+            raycast_octree_hit =
+                crate::math::raycast::octree_raycast(octree_start, delta, layer, node)
+                    // Use `add_base_pos()` to convert coordinates back from octree
+                    // node space into local space.
+                    .map(|h| h.add_base_pos(local_octree_base_pos))
+                    .map(|h| RaycastHit::new(&xform, h, RaycastHitThing::Cell));
+        }
+
+        let raycast_gridlines_hit = self.grid().and_then(|(grid_axis, grid_coord)| {
+            let grid_coord = xform.global_to_local_visible_coord(grid_axis, &grid_coord)?;
+            crate::math::raycast::plane_raycast(start, delta, grid_axis, r64(grid_coord as f64))
+                .map(|h| RaycastHit::new(&xform, h, RaycastHitThing::Gridlines))
+        });
+        let raycast_selection_hit = None; // TODO
+
+        printlnd!("gridl {:?}", raycast_gridlines_hit);
 
         ScreenPos3D {
             pixel,
             xform,
-            raycast_hit,
+            raycast_octree_hit,
+            raycast_gridlines_hit,
+            raycast_selection_hit,
         }
     }
 
@@ -166,7 +180,9 @@ impl GridView3D {
 pub struct ScreenPos3D {
     pixel: FVec2D,
     xform: CellTransform3D,
-    raycast_hit: Option<raycast::Hit>,
+    pub raycast_octree_hit: Option<RaycastHit>,
+    pub raycast_gridlines_hit: Option<RaycastHit>,
+    pub raycast_selection_hit: Option<RaycastHit>,
 }
 impl ScreenPos3D {
     /// Returns the position of the mouse in pixel space.
@@ -180,13 +196,23 @@ impl ScreenPos3D {
             .pixel_to_global_pos(self.pixel, Viewpoint3D::DISTANCE_TO_PIVOT)
     }
 
-    /// Returns the global position of the cell visible at the mouse cursor.
+    /// Returns the global position of the closest iteractive thing visible at
+    /// the mouse cursor.
     pub fn raycast(&self) -> Option<RaycastHit> {
-        self.raycast_hit.map(|hit| RaycastHit {
-            pos: self.xform.local_to_global_float(hit.pos_float),
-            cell: self.xform.local_to_global_int(hit.pos_int),
-            face: hit.face,
+        // Select closest raycast.
+        [
+            &self.raycast_octree_hit,
+            &self.raycast_gridlines_hit,
+            &self.raycast_selection_hit,
+        ]
+        .iter()
+        .min_by_key(|h| match h {
+            Some(hit) => hit.distance,
+            None => R64::max_value(),
         })
+        .cloned()
+        .cloned()
+        .flatten()
     }
 }
 
@@ -198,4 +224,26 @@ pub struct RaycastHit {
     pub cell: BigVec3D,
     /// Face of cell intersected.
     pub face: Face,
+    /// Type of thing hit.
+    pub thing: RaycastHitThing,
+    /// Abstract distance to intersection.
+    distance: R64,
+}
+impl RaycastHit {
+    fn new(xform: &CellTransform3D, hit: raycast::Hit, thing: RaycastHitThing) -> Self {
+        Self {
+            pos: xform.local_to_global_float(hit.pos_float),
+            cell: xform.local_to_global_int(hit.pos_int),
+            face: hit.face,
+            thing: thing,
+            distance: hit.t0,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum RaycastHitThing {
+    Cell,
+    Gridlines,
+    Selelction,
 }

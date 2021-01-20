@@ -10,9 +10,8 @@ use super::selection::Selection2D;
 use super::viewpoint::{Viewpoint, Viewpoint2D};
 use super::{DragHandler, DragOutcome, DragType};
 use crate::commands::*;
-use crate::direction::Direction;
 use crate::mouse::MouseDisplay;
-use crate::{Scale, CONFIG};
+use crate::{Direction, Scale, CONFIG};
 
 pub type GridView2D = GenericGridView<GridViewDim2D>;
 

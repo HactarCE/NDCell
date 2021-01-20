@@ -7,7 +7,9 @@ use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult
 use super::viewpoint::{CellTransform3D, Viewpoint, Viewpoint3D};
 use super::{DragHandler, DragType};
 use crate::commands::*;
-use crate::math::{raycast, Face};
+use crate::math::raycast;
+use crate::mouse::MouseDisplay;
+use crate::Face;
 
 pub type GridView3D = GenericGridView<GridViewDim3D>;
 

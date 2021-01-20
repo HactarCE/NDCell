@@ -32,11 +32,9 @@ use super::shaders;
 use super::vertices::Vertex2D;
 use super::CellDrawParams;
 use crate::config::MouseDragBinding;
-use crate::direction::{Direction, DIRECTIONS};
 use crate::ext::*;
 use crate::gridview::*;
-use crate::math::Face;
-use crate::{Scale, CONFIG};
+use crate::{Direction, Face, Scale, CONFIG, DIRECTIONS};
 
 pub(in crate::gridview) type GridViewRender2D<'a> = GenericGridViewRender<'a, RenderDim2D>;
 

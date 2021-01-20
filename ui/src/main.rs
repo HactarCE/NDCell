@@ -30,6 +30,7 @@ mod commands;
 mod config;
 mod direction;
 mod ext;
+mod face;
 mod gridview;
 mod gui;
 mod input;
@@ -39,6 +40,8 @@ mod scale;
 mod windows;
 
 use config::Config;
+use direction::{Direction, DIRECTIONS};
+use face::{Face, FACES};
 use gui::DISPLAY;
 use scale::Scale;
 

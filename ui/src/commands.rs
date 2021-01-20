@@ -2,8 +2,7 @@ use cgmath::Deg;
 
 use ndcell_core::prelude::*;
 
-use crate::direction::Direction;
-use crate::Scale;
+use crate::{Direction, Scale};
 
 macro_rules! impl_command_from {
     ( Command::$command_variant:ident($inner:ty) ) => {

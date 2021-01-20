@@ -14,7 +14,7 @@ use super::vertices::MouseTargetVertex;
 use super::CellDrawParams;
 use crate::ext::*;
 use crate::gridview::*;
-use crate::math::Face;
+use crate::Face;
 
 pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
     pub(super) cache: RefMut<'a, super::RenderCache>,

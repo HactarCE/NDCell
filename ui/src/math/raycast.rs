@@ -5,7 +5,7 @@
 
 use ndcell_core::prelude::*;
 
-use super::Face;
+use crate::Face;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Hit {

@@ -2,12 +2,12 @@ use anyhow::{bail, Context, Result};
 
 use ndcell_core::prelude::*;
 
+use super::algorithms::raycast;
 use super::generic::{GenericGridView, GridViewDimension};
 use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
 use super::viewpoint::{CellTransform3D, Viewpoint, Viewpoint3D};
 use super::{DragHandler, DragType};
 use crate::commands::*;
-use crate::math::raycast;
 use crate::mouse::MouseDisplay;
 use crate::Face;
 
@@ -137,17 +137,16 @@ impl GridView3D {
             let layer = xform.render_cell_layer;
             let node = visible_octree.root.as_ref();
 
-            raycast_octree_hit =
-                crate::math::raycast::octree_raycast(octree_start, delta, layer, node)
-                    // Use `add_base_pos()` to convert coordinates back from octree
-                    // node space into local space.
-                    .map(|h| h.add_base_pos(local_octree_base_pos))
-                    .map(|h| RaycastHit::new(&xform, h, RaycastHitThing::Cell));
+            raycast_octree_hit = raycast::intersect_octree(octree_start, delta, layer, node)
+                // Use `add_base_pos()` to convert coordinates back from octree
+                // node space into local space.
+                .map(|h| h.add_base_pos(local_octree_base_pos))
+                .map(|h| RaycastHit::new(&xform, h, RaycastHitThing::Cell));
         }
 
         let raycast_gridlines_hit = self.grid().and_then(|(grid_axis, grid_coord)| {
             let grid_coord = xform.global_to_local_visible_coord(grid_axis, &grid_coord)?;
-            crate::math::raycast::plane_raycast(start, delta, grid_axis, r64(grid_coord as f64))
+            raycast::intersect_plane(start, delta, grid_axis, r64(grid_coord as f64))
                 .map(|h| RaycastHit::new(&xform, h, RaycastHitThing::Gridlines))
         });
         let raycast_selection_hit = None; // TODO

@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use ndcell_core::prelude::*;
 
+mod algorithms;
 mod generic;
 mod history;
 pub mod render;

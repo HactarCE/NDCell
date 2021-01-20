@@ -30,7 +30,7 @@ impl Hit {
 
 /// Computes a 3D raycast into an octree. `start` and `delta` are both in units
 /// of `min_layer` nodes, and `start` is relative to the lower corner of `node`.
-pub fn octree_raycast(
+pub fn intersect_octree(
     mut start: FVec3D,
     mut delta: FVec3D,
     min_layer: Layer,
@@ -170,8 +170,8 @@ fn raycast_node_child(
     }
 }
 
-/// Computes the intersection of a 3D raycast and a plane.
-pub fn plane_raycast(
+/// Computes the intersection of a 3D ray and a plane.
+pub fn intersect_plane(
     start: FVec3D,
     delta: FVec3D,
     perpendicular_axis: Axis,

@@ -3,6 +3,7 @@ use log::warn;
 
 use ndcell_core::prelude::*;
 
+use super::algorithms::bresenham;
 use super::generic::{GenericGridView, GridViewDimension};
 use super::history::History;
 use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
@@ -322,7 +323,7 @@ fn make_freeform_draw_drag_handler(
             return Ok(DragOutcome::Cancel);
         }
         let pos2 = this.screen_pos(new_cursor_pos).cell();
-        for pos in crate::math::bresenham::line(pos1.clone(), pos2.clone()) {
+        for pos in bresenham::line(pos1.clone(), pos2.clone()) {
             this.automaton.ndtree.set_cell(&pos, new_cell_state);
         }
         pos1 = pos2.clone();

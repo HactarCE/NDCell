@@ -35,6 +35,7 @@ mod gridview;
 mod gui;
 mod input;
 mod mouse;
+mod plane;
 mod scale;
 mod windows;
 
@@ -42,6 +43,7 @@ use config::Config;
 use direction::{Direction, DIRECTIONS};
 use face::{Face, FACES};
 use gui::DISPLAY;
+use plane::Plane;
 use scale::Scale;
 
 /// The title of the window (both the OS window, and the main imgui window).

@@ -5,7 +5,7 @@ use std::convert::TryFrom;
 use ndcell_core::prelude::*;
 
 use crate::ext::*;
-use crate::Scale;
+use crate::{Plane, Scale};
 
 pub type CellTransform2D = NdCellTransform<Dim2D>;
 pub type CellTransform3D = NdCellTransform<Dim3D>;
@@ -399,21 +399,16 @@ impl CellTransform3D {
 
     /// Returns the global position on an axis-aligned plane that appears at the
     /// given pixel position on the screen.
-    pub fn pixel_to_global_pos_in_plane(
-        &self,
-        pixel: FVec2D,
-        plane: (Axis, &FixedPoint),
-    ) -> Option<FixedVec3D> {
-        let (plane_axis, plane_pos) = plane;
+    pub fn pixel_to_global_pos_in_plane(&self, pixel: FVec2D, plane: &Plane) -> Option<FixedVec3D> {
         let (start, delta) = self.pixel_to_global_ray(pixel);
 
-        if delta[plane_axis].is_zero() {
+        if delta[plane.axis].is_zero() {
             // The delta vector is parallel to the plane.
             return None;
         }
 
         // How many times do we have to add `delta` to reach the plane?
-        let t = (plane_pos - &start[plane_axis]) / &delta[plane_axis];
+        let t = (&plane.coordinate - &start[plane.axis]) / &delta[plane.axis];
 
         if !t.is_positive() {
             // The plane is behind the camera.

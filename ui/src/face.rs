@@ -56,6 +56,18 @@ impl Face {
             _ => panic!("Invalid 3D axis: {:?}", axis),
         }
     }
+    /// Returns the opposite face.
+    pub fn opposite(self) -> Self {
+        use Face::*;
+        match self {
+            PosX => NegX,
+            PosY => NegY,
+            PosZ => NegZ,
+            NegX => PosX,
+            NegY => PosY,
+            NegZ => PosZ,
+        }
+    }
 
     /// Returns the sign of the nonzero component of the normal vector.
     pub fn sign(self) -> Sign {
@@ -105,6 +117,12 @@ impl Face {
     pub fn normal_fvec(self) -> FVec3D {
         let [x, y, z] = self.normal();
         NdVec([r64(x as f64), r64(y as f64), r64(z as f64)])
+    }
+    /// Returns the normal vector, which has a single nonzero component that is
+    /// either +1 or -1.
+    pub fn normal_bigvec(self) -> BigVec3D {
+        let [x, y, z] = self.normal();
+        NdVec([x.into(), y.into(), z.into()])
     }
 
     /// Returns a cuboid flattened to this face of itself.

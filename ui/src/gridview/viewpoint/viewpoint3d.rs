@@ -11,7 +11,7 @@ use super::{
 };
 use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::config::{ForwardAxis3D, UpAxis3D};
-use crate::CONFIG;
+use crate::{Plane, CONFIG};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Viewpoint3D {
@@ -271,14 +271,17 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
                     todo!("pan aligned vertical");
                 }
                 ViewDragCommand::PanHorizontal => {
-                    let y = self.pivot[Y].clone();
+                    let plane = Plane {
+                        axis: Y,
+                        coordinate: self.pivot[Y].clone(),
+                    };
                     let start = self
                         .cell_transform()
-                        .pixel_to_global_pos_in_plane(cursor_start, (Y, &y));
+                        .pixel_to_global_pos_in_plane(cursor_start, &plane);
                     Ok(Some(Box::new(move |this, cursor_end| {
                         let end = this
                             .cell_transform()
-                            .pixel_to_global_pos_in_plane(cursor_end, (Y, &y));
+                            .pixel_to_global_pos_in_plane(cursor_end, &plane);
                         if let (Some(start), Some(end)) = (&start, &end) {
                             this.pivot += start - end;
                         }

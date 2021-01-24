@@ -51,6 +51,8 @@ pub struct GenericGridView<G: GridViewDimension> {
     drag_handler: Option<DragHandler<Self>>,
     /// Type of mouse drag being handled.
     drag_type: Option<DragType>,
+    /// Initial screen position of mouse drag.
+    pub(super) drag_initial: Option<G::ScreenPos>,
 
     /// Time that the last several frames completed.
     last_frame_times: VecDeque<Instant>,
@@ -87,6 +89,7 @@ impl<G: GridViewDimension> Default for GenericGridView<G> {
 
             drag_handler: Default::default(),
             drag_type: Default::default(),
+            drag_initial: Default::default(),
 
             last_frame_times: Default::default(),
             last_sim_times: Default::default(),
@@ -313,7 +316,8 @@ impl<G: GridViewDimension> GenericGridView<G> {
                 self.selected_cell_state = new_selected_cell_state;
             }
             DrawCommand::Drag(c, cursor_start) => {
-                let initial_cell = match self.screen_pos(cursor_start).draw_cell(c.mode) {
+                let initial_screen_pos = self.screen_pos(cursor_start);
+                let initial_cell = match initial_screen_pos.draw_cell(c.mode, None) {
                     Some(cell) => cell,
                     None => return Ok(()),
                 };
@@ -327,7 +331,10 @@ impl<G: GridViewDimension> GenericGridView<G> {
                     DrawShape::Freeform => {
                         let mut pos1 = initial_cell;
                         Box::new(move |this, pixel| {
-                            let pos2 = match this.screen_pos(pixel).draw_cell(c.mode) {
+                            let pos2 = match this
+                                .screen_pos(pixel)
+                                .draw_cell(c.mode, this.drag_initial.as_ref())
+                            {
                                 Some(cell) => cell,
                                 None => return Ok(DragOutcome::Cancel),
                             };
@@ -347,7 +354,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
 
                 self.reset_worker_thread();
                 self.record();
-                self.start_drag(DragType::Drawing, new_drag_handler);
+                self.start_drag(DragType::Drawing, new_drag_handler, Some(cursor_start));
             }
             DrawCommand::Confirm => {
                 if self.is_drawing() {
@@ -372,9 +379,15 @@ impl<G: GridViewDimension> GenericGridView<G> {
     /// Starts a drag event.
     ///
     /// Do not call this method from within a drag handler.
-    pub(super) fn start_drag(&mut self, drag_type: DragType, drag_handler: DragHandler<Self>) {
+    pub(super) fn start_drag(
+        &mut self,
+        drag_type: DragType,
+        drag_handler: DragHandler<Self>,
+        pixel: Option<FVec2D>,
+    ) {
         self.drag_type = Some(drag_type);
         self.drag_handler = Some(drag_handler);
+        self.drag_initial = pixel.map(|p| self.screen_pos(p));
     }
     /// Executes a `ContinueDrag` command, calling the drag handler.
     ///
@@ -395,6 +408,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
     pub(super) fn stop_drag(&mut self) {
         self.drag_type = None;
         self.drag_handler = None;
+        self.drag_initial = None;
     }
 
     /// Submits a request to the worker thread. Returns an error if the worker

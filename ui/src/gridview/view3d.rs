@@ -35,7 +35,7 @@ impl GridViewDimension for GridViewDim3D {
         // Handle `FocusPixel` specially because it depends on the cell contents
         // of the automaton.
         if let ViewCommand::FocusPixel(pixel) = command {
-            if let Some(hit) = this.screen_pos(pixel).raycast {
+            if let Some(hit) = this.screen_pos(pixel).raycast_octree_hit {
                 // Set grid axes.
                 let axis = hit.face.normal_axis();
                 this.show_grid(axis, hit.pos[axis].round());
@@ -73,6 +73,7 @@ impl GridViewDimension for GridViewDim3D {
                     Box::new(move |gridview: &mut GridView3D, cursor_pos| {
                         interpolator_drag_handler(&mut gridview.viewpoint_interpolator, cursor_pos)
                     }) as DragHandler<GridView3D>,
+                    None,
                 );
             }
         }
@@ -85,7 +86,7 @@ impl GridViewDimension for GridViewDim3D {
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {
         let mouse = params.mouse;
-        let mouse_raycast = mouse.pos.and_then(|pixel| this.screen_pos(pixel).raycast);
+        let screen_pos = mouse.pos.map(|pixel| this.screen_pos(pixel));
 
         let mut frame = GridViewRender3D::new(params, this.viewpoint());
         frame.draw_cells(CellDrawParams {
@@ -100,17 +101,24 @@ impl GridViewDimension for GridViewDim3D {
         }
 
         // Draw mouse display.
-        if let Some(hit) = mouse_raycast {
+        if let Some(screen_pos) = &screen_pos {
             match mouse.display {
-                MouseDisplay::Draw if !this.viewpoint().too_small_to_draw() => {
-                    frame.add_hover_draw_overlay(&hit.cell, hit.face);
+                MouseDisplay::Draw(mode) => {
+                    if let Some((cell, face)) =
+                        screen_pos.draw_cell_and_face(mode, this.drag_initial.as_ref())
+                    {
+                        frame.add_hover_draw_overlay(&cell, face, mode);
+                    }
                 }
                 MouseDisplay::Select => {
-                    frame.add_hover_select_overlay(&hit.cell, hit.face);
+                    if let Some(hit) = &screen_pos.raycast {
+                        frame.add_hover_select_overlay(&hit.cell, hit.face);
+                    }
                 }
                 _ => (),
             }
         }
+
         frame.finish()
     }
 

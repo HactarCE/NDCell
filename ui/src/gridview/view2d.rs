@@ -7,7 +7,7 @@ use super::algorithms::bresenham;
 use super::generic::{GenericGridView, GridViewDimension};
 use super::history::History;
 use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
-use super::screenpos::ScreenPos2D;
+use super::screenpos::{ScreenPos, ScreenPos2D};
 use super::selection::Selection2D;
 use super::viewpoint::{Viewpoint, Viewpoint2D};
 use super::{DragHandler, DragOutcome, DragType};
@@ -61,6 +61,7 @@ impl GridViewDimension for GridViewDim2D {
                     Box::new(move |gridview: &mut GridView2D, cursor_pos| {
                         interpolator_drag_handler(&mut gridview.viewpoint_interpolator, cursor_pos)
                     }) as DragHandler<GridView2D>,
+                    None,
                 );
             }
         }
@@ -128,7 +129,11 @@ impl GridViewDimension for GridViewDim2D {
                     this.deselect();
                 }
 
-                this.start_drag(DragType::Selecting, new_drag_handler_with_threshold);
+                this.start_drag(
+                    DragType::Selecting,
+                    new_drag_handler_with_threshold,
+                    Some(cursor_start),
+                );
             }
 
             SelectCommand::SelectAll => {
@@ -221,12 +226,14 @@ impl GridViewDimension for GridViewDim2D {
 
         // Draw mouse display.
         if let Some(screen_pos) = &screen_pos {
-            let cell_pos = screen_pos.cell();
             match mouse.display {
-                MouseDisplay::Draw if !this.viewpoint().too_small_to_draw() => {
-                    frame.add_hover_draw_overlay(&cell_pos);
+                MouseDisplay::Draw(mode) => {
+                    if let Some(cell_pos) = screen_pos.draw_cell(mode, None) {
+                        frame.add_hover_draw_overlay(&cell_pos, mode);
+                    }
                 }
                 MouseDisplay::Select => {
+                    let cell_pos = screen_pos.cell();
                     frame.add_hover_select_overlay(&cell_pos);
                 }
                 _ => (),

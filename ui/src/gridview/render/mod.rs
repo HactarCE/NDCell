@@ -37,6 +37,8 @@ mod consts {
 
     /// Small value for avoiding Z fighting.
     pub const Z_EPSILON: f64 = 1.0 / 256.0;
+    /// Padding added to integer cuboid overlays, measured in render cells.
+    pub const CUBOID_OVERLAY_PADDING: f64 = GRIDLINE_WIDTH / 2.0;
 
     /// Width of gridlines, measured in cells.
     pub const GRIDLINE_WIDTH: f64 = 1.0 / 32.0;

@@ -26,7 +26,7 @@
   - [ ] Selecting
     - [ ] Resize selection
     - [ ] Move selection
-  - [ ] Drawing
+  - [x] Drawing
 - [ ] Improve UI
   - [ ] Better error reporting
     - [ ] RLE loading

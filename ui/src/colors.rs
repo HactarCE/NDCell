@@ -37,10 +37,23 @@ pub const CROSSHAIR_OPACITY: f32 = 0.2;
 pub mod hover {
     use super::*;
 
-    /// Color of the hovered cell when drawing.
-    pub const DRAW_FILL: Srgba = rgba!(0.0, 0.25, 0.5, 0.75);
-    /// Color of the outline around the hovered cell when drawing.
-    pub const DRAW_OUTLINE: Srgb = rgb!(0.0, 0.5, 1.0);
+    /// Color of the hovered cell when drawing in `PLACE` mode.
+    pub const PLACE_FILL: Srgba = rgba!(0.2, 0.5, 0.2, 0.75);
+    /// Color of the outline around the hovered cell when drawing in `PLACE`
+    /// mode.
+    pub const PLACE_OUTLINE: Srgb = rgb!(0.4, 1.0, 0.4);
+
+    /// Color of the hovered cell when drawing in `REPLACE` mode.
+    pub const REPLACE_FILL: Srgba = rgba!(0.0, 0.2, 0.5, 0.75);
+    /// Color of the outline around the hovered cell when drawing in `REPLACE`
+    /// mode.
+    pub const REPLACE_OUTLINE: Srgb = rgb!(0.0, 0.4, 1.0);
+
+    /// Color of the hovered cell when drawing in `ERASE` mode.
+    pub const ERASE_FILL: Srgba = rgba!(0.4, 0.1, 0.1, 0.75);
+    /// Color of the outline around the hovered cell when drawing in `ERASE`
+    /// mode.
+    pub const ERASE_OUTLINE: Srgb = rgb!(0.8, 0.2, 0.2);
 
     /// Color of the hovered cell when selecting.
     pub const SELECT_FILL: Srgba = rgba!(0.6, 0.6, 0.6, 0.75);

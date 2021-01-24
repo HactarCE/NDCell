@@ -31,6 +31,7 @@ use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoin
 use super::shaders;
 use super::vertices::Vertex2D;
 use super::CellDrawParams;
+use crate::commands::DrawMode;
 use crate::config::MouseDragBinding;
 use crate::ext::*;
 use crate::gridview::*;
@@ -260,9 +261,8 @@ impl GridViewRender2D<'_> {
 
     /// Adds a highlight on the render cell under the mouse cursor when using
     /// the drawing tool.
-    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec2D) {
-        use crate::colors::hover::*;
-        self.add_hover_overlay(cell_pos, DRAW_FILL, DRAW_OUTLINE);
+    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec2D, mode: DrawMode) {
+        self.add_hover_overlay(cell_pos, mode.fill_color(), mode.outline_color());
     }
     /// Adds a highlight on the render cell under the mouse cursor when using
     /// the selection tool.

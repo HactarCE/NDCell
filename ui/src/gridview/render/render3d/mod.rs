@@ -8,6 +8,7 @@ use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::uniforms::UniformBuffer;
 use glium::Surface;
+use itertools::Itertools;
 use palette::{Pixel, Srgb, Srgba};
 use sloth::Lazy;
 
@@ -22,7 +23,7 @@ use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoin
 use super::shaders;
 use super::vertices::Vertex3D;
 use super::CellDrawParams;
-use crate::config::MouseDragBinding;
+use crate::commands::DrawMode;
 use crate::ext::*;
 use crate::gridview::*;
 use crate::{Face, CONFIG, DISPLAY, FACES};
@@ -239,29 +240,12 @@ impl GridViewRender3D<'_> {
             face: Face::negative(perpendicular_axis),
             fill: OverlayFill::Gridlines3D,
         });
-
-        // "Freeform draw" target.
-        self.add_mouse_target_quad(
-            rect,
-            perpendicular_axis,
-            ModifiersState::empty(),
-            MouseTargetData {
-                binding: MouseDragBinding::Draw(
-                    DrawDragCommand {
-                        mode: DrawMode::Replace,
-                        shape: DrawShape::Freeform,
-                    }
-                    .into(),
-                ),
-            },
-        );
     }
 
     /// Adds a highlight on the render cell face under the mouse cursor when
     /// using the drawing tool.
-    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec3D, face: Face) {
-        use crate::colors::hover::*;
-        self.add_hover_overlay(cell_pos, face, DRAW_FILL, DRAW_OUTLINE);
+    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec3D, face: Face, mode: DrawMode) {
+        self.add_hover_overlay(cell_pos, face, mode.fill_color(), mode.outline_color());
     }
     /// Adds a highlight on the render cell face under the mouse cursor when
     /// using the selection tool.
@@ -278,10 +262,10 @@ impl GridViewRender3D<'_> {
         outline_color: Srgb,
     ) {
         let local_rect = IRect::single_cell(self.clamp_int_pos_to_visible(cell_pos));
-        let local_rect = self._adjust_rect_for_overlay(local_rect);
+        let local_frect = self._adjust_rect_for_overlay(local_rect);
         let width = r64(HOVER_HIGHLIGHT_WIDTH);
-        self.add_face_fill_overlay(local_rect, face, fill_color);
-        self.add_face_crosshairs_overlay(local_rect, face, outline_color, width);
+        self.add_cuboid_fill_overlay(local_frect, fill_color);
+        self.add_face_outline_overlay(local_rect, face, outline_color, width);
     }
 
     /// Adds all six faces of a filled-in cuboid with a solid color.
@@ -296,16 +280,36 @@ impl GridViewRender3D<'_> {
         let fill = fill.into();
         self.overlay_quads.push(OverlayQuad { rect, face, fill });
     }
+    /// Adds an outline around a face of a cuboid with a solid color.
+    fn add_face_outline_overlay(&mut self, cuboid: IRect3D, face: Face, color: Srgb, width: R64) {
+        let rect = face.of(cuboid.to_frect());
+        let min = rect.min();
+        let max = rect.max();
+        let [ax1, ax2] = face.plane_axes();
+        let mut corners = [min; 5];
+        corners[1][ax1] = max[ax1];
+        corners[2][ax1] = max[ax1];
+        corners[2][ax2] = max[ax2];
+        corners[3][ax2] = max[ax2];
+
+        for (&c1, &c2) in corners.iter().tuple_windows() {
+            self.add_line_overlay(
+                LineEndpoint3D::include(c1, color),
+                LineEndpoint3D::include(c2, color),
+                width,
+            );
+        }
+    }
     /// Adds crosshairs around a face of a cuboid with a solid color that fades into
     /// the gridline color toward the edges.
     fn add_face_crosshairs_overlay(
         &mut self,
-        cuboid: FRect3D,
+        cuboid: IRect3D,
         face: Face,
         color: Srgb,
         width: R64,
     ) {
-        let rect = face.of(cuboid);
+        let rect = face.of(cuboid.to_frect());
         let min = rect.min();
         let max = rect.max();
         let [ax1, ax2] = face.plane_axes();

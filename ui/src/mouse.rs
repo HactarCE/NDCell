@@ -2,6 +2,7 @@ use imgui::MouseCursor;
 
 use ndcell_core::ndvec::FVec2D;
 
+use crate::commands::DrawMode;
 use crate::Direction;
 
 /// What to display for the mouse cursor.
@@ -14,7 +15,7 @@ pub enum MouseDisplay {
     Pan,
     Orbit,
     Scale,
-    Draw,
+    Draw(DrawMode),
     Select,
     ResizeSelectionEdge(Direction),
     ResizeSelectionAbsolute,
@@ -32,7 +33,7 @@ impl MouseDisplay {
             Self::Pan => Some(Arrow),      // TODO: open palm hand
             Self::Orbit => Some(Arrow),    // TODO: some better icon?
             Self::Scale => Some(ResizeNS), // TODO: some better icon?
-            Self::Draw => Some(Arrow),     // TODO: pencil
+            Self::Draw(_) => Some(Arrow),  // TODO: pencil
             Self::Select => Some(Arrow),   // TODO: crosshairs/plus
             Self::ResizeSelectionEdge(direction) => match direction {
                 Direction::N | Direction::S => Some(ResizeNS),

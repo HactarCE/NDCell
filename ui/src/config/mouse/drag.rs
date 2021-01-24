@@ -12,7 +12,7 @@ pub enum MouseDragBinding {
 impl MouseDragBinding {
     pub fn display(&self) -> MouseDisplay {
         match self {
-            Self::Draw(_) => MouseDisplay::Draw,
+            Self::Draw(d) => MouseDisplay::Draw(d.0.mode),
             Self::Select(s) => {
                 use SelectDragCommand::*;
                 match s.0 {

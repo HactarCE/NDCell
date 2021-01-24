@@ -1,4 +1,5 @@
 use cgmath::Deg;
+use palette::{Srgb, Srgba};
 
 use ndcell_core::prelude::*;
 
@@ -130,7 +131,7 @@ pub struct DrawDragCommand {
     pub shape: DrawShape,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DrawMode {
     /// Sets the state of a #0 cell to nonzero.
     Place,
@@ -156,6 +157,21 @@ impl DrawMode {
                 }
             }
             DrawMode::Erase => 0_u8,
+        }
+    }
+
+    pub fn fill_color(self) -> Srgba {
+        match self {
+            DrawMode::Place => crate::colors::hover::PLACE_FILL,
+            DrawMode::Replace => crate::colors::hover::REPLACE_FILL,
+            DrawMode::Erase => crate::colors::hover::ERASE_FILL,
+        }
+    }
+    pub fn outline_color(self) -> Srgb {
+        match self {
+            DrawMode::Place => crate::colors::hover::PLACE_OUTLINE,
+            DrawMode::Replace => crate::colors::hover::REPLACE_OUTLINE,
+            DrawMode::Erase => crate::colors::hover::ERASE_OUTLINE,
         }
     }
 }

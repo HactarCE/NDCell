@@ -27,14 +27,24 @@ impl Default for MouseConfig {
         use MouseButton::{Left, Middle, Right};
         use MouseDragBinding::{Draw, Select, View};
 
-        let draw_freeform: DrawDragBinding = DrawDragCommand {
+        let replace_freeform: DrawDragBinding = DrawDragCommand {
             mode: DrawMode::Replace,
             shape: DrawShape::Freeform,
         }
         .into();
-        let draw_line: DrawDragBinding = DrawDragCommand {
-            mode: DrawMode::Replace,
+        let place_line: DrawDragBinding = DrawDragCommand {
+            mode: DrawMode::Place,
             shape: DrawShape::Line,
+        }
+        .into();
+        let place_freeform: DrawDragBinding = DrawDragCommand {
+            mode: DrawMode::Place,
+            shape: DrawShape::Freeform,
+        }
+        .into();
+        let erase_freeform: DrawDragBinding = DrawDragCommand {
+            mode: DrawMode::Erase,
+            shape: DrawShape::Freeform,
         }
         .into();
 
@@ -42,8 +52,8 @@ impl Default for MouseConfig {
             click_bindings_2d: vec![].into_iter().collect(),
             click_bindings_3d: vec![].into_iter().collect(),
             drag_bindings_2d: vec![
-                (NONE, Left, Draw(draw_freeform)),
-                (SHIFT, Left, Draw(draw_line)),
+                (NONE, Left, Draw(replace_freeform)),
+                (SHIFT, Left, Draw(place_line)),
                 (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
                 (
                     CTRL | SHIFT,
@@ -57,8 +67,8 @@ impl Default for MouseConfig {
             .into_iter()
             .collect(),
             drag_bindings_3d: vec![
-                (NONE, Left, Draw(draw_freeform)),
-                (SHIFT, Left, Draw(draw_line)),
+                (NONE, Left, Draw(place_freeform)),
+                (SHIFT, Left, Draw(erase_freeform)),
                 (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
                 (NONE, Right, View(ViewDragCommand::Orbit.into())),
                 (CTRL, Right, View(ViewDragCommand::Scale.into())),

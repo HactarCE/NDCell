@@ -55,26 +55,34 @@ impl MousePicker {
         (fbo, viewport)
     }
 
-    pub fn get_pixel(&self, (cursor_x, cursor_y): (u32, u32)) -> u32 {
-        let (target_w, target_h) = self.attachments.desired_size().unwrap();
-        let (texture, _depth) = self.attachments.unwrap();
+    pub fn get_pixel(&self, cursor_pos: (u32, u32)) -> u32 {
+        if let Some(rect) = self.single_pixel_rect(cursor_pos) {
+            let (texture, _depth) = self.attachments.unwrap();
 
-        let single_pixel_rect = glium::Rect {
-            left: cursor_x,
-            bottom: target_h.saturating_sub(cursor_y + 1),
-            width: 1,
-            height: 1,
-        };
-
-        if single_pixel_rect.left < target_w && single_pixel_rect.bottom < target_h {
             texture
                 .main_level()
                 .first_layer()
                 .into_image(None)
                 .unwrap()
-                .raw_read::<Vec<Vec<u32>>, u32>(&single_pixel_rect)[0][0]
+                .raw_read::<Vec<Vec<u32>>, u32>(&rect)[0][0]
         } else {
             0
+        }
+    }
+
+    fn single_pixel_rect(&self, (cursor_x, cursor_y): (u32, u32)) -> Option<glium::Rect> {
+        let (target_w, target_h) = self.attachments.desired_size().unwrap();
+        let left = cursor_x;
+        let bottom = target_h.saturating_sub(cursor_y + 1);
+        if left < target_w && bottom < target_h {
+            Some(glium::Rect {
+                left,
+                bottom,
+                width: 1,
+                height: 1,
+            })
+        } else {
+            None
         }
     }
 }

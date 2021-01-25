@@ -9,7 +9,7 @@ uniform usampler2D quadtree_texture;
 uniform int layer_count;
 uniform uint root_idx;
 
-uniform ivec2 quadtree_offset;
+uniform ivec2 quadtree_base;
 
 uint texture_width = uint(textureSize(quadtree_texture, 0).x);
 int quadtree_len = 1 << layer_count;
@@ -32,7 +32,7 @@ uint getNodeChild(uint node, bvec2 which_child) {
 }
 
 void main() {
-    ivec2 cell_pos = ivec2(floor(gl_FragCoord.xy)) + quadtree_offset;
+    ivec2 cell_pos = ivec2(floor(gl_FragCoord.xy)) - quadtree_base;
 
     if (cell_pos.x < 0 || cell_pos.x > quadtree_len) discard;
     if (cell_pos.y < 0 || cell_pos.y > quadtree_len) discard;

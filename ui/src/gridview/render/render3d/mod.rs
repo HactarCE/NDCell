@@ -24,6 +24,7 @@ use super::shaders;
 use super::vertices::Vertex3D;
 use super::CellDrawParams;
 use crate::commands::DrawMode;
+use crate::config::MouseDragBinding;
 use crate::ext::*;
 use crate::gridview::*;
 use crate::{Face, CONFIG, DISPLAY, FACES};
@@ -306,6 +307,26 @@ impl GridViewRender3D<'_> {
         let width = r64(SELECTION_HIGHLIGHT_WIDTH);
         self.add_cuboid_fill_overlay(local_frect, fill_color);
         self.add_cuboid_outline_overlay(local_rect, outline_color, width);
+
+        for &face in &FACES {
+            let binding = MouseDragBinding::Select(SelectDragCommand::Resize3D(face).into());
+            self.add_mouse_target_face(
+                local_frect,
+                face,
+                Some(ModifiersState::empty()),
+                Some(MouseTargetData { binding }),
+            )
+        }
+    }
+    /// Adds a highlight indicating which face of the selection will be resized.
+    pub fn add_selection_face_resize_overlay(&mut self, selection_rect: &BigRect3D, face: Face) {
+        let local_rect = self.clip_int_rect_to_visible(selection_rect);
+        let local_frect = self._adjust_rect_for_overlay(local_rect);
+        let width = r64(SELECTION_HIGHLIGHT_WIDTH);
+        let fill_color = crate::colors::selection::RESIZE_FILL;
+        let outline_color = crate::colors::selection::RESIZE_OUTLINE;
+        self.add_face_fill_overlay(local_frect, face, fill_color);
+        self.add_face_outline_overlay(local_rect, face, outline_color, width);
     }
 
     /// Adds all six faces of a filled-in cuboid with a solid color.

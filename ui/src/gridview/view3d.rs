@@ -147,6 +147,12 @@ impl GridViewDimension for GridViewDim3D {
                 frame.add_selection_region_highlight_overlay(&selection.rect);
             }
         }
+        // Draw relative selection resize preview after drawing selection.
+        if let MouseDisplay::ResizeSelectionFace(face) = mouse.display {
+            if let Some(current_selection) = &this.selection {
+                frame.add_selection_face_resize_overlay(&current_selection.rect, face);
+            }
+        }
 
         frame.finish()
     }

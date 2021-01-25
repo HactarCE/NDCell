@@ -31,8 +31,12 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 
 ## Screenshots
 
-<img src="https://i.imgur.com/vRMLNYC.png" alt="Gosper's Glider Gun simulated for 57 generations" width="512" />
-<img src="https://i.imgur.com/uKiOxqy.png" alt="Catacryst simulated for almost 8 million generations" width="512" />
+Click to view full resolution / play video.
+
+<img src="https://i.imgur.com/vRMLNYC.png" alt="Gosper's Glider Gun simulated for 57 generations" width="256" />
+<img src="https://i.imgur.com/uKiOxqy.png" alt="Catacryst simulated for 7.9 million generations" width="256" />
+<img src="https://i.imgur.com/NAxRaYd.png" alt="WireWorld primes calculator simulated for 2.9 million generations, displaying the number 23" width="256" />
+<a href="https://i.imgur.com/xAhILIO.mp4"><img src="https://i.imgur.com/aWGsV9Y.png" alt="3D WireWorld XOR gate supporting 3-micron signals" width="256" /></a>
 
 ## What works right now
 

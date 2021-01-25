@@ -5,6 +5,7 @@ use ndcell_core::prelude::*;
 
 #[cfg(debug_assertions)]
 mod debug;
+mod setup;
 mod simulation;
 
 use crate::commands::Command;
@@ -13,6 +14,7 @@ use crate::mouse::MouseState;
 use crate::CONFIG;
 #[cfg(debug_assertions)]
 use debug::DebugWindow;
+use setup::SetupWindow;
 use simulation::SimulationWindow;
 
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
@@ -28,9 +30,10 @@ pub struct BuildParams<'a> {
 
 #[derive(Debug, Default)]
 pub struct MainWindow {
-    simulation: SimulationWindow,
     #[cfg(debug_assertions)]
     debug: DebugWindow,
+    setup: SetupWindow,
+    simulation: SimulationWindow,
 }
 impl MainWindow {
     /// Builds the window.
@@ -149,14 +152,16 @@ impl MainWindow {
                 gridview.selected_cell_state(),
             ));
             ui.text("");
+            ui.checkbox(im_str!("Setup"), &mut self.setup.is_visible);
             ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
             #[cfg(debug_assertions)]
             ui.checkbox(im_str!("Debug values"), &mut self.debug.is_visible);
         });
 
-        self.simulation.build(params);
         #[cfg(debug_assertions)]
         self.debug.build(params);
+        self.setup.build(params);
+        self.simulation.build(params);
     }
 }
 

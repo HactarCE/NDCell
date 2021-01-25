@@ -106,6 +106,11 @@ impl GridViewDimension for GridViewDim3D {
     }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {
+        if this.automaton.ndtree.root_ref().is_empty() {
+            // Provide a surface to place initial cells on.
+            this.show_grid(Axis::Y, BigInt::zero());
+        }
+
         let mouse = params.mouse;
         let screen_pos = mouse.pos.map(|pixel| this.screen_pos(pixel));
 

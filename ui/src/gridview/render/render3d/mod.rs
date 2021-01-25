@@ -198,6 +198,24 @@ impl GridViewRender3D<'_> {
             )
             .expect("Drawing cells");
 
+        // If the mouse is hovering over a cell, draw that on the mouse picker.
+        if let Some(pixel) = self.params.mouse.pos {
+            let (start, delta) = self.xform.pixel_to_local_ray(pixel);
+            let raycast = crate::gridview::algorithms::raycast::intersect_octree(
+                start - octree_base.to_fvec(),
+                delta,
+                self.xform.render_cell_layer,
+                visible_octree.root.as_ref(),
+            );
+            if let Some(hit) = raycast {
+                let cuboid = IRect::single_cell(hit.pos_int + octree_base).to_frect();
+                let face = hit.face;
+                let modifiers = None;
+                let target_data = None;
+                self.add_mouse_target_face(cuboid, face, modifiers, target_data);
+            }
+        }
+
         Ok(())
     }
 

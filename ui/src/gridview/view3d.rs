@@ -1,9 +1,10 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
+use log::warn;
 
 use ndcell_core::prelude::*;
 
 use super::algorithms::raycast;
-use super::generic::{GenericGridView, GridViewDimension};
+use super::generic::{GenericGridView, GridViewDimension, SelectionDragHandler};
 use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
 use super::screenpos::{RaycastHit, RaycastHitThing, ScreenPos3D};
 use super::viewpoint::{Viewpoint, Viewpoint3D};
@@ -12,6 +13,8 @@ use crate::commands::*;
 use crate::mouse::MouseDisplay;
 
 pub type GridView3D = GenericGridView<GridViewDim3D>;
+type SelectionDragHandler3D = SelectionDragHandler<GridViewDim3D>;
+
 macro_rules! ignore_command {
     ($c:expr) => {{
         warn!("Ignoring {:?} in GridView3D", $c);
@@ -86,8 +89,20 @@ impl GridViewDimension for GridViewDim3D {
 
         Ok(())
     }
-    fn do_select_command(_this: &mut GridView3D, _command: SelectCommand) -> Result<()> {
-        bail!("unimplemented")
+    fn make_select_drag_handler(
+        this: &mut GridView3D,
+        command: SelectDragCommand,
+        initial_pos: ScreenPos3D,
+    ) -> Option<SelectionDragHandler3D> {
+        match command {
+            SelectDragCommand::NewRect => unimplemented!(),
+            SelectDragCommand::Resize2D(_) => ignore_command!(command),
+            SelectDragCommand::Resize3D(face) => unimplemented!(),
+            SelectDragCommand::ResizeToCell => unimplemented!(),
+            SelectDragCommand::MoveSelection => unimplemented!(),
+            SelectDragCommand::MoveCells => unimplemented!(),
+            SelectDragCommand::CopyCells => unimplemented!(),
+        }
     }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {

@@ -3,18 +3,17 @@ use log::warn;
 
 use ndcell_core::prelude::*;
 
-use super::generic::{GenericGridView, GridViewDimension};
-use super::history::History;
+use super::generic::{GenericGridView, GridViewDimension, SelectionDragHandler};
 use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
 use super::screenpos::{ScreenPos, ScreenPos2D};
-use super::selection::Selection2D;
 use super::viewpoint::{Viewpoint, Viewpoint2D};
 use super::{DragHandler, DragOutcome, DragType};
 use crate::commands::*;
 use crate::mouse::MouseDisplay;
-use crate::{Direction, Scale, CONFIG};
+use crate::{Direction, Scale};
 
 pub type GridView2D = GenericGridView<GridViewDim2D>;
+type SelectionDragHandler2D = SelectionDragHandler<GridViewDim2D>;
 
 macro_rules! ignore_command {
     ($c:expr) => {{
@@ -74,134 +73,30 @@ impl GridViewDimension for GridViewDim2D {
 
         Ok(())
     }
-    fn do_select_command(this: &mut GridView2D, command: SelectCommand) -> Result<()> {
+    fn make_select_drag_handler(
+        this: &mut GenericGridView<Self>,
+        command: SelectDragCommand,
+        initial_pos: ScreenPos2D,
+    ) -> Option<SelectionDragHandler2D> {
         match command {
-            SelectCommand::Drag(c, cursor_start) => {
-                let initial_pos = this.screen_pos(cursor_start);
-
-                let new_drag_handler = match c {
-                    SelectDragCommand::NewRect => make_new_rect_selection_drag_handler(initial_pos),
-                    SelectDragCommand::Resize2D(direction) => {
-                        make_resize_selection_drag_handler(initial_pos, direction)
-                    }
-                    SelectDragCommand::ResizeToCell => {
-                        make_resize_selection_to_cell_drag_handler(initial_pos)
-                    }
-                    SelectDragCommand::MoveSelection => {
-                        make_move_selection_drag_handler(initial_pos)
-                    }
-                    SelectDragCommand::MoveCells => {
-                        make_move_or_copy_selected_cells_drag_handler(initial_pos, false)
-                    }
-                    SelectDragCommand::CopyCells => {
-                        make_move_or_copy_selected_cells_drag_handler(initial_pos, true)
-                    }
-                };
-
-                let wait_for_drag_threshold = match c {
-                    SelectDragCommand::NewRect => true,
-                    SelectDragCommand::Resize2D { .. } => true,
-                    SelectDragCommand::ResizeToCell => false,
-                    SelectDragCommand::MoveSelection => true,
-                    SelectDragCommand::MoveCells => true,
-                    SelectDragCommand::CopyCells => true,
-                };
-
-                let new_drag_handler_with_threshold: DragHandler<GridView2D> =
-                    make_selection_drag_handler_with_threshold(
-                        cursor_start,
-                        wait_for_drag_threshold,
-                        new_drag_handler,
-                    );
-
-                match c {
-                    SelectDragCommand::NewRect
-                    | SelectDragCommand::Resize2D { .. }
-                    | SelectDragCommand::ResizeToCell
-                    | SelectDragCommand::MoveSelection => {
-                        if CONFIG.lock().hist.record_select {
-                            this.reset_worker_thread();
-                            this.record();
-                        }
-                    }
-                    SelectDragCommand::MoveCells | SelectDragCommand::CopyCells => {
-                        this.reset_worker_thread();
-                        this.record();
-                    }
-                }
-
-                if let SelectDragCommand::NewRect = c {
-                    // Deselect immediately; don't wait for drag threshold.
-                    this.deselect();
-                }
-
-                this.start_drag(
-                    DragType::Selecting,
-                    new_drag_handler_with_threshold,
-                    Some(cursor_start),
-                );
+            SelectDragCommand::NewRect => Some(make_new_rect_selection_drag_handler(initial_pos)),
+            SelectDragCommand::Resize2D(direction) => {
+                Some(make_resize_selection_drag_handler(initial_pos, direction))
             }
-
-            SelectCommand::SelectAll => {
-                this.deselect(); // take into account pasted cells
-                this.set_selection(this.automaton.ndtree.bounding_rect().map(Selection2D::from))
+            SelectDragCommand::Resize3D(_) => ignore_command!(command),
+            SelectDragCommand::ResizeToCell => {
+                Some(make_resize_selection_to_cell_drag_handler(initial_pos))
             }
-            SelectCommand::Deselect => {
-                this.deselect();
-            }
-
-            SelectCommand::Copy(format) => {
-                if this.selection.is_some() {
-                    let result = this.export(format);
-                    match result {
-                        Ok(s) => crate::clipboard_compat::clipboard_set(s)?,
-                        Err(msg) => warn!("Failed to generate {}: {}", format, msg),
-                    }
-                }
-            }
-            SelectCommand::Paste => {
-                let old_sel_rect = this.selection_rect();
-
-                this.record();
-                let string_from_clipboard = crate::clipboard_compat::clipboard_get()?;
-                let result =
-                    Selection2D::from_str(&string_from_clipboard, this.automaton.ndtree.pool());
-                match result {
-                    Ok(sel) => {
-                        this.set_selection(sel);
-                        this.ensure_selection_visible();
-
-                        // If selection size is the same, preserve position.
-                        if let Some((old_rect, new_sel)) = old_sel_rect.zip(this.selection.as_mut())
-                        {
-                            if old_rect.size() == new_sel.rect.size() {
-                                *new_sel = new_sel.move_by(old_rect.min() - new_sel.rect.min());
-                            }
-                        }
-                    }
-                    Err(errors) => warn!("Failed to load pattern: {:?}", errors),
-                }
-            }
-            SelectCommand::Delete => {
-                if this.selection.is_some() {
-                    this.record();
-                    this.selection.as_mut().unwrap().cells = None;
-                    this.grab_selected_cells();
-                    this.selection.as_mut().unwrap().cells = None;
-                }
-            }
-
-            SelectCommand::Cancel => {
-                if let Some(sel) = &this.selection {
-                    if sel.cells.is_some() {
-                        this.drop_selected_cells();
-                    } else {
-                        this.deselect();
-                    }
-                }
-            }
+            SelectDragCommand::MoveSelection => Some(make_move_selection_drag_handler(initial_pos)),
+            SelectDragCommand::MoveCells => Some(make_move_or_copy_selected_cells_drag_handler(
+                initial_pos,
+                false,
+            )),
+            SelectDragCommand::CopyCells => Some(make_move_or_copy_selected_cells_drag_handler(
+                initial_pos,
+                true,
+            )),
         }
-        Ok(())
     }
 
     fn render(this: &mut GridView2D, params: RenderParams<'_>) -> Result<RenderResult> {
@@ -288,75 +183,8 @@ impl GridViewDimension for GridViewDim2D {
         ScreenPos2D { pixel, layer, pos }
     }
 }
-impl GridView2D {
-    /// Moves the selection to the center of the screen along each axis for
-    /// which it is outside the viewport.
-    fn ensure_selection_visible(&mut self) {
-        if let Some(mut sel) = self.selection.take() {
-            // The number of render cells of padding to ensure.
-            const PADDING: usize = 2;
 
-            let (render_cell_layer, _) = self.viewpoint().render_cell_layer_and_scale();
-
-            // Convert to render cells.
-            let sel_rect = sel.rect.div_outward(&render_cell_layer.big_len());
-            let visible_rect = self
-                .viewpoint()
-                .global_visible_rect()
-                .div_outward(&render_cell_layer.big_len());
-
-            let sel_min = sel_rect.min();
-            let sel_max = sel_rect.max();
-            let sel_center = sel_rect.center();
-            let visible_min = visible_rect.min();
-            let visible_max = visible_rect.max();
-            let view_center = self.viewpoint().center().floor();
-
-            for &ax in Dim2D::axes() {
-                if sel_max[ax] < visible_min[ax].clone() + PADDING
-                    || visible_max[ax] < sel_min[ax].clone() + PADDING
-                {
-                    // Move selection to center along this axis.
-                    sel =
-                        sel.move_by(NdVec::unit(ax) * (view_center[ax].clone() - &sel_center[ax]));
-                }
-            }
-
-            self.set_selection(Some(sel));
-        }
-    }
-}
-
-type SelectionDragHandler = Box<dyn FnMut(&mut GridView2D, ScreenPos2D) -> Result<DragOutcome>>;
-
-fn make_selection_drag_handler_with_threshold(
-    cursor_start: FVec2D,
-    wait_for_drag_threshold: bool,
-    mut inner_drag_handler: SelectionDragHandler,
-) -> DragHandler<GridView2D> {
-    let drag_threshold = r64(CONFIG.lock().mouse.drag_threshold);
-
-    // State variable to be moved into the closure and used by the
-    // drag handler.
-    let mut past_drag_threshold: bool = false;
-    if !wait_for_drag_threshold {
-        past_drag_threshold = true;
-    }
-
-    Box::new(move |this, new_cursor_pos| {
-        if !((new_cursor_pos - cursor_start).abs() < FVec::repeat(drag_threshold)) {
-            past_drag_threshold = true;
-        }
-        if past_drag_threshold {
-            let screen_pos = this.screen_pos(new_cursor_pos);
-            inner_drag_handler(this, screen_pos)
-        } else {
-            Ok(DragOutcome::Continue)
-        }
-    })
-}
-
-fn make_new_rect_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler {
+fn make_new_rect_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler2D {
     Box::new(move |this, new_pos| {
         this.set_selection_rect(Some(NdRect::span_rects(initial_pos.rect(), new_pos.rect())));
         Ok(DragOutcome::Continue)
@@ -365,7 +193,7 @@ fn make_new_rect_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDr
 fn make_resize_selection_drag_handler(
     initial_pos: ScreenPos2D,
     direction: Direction,
-) -> SelectionDragHandler {
+) -> SelectionDragHandler2D {
     let mut initial_selection = None;
 
     Box::new(move |this, new_pos| {
@@ -384,7 +212,7 @@ fn make_resize_selection_drag_handler(
         }
     })
 }
-fn make_resize_selection_to_cell_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler {
+fn make_resize_selection_to_cell_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler2D {
     let mut initial_selection = None;
 
     Box::new(move |this, new_pos| {
@@ -402,7 +230,7 @@ fn make_resize_selection_to_cell_drag_handler(initial_pos: ScreenPos2D) -> Selec
         }
     })
 }
-fn make_move_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler {
+fn make_move_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler2D {
     let mut initial_selection = None;
 
     Box::new(move |this, new_pos| {
@@ -420,7 +248,7 @@ fn make_move_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHa
 fn make_move_or_copy_selected_cells_drag_handler(
     initial_pos: ScreenPos2D,
     copy: bool,
-) -> SelectionDragHandler {
+) -> SelectionDragHandler2D {
     let mut initial_selection = None;
 
     Box::new(move |this, new_pos| {

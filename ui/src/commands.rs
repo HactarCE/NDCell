@@ -3,7 +3,7 @@ use palette::{Srgb, Srgba};
 
 use ndcell_core::prelude::*;
 
-use crate::{Direction, Scale};
+use crate::{Direction, Face, Scale};
 
 macro_rules! impl_command_from {
     ( Command::$command_variant:ident($inner:ty) ) => {
@@ -202,8 +202,22 @@ impl_command_from!(Command::Select(SelectCommand));
 pub enum SelectDragCommand {
     NewRect,
     Resize2D(Direction),
+    Resize3D(Face),
     ResizeToCell,
     MoveSelection,
     MoveCells,
     CopyCells,
+}
+impl SelectDragCommand {
+    pub fn uses_drag_threshold(self) -> bool {
+        match self {
+            SelectDragCommand::NewRect => true,
+            SelectDragCommand::Resize2D(_) => true,
+            SelectDragCommand::Resize3D(_) => true,
+            SelectDragCommand::ResizeToCell => false,
+            SelectDragCommand::MoveSelection => true,
+            SelectDragCommand::MoveCells => true,
+            SelectDragCommand::CopyCells => true,
+        }
+    }
 }

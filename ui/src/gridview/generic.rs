@@ -28,6 +28,10 @@ const MAX_LAST_FRAME_TIMES: usize = 2;
 /// steps per second.
 const MAX_LAST_SIM_TIMES: usize = 4;
 
+pub type SelectionDragHandler<G> = Box<
+    dyn FnMut(&mut GenericGridView<G>, <G as GridViewDimension>::ScreenPos) -> Result<DragOutcome>,
+>;
+
 /// Dimension-generic interactive cellular automaton interface.
 pub struct GenericGridView<G: GridViewDimension> {
     pub automaton: NdAutomaton<G::D>,
@@ -372,8 +376,97 @@ impl<G: GridViewDimension> GenericGridView<G> {
     }
     /// Executes a `Select` command.
     fn do_select_command(&mut self, command: SelectCommand) -> Result<()> {
-        // `Select` commands depend on the number of dimensions.
-        G::do_select_command(self, command)
+        match command {
+            SelectCommand::Drag(c, cursor_start) => {
+                let initial_pos = self.screen_pos(cursor_start);
+                // Drag handlers depend on the number of dimensions.
+                let new_drag_handler = match G::make_select_drag_handler(self, c, initial_pos) {
+                    Some(h) => h,
+                    None => return Ok(()),
+                };
+                let new_drag_handler_with_threshold: DragHandler<Self> =
+                    make_selection_drag_handler_with_threshold(
+                        cursor_start,
+                        c.uses_drag_threshold(),
+                        new_drag_handler,
+                    );
+                if CONFIG.lock().hist.should_record_select_drag_command(c) {
+                    self.reset_worker_thread();
+                    self.record();
+                }
+
+                if let SelectDragCommand::NewRect = c {
+                    // Deselect immediately; don't wait for drag threshold.
+                    self.deselect();
+                }
+
+                self.start_drag(
+                    DragType::Selecting,
+                    new_drag_handler_with_threshold,
+                    Some(cursor_start),
+                );
+            }
+
+            SelectCommand::SelectAll => {
+                self.deselect(); // take into account pasted cells
+                self.set_selection(self.automaton.ndtree.bounding_rect().map(Selection::from))
+            }
+            SelectCommand::Deselect => {
+                self.deselect();
+            }
+
+            SelectCommand::Copy(format) => {
+                if self.selection.is_some() {
+                    let result = self.export(format);
+                    match result {
+                        Ok(s) => crate::clipboard_compat::clipboard_set(s)?,
+                        Err(msg) => warn!("Failed to generate {}: {}", format, msg),
+                    }
+                }
+            }
+            SelectCommand::Paste => {
+                let old_sel_rect = self.selection_rect();
+
+                self.record();
+                let string_from_clipboard = crate::clipboard_compat::clipboard_get()?;
+                let result =
+                    Selection::from_str(&string_from_clipboard, self.automaton.ndtree.pool());
+                match result {
+                    Ok(sel) => {
+                        self.set_selection(sel);
+                        self.ensure_selection_visible();
+
+                        // If selection size is the same, preserve position.
+                        if let Some((old_rect, new_sel)) = old_sel_rect.zip(self.selection.as_mut())
+                        {
+                            if old_rect.size() == new_sel.rect.size() {
+                                *new_sel = new_sel.move_by(old_rect.min() - new_sel.rect.min());
+                            }
+                        }
+                    }
+                    Err(errors) => warn!("Failed to load pattern: {:?}", errors),
+                }
+            }
+            SelectCommand::Delete => {
+                if self.selection.is_some() {
+                    self.record();
+                    self.selection.as_mut().unwrap().cells = None;
+                    self.grab_selected_cells();
+                    self.selection.as_mut().unwrap().cells = None;
+                }
+            }
+
+            SelectCommand::Cancel => {
+                if let Some(sel) = &self.selection {
+                    if sel.cells.is_some() {
+                        self.drop_selected_cells();
+                    } else {
+                        self.deselect();
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Starts a drag event.
@@ -631,6 +724,42 @@ impl<G: GridViewDimension> GenericGridView<G> {
         }
         self.selection.take()
     }
+    /// Moves the selection to the center of the screen along each axis for
+    /// which it is outside the viewport.
+    fn ensure_selection_visible(&mut self) {
+        if let Some(mut sel) = self.selection.take() {
+            // The number of render cells of padding to ensure.
+            const PADDING: usize = 2;
+
+            let render_cell_layer = self.viewpoint().render_cell_layer();
+
+            // Convert to render cells.
+            let sel_rect = sel.rect.div_outward(&render_cell_layer.big_len());
+            let visible_rect = self
+                .viewpoint()
+                .global_visible_rect()
+                .div_outward(&render_cell_layer.big_len());
+
+            let sel_min = sel_rect.min();
+            let sel_max = sel_rect.max();
+            let sel_center = sel_rect.center();
+            let visible_min = visible_rect.min();
+            let visible_max = visible_rect.max();
+            let view_center = self.viewpoint().center().floor();
+
+            for &ax in Dim2D::axes() {
+                if sel_max[ax] < visible_min[ax].clone() + PADDING
+                    || visible_max[ax] < sel_min[ax].clone() + PADDING
+                {
+                    // Move selection to center along this axis.
+                    sel =
+                        sel.move_by(NdVec::unit(ax) * (view_center[ax].clone() - &sel_center[ax]));
+                }
+            }
+
+            self.set_selection(Some(sel));
+        }
+    }
     /// Moves the selected cells from the selection to the main grid. Outputs a
     /// warning in the log if there is no selection.
     pub(super) fn drop_selected_cells(&mut self) {
@@ -777,21 +906,52 @@ impl<G: GridViewDimension> GenericGridView<G> {
     }
 }
 
-pub trait GridViewDimension: fmt::Debug + Default {
+pub trait GridViewDimension: 'static + fmt::Debug + Default {
     type D: Dim;
     type Viewpoint: Viewpoint<Self::D>;
     type ScreenPos: ScreenPos<D = Self::D>;
 
     /// Executes a `View` command.
     fn do_view_command(this: &mut GenericGridView<Self>, command: ViewCommand) -> Result<()>;
-    /// Executes a `Select` command.
-    fn do_select_command(this: &mut GenericGridView<Self>, command: SelectCommand) -> Result<()>;
+    /// Returns a drag handler for a `SelectDragCommand`.
+    fn make_select_drag_handler(
+        this: &mut GenericGridView<Self>,
+        command: SelectDragCommand,
+        initial_pos: Self::ScreenPos,
+    ) -> Option<SelectionDragHandler<Self>>;
 
     /// Renders the gridview.
     fn render(this: &mut GenericGridView<Self>, params: RenderParams<'_>) -> Result<RenderResult>;
 
     /// Returns a useful representation of a pixel position on the screen.
     fn screen_pos(this: &GenericGridView<Self>, pixel: FVec2D) -> Self::ScreenPos;
+}
+
+fn make_selection_drag_handler_with_threshold<G: GridViewDimension>(
+    cursor_start: FVec2D,
+    wait_for_drag_threshold: bool,
+    mut inner_drag_handler: SelectionDragHandler<G>,
+) -> DragHandler<GenericGridView<G>> {
+    let drag_threshold = r64(CONFIG.lock().mouse.drag_threshold);
+
+    // State variable to be moved into the closure and used by the
+    // drag handler.
+    let mut past_drag_threshold: bool = false;
+    if !wait_for_drag_threshold {
+        past_drag_threshold = true;
+    }
+
+    Box::new(move |this, new_cursor_pos| {
+        if !((new_cursor_pos - cursor_start).abs() < FVec::repeat(drag_threshold)) {
+            past_drag_threshold = true;
+        }
+        if past_drag_threshold {
+            let screen_pos = this.screen_pos(new_cursor_pos);
+            inner_drag_handler(this, screen_pos)
+        } else {
+            Ok(DragOutcome::Continue)
+        }
+    })
 }
 
 #[derive(Debug, Clone)]

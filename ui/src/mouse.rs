@@ -3,7 +3,7 @@ use imgui::MouseCursor;
 use ndcell_core::ndvec::FVec2D;
 
 use crate::commands::DrawMode;
-use crate::Direction;
+use crate::{Direction, Face};
 
 /// What to display for the mouse cursor.
 ///
@@ -18,6 +18,7 @@ pub enum MouseDisplay {
     Draw(DrawMode),
     Select,
     ResizeSelectionEdge(Direction),
+    ResizeSelectionFace(Face),
     ResizeSelectionAbsolute,
     Move,
 }
@@ -41,6 +42,7 @@ impl MouseDisplay {
                 Direction::E | Direction::W => Some(ResizeEW),
                 Direction::SE | Direction::NW => Some(ResizeNWSE),
             },
+            Self::ResizeSelectionFace(_) => Some(Arrow),
             Self::Move => Some(ResizeAll),
             _ => Some(Arrow),
         }

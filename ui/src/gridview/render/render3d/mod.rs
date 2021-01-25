@@ -38,13 +38,6 @@ type CuboidVerts = [Option<QuadVerts>; 6];
 
 type LazyUbo<T> = Lazy<UniformBuffer<T>, Box<dyn FnOnce() -> UniformBuffer<T>>>;
 
-const DEPTH_TEST: glium::Depth = glium::Depth {
-    test: glium::DepthTest::IfLessOrEqual,
-    write: true,
-    range: (0.0, 1.0),                                  // default
-    clamp: glium::draw_parameters::DepthClamp::NoClamp, // default
-};
-
 pub(in crate::gridview) struct RenderDim3D {
     fog_uniform: LazyUbo<FogParams>,
     gridline_uniform: LazyUbo<GridlineParams>,
@@ -193,7 +186,11 @@ impl GridViewRender3D<'_> {
                     LightingParams: &**self.dim.as_ref().unwrap().lighting_uniform,
                 },
                 &glium::DrawParameters {
-                    depth: DEPTH_TEST,
+                    depth: glium::Depth {
+                        test: glium::DepthTest::IfLessOrEqual,
+                        write: true,
+                        ..Default::default()
+                    },
                     blend: glium::Blend::alpha_blending(),
                     multisampling: false,
                     ..Default::default()

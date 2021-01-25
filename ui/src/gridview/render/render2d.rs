@@ -306,7 +306,7 @@ impl GridViewRender2D<'_> {
         // "Move selected cells" target.
         self.add_mouse_target_quad(
             local_rect,
-            ModifiersState::empty(),
+            Some(ModifiersState::empty()),
             MouseTargetData {
                 binding: MouseDragBinding::Select(SelectDragCommand::MoveCells.into()),
             },
@@ -314,7 +314,7 @@ impl GridViewRender2D<'_> {
         // "Move selection" target.
         self.add_mouse_target_quad(
             local_rect,
-            ModifiersState::SHIFT,
+            Some(ModifiersState::SHIFT),
             MouseTargetData {
                 binding: MouseDragBinding::Select(SelectDragCommand::MoveSelection.into()),
             },
@@ -322,7 +322,7 @@ impl GridViewRender2D<'_> {
         // "Move copy of cells" target.
         self.add_mouse_target_quad(
             local_rect,
-            ModifiersState::CTRL,
+            Some(ModifiersState::CTRL),
             MouseTargetData {
                 binding: MouseDragBinding::Select(SelectDragCommand::CopyCells.into()),
             },
@@ -352,7 +352,7 @@ impl GridViewRender2D<'_> {
                     NdVec([xs[(dx + 1) as usize], ys[(dy + 1) as usize]]),
                     NdVec([xs[(dx + 2) as usize], ys[(dy + 2) as usize]]),
                 ),
-                ModifiersState::empty(),
+                Some(ModifiersState::empty()),
                 MouseTargetData { binding },
             );
         }
@@ -453,7 +453,7 @@ impl GridViewRender2D<'_> {
     fn add_mouse_target_quad(
         &mut self,
         rect: FRect2D,
-        modifiers: ModifiersState,
+        modifiers: Option<ModifiersState>,
         data: MouseTargetData,
     ) {
         let NdVec([x1, y1]) = rect.min();

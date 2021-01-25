@@ -144,16 +144,20 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
     }
     pub(super) fn add_mouse_target_tri(
         &mut self,
-        modifiers: ModifiersState,
+        modifiers: Option<ModifiersState>,
         points: [FVec3D; 3],
         target_id: u32,
     ) {
-        if self.params.modifiers == modifiers {
-            for &point in &points {
-                let pos = point.to_f32_array();
-                self.mouse_target_tris
-                    .push(MouseTargetVertex { pos, target_id })
+        if let Some(mods) = modifiers {
+            if self.params.modifiers != mods {
+                return;
             }
+        }
+
+        for &point in &points {
+            let pos = point.to_f32_array();
+            self.mouse_target_tris
+                .push(MouseTargetVertex { pos, target_id })
         }
     }
 

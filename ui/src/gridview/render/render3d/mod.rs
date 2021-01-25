@@ -496,22 +496,15 @@ impl GridViewRender3D<'_> {
         ret
     }
 
-    fn add_mouse_target_quad(
+    fn add_mouse_target_face(
         &mut self,
-        rect: FRect3D,
-        axis: Axis,
-        modifiers: ModifiersState,
-        data: MouseTargetData,
+        cuboid: FRect3D,
+        face: Face,
+        modifiers: Option<ModifiersState>,
+        data: Option<MouseTargetData>,
     ) {
-        let [ax1, ax2] = Face::positive(axis).plane_axes();
-        let min = rect.min();
-        let max = rect.max();
-        let mut corners = [min; 4];
-        corners[1][ax1] = max[ax1];
-        corners[2][ax2] = max[ax2];
-        corners[3][ax1] = max[ax1];
-        corners[3][ax2] = max[ax2];
-        let target_id = self.add_mouse_target(data);
+        let corners = face.corners_of(cuboid);
+        let target_id = data.map(|data| self.add_mouse_target(data)).unwrap_or(0);
         self.add_mouse_target_tri(modifiers, [corners[0], corners[1], corners[2]], target_id);
         self.add_mouse_target_tri(modifiers, [corners[3], corners[2], corners[1]], target_id);
     }

@@ -118,6 +118,14 @@ impl GridViewDimension for GridViewDim3D {
                 _ => (),
             }
         }
+        // Draw selection highlight.
+        if let Some(selection) = &this.selection {
+            if selection.cells.is_some() {
+                frame.add_selection_cells_highlight_overlay(&selection.rect);
+            } else {
+                frame.add_selection_region_highlight_overlay(&selection.rect);
+            }
+        }
 
         frame.finish()
     }

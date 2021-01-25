@@ -265,6 +265,31 @@ impl GridViewRender3D<'_> {
         self.add_face_outline_overlay(local_rect, face, outline_color, width);
     }
 
+    /// Adds a highlight around the selection when the selection includes cells.
+    pub fn add_selection_cells_highlight_overlay(&mut self, selection_rect: &BigRect3D) {
+        use crate::colors::selection::*;
+        self.add_selection_highlight_overlay(selection_rect, CELLS_FILL, CELLS_OUTLINE)
+    }
+    /// Adds a highlight around the selection when the selection does not
+    /// include cells.
+    pub fn add_selection_region_highlight_overlay(&mut self, selection_rect: &BigRect3D) {
+        use crate::colors::selection::*;
+        self.add_selection_highlight_overlay(selection_rect, REGION_FILL, REGION_OUTLINE)
+    }
+    /// Adds a highlight around the selection.
+    fn add_selection_highlight_overlay(
+        &mut self,
+        selection_rect: &BigRect3D,
+        fill_color: Srgba,
+        outline_color: Srgb,
+    ) {
+        let local_rect = self.clip_int_rect_to_visible(selection_rect);
+        let local_frect = self._adjust_rect_for_overlay(local_rect);
+        let width = r64(SELECTION_HIGHLIGHT_WIDTH);
+        self.add_cuboid_fill_overlay(local_frect, fill_color);
+        self.add_cuboid_outline_overlay(local_rect, outline_color, width);
+    }
+
     /// Adds all six faces of a filled-in cuboid with a solid color.
     fn add_cuboid_fill_overlay(&mut self, cuboid: FRect3D, fill: impl Copy + Into<OverlayFill>) {
         let fill = fill.into();

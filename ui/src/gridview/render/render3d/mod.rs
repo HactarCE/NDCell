@@ -340,6 +340,37 @@ impl GridViewRender3D<'_> {
         self.add_cuboid_fill_overlay(rect, fill);
     }
 
+    /// Draws many transparent intersecting planes of different colors to test
+    /// transparent splitting and sorting.
+    pub fn draw_transparency_test(&mut self) {
+        let min = NdVec([0, 0, 5]);
+        let max = NdVec([5, 5, 10]);
+
+        for &ax in Dim3D::axes() {
+            for coord in (min[ax] + 1)..(max[ax] + 1) {
+                let mut min = min;
+                let mut max = max;
+                min[ax] = coord;
+                max[ax] = coord;
+                let global_rect = IRect3D::span(min, max).to_bigrect();
+                let rect = self.clip_int_rect_to_visible(&global_rect).to_frect();
+                let r = (ax == Axis::X) as u8 as f32;
+                let g = (ax == Axis::Y) as u8 as f32;
+                let b = (ax == Axis::Z) as u8 as f32;
+                self.overlay_quads.push(OverlayQuad {
+                    rect,
+                    face: Face::positive(ax),
+                    fill: OverlayFill::Solid(Srgba::new(r, g, b, 0.25)),
+                });
+                self.overlay_quads.push(OverlayQuad {
+                    rect,
+                    face: Face::negative(ax),
+                    fill: OverlayFill::Solid(Srgba::new(r, g, b, 0.25)),
+                });
+            }
+        }
+    }
+
     /// Remove quads that are not visible from the current camera position.
     fn cull_backface_quads(&mut self) {
         // Get global camera positiion.
@@ -352,7 +383,61 @@ impl GridViewRender3D<'_> {
     }
     /// Sort quads by depth, splitting as necessary.
     fn depth_sort_quads(&mut self) {
-        self.overlay_quads.sort_by_key(|quad| !quad.is_opaque());
+        let transparent_quads = self
+            .overlay_quads
+            .iter()
+            .copied()
+            .filter(|quad| !quad.is_opaque())
+            .collect_vec();
+
+        let x_quads = Self::filter_and_sort_quads_on_axis(&transparent_quads, Axis::X);
+        let y_quads = Self::filter_and_sort_quads_on_axis(&transparent_quads, Axis::Y);
+        let z_quads = Self::filter_and_sort_quads_on_axis(&transparent_quads, Axis::Z);
+
+        let mut sorted_transparent_quads = x_quads;
+        sorted_transparent_quads =
+            Self::split_and_intersperse_quads(sorted_transparent_quads, &y_quads);
+        sorted_transparent_quads =
+            Self::split_and_intersperse_quads(sorted_transparent_quads, &z_quads);
+
+        // Draw all opaque quads first, then all the transparent quads,
+        // back-to-front.
+        self.overlay_quads.retain(|quad| quad.is_opaque());
+        self.overlay_quads
+            .extend_from_slice(&sorted_transparent_quads);
+    }
+    /// Filters the quads to only those with a particular normal axis, then sort
+    /// those quads back-to-front.
+    fn filter_and_sort_quads_on_axis(quads: &[OverlayQuad], axis: Axis) -> Vec<OverlayQuad> {
+        quads
+            .iter()
+            .copied()
+            .filter(|q| q.face.normal_axis() == axis)
+            .sorted_by_key(|q| q.plane())
+            .collect_vec()
+    }
+    /// Splits the quads in the first list at each intersection with a quad from
+    /// the second list, and sort all quads back-to-front. Both initial lists
+    /// must be initially sorted back-to-front.
+    fn split_and_intersperse_quads(
+        quads: Vec<OverlayQuad>,
+        splits: &[OverlayQuad],
+    ) -> Vec<OverlayQuad> {
+        let mut ret = vec![];
+        let mut remaining_in_front = quads;
+        for &split_quad in splits {
+            remaining_in_front = remaining_in_front
+                .into_iter()
+                .filter_map(|remaining_quad| {
+                    let [behind, in_front] = remaining_quad.split_at_plane(split_quad.plane());
+                    ret.extend(behind);
+                    in_front
+                })
+                .collect_vec();
+            ret.push(split_quad);
+        }
+        ret.extend_from_slice(&remaining_in_front);
+        ret
     }
 
     fn add_mouse_target_quad(

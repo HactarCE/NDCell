@@ -36,7 +36,7 @@ impl MousePicker {
     pub fn init(&mut self, (target_w, target_h): (u32, u32)) {
         self.attachments.set_min_size(target_w, target_h);
         let (mut fbo, _viewport) = self.fbo();
-        fbo.clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 0.0);
+        fbo.clear_color_and_depth((0.0, 0.0, 0.0, 0.0), f32::INFINITY);
     }
 
     pub fn fbo<'a>(&'a mut self) -> (SimpleFrameBuffer<'a>, glium::Rect) {

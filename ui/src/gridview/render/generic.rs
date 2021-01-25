@@ -115,7 +115,8 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
                     &uniform! { matrix: self.xform.gl_matrix() },
                     &glium::DrawParameters {
                         depth: glium::Depth {
-                            test: glium::DepthTest::Overwrite,
+                            test: glium::DepthTest::IfLessOrEqual,
+                            write: true,
                             ..Default::default()
                         },
                         viewport: Some(picker_viewport),

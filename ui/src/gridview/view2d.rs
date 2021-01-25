@@ -3,7 +3,6 @@ use log::warn;
 
 use ndcell_core::prelude::*;
 
-use super::algorithms::bresenham;
 use super::generic::{GenericGridView, GridViewDimension};
 use super::history::History;
 use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
@@ -319,23 +318,6 @@ impl GridView2D {
             self.set_selection(Some(sel));
         }
     }
-}
-
-fn make_freeform_draw_drag_handler(
-    mut pos1: BigVec2D,
-    new_cell_state: u8,
-) -> DragHandler<GridView2D> {
-    Box::new(move |this, new_cursor_pos| {
-        if this.viewpoint().too_small_to_draw() {
-            return Ok(DragOutcome::Cancel);
-        }
-        let pos2 = this.screen_pos(new_cursor_pos).cell();
-        for pos in bresenham::line(pos1.clone(), pos2.clone()) {
-            this.automaton.ndtree.set_cell(&pos, new_cell_state);
-        }
-        pos1 = pos2.clone();
-        Ok(DragOutcome::Continue)
-    })
 }
 
 type SelectionDragHandler = Box<dyn FnMut(&mut GridView2D, ScreenPos2D) -> Result<DragOutcome>>;

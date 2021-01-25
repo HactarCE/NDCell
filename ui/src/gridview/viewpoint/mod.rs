@@ -127,11 +127,6 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
         self.scale_by_factor(self.scale().round() / self.scale(), invariant_pos);
         self.set_scale(self.scale().round()); // Fix any potential rounding error.
     }
-    /// Returns `true` if the scale is too small to draw individual cells, or
-    /// `false` otherwise.
-    fn too_small_to_draw(&self) -> bool {
-        self.scale() < Scale::from_factor(r64(1.0))
-    }
 
     /// Returns the abstract "distance" between two viewpoints.
     fn distance(a: &Self, b: &Self) -> FixedPoint {

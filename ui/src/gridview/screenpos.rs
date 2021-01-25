@@ -121,6 +121,9 @@ impl ScreenPos3D {
     }
 
     fn draw_cell_in_plane(&self, draw_plane: &DrawPlane) -> Option<BigVec3D> {
+        if self.layer != Layer(0) {
+            return None;
+        }
         let mut global_pos = self
             .xform
             .pixel_to_global_pos_in_plane(self.pixel, &draw_plane.fixedpoint_plane())?

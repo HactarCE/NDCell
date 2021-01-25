@@ -13,6 +13,13 @@ use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::config::{ForwardAxis3D, UpAxis3D};
 use crate::{Plane, CONFIG};
 
+macro_rules! ignore_command {
+    ($c:expr) => {{
+        warn!("Ignoring {:?} in Viewpoint3D", $c);
+        return Ok(None);
+    }};
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Viewpoint3D {
     /// Width and height of the render target.
@@ -292,10 +299,7 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
                 ViewDragCommand::Scale => todo!("Scale using click & drag"),
             },
 
-            ViewCommand::GoTo2D { .. } => {
-                warn!("Ignoring {:?} in Viewpoint3D", command);
-                Ok(None)
-            }
+            ViewCommand::GoTo2D { .. } => ignore_command!(command),
             ViewCommand::GoTo3D {
                 mut x,
                 mut y,

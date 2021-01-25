@@ -11,6 +11,13 @@ use super::{
 use crate::commands::{ViewCommand, ViewDragCommand};
 use crate::CONFIG;
 
+macro_rules! ignore_command {
+    ($c:expr) => {{
+        warn!("Ignoring {:?} in Viewpoint2D", $c);
+        return Ok(None);
+    }};
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Viewpoint2D {
     /// Width and height of the render target.
@@ -181,10 +188,7 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
     fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
         match command {
             ViewCommand::Drag(c, cursor_start) => match c {
-                ViewDragCommand::Orbit => {
-                    warn!("Ignoring {:?} in Viewpoint2D", command);
-                    Ok(None)
-                }
+                ViewDragCommand::Orbit => ignore_command!(command),
 
                 ViewDragCommand::Pan
                 | ViewDragCommand::PanAligned
@@ -224,10 +228,7 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
                 }
                 Ok(None)
             }
-            ViewCommand::GoTo3D { .. } => {
-                warn!("Ignoring {:?} in Viewpoint2D", command);
-                Ok(None)
-            }
+            ViewCommand::GoTo3D { .. } => ignore_command!(command),
             ViewCommand::GoToScale(scale) => {
                 self.set_scale(scale);
                 Ok(None)

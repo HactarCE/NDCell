@@ -16,6 +16,13 @@ use crate::{Direction, Scale, CONFIG};
 
 pub type GridView2D = GenericGridView<GridViewDim2D>;
 
+macro_rules! ignore_command {
+    ($c:expr) => {{
+        warn!("Ignoring {:?} in GridView3D", $c);
+        return None;
+    }};
+}
+
 #[derive(Debug, Default)]
 pub struct GridViewDim2D;
 impl GridViewDimension for GridViewDim2D {

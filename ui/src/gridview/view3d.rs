@@ -12,6 +12,12 @@ use crate::commands::*;
 use crate::mouse::MouseDisplay;
 
 pub type GridView3D = GenericGridView<GridViewDim3D>;
+macro_rules! ignore_command {
+    ($c:expr) => {{
+        warn!("Ignoring {:?} in GridView3D", $c);
+        return None;
+    }};
+}
 
 #[derive(Debug)]
 pub struct GridViewDim3D {

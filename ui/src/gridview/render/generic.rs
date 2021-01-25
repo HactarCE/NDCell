@@ -436,4 +436,12 @@ impl OverlayFill {
             }
         }
     }
+    /// Returns `true` if the quad is definitely 100% opaque.
+    pub fn is_opaque(self) -> bool {
+        match self {
+            Self::Solid(color) => color.alpha >= 1.0,
+            Self::Gradient(_, c1, c2) => c1.alpha >= 1.0 && c2.alpha >= 1.0,
+            Self::Gridlines3D => false,
+        }
+    }
 }

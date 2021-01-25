@@ -137,4 +137,18 @@ impl Face {
         }
         FRect3D::span(min, max)
     }
+
+    /// Returns the corners of this face of the cuboid.
+    pub fn corners_of(self, cuboid: FRect3D) -> [FVec3D; 4] {
+        let rect = self.of(cuboid);
+        let min = rect.min();
+        let max = rect.max();
+        let [ax1, ax2] = self.plane_axes();
+        let mut ret = [min; 4];
+        ret[1][ax1] = max[ax1];
+        ret[2][ax2] = max[ax2];
+        ret[3][ax1] = max[ax1];
+        ret[3][ax2] = max[ax2];
+        ret
+    }
 }

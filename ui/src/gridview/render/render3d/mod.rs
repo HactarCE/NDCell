@@ -267,13 +267,44 @@ impl GridViewRender3D<'_> {
 
     /// Adds all six faces of a filled-in cuboid with a solid color.
     fn add_cuboid_fill_overlay(&mut self, cuboid: FRect3D, fill: impl Copy + Into<OverlayFill>) {
+        let fill = fill.into();
         for &face in &FACES {
             self.add_face_fill_overlay(cuboid, face, fill);
+            if !fill.is_opaque() {
+                self.add_back_face_fill_overlay(cuboid, face, fill);
+            }
+        }
+    }
+    /// Adds an outline around all faces of a cuboid with a solid color.
+    fn add_cuboid_outline_overlay(&mut self, cuboid: IRect3D, color: Srgb, width: R64) {
+        let cuboid = cuboid.to_frect();
+        for &ax in Dim3D::axes() {
+            let neg_corners = Face::negative(ax).corners_of(cuboid);
+            let pos_corners = Face::positive(ax).corners_of(cuboid);
+            for &(i1, i2) in &[(0, 0), (1, 2), (2, 1), (3, 3)] {
+                self.add_line_overlay(
+                    LineEndpoint3D::include(neg_corners[i1], color),
+                    LineEndpoint3D::include(pos_corners[i2], color),
+                    width,
+                );
+            }
         }
     }
     /// Adds a filled-in face of a cuboid with a solid color.
     fn add_face_fill_overlay(&mut self, cuboid: FRect3D, face: Face, fill: impl Into<OverlayFill>) {
         let rect = face.of(cuboid);
+        let fill = fill.into();
+        self.overlay_quads.push(OverlayQuad { rect, face, fill });
+    }
+    /// Adds a filled-in back-face of a cuboid with a solid color.
+    fn add_back_face_fill_overlay(
+        &mut self,
+        cuboid: FRect3D,
+        face: Face,
+        fill: impl Into<OverlayFill>,
+    ) {
+        let rect = face.of(cuboid);
+        let face = face.opposite();
         let fill = fill.into();
         self.overlay_quads.push(OverlayQuad { rect, face, fill });
     }
@@ -480,11 +511,7 @@ pub struct OverlayQuad {
 impl OverlayQuad {
     /// Returns `true` if the quad is definitely 100% opaque.
     pub fn is_opaque(self) -> bool {
-        match self.fill {
-            OverlayFill::Solid(color) => color.alpha >= 1.0,
-            OverlayFill::Gradient(_, c1, c2) => c1.alpha >= 1.0 && c2.alpha >= 1.0,
-            OverlayFill::Gridlines3D => false,
-        }
+        self.fill.is_opaque()
     }
     /// Returns `true` if the front of the quad faces the camera, or `false` if
     /// the back of the quad faces the camera.

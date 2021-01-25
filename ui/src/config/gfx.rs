@@ -1,3 +1,5 @@
+use palette::Srgba;
+
 #[derive(Debug)]
 pub struct GfxConfig {
     pub dpi: f64,
@@ -7,6 +9,8 @@ pub struct GfxConfig {
     pub msaa: Msaa,
 
     pub octree_perf_view: bool,
+
+    pub cell_colors: [Srgba; 256],
 }
 impl Default for GfxConfig {
     fn default() -> Self {
@@ -18,6 +22,8 @@ impl Default for GfxConfig {
             msaa: Msaa::_8,
 
             octree_perf_view: false,
+
+            cell_colors: crate::default_colors(),
         }
     }
 }

@@ -229,38 +229,6 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             .unwrap_or(0)
     }
 
-    /// Returns the color to represent an ND-tree node.
-    pub(super) fn ndtree_node_color(node: NodeRef<'_, R::D>) -> Srgba {
-        if let Some(cell_state) = node.single_state() {
-            match cell_state {
-                0_u8 => crate::colors::cells::DEAD,
-                1_u8 => crate::colors::cells::LIVE,
-                i => {
-                    let c = colorous::SPECTRAL.eval_rational(i as usize - 2, 255);
-                    Srgba::new(c.r, c.g, c.b, u8::MAX).into_format()
-                }
-            }
-        } else if node.is_empty() {
-            crate::colors::cells::DEAD
-        } else {
-            // Multiply then divide by 255 to keep some precision.
-            let population_ratio = (node.population() * 255_usize / node.big_num_cells())
-                .to_f32()
-                .unwrap()
-                / 255.0;
-            // Bias so that 50% is the minimum brightness if there are any
-            // live cells.
-            let mix_factor = (population_ratio / 2.0) + 0.5;
-
-            // Mix colors for state #0 and #1 using proportion of live cells.
-            Srgba::from_linear(Mix::mix(
-                &crate::colors::cells::DEAD.into_linear(),
-                &crate::colors::cells::LIVE.into_linear(),
-                mix_factor,
-            ))
-        }
-    }
-
     /// Returns the endpoint pairs for a single crosshair.
     pub(super) fn make_crosshair_endpoints(
         &mut self,

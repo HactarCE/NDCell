@@ -160,11 +160,9 @@ impl GridViewRender3D<'_> {
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
 
-        let gl_octree = cache.gl_octrees.gl_ndtree_from_node(
-            (&visible_octree.root).into(),
-            self.xform.render_cell_layer,
-            Self::ndtree_node_color,
-        )?;
+        let gl_octree = cache
+            .gl_octrees
+            .gl_ndtree_from_node((&visible_octree.root).into(), self.xform.render_cell_layer)?;
 
         self.params
             .target

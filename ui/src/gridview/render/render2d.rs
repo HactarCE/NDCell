@@ -116,7 +116,6 @@ impl GridViewRender2D<'_> {
         let gl_quadtree = cache.gl_quadtrees.gl_ndtree_from_node(
             (&visible_quadtree.root).into(),
             self.xform.render_cell_layer,
-            Self::ndtree_node_color,
         )?;
         // Step #2: draw at 1 pixel per render cell, including only the render
         // cells inside `self.local_visible_rect`.

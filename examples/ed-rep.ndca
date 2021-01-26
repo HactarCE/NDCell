@@ -1,0 +1,5 @@
+@transition {
+  ret = (this == #1)
+  for cell in nbhd { ret += (cell == #1) }
+  become #(ret & 7)
+}

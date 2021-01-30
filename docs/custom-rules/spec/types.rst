@@ -46,15 +46,17 @@ Basic types
   - ``Vector3``
   - ``Vector256``
 
-### Vector arithmetic
+  Vector arithmetic
+  -----------------
 
-Vectors support all the same arithmetic and bitwise operations as [integers][integer] by applying them componentwise. For example, `[1, 2, 3] + [10, 20, 30]` results in `[11, 22, 33]`.
+  Vectors support all the same arithmetic and bitwise operations as [integers][integer] by applying them componentwise. For example, `[1, 2, 3] + [10, 20, 30]` results in `[11, 22, 33]`.
 
-For most operations, when an operation is applied between vectors of different lengths, the shorter vector is first extended using `0`. For example, `[1, 2] + [10, 20, 30]` results in `[11, 22, 30]`. For multiplication (`*`) and bitwise AND (`&`), however, the longer vector is truncated to the length of the shorter one, since the extra components would be zero anyway. So `[1, 2, 3] * [1, 2]` results in `[1, 4]`, **not** `[1, 4, 0]`.
+  For most operations, when an operation is applied between vectors of different lengths, the shorter vector is first extended using `0`. For example, `[1, 2] + [10, 20, 30]` results in `[11, 22, 30]`. For multiplication (`*`) and bitwise AND (`&`), however, the longer vector is truncated to the length of the shorter one, since the extra components would be zero anyway. So `[1, 2, 3] * [1, 2]` results in `[1, 4]`, **not** `[1, 4, 0]`.
 
-### Vector comparisons
+  Vector comparisons
+  ------------------
 
-Vectors support all the same comparisons as [integers][integer], by applying them componentwise. When comparing vectors, the shorter vector is first extended using `0`. A comparison between vectors compares all components, and is true only if that comparison is true for all components. For example `[-1, 2] < [0, 4]` is true because `-1 < 0` and `2 < 4` are both true. `[-1, 2] < [0, 1]`, however, is false because `2 < 1` is false.
+  Vectors support all the same comparisons as [integers][integer], by applying them componentwise. When comparing vectors, the shorter vector is first extended using `0`. A comparison between vectors compares all components, and is true only if that comparison is true for all components. For example `[-1, 2] < [0, 4]` is true because `-1 < 0` and `2 < 4` are both true. `[-1, 2] < [0, 1]`, however, is false because `2 < 1` is false.
 
 .. _cell:
 
@@ -64,13 +66,15 @@ Vectors support all the same comparisons as [integers][integer], by applying the
 
   Single cell states are written using the ``#`` operator followed by a number. Examples: ``#0``, ``#1``, ``#42``. To use the value of a variable or expression instead of a literal integer, surround the expression in parentheses: ``#(my_variable)`` or ``#(10 + 5)``.
 
-### Cell operations
+  Cell operations
+  ---------------
 
-Cells are automatically converted to [cell filters][cell filter] when used with any set operator
+  Cells are automatically converted to [cell filters][cell filter] when used with any set operator
 
-### Cell comparisons
+  Cell comparisons
+  ----------------
 
-Cells support the comparison operators ``==`` and ``!=``, which compare the IDs.
+  Cells support the comparison operators ``==`` and ``!=``, which compare the IDs.
 
 .. _pattern:
 

@@ -12,13 +12,14 @@ __ https://en.wikipedia.org/wiki/Domain-specific_language
    :titlesonly:
 
    spec/types
+   spec/conversions
    spec/syntax
    spec/directives
    spec/statements
    spec/expressions
    spec/operators
-   spec/conversions
    spec/variables
    spec/constants
    spec/functions
    spec/methods
+   spec/errors

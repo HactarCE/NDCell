@@ -1,5 +1,3 @@
-.. _functions:
-
 *********
 Functions
 *********

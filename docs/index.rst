@@ -16,3 +16,10 @@ __ https://www.github.com/HactarCE/NDCell
    custom-rules/examples
    Specification <custom-rules/spec>
    custom-rules/rationale
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Other
+   :hidden:
+
+   formats

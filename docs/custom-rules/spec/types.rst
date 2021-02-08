@@ -4,132 +4,161 @@
 Types
 *****
 
-Note that all types except :ref:`patterns <pattern>` have `value semantics`__, which means that modifying a value in one variable does not have an effect on any other variables.
+Overview
+========
 
-__ https://en.wikipedia.org/wiki/Value_semantics
+- There are two important primitive types: :data:`Int` and :data:`Cell`
+- Each of these two primitive types has a collection type: :data:`Vec` (collection of :data:`Int`) and :data:`Pattern` (collection of :data:`Cell`)
+- Each of these four types has a corresponding set or filter types: :data:`IntSet`, :data:`CellSet`, :data:`VecSet`, and :data:`PatternFilter`
 
-.. _basic-types:
+  - :data:`Cell` is a subtype [#f1]_ of :data:`CellSet`
+  - :data:`Pattern` is a subtype of :data:`PatternFilter`
 
-Basic types
-===========
+- There is another primitive type, :data:`Tag`, which is also a subtype of :data:`CellSet`
+- There is a special primitive type, :data:`String`, which is used only in constants
 
-.. _integer:
+.. [#f1] I.e. anywhere that a :data:`CellSet` is required, a :data:`Cell` is accepted as well. All operations on a :data:`CellSet` are also allowed on a :data:`Cell`. See https://en.wikipedia.org/wiki/Subtyping.
 
-.. data:: Integer
+See :ref:`subtype-coercion` for more about subtypes.
 
-  :aliases: ``Int``
-  :methods: :ref:`integer-methods`
+See :ref:`variable-types` regarding how variables use the type system.
 
-  Integers are represented using 64-bit signed two's complement. This means the minimum value is ``-9223372036854775808`` and the maximum value is ``9223372036854775807``.
+.. _primitive-types:
 
-  Integers are also used for boolean values; ``0`` is "falsey" and any other number (generally ``1``) is "truthy."
+Primitive types
+===============
 
-  Integers are written as a sequence of digits without a leading zero but with an optional ``+`` or ``-`` at the beginning. Examples: ``0``, ``-1``, ``42``, ``+6``, ``-32768``.
+.. data:: Int
 
-  NOTE: In the future, hexadecimal and/or binary literals may be supported.
+  :status: Fully implemented
+  :methods: :ref:`int-methods`
+  :operators: :ref:`arithmetic-operators`, :ref:`bitwise-operators`, :ref:`comparison-operators`
 
-.. _vector:
+  An integer, represented using a 64-bit signed two's complement integer. This means the minimum value is ``-9223372036854775808`` and the maximum value is ``9223372036854775807``.
 
-.. data:: Vector
+  Boolean values are represented using integers. (See :ref:`boolean-conversion`.)
 
-  :ref:`vector-methods`
+  An integer literal consists of a sequence of digits without a leading zero but with an optional ``+`` or ``-`` at the beginning. Examples:
 
-  A vector is a sequence of :ref:`integers <integer>` of a fixed length. Each integer is a component of that vector, and the number of components is the length of that vector. Vectors of different lengths are different types. The length of a vector a must be between 1 and 256 (inclusive).
-
-  The first component of a vector is the X component at index 0; the second is the Y component at index 1; etc.
-
-  Vectors are written as a list of integers separated by commas surrounded by square brackets. For example, ``[3, -1, 0]`` is a vector of length ``3`` with X component ``3``, Y component ``-1``, Z component ``0``. Vectors can also be written using :func:`vec()` and its variants.
-
-  Example vector types:
-
-  - ``Vector1``
-  - ``Vector3``
-  - ``Vector256``
-
-  Vector arithmetic
-  -----------------
-
-  Vectors support all the same arithmetic and bitwise operations as [integers][integer] by applying them componentwise. For example, `[1, 2, 3] + [10, 20, 30]` results in `[11, 22, 33]`.
-
-  For most operations, when an operation is applied between vectors of different lengths, the shorter vector is first extended using `0`. For example, `[1, 2] + [10, 20, 30]` results in `[11, 22, 30]`. For multiplication (`*`) and bitwise AND (`&`), however, the longer vector is truncated to the length of the shorter one, since the extra components would be zero anyway. So `[1, 2, 3] * [1, 2]` results in `[1, 4]`, **not** `[1, 4, 0]`.
-
-  Vector comparisons
-  ------------------
-
-  Vectors support all the same comparisons as [integers][integer], by applying them componentwise. When comparing vectors, the shorter vector is first extended using `0`. A comparison between vectors compares all components, and is true only if that comparison is true for all components. For example `[-1, 2] < [0, 4]` is true because `-1 < 0` and `2 < 4` are both true. `[-1, 2] < [0, 1]`, however, is false because `2 < 1` is false.
-
-.. _cell:
+    - ``0``
+    - ``-1``
+    - ``42``
+    - ``+6``
+    - ``-32768``
 
 .. data:: Cell
 
-  Cells are represented using unsigned 8-bit integers holding ID of the cell's state. This means the minimum value is ``0`` and the maximum value is ``255``, so an automaton cannot have more than 256 states. Cells values are always within the range of valid cell states in a cellular automaton. For example, an automaton with ``10`` states has a maximum cell state ID of ``9``.
+  :status: Fully implemented
+  :methods: :ref:`cell-methods`
+  :operators: :ref:`set-operators`, :ref:`comparison-operators` (``==`` and ``!=`` only)
+  :subtype of: :data:`CellSet`
 
-  Single cell states are written using the ``#`` operator followed by a number. Examples: ``#0``, ``#1``, ``#42``. To use the value of a variable or expression instead of a literal integer, surround the expression in parentheses: ``#(my_variable)`` or ``#(10 + 5)``.
+  A cell state, represented using an 8-bit unsigned integer. This means the minimum value is ``0`` and the maximum value is ``255``, so an automaton cannot have more than 256 states. :data:`Cell` values are always within the range of valid cell states in a cellular automaton. For example, an automaton with 10 states has a maximum cell state ID of ``9``.
 
-  Cell operations
-  ---------------
+  :data:`Cell` is a subtype of :data:`CellSet`. When used in place of a :data:`CellSet`, a :data:`Cell` represents a set containing only the one cell state.
 
-  Cells are automatically converted to [cell filters][cell filter] when used with any set operator
+  A :data:`Cell` literal consists of the ``#`` operator followed by the cell state ID. Examples:
 
-  Cell comparisons
-  ----------------
+    - ``#0``
+    - ``#1``
+    - ``#42``
 
-  Cells support the comparison operators ``==`` and ``!=``, which compare the IDs.
+  A :data:`Cell` literal may use an arbitrary integer expression for the cell state ID by surrounding the expression in parentheses. Examples:
 
-.. _pattern:
-
-.. data:: Pattern
-
-  TODO
-
-.. _filter-types:
-
-Filter types
-============
-
-.. _range:
-
-.. data:: Range
-
-  TODO
-
-.. _rectangle:
-
-.. data:: Rectangle
-
-  TODO
-
-.. _cell-filter:
-
-.. data:: Cell filter
-
-  TODO
-
-.. _pattern-filter:
-
-.. data:: Pattern filter
-
-  TODO
-
-.. _other-types:
-
-Other types
-===========
-
-.. _tag:
+    - ``#(my_variable)``
+    - ``#(x + 5)``
 
 .. data:: Tag
 
-  TODO
+  :status: Not yet implemented
 
-.. _string:
+  This type's design is still a work in progress.
 
 .. data:: String
 
-  Strings cannot be stored in variables.
+  :status: Partially implemented
 
-.. _void:
+  Different :data:`String` values are different types, and therefore cannot be stored in the same variable. (See :ref:`set-contents-rationale`)
 
-.. data:: Void
+  This type's design is still a work in progress.
 
-  The void type is an implementation detail that will probably be removed in a future version. Ignore it for now.
+.. _collection-types:
+
+Collection types
+================
+
+.. data:: Vec
+
+  :status: Fully implemented
+  :methods: :ref:`vec-methods`
+  :operators: :ref:`arithmetic-operators`, :ref:`bitwise-operators`, :ref:`comparison-operators`, :ref:`vector-indexing`
+
+  A vector, represented using a fixed-length array of :data:`Int` values. Each :data:`Int` value is a component of the :data:`Vec`, and the number of components is the length of the :data:`Vec`. The length of a :data:`Vec` must be between 1 and 256 (inclusive). :data:`Vec` values of different lengths are different types, and therefore cannot be stored in the same variable.
+
+  The first component of a :data:`Vec` is the X component at index 0; the second is the Y component at index 1; etc.
+
+  A :data:`Vec` literal consists of a list of integer expressions separated by commas surrounded by square brackets. Examples:
+
+  - ``[3, -1, 0]`` is a :data:`Vec` of length ``3`` with X component ``3``, Y component ``-1``, Z component ``0``
+  - ``[6]`` is a :data:`Vec` of length ``1`` with X component ``6``
+  - ``[a, b]`` is a :data:`Vec` of length ``2`` with X compoment ``a`` and Y component ``b``, given ``a`` and ``b`` are integers
+
+  A :data:`Vec` literal may contain other vectors, which are concatenated to produce the result. Examples:
+
+  - ``[v1, -3, v2]`` is a :data:`Vec` constructed by concatenating ``v1``, ``[-3]``, and ``v2``
+
+  A :data:`Vec` can also be constructed using :func:`vec()` and its variants.
+
+.. data:: Pattern
+
+  :status: Partially implemented
+
+  A configuration of cells. Patterns with different shapes are different types.
+
+.. _filter-types:
+
+Set/filter types
+================
+
+.. data:: IntSet
+
+  :status: Implementation in progress
+  :operators: :ref:`set-operators`
+
+  A finite set of :data:`Int`. Different :data:`IntSet` values are different types, and therefore cannot be stored in the same variable. (See :ref:`set-contents-rationale`)
+
+  An :data:`IntSet` literal consists of a comma-separated list of :data:`Int` or :data:`IntSet` surrounded by curly braces. Examples:
+
+  - ``{}`` constructs the empty set, containing no integers
+  - ``{42}`` constructs a set containing only the integer 42
+  - ``{1, 2, 3, 4}`` constructs a set containing the integers 1, 2, 3, and 4
+  - ``{1, 2, 3, 4,}`` is also allowed (but discouraged unless spanning multiple lines)
+
+  An :data:`IntSet` can also be constructed using a range literal consisting of two integers separated by ``..``. Examples:
+
+  - ``1..5`` is equivalent to ``{1, 2, 3, 4, 5}``
+  - ``-3..+3`` contains all integers from -3 to 3 (inclusive)
+  - ``{-4..-1, 1..99}`` contains all integers from -4 to 99 (inclusive) *except* 0
+
+.. data:: VecSet
+
+  :status: Implementation in progress
+  :operators: :ref:`set-operators`
+
+  A finite set of :data:`Vec`, all with the same length. Different :data:`VecSet` values are different types, and therefore cannot be stored in the same variable. (See :ref:`set-contents-rationale`)
+
+.. data:: CellSet
+
+  :status: Partially implemented
+
+  A set of cell states. Unlike :data:`IntSet` and :data:`VecSet`, all :data:`CellSet` values are the same type.
+
+  This type's design is still a work in progress.
+
+.. data:: PatternFilter
+
+  :status: Not yet implemented
+
+  Different :data:`PatternFilter` values are different types, and therefore cannot be stored in the same variable. (See :ref:`set-contents-rationale`)
+
+  This type's design is still a work in progress.

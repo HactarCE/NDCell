@@ -20,7 +20,7 @@ import sphinx_rtd_theme
 # -- Project information -----------------------------------------------------
 
 project = 'NDCell'
-copyright = '2020, HactarCE'
+copyright = '2021, HactarCE'
 author = 'HactarCE'
 
 

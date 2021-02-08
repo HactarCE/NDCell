@@ -1,8 +1,10 @@
-.. _statements:
-
 **********
 Statements
 **********
+
+.. note::
+
+  This page is under construction.
 
 Several statements involve boolean conversion; for more details, see :ref:`boolean-conversion`.
 
@@ -177,7 +179,7 @@ Debugging
 Error statement
 ---------------
 
-An error statement consists of the keyword ``error``, optionally followed by a :ref:`string literal <string-literal>` specifying a custom error message. An error statement causes an error, which aborts the simulation.
+An error statement consists of the keyword ``error``, optionally followed by a :data:`String` specifying a custom error message. An error statement causes an error, which aborts the simulation.
 
 Examples:
 
@@ -191,7 +193,7 @@ Examples:
 Assert statement
 ----------------
 
-An assert statement consists of the keyword ``assert``, followed by an :ref:`expression <expressions>`, and then an optional comma and :ref:`string literal <string-literal>` specifying a custom error message. The expression must be able to be converted to a boolean. An assert statement evaluates the expression and if the result is falsey it causes an error, which aborts the simulation.
+An assert statement consists of the keyword ``assert``, followed by an :ref:`expression <expressions>`, and then an optional comma and :data:`String` specifying a custom error message. The expression must be able to be converted to a boolean. An assert statement evaluates the expression and if the result is falsey it causes an error, which aborts the simulation.
 
 Examples:
 

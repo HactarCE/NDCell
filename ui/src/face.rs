@@ -3,6 +3,8 @@ use std::fmt;
 use ndcell_core::prelude::*;
 use Axis::{X, Y, Z};
 
+use crate::Plane;
+
 pub const FACES: [Face; 6] = [
     Face::PosX,
     Face::PosY,
@@ -114,6 +116,12 @@ impl Face {
     }
     /// Returns the normal vector, which has a single nonzero component that is
     /// either +1 or -1.
+    pub fn normal_ivec(self) -> IVec3D {
+        let [x, y, z] = self.normal();
+        NdVec([x as isize, y as isize, z as isize])
+    }
+    /// Returns the normal vector, which has a single nonzero component that is
+    /// either +1 or -1.
     pub fn normal_fvec(self) -> FVec3D {
         let [x, y, z] = self.normal();
         NdVec([r64(x as f64), r64(y as f64), r64(z as f64)])
@@ -150,5 +158,19 @@ impl Face {
         ret[3][ax1] = max[ax1];
         ret[3][ax2] = max[ax2];
         ret
+    }
+
+    /// Returns the plane of this face of the cuboid.
+    pub fn plane_of(self, cuboid: &FixedRect3D) -> Plane {
+        let axis = self.normal_axis();
+        let coordinate = match self {
+            Face::PosX => cuboid.max()[X].clone(),
+            Face::PosY => cuboid.max()[Y].clone(),
+            Face::PosZ => cuboid.max()[Z].clone(),
+            Face::NegX => cuboid.min()[X].clone(),
+            Face::NegY => cuboid.min()[Y].clone(),
+            Face::NegZ => cuboid.min()[Z].clone(),
+        };
+        Plane { axis, coordinate }
     }
 }

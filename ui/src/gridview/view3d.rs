@@ -8,7 +8,7 @@ use super::generic::{GenericGridView, GridViewDimension, SelectionDragHandler};
 use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
 use super::screenpos::{RaycastHit, RaycastHitThing, ScreenPos3D};
 use super::viewpoint::{Viewpoint, Viewpoint3D};
-use super::{DragHandler, DragType};
+use super::{DragHandler, DragOutcome, DragType};
 use crate::commands::*;
 use crate::mouse::MouseDisplay;
 
@@ -97,7 +97,38 @@ impl GridViewDimension for GridViewDim3D {
         match command {
             SelectDragCommand::NewRect => unimplemented!(),
             SelectDragCommand::Resize2D(_) => ignore_command!(command),
-            SelectDragCommand::Resize3D(face) => unimplemented!(),
+            SelectDragCommand::Resize3D(face) => {
+                let selection_face_plane =
+                    face.plane_of(&this.selection.as_ref()?.rect.to_fixedrect());
+                let line_start = initial_pos.raycast_to_plane(&selection_face_plane)?;
+                let line_delta = face.normal_fvec();
+
+                let mut initial_selection = None;
+                Some(Box::new(move |this, new_pos| {
+                    if let Some(new_pos_on_line) =
+                        new_pos.nearest_global_pos_on_line(&line_start, line_delta)
+                    {
+                        initial_selection = initial_selection.take().or_else(|| this.deselect());
+                        if let Some(s) = &initial_selection {
+                            this.set_selection_rect(Some(
+                                super::selection::resize_selection_relative(
+                                    &s.rect,
+                                    &line_start,
+                                    &new_pos_on_line,
+                                    face.normal_ivec(),
+                                ),
+                            ));
+                            Ok(DragOutcome::Continue)
+                        } else {
+                            // There is no selection to resize.
+                            Ok(DragOutcome::Cancel)
+                        }
+                    } else {
+                        // We can't resolve the new selection position.
+                        Ok(DragOutcome::Cancel)
+                    }
+                }))
+            }
             SelectDragCommand::ResizeToCell => unimplemented!(),
             SelectDragCommand::MoveSelection => unimplemented!(),
             SelectDragCommand::MoveCells => unimplemented!(),
@@ -196,7 +227,7 @@ impl GridViewDimension for GridViewDim3D {
             raycast::intersect_plane(start, delta, grid_axis, r64(grid_coord as f64))
                 .map(|h| RaycastHit::new(&xform, h, RaycastHitThing::Gridlines))
         });
-        let raycast_selection_hit = None; // TODO
+        let raycast_selection_hit = None; // TODO probably remove this entirely
 
         // Choose the ONE RAYCAST TO RULE THEM ALL (the one that is shortest).
         let raycast = [

@@ -2,8 +2,9 @@ use ndcell_core::prelude::*;
 
 use super::algorithms::raycast;
 use super::viewpoint::{CellTransform3D, Viewpoint3D};
-use crate::commands::DrawMode;
+use crate::{commands::DrawMode, ext::FVecConvertExt};
 use crate::{Face, Plane};
+use cgmath::InnerSpace;
 
 /// Convenient representation of a pixel position on the screen.
 pub trait ScreenPos: Sized {
@@ -124,12 +125,58 @@ impl ScreenPos3D {
         if self.layer != Layer(0) {
             return None;
         }
+
         let mut global_pos = self
-            .xform
-            .pixel_to_global_pos_in_plane(self.pixel, &draw_plane.fixedpoint_plane())?
+            .raycast_to_plane(&draw_plane.fixedpoint_plane())?
             .floor();
+        // Account for possible off-by-one error.
         global_pos[draw_plane.face.normal_axis()] = draw_plane.coord.clone();
+
         Some(global_pos)
+    }
+
+    pub fn raycast_to_plane(&self, plane: &Plane) -> Option<FixedVec3D> {
+        self.xform.pixel_to_global_pos_in_plane(self.pixel, plane)
+    }
+
+    pub fn nearest_global_pos_on_line(
+        &self,
+        line_start: &FixedVec3D,
+        line_delta: FVec3D,
+    ) -> Option<FixedVec3D> {
+        let line_start = self.xform.global_to_local_float(line_start)?;
+        let local_result = self.nearest_local_pos_on_line(line_start, line_delta)?;
+        Some(self.xform.local_to_global_float(local_result))
+    }
+    pub fn nearest_local_pos_on_line(
+        &self,
+        line_start: FVec3D,
+        line_delta: FVec3D,
+    ) -> Option<FVec3D> {
+        // https://math.stackexchange.com/questions/1414285/
+
+        let p1 = line_start.to_cgmath_point3();
+        let d1 = line_delta.to_cgmath_vec3();
+        let (pixel_ray_start, pixel_ray_delta) = self.xform.pixel_to_local_ray(self.pixel);
+        let p2 = pixel_ray_start.to_cgmath_point3();
+        let d2 = pixel_ray_delta.to_cgmath_vec3();
+
+        let n = d1.cross(d2);
+        let n1 = d1.cross(n);
+        let n2 = d2.cross(n);
+
+        let t2 = (p1 - p2).dot(n1) / d2.dot(n1);
+        if t2.is_finite() && t2 > 0.0 {
+            let t1 = (p2 - p1).dot(n2) / d1.dot(n2);
+            let c1 = p1 + t1 * d1;
+            Some(NdVec([
+                r64(c1.x as f64),
+                r64(c1.y as f64),
+                r64(c1.z as f64),
+            ]))
+        } else {
+            None
+        }
     }
 }
 

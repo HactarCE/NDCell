@@ -9,7 +9,7 @@ Overview
 
 - There are two important primitive types: :data:`Int` and :data:`Cell`
 - Each of these two primitive types has a collection type: :data:`Vec` (collection of :data:`Int`) and :data:`Pattern` (collection of :data:`Cell`)
-- Each of these four types has a corresponding set or filter types: :data:`IntSet`, :data:`CellSet`, :data:`VecSet`, and :data:`PatternFilter`
+- Each of these four types has a corresponding set/filter type: :data:`IntSet`, :data:`CellSet`, :data:`VecSet`, and :data:`PatternFilter`
 
   - :data:`Cell` is a subtype [#f1]_ of :data:`CellSet`
   - :data:`Pattern` is a subtype of :data:`PatternFilter`

@@ -3,6 +3,8 @@
 //!
 //! This is also implemented in GLSL in the octree fragment shader.
 
+// TODO: rewrite using cgmath so that division by zero is safe
+
 use ndcell_core::prelude::*;
 
 use crate::Face;
@@ -52,9 +54,9 @@ pub fn intersect_octree(
             start[ax] = -start[ax] + node_len;
             delta[ax] = -delta[ax];
         }
-        // Please don't crash on division by zero!
-        ensure_nonzero_delta(&mut delta);
     }
+    // Please don't crash on division by zero!
+    ensure_nonzero_delta(&mut delta);
 
     // At what `t` does the ray enter the root node (considering only one axis
     // at a time)?
@@ -76,8 +78,11 @@ pub fn intersect_octree(
         raycast_node_child(start, delta, t0, t1, min_layer, node, invert_mask).map(|(t0, t1)| {
             let tm = (t0 + t1) / 2.0;
 
+            let max_t0: R64 = *t0.max_component();
+            let min_t1: R64 = *t1.min_component();
+
             let pos_int = (original_start + original_delta * tm).floor().to_ivec();
-            let pos_float = original_start + original_delta * t0.max_component();
+            let pos_float = original_start + original_delta * max_t0;
             let entry_axis = entry_axis(t0);
             let face = if invert_mask & entry_axis.bit() == 0 {
                 Face::negative(entry_axis) // ray is positive; hit negative face of cell
@@ -89,8 +94,8 @@ pub fn intersect_octree(
                 start,
                 delta,
 
-                t0: *t0.max_component(),
-                t1: *t1.min_component(),
+                t0: max_t0,
+                t1: min_t1,
 
                 pos_int,
                 pos_float,

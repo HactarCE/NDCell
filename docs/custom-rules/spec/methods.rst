@@ -16,13 +16,13 @@ TODO
 .. _vec-methods:
 
 ``Vec`` methods
-==============
+===============
 
 TODO
 
 .. _cell-methods:
 
 ``Cell`` methods
-============
+================
 
 TODO

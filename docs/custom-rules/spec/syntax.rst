@@ -2,6 +2,10 @@
 Syntax
 ******
 
+.. note::
+
+  This page is under construction.
+
 Like Lua and most C-family programming languages:
 
 - :ref:`Code blocks <code-block>` begin with ``{`` and end with ``}``

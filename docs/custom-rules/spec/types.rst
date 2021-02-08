@@ -14,8 +14,9 @@ Overview
   - :data:`Cell` is a subtype [#f1]_ of :data:`CellSet`
   - :data:`Pattern` is a subtype of :data:`PatternFilter`
 
-- There is another primitive type, :data:`Tag`, which is also a subtype of :data:`CellSet`
-- There is a special primitive type, :data:`String`, which is used only in constants
+- There are two other primitive types: :data:`Tag` and :data:`String`
+
+  - :data:`Tag` is also a subtype of :data:`CellSet`
 
 .. [#f1] I.e. anywhere that a :data:`CellSet` is required, a :data:`Cell` is accepted as well. All operations on a :data:`CellSet` are also allowed on a :data:`Cell`. See https://en.wikipedia.org/wiki/Subtyping.
 

@@ -202,7 +202,15 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
                     })))
                 }
 
-                ViewDragCommand::Scale => todo!("Scale using click & drag"),
+                ViewDragCommand::Scale => {
+                    let initial_scale = self.scale;
+                    Ok(Some(Box::new(move |this, cursor_end| {
+                        let delta = (cursor_end - cursor_start)[Y]
+                            / -CONFIG.lock().ctrl.pixels_per_2x_scale_2d;
+                        this.scale = Scale::from_log2_factor(initial_scale.log2_factor() + delta);
+                        Ok(DragOutcome::Continue)
+                    })))
+                }
             },
 
             ViewCommand::GoTo2D {

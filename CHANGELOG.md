@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - 3D orbit (right mouse drag)
   - 3D pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or middle mouse drag)
   - 3D pan horizontally (middle mouse drag with <kbd>Shift</kbd>)
+  - Zoom (right mouse drag with <kbd>Ctrl</kbd>)
 
 ### Changed
 
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Changing the step size while the simulation is running now takes effect immediately ([#6][i6])
 - Selected cells no longer appear to be tiled infinitely
+- Touchpad scrolling now zooms in/out at a reasonable pace.
 
 [i6]: https://github.com/HactarCE/NDCell/issues/6
 

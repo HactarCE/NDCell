@@ -152,13 +152,13 @@ impl FrameInProgress<'_> {
                                 config.ctrl.discrete_scale_speed_2d
                             }
                             (GridView::View2D(_), MouseScrollDelta::PixelDelta(_)) => {
-                                config.ctrl.smooth_scroll_speed_2d
+                                1.0 / config.ctrl.pixels_per_2x_scale_2d
                             }
                             (GridView::View3D(_), MouseScrollDelta::LineDelta(_, _)) => {
                                 config.ctrl.discrete_scale_speed_3d
                             }
                             (GridView::View3D(_), MouseScrollDelta::PixelDelta(_)) => {
-                                config.ctrl.smooth_scroll_speed_3d
+                                1.0 / config.ctrl.pixels_per_2x_scale_3d
                             }
                         };
                         self.gridview.enqueue(ViewCommand::Scale {

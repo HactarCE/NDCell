@@ -6,8 +6,8 @@ pub struct CtrlConfig {
     pub keybd_scale_speed_3d: f64,
     pub discrete_scale_speed_2d: f64,
     pub discrete_scale_speed_3d: f64,
-    pub smooth_scroll_speed_2d: f64,
-    pub smooth_scroll_speed_3d: f64,
+    pub pixels_per_2x_scale_2d: f64,
+    pub pixels_per_2x_scale_3d: f64,
     pub mouse_orbit_speed: f64,
     // TODO: make speed_modifier an attribute of the keybind
     pub speed_modifier: f64,
@@ -34,8 +34,8 @@ impl Default for CtrlConfig {
             keybd_scale_speed_3d: 2.0,
             discrete_scale_speed_2d: 1.0,
             discrete_scale_speed_3d: 0.5,
-            smooth_scroll_speed_2d: 1.0,
-            smooth_scroll_speed_3d: 0.5,
+            pixels_per_2x_scale_2d: 100.0,
+            pixels_per_2x_scale_3d: 200.0,
             mouse_orbit_speed: 0.75,
             speed_modifier: 3.0,
 

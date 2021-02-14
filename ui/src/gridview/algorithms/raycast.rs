@@ -212,6 +212,58 @@ pub fn intersect_plane(
     })
 }
 
+/// Computes the intersection of a 3D ray and a cuboid.
+pub fn intersect_cuboid(start: FVec3D, mut delta: FVec3D, cuboid: FRect3D) -> Option<Hit> {
+    let mut entry_corner = cuboid.min();
+    let mut exit_corner = cuboid.max();
+
+    for &ax in Dim3D::axes() {
+        if delta[ax].is_negative() {
+            std::mem::swap(&mut entry_corner[ax], &mut exit_corner[ax]);
+        }
+    }
+    // Please don't crash on division by zero!
+    ensure_nonzero_delta(&mut delta);
+
+    // At what `t` does the ray enter the cuboid (considering only one axis at a
+    // time)?
+    let t0 = (entry_corner - start) / delta;
+    // At what `t` does the ray exit the cuboid (considering only one axis at
+    // a time)?
+    let t1 = (exit_corner - start) / delta;
+
+    // At what `t` has the ray entered the cuboid along all axes?
+    let max_t0: R64 = *t0.max_component();
+    // At what `t` has the ray entered the cuboid along all axes?
+    let min_t1: R64 = *t1.min_component();
+
+    // If we enter AFTER we exit, or exit at a negative `t` ...
+    if max_t0 >= min_t1 || r64(0.0) > min_t1 {
+        // ... then the ray does not intersect with the cuboid.
+        return None;
+    } else {
+        // Otherwise, the ray does intersect with the cuboid.
+        let pos_int = (start + delta * (max_t0 + 0.5)).floor().to_ivec();
+        let pos_float = start + delta * max_t0;
+        let entry_axis = entry_axis(t0);
+        let face = if delta[entry_axis].is_positive() {
+            Face::negative(entry_axis) // ray is positive; hit negative face of cell
+        } else {
+            Face::positive(entry_axis) // ray is negative; hit positive face of cell
+        };
+
+        Some(Hit {
+            start,
+            delta,
+            t0: max_t0,
+            t1: min_t1,
+            pos_int,
+            pos_float,
+            face,
+        })
+    }
+}
+
 // Given the parameters `t0` at which the ray enters a node along each axis and
 // `tm` at which the ray crosses the middle of a node along each axis, returns
 // the child index of the first child of that node intersected by the ray.

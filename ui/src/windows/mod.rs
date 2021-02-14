@@ -5,6 +5,7 @@ use ndcell_core::prelude::*;
 
 #[cfg(debug_assertions)]
 mod debug;
+pub mod error_popup;
 mod setup;
 mod simulation;
 

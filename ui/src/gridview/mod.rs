@@ -157,6 +157,13 @@ impl GridView {
             GridView::View3D(view3d) => view3d.render(params),
         }
     }
+    /// Exports the simulation to a string.
+    pub fn export(&self, format: CaFormat) -> Result<String, CaFormatError> {
+        match self {
+            GridView::View2D(view2d) => view2d.export(format),
+            GridView::View3D(view3d) => view3d.export(format),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

@@ -132,7 +132,7 @@ where
     }
 
     /// Creates an `NdRect` spanning both of the given rectangles (inclusive).
-    pub fn span_rects(a: Self, b: Self) -> Self {
+    pub fn span_rects(a: &Self, b: &Self) -> Self {
         Self::span(
             NdVec::min(&a.min(), &b.min()),
             NdVec::max(&a.max(), &b.max()),

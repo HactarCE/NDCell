@@ -79,7 +79,7 @@ impl GridViewDimension for GridViewDim2D {
         initial_pos: ScreenPos2D,
     ) -> Option<SelectionDragHandler2D> {
         match command {
-            SelectDragCommand::NewRect => Some(make_new_rect_selection_drag_handler(initial_pos)),
+            SelectDragCommand::NewRect => make_new_rect_selection_drag_handler(initial_pos),
             SelectDragCommand::Resize2D(direction) => {
                 Some(make_resize_selection_drag_handler(initial_pos, direction))
             }
@@ -129,7 +129,7 @@ impl GridViewDimension for GridViewDim2D {
         if let Some(screen_pos) = &screen_pos {
             match mouse.display {
                 MouseDisplay::Draw(mode) => {
-                    if let Some(cell_pos) = screen_pos.draw_cell(mode, None) {
+                    if let Some(cell_pos) = screen_pos.cell_to_draw(mode, None) {
                         frame.add_hover_draw_overlay(&cell_pos, mode);
                     }
                 }
@@ -151,20 +151,21 @@ impl GridViewDimension for GridViewDim2D {
         // Draw absolute selection resize preview after drawing selection.
         if mouse.display == MouseDisplay::ResizeSelectionAbsolute {
             if let (Some(current_selection), Some(screen_pos)) = (&this.selection, &screen_pos) {
-                let resize_preview_rect = if this.is_dragging() {
+                if this.is_dragging() {
                     // We are already resizing the selection; just use the
                     // current selection.
-                    current_selection.rect.clone()
-                } else {
+                    frame.add_selection_resize_preview_overlay(&current_selection.rect);
+                } else if let Some(resize_destination) = screen_pos.render_cell_to_select(None) {
                     // Show what *would* happen if the user resized the
                     // selection.
-                    super::selection::resize_selection_absolute(
-                        &current_selection.rect,
-                        &screen_pos.pos(),
-                        &screen_pos.rect(),
-                    )
-                };
-                frame.add_selection_resize_preview_overlay(&resize_preview_rect);
+                    frame.add_selection_resize_preview_overlay(
+                        &super::selection::resize_selection_absolute(
+                            &current_selection.rect,
+                            &screen_pos.pos(),
+                            &resize_destination,
+                        ),
+                    );
+                }
             }
         }
         // Draw relative selection resize preview after drawing selection.
@@ -184,11 +185,16 @@ impl GridViewDimension for GridViewDim2D {
     }
 }
 
-fn make_new_rect_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler2D {
-    Box::new(move |this, new_pos| {
-        this.set_selection_rect(Some(NdRect::span_rects(initial_pos.rect(), new_pos.rect())));
+fn make_new_rect_selection_drag_handler(
+    initial_pos: ScreenPos2D,
+) -> Option<SelectionDragHandler2D> {
+    let resize_start = initial_pos.render_cell_to_select(None)?;
+    Some(Box::new(move |this, new_pos| {
+        if let Some(resize_destination) = new_pos.render_cell_to_select(Some(&initial_pos)) {
+            this.set_selection_rect(Some(NdRect::span_rects(&resize_start, &resize_destination)));
+        }
         Ok(DragOutcome::Continue)
-    })
+    }))
 }
 fn make_resize_selection_drag_handler(
     initial_pos: ScreenPos2D,
@@ -218,11 +224,13 @@ fn make_resize_selection_to_cell_drag_handler(initial_pos: ScreenPos2D) -> Selec
     Box::new(move |this, new_pos| {
         initial_selection = initial_selection.take().or_else(|| this.deselect());
         if let Some(s) = &initial_selection {
-            this.set_selection_rect(Some(super::selection::resize_selection_absolute(
-                &s.rect,
-                &initial_pos.pos(),
-                &new_pos.rect(),
-            )));
+            if let Some(resize_destination) = new_pos.render_cell_to_select(Some(&initial_pos)) {
+                this.set_selection_rect(Some(super::selection::resize_selection_absolute(
+                    &s.rect,
+                    &initial_pos.pos(),
+                    &resize_destination,
+                )));
+            }
             Ok(DragOutcome::Continue)
         } else {
             // There is no selection to resize.

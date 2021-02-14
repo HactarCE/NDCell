@@ -321,7 +321,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
             }
             DrawCommand::Drag(c, cursor_start) => {
                 let initial_screen_pos = self.screen_pos(cursor_start);
-                let initial_cell = match initial_screen_pos.draw_cell(c.mode, None) {
+                let initial_cell = match initial_screen_pos.cell_to_draw(c.mode, None) {
                     Some(cell) => cell,
                     None => return Ok(()),
                 };
@@ -335,17 +335,15 @@ impl<G: GridViewDimension> GenericGridView<G> {
                     DrawShape::Freeform => {
                         let mut pos1 = initial_cell;
                         Box::new(move |this, pixel| {
-                            let pos2 = match this
+                            if let Some(pos2) = this
                                 .screen_pos(pixel)
-                                .draw_cell(c.mode, this.drag_initial.as_ref())
+                                .cell_to_draw(c.mode, this.drag_initial.as_ref())
                             {
-                                Some(cell) => cell,
-                                None => return Ok(DragOutcome::Cancel),
-                            };
-                            for pos in bresenham::line(pos1.clone(), pos2.clone()) {
-                                this.automaton.ndtree.set_cell(&pos, new_cell_state);
+                                for pos in bresenham::line(pos1.clone(), pos2.clone()) {
+                                    this.automaton.ndtree.set_cell(&pos, new_cell_state);
+                                }
+                                pos1 = pos2;
                             }
-                            pos1 = pos2;
                             Ok(DragOutcome::Continue)
                         })
                     }

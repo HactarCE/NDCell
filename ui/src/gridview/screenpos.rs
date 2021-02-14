@@ -18,7 +18,7 @@ pub trait ScreenPos: Sized {
 
     /// Returns the cell to draw on, which is automatically `None` if zoomed out
     /// too far to draw.
-    fn draw_cell(&self, mode: DrawMode, initial: Option<&Self>) -> Option<BigVec<Self::D>>;
+    fn cell_to_draw(&self, mode: DrawMode, initial: Option<&Self>) -> Option<BigVec<Self::D>>;
 }
 
 #[derive(Debug, Clone)]
@@ -40,13 +40,15 @@ impl ScreenPos for ScreenPos2D {
         self.layer
     }
 
-    fn draw_cell(&self, _mode: DrawMode, _initial: Option<&Self>) -> Option<BigVec2D> {
+    fn cell_to_draw(&self, _mode: DrawMode, _initial: Option<&Self>) -> Option<BigVec2D> {
         if self.layer != Layer(0) {
             return None;
         }
+
         Some(self.pos.floor())
     }
 }
+
 impl ScreenPos2D {
     /// Returns the global cell position of the mouse.
     pub fn pos(&self) -> FixedVec2D {
@@ -91,10 +93,11 @@ impl ScreenPos for ScreenPos3D {
         self.layer
     }
 
-    fn draw_cell(&self, mode: DrawMode, initial: Option<&Self>) -> Option<BigVec3D> {
+    fn cell_to_draw(&self, mode: DrawMode, initial: Option<&Self>) -> Option<BigVec3D> {
         if self.layer != Layer(0) {
             return None;
         }
+
         let (cell, _face) = self.draw_cell_and_face(mode, initial)?;
         Some(cell)
     }
@@ -112,29 +115,32 @@ impl ScreenPos3D {
         mode: DrawMode,
         initial: Option<&Self>,
     ) -> Option<(BigVec3D, Face)> {
-        let draw_plane = initial
-            .unwrap_or(&self)
-            .raycast
-            .as_ref()?
-            .draw_plane(mode)?;
-        let draw_cell = self.draw_cell_in_plane(&draw_plane)?;
-        Some((draw_cell, draw_plane.face))
-    }
-
-    fn draw_cell_in_plane(&self, draw_plane: &DrawPlane) -> Option<BigVec3D> {
         if self.layer != Layer(0) {
             return None;
         }
 
-        let mut global_pos = self
-            .raycast_to_plane(&draw_plane.fixedpoint_plane())?
-            .floor();
-        // Account for possible off-by-one error.
-        global_pos[draw_plane.face.normal_axis()] = draw_plane.coord.clone();
+        // Determine the plane to draw in.
+        let initial_raycast = initial.unwrap_or(&self).raycast.as_ref()?;
+        let draw_plane = match mode {
+            DrawMode::Place => initial_raycast.outside_plane_face(),
+            DrawMode::Replace => initial_raycast.inside_plane_face(),
+            DrawMode::Erase => initial_raycast.inside_plane_face(),
+        };
 
-        Some(global_pos)
+        // Raycast from the cursor to that plane.
+        let cell_to_draw = self.raycast_to_plane_face(&draw_plane)?;
+
+        Some((cell_to_draw, draw_plane.face))
     }
 
+    fn raycast_to_plane_face(&self, plane: &PlaneFace) -> Option<BigVec3D> {
+        let mut ret = self.raycast_to_plane(&plane.fixedpoint_plane())?.floor();
+
+        // Account for possible off-by-one error during the raycast.
+        ret[plane.face.normal_axis()] = plane.coord.clone();
+
+        Some(ret)
+    }
     pub fn raycast_to_plane(&self, plane: &Plane) -> Option<FixedVec3D> {
         self.xform.pixel_to_global_pos_in_plane(self.pixel, plane)
     }
@@ -219,27 +225,33 @@ impl RaycastHit {
         }
     }
 
-    fn draw_plane(&self, mode: DrawMode) -> Option<DrawPlane> {
-        let replace_cell: bool = match self.thing {
-            RaycastHitThing::Selection => return None,
-            RaycastHitThing::Gridlines => false,
-            RaycastHitThing::Cell => match mode {
-                DrawMode::Place => false,
-                DrawMode::Replace => true,
-                DrawMode::Erase => true,
-            },
-        };
-        let mut face = self.face;
-        let mut coord = self.cell[face.normal_axis()].clone();
-        if !replace_cell {
-            coord += match self.face.sign() {
-                Sign::Minus => -1,
-                Sign::NoSign => unreachable!(),
-                Sign::Plus => 1,
-            };
-            face = face.opposite();
+    /// Returns the plane face of the cell hit by the ray, facing toward the
+    /// camera. If the ray hits the gridline plane, then the result is the same
+    /// as `outside_plane_face()`.
+    fn inside_plane_face(&self) -> PlaneFace {
+        match self.thing {
+            RaycastHitThing::Selection => todo!(),
+            RaycastHitThing::Gridlines => self.outside_plane_face(),
+            RaycastHitThing::Cell => self._inside_plane_face(),
         }
-        Some(DrawPlane { face, coord })
+    }
+    /// Returns the plane face of the cell in front of the one hit by the ray,
+    /// facing toward the cell hit.
+    fn outside_plane_face(&self) -> PlaneFace {
+        let mut ret = self._inside_plane_face();
+        ret.coord += match self.face.sign() {
+            Sign::Minus => -1,
+            Sign::NoSign => unreachable!(),
+            Sign::Plus => 1,
+        };
+        ret.face = self.face.opposite();
+        ret
+    }
+
+    fn _inside_plane_face(&self) -> PlaneFace {
+        let face = self.face;
+        let coord = self.cell[face.normal_axis()].clone();
+        PlaneFace { face, coord }
     }
 }
 
@@ -250,12 +262,13 @@ pub enum RaycastHitThing {
     Cell,      // then cells
 }
 
+/// A global cell plane and one of its two faces.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct DrawPlane {
+struct PlaneFace {
     pub face: Face,
     pub coord: BigInt,
 }
-impl DrawPlane {
+impl PlaneFace {
     fn fixedpoint_plane(&self) -> Plane {
         Plane {
             axis: self.face.normal_axis(),

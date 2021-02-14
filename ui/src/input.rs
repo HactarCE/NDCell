@@ -371,6 +371,7 @@ impl FrameInProgress<'_> {
             let mouse_target_data = maybe_mouse_target.unwrap();
             let binding = &mouse_target_data.binding;
             self.state.dragging_button = Some(button);
+            self.state.mouse.display = binding.display();
             self.gridview.enqueue(binding.to_command(cursor_pos));
         } else if let Some(b) = click_binding {
             // Possibility #2: Click
@@ -382,6 +383,7 @@ impl FrameInProgress<'_> {
         } else if let Some(b) = drag_binding {
             // Possibility #3: Drag
             self.state.dragging_button = Some(button);
+            self.state.mouse.display = b.display();
             self.gridview.enqueue(b.to_command(cursor_pos));
         }
     }

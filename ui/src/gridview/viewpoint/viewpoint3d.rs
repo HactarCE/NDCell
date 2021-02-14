@@ -373,12 +373,16 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
             }
 
             ViewCommand::FitView => {
-                todo!("fit view 3D");
+                bail!(
+                    "FitView command received in Viewpoint3D (must be converted to GoTo command)",
+                );
             }
 
-            ViewCommand::FocusPixel(_) => bail!(
-                "FocusPixel command received in Viewpoint3D (must be converted to GoTo command)",
-            ),
+            ViewCommand::FocusPixel(_) => {
+                bail!(
+                    "FocusPixel command received in Viewpoint3D (must be converted to GoTo command)",
+                );
+            }
         }
     }
 }

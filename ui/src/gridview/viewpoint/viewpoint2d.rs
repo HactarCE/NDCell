@@ -265,7 +265,9 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
             }
 
             ViewCommand::FitView => {
-                bail!("FitView command received in Viewpoint2D (must be converted to GoTo command)")
+                bail!(
+                    "FitView command received in Viewpoint2D (must be converted to GoTo command)",
+                );
             }
 
             ViewCommand::FocusPixel(pixel) => {

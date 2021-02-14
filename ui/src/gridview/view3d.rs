@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use ndcell_core::prelude::*;
 
@@ -33,6 +33,12 @@ impl GridViewDimension for GridViewDim3D {
     type ScreenPos = ScreenPos3D;
 
     fn do_view_command(this: &mut GridView3D, command: ViewCommand) -> Result<()> {
+        // Handle `FitView` specially because it depends on the cell contents of
+        // the automaton.
+        if matches!(command, ViewCommand::FitView) {
+            bail!("3D FitView command is not yet implemented");
+        }
+
         // Handle `FocusPixel` specially because it depends on the cell contents
         // of the automaton.
         if let ViewCommand::FocusPixel(pixel) = command {

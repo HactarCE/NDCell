@@ -1,3 +1,5 @@
+use log::warn;
+
 use ndcell_core::prelude::*;
 
 use super::algorithms::raycast;
@@ -16,9 +18,56 @@ pub trait ScreenPos: Sized {
     /// Returns the render cell layer.
     fn layer(&self) -> Layer;
 
-    /// Returns the cell to draw on, which is automatically `None` if zoomed out
-    /// too far to draw.
-    fn cell_to_draw(&self, mode: DrawMode, initial: Option<&Self>) -> Option<BigVec<Self::D>>;
+    /// Returns the cell to draw on, which is always `None` if zoomed out too
+    /// far to draw.
+    fn cell_to_draw(&self, mode: DrawMode) -> Option<BigVec<Self::D>>;
+    /// Returns the cell to draw on in the middle of a drag, which is always
+    /// `None` if zoomed out too far to draw.
+    fn cell_to_draw_starting_at(&self, mode: DrawMode, _initial: &Self) -> Option<BigVec<Self::D>> {
+        self.cell_to_draw(mode)
+    }
+
+    /// Returns the cell to select.
+    fn cell_to_select(&self) -> Option<BigVec<Self::D>>;
+    /// Returns the cell to select in the middle of a drag.
+    fn cell_to_select_starting_at(&self, _initial: &Self) -> Option<BigVec<Self::D>> {
+        self.cell_to_select()
+    }
+
+    /// Returns a rectangle encompassing the render cell to select.
+    fn render_cell_to_select(&self) -> Option<BigRect<Self::D>> {
+        let len = self.layer().big_len();
+        // Round to nearest render cell.
+        let pos = self.cell_to_select()?.div_floor(&len) * &len;
+        Some(self.layer().big_rect() + pos)
+    }
+    /// Returns a rectangle encompassing the render cell to select.
+    fn render_cell_to_select_starting_at(&self, initial: &Self) -> Option<BigRect<Self::D>> {
+        let len = self.layer().big_len();
+        // Round to nearest render cell.
+        let pos = self.cell_to_select_starting_at(initial)?.div_floor(&len) * &len;
+        Some(self.layer().big_rect() + pos)
+    }
+
+    /// Returns the delta between `initial` and `self` when resizing
+    /// `initial_rect` along `resize_vector`.
+    fn rect_resize_delta(
+        &self,
+        initial_rect: &FixedRect<Self::D>,
+        initial_screenpos: &Self,
+        resize_vector: &IVec<Self::D>,
+    ) -> Option<FixedVec<Self::D>>;
+    /// Returns the delta between `initial` and `self` along `parallel_face` of
+    /// `initial_rect`. `parallel_face` is ignored in 2D but must be `Some` in
+    /// 3D.
+    fn rect_move_delta(
+        &self,
+        initial_rect: &FixedRect<Self::D>,
+        initial_screenpos: &Self,
+        parallel_face: Option<Face>,
+    ) -> Option<FixedVec<Self::D>>;
+    /// Returns the initial position for absolute resizing of the selection.
+    fn absolute_selection_resize_start_pos(&self) -> Option<FixedVec<Self::D>>;
 }
 
 #[derive(Debug, Clone)]
@@ -40,12 +89,36 @@ impl ScreenPos for ScreenPos2D {
         self.layer
     }
 
-    fn cell_to_draw(&self, _mode: DrawMode, _initial: Option<&Self>) -> Option<BigVec2D> {
+    fn cell_to_draw(&self, _mode: DrawMode) -> Option<BigVec2D> {
         if self.layer != Layer(0) {
             return None;
         }
 
-        Some(self.pos.floor())
+        Some(self.cell())
+    }
+
+    fn cell_to_select(&self) -> Option<BigVec2D> {
+        Some(self.cell())
+    }
+
+    fn rect_resize_delta(
+        &self,
+        _initial_rect: &FixedRect<Self::D>,
+        initial_screenpos: &Self,
+        _resize_vector: &IVec<Self::D>,
+    ) -> Option<FixedVec<Self::D>> {
+        Some(self.pos() - &initial_screenpos.pos)
+    }
+    fn rect_move_delta(
+        &self,
+        _initial_rect: &FixedRect<Self::D>,
+        initial_screenpos: &Self,
+        _parallel_face: Option<Face>,
+    ) -> Option<FixedVec<Self::D>> {
+        Some(self.pos() - &initial_screenpos.pos)
+    }
+    fn absolute_selection_resize_start_pos(&self) -> Option<FixedVec<Self::D>> {
+        Some(self.pos())
     }
 }
 
@@ -93,13 +166,91 @@ impl ScreenPos for ScreenPos3D {
         self.layer
     }
 
-    fn cell_to_draw(&self, mode: DrawMode, initial: Option<&Self>) -> Option<BigVec3D> {
+    fn cell_to_draw(&self, mode: DrawMode) -> Option<BigVec3D> {
         if self.layer != Layer(0) {
             return None;
         }
 
-        let (cell, _face) = self.draw_cell_and_face(mode, initial)?;
+        let (cell, _face) = self.cell_and_face_to_draw(mode)?;
         Some(cell)
+    }
+    fn cell_to_draw_starting_at(&self, mode: DrawMode, initial: &Self) -> Option<BigVec3D> {
+        if self.layer != Layer(0) {
+            return None;
+        }
+
+        let (cell, _face) = self.cell_and_face_to_draw_starting_at(mode, initial)?;
+        Some(cell)
+    }
+
+    fn cell_to_select(&self) -> Option<BigVec3D> {
+        // First, do a normal raycast. If we hit something, use that.
+        if let Some(hit) = &self.raycast {
+            return Some(hit.cell.clone());
+        }
+
+        let initial = self;
+        self.cell_to_select_starting_at(initial)
+    }
+    fn cell_to_select_starting_at(&self, initial: &Self) -> Option<BigVec3D> {
+        // First, do a normal raycast. If we hit something, use that.
+        if let Some(hit) = &self.raycast {
+            return Some(hit.cell.clone());
+        }
+
+        // Determine the plane to select in.
+        let initial_raycast = initial.raycast.as_ref()?;
+        let select_plane = initial_raycast.inside_plane_face();
+        // Raycast to that plane.
+        self.raycast_to_plane_face(&select_plane)
+    }
+
+    fn rect_resize_delta(
+        &self,
+        initial_rect: &FixedRect<Self::D>,
+        initial_screenpos: &Self,
+        resize_vector: &IVec<Self::D>,
+    ) -> Option<FixedVec<Self::D>> {
+        // Assume `resize_vector` is a unit vector along one axis. If it isn't,
+        // throw a warning and move on.
+        let axis = resize_vector.abs().max_axis();
+        let face = if resize_vector[axis].is_positive() {
+            Face::positive(axis)
+        } else {
+            Face::negative(axis)
+        };
+        if face.normal_ivec() != *resize_vector {
+            warn!(
+                "rect_resize_delta() received weird resize_vector {}; assuming it is {}",
+                resize_vector, face,
+            );
+        }
+
+        let selection_face_plane = face.plane_of(initial_rect);
+        let line_start = initial_screenpos.raycast_to_plane(&selection_face_plane)?;
+        let line_delta = face.normal_fvec();
+        let line_end = self.nearest_global_pos_on_line(&line_start, line_delta)?;
+
+        Some(line_end - line_start)
+    }
+    fn rect_move_delta(
+        &self,
+        initial_rect: &FixedRect<Self::D>,
+        initial_screenpos: &Self,
+        parallel_face: Option<Face>,
+    ) -> Option<FixedVec<Self::D>> {
+        if parallel_face.is_none() {
+            warn!("ScreenPos3D::rect_move_delta() received `parallel_face = None`");
+        }
+
+        let selection_face_plane = parallel_face?.plane_of(initial_rect);
+        let start_pos = initial_screenpos.raycast_to_plane(&selection_face_plane)?;
+        let end_pos = self.raycast_to_plane(&selection_face_plane)?;
+
+        Some(end_pos - start_pos)
+    }
+    fn absolute_selection_resize_start_pos(&self) -> Option<FixedVec<Self::D>> {
+        self.raycast.as_ref().map(|hit| hit.pos.clone())
     }
 }
 impl ScreenPos3D {
@@ -110,17 +261,21 @@ impl ScreenPos3D {
             .pixel_to_global_pos(self.pixel, Viewpoint3D::DISTANCE_TO_PIVOT)
     }
 
-    pub fn draw_cell_and_face(
+    pub fn cell_and_face_to_draw(&self, mode: DrawMode) -> Option<(BigVec3D, Face)> {
+        let initial = self;
+        self.cell_and_face_to_draw_starting_at(mode, initial)
+    }
+    pub fn cell_and_face_to_draw_starting_at(
         &self,
         mode: DrawMode,
-        initial: Option<&Self>,
+        initial: &Self,
     ) -> Option<(BigVec3D, Face)> {
         if self.layer != Layer(0) {
             return None;
         }
 
         // Determine the plane to draw in.
-        let initial_raycast = initial.unwrap_or(&self).raycast.as_ref()?;
+        let initial_raycast = initial.raycast.as_ref()?;
         let draw_plane = match mode {
             DrawMode::Place => initial_raycast.outside_plane_face(),
             DrawMode::Replace => initial_raycast.inside_plane_face(),

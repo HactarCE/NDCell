@@ -302,28 +302,33 @@ impl GridViewRender2D<'_> {
 
         let local_rect = local_rect.to_frect();
 
+        use MouseDragBinding as Mdb;
+        use SelectDragCommand as Sdc;
+
         // "Move selected cells" target.
         self.add_mouse_target_quad(
             local_rect,
             Some(ModifiersState::empty()),
             MouseTargetData {
-                binding: MouseDragBinding::Select(SelectDragCommand::MoveCells.into()),
+                binding: Mdb::Select(Sdc::MoveCells(None).into()),
             },
         );
+
         // "Move selection" target.
         self.add_mouse_target_quad(
             local_rect,
             Some(ModifiersState::SHIFT),
             MouseTargetData {
-                binding: MouseDragBinding::Select(SelectDragCommand::MoveSelection.into()),
+                binding: Mdb::Select(Sdc::MoveSelection(None).into()),
             },
         );
+
         // "Move copy of cells" target.
         self.add_mouse_target_quad(
             local_rect,
             Some(ModifiersState::CTRL),
             MouseTargetData {
-                binding: MouseDragBinding::Select(SelectDragCommand::CopyCells.into()),
+                binding: Mdb::Select(Sdc::CopyCells(None).into()),
             },
         );
 
@@ -344,7 +349,7 @@ impl GridViewRender2D<'_> {
             max[Y] + click_target_width * 0.75,
         ];
         for &direction in &DIRECTIONS {
-            let binding = MouseDragBinding::Select(SelectDragCommand::Resize2D(direction).into());
+            let binding = Mdb::Select(Sdc::Resize2D(direction).into());
             let NdVec([dx, dy]) = direction.vector();
             self.add_mouse_target_quad(
                 FRect::span(

@@ -70,6 +70,11 @@ impl Default for MouseConfig {
                 (NONE, Left, Draw(place_freeform)),
                 (SHIFT, Left, Draw(erase_freeform)),
                 (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
+                (
+                    CTRL | SHIFT,
+                    Left,
+                    Select(SelectDragCommand::ResizeToCell.into()),
+                ),
                 (NONE, Right, View(ViewDragCommand::Orbit.into())),
                 (CTRL, Right, View(ViewDragCommand::Scale.into())),
                 (NONE, Middle, View(ViewDragCommand::Pan.into())),

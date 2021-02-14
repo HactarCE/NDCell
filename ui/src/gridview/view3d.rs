@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use log::warn;
 
 use ndcell_core::prelude::*;
 
@@ -8,19 +7,12 @@ use super::generic::{GenericGridView, GridViewDimension, SelectionDragHandler};
 use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
 use super::screenpos::{RaycastHit, RaycastHitThing, ScreenPos3D};
 use super::viewpoint::{Viewpoint, Viewpoint3D};
-use super::{DragHandler, DragOutcome, DragType};
+use super::{DragHandler, DragType};
 use crate::commands::*;
 use crate::mouse::MouseDisplay;
 
 pub type GridView3D = GenericGridView<GridViewDim3D>;
 type SelectionDragHandler3D = SelectionDragHandler<GridViewDim3D>;
-
-macro_rules! ignore_command {
-    ($c:expr) => {{
-        warn!("Ignoring {:?} in GridView3D", $c);
-        return None;
-    }};
-}
 
 #[derive(Debug)]
 pub struct GridViewDim3D {
@@ -89,52 +81,6 @@ impl GridViewDimension for GridViewDim3D {
 
         Ok(())
     }
-    fn make_select_drag_handler(
-        this: &mut GridView3D,
-        command: SelectDragCommand,
-        initial_pos: ScreenPos3D,
-    ) -> Option<SelectionDragHandler3D> {
-        match command {
-            SelectDragCommand::NewRect => unimplemented!(),
-            SelectDragCommand::Resize2D(_) => ignore_command!(command),
-            SelectDragCommand::Resize3D(face) => {
-                let selection_face_plane =
-                    face.plane_of(&this.selection.as_ref()?.rect.to_fixedrect());
-                let line_start = initial_pos.raycast_to_plane(&selection_face_plane)?;
-                let line_delta = face.normal_fvec();
-
-                let mut initial_selection = None;
-                Some(Box::new(move |this, new_pos| {
-                    if let Some(new_pos_on_line) =
-                        new_pos.nearest_global_pos_on_line(&line_start, line_delta)
-                    {
-                        initial_selection = initial_selection.take().or_else(|| this.deselect());
-                        if let Some(s) = &initial_selection {
-                            this.set_selection_rect(Some(
-                                super::selection::resize_selection_relative(
-                                    &s.rect,
-                                    &line_start,
-                                    &new_pos_on_line,
-                                    face.normal_ivec(),
-                                ),
-                            ));
-                            Ok(DragOutcome::Continue)
-                        } else {
-                            // There is no selection to resize.
-                            Ok(DragOutcome::Cancel)
-                        }
-                    } else {
-                        // We can't resolve the new selection position.
-                        Ok(DragOutcome::Cancel)
-                    }
-                }))
-            }
-            SelectDragCommand::ResizeToCell => unimplemented!(),
-            SelectDragCommand::MoveSelection => unimplemented!(),
-            SelectDragCommand::MoveCells => unimplemented!(),
-            SelectDragCommand::CopyCells => unimplemented!(),
-        }
-    }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {
         if this.automaton.ndtree.root_ref().is_empty() {
@@ -161,9 +107,13 @@ impl GridViewDimension for GridViewDim3D {
         if let Some(screen_pos) = &screen_pos {
             match mouse.display {
                 MouseDisplay::Draw(mode) => {
-                    if let Some((cell, face)) =
-                        screen_pos.draw_cell_and_face(mode, this.drag_initial.as_ref())
-                    {
+                    let cell_and_face_to_draw = match &this.drag_initial {
+                        Some(initial) => {
+                            screen_pos.cell_and_face_to_draw_starting_at(mode, initial)
+                        }
+                        None => screen_pos.cell_and_face_to_draw(mode),
+                    };
+                    if let Some((cell, face)) = cell_and_face_to_draw {
                         frame.add_hover_draw_overlay(&cell, face, mode);
                     }
                 }

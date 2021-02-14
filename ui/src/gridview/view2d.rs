@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use log::warn;
 
 use ndcell_core::prelude::*;
 
@@ -7,20 +6,13 @@ use super::generic::{GenericGridView, GridViewDimension, SelectionDragHandler};
 use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
 use super::screenpos::{ScreenPos, ScreenPos2D};
 use super::viewpoint::{Viewpoint, Viewpoint2D};
-use super::{DragHandler, DragOutcome, DragType};
+use super::{DragHandler, DragType};
 use crate::commands::*;
 use crate::mouse::MouseDisplay;
-use crate::{Direction, Scale};
+use crate::Scale;
 
 pub type GridView2D = GenericGridView<GridViewDim2D>;
 type SelectionDragHandler2D = SelectionDragHandler<GridViewDim2D>;
-
-macro_rules! ignore_command {
-    ($c:expr) => {{
-        warn!("Ignoring {:?} in GridView3D", $c);
-        return None;
-    }};
-}
 
 #[derive(Debug, Default)]
 pub struct GridViewDim2D;
@@ -73,31 +65,6 @@ impl GridViewDimension for GridViewDim2D {
 
         Ok(())
     }
-    fn make_select_drag_handler(
-        this: &mut GenericGridView<Self>,
-        command: SelectDragCommand,
-        initial_pos: ScreenPos2D,
-    ) -> Option<SelectionDragHandler2D> {
-        match command {
-            SelectDragCommand::NewRect => make_new_rect_selection_drag_handler(initial_pos),
-            SelectDragCommand::Resize2D(direction) => {
-                Some(make_resize_selection_drag_handler(initial_pos, direction))
-            }
-            SelectDragCommand::Resize3D(_) => ignore_command!(command),
-            SelectDragCommand::ResizeToCell => {
-                Some(make_resize_selection_to_cell_drag_handler(initial_pos))
-            }
-            SelectDragCommand::MoveSelection => Some(make_move_selection_drag_handler(initial_pos)),
-            SelectDragCommand::MoveCells => Some(make_move_or_copy_selected_cells_drag_handler(
-                initial_pos,
-                false,
-            )),
-            SelectDragCommand::CopyCells => Some(make_move_or_copy_selected_cells_drag_handler(
-                initial_pos,
-                true,
-            )),
-        }
-    }
 
     fn render(this: &mut GridView2D, params: RenderParams<'_>) -> Result<RenderResult> {
         let mouse = params.mouse;
@@ -129,7 +96,7 @@ impl GridViewDimension for GridViewDim2D {
         if let Some(screen_pos) = &screen_pos {
             match mouse.display {
                 MouseDisplay::Draw(mode) => {
-                    if let Some(cell_pos) = screen_pos.cell_to_draw(mode, None) {
+                    if let Some(cell_pos) = screen_pos.cell_to_draw(mode) {
                         frame.add_hover_draw_overlay(&cell_pos, mode);
                     }
                 }
@@ -155,7 +122,7 @@ impl GridViewDimension for GridViewDim2D {
                     // We are already resizing the selection; just use the
                     // current selection.
                     frame.add_selection_resize_preview_overlay(&current_selection.rect);
-                } else if let Some(resize_destination) = screen_pos.render_cell_to_select(None) {
+                } else if let Some(resize_destination) = screen_pos.render_cell_to_select() {
                     // Show what *would* happen if the user resized the
                     // selection.
                     frame.add_selection_resize_preview_overlay(
@@ -183,98 +150,4 @@ impl GridViewDimension for GridViewDim2D {
         let pos = this.viewpoint().cell_transform().pixel_to_global_pos(pixel);
         ScreenPos2D { pixel, layer, pos }
     }
-}
-
-fn make_new_rect_selection_drag_handler(
-    initial_pos: ScreenPos2D,
-) -> Option<SelectionDragHandler2D> {
-    let resize_start = initial_pos.render_cell_to_select(None)?;
-    Some(Box::new(move |this, new_pos| {
-        if let Some(resize_destination) = new_pos.render_cell_to_select(Some(&initial_pos)) {
-            this.set_selection_rect(Some(NdRect::span_rects(&resize_start, &resize_destination)));
-        }
-        Ok(DragOutcome::Continue)
-    }))
-}
-fn make_resize_selection_drag_handler(
-    initial_pos: ScreenPos2D,
-    direction: Direction,
-) -> SelectionDragHandler2D {
-    let mut initial_selection = None;
-
-    Box::new(move |this, new_pos| {
-        initial_selection = initial_selection.take().or_else(|| this.deselect());
-        if let Some(s) = &initial_selection {
-            this.set_selection_rect(Some(super::selection::resize_selection_relative(
-                &s.rect,
-                &initial_pos.pos(),
-                &new_pos.pos(),
-                direction.vector(),
-            )));
-            Ok(DragOutcome::Continue)
-        } else {
-            // There is no selection to resize.
-            Ok(DragOutcome::Cancel)
-        }
-    })
-}
-fn make_resize_selection_to_cell_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler2D {
-    let mut initial_selection = None;
-
-    Box::new(move |this, new_pos| {
-        initial_selection = initial_selection.take().or_else(|| this.deselect());
-        if let Some(s) = &initial_selection {
-            if let Some(resize_destination) = new_pos.render_cell_to_select(Some(&initial_pos)) {
-                this.set_selection_rect(Some(super::selection::resize_selection_absolute(
-                    &s.rect,
-                    &initial_pos.pos(),
-                    &resize_destination,
-                )));
-            }
-            Ok(DragOutcome::Continue)
-        } else {
-            // There is no selection to resize.
-            Ok(DragOutcome::Cancel)
-        }
-    })
-}
-fn make_move_selection_drag_handler(initial_pos: ScreenPos2D) -> SelectionDragHandler2D {
-    let mut initial_selection = None;
-
-    Box::new(move |this, new_pos| {
-        initial_selection = initial_selection.take().or_else(|| this.deselect());
-        if let Some(s) = &initial_selection {
-            let delta = (new_pos.pos() - initial_pos.pos()).round();
-            this.set_selection_rect(Some(s.rect.clone() + delta));
-            Ok(DragOutcome::Continue)
-        } else {
-            // There is no selection to move.
-            Ok(DragOutcome::Cancel)
-        }
-    })
-}
-fn make_move_or_copy_selected_cells_drag_handler(
-    initial_pos: ScreenPos2D,
-    copy: bool,
-) -> SelectionDragHandler2D {
-    let mut initial_selection = None;
-
-    Box::new(move |this, new_pos| {
-        initial_selection = initial_selection.take().or_else(|| {
-            if copy {
-                this.grab_copy_of_selected_cells();
-            } else {
-                this.grab_selected_cells();
-            }
-            this.selection.take()
-        });
-        if let Some(s) = &initial_selection {
-            let delta = (new_pos.pos() - initial_pos.pos()).round();
-            this.selection = Some(s.move_by(delta));
-            Ok(DragOutcome::Continue)
-        } else {
-            // There is no selection to move.
-            Ok(DragOutcome::Cancel)
-        }
-    })
 }

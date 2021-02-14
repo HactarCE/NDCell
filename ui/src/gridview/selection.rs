@@ -75,17 +75,15 @@ impl<D: Dim> Selection<D> {
     }
 }
 
-/// Resizes a selection given cursor movement from `drag_start_pos` to
-/// `drag_end_pos` based on the distance covered during the drag.
+/// Resizes a selection along a global `resize_delta`.
 ///
 /// `resize_vector` is a vector where the sign of each component indicates the
 /// direction to resize along that axis, with zero for axes where the selection
 /// rectangle is not resized.
 pub fn resize_selection_relative<D: Dim>(
     initial_selection: &BigRect<D>,
-    drag_start_pos: &FixedVec<D>,
-    drag_end_pos: &FixedVec<D>,
-    resize_vector: IVec<D>,
+    resize_delta: &FixedVec<D>,
+    resize_vector: &IVec<D>,
 ) -> BigRect<D> {
     // `pos1` stays fixed; `pos2` varies.
     let mut pos1 = initial_selection.min();
@@ -96,12 +94,9 @@ pub fn resize_selection_relative<D: Dim>(
         }
     }
 
-    // Use delta from original cursor position to new cursor
-    // position.
-    let delta = drag_end_pos - drag_start_pos;
     for &ax in D::axes() {
         if resize_vector[ax] != 0 {
-            pos2[ax] += delta[ax].round();
+            pos2[ax] += resize_delta[ax].round();
 
             // Clamp to `pos1`; prevent the selection from turning "inside out."
             if resize_vector[ax] > 0 && pos1[ax] > pos2[ax]

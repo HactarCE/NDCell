@@ -19,7 +19,7 @@ use super::viewpoint::{Interpolate, Interpolator, Viewpoint};
 use super::worker::*;
 use super::{DragHandler, DragOutcome, DragType, WorkType};
 use crate::commands::*;
-use crate::CONFIG;
+use crate::{Face, CONFIG};
 
 /// Number of previous frame times to track. If this is too low, viewpoint
 /// interpolation may not work.
@@ -31,6 +31,13 @@ const MAX_LAST_SIM_TIMES: usize = 4;
 pub type SelectionDragHandler<G> = Box<
     dyn FnMut(&mut GenericGridView<G>, <G as GridViewDimension>::ScreenPos) -> Result<DragOutcome>,
 >;
+
+macro_rules! ignore_command {
+    ($c:expr) => {{
+        warn!("Ignoring {:?} in GridView{}D", $c, G::D::NDIM);
+        return None;
+    }};
+}
 
 /// Dimension-generic interactive cellular automaton interface.
 pub struct GenericGridView<G: GridViewDimension> {
@@ -321,7 +328,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
             }
             DrawCommand::Drag(c, cursor_start) => {
                 let initial_screen_pos = self.screen_pos(cursor_start);
-                let initial_cell = match initial_screen_pos.cell_to_draw(c.mode, None) {
+                let initial_cell = match initial_screen_pos.cell_to_draw(c.mode) {
                     Some(cell) => cell,
                     None => return Ok(()),
                 };
@@ -337,7 +344,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
                         Box::new(move |this, pixel| {
                             if let Some(pos2) = this
                                 .screen_pos(pixel)
-                                .cell_to_draw(c.mode, this.drag_initial.as_ref())
+                                .cell_to_draw_starting_at(c.mode, &initial_screen_pos)
                             {
                                 for pos in bresenham::line(pos1.clone(), pos2.clone()) {
                                     this.automaton.ndtree.set_cell(&pos, new_cell_state);
@@ -378,7 +385,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
             SelectCommand::Drag(c, cursor_start) => {
                 let initial_pos = self.screen_pos(cursor_start);
                 // Drag handlers depend on the number of dimensions.
-                let new_drag_handler = match G::make_select_drag_handler(self, c, initial_pos) {
+                let new_drag_handler = match self.make_select_drag_handler(c, initial_pos) {
                     Some(h) => h,
                     None => return Ok(()),
                 };
@@ -465,6 +472,148 @@ impl<G: GridViewDimension> GenericGridView<G> {
             }
         }
         Ok(())
+    }
+
+    /// Returns a selection drag handler for a selection command, given the
+    /// starting screen position.
+    fn make_select_drag_handler(
+        &self,
+        command: SelectDragCommand,
+        initial_pos: G::ScreenPos,
+    ) -> Option<SelectionDragHandler<G>> {
+        match command {
+            SelectDragCommand::NewRect => {
+                let resize_start = initial_pos.render_cell_to_select()?;
+                Some(Box::new(move |this, new_pos| {
+                    if let Some(resize_destination) =
+                        new_pos.render_cell_to_select_starting_at(&initial_pos)
+                    {
+                        this.set_selection_rect(Some(NdRect::span_rects(
+                            &resize_start,
+                            &resize_destination,
+                        )));
+                    }
+                    Ok(DragOutcome::Continue)
+                }))
+            }
+
+            SelectDragCommand::Resize2D(direction) => {
+                if G::D::NDIM != 2 {
+                    ignore_command!(command);
+                }
+                self.make_selection_resize_drag_handler(initial_pos, direction.vector())
+            }
+
+            SelectDragCommand::Resize3D(face) => {
+                if G::D::NDIM != 3 {
+                    ignore_command!(command);
+                }
+                self.make_selection_resize_drag_handler(initial_pos, face.normal_ivec())
+            }
+
+            SelectDragCommand::ResizeToCell => {
+                let mut initial_selection = None;
+                let resize_start = initial_pos.absolute_selection_resize_start_pos()?;
+                Some(Box::new(move |this, new_pos| {
+                    initial_selection = initial_selection.take().or_else(|| this.deselect());
+                    if let Some(s) = &initial_selection {
+                        if let Some(resize_destination) =
+                            new_pos.render_cell_to_select_starting_at(&initial_pos)
+                        {
+                            this.set_selection_rect(Some(
+                                super::selection::resize_selection_absolute(
+                                    &s.rect,
+                                    &resize_start,
+                                    &resize_destination,
+                                ),
+                            ));
+                        }
+                        Ok(DragOutcome::Continue)
+                    } else {
+                        // There is no selection to resize.
+                        Ok(DragOutcome::Cancel)
+                    }
+                }))
+            }
+
+            SelectDragCommand::MoveSelection(face) => {
+                self.make_selection_move_drag_handler(face, initial_pos, |this| {
+                    // To move the selection, we must first drop the selected
+                    // cells.
+                    this.drop_selected_cells();
+                })
+            }
+
+            SelectDragCommand::MoveCells(face) => {
+                self.make_selection_move_drag_handler(face, initial_pos, |this| {
+                    // To move the selected cells, we must first grab those
+                    // cells.
+                    this.grab_selected_cells();
+                })
+            }
+
+            SelectDragCommand::CopyCells(face) => {
+                self.make_selection_move_drag_handler(face, initial_pos, |this| {
+                    // To copy the selected cells, we must first grab a copy of
+                    // those cells.
+                    this.drop_selected_cells();
+                    this.grab_copy_of_selected_cells();
+                })
+            }
+        }
+    }
+    fn make_selection_resize_drag_handler<D: Dim>(
+        &self,
+        initial_pos: G::ScreenPos,
+        resize_vector: IVec<D>,
+    ) -> Option<SelectionDragHandler<G>> {
+        // Attempt to cast `resize_vector` to the correct number of dimensions.
+        let resize_vector: IVec<G::D> = AnyDimIVec::from(resize_vector).try_into().ok()?;
+
+        let mut initial_selection = None;
+        Some(Box::new(move |this, new_pos| {
+            initial_selection = initial_selection.take().or_else(|| this.deselect());
+            if let Some(s) = &initial_selection {
+                if let Some(resize_delta) =
+                    new_pos.rect_resize_delta(&s.rect.to_fixedrect(), &initial_pos, &resize_vector)
+                {
+                    this.set_selection_rect(Some(super::selection::resize_selection_relative(
+                        &s.rect,
+                        &resize_delta,
+                        &resize_vector,
+                    )));
+                }
+                Ok(DragOutcome::Continue)
+            } else {
+                // There is no selection to resize.
+                Ok(DragOutcome::Cancel)
+            }
+        }))
+    }
+    fn make_selection_move_drag_handler(
+        &self,
+        face: Option<Face>,
+        initial_pos: G::ScreenPos,
+        selection_setup_fn: impl 'static + Fn(&mut Self),
+    ) -> Option<SelectionDragHandler<G>> {
+        let mut initial_selection = None;
+        Some(Box::new(move |this, new_pos| {
+            initial_selection = initial_selection.take().or_else(|| {
+                selection_setup_fn(this);
+                this.selection.take()
+            });
+            if let Some(s) = &initial_selection {
+                if let Some(delta) =
+                    new_pos.rect_move_delta(&s.rect.to_fixedrect(), &initial_pos, face)
+                {
+                    this.selection = Some(s.move_by(delta.round()));
+                }
+                Ok(DragOutcome::Continue)
+            } else {
+                // There is no selection to move.
+                Ok(DragOutcome::Cancel)
+            }
+        }))
     }
 
     /// Starts a drag event.
@@ -911,12 +1060,6 @@ pub trait GridViewDimension: 'static + fmt::Debug + Default {
 
     /// Executes a `View` command.
     fn do_view_command(this: &mut GenericGridView<Self>, command: ViewCommand) -> Result<()>;
-    /// Returns a drag handler for a `SelectDragCommand`.
-    fn make_select_drag_handler(
-        this: &mut GenericGridView<Self>,
-        command: SelectDragCommand,
-        initial_pos: Self::ScreenPos,
-    ) -> Option<SelectionDragHandler<Self>>;
 
     /// Renders the gridview.
     fn render(this: &mut GenericGridView<Self>, params: RenderParams<'_>) -> Result<RenderResult>;

@@ -20,7 +20,7 @@ impl MouseDragBinding {
                     Resize2D(direction) => MouseDisplay::ResizeSelectionEdge(direction),
                     Resize3D(face) => MouseDisplay::ResizeSelectionFace(face),
                     ResizeToCell => MouseDisplay::ResizeSelectionAbsolute,
-                    MoveSelection | MoveCells | CopyCells => MouseDisplay::Move,
+                    MoveSelection(_) | MoveCells(_) | CopyCells(_) => MouseDisplay::Move,
                 }
             }
             Self::View(v) => {

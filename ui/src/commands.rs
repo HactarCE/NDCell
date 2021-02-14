@@ -204,9 +204,9 @@ pub enum SelectDragCommand {
     Resize2D(Direction),
     Resize3D(Face),
     ResizeToCell,
-    MoveSelection,
-    MoveCells,
-    CopyCells,
+    MoveSelection(Option<Face>),
+    MoveCells(Option<Face>),
+    CopyCells(Option<Face>),
 }
 impl SelectDragCommand {
     pub fn uses_drag_threshold(self) -> bool {
@@ -215,9 +215,9 @@ impl SelectDragCommand {
             SelectDragCommand::Resize2D(_) => true,
             SelectDragCommand::Resize3D(_) => true,
             SelectDragCommand::ResizeToCell => false,
-            SelectDragCommand::MoveSelection => true,
-            SelectDragCommand::MoveCells => true,
-            SelectDragCommand::CopyCells => true,
+            SelectDragCommand::MoveSelection(_) => true,
+            SelectDragCommand::MoveCells(_) => true,
+            SelectDragCommand::CopyCells(_) => true,
         }
     }
 }

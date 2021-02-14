@@ -21,10 +21,10 @@ impl HistoryConfig {
     pub fn should_record_select_drag_command(&self, command: SelectDragCommand) -> bool {
         use SelectDragCommand::*;
         match command {
-            NewRect | Resize2D(_) | Resize3D(_) | ResizeToCell | MoveSelection => {
+            NewRect | Resize2D(_) | Resize3D(_) | ResizeToCell | MoveSelection(_) => {
                 self.record_select
             }
-            MoveCells | CopyCells => self.record_move_cells,
+            MoveCells(_) | CopyCells(_) => self.record_move_cells,
         }
     }
 }

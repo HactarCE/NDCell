@@ -307,11 +307,42 @@ impl GridViewRender3D<'_> {
         self.add_cuboid_outline_overlay(local_rect, outline_color, width);
 
         for &face in &FACES {
-            let binding = MouseDragBinding::Select(SelectDragCommand::Resize3D(face).into());
+            use MouseDragBinding as Mdb;
+            use SelectDragCommand as Sdc;
+
+            // "Move selected cells" target.
+            let binding = Mdb::Select(Sdc::MoveCells(Some(face)).into());
             self.add_mouse_target_face(
                 local_frect,
                 face,
                 Some(ModifiersState::empty()),
+                Some(MouseTargetData { binding }),
+            );
+
+            // "Move selection" target.
+            let binding = Mdb::Select(Sdc::MoveSelection(Some(face)).into());
+            self.add_mouse_target_face(
+                local_frect,
+                face,
+                Some(ModifiersState::SHIFT),
+                Some(MouseTargetData { binding }),
+            );
+
+            // "Move copy of cells" target.
+            let binding = Mdb::Select(Sdc::CopyCells(Some(face)).into());
+            self.add_mouse_target_face(
+                local_frect,
+                face,
+                Some(ModifiersState::CTRL),
+                Some(MouseTargetData { binding }),
+            );
+
+            // "Resize selection" target.
+            let binding = Mdb::Select(Sdc::Resize3D(face).into());
+            self.add_mouse_target_face(
+                local_frect,
+                face,
+                Some(ModifiersState::CTRL | ModifiersState::SHIFT),
                 Some(MouseTargetData { binding }),
             )
         }

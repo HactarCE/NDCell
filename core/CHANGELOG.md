@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `NdVec` methods `min_component()` and `max_component()`
 - `NdRect` method `span_rects()`
 - Re-export of `num` modules `cast`, `iter`, and `pow` from `crate::num`
+- Implementation of `std::error::Error` for `CaFormatError`
 - Implementation of `std::iter::{Product, Sum}` for `NdVec`
 
 ### Changed

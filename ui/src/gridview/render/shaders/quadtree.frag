@@ -1,6 +1,6 @@
 #version 150
 
-in vec2 screen_pos; // 0.0 ... 1.0
+in vec2 ndc_xy; // 0.0 ... 1.0
 
 out vec4 color;
 

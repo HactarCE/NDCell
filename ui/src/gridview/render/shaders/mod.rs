@@ -21,8 +21,8 @@ pub type WrappedShader = StaticWrappedShader;
 shader!(RGBA_2D      = { srgb: true,  "rgba_2d" });
 shader!(RGBA_3D      = { srgb: true,  "rgba_3d" });
 
-shader!(QUADTREE     = { srgb: true,  vert: "screen_pos", frag: "quadtree" });
-shader!(OCTREE       = { srgb: true,  vert: "screen_pos", frag: "octree" });
+shader!(QUADTREE     = { srgb: true,  vert: "ndc_xy", frag: "quadtree" });
+shader!(OCTREE       = { srgb: true,  vert: "ndc_xy", frag: "octree" });
 
 shader!(GRIDLINES_3D = { srgb: true,  "gridlines_3d" });
 

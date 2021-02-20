@@ -3,7 +3,7 @@
 
 #version 150
 
-in vec2 screen_pos; // -1.0 ... +1.0 (same as `gl_Position`)
+in vec2 ndc_xy; // -1.0 ... +1.0 (same as `gl_Position`)
 
 out vec4 color;
 
@@ -91,7 +91,7 @@ void main() {
     // https://stackoverflow.com/a/42634961)
     vec3 start, delta;
     {
-        vec4 near = inv_matrix * vec4(screen_pos, 0.0, 1.0);
+        vec4 near = inv_matrix * vec4(ndc_xy, 0.0, 1.0);
         vec4 far = near + inv_matrix[2];
         near.xyz /= near.w;
         far.xyz /= far.w;

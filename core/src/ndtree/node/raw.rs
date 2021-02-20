@@ -458,8 +458,14 @@ impl<D: Dim> RawNode<D> {
     /// Automatically converts the argument to a `BigUint` if necessary.
     fn set_pop_small(&self, pop: usize) {
         let value_to_store = (pop << 1) | 1;
+        // Does `pop` fit inside 63 bits? If not, we'll need to convert to
+        // `BigUint`.
         if value_to_store >> 1 == pop {
-            self.population.compare_and_swap(0, (pop << 1) | 1, Relaxed);
+            // If this fails, we don't care. That just means some other thread
+            // computed the population before we did.
+            let _ = self
+                .population
+                .compare_exchange(0, (pop << 1) | 1, Relaxed, Relaxed);
         } else {
             self.set_pop_big(pop.into());
         }
@@ -468,10 +474,11 @@ impl<D: Dim> RawNode<D> {
     fn set_pop_big(&self, pop: BigUint) {
         // Put it on the heap and leak it.
         let new_pop_ptr = Box::into_raw(Box::new(pop));
-        let old = self
+        if self
             .population
-            .compare_and_swap(0, new_pop_ptr as usize, Relaxed);
-        if old != 0 {
+            .compare_exchange(0, new_pop_ptr as usize, Relaxed, Relaxed)
+            .is_err()
+        {
             // The swap was not successful, so drop `pop_ptr` because the
             // it's not in `self.population`.
             unsafe { std::ptr::drop_in_place(new_pop_ptr) };

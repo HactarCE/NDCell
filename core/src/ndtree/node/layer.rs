@@ -269,6 +269,16 @@ impl Layer {
         let len = self.big_len();
         rect.div_outward(&len) * &len
     }
+    /// Rounds the given rectangle outward to the next node boundaries at this
+    /// layer, given a global ND-tree base position.
+    #[inline]
+    pub fn round_rect_with_base_pos<D: Dim>(
+        self,
+        rect: BigRect<D>,
+        base_pos: &BigVec<D>,
+    ) -> BigRect<D> {
+        self.round_rect(&(rect - base_pos)) + base_pos
+    }
 
     /// Returns the layer of the largest layer boundary a vector points to, or
     /// `None` if it is the origin vector (largest aligned layer would be

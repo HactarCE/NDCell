@@ -26,8 +26,9 @@ What you'll need:
 - Rustup
 - CMake
 - Visual Studio + Visual Studio Build Tools
+- Windows 10 SDK (particularly `rc.exe`)
 
-Visual Studio is optional if you do not want to build LLVM from source, but the Visual Studio Build Tools are required.
+Visual Studio is optional if you do not want to build LLVM from source, but the Visual Studio Build Tools and Windows 10 SDK are required.
 
 ### Part 1 - Rust setup
 

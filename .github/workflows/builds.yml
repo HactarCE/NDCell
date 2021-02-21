@@ -3,9 +3,11 @@ name: build
 on:
   push:
     branches: [ stable ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  NDCELL_VERSION: 0.3.0-dev
 
 jobs:
 
@@ -28,6 +30,7 @@ jobs:
             toolchain: stable
             components: clippy
             override: true
+      - uses: ilammy/msvc-dev-cmd@v1
       - name: Download LLVM
         run: git clone https://github.com/HactarCE/LLVM-MSVC-Win64-Dev C:\LLVM
       - name: Build NDCell
@@ -35,7 +38,7 @@ jobs:
       - name: Upload executable
         uses: actions/upload-artifact@v2
         with:
-          name: Windows build
+          name: ndcell_v${{ env.NDCELL_VERSION }}_win64
           path: target/release/ndcell.exe
 
   linux:
@@ -66,7 +69,7 @@ jobs:
       - name: Upload executable
         uses: actions/upload-artifact@v2
         with:
-          name: Linux build
+          name: ndcell_v${{ env.NDCELL_VERSION }}_linux
           path: target/release/ndcell
 
   macos:
@@ -98,5 +101,5 @@ jobs:
       - name: Upload executable
         uses: actions/upload-artifact@v2
         with:
-          name: macOS build
+          name: ndcell_v${{ env.NDCELL_VERSION }}_macos
           path: target/release/ndcell

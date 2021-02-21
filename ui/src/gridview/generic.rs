@@ -483,7 +483,10 @@ impl<D: GridViewDimension> GenericGridView<D> {
                     self.make_drag_draw_update_fn(*draw_mode, initial_screen_pos)
                 }
 
-                DragCmd::SelectNewRect => self.make_drag_select_new_rect_update_fn(),
+                DragCmd::SelectNewRect => {
+                    self.deselect();
+                    self.make_drag_select_new_rect_update_fn()
+                }
                 DragCmd::ResizeSelectionToCursor => {
                     self.make_drag_resize_selection_to_cursor_update_fn(initial_screen_pos)
                 }

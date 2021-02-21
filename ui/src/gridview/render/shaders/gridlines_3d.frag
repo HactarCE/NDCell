@@ -71,7 +71,7 @@ void main() {
 
     // Convert `grid_(min|max)_spacing` from pixels to cells, and then take the
     // `grid_base`th root (which we can do using division in logarithm land).
-    float log2_grid_base = log2(grid_base);
+    float log2_grid_base = log2(float(grid_base));
     vec2 min_exponent = log2(grid_min_spacing * delta) / log2_grid_base;
     vec2 max_exponent = log2(grid_max_spacing * delta) / log2_grid_base;
 

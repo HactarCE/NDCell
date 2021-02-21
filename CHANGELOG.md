@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - 3D rendering and simulation
   - Advance one generation (<kbd>Space</kbd>)
   - Advance one step (<kbd>Tab</kbd>)
+  - Place grid plane on cell face (<kbd>E</kbd>)
 - **Selection**
   - Added edge resize indicator
   - Cancel selection drag (<kbd>Esc</kbd>)

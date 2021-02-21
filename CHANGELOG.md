@@ -8,13 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- Fix crash on placing grid plane with an NVIDIA GPU
+- Crash on placing grid plane with an NVIDIA GPU
 
 ## [0.2.1] Blinker (2020-02-21)
 
 ### Fixed
 
-- Fix crash on startup with an NVIDIA GPU
+- Crash on startup with an NVIDIA GPU
 
 ## [0.2.0] Blinker (2020-02-21)
 
@@ -65,7 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- Fix crash when selecting cells
+- Crash when selecting cells
 
 ## [0.1.0] Block (2020-12-17)
 

@@ -8,6 +8,8 @@
 #![warn(clippy::all)]
 #![deny(clippy::correctness)]
 
+#![windows_subsystem = "windows"]
+
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 

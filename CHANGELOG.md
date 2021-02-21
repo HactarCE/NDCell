@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - 3D pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or middle mouse drag)
   - 3D pan horizontally (middle mouse drag with <kbd>Shift</kbd>)
   - Zoom (right mouse drag with <kbd>Ctrl</kbd>)
+- **GUI**
+  - Load/save file
 
 ### Changed
 

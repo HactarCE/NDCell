@@ -1,6 +1,7 @@
 use anyhow::Result;
 use enum_dispatch::enum_dispatch;
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Duration;
 
 use ndcell_core::prelude::*;
@@ -72,6 +73,13 @@ impl GridView {
         match self {
             GridView::View2D(_) => false,
             GridView::View3D(_) => true,
+        }
+    }
+
+    pub fn rule(&self) -> Rule {
+        match self {
+            GridView::View2D(view2d) => Rule::Rule2D(Arc::clone(&view2d.automaton.rule)),
+            GridView::View3D(view3d) => Rule::Rule3D(Arc::clone(&view3d.automaton.rule)),
         }
     }
 

@@ -50,6 +50,43 @@ impl MainWindow {
 
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
             ui.text("");
+
+            let width = ui.window_content_region_width();
+            let button_width = (width - 10.0) / 2.0;
+            if ui.button(im_str!("Load file"), [button_width, 40.0]) {
+                if let Ok(response) = nfd2::open_file_dialog(Some("rle,mc"), None) {
+                    if let nfd2::Response::Okay(path) = response {
+                        let rule = gridview.rule();
+                        if let Ok(s) = std::fs::read_to_string(path) {
+                            if let Ok(automaton) =
+                                ndcell_core::io::import_automaton_from_string(&s, rule)
+                            {
+                                match automaton.unwrap() {
+                                    Automaton::Automaton2D(a) => **gridview = a.into(),
+                                    Automaton::Automaton3D(a) => **gridview = a.into(),
+                                    _ => (),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ui.same_line(button_width + 18.0);
+            if ui.button(im_str!("Save file"), [button_width, 40.0]) {
+                if let Ok(response) = nfd2::open_save_dialog(Some("rle;mc"), None) {
+                    if let nfd2::Response::Okay(path) = response {
+                        let ca_format = match path.extension() {
+                            Some(ext) if ext == "mc" => CaFormat::Macrocell,
+                            _ => CaFormat::Rle,
+                        };
+                        if let Ok(s) = gridview.export(ca_format) {
+                            let _ = std::fs::write(path, s);
+                        }
+                    }
+                }
+            }
+
+            ui.text("");
             let fps = ui.io().framerate.ceil() as usize;
             ui.text_colored(fps_color(fps), format!("Framerate = {} FPS", fps));
             let total_sim_time: Duration = gridview

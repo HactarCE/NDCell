@@ -59,6 +59,8 @@ jobs:
         run: wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 10
       - name: Install ImGui dependencies
         run: sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev
+      - name: Install Native File Dialog dependencies
+        run: sudo apt-get install libgtk-3-dev
       - name: Build NDCell
         run: cargo build --release
       - name: Upload executable

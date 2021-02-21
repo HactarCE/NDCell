@@ -30,6 +30,7 @@ jobs:
             toolchain: stable
             components: clippy
             override: true
+      - uses: ilammy/msvc-dev-cmd@v1
       - name: Download LLVM
         run: git clone https://github.com/HactarCE/LLVM-MSVC-Win64-Dev C:\LLVM
       - name: Build NDCell

@@ -584,7 +584,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
             })
     }
     fn make_drag_draw_update_fn(
-        &mut self,
+        &self,
         draw_mode: DrawMode,
         initial_pos: D::ScreenPos,
     ) -> Option<DragUpdateFn<D>> {
@@ -595,9 +595,6 @@ impl<D: GridViewDimension> GenericGridView<D> {
             self.automaton.ndtree.get_cell(&initial_cell),
             self.selected_cell_state,
         );
-
-        self.reset_worker_thread();
-        self.record();
 
         let mut pos1 = initial_cell;
         Some(Box::new(move |drag, this, new_screen_pos| {

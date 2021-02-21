@@ -53,10 +53,11 @@ float vec3_min(vec3 v) {
 
 // Given the parameters `t0` at which the ray enters a node along each axis and
 // `tm` at which the ray crosses the middle of a node along each axis, returns
-// the `bvec3` of the first child of that node intersected by the ray.
-bvec3 entryChild(vec3 t0, vec3 tm) {
+// the `bvec3` of the first child of that node intersected by the ray, convert
+// to a `vec3`.
+vec3 entryChild(vec3 t0, vec3 tm) {
     float max_t0 = vec3_max(t0); // when the ray actually enters the node
-    return greaterThanEqual(vec3(max_t0), tm);
+    return vec3(greaterThanEqual(vec3(max_t0), tm));
 }
 
 // Given the parameters `t0` at which the ray enters a node along each axis,
@@ -109,7 +110,7 @@ void main() {
     // is, then mirror the ray along that axis so that the delta vector is
     // positive and also mirror the quadtree along that axis using
     // `invert_mask`, which will flip bits of child indices.
-    bvec3 invert_mask = lessThan(delta, vec3(0));
+    vec3 invert_mask = vec3(lessThan(delta, vec3(0)));
     start -= octree_base;
     start = mix(start, octree_side_len - start, invert_mask);
     delta = mix(delta, -delta, invert_mask);
@@ -140,12 +141,12 @@ void main() {
         // that would cause precision problems and stuff, so that should be
         // plenty of stack space.
         int layer = layer_count;    // current layer (used as index into stack)
-        uint [32] node_idx_stack;   // index of current node
-        bool [32] has_next_child;   // whether the ray intersects another child of the current node
-        bvec3[32] next_child_stack; // index of the child of the current node that the ray intersects next
-        vec3 [32] t0_stack;         // time of entry along axis
-        vec3 [32] tm_stack;         // time of reaching middle along axis
-        vec3 [32] t1_stack;         // time of exit along axis
+        uint[32] node_idx_stack;   // index of current node
+        bool[32] has_next_child;   // whether the ray intersects another child of the current node
+        vec3[32] next_child_stack; // index of the child of the current node that the ray intersects next
+        vec3[32] t0_stack;         // time of entry along axis
+        vec3[32] tm_stack;         // time of reaching middle along axis
+        vec3[32] t1_stack;         // time of exit along axis
 
         // Set initial stack values.
         node_idx_stack[layer] = root_idx;
@@ -164,7 +165,7 @@ void main() {
             } else {
                 count++;
 
-                bvec3 next_child = next_child_stack[layer];
+                vec3 next_child = next_child_stack[layer];
 
                 // Compute the parameter `t` values for the `next_child`.
                 t0 = mix(t0_stack[layer], tm_stack[layer], next_child);
@@ -173,15 +174,13 @@ void main() {
 
                 // Compute the sibling of `next_child` to visit after this one.
                 uint exit_axis = exitAxis(t1);
-                // `== true` is required to work around a bug in AMD drivers.
-                // Yes this is cursed.
-                if (next_child[exit_axis] == true) {
+                if (next_child[exit_axis] == 1.0) {
                     // `next_child` is the last child of the current node that
                     // the ray intersects.
                     has_next_child[layer] = false;
                 } else {
                     // Advance along `exit_axis` to get the next child to visit.
-                    next_child_stack[layer][exit_axis] = true;
+                    next_child_stack[layer][exit_axis] = 1.0;
                 }
 
                 if (vec3_min(t1) < 0) {

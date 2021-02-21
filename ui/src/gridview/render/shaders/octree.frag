@@ -21,6 +21,8 @@ float octree_side_len = (1 << layer_count);
 
 uniform bool perf_view;
 
+uniform float alpha;
+
 // These lines include other files in this GLSL program. See `shaders/mod.rs`.
 //#include util/fog.frag
 //#include util/lighting.frag
@@ -213,7 +215,7 @@ void main() {
                     float g = float((child_value >> 16) & 255u) / 255.0;
                     float b = float((child_value >>  8) & 255u) / 255.0;
                     float a = float( child_value        & 255u) / 255.0;
-                    color = vec4(r, g, b, a);
+                    color = vec4(r, g, b, a * alpha);
 
                     // Compute lighting using a normal vector based on the entry
                     // axis for the node.

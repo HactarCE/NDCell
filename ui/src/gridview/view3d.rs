@@ -68,7 +68,7 @@ impl GridViewDimension for Dim3D {
             if let Some(ndtree) = &selection.cells {
                 frame.draw_cells(CellDrawParams {
                     ndtree,
-                    alpha: 0.5,
+                    alpha: 1.0,
                     rect: Some(&selection.rect),
                     interactive: false,
                 })?;

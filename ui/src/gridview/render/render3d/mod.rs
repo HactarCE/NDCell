@@ -180,6 +180,8 @@ impl GridViewRender3D<'_> {
 
                     perf_view: CONFIG.lock().gfx.octree_perf_view,
 
+                    alpha: params.alpha,
+
                     FogParams: &**self.dim.as_ref().unwrap().fog_uniform,
                     LightingParams: &**self.dim.as_ref().unwrap().lighting_uniform,
                 },

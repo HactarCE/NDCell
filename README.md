@@ -51,21 +51,21 @@ See the [Changelog](CHANGELOG.md) for the latest list of features.
 
 In roughly descending order of priority/likelihood:
 
-- **[Everything on the short-term to-do list](TODO.md)**, including **3D rendering/simulation**
+- **[Everything on the short-term to-do list](TODO.md)**
 - **Arbitrary range and neighborhood** within a reasonable limit.
 - **Custom symmetries** with different cell states for each orientation. Any symmetry can be used in part or all of the transition function.
 - **Custom colors and icons** with several built-in presets and primitives.
-- **3D simulation and editing**
 - **Custom 3D models** with several built-in presets and primitives.
-- **Anywhere from 1 to 6 dimensions** - Only a 2D or 3D slice of spacetime will be shown at any time; the position of the slice along the hidden axes will be adjustable.
+- **Lua scripting** for custom rule generators and other plugins.
 - **Command-line interface** for use in scripts and other automated tools.
-- **Lua scripting** - Still working out the details -- I'll update this when I have a more concrete plan.
+- **Anywhere from 4 to 6 spatial dimensions** supported via CLI.
+- **2D and 3D spacetime** for 1D and 2D rules respectively.
 - **Spacetime residue** - Rules will be able to define several arbitrary "spacetime residues" (linear combination of spatial and temporal positions, modulo some value) available for use in the transition function, within some reasonable limit. This means a rule like [Busy Boxes] would only need 2 states instead of 7.
 - **Block CA** such as Margolus - This would be possible anyway with the spacetime residues above (using `x + time mod 2` and `y + time mod 2`), but native support would improve ergonomics.
-- **Custom regular tilings** - Only those that are an affine transformation away from square/cubic. (Hexagonal and triangular neighborhoods qualify!)
+- **Custom regular tilings** including hexagonal and triangular neighborhoods.
 - **Reversible CA** - "Go back in time" in a reversible CA, if an inverse transition function is defined.
 - **Grid topology** - Each axis will be able to be infinite, half-infinite, finite, looped (torus), looped with an offset (twisted torus), or flipped (Möbius loop),
-- **Infinite agars** and **true support for "B0" rules**
+- **Infinite agars** and **native support for "B0" rules**
 
 [Busy Boxes]: http://busyboxes.org/
 

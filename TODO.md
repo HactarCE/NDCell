@@ -22,21 +22,21 @@
     - [x] Limit visibility / implement render cells
     - [x] Hide occluded faces
     - [x] Traverse octree on GPU
-- [ ] Basic editing in 3D
-  - [ ] Selecting
-    - [ ] Resize selection
-    - [ ] Move selection
+- [x] Basic editing in 3D
+  - [x] Selecting
+    - [x] Resize selection
+    - [x] Move selection
   - [x] Drawing
 - [ ] Improve UI
-  - [ ] Better error reporting
-    - [ ] RLE loading
-    - [ ] Compile error from custom rule
+  - [x] Better error reporting
+    - [x] RLE loading
+    - [x] Compile error from custom rule
     - [ ] Runtime error from custom rule
   - [x] Rectangular selection
   - [x] Copy/paste selection
   - [ ] Rotate/reflect selection
   - [ ] Simulate in selection
-  - [ ] Save/load patterns
+  - [x] Save/load patterns
   - [ ] Select rule
   - [ ] Preferences
     - [ ] Tweak rendering parameters

@@ -94,11 +94,11 @@ impl SimulationWindow {
                 ui.separator();
                 ui.spacing();
                 ui.spacing();
-                let button_width = (width - 20.0) / 2.0;
+                let button_width = (width - 10.0) / 2.0;
                 if ui.button(im_str!("Undo"), [button_width, 60.0]) {
                     gridview.enqueue(Cmd::Undo);
                 }
-                ui.same_line(button_width + 20.0);
+                ui.same_line(button_width + 18.0);
                 if ui.button(im_str!("Redo"), [button_width, 60.0]) {
                     gridview.enqueue(Cmd::Redo);
                 }

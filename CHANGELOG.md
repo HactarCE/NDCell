@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Zoom (right mouse drag with <kbd>Ctrl</kbd>)
 - **GUI**
   - Load/save file
+  - Disabled rounded window borders
 
 ### Changed
 

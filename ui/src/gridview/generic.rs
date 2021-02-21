@@ -520,8 +520,8 @@ impl<D: GridViewDimension> GenericGridView<D> {
                 DragCmd::CopySelectedCells(face) => {
                     self.make_drag_move_selection_update_fn(*face, initial_screen_pos, |this| {
                         // To copy the selected cells, we must first grab a copy
-                        // of those cells.
-                        this.drop_selected_cells();
+                        // of those cells. If the cells are already grabbed,
+                        // this does nothing.
                         this.grab_copy_of_selected_cells();
                     })
                 }

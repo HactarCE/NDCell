@@ -101,10 +101,11 @@ jobs:
       - name: Download Mac App Shell script
         uses: actions/checkout@v2
         with:
-          repository: Xeoncross/macappshell
+          repository:
       - name: Make app
-        run:
-          sh macappshell/setup.sh NDCell ui/resources/icon/ndcell.svg
+        run: |
+          git clone https://github.com/Xeoncross/macappshell.git
+          ./macappshell/setup.sh NDCell ui/resources/icon/ndcell.svg
           mv target/release/ndcell NDCell.app/Contents/MacOS/NDCell
       - name: Upload app
         uses: actions/upload-artifact@v2

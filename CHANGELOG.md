@@ -4,6 +4,12 @@ All notable changes to NDCell will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), except for minor stylistic changes to organize features and accomodate named versions. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with respect to the Rust API for `ndcell_core`, the NDCA API for `ndcell_lang`, and the combined Lua/NDCA API for `ndcell_ui`, the main application.
 
+## [0.2.2] Blinker (2020-02-21)
+
+### Fixed
+
+- Fix crash on placing grid plane with an NVIDIA GPU
+
 ## [0.2.1] Blinker (2020-02-21)
 
 ### Fixed

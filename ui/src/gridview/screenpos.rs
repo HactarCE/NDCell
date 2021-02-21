@@ -1,53 +1,82 @@
+use cgmath::InnerSpace;
 use log::warn;
+use std::fmt;
 
 use ndcell_core::prelude::*;
 
 use super::algorithms::raycast;
+use super::generic::GridViewDimension;
 use super::viewpoint::{CellTransform3D, Viewpoint3D};
-use crate::{commands::DrawMode, ext::FVecConvertExt};
+use crate::commands::{DragCmd, DrawMode};
+use crate::ext::FVecConvertExt;
+use crate::mouse::MouseDisplayMode;
 use crate::{Face, Plane};
-use cgmath::InnerSpace;
+
+pub type OperationPos<D> = <<D as GridViewDimension>::ScreenPos as ScreenPosTrait>::OperationPos;
+
+pub trait OperationPosTrait: fmt::Debug + Sized {
+    type D: Dim;
+
+    fn cell(&self) -> &BigVec<Self::D>;
+    fn into_cell(self) -> BigVec<Self::D>;
+}
 
 /// Convenient representation of a pixel position on the screen.
-pub trait ScreenPos: Sized {
+pub trait ScreenPosTrait: Sized {
     type D: Dim;
-    type DrawState: 'static;
+    type DrawState: 'static + fmt::Debug;
+    type OperationPos: OperationPosTrait<D = Self::D>;
 
     /// Returns the original pixel location.
     fn pixel(&self) -> FVec2D;
     /// Returns the render cell layer.
     fn layer(&self) -> Layer;
 
-    /// Returns the cell to draw on, which is always `None` if zoomed out too
-    /// far to draw.
-    fn cell_to_draw(&self, mode: DrawMode) -> Option<BigVec<Self::D>>;
-    /// Returns the cell to draw on in the middle of a drag, which is always
-    /// `None` if zoomed out too far to draw.
-    fn cell_to_draw_starting_at(&self, mode: DrawMode, _initial: &Self) -> Option<BigVec<Self::D>> {
-        self.cell_to_draw(mode)
+    /// Returns the cell to highlight.
+    fn op_pos_for_mouse_display_mode(
+        &self,
+        mouse_display_mode: MouseDisplayMode,
+    ) -> Option<Self::OperationPos> {
+        match mouse_display_mode {
+            MouseDisplayMode::Draw(draw_mode) => {
+                self.op_pos_for_drag_command(&DragCmd::DrawFreeform(draw_mode))
+            }
+
+            MouseDisplayMode::Select => self.op_pos_for_drag_command(&DragCmd::SelectNewRect),
+            MouseDisplayMode::ResizeSelectionToCursor => {
+                self.op_pos_for_drag_command(&DragCmd::ResizeSelectionToCursor)
+            }
+
+            _ => None,
+        }
+    }
+    /// Returns the cell that a drag command operates on initially.
+    fn op_pos_for_drag_command(&self, command: &DragCmd) -> Option<Self::OperationPos> {
+        self.op_pos_for_continue_drag_command(command, self)
+    }
+    /// Returns the cell that a drag command operates on, given the starting
+    /// position of the drag.
+    fn op_pos_for_continue_drag_command(
+        &self,
+        command: &DragCmd,
+        start: &Self,
+    ) -> Option<Self::OperationPos> {
+        match command {
+            DragCmd::DrawFreeform(draw_mode) => self.pos_to_draw(*draw_mode, start),
+
+            DragCmd::SelectNewRect | DragCmd::ResizeSelectionToCursor => self.pos_to_select(start),
+
+            _ => None,
+        }
     }
 
-    /// Returns the cell to select.
-    fn cell_to_select(&self) -> Option<BigVec<Self::D>>;
-    /// Returns the cell to select in the middle of a drag.
-    fn cell_to_select_starting_at(&self, _initial: &Self) -> Option<BigVec<Self::D>> {
-        self.cell_to_select()
-    }
+    /// Returns the cell that a draw drag command operates on.
+    fn pos_to_draw(&self, draw_mode: DrawMode, start: &Self) -> Option<Self::OperationPos>;
+    /// Returns the cell that a selection drag command operates on.
+    fn pos_to_select(&self, start: &Self) -> Option<Self::OperationPos>;
 
-    /// Returns a rectangle encompassing the render cell to select.
-    fn render_cell_to_select(&self) -> Option<BigRect<Self::D>> {
-        let len = self.layer().big_len();
-        // Round to nearest render cell.
-        let pos = self.cell_to_select()?.div_floor(&len) * &len;
-        Some(self.layer().big_rect() + pos)
-    }
-    /// Returns a rectangle encompassing the render cell to select.
-    fn render_cell_to_select_starting_at(&self, initial: &Self) -> Option<BigRect<Self::D>> {
-        let len = self.layer().big_len();
-        // Round to nearest render cell.
-        let pos = self.cell_to_select_starting_at(initial)?.div_floor(&len) * &len;
-        Some(self.layer().big_rect() + pos)
-    }
+    /// Returns the position that most view commands operate on.
+    fn scale_invariant_pos(&self) -> Option<FixedVec<Self::D>>;
 
     /// Returns the delta between `initial` and `self` when resizing
     /// `initial_rect` along `resize_vector`.
@@ -78,9 +107,10 @@ pub struct ScreenPos2D {
     /// Global cell position.
     pub pos: FixedVec2D,
 }
-impl ScreenPos for ScreenPos2D {
+impl ScreenPosTrait for ScreenPos2D {
     type D = Dim2D;
     type DrawState = ();
+    type OperationPos = OperationPos2D;
 
     fn pixel(&self) -> FVec2D {
         self.pixel
@@ -89,35 +119,38 @@ impl ScreenPos for ScreenPos2D {
         self.layer
     }
 
-    fn cell_to_draw(&self, _mode: DrawMode) -> Option<BigVec2D> {
+    fn pos_to_draw(&self, _draw_mode: DrawMode, _start: &Self) -> Option<Self::OperationPos> {
         if self.layer != Layer(0) {
             return None;
         }
 
-        Some(self.cell())
+        Some(OperationPos2D { cell: self.cell() })
+    }
+    fn pos_to_select(&self, _start: &Self) -> Option<Self::OperationPos> {
+        Some(OperationPos2D { cell: self.cell() })
     }
 
-    fn cell_to_select(&self) -> Option<BigVec2D> {
-        Some(self.cell())
+    fn scale_invariant_pos(&self) -> Option<FixedVec2D> {
+        Some(self.pos())
     }
 
     fn rect_resize_delta(
         &self,
-        _initial_rect: &FixedRect<Self::D>,
+        _initial_rect: &FixedRect2D,
         initial_screenpos: &Self,
-        _resize_vector: &IVec<Self::D>,
-    ) -> Option<FixedVec<Self::D>> {
+        _resize_vector: &IVec2D,
+    ) -> Option<FixedVec2D> {
         Some(self.pos() - &initial_screenpos.pos)
     }
     fn rect_move_delta(
         &self,
-        _initial_rect: &FixedRect<Self::D>,
+        _initial_rect: &FixedRect2D,
         initial_screenpos: &Self,
         _parallel_face: Option<Face>,
-    ) -> Option<FixedVec<Self::D>> {
+    ) -> Option<FixedVec2D> {
         Some(self.pos() - &initial_screenpos.pos)
     }
-    fn absolute_selection_resize_start_pos(&self) -> Option<FixedVec<Self::D>> {
+    fn absolute_selection_resize_start_pos(&self) -> Option<FixedVec2D> {
         Some(self.pos())
     }
 }
@@ -141,6 +174,21 @@ impl ScreenPos2D {
 }
 
 #[derive(Debug, Clone)]
+pub struct OperationPos2D {
+    pub cell: BigVec2D,
+}
+impl OperationPosTrait for OperationPos2D {
+    type D = Dim2D;
+
+    fn cell(&self) -> &BigVec2D {
+        &self.cell
+    }
+    fn into_cell(self) -> BigVec2D {
+        self.cell
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ScreenPos3D {
     pub(super) pixel: FVec2D,
     pub(super) layer: Layer,
@@ -155,9 +203,10 @@ pub struct ScreenPos3D {
     /// Ray intersection with selection boundary.
     pub raycast_selection_hit: Option<RaycastHit>,
 }
-impl ScreenPos for ScreenPos3D {
+impl ScreenPosTrait for ScreenPos3D {
     type D = Dim3D;
     type DrawState = (BigVec3D, Plane);
+    type OperationPos = OperationPos3D;
 
     fn pixel(&self) -> FVec2D {
         self.pixel
@@ -166,43 +215,50 @@ impl ScreenPos for ScreenPos3D {
         self.layer
     }
 
-    fn cell_to_draw(&self, mode: DrawMode) -> Option<BigVec3D> {
+    fn pos_to_draw(&self, draw_mode: DrawMode, initial: &Self) -> Option<OperationPos3D> {
         if self.layer != Layer(0) {
             return None;
         }
 
-        let (cell, _face) = self.cell_and_face_to_draw(mode)?;
-        Some(cell)
-    }
-    fn cell_to_draw_starting_at(&self, mode: DrawMode, initial: &Self) -> Option<BigVec3D> {
-        if self.layer != Layer(0) {
-            return None;
-        }
+        // Determine the plane to draw in.
+        let initial_raycast = initial.raycast.as_ref()?;
+        let draw_plane = match draw_mode {
+            DrawMode::Place => initial_raycast.outside_plane_face(),
+            DrawMode::Replace => initial_raycast.inside_plane_face(),
+            DrawMode::Erase => initial_raycast.inside_plane_face(),
+        };
 
-        let (cell, _face) = self.cell_and_face_to_draw_starting_at(mode, initial)?;
-        Some(cell)
-    }
+        // Raycast from the cursor to that plane.
+        let cell_to_draw = self.raycast_to_plane_face(&draw_plane)?;
 
-    fn cell_to_select(&self) -> Option<BigVec3D> {
+        Some(OperationPos3D {
+            cell: cell_to_draw,
+            face: draw_plane.face,
+        })
+    }
+    fn pos_to_select(&self, start: &Self) -> Option<OperationPos3D> {
         // First, do a normal raycast. If we hit something, use that.
         if let Some(hit) = &self.raycast {
-            return Some(hit.cell.clone());
-        }
-
-        let initial = self;
-        self.cell_to_select_starting_at(initial)
-    }
-    fn cell_to_select_starting_at(&self, initial: &Self) -> Option<BigVec3D> {
-        // First, do a normal raycast. If we hit something, use that.
-        if let Some(hit) = &self.raycast {
-            return Some(hit.cell.clone());
+            return Some(OperationPos3D {
+                cell: hit.inside_cell(),
+                face: hit.inside_plane_face().face,
+            });
         }
 
         // Determine the plane to select in.
-        let initial_raycast = initial.raycast.as_ref()?;
+        let initial_raycast = start.raycast.as_ref()?;
         let select_plane = initial_raycast.inside_plane_face();
-        // Raycast to that plane.
-        self.raycast_to_plane_face(&select_plane)
+        // Raycast from the cursor to that plane.
+        let cell_to_select = self.raycast_to_plane_face(&select_plane)?;
+
+        Some(OperationPos3D {
+            cell: cell_to_select,
+            face: select_plane.face,
+        })
+    }
+
+    fn scale_invariant_pos(&self) -> Option<FixedVec<Self::D>> {
+        None
     }
 
     fn rect_resize_delta(
@@ -259,33 +315,6 @@ impl ScreenPos3D {
     pub fn global_pos_at_pivot_depth(&self) -> FixedVec3D {
         self.xform
             .pixel_to_global_pos(self.pixel, Viewpoint3D::DISTANCE_TO_PIVOT)
-    }
-
-    pub fn cell_and_face_to_draw(&self, mode: DrawMode) -> Option<(BigVec3D, Face)> {
-        let initial = self;
-        self.cell_and_face_to_draw_starting_at(mode, initial)
-    }
-    pub fn cell_and_face_to_draw_starting_at(
-        &self,
-        mode: DrawMode,
-        initial: &Self,
-    ) -> Option<(BigVec3D, Face)> {
-        if self.layer != Layer(0) {
-            return None;
-        }
-
-        // Determine the plane to draw in.
-        let initial_raycast = initial.raycast.as_ref()?;
-        let draw_plane = match mode {
-            DrawMode::Place => initial_raycast.outside_plane_face(),
-            DrawMode::Replace => initial_raycast.inside_plane_face(),
-            DrawMode::Erase => initial_raycast.inside_plane_face(),
-        };
-
-        // Raycast from the cursor to that plane.
-        let cell_to_draw = self.raycast_to_plane_face(&draw_plane)?;
-
-        Some((cell_to_draw, draw_plane.face))
     }
 
     fn raycast_to_plane_face(&self, plane: &PlaneFace) -> Option<BigVec3D> {
@@ -380,40 +409,76 @@ impl RaycastHit {
         }
     }
 
+    /// Returns the cell hit by the ray. If the ray hits the gridline plane,
+    /// then the cell in front of the gridlines is considered hit.
+    pub fn inside_cell(&self) -> BigVec3D {
+        match self.thing {
+            RaycastHitThing::Gridlines => self.outside_cell(),
+            RaycastHitThing::Cell => self.cell.clone(),
+        }
+    }
+    /// Returns the cell in front of the one hit by the ray.
+    pub fn outside_cell(&self) -> BigVec3D {
+        self.face.normal_bigvec() + &self.cell
+    }
+
+    /// Returns the face of the cell hit by the ray, facing toward the camera.
+    /// If the ray hits the gridline plane, then the cell in front of the
+    /// gridlines is considered hit, and the face will be opposite.
+    pub fn inside_face(&self) -> Face {
+        match self.thing {
+            RaycastHitThing::Gridlines => self.outside_face(),
+            RaycastHitThing::Cell => self.face,
+        }
+    }
+    /// Returns the face of the cell in front of the one hit by the ray, facing
+    /// away from the camera. This face has a normal vector in the same
+    /// direction as the ray.
+    pub fn outside_face(&self) -> Face {
+        self.face.opposite()
+    }
+
     /// Returns the plane face of the cell hit by the ray, facing toward the
     /// camera. If the ray hits the gridline plane, then the result is the same
     /// as `outside_plane_face()`.
     fn inside_plane_face(&self) -> PlaneFace {
         match self.thing {
-            RaycastHitThing::Selection => todo!(),
             RaycastHitThing::Gridlines => self.outside_plane_face(),
-            RaycastHitThing::Cell => self._inside_plane_face(),
+            RaycastHitThing::Cell => {
+                let face = self.inside_face();
+                let coord = self.inside_cell()[face.normal_axis()].clone();
+                PlaneFace { face, coord }
+            }
         }
     }
     /// Returns the plane face of the cell in front of the one hit by the ray,
     /// facing toward the cell hit.
     fn outside_plane_face(&self) -> PlaneFace {
-        let mut ret = self._inside_plane_face();
-        ret.coord += match self.face.sign() {
-            Sign::Minus => -1,
-            Sign::NoSign => unreachable!(),
-            Sign::Plus => 1,
-        };
-        ret.face = self.face.opposite();
-        ret
-    }
-
-    fn _inside_plane_face(&self) -> PlaneFace {
-        let face = self.face;
-        let coord = self.cell[face.normal_axis()].clone();
+        let face = self.outside_face();
+        let coord = self.outside_cell()[face.normal_axis()].clone();
         PlaneFace { face, coord }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OperationPos3D {
+    pub cell: BigVec3D,
+    pub face: Face,
+}
+impl OperationPosTrait for OperationPos3D {
+    type D = Dim3D;
+
+    fn cell(&self) -> &BigVec3D {
+        &self.cell
+    }
+    fn into_cell(self) -> BigVec3D {
+        self.cell
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RaycastHitThing {
-    Selection, // selection in front
-    Gridlines, // then gridlines
+    Gridlines, // gridlines in front
     Cell,      // then cells
 }
 

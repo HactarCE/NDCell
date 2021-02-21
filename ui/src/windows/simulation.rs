@@ -28,7 +28,7 @@ impl SimulationWindow {
                     width = 200.0;
                 }
                 if ui.button(im_str!("Step 1 generation"), [width, 40.0]) {
-                    gridview.enqueue(SimCommand::Step(1.into()));
+                    gridview.enqueue(Cmd::Step(1));
                 }
                 ui.spacing();
                 ui.spacing();
@@ -52,7 +52,7 @@ impl SimulationWindow {
                     &ImString::new(format!("Step {} generations", config.sim.step_size)),
                     [width, 40.0],
                 ) {
-                    gridview.enqueue(SimCommand::StepStepSize);
+                    gridview.enqueue(Cmd::StepStepSize);
                 }
                 ui.spacing();
                 ui.spacing();
@@ -65,7 +65,7 @@ impl SimulationWindow {
                         },
                         [width, 60.0],
                     ) {
-                        gridview.enqueue(SimCommand::ToggleRunning);
+                        gridview.enqueue(Cmd::ToggleRunning);
                     }
                 }
                 ui.spacing();
@@ -96,16 +96,16 @@ impl SimulationWindow {
                 ui.spacing();
                 let button_width = (width - 20.0) / 2.0;
                 if ui.button(im_str!("Undo"), [button_width, 60.0]) {
-                    gridview.enqueue(HistoryCommand::Undo);
+                    gridview.enqueue(Cmd::Undo);
                 }
                 ui.same_line(button_width + 20.0);
                 if ui.button(im_str!("Redo"), [button_width, 60.0]) {
-                    gridview.enqueue(HistoryCommand::Redo);
+                    gridview.enqueue(Cmd::Redo);
                 }
                 ui.spacing();
                 ui.spacing();
                 if ui.button(im_str!("Reset"), [width, 40.0]) {
-                    gridview.enqueue(HistoryCommand::UndoTo(0.into()));
+                    gridview.enqueue(Cmd::Reset);
                 }
             })
         }

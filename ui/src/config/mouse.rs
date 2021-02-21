@@ -1,20 +1,14 @@
 use glium::glutin::event::{ModifiersState, MouseButton};
 use std::ops::{Index, IndexMut};
 
-mod click;
-mod drag;
-
-pub use click::*;
-pub use drag::*;
-
-use crate::commands::{DrawDragCommand, DrawMode, DrawShape, SelectDragCommand, ViewDragCommand};
+use crate::commands::{Cmd, DragCmd, DragViewCmd, DrawMode};
 
 #[derive(Debug)]
 pub struct MouseConfig {
-    pub click_bindings_2d: MouseBindings<Option<MouseClickBinding>>,
-    pub click_bindings_3d: MouseBindings<Option<MouseClickBinding>>,
-    pub drag_bindings_2d: MouseBindings<Option<MouseDragBinding>>,
-    pub drag_bindings_3d: MouseBindings<Option<MouseDragBinding>>,
+    pub click_bindings_2d: MouseBindings<Option<Cmd>>,
+    pub click_bindings_3d: MouseBindings<Option<Cmd>>,
+    pub drag_bindings_2d: MouseBindings<Option<DragCmd>>,
+    pub drag_bindings_3d: MouseBindings<Option<DragCmd>>,
     pub drag_threshold: f64,
 }
 impl Default for MouseConfig {
@@ -25,60 +19,29 @@ impl Default for MouseConfig {
         const NONE: ModifiersState = ModifiersState::empty();
 
         use MouseButton::{Left, Middle, Right};
-        use MouseDragBinding::{Draw, Select, View};
-
-        let replace_freeform: DrawDragBinding = DrawDragCommand {
-            mode: DrawMode::Replace,
-            shape: DrawShape::Freeform,
-        }
-        .into();
-        let place_line: DrawDragBinding = DrawDragCommand {
-            mode: DrawMode::Place,
-            shape: DrawShape::Line,
-        }
-        .into();
-        let place_freeform: DrawDragBinding = DrawDragCommand {
-            mode: DrawMode::Place,
-            shape: DrawShape::Freeform,
-        }
-        .into();
-        let erase_freeform: DrawDragBinding = DrawDragCommand {
-            mode: DrawMode::Erase,
-            shape: DrawShape::Freeform,
-        }
-        .into();
 
         Self {
             click_bindings_2d: vec![].into_iter().collect(),
             click_bindings_3d: vec![].into_iter().collect(),
             drag_bindings_2d: vec![
-                (NONE, Left, Draw(replace_freeform)),
-                (SHIFT, Left, Draw(place_line)),
-                (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
-                (
-                    CTRL | SHIFT,
-                    Left,
-                    Select(SelectDragCommand::ResizeToCell.into()),
-                ),
-                (NONE, Right, View(ViewDragCommand::Pan.into())),
-                (CTRL, Right, View(ViewDragCommand::Scale.into())),
-                (NONE, Middle, View(ViewDragCommand::Pan.into())),
+                (NONE, Left, DragCmd::DrawFreeform(DrawMode::Replace)),
+                (CTRL, Left, DragCmd::SelectNewRect),
+                (CTRL | SHIFT, Left, DragCmd::ResizeSelectionToCursor),
+                (NONE, Right, DragViewCmd::Pan.into()),
+                (CTRL, Right, DragViewCmd::Scale.into()),
+                (NONE, Middle, DragViewCmd::Pan.into()),
             ]
             .into_iter()
             .collect(),
             drag_bindings_3d: vec![
-                (NONE, Left, Draw(place_freeform)),
-                (SHIFT, Left, Draw(erase_freeform)),
-                (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
-                (
-                    CTRL | SHIFT,
-                    Left,
-                    Select(SelectDragCommand::ResizeToCell.into()),
-                ),
-                (NONE, Right, View(ViewDragCommand::Orbit.into())),
-                (CTRL, Right, View(ViewDragCommand::Scale.into())),
-                (NONE, Middle, View(ViewDragCommand::Pan.into())),
-                (SHIFT, Middle, View(ViewDragCommand::PanHorizontal.into())),
+                (NONE, Left, DragCmd::DrawFreeform(DrawMode::Place)),
+                (SHIFT, Left, DragCmd::DrawFreeform(DrawMode::Erase)),
+                (CTRL, Left, DragCmd::SelectNewRect),
+                (CTRL | SHIFT, Left, DragCmd::ResizeSelectionToCursor),
+                (NONE, Right, DragViewCmd::Orbit3D.into()),
+                (CTRL, Right, DragViewCmd::Scale.into()),
+                (NONE, Middle, DragViewCmd::Pan.into()),
+                (SHIFT, Middle, DragViewCmd::PanHorizontal3D.into()),
             ]
             .into_iter()
             .collect(),
@@ -93,7 +56,7 @@ impl MouseConfig {
         ndim: usize,
         mods: ModifiersState,
         button: MouseButton,
-    ) -> (&Option<MouseClickBinding>, &Option<MouseDragBinding>) {
+    ) -> (&Option<Cmd>, &Option<DragCmd>) {
         match ndim {
             2 => (
                 &self.click_bindings_2d[(mods, button)],

@@ -149,7 +149,7 @@ pub fn show_gui() -> ! {
                     gridview: &mut gridview,
                 });
                 if !imgui_has_mouse {
-                    ui.set_mouse_cursor(input_state.mouse().display.cursor_icon());
+                    ui.set_mouse_cursor(input_state.mouse().display_mode.cursor_icon());
                 }
 
                 let mut target = display.draw();

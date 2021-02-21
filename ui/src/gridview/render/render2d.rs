@@ -31,8 +31,7 @@ use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoin
 use super::shaders;
 use super::vertices::Vertex2D;
 use super::CellDrawParams;
-use crate::commands::DrawMode;
-use crate::config::MouseDragBinding;
+use crate::commands::{DragCmd, DrawMode};
 use crate::ext::*;
 use crate::gridview::*;
 use crate::{Direction, Face, Scale, CONFIG, DIRECTIONS};
@@ -260,8 +259,8 @@ impl GridViewRender2D<'_> {
 
     /// Adds a highlight on the render cell under the mouse cursor when using
     /// the drawing tool.
-    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec2D, mode: DrawMode) {
-        self.add_hover_overlay(cell_pos, mode.fill_color(), mode.outline_color());
+    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec2D, draw_mode: DrawMode) {
+        self.add_hover_overlay(cell_pos, draw_mode.fill_color(), draw_mode.outline_color());
     }
     /// Adds a highlight on the render cell under the mouse cursor when using
     /// the selection tool.
@@ -302,15 +301,12 @@ impl GridViewRender2D<'_> {
 
         let local_rect = local_rect.to_frect();
 
-        use MouseDragBinding as Mdb;
-        use SelectDragCommand as Sdc;
-
         // "Move selected cells" target.
         self.add_mouse_target_quad(
             local_rect,
             Some(ModifiersState::empty()),
             MouseTargetData {
-                binding: Mdb::Select(Sdc::MoveCells(None).into()),
+                binding: DragCmd::MoveSelectedCells(None),
             },
         );
 
@@ -319,7 +315,7 @@ impl GridViewRender2D<'_> {
             local_rect,
             Some(ModifiersState::SHIFT),
             MouseTargetData {
-                binding: Mdb::Select(Sdc::MoveSelection(None).into()),
+                binding: DragCmd::MoveSelection(None),
             },
         );
 
@@ -328,7 +324,7 @@ impl GridViewRender2D<'_> {
             local_rect,
             Some(ModifiersState::CTRL),
             MouseTargetData {
-                binding: Mdb::Select(Sdc::CopyCells(None).into()),
+                binding: DragCmd::CopySelectedCells(None),
             },
         );
 
@@ -349,7 +345,7 @@ impl GridViewRender2D<'_> {
             max[Y] + click_target_width * 0.75,
         ];
         for &direction in &DIRECTIONS {
-            let binding = Mdb::Select(Sdc::Resize2D(direction).into());
+            let binding = DragCmd::ResizeSelection2D(direction);
             let NdVec([dx, dy]) = direction.vector();
             self.add_mouse_target_quad(
                 FRect::span(

@@ -1,25 +1,22 @@
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 
 use ndcell_core::prelude::*;
 
 use super::algorithms::raycast;
-use super::generic::{GenericGridView, GridViewDimension, SelectionDragHandler};
+use super::generic::{GenericGridView, GridViewDimension};
 use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
-use super::screenpos::{RaycastHit, RaycastHitThing, ScreenPos3D};
+use super::screenpos::{RaycastHit, RaycastHitThing, ScreenPos3D, ScreenPosTrait};
 use super::viewpoint::{Viewpoint, Viewpoint3D};
-use super::{DragHandler, DragType};
-use crate::commands::*;
-use crate::mouse::MouseDisplay;
+use crate::mouse::MouseDisplayMode;
 
-pub type GridView3D = GenericGridView<GridViewDim3D>;
-type SelectionDragHandler3D = SelectionDragHandler<GridViewDim3D>;
+pub type GridView3D = GenericGridView<Dim3D>;
 
 #[derive(Debug)]
-pub struct GridViewDim3D {
+pub struct GridViewData3D {
     grid_axis: Option<Axis>,
     grid_coord: BigInt,
 }
-impl Default for GridViewDim3D {
+impl Default for GridViewData3D {
     fn default() -> Self {
         Self {
             grid_axis: None,
@@ -27,82 +24,56 @@ impl Default for GridViewDim3D {
         }
     }
 }
-impl GridViewDimension for GridViewDim3D {
-    type D = Dim3D;
+impl GridViewDimension for Dim3D {
     type Viewpoint = Viewpoint3D;
     type ScreenPos = ScreenPos3D;
 
-    fn do_view_command(this: &mut GridView3D, command: ViewCommand) -> Result<()> {
-        // Handle `FitView` specially because it depends on the cell contents of
-        // the automaton.
-        if matches!(command, ViewCommand::FitView) {
-            bail!("3D FitView command is not yet implemented");
+    type Data = GridViewData3D;
+
+    fn focus(this: &mut GridView3D, pos: &ScreenPos3D) {
+        if let Some(hit) = &pos.raycast_octree_hit {
+            // Set grid axes.
+            let axis = hit.face.normal_axis();
+            this.show_grid(axis, hit.pos[axis].round());
+            // Set position.
+            this.target_viewpoint().set_center(hit.pos.clone());
+        } else {
+            // Hide grid.
+            this.hide_grid();
         }
-
-        // Handle `FocusPixel` specially because it depends on the cell contents
-        // of the automaton.
-        if let ViewCommand::FocusPixel(pixel) = command {
-            if let Some(hit) = this.screen_pos(pixel).raycast_octree_hit {
-                // Set grid axes.
-                let axis = hit.face.normal_axis();
-                this.show_grid(axis, hit.pos[axis].round());
-
-                // Set position.
-                let NdVec([x, y, z]) = hit.pos;
-                this.do_command(ViewCommand::GoTo3D {
-                    x: Some(x),
-                    y: Some(y),
-                    z: Some(z),
-                    yaw: None,
-                    pitch: None,
-                    relative: false,
-                    scaled: false,
-                })?;
-            } else {
-                // Hide grid.
-                this.hide_grid();
-            }
-
-            return Ok(());
-        }
-
-        // Delegate to the viewpoint.
-        let maybe_new_drag_handler = this
-            .viewpoint_interpolator
-            .do_view_command(command)
-            .context("Executing view command")?;
-
-        // Update drag handler, if the viewpoint gave one.
-        if !this.is_dragging() {
-            if let Some(mut interpolator_drag_handler) = maybe_new_drag_handler {
-                this.start_drag(
-                    DragType::MovingView,
-                    Box::new(move |gridview: &mut GridView3D, cursor_pos| {
-                        interpolator_drag_handler(&mut gridview.viewpoint_interpolator, cursor_pos)
-                    }) as DragHandler<GridView3D>,
-                    None,
-                );
-            }
-        }
-
-        Ok(())
     }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {
-        if this.automaton.ndtree.root_ref().is_empty() {
-            // Provide a surface to place initial cells on.
-            this.show_grid(Axis::Y, BigInt::zero());
+        if this.automaton.ndtree.root_ref().is_empty() && this.selection.is_none() {
+            // Provide a surface to place some initial cells on.
+            this.show_grid_at_viewpoint(Axis::Y);
         }
 
         let mouse = params.mouse;
         let screen_pos = mouse.pos.map(|pixel| this.screen_pos(pixel));
+        let pos_to_highlight = this.cell_to_highlight(&mouse);
+        let rect_cell_to_highlight = this.render_cell_rect_to_highlight(&mouse);
 
         let mut frame = GridViewRender3D::new(params, this.viewpoint());
+
+        // Draw main cells.
         frame.draw_cells(CellDrawParams {
             ndtree: &this.automaton.ndtree,
             alpha: 1.0,
             rect: None,
+            interactive: true,
         })?;
+        // Draw selection cells.
+        if let Some(selection) = &this.selection {
+            if let Some(ndtree) = &selection.cells {
+                frame.draw_cells(CellDrawParams {
+                    ndtree,
+                    alpha: 0.5,
+                    rect: Some(&selection.rect),
+                    interactive: false,
+                })?;
+            }
+        }
 
         // Draw gridlines.
         if let Some((axis, coord)) = this.grid() {
@@ -110,39 +81,53 @@ impl GridViewDimension for GridViewDim3D {
         }
 
         // Draw mouse display.
-        if let Some(screen_pos) = &screen_pos {
-            match mouse.display {
-                MouseDisplay::Draw(mode) => {
-                    let cell_and_face_to_draw = match &this.drag_initial {
-                        Some(initial) => {
-                            screen_pos.cell_and_face_to_draw_starting_at(mode, initial)
-                        }
-                        None => screen_pos.cell_and_face_to_draw(mode),
-                    };
-                    if let Some((cell, face)) = cell_and_face_to_draw {
-                        frame.add_hover_draw_overlay(&cell, face, mode);
-                    }
+        if let Some(pos) = &pos_to_highlight {
+            match mouse.display_mode {
+                MouseDisplayMode::Draw(draw_mode) => {
+                    frame.add_hover_draw_overlay(&pos.cell, pos.face, draw_mode);
                 }
-                MouseDisplay::Select => {
-                    if let Some(hit) = &screen_pos.raycast {
-                        frame.add_hover_select_overlay(&hit.cell, hit.face);
-                    }
+                MouseDisplayMode::Select => {
+                    frame.add_hover_select_overlay(&pos.cell, pos.face);
                 }
                 _ => (),
             }
         }
-        // Draw selection highlight.
+
         if let Some(selection) = &this.selection {
+            // Draw selection highlight.
             if selection.cells.is_some() {
                 frame.add_selection_cells_highlight_overlay(&selection.rect);
             } else {
                 frame.add_selection_region_highlight_overlay(&selection.rect);
             }
-        }
-        // Draw relative selection resize preview after drawing selection.
-        if let MouseDisplay::ResizeSelectionFace(face) = mouse.display {
-            if let Some(current_selection) = &this.selection {
-                frame.add_selection_face_resize_overlay(&current_selection.rect, face);
+
+            // Draw absolute selection resize preview after drawing selection.
+            if mouse.display_mode == MouseDisplayMode::ResizeSelectionToCursor {
+                if this.is_dragging() {
+                    // We are already resizing the selection; just use the
+                    // current selection.
+
+                    // frame.add_selection_resize_preview_overlay(&selection.rect);
+                } else if let (Some(resize_start), Some(resize_end)) = (
+                    screen_pos.and_then(|pos| pos.absolute_selection_resize_start_pos()),
+                    rect_cell_to_highlight,
+                ) {
+                    // Show what *would* happen if the user resized the
+                    // selection.
+
+                    // frame.add_selection_resize_preview_overlay(
+                    //     &super::selection::resize_selection_absolute(
+                    //         &selection.rect,
+                    //         &resize_start,
+                    //         &resize_end,
+                    //     ),
+                    // );
+                }
+            }
+
+            // Draw relative selection resize preview after drawing selection.
+            if let MouseDisplayMode::ResizeSelectionFace(face) = mouse.display_mode {
+                frame.add_selection_face_resize_overlay(&selection.rect, face);
             }
         }
 
@@ -210,16 +195,20 @@ impl GridViewDimension for GridViewDim3D {
     }
 }
 impl GridView3D {
+    pub fn show_grid_at_viewpoint(&mut self, axis: Axis) {
+        let coord = self.target_viewpoint().center()[Axis::Y].floor();
+        self.show_grid(axis, coord);
+    }
     pub fn show_grid(&mut self, axis: Axis, coord: BigInt) {
-        self.dim.grid_axis = Some(axis);
-        self.dim.grid_coord = coord;
+        self.dim_data.grid_axis = Some(axis);
+        self.dim_data.grid_coord = coord;
     }
     pub fn hide_grid(&mut self) {
-        self.dim.grid_axis = None;
+        self.dim_data.grid_axis = None;
     }
     pub fn grid(&self) -> Option<(Axis, &BigInt)> {
-        match self.dim.grid_axis {
-            Some(axis) => Some((axis, &self.dim.grid_coord)),
+        match self.dim_data.grid_axis {
+            Some(axis) => Some((axis, &self.dim_data.grid_coord)),
             None => None,
         }
     }

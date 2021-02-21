@@ -23,8 +23,7 @@ use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoin
 use super::shaders;
 use super::vertices::Vertex3D;
 use super::CellDrawParams;
-use crate::commands::DrawMode;
-use crate::config::MouseDragBinding;
+use crate::commands::{DragCmd, DrawMode};
 use crate::ext::*;
 use crate::gridview::*;
 use crate::{Face, CONFIG, DISPLAY, FACES};
@@ -197,21 +196,24 @@ impl GridViewRender3D<'_> {
             )
             .expect("Drawing cells");
 
-        // If the mouse is hovering over a cell, draw that on the mouse picker.
-        if let Some(pixel) = self.params.mouse.pos {
-            let (start, delta) = self.xform.pixel_to_local_ray(pixel);
-            let raycast = crate::gridview::algorithms::raycast::intersect_octree(
-                start - octree_base.to_fvec(),
-                delta,
-                self.xform.render_cell_layer,
-                visible_octree.root.as_ref(),
-            );
-            if let Some(hit) = raycast {
-                let cuboid = IRect::single_cell(hit.pos_int + octree_base).to_frect();
-                let face = hit.face;
-                let modifiers = None;
-                let target_data = None;
-                self.add_mouse_target_face(cuboid, face, modifiers, target_data);
+        // If the mouse is hovering over a cell, and these cells are
+        // interactive, draw that on the mouse picker.
+        if params.interactive {
+            if let Some(pixel) = self.params.mouse.pos {
+                let (start, delta) = self.xform.pixel_to_local_ray(pixel);
+                let raycast = crate::gridview::algorithms::raycast::intersect_octree(
+                    start - octree_base.to_fvec(),
+                    delta,
+                    self.xform.render_cell_layer,
+                    visible_octree.root.as_ref(),
+                );
+                if let Some(hit) = raycast {
+                    let cuboid = IRect::single_cell(hit.pos_int + octree_base).to_frect();
+                    let face = hit.face;
+                    let modifiers = None;
+                    let target_data = None;
+                    self.add_mouse_target_face(cuboid, face, modifiers, target_data);
+                }
             }
         }
 
@@ -258,8 +260,13 @@ impl GridViewRender3D<'_> {
 
     /// Adds a highlight on the render cell face under the mouse cursor when
     /// using the drawing tool.
-    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec3D, face: Face, mode: DrawMode) {
-        self.add_hover_overlay(cell_pos, face, mode.fill_color(), mode.outline_color());
+    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec3D, face: Face, draw_mode: DrawMode) {
+        self.add_hover_overlay(
+            cell_pos,
+            face,
+            draw_mode.fill_color(),
+            draw_mode.outline_color(),
+        );
     }
     /// Adds a highlight on the render cell face under the mouse cursor when
     /// using the selection tool.
@@ -307,11 +314,8 @@ impl GridViewRender3D<'_> {
         self.add_cuboid_outline_overlay(local_rect, outline_color, width);
 
         for &face in &FACES {
-            use MouseDragBinding as Mdb;
-            use SelectDragCommand as Sdc;
-
             // "Move selected cells" target.
-            let binding = Mdb::Select(Sdc::MoveCells(Some(face)).into());
+            let binding = DragCmd::MoveSelectedCells(Some(face));
             self.add_mouse_target_face(
                 local_frect,
                 face,
@@ -320,7 +324,7 @@ impl GridViewRender3D<'_> {
             );
 
             // "Move selection" target.
-            let binding = Mdb::Select(Sdc::MoveSelection(Some(face)).into());
+            let binding = DragCmd::MoveSelection(Some(face));
             self.add_mouse_target_face(
                 local_frect,
                 face,
@@ -329,7 +333,7 @@ impl GridViewRender3D<'_> {
             );
 
             // "Move copy of cells" target.
-            let binding = Mdb::Select(Sdc::CopyCells(Some(face)).into());
+            let binding = DragCmd::CopySelectedCells(Some(face));
             self.add_mouse_target_face(
                 local_frect,
                 face,
@@ -338,7 +342,7 @@ impl GridViewRender3D<'_> {
             );
 
             // "Resize selection" target.
-            let binding = Mdb::Select(Sdc::Resize3D(face).into());
+            let binding = DragCmd::ResizeSelection3D(face);
             self.add_mouse_target_face(
                 local_frect,
                 face,

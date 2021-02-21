@@ -6,7 +6,7 @@ use std::cell::RefCell;
 
 use ndcell_core::prelude::*;
 
-use crate::config::MouseDragBinding;
+use crate::commands::DragCmd;
 use crate::mouse::MouseState;
 
 mod generic;
@@ -118,6 +118,8 @@ pub(super) struct CellDrawParams<'a, D: Dim> {
     pub rect: Option<&'a BigRect<D>>,
     /// Alpha value for the whole ND-tree.
     pub alpha: f32,
+    /// Whether these cells can be interacted with.
+    pub interactive: bool,
 }
 
 /// How to handle a mouse hover or click on a particular location on the screen.
@@ -125,7 +127,7 @@ pub(super) struct CellDrawParams<'a, D: Dim> {
 pub struct MouseTargetData {
     /// Mouse binding for clicking the left mouse button over the target and
     /// dragging.
-    pub binding: MouseDragBinding,
+    pub binding: DragCmd,
 }
 
 #[derive(Default)]

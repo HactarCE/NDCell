@@ -9,7 +9,7 @@ pub mod error_popup;
 mod setup;
 mod simulation;
 
-use crate::commands::Command;
+use crate::commands::Cmd;
 use crate::gridview::*;
 use crate::mouse::MouseState;
 use crate::CONFIG;
@@ -142,10 +142,10 @@ impl MainWindow {
                 config.sim.max_memory.div_ceil(&MEBIBYTE),
             ));
             if ui.button(
-                im_str!("Trigger garbage collection"),
+                im_str!("Clear cache"),
                 [ui.window_content_region_width(), 30.0],
             ) {
-                gridview.enqueue(Command::GarbageCollect)
+                gridview.enqueue(Cmd::ClearCache);
             }
             ui.text("");
             ui.text(format!(

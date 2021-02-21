@@ -1,4 +1,4 @@
-use crate::commands::*;
+use crate::commands::DragCmd;
 
 #[derive(Debug)]
 pub struct HistoryConfig {
@@ -12,19 +12,24 @@ impl Default for HistoryConfig {
     fn default() -> Self {
         Self {
             record_move_cells: true,
-            record_select: false, // still restored when moving
+            record_select: false,
             record_view: false,
         }
     }
 }
 impl HistoryConfig {
-    pub fn should_record_select_drag_command(&self, command: SelectDragCommand) -> bool {
-        use SelectDragCommand::*;
+    pub fn should_record_history_for_drag_command(&self, command: &DragCmd) -> bool {
         match command {
-            NewRect | Resize2D(_) | Resize3D(_) | ResizeToCell | MoveSelection(_) => {
-                self.record_select
-            }
-            MoveCells(_) | CopyCells(_) => self.record_move_cells,
+            DragCmd::View(_) => false,
+
+            DragCmd::DrawFreeform(_) => true,
+
+            DragCmd::SelectNewRect
+            | DragCmd::ResizeSelectionToCursor
+            | DragCmd::ResizeSelection2D(_)
+            | DragCmd::ResizeSelection3D(_)
+            | DragCmd::MoveSelection(_) => self.record_select,
+            DragCmd::MoveSelectedCells(_) | DragCmd::CopySelectedCells(_) => self.record_move_cells,
         }
     }
 }

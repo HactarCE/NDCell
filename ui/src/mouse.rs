@@ -5,34 +5,35 @@ use ndcell_core::ndvec::FVec2D;
 use crate::commands::DrawMode;
 use crate::{Direction, Face};
 
-/// What to display for the mouse cursor.
-///
-/// This determines the mouse cursor icon and how/whether to indicate the
-/// highlighted cell in the grid.
+/// The way to display the mouse cursor and the cell it is hovering over.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum MouseDisplay {
+pub enum MouseDisplayMode {
     Normal,
-    Pan,
+
     Orbit,
+    Pan,
     Scale,
+
     Draw(DrawMode),
+
     Select,
+    ResizeSelectionToCursor,
     ResizeSelectionEdge(Direction),
     ResizeSelectionFace(Face),
-    ResizeSelectionAbsolute,
+
     Move,
 }
-impl Default for MouseDisplay {
+impl Default for MouseDisplayMode {
     fn default() -> Self {
         Self::Normal
     }
 }
-impl MouseDisplay {
+impl MouseDisplayMode {
     pub fn cursor_icon(self) -> Option<MouseCursor> {
         use MouseCursor::*;
         match self {
-            Self::Pan => Some(Arrow),      // TODO: open palm hand
             Self::Orbit => Some(Arrow),    // TODO: some better icon?
+            Self::Pan => Some(Arrow),      // TODO: open palm hand
             Self::Scale => Some(ResizeNS), // TODO: some better icon?
             Self::Draw(_) => Some(Arrow),  // TODO: pencil
             Self::Select => Some(Arrow),   // TODO: crosshairs/plus
@@ -62,5 +63,5 @@ pub struct MouseState {
     ///
     /// This determines the mouse cursor icon and how/whether to indicate the
     /// highlighted cell in the grid.
-    pub display: MouseDisplay,
+    pub display_mode: MouseDisplayMode,
 }

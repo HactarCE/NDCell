@@ -6,6 +6,7 @@ use std::time::Duration;
 use ndcell_core::prelude::*;
 
 mod algorithms;
+mod drag;
 mod generic;
 mod history;
 pub mod render;
@@ -16,7 +17,7 @@ mod view3d;
 mod viewpoint;
 mod worker;
 
-use crate::commands::*;
+use crate::commands::{CmdMsg, DragCmd};
 pub use generic::GenericGridView;
 pub use history::History;
 pub use render::{MouseTargetData, RenderParams, RenderResult};
@@ -25,15 +26,6 @@ pub use selection::*;
 pub use view2d::GridView2D;
 pub use view3d::GridView3D;
 pub use viewpoint::*;
-
-/// Handler for mouse drag events, when the user starts dragging and called for
-/// each cursor movement until released. Returns whether to continue or cancel
-/// the drag.
-///
-/// It takes as input the current state, which is mutated, and the current mouse
-/// cursor position. If any initial state or mouse cursor history is relevant,
-/// the closure must maintain this information.
-pub type DragHandler<G> = Box<dyn FnMut(&mut G, FVec2D) -> Result<DragOutcome>>;
 
 /// Abstraction over 2D and 3D gridviews.
 #[enum_dispatch(History)]
@@ -115,16 +107,22 @@ impl GridView {
             GridView::View3D(view3d) => view3d.work_type(),
         }
     }
+    pub fn is_dragging(&self) -> bool {
+        match self {
+            GridView::View2D(view2d) => view2d.is_dragging(),
+            GridView::View3D(view3d) => view3d.is_dragging(),
+        }
+    }
+    pub fn drag_cmd(&self) -> Option<&DragCmd> {
+        match self {
+            GridView::View2D(view2d) => view2d.get_drag().map(|d| &d.command),
+            GridView::View3D(view3d) => view3d.get_drag().map(|d| &d.command),
+        }
+    }
     pub fn is_drawing(&self) -> bool {
         match self {
             GridView::View2D(view2d) => view2d.is_drawing(),
             GridView::View3D(view3d) => view3d.is_drawing(),
-        }
-    }
-    pub fn is_dragging_view(&self) -> bool {
-        match self {
-            GridView::View2D(view2d) => view2d.is_dragging_view(),
-            GridView::View3D(view3d) => view3d.is_dragging_view(),
         }
     }
     pub fn is_running(&self) -> bool {
@@ -135,7 +133,7 @@ impl GridView {
     }
 
     /// Enqueues a command to be executed on the next frame.
-    pub fn enqueue(&self, command: impl Into<Command>) {
+    pub fn enqueue(&self, command: impl Into<CmdMsg>) {
         match self {
             GridView::View2D(view2d) => view2d.enqueue(command),
             GridView::View3D(view3d) => view3d.enqueue(command),
@@ -164,23 +162,17 @@ impl GridView {
             GridView::View3D(view3d) => view3d.export(format),
         }
     }
+    /// Returns whether there is a selection.
+    pub fn has_selection(&self) -> bool {
+        match self {
+            GridView::View2D(view2d) => view2d.selection.is_some(),
+            GridView::View3D(view3d) => view3d.selection.is_some(),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum WorkType {
     SimStep,
     SimContinuous,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum DragType {
-    MovingView,
-    Drawing,
-    Selecting,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum DragOutcome {
-    Continue,
-    Cancel,
 }

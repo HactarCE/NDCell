@@ -1140,7 +1140,7 @@ dependencies = [
 
 [[package]]
 name = "ndcell"
-version = "0.2.0-dev"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "cgmath",
@@ -1169,7 +1169,7 @@ dependencies = [
 
 [[package]]
 name = "ndcell_core"
-version = "0.2.0-dev"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "itertools 0.10.0",

@@ -1,6 +1,6 @@
 [package]
 name = "ndcell_core"
-version = "0.2.0-dev"
+version = "0.2.0"
 authors = ["HactarCE <6060305+HactarCE@users.noreply.github.com>"]
 edition = "2018"
 

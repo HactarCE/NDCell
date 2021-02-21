@@ -36,6 +36,10 @@ To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 
 ## What works right now
 
+- **2D and 3D rendering, simulation, and editing**
+- **Copy/paste**
+- **Save/load files**
+
 See the [Changelog](CHANGELOG.md) for the latest list of features.
 
 ## What's planned for the future

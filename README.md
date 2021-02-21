@@ -18,7 +18,7 @@ _Any computable transition function_
 
 **Simulate _any_ deterministic cellular automaton**
 
-An N-dimensional cellular automaton simulation program. Maybe. Someday.
+A fast, flexible, and feature-rich interactive multidimensional cellular automaton simulator written in Rust.
 
 ## Downloads
 

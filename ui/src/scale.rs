@@ -68,10 +68,18 @@ impl Scale {
     }
     /// Returns the largest `Scale` at which a rectangle of cells fits entirely
     /// on the target.
-    pub fn from_fit(cells_size: BigVec2D, target_size: (u32, u32)) -> Self {
+    pub fn from_fit<D: Dim>(cells_size: BigVec<D>, target_size: (u32, u32)) -> Self {
         let log2_cells_size =
-            FVec2D::from_fn(|ax| r64(FixedPoint::from(cells_size[ax].clone()).log2()));
-        let NdVec([log2_cells_w, log2_cells_h]) = log2_cells_size;
+            FVec::<D>::from_fn(|ax| r64(FixedPoint::from(cells_size[ax].clone()).log2()));
+
+        let (log2_cells_w, log2_cells_h) = if D::NDIM == 2 {
+            // Unpack vector into two values.
+            (log2_cells_size[Axis::X], log2_cells_size[Axis::Y])
+        } else {
+            // Clone the same value.
+            let max = *log2_cells_size.max_component();
+            (max, max)
+        };
 
         let log2_target_w: R64 = R64::from_u32(target_size.0).unwrap().log2();
         let log2_target_h: R64 = R64::from_u32(target_size.1).unwrap().log2();

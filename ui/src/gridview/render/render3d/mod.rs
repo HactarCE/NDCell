@@ -353,14 +353,24 @@ impl GridViewRender3D<'_> {
             )
         }
     }
+    /// Adds a highlight indicating how the selection will be resized.
+    pub fn add_selection_resize_preview_overlay(&mut self, selection_preview_rect: &BigRect3D) {
+        let local_rect = self.clip_int_rect_to_visible(selection_preview_rect);
+        let local_frect = self._adjust_rect_for_overlay(local_rect);
+        let width = r64(SELECTION_HIGHLIGHT_WIDTH * WIDTH_FUDGE_FACTOR_3D);
+        use crate::colors::selection::*;
+        self.add_cuboid_fill_overlay(local_frect, RESIZE_FILL);
+        self.add_cuboid_outline_overlay(local_rect, RESIZE_OUTLINE, width);
+    }
     /// Adds a highlight indicating which face of the selection will be resized.
     pub fn add_selection_face_resize_overlay(&mut self, selection_rect: &BigRect3D, face: Face) {
         let local_rect = self.clip_int_rect_to_visible(selection_rect);
         let local_frect = self._adjust_rect_for_overlay(local_rect);
-        let width = r64(SELECTION_HIGHLIGHT_WIDTH);
+        let width = r64(SELECTION_HIGHLIGHT_WIDTH * WIDTH_FUDGE_FACTOR_3D);
         let fill_color = crate::colors::selection::RESIZE_FILL;
         let outline_color = crate::colors::selection::RESIZE_OUTLINE;
         self.add_face_fill_overlay(local_frect, face, fill_color);
+        self.add_back_face_fill_overlay(local_frect, face, fill_color);
         self.add_face_outline_overlay(local_rect, face, outline_color, width);
     }
 

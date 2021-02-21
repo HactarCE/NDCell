@@ -2,6 +2,7 @@ use anyhow::Result;
 
 use ndcell_core::prelude::*;
 
+use super::drag::Drag;
 use super::generic::{GenericGridView, GridViewDimension};
 use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult};
 use super::screenpos::{ScreenPos2D, ScreenPosTrait};
@@ -16,8 +17,16 @@ impl GridViewDimension for Dim2D {
 
     type Data = ();
 
-    fn focus(this: &mut GenericGridView<Self>, pos: &ScreenPos2D) {
+    fn focus(this: &mut GridView2D, pos: &ScreenPos2D) {
         this.target_viewpoint().set_center(pos.pos());
+    }
+    fn resize_selection_to_cursor(
+        rect: &BigRect2D,
+        start: &FixedVec2D,
+        end: &BigRect2D,
+        _drag: &Drag<Self>,
+    ) -> BigRect2D {
+        super::selection::resize_selection_absolute(&rect, &start, &end)
     }
 
     fn render(this: &mut GridView2D, params: RenderParams<'_>) -> Result<RenderResult> {

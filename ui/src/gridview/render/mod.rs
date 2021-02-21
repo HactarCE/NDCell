@@ -46,8 +46,8 @@ mod consts {
     pub const HOVER_HIGHLIGHT_WIDTH: f64 = 2.0 * GRIDLINE_WIDTH;
     /// Width of selection outline, measured in cells.
     pub const SELECTION_HIGHLIGHT_WIDTH: f64 = 4.0 * GRIDLINE_WIDTH;
-    /// Width of selection resize preview outline, measured in cells.
-    pub const SELECTION_RESIZE_PREVIEW_WIDTH: f64 = 2.0 * GRIDLINE_WIDTH;
+    /// Multiplicative fudge factor to prevent Z-fighting on outlines.
+    pub const WIDTH_FUDGE_FACTOR_3D: f64 = 1.125;
 
     /// Coefficient to use for gridline spacing.
     ///

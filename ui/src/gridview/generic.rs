@@ -654,11 +654,14 @@ impl<D: GridViewDimension> GenericGridView<D> {
             initial_selection = initial_selection.take().or_else(|| this.deselect());
             if let Some(s) = &initial_selection {
                 if let Some(resize_end) = drag.new_render_cell_rect(&new_pos) {
-                    this.set_selection_rect(Some(super::selection::resize_selection_absolute(
+                    this.set_selection_rect(Some(D::resize_selection_to_cursor(
                         &s.rect,
                         &resize_start,
                         &resize_end,
+                        &drag,
                     )));
+                } else {
+                    this.set_selection_rect(Some(s.rect.clone()));
                 }
                 Ok(DragOutcome::Continue)
             } else {
@@ -1175,8 +1178,17 @@ pub trait GridViewDimension: Dim {
     /// Extra data stored for a `GridView` with this number of dimensions.
     type Data: fmt::Debug + Default;
 
-    /// Executes a `FocusCursor` command.
+    /// Executes a `FocusCursor` command. This has different behavior in 2D vs.
+    /// 3D.
     fn focus(this: &mut GenericGridView<Self>, pos: &Self::ScreenPos);
+    /// Resizes a selection rectangle to the cell at the cursor. This has
+    /// different behavior in 2D vs. 3D.
+    fn resize_selection_to_cursor(
+        rect: &BigRect<Self>,
+        start: &FixedVec<Self>,
+        end: &BigRect<Self>,
+        drag: &Drag<Self>,
+    ) -> BigRect<Self>;
 
     /// Renders the gridview.
     fn render(this: &mut GenericGridView<Self>, params: RenderParams<'_>) -> Result<RenderResult>;

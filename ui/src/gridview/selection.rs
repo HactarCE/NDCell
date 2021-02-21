@@ -1,6 +1,6 @@
 use ndcell_core::prelude::*;
 
-use crate::CONFIG;
+use crate::{Face, CONFIG};
 
 pub type Selection2D = Selection<Dim2D>;
 pub type Selection3D = Selection<Dim3D>;
@@ -111,8 +111,8 @@ pub fn resize_selection_relative<D: Dim>(
 }
 
 /// Resizes a selection given cursor movement from `drag_start_pos` to
-/// `drag_end_pos`, using the absolute `drag_start_pos` to infer which axes to
-/// modify.
+/// `drag_end_render_cell`, using the absolute `drag_start_pos` to infer which
+/// axes to modify.
 pub fn resize_selection_absolute<D: Dim>(
     initial_selection: &BigRect<D>,
     drag_start_pos: &FixedVec<D>,
@@ -127,12 +127,50 @@ pub fn resize_selection_absolute<D: Dim>(
     let drag_end_min = drag_end_render_cell.min();
     let drag_end_max = drag_end_render_cell.max();
     for ax in axes {
-        pos2[ax] = if drag_end_max[ax] > pos1[ax] {
-            drag_end_max[ax].clone()
+        pos2[ax] = if pos2[ax] > pos1[ax] {
+            std::cmp::max(drag_end_max[ax].clone(), pos1[ax].clone())
         } else {
-            drag_end_min[ax].clone()
+            std::cmp::min(drag_end_min[ax].clone(), pos1[ax].clone())
         };
     }
+
+    NdRect::span(pos1, pos2)
+}
+
+/// Resizes a selection to `face` of `drag_end_render_cell` along the axis
+/// normal to `face`.
+pub fn resize_selection_to_face<D: Dim>(
+    initial_selection: &BigRect<D>,
+    drag_start_pos: &FixedVec<D>,
+    drag_end_render_cell: &BigRect<D>,
+    face: Face,
+) -> BigRect<D> {
+    // Farthest corner stays fixed.
+    let pos1 = initial_selection.farthest_corner(drag_start_pos);
+    // Closest corner varies.
+    let mut pos2 = initial_selection.closest_corner(drag_start_pos);
+
+    let drag_end_min = drag_end_render_cell.min();
+    let drag_end_max = drag_end_render_cell.max();
+
+    let axis = face.normal_axis();
+    pos2[axis] = match face.sign() {
+        Sign::Minus => {
+            if pos2[axis] > pos1[axis] {
+                std::cmp::max(drag_end_min[axis].clone() - 1, pos1[axis].clone())
+            } else {
+                std::cmp::min(drag_end_min[axis].clone(), pos1[axis].clone())
+            }
+        }
+        Sign::NoSign => unreachable!(),
+        Sign::Plus => {
+            if pos2[axis] > pos1[axis] {
+                std::cmp::max(drag_end_max[axis].clone(), pos1[axis].clone())
+            } else {
+                std::cmp::min(drag_end_max[axis].clone() + 1, pos1[axis].clone())
+            }
+        }
+    };
 
     NdRect::span(pos1, pos2)
 }

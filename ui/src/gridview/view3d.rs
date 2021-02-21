@@ -3,6 +3,7 @@ use anyhow::Result;
 use ndcell_core::prelude::*;
 
 use super::algorithms::raycast;
+use super::drag::Drag;
 use super::generic::{GenericGridView, GridViewDimension};
 use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult};
 use super::screenpos::{RaycastHit, RaycastHitThing, ScreenPos3D, ScreenPosTrait};
@@ -41,6 +42,19 @@ impl GridViewDimension for Dim3D {
             // Hide grid.
             this.hide_grid();
         }
+    }
+    fn resize_selection_to_cursor(
+        rect: &BigRect3D,
+        start: &FixedVec3D,
+        end: &BigRect3D,
+        drag: &Drag<Self>,
+    ) -> BigRect3D {
+        super::selection::resize_selection_to_face(
+            &rect,
+            &start,
+            &end,
+            drag.initial_pos().unwrap().face,
+        )
     }
 
     fn render(this: &mut GridView3D, params: RenderParams<'_>) -> Result<RenderResult> {
@@ -106,22 +120,21 @@ impl GridViewDimension for Dim3D {
                 if this.is_dragging() {
                     // We are already resizing the selection; just use the
                     // current selection.
-
-                    // frame.add_selection_resize_preview_overlay(&selection.rect);
+                    frame.add_selection_resize_preview_overlay(&selection.rect);
                 } else if let (Some(resize_start), Some(resize_end)) = (
                     screen_pos.and_then(|pos| pos.absolute_selection_resize_start_pos()),
                     rect_cell_to_highlight,
                 ) {
                     // Show what *would* happen if the user resized the
                     // selection.
-
-                    // frame.add_selection_resize_preview_overlay(
-                    //     &super::selection::resize_selection_absolute(
-                    //         &selection.rect,
-                    //         &resize_start,
-                    //         &resize_end,
-                    //     ),
-                    // );
+                    frame.add_selection_resize_preview_overlay(
+                        &super::selection::resize_selection_to_face(
+                            &selection.rect,
+                            &resize_start,
+                            &resize_end,
+                            pos_to_highlight.unwrap().face,
+                        ),
+                    );
                 }
             }
 

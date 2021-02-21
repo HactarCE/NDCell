@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Advance one step (<kbd>Tab</kbd>)
 - **Selection**
   - Added edge resize indicator
+  - Cancel selection drag (<kbd>Esc</kbd>)
 - **Navigation**
   - 3D orbit (right mouse drag)
   - 3D pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or middle mouse drag)
@@ -30,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **GUI**
   - Display "RUNNING" or "STEPPING" accordingly instead of "SIMULATING"
   - Replaced inaccurate maximum simulation speed with average simulation time.
+  - Relabeled "Trigger garbage collection" button to "Clear cache"
 - Tweaked colors
 
 ### Fixed

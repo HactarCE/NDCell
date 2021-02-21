@@ -1,7 +1,35 @@
-use glium::glutin::event::{ModifiersState, MouseButton};
+use glium::glutin::event::{ModifiersState, MouseButton as GlutinMouseButton};
+use std::convert::{TryFrom, TryInto};
 use std::ops::{Index, IndexMut};
 
 use crate::commands::{Cmd, DragCmd, DragViewCmd, DrawMode};
+
+/// Left, right, or middle mouse button.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
+impl Default for MouseButton {
+    fn default() -> Self {
+        Self::Left
+    }
+}
+impl TryFrom<GlutinMouseButton> for MouseButton {
+    type Error = OtherMouseButton;
+
+    fn try_from(button: GlutinMouseButton) -> Result<Self, Self::Error> {
+        match button {
+            GlutinMouseButton::Left => Ok(Self::Left),
+            GlutinMouseButton::Right => Ok(Self::Right),
+            GlutinMouseButton::Middle => Ok(Self::Middle),
+            GlutinMouseButton::Other(n) => Err(OtherMouseButton(n)),
+        }
+    }
+}
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+struct OtherMouseButton(u16);
 
 #[derive(Debug)]
 pub struct MouseConfig {
@@ -55,8 +83,13 @@ impl MouseConfig {
         &self,
         ndim: usize,
         mods: ModifiersState,
-        button: MouseButton,
+        button: GlutinMouseButton,
     ) -> (&Option<Cmd>, &Option<DragCmd>) {
+        let button = match button.try_into() {
+            Ok(b) => b,
+            Err(_) => return (&None, &None),
+        };
+
         match ndim {
             2 => (
                 &self.click_bindings_2d[(mods, button)],
@@ -99,7 +132,6 @@ impl<T> Index<(ModifiersState, MouseButton)> for MouseBindings<T> {
             MouseButton::Left => &self[mods].0,
             MouseButton::Right => &self[mods].1,
             MouseButton::Middle => &self[mods].2,
-            _ => panic!("Cannot assign binding to non-standard mouse button"),
         }
     }
 }
@@ -109,7 +141,6 @@ impl<T> IndexMut<(ModifiersState, MouseButton)> for MouseBindings<T> {
             MouseButton::Left => &mut self[mods].0,
             MouseButton::Right => &mut self[mods].1,
             MouseButton::Middle => &mut self[mods].2,
-            _ => panic!("Cannot assign binding to non-standard mouse button"),
         }
     }
 }

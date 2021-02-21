@@ -22,7 +22,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Zoom (right mouse drag with <kbd>Ctrl</kbd>)
 - **GUI**
   - Load/save file
-  - Disabled rounded window borders
 
 ### Changed
 
@@ -32,9 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Selection**
   - Selection edge resizing now clamps to the opposite corner
 - **GUI**
+  - Disabled rounded window borders
   - Display "RUNNING" or "STEPPING" accordingly instead of "SIMULATING"
-  - Replaced inaccurate maximum simulation speed with average simulation time.
   - Relabeled "Trigger garbage collection" button to "Clear cache"
+  - Replaced inaccurate maximum simulation speed with average simulation time.
 - Tweaked colors
 
 ### Fixed

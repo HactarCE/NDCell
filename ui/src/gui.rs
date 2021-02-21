@@ -1,11 +1,13 @@
 use anyhow::{Context, Result};
 use glium::glutin::event::{Event, StartCause, WindowEvent};
 use glium::glutin::event_loop::{ControlFlow, EventLoop};
-use glium::glutin::{window::WindowBuilder, ContextBuilder};
+use glium::glutin::window::{Icon, WindowBuilder};
+use glium::glutin::ContextBuilder;
 use glium::Surface;
 use imgui::FontSource;
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use log::warn;
 use send_wrapper::SendWrapper;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -21,7 +23,9 @@ lazy_static! {
     static ref EVENT_LOOP: SendWrapper<RefCell<Option<EventLoop<()>>>> =
         SendWrapper::new(RefCell::new(Some(EventLoop::new())));
     pub static ref DISPLAY: SendWrapper<glium::Display> = SendWrapper::new({
-        let wb = WindowBuilder::new().with_title(super::TITLE.to_owned());
+        let wb = WindowBuilder::new()
+            .with_title(super::TITLE.to_owned())
+            .with_window_icon(load_application_icon());
         let cb = ContextBuilder::new()
             .with_vsync(true)
             .with_multisampling(CONFIG.lock().gfx.msaa as u16);
@@ -194,4 +198,38 @@ pub fn show_gui() -> ! {
                 super::gridview::render::post_frame_clean_cache();
             }
         })
+}
+
+fn load_application_icon() -> Option<Icon> {
+    let icon_png_data = include_bytes!("../resources/icon/ndcell_32x32.png");
+    let png_decoder = png::Decoder::new(&icon_png_data[..]);
+    match png_decoder.read_info() {
+        Ok((info, mut reader)) => match info.color_type {
+            png::ColorType::RGBA => {
+                let mut img_data = vec![0_u8; info.buffer_size()];
+                if let Err(err) = reader.next_frame(&mut img_data) {
+                    warn!("Failed to read icon data: {:?}", err);
+                    return None;
+                };
+                match Icon::from_rgba(img_data, info.width, info.height) {
+                    Ok(icon) => Some(icon),
+                    Err(err) => {
+                        warn!("Failed to construct icon: {:?}", err);
+                        None
+                    }
+                }
+            }
+            _ => {
+                warn!(
+                    "Failed to load icon data due to unknown color format: {:?}",
+                    info.color_type,
+                );
+                None
+            }
+        },
+        Err(err) => {
+            warn!("Failed to load icon data: {:?}", err);
+            None
+        }
+    }
 }

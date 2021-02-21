@@ -594,7 +594,7 @@ impl GridViewRender3D<'_> {
     }
 
     fn _adjust_rect_for_overlay(&self, rect: IRect3D) -> FRect3D {
-        // Avoid Z fighting with cells by expanding the rectangle a tiny bit.
+        // Avoid Z-fighting with cells by expanding the rectangle a tiny bit.
         rect.to_frect()
             .offset_min_max(r64(-CUBOID_OVERLAY_PADDING), r64(CUBOID_OVERLAY_PADDING))
     }

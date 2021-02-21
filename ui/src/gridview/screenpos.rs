@@ -391,7 +391,7 @@ impl PartialOrd for RaycastHit {
 impl Ord for RaycastHit {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         if self.cell == other.cell && self.face == other.face {
-            // Z fighting! Sort by thing instead.
+            // Z-fighting! Sort by thing instead.
             self.thing.cmp(&other.thing)
         } else {
             self.distance.cmp(&other.distance)

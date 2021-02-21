@@ -35,7 +35,7 @@ mod consts {
     /// Minimum render cell length of the crosshair gradient.
     pub const CROSSHAIR_GRADIENT_MIN_CELL_LEN: f64 = 1.0;
 
-    /// Small value for avoiding Z fighting.
+    /// Small value for avoiding Z-fighting.
     pub const Z_EPSILON: f64 = 1.0 / 256.0;
     /// Padding added to integer cuboid overlays, measured in render cells.
     pub const CUBOID_OVERLAY_PADDING: f64 = GRIDLINE_WIDTH / 2.0;

@@ -28,6 +28,8 @@ pub enum Cmd {
     ContinueDrag,
     /// Ends a drag command. (hidden)
     EndDrag,
+    /// Cancels a drag command.
+    CancelDrag,
 
     /// Cancels any operation.
     Cancel,

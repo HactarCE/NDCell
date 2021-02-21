@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use ndcell_core::prelude::*;
 
 use super::algorithms::bresenham;
-use super::drag::{Drag, DragOutcome, DragUpdateFn};
+use super::drag::{Drag, DragCancelFn, DragOutcome, DragUpdateFn};
 use super::history::{History, HistoryBase, HistoryManager};
 use super::render::{RenderParams, RenderResult};
 use super::screenpos::{OperationPos, OperationPosTrait, ScreenPosTrait};
@@ -64,14 +64,6 @@ pub struct GenericGridView<D: GridViewDimension> {
     /// Mouse drag in progress.
     drag: Option<Drag<D>>,
 
-    /*
-        /// Mouse drag handler.
-        drag_handler: Option<DragUpdateFn<Self>>,
-        /// Type of mouse drag being handled.
-        drag_type: Option<DragType>,
-        /// Initial screen position of mouse drag.
-        pub(super) drag_initial: Option<D::ScreenPos>,
-    */
     /// Time that the last several frames completed.
     last_frame_times: VecDeque<Instant>,
     /// Last several simulation times, with the most recent at the front.
@@ -242,20 +234,24 @@ impl<D: GridViewDimension> GenericGridView<D> {
             Cmd::BeginDrag(cmd) => Ok(self.begin_drag(cmd, cursor_pos?)),
             Cmd::ContinueDrag => self.continue_drag(cursor_pos?),
             Cmd::EndDrag => Ok(self.end_drag()),
+            Cmd::CancelDrag => Ok(self.cancel_drag()),
 
             Cmd::Cancel => Ok(self.cancel()),
 
             Cmd::Undo => {
+                self.end_drag();
                 self.reset_worker_thread();
                 self.undo();
                 Ok(())
             }
             Cmd::Redo => {
+                self.end_drag();
                 self.reset_worker_thread();
                 self.redo();
                 Ok(())
             }
             Cmd::Reset => {
+                self.end_drag();
                 self.reset_worker_thread();
                 self.reset();
                 Ok(())
@@ -316,18 +312,28 @@ impl<D: GridViewDimension> GenericGridView<D> {
 
     /// Executes a `Cancel` command.
     fn cancel(&mut self) {
-        if self.reset_worker_thread() {
+        if self.is_dragging() {
+            self.cancel_drag();
+        } else if self.reset_worker_thread() {
+            // ok
         } else if self.is_drawing() {
             self.cancel_draw()
         } else {
             self.cancel_selection()
         }
     }
+    /// Executes a `CancelDrag` command.
+    fn cancel_drag(&mut self) {
+        if let Some(drag) = self.drag.take() {
+            if let Some(cancel_fn) = drag.cancel_fn {
+                cancel_fn(self);
+            }
+        }
+    }
     /// Executes a `CancelDraw` command.
     fn cancel_draw(&mut self) {
         if self.is_drawing() {
-            self.end_drag();
-            self.undo();
+            self.cancel_drag();
         }
     }
     /// Executes a `CancelSelection` command.
@@ -470,7 +476,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
         } else {
             let initial_screen_pos = self.screen_pos(pixel);
 
-            let drag_update_fn = match &command {
+            let update_fn = match &command {
                 DragCmd::View(cmd) => self.make_drag_view_update_fn(*cmd, pixel),
 
                 DragCmd::DrawFreeform(draw_mode) => {
@@ -496,7 +502,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
                     )
                 }
                 DragCmd::MoveSelection(face) => {
-                    self.make_selection_move_drag_handler(*face, initial_screen_pos, |this| {
+                    self.make_drag_move_selection_update_fn(*face, initial_screen_pos, |this| {
                         // To move the selection, we must first drop the
                         // selected cells.
                         this.drop_selected_cells();
@@ -504,7 +510,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
                 }
 
                 DragCmd::MoveSelectedCells(face) => {
-                    self.make_selection_move_drag_handler(*face, initial_screen_pos, |this| {
+                    self.make_drag_move_selection_update_fn(*face, initial_screen_pos, |this| {
                         // To move the selected cells, we must first grab those
                         // cells.
                         this.grab_selected_cells();
@@ -512,7 +518,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
                 }
 
                 DragCmd::CopySelectedCells(face) => {
-                    self.make_selection_move_drag_handler(*face, initial_screen_pos, |this| {
+                    self.make_drag_move_selection_update_fn(*face, initial_screen_pos, |this| {
                         // To copy the selected cells, we must first grab a copy
                         // of those cells.
                         this.drop_selected_cells();
@@ -521,7 +527,9 @@ impl<D: GridViewDimension> GenericGridView<D> {
                 }
             };
 
-            if let Some(update_fn) = drag_update_fn {
+            if update_fn.is_some() {
+                let cancel_fn: Option<DragCancelFn<Self>>;
+
                 if CONFIG
                     .lock()
                     .hist
@@ -529,6 +537,17 @@ impl<D: GridViewDimension> GenericGridView<D> {
                 {
                     self.reset_worker_thread();
                     self.record();
+
+                    cancel_fn = Some(Box::new(|this| {
+                        this.undo();
+                    }));
+                } else {
+                    let old_ndtree = self.automaton.ndtree.clone();
+                    let old_selection = self.selection.clone();
+                    cancel_fn = Some(Box::new(move |this| {
+                        this.automaton.ndtree = old_ndtree;
+                        this.selection = old_selection;
+                    }));
                 }
 
                 // Recreate `initial_screen_pos` because it may have been
@@ -540,7 +559,8 @@ impl<D: GridViewDimension> GenericGridView<D> {
                     initial_screen_pos,
                     waiting_for_drag_threshold,
 
-                    update_fn: Some(update_fn),
+                    update_fn,
+                    cancel_fn,
 
                     ndtree_base_pos: self.automaton.ndtree.base_pos().clone(),
                 });
@@ -598,7 +618,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
 
         let mut pos1 = initial_cell;
         Some(Box::new(move |drag, this, new_screen_pos| {
-            if let Some(pos2) = drag.new(&new_screen_pos).map(|p| p.into_cell()) {
+            if let Some(pos2) = drag.new_pos(&new_screen_pos).map(|p| p.into_cell()) {
                 for pos in bresenham::line(pos1.clone(), pos2.clone()) {
                     this.automaton.ndtree.set_cell(&pos, new_cell_state);
                 }
@@ -672,7 +692,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
             }
         }))
     }
-    fn make_selection_move_drag_handler(
+    fn make_drag_move_selection_update_fn(
         &self,
         face: Option<Face>,
         initial_pos: D::ScreenPos,
@@ -1116,7 +1136,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
     pub(super) fn cell_to_highlight(&self, mouse: &MouseState) -> Option<OperationPos<D>> {
         let screen_pos = self.screen_pos(mouse.pos?);
         if let Some(drag) = self.get_drag() {
-            drag.new(&screen_pos)
+            drag.new_pos(&screen_pos)
         } else {
             screen_pos.op_pos_for_mouse_display_mode(mouse.display_mode)
         }

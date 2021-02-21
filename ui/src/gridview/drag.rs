@@ -18,6 +18,8 @@ use crate::CONFIG;
 pub type DragUpdateFn<D, T = GenericGridView<D>> =
     Box<dyn FnMut(&Drag<D>, &mut T, &<D as GridViewDimension>::ScreenPos) -> Result<DragOutcome>>;
 
+pub type DragCancelFn<G> = Box<dyn FnOnce(&mut G)>;
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum DragOutcome {
     Continue,
@@ -30,6 +32,7 @@ pub struct Drag<D: GridViewDimension> {
     pub waiting_for_drag_threshold: bool,
 
     pub(super) update_fn: Option<DragUpdateFn<D>>,
+    pub(super) cancel_fn: Option<DragCancelFn<GenericGridView<D>>>,
 
     pub(super) ndtree_base_pos: BigVec<D>,
 }
@@ -40,18 +43,18 @@ impl<D: GridViewDimension> Drag<D> {
     }
 
     /// Returns the cell initially clicked on.
-    pub fn initial(&self) -> Option<OperationPos<D>> {
+    pub fn initial_pos(&self) -> Option<OperationPos<D>> {
         self.initial_screen_pos
             .op_pos_for_drag_command(&self.command)
     }
     /// Returns the cell dragged over at `new_screen_pos`.
-    pub fn new(&self, new_screen_pos: &D::ScreenPos) -> Option<OperationPos<D>> {
+    pub fn new_pos(&self, new_screen_pos: &D::ScreenPos) -> Option<OperationPos<D>> {
         new_screen_pos.op_pos_for_continue_drag_command(&self.command, &self.initial_screen_pos)
     }
 
     /// Returns the rectangle of the render cell initially clicked on.
     pub fn initial_render_cell_rect(&self) -> Option<BigRect<D>> {
-        self.initial().map(|op_pos| {
+        self.initial_pos().map(|op_pos| {
             self.initial_screen_pos.layer().round_rect_with_base_pos(
                 BigRect::single_cell(op_pos.cell().clone()),
                 &self.ndtree_base_pos,
@@ -61,7 +64,7 @@ impl<D: GridViewDimension> Drag<D> {
     /// Returns the rectangle of the render cell dragged over at
     /// `new_screen_pos`.
     pub fn new_render_cell_rect(&self, new_screen_pos: &D::ScreenPos) -> Option<BigRect<D>> {
-        self.new(new_screen_pos).map(|op_pos| {
+        self.new_pos(new_screen_pos).map(|op_pos| {
             self.initial_screen_pos.layer().round_rect_with_base_pos(
                 BigRect::single_cell(op_pos.cell().clone()),
                 &self.ndtree_base_pos,

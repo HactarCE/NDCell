@@ -1,26 +1,28 @@
-.. _methods:
-
 *******
 Methods
 *******
 
-.. _integer-methods:
+.. note::
 
-Integer methods
+  This page is under construction.
+
+.. _int-methods:
+
+``Int`` methods
 ===============
 
 TODO
 
-.. _vector-methods:
+.. _vec-methods:
 
-Vector methods
-==============
+``Vec`` methods
+===============
 
 TODO
 
 .. _cell-methods:
 
-Cell methods
-============
+``Cell`` methods
+================
 
 TODO

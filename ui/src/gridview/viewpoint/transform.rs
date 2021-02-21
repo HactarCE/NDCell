@@ -5,7 +5,7 @@ use std::convert::TryFrom;
 use ndcell_core::prelude::*;
 
 use crate::ext::*;
-use crate::Scale;
+use crate::{Plane, Scale};
 
 pub type CellTransform2D = NdCellTransform<Dim2D>;
 pub type CellTransform3D = NdCellTransform<Dim3D>;
@@ -284,6 +284,24 @@ impl<D: Dim> NdCellTransform<D> {
         }
         Some(IRect::span(min, max))
     }
+
+    /// Converts a single coordinate from global space to local space, if the
+    /// point is inside the visible area. Returns `None` if the point is outside
+    /// the visible area.
+    pub fn global_to_local_visible_coord(&self, axis: Axis, coordinate: &BigInt) -> Option<isize> {
+        let big_local_coord = (coordinate - &self.origin[axis]) >> self.render_cell_layer.to_u32();
+        if let Some(local_coord) = big_local_coord.to_isize() {
+            let cell_view_radius =
+                self.render_cell_scale.cells_per_unit().raw() as f32 * super::VIEW_RADIUS_3D;
+            if local_coord.abs() < cell_view_radius.ceil() as isize {
+                Some(local_coord)
+            } else {
+                None // The coordinate is outside the visible area.
+            }
+        } else {
+            None // The coordinate is outside the visible area.
+        }
+    }
 }
 
 impl CellTransform2D {
@@ -381,21 +399,16 @@ impl CellTransform3D {
 
     /// Returns the global position on an axis-aligned plane that appears at the
     /// given pixel position on the screen.
-    pub fn pixel_to_global_pos_in_plane(
-        &self,
-        pixel: FVec2D,
-        plane: (Axis, &FixedPoint),
-    ) -> Option<FixedVec3D> {
-        let (plane_axis, plane_pos) = plane;
+    pub fn pixel_to_global_pos_in_plane(&self, pixel: FVec2D, plane: &Plane) -> Option<FixedVec3D> {
         let (start, delta) = self.pixel_to_global_ray(pixel);
 
-        if delta[plane_axis].is_zero() {
+        if delta[plane.axis].is_zero() {
             // The delta vector is parallel to the plane.
             return None;
         }
 
         // How many times do we have to add `delta` to reach the plane?
-        let t = (plane_pos - &start[plane_axis]) / &delta[plane_axis];
+        let t = (&plane.coordinate - &start[plane.axis]) / &delta[plane.axis];
 
         if !t.is_positive() {
             // The plane is behind the camera.

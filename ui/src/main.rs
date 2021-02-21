@@ -28,17 +28,22 @@ mod clipboard_compat;
 mod colors;
 mod commands;
 mod config;
+mod direction;
 mod ext;
+mod face;
 mod gridview;
 mod gui;
 mod input;
-mod math;
 mod mouse;
+mod plane;
 mod scale;
 mod windows;
 
 use config::Config;
+use direction::{Direction, DIRECTIONS};
+use face::{Face, FACES};
 use gui::DISPLAY;
+use plane::Plane;
 use scale::Scale;
 
 /// The title of the window (both the OS window, and the main imgui window).
@@ -120,4 +125,19 @@ fn make_default_gridview(ndim: usize) -> gridview::GridView {
         .into(),
         _ => panic!("Invalid number of dimensions passed to make_default_gridview()"),
     }
+}
+
+fn default_colors() -> [palette::Srgba; 256] {
+    use palette::Srgba;
+    let mut ret = [Srgba::default(); 256];
+
+    ret[0] = crate::colors::cells::DEAD;
+    ret[1] = crate::colors::cells::LIVE;
+
+    for i in 2..256 {
+        let c = colorous::SPECTRAL.eval_rational(i as usize - 2, 255);
+        ret[i] = Srgba::new(c.r, c.g, c.b, u8::MAX).into_format();
+    }
+
+    ret
 }

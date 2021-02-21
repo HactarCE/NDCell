@@ -13,9 +13,8 @@ Automaton directives
 
   The number of states in the automaton.
 
-  NOTE: ``@states`` will be made much more powerful in the future.
-
-  :type: :data:`Integer`
+  :status: Partially implemented; more functionality planned
+  :type: :data:`Int`
   :default value: ``2``
   :examples:
 
@@ -28,7 +27,8 @@ Automaton directives
 
   __ https://en.wikipedia.org/wiki/Chebyshev_distance
 
-  :type: :data:`Integer` (nonnegative)
+  :status: Fully implemented
+  :type: :data:`Int` (nonnegative)
   :default value: ``1``
   :examples:
 
@@ -40,6 +40,7 @@ Automaton directives
 
   TODO: describe special variables ``this``, ``neighborhood``, and ``nbhd``.
 
+  :status: Fully implemented
   :type: :ref:`Code block <code-block>`
   :default value: ``{ remain }``
   :examples: See :ref:`examples`
@@ -50,9 +51,8 @@ Automaton directives
 
   __ https://www.conwaylife.com/wiki/Run_Length_Encoded
 
-  NOTE: not yet implemented, and may be removed
-
-  :type: :ref:`String literal <string-literal>`
+  :status: Not yet implemented; may be removed
+  :type: :data:`String`
   :default value: None
   :examples:
 
@@ -65,9 +65,8 @@ Metadata directives
 
   The name of the automaton.
 
-  NOTE: not yet implemented
-
-  :type: :ref:`String literal <string-literal>`
+  :status: Not yet implemented
+  :type: :data:`String`
   :default value: Name of the file, excluding the extension.
   :examples:
 
@@ -78,9 +77,8 @@ Metadata directives
 
   The author(s) of the NDCA file.
 
-  NOTE: not yet implemented
-
-  :type: :ref:`String literal <string-literal>`
+  :status: Not yet implemented
+  :type: :data:`String`
   :default value: ``"Unknown"``
   :examples:
 
@@ -92,9 +90,8 @@ Metadata directives
 
   The designer(s)/discoverer(s) of the automaton.
 
-  NOTE: not yet implemented
-
-  :type: :ref:`String literal <string-literal>`
+  :status: Not yet implemented
+  :type: :data:`String`
   :default value: Same as :data:`@author`
   :examples:
 
@@ -106,9 +103,8 @@ Metadata directives
 
   The year that the automaton was designed/discovered.
 
-  NOTE: not yet implemented
-
-  :type: :ref:`String literal <string-literal>`
+  :status: Not yet implemented
+  :type: :data:`String`
   :default value: ``"Unknown"``
   :examples:
 
@@ -121,9 +117,8 @@ Metadata directives
 
   __ https://www.conwaylife.com/wiki/Main_Page
 
-  NOTE: not yet implemented
-
-  :type: :ref:`String literal <string-literal>`
+  :status: Not yet implemented
+  :type: :data:`String`
   :default value: ``"None"``
   :examples:
 

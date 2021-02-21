@@ -1,8 +1,9 @@
+use anyhow::{Context, Result};
 use glium::glutin::event::{Event, StartCause, WindowEvent};
 use glium::glutin::event_loop::{ControlFlow, EventLoop};
 use glium::glutin::{window::WindowBuilder, ContextBuilder};
 use glium::Surface;
-use imgui::{Context, FontSource};
+use imgui::FontSource;
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use send_wrapper::SendWrapper;
@@ -10,7 +11,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::time::Instant;
 
-use crate::clipboard_compat::*;
+use crate::clipboard_compat::ClipboardCompat;
 use crate::gridview;
 use crate::input;
 use crate::windows;
@@ -21,7 +22,9 @@ lazy_static! {
         SendWrapper::new(RefCell::new(Some(EventLoop::new())));
     pub static ref DISPLAY: SendWrapper<glium::Display> = SendWrapper::new({
         let wb = WindowBuilder::new().with_title(super::TITLE.to_owned());
-        let cb = ContextBuilder::new().with_vsync(true);
+        let cb = ContextBuilder::new()
+            .with_vsync(true)
+            .with_multisampling(CONFIG.lock().gfx.msaa as u16);
         glium::Display::new(wb, cb, EVENT_LOOP.borrow().as_ref().unwrap())
             .expect("Failed to initialize display")
     });
@@ -38,7 +41,7 @@ pub fn show_gui() -> ! {
     let mut events_buffer = VecDeque::new();
 
     // Initialize imgui.
-    let mut imgui = Context::create();
+    let mut imgui = imgui::Context::create();
     imgui.set_clipboard_backend(Box::new(ClipboardCompat));
     imgui.set_ini_filename(None);
     let mut platform = WinitPlatform::init(&mut imgui);
@@ -146,31 +149,44 @@ pub fn show_gui() -> ! {
                     gridview: &mut gridview,
                 });
                 if !imgui_has_mouse {
-                    ui.set_mouse_cursor(input_state.mouse().display.cursor_icon());
+                    ui.set_mouse_cursor(input_state.mouse().display_mode.cursor_icon());
                 }
 
                 let mut target = display.draw();
 
-                // Execute commands and run the simulation.
-                gridview.do_frame().expect("Unhandled exception!");
+                // Use IIFE for error handling.
+                let gridview_frame_result = || -> Result<()> {
+                    // Execute commands and run the simulation.
+                    gridview.do_frame().context("Updating gridview")?;
 
-                if target.get_dimensions() != (0, 0) {
-                    // Render the gridview.
-                    gridview
-                        .render(gridview::RenderParams {
-                            target: &mut target,
-                            mouse: input_state.mouse(),
-                            modifiers: input_state.modifiers(),
-                        })
-                        .expect("Unhandled exception!");
+                    if target.get_dimensions() != (0, 0) {
+                        // Render the gridview.
+                        gridview
+                            .render(gridview::RenderParams {
+                                target: &mut target,
+                                mouse: input_state.mouse(),
+                                modifiers: input_state.modifiers(),
+                            })
+                            .context("Rendering gridview")?;
+                    }
 
-                    // Render imgui.
-                    platform.prepare_render(&ui, gl_window.window());
-                    let draw_data = ui.render();
-                    renderer
-                        .render(&mut target, draw_data)
-                        .expect("Rendering failed");
-                }
+                    Ok(())
+                }();
+
+                // Handle gridview errors.
+                windows::error_popup::show_error_popup_on_error(
+                    &ui,
+                    &gridview,
+                    gridview_frame_result,
+                );
+
+                // Render imgui.
+                platform.prepare_render(&ui, gl_window.window());
+                let draw_data = ui.render();
+                renderer
+                    .render(&mut target, draw_data)
+                    .expect("Error while rendering imgui");
+
                 // Put it all on the screen.
                 target.finish().expect("Failed to swap buffers");
 

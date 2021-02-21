@@ -5,14 +5,17 @@ use ndcell_core::prelude::*;
 
 #[cfg(debug_assertions)]
 mod debug;
+pub mod error_popup;
+mod setup;
 mod simulation;
 
-use crate::commands::Command;
+use crate::commands::Cmd;
 use crate::gridview::*;
 use crate::mouse::MouseState;
 use crate::CONFIG;
 #[cfg(debug_assertions)]
 use debug::DebugWindow;
+use setup::SetupWindow;
 use simulation::SimulationWindow;
 
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
@@ -28,9 +31,10 @@ pub struct BuildParams<'a> {
 
 #[derive(Debug, Default)]
 pub struct MainWindow {
-    simulation: SimulationWindow,
     #[cfg(debug_assertions)]
     debug: DebugWindow,
+    setup: SetupWindow,
+    simulation: SimulationWindow,
 }
 impl MainWindow {
     /// Builds the window.
@@ -45,6 +49,43 @@ impl MainWindow {
             let config = CONFIG.lock();
 
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
+            ui.text("");
+
+            let width = ui.window_content_region_width();
+            let button_width = (width - 10.0) / 2.0;
+            if ui.button(im_str!("Load file"), [button_width, 40.0]) {
+                if let Ok(response) = nfd2::open_file_dialog(Some("rle,mc"), None) {
+                    if let nfd2::Response::Okay(path) = response {
+                        let rule = gridview.rule();
+                        if let Ok(s) = std::fs::read_to_string(path) {
+                            if let Ok(automaton) =
+                                ndcell_core::io::import_automaton_from_string(&s, rule)
+                            {
+                                match automaton.unwrap() {
+                                    Automaton::Automaton2D(a) => **gridview = a.into(),
+                                    Automaton::Automaton3D(a) => **gridview = a.into(),
+                                    _ => (),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ui.same_line(button_width + 18.0);
+            if ui.button(im_str!("Save file"), [button_width, 40.0]) {
+                if let Ok(response) = nfd2::open_save_dialog(Some("rle;mc"), None) {
+                    if let nfd2::Response::Okay(path) = response {
+                        let ca_format = match path.extension() {
+                            Some(ext) if ext == "mc" => CaFormat::Macrocell,
+                            _ => CaFormat::Rle,
+                        };
+                        if let Ok(s) = gridview.export(ca_format) {
+                            let _ = std::fs::write(path, s);
+                        }
+                    }
+                }
+            }
+
             ui.text("");
             let fps = ui.io().framerate.ceil() as usize;
             ui.text_colored(fps_color(fps), format!("Framerate = {} FPS", fps));
@@ -123,17 +164,9 @@ impl MainWindow {
                     }
                     ui.text(format!("Pitch = {:.2?}°", vp.pitch().0));
                     ui.text(format!("Yaw = {:.2?}°", vp.yaw().0));
-                    if let Some(hit) = mouse
-                        .pos
-                        .and_then(|pixel| view3d.screen_pos(pixel).raycast())
+                    if let Some(hit) = mouse.pos.and_then(|pixel| view3d.screen_pos(pixel).raycast)
                     {
-                        let (axis, sign) = hit.face;
-                        let sign = match sign {
-                            Sign::Minus => "-",
-                            Sign::NoSign => "",
-                            Sign::Plus => "+",
-                        };
-                        ui.text(format!("Cursor: {} {}{:?}", hit.cell, sign, axis));
+                        ui.text(format!("Cursor: {} {}", hit.cell, hit.face));
                     } else {
                         ui.text("");
                     }
@@ -146,10 +179,10 @@ impl MainWindow {
                 config.sim.max_memory.div_ceil(&MEBIBYTE),
             ));
             if ui.button(
-                im_str!("Trigger garbage collection"),
+                im_str!("Clear cache"),
                 [ui.window_content_region_width(), 30.0],
             ) {
-                gridview.enqueue(Command::GarbageCollect)
+                gridview.enqueue(Cmd::ClearCache);
             }
             ui.text("");
             ui.text(format!(
@@ -157,26 +190,25 @@ impl MainWindow {
                 gridview.selected_cell_state(),
             ));
             ui.text("");
+            ui.checkbox(im_str!("Setup"), &mut self.setup.is_visible);
             ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
             #[cfg(debug_assertions)]
             ui.checkbox(im_str!("Debug values"), &mut self.debug.is_visible);
         });
 
-        self.simulation.build(params);
         #[cfg(debug_assertions)]
         self.debug.build(params);
+        self.setup.build(params);
+        self.simulation.build(params);
     }
 }
 
 fn fps_color(fps: usize) -> [f32; 4] {
     if fps >= 58 {
-        // Green
-        [0.0, 1.0, 0.0, 1.0]
+        GREEN
     } else if fps >= 29 {
-        // Yellow
-        [1.0, 1.0, 0.0, 1.0]
+        YELLOW
     } else {
-        // Red
-        [1.0, 0.0, 0.0, 1.0]
+        RED
     }
 }

@@ -51,13 +51,13 @@ impl VboCache {
     }
 
     pub fn gridlines_quad(&mut self, rect: FRect2D) -> &mut VertexBuffer<PosVertex2D> {
-        let [x0, y0] = rect.min().to_f32_array();
-        let [x1, y1] = rect.max().to_f32_array();
+        let [x1, y1] = rect.min().to_f32_array();
+        let [x2, y2] = rect.max().to_f32_array();
         self.gridlines_quad.write(&[
-            PosVertex2D { pos: [x0, y0] },
-            PosVertex2D { pos: [x1, y0] },
-            PosVertex2D { pos: [x0, y1] },
             PosVertex2D { pos: [x1, y1] },
+            PosVertex2D { pos: [x2, y1] },
+            PosVertex2D { pos: [x1, y2] },
+            PosVertex2D { pos: [x2, y2] },
         ]);
         &mut self.gridlines_quad
     }

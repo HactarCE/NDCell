@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
+use palette::{Mix, Srgb, Srgba};
 use std::cell::RefMut;
 
 use ndcell_core::prelude::*;
@@ -13,11 +14,12 @@ use super::vertices::MouseTargetVertex;
 use super::CellDrawParams;
 use crate::ext::*;
 use crate::gridview::*;
+use crate::Face;
 
 pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
     pub(super) cache: RefMut<'a, super::RenderCache>,
     pub(super) params: RenderParams<'a>,
-    pub(super) dim: R,
+    pub(super) dim: Option<R>,
 
     /// Viewpoint to render the grid from.
     pub(super) viewpoint: &'a R::Viewpoint,
@@ -34,6 +36,9 @@ pub struct GenericGridViewRender<'a, R: GridViewRenderDimension<'a>> {
     mouse_targets: Vec<MouseTargetData>,
     /// Vertex data for mouse targets.
     mouse_target_tris: Vec<MouseTargetVertex>,
+
+    /// Overlay rectangles to draw batched for performance and transparency.
+    pub(super) overlay_quads: Vec<R::OverlayQuad>,
 }
 impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
     /// Creates a `GridViewRender` for a gridview.
@@ -41,9 +46,11 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
         let mut cache = super::CACHE.borrow_mut();
 
         // Initialize color and depth buffers.
-        params
-            .target
-            .clear_color_srgb_and_depth(R::DEFAULT_COLOR, R::DEFAULT_DEPTH);
+        let color = R::DEFAULT_COLOR;
+        params.target.clear_color_srgb_and_depth(
+            (color.red, color.green, color.blue, 1.0),
+            R::DEFAULT_DEPTH,
+        );
 
         // Initialize mouse picker.
         cache.picker.init(params.target.get_dimensions());
@@ -59,10 +66,10 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             .global_to_local_int_rect(&global_visible_rect)
             .expect("Unreasonable visible rectangle");
 
-        R::init(Self {
+        let mut ret = Self {
             cache,
             params,
-            dim: R::default(),
+            dim: None,
 
             viewpoint,
             xform,
@@ -71,11 +78,16 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
 
             mouse_targets: vec![],
             mouse_target_tris: vec![],
-        })
+
+            overlay_quads: vec![],
+        };
+        ret.dim = Some(R::init(&ret));
+        ret
     }
 
     /// Returns a `RenderResult` from this render.
     pub fn finish(mut self) -> Result<RenderResult> {
+        R::draw_overlay_quads(&mut self).context("Drawing overlay")?;
         Ok(RenderResult {
             mouse_target: self.render_mouse_targets()?,
         })
@@ -103,7 +115,8 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
                     &uniform! { matrix: self.xform.gl_matrix() },
                     &glium::DrawParameters {
                         depth: glium::Depth {
-                            test: glium::DepthTest::Overwrite,
+                            test: glium::DepthTest::IfLessOrEqual,
+                            write: true,
                             ..Default::default()
                         },
                         viewport: Some(picker_viewport),
@@ -126,40 +139,26 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             .and_then(|i| self.mouse_targets.get(i.checked_sub(1)?))
             .cloned())
     }
-    pub(super) fn add_mouse_target_quad(
-        &mut self,
-        modifiers: ModifiersState,
-        cells: FRect2D,
-        data: MouseTargetData,
-    ) {
+    pub(super) fn add_mouse_target(&mut self, data: MouseTargetData) -> u32 {
         self.mouse_targets.push(data);
-        let target_id = self.mouse_targets.len() as u32; // IDs start at 1
-        let NdVec([x1, y1]) = cells.min();
-        let NdVec([x2, y2]) = cells.max();
-        let corners = [
-            NdVec([x1, y1]),
-            NdVec([x2, y1]),
-            NdVec([x1, y2]),
-            NdVec([x2, y2]),
-        ];
-        self.add_mouse_target_tri(modifiers, [corners[0], corners[1], corners[2]], target_id);
-        self.add_mouse_target_tri(modifiers, [corners[3], corners[2], corners[1]], target_id);
+        self.mouse_targets.len() as u32 // IDs start at 1
     }
-    fn add_mouse_target_tri(
+    pub(super) fn add_mouse_target_tri(
         &mut self,
-        modifiers: ModifiersState,
-        points: [FVec2D; 3],
+        modifiers: Option<ModifiersState>,
+        points: [FVec3D; 3],
         target_id: u32,
     ) {
-        if self.params.modifiers == modifiers {
-            let z = 0.0;
-            for &point in &points {
-                let [x, y] = point.to_f32_array();
-                self.mouse_target_tris.push(MouseTargetVertex {
-                    pos: [x, y, z],
-                    target_id,
-                })
+        if let Some(mods) = modifiers {
+            if self.params.modifiers != mods {
+                return;
             }
+        }
+
+        for &point in &points {
+            let pos = point.to_f32_array();
+            self.mouse_target_tris
+                .push(MouseTargetVertex { pos, target_id })
         }
     }
 
@@ -230,59 +229,192 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             .unwrap_or(0)
     }
 
-    /// Returns the color to represent an ND-tree node.
-    pub(super) fn ndtree_node_color(node: NodeRef<'_, R::D>) -> [u8; 4] {
-        if let Some(cell_state) = node.single_state() {
-            match cell_state {
-                0_u8 => crate::colors::DEAD,
-                1_u8 => crate::colors::LIVE,
-                i => {
-                    let [r, g, b] = colorous::TURBO
-                        .eval_rational(257 - i as usize, 256)
-                        .as_array();
-                    [r, g, b, 255]
-                }
-            }
-        } else {
-            let ratio = if node.is_empty() {
-                0.0
-            } else {
-                // Multiply then divide by 255 to keep some precision.
-                let population_ratio = (node.population() * 255_usize / node.big_num_cells())
-                    .to_f64()
-                    .unwrap()
-                    / 255.0;
-                // Bias so that 50% is the minimum brightness if there are any
-                // live cells.
-                (population_ratio / 2.0) + 0.5
-            };
+    /// Returns the endpoint pairs for a single crosshair.
+    pub(super) fn make_crosshair_endpoints(
+        &mut self,
+        parallel_axis: Axis,
+        a: R64,
+        b: R64,
+        position: FVec<R::D>,
+        color: Srgb,
+    ) -> Vec<[LineEndpoint<R::D>; 2]>
+    where
+        FVec<R::D>: Copy,
+    {
+        let bright_color = color;
+        let dull_color = Srgb::from_linear(Mix::mix(
+            &R::DEFAULT_COLOR.into_linear(),
+            &color.into_linear(),
+            crate::colors::CROSSHAIR_OPACITY,
+        ));
 
-            // Set alpha to live:dead ratio.
-            let mut color = crate::colors::LIVE;
-            color[3] = (color[3] as f64 * ratio) as u8;
-            color
+        let gradient_len = std::cmp::max(
+            r64(CROSSHAIR_GRADIENT_MIN_PIXEL_LEN) * self.xform.render_cell_scale.cells_per_unit(),
+            r64(CROSSHAIR_GRADIENT_MIN_CELL_LEN),
+        );
+
+        let (pos1, pos2, pos3, pos4, pos5, pos6);
+        {
+            let visible_rect = self.local_visible_rect.to_frect();
+            let pos_along_line = |coord| {
+                let mut ret = position;
+                ret[parallel_axis] = coord;
+                ret
+            };
+            pos1 = pos_along_line(visible_rect.min()[parallel_axis]);
+            pos2 = pos_along_line(a - gradient_len);
+            pos3 = pos_along_line(a);
+            pos4 = pos_along_line(b);
+            pos5 = pos_along_line(b + gradient_len);
+            pos6 = pos_along_line(visible_rect.max()[parallel_axis]);
+        }
+
+        vec![
+            [
+                LineEndpoint::include(pos1, dull_color),
+                LineEndpoint::include(pos2, dull_color),
+            ],
+            [
+                LineEndpoint::exclude(pos2, dull_color),
+                LineEndpoint::exclude(pos3, bright_color),
+            ],
+            [
+                LineEndpoint::include(pos3, bright_color),
+                LineEndpoint::include(pos4, bright_color),
+            ],
+            [
+                LineEndpoint::exclude(pos4, bright_color),
+                LineEndpoint::exclude(pos5, dull_color),
+            ],
+            [
+                LineEndpoint::include(pos5, dull_color),
+                LineEndpoint::include(pos6, dull_color),
+            ],
+        ]
+    }
+    /// Returns an `FRect` for the line, swapping the endpoints if necessary so
+    /// that `start[line_axis] < end[line_axis]`.
+    pub(super) fn make_line_ndrect(
+        &mut self,
+        start: &mut LineEndpoint<R::D>,
+        end: &mut LineEndpoint<R::D>,
+        width: R64,
+    ) -> (FRect<R::D>, Axis)
+    where
+        FVec<R::D>: Copy,
+    {
+        let min_width = self.xform.render_cell_scale.cells_per_unit() * R::LINE_MIN_PIXEL_WIDTH;
+        let width = if self.xform.render_cell_layer == Layer(0) {
+            std::cmp::max(width, min_width)
+        } else {
+            min_width
+        };
+
+        let rect = FRect::span(start.pos, end.pos);
+        let axis = rect.size().max_axis();
+        if start.pos[axis] > end.pos[axis] {
+            std::mem::swap(start, end);
+        }
+
+        let mut min_offset = NdVec::repeat(-width / 2.0);
+        let mut max_offset = NdVec::repeat(width / 2.0);
+        if !start.include_endpoint {
+            min_offset[axis] *= -1.0;
+        }
+        if !end.include_endpoint {
+            max_offset[axis] *= -1.0;
+        }
+        (rect.offset_min_max(min_offset, max_offset), axis)
+    }
+}
+
+pub trait GridViewRenderDimension<'a>: Sized {
+    type D: Dim;
+    type Viewpoint: Viewpoint<Self::D>;
+    type OverlayQuad: Copy;
+
+    const DEFAULT_COLOR: Srgb;
+    const DEFAULT_DEPTH: f32;
+    const LINE_MIN_PIXEL_WIDTH: f64;
+
+    fn init(gvr: &GenericGridViewRender<'a, Self>) -> Self;
+
+    fn draw_overlay_quads(this: &mut GenericGridViewRender<'a, Self>) -> Result<()>;
+}
+
+pub(super) type LineEndpoint2D = LineEndpoint<Dim2D>;
+pub(super) type LineEndpoint3D = LineEndpoint<Dim3D>;
+
+#[derive(Debug, Clone)]
+pub(super) struct LineEndpoint<D: Dim> {
+    pub pos: FVec<D>,
+    pub color: Srgba,
+    pub include_endpoint: bool,
+}
+impl<D: Dim> Copy for LineEndpoint<D> where FVec<D>: Copy {}
+impl<D: Dim> LineEndpoint<D> {
+    pub fn include(pos: FVec<D>, color: impl Into<Srgba>) -> Self {
+        Self {
+            pos,
+            color: color.into(),
+            include_endpoint: true,
+        }
+    }
+    pub fn exclude(pos: FVec<D>, color: impl Into<Srgba>) -> Self {
+        Self {
+            pos,
+            color: color.into(),
+            include_endpoint: false,
         }
     }
 }
 
-pub trait GridViewRenderDimension<'a>: Default {
-    type D: Dim;
-    type Viewpoint: Viewpoint<Self::D>;
-
-    const DEFAULT_COLOR: (f32, f32, f32, f32);
-    const DEFAULT_DEPTH: f32;
-
-    fn init(this: GenericGridViewRender<'a, Self>) -> GenericGridViewRender<'a, Self> {
-        this
+/// Fill style for an overlay quad.
+#[derive(Debug, Copy, Clone)]
+pub(super) enum OverlayFill {
+    Solid(Srgba),
+    Gradient(Axis, Srgba, Srgba),
+    Gridlines3D,
+}
+impl From<Srgba> for OverlayFill {
+    fn from(color: Srgba) -> Self {
+        Self::Solid(color)
     }
 }
-
-#[derive(Debug, Copy, Clone)]
-pub(super) struct LineParams {
-    /// Line width.
-    pub width: f64,
-    /// Whether to include the squares at the endpoints of this line.
-    pub include_endpoints: bool,
-    /// The axis this line is along.
-    pub axis: Axis,
+impl OverlayFill {
+    pub fn gradient(axis: Axis, color1: Srgba, color2: Srgba) -> Self {
+        if color1 == color2 {
+            Self::Solid(color1)
+        } else {
+            Self::Gradient(axis, color1, color2)
+        }
+    }
+    pub fn vertex_colors(self, face: Face) -> [Srgba; 4] {
+        match self {
+            OverlayFill::Gridlines3D => [Srgba::new(0.0, 0.0, 0.0, 0.0); 4], // ignored in vertex shader
+            OverlayFill::Solid(color) => [color; 4],
+            OverlayFill::Gradient(gradient_axis, c1, c2) => {
+                let [ax1, ax2] = face.plane_axes();
+                if gradient_axis == ax1 {
+                    [c1, c2, c1, c2]
+                } else if gradient_axis == ax2 {
+                    [c1, c1, c2, c2]
+                } else {
+                    match face.sign() {
+                        Sign::Minus => [c1; 4],
+                        Sign::NoSign => unreachable!(),
+                        Sign::Plus => [c2; 4],
+                    }
+                }
+            }
+        }
+    }
+    /// Returns `true` if the quad is definitely 100% opaque.
+    pub fn is_opaque(self) -> bool {
+        match self {
+            Self::Solid(color) => color.alpha >= 1.0,
+            Self::Gradient(_, c1, c2) => c1.alpha >= 1.0 && c2.alpha >= 1.0,
+            Self::Gridlines3D => false,
+        }
+    }
 }

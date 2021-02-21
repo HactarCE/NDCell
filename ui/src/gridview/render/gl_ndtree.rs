@@ -5,13 +5,14 @@ use glium::texture::unsigned_texture2d::UnsignedTexture2d;
 use glium::texture::{ClientFormat, RawImage2d};
 use itertools::Itertools;
 use log::warn;
+use palette::{Mix, Pixel, Srgba};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Once;
 
 use ndcell_core::prelude::*;
 
-use crate::DISPLAY;
+use crate::{CONFIG, DISPLAY};
 
 /// Texture size threshold beyond which to write a warning to the log.
 ///
@@ -36,12 +37,7 @@ pub struct GlNdTreeCache<D: Dim> {
     unused: HashMap<(ArcNode<D>, Layer), GlNdTree>,
 }
 impl<D: Dim> GlNdTreeCache<D> {
-    pub fn gl_ndtree_from_node(
-        &mut self,
-        node: ArcNode<D>,
-        min_layer: Layer,
-        pixelator: impl FnMut(NodeRef<'_, D>) -> [u8; 4],
-    ) -> Result<&GlNdTree> {
+    pub fn gl_ndtree_from_node(&mut self, node: ArcNode<D>, min_layer: Layer) -> Result<&GlNdTree> {
         let key = (node, min_layer);
 
         // There's some unnecessary mutation of the `HashMap` here, but this
@@ -56,7 +52,7 @@ impl<D: Dim> GlNdTreeCache<D> {
         } else {
             // We DO need to regenerate the texture.
             let node_ref = key.0.as_ref_with_guard();
-            GlNdTree::from_node(&node_ref, min_layer, pixelator)?
+            GlNdTree::from_node(&node_ref, min_layer)?
         };
         Ok(self.used.entry(key).or_insert(ret))
     }
@@ -82,11 +78,7 @@ pub struct GlNdTree {
 impl GlNdTree {
     /// Constructs a `GlNdTree` from a node and a function to turn a node into a
     /// solid color.
-    pub fn from_node<'n, N: NodeRefTrait<'n>>(
-        node: N,
-        min_layer: Layer,
-        mut pixelator: impl FnMut(NodeRef<'n, N::D>) -> [u8; 4],
-    ) -> Result<Self> {
+    pub fn from_node<'n, N: NodeRefTrait<'n>>(node: N, min_layer: Layer) -> Result<Self> {
         // Use the parent layer because we want to store four pixels (each
         // representing a node at `min_layer`) inside one index.
         let flat_ndtree = FlatNdTree::from_node(node, min_layer.parent_layer(), |node| node);
@@ -100,8 +92,9 @@ impl GlNdTree {
                     .subdivide()
                     .unwrap()
                     .into_iter()
-                    .map(&mut pixelator)
-                    .map(u32::from_be_bytes) // shader expects big-endian
+                    .map(ndtree_node_color) // `NodeRef` to `Srgba`
+                    .map(|color| color.into_format::<u8, u8>().into_raw()) // `Srgba` to `[u8; 4]`
+                    .map(u32::from_be_bytes) // `[u8; 4]` to `u32` (shader expects big-endian)
                     .collect_vec(),
                 FlatNdTreeNode::NonLeaf(indices, _) => {
                     indices.into_iter().map(|&i| i as u32).collect_vec()
@@ -141,5 +134,28 @@ impl GlNdTree {
             layers: layer_count as i32,
             root_idx: flat_ndtree.root_idx() as u32,
         })
+    }
+}
+
+/// Returns the color to represent an ND-tree node.
+pub fn ndtree_node_color<D: Dim>(node: NodeRef<'_, D>) -> Srgba {
+    if let Some(cell_state) = node.single_state() {
+        CONFIG.lock().gfx.cell_colors[cell_state as usize] // TODO: is locking the mutex a perf issue?
+    } else {
+        // Multiply then divide by 255 to keep some precision.
+        let population_ratio = (node.population() * 255_usize / node.big_num_cells())
+            .to_f32()
+            .unwrap()
+            / 255.0;
+        // Bias so that 50% is the minimum brightness if there are any
+        // live cells.
+        let mix_factor = (population_ratio / 2.0) + 0.5;
+
+        // Mix colors for state #0 and #1 using proportion of live cells.
+        Srgba::from_linear(Mix::mix(
+            &crate::colors::cells::DEAD.into_linear(),
+            &crate::colors::cells::LIVE.into_linear(),
+            mix_factor,
+        ))
     }
 }

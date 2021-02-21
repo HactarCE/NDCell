@@ -7,15 +7,18 @@ mod transform;
 mod viewpoint2d;
 mod viewpoint3d;
 
-use crate::commands::ViewCommand;
-use crate::gridview::{DragHandler, DragOutcome};
-use crate::Scale;
-pub use interpolator::{Interpolate, Interpolator};
+use crate::commands::{Move2D, Move3D};
+use crate::gridview::drag::DragOutcome;
+use crate::{Scale, CONFIG};
+pub use interpolator::Interpolator;
 pub use transform::{
     CellTransform, CellTransform2D, CellTransform3D, NdCellTransform, ProjectionType,
 };
 pub use viewpoint2d::Viewpoint2D;
 pub use viewpoint3d::Viewpoint3D;
+
+/// Drag update function that modifies a viewpoint or interpolator.
+type DragUpdateViewFn<V> = Box<dyn FnMut(&mut V, FVec2D) -> Result<DragOutcome>>;
 
 /// Minimum target width & height, to avoid divide-by-zero errors.
 const MIN_TARGET_SIZE: u32 = 10;
@@ -36,7 +39,11 @@ const PIXELS_PER_2X_SCALE: f64 = 400.0;
 /// 2.
 ///
 /// This one is completely arbitrary.
-const ROT_DEGREES_PER_2X_SCALE: f64 = PIXELS_PER_2X_SCALE;
+const ROT_DEGREES_PER_2X_SCALE: f64 = 100.0;
+
+/// Radius of visible cells in 3D, measured in "scaled units". (See `Scale`
+/// docs.)
+const VIEW_RADIUS_3D: f32 = 5000.0;
 
 /// Common functionality for 2D and 3D viewpoints.
 pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + PartialEq {
@@ -53,9 +60,9 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
     /// Returns the position the camera is looking at/from.
     fn center(&self) -> &FixedVec<D>;
     /// Sets the position the camera is looking at/from.
-    fn set_pos(&mut self, pos: FixedVec<D>);
+    fn set_center(&mut self, pos: FixedVec<D>);
     /// Snap to the nearest integer cell position.
-    fn snap_pos(&mut self);
+    fn snap_center(&mut self);
 
     /// Returns the visual scale of cells.
     fn scale(&self) -> Scale;
@@ -88,7 +95,7 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
 
         // Apply that offset so that the point goes back to the same scaled
         // location as before.
-        self.set_pos(self.center() + new_scale.units_to_cells(delta_pixel_offset));
+        self.set_center(self.center() + new_scale.units_to_cells(delta_pixel_offset));
     }
     /// Scales by 2^`log2_factor`, keeping one invariant point at the same
     /// location on the screen.
@@ -122,11 +129,6 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
     fn snap_scale(&mut self, invariant_pos: Option<FixedVec<D>>) {
         self.scale_by_factor(self.scale().round() / self.scale(), invariant_pos);
         self.set_scale(self.scale().round()); // Fix any potential rounding error.
-    }
-    /// Returns `true` if the scale is too small to draw individual cells, or
-    /// `false` otherwise.
-    fn too_small_to_draw(&self) -> bool {
-        self.scale() < Scale::from_factor(r64(1.0))
     }
 
     /// Returns the abstract "distance" between two viewpoints.
@@ -188,8 +190,27 @@ pub trait Viewpoint<D: Dim>: 'static + std::fmt::Debug + Default + Clone + Parti
     /// rounded outward to the nearest render cell.
     fn global_visible_rect(&self) -> BigRect<D>;
 
-    /// Executes a movement command.
-    fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>>;
+    /// Returns a drag update function for `DragViewCmd::Orbit3D`.
+    fn drag_orbit_3d(&self, cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>>;
+    /// Returns a drag update function for `DragViewCmd::Pan`.
+    fn drag_pan(&self, cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>>;
+    /// Returns a drag update function for `DragViewCmd::PanHorizontal3D`.
+    fn drag_pan_horizontal_3d(&self, cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>>;
+    /// Returns a drag update function for `DragViewCmd::Scale`.
+    fn drag_scale(&self, cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>> {
+        let initial_scale = self.scale();
+        Some(Box::new(move |this, cursor_end| {
+            let delta =
+                (cursor_end - cursor_start)[Axis::Y] / -CONFIG.lock().ctrl.pixels_per_2x_scale_2d;
+            this.set_scale(Scale::from_log2_factor(initial_scale.log2_factor() + delta));
+            Ok(DragOutcome::Continue)
+        }))
+    }
+
+    /// Moves the viewpoint in 2D.
+    fn apply_move_2d(&mut self, movement: Move2D);
+    /// Moves the viewpoint in 3D.
+    fn apply_move_3d(&mut self, movement: Move3D);
 }
 
 /// Returns the "average" scale between the two viewpoints, averaging scale

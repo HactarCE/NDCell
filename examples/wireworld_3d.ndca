@@ -1,0 +1,12 @@
+@states 4
+@ndim 3
+
+@transition {
+  if this is #3 {
+    sum = 0
+    for cell in nbhd { sum += (cell == #1) }
+    if 1 <= sum <= 2 { become #1 }
+  }
+  if this is #1 { become #2 }
+  if this is #2 { become #3 }
+}

@@ -1,9 +1,9 @@
 // Octree traversal algorithm based on An Efficient Parametric Algorithm for
 // Octree Traversal by J. Revelles, C. Ureña, M. Lastra.
 
-#version 140
+#version 150
 
-in vec2 screen_pos; // -1.0 ... +1.0 (same as `gl_Position`)
+in vec2 ndc_xy; // -1.0 ... +1.0 (same as `gl_Position`)
 
 out vec4 color;
 
@@ -15,11 +15,13 @@ uniform usampler2D octree_texture;
 uniform int layer_count;
 uniform uint root_idx;
 
-uniform ivec3 octree_offset;
+uniform ivec3 octree_base;
 uint texture_width = uint(textureSize(octree_texture, 0).x);
 float octree_side_len = (1 << layer_count);
 
 uniform bool perf_view;
+
+uniform float alpha;
 
 // These lines include other files in this GLSL program. See `shaders/mod.rs`.
 //#include util/fog.frag
@@ -91,7 +93,7 @@ void main() {
     // https://stackoverflow.com/a/42634961)
     vec3 start, delta;
     {
-        vec4 near = inv_matrix * vec4(screen_pos, 0.0, 1.0);
+        vec4 near = inv_matrix * vec4(ndc_xy, 0.0, 1.0);
         vec4 far = near + inv_matrix[2];
         near.xyz /= near.w;
         far.xyz /= far.w;
@@ -108,7 +110,7 @@ void main() {
     // positive and also mirror the quadtree along that axis using
     // `invert_mask`, which will flip bits of child indices.
     bvec3 invert_mask = lessThan(delta, vec3(0));
-    start -= octree_offset;
+    start -= octree_base;
     start = mix(start, octree_side_len - start, invert_mask);
     delta = mix(delta, -delta, invert_mask);
 
@@ -213,7 +215,7 @@ void main() {
                     float g = float((child_value >> 16) & 255u) / 255.0;
                     float b = float((child_value >>  8) & 255u) / 255.0;
                     float a = float( child_value        & 255u) / 255.0;
-                    color = vec4(r, g, b, a);
+                    color = vec4(r, g, b, a * alpha);
 
                     // Compute lighting using a normal vector based on the entry
                     // axis for the node.

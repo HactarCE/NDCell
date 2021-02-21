@@ -1,15 +1,13 @@
 //! Viewpoint interpolation.
 
-use anyhow::Result;
-use std::any::Any;
 use std::fmt;
 use std::marker::PhantomData;
 use std::time::Duration;
 
 use ndcell_core::prelude::*;
 
-use super::{DragHandler, DragOutcome, Viewpoint};
-use crate::commands::ViewCommand;
+use super::{DragOutcome, DragUpdateViewFn, Viewpoint};
+use crate::commands::DragViewCmd;
 use crate::config::Interpolation;
 
 /// Distance beneath which to "snap" to the target, for interpolation strategies
@@ -39,31 +37,18 @@ impl<D: Dim, V: Viewpoint<D>> From<V> for Interpolator<D, V> {
     }
 }
 
-/// Stateful interpolation.
-///
-/// This abstracts away dimensionality, so it can be used as a trait object.
-pub trait Interpolate: Any {
+impl<D: Dim, V: Viewpoint<D>> Interpolator<D, V> {
     /// Returns the distance between the current state and the target state.
-    fn distance(&self) -> f64;
-
-    /// Advances the state by one frame using the given interpolation strategy.
-    ///
-    /// Returns `true` if the target has been reached, or `false` otherwise.
-    fn advance(&mut self, frame_duration: Duration, interpolation: Interpolation) -> bool;
-
-    /// Sets the display scaling factor of the underlying viewpoint.
-    fn set_dpi(&mut self, dpi: f32);
-    /// Updates the target dimensions.
-    fn set_target_dimensions(&mut self, target_dimensions: (u32, u32));
-}
-impl<D: Dim, V: Viewpoint<D>> Interpolate for Interpolator<D, V> {
-    fn distance(&self) -> f64 {
+    pub fn distance(&self) -> f64 {
         V::distance(&self.current, &self.target)
             .to_f64()
             .unwrap_or(f64::MAX)
     }
 
-    fn advance(&mut self, frame_duration: Duration, interpolation: Interpolation) -> bool {
+    /// Advances the state by one frame using the given interpolation strategy.
+    ///
+    /// Returns `true` if the target has been reached, or `false` otherwise.
+    pub fn advance(&mut self, frame_duration: Duration, interpolation: Interpolation) -> bool {
         let seconds_elapsed = frame_duration.as_secs_f64();
 
         if self.current == self.target {
@@ -90,30 +75,40 @@ impl<D: Dim, V: Viewpoint<D>> Interpolate for Interpolator<D, V> {
         }
     }
 
-    fn set_dpi(&mut self, dpi: f32) {
+    /// Sets the display scaling factor of the underlying viewpoint.
+    pub fn set_dpi(&mut self, dpi: f32) {
         self.current.set_dpi(dpi);
         self.target.set_dpi(dpi);
     }
-    fn set_target_dimensions(&mut self, target_dimensions: (u32, u32)) {
+    /// Updates the target dimensions.
+    pub fn set_target_dimensions(&mut self, target_dimensions: (u32, u32)) {
         self.target.set_target_dimensions(target_dimensions);
         self.current.set_target_dimensions(target_dimensions);
     }
-}
 
-impl<D: Dim, V: Viewpoint<D>> Interpolator<D, V> {
-    /// Executes a movement command, interpolating if necessary.
-    pub fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
-        Ok(self
-            .target
-            .do_view_command(command)?
-            // Turn the DragHandler<V> into a DragHandler<Interpolator<D, V>>.
-            .map(|mut viewpoint_drag_handler| -> DragHandler<Self> {
-                Box::new(move |this, cursor_pos| {
-                    // Skip interpolation for dragging.
-                    viewpoint_drag_handler(&mut this.target, cursor_pos)?;
-                    viewpoint_drag_handler(&mut this.current, cursor_pos)?;
-                    Ok(DragOutcome::Continue)
-                })
-            }))
+    /// Returns the drag update function for a drag view command.
+    pub fn make_drag_update_fn(
+        &self,
+        command: DragViewCmd,
+        cursor_start: FVec2D,
+    ) -> Option<DragUpdateViewFn<Self>> {
+        match command {
+            DragViewCmd::Orbit3D => self.target.drag_orbit_3d(cursor_start),
+            DragViewCmd::Pan => self.target.drag_pan(cursor_start),
+            DragViewCmd::PanHorizontal3D => self.target.drag_pan_horizontal_3d(cursor_start),
+            DragViewCmd::Scale => self.target.drag_scale(cursor_start),
+        }
+        .map(Self::wrap_drag_update_fn)
+    }
+
+    /// Wraps a drag update function to operate on an `Interpolator` instead of
+    /// a `Viewpoint` directly.
+    fn wrap_drag_update_fn(mut h: DragUpdateViewFn<V>) -> DragUpdateViewFn<Self> {
+        Box::new(move |this, cursor_pos| {
+            // Skip interpolation for dragging.
+            h(&mut this.target, cursor_pos)?;
+            h(&mut this.current, cursor_pos)?;
+            Ok(DragOutcome::Continue)
+        })
     }
 }

@@ -1,6 +1,6 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use glium::Surface;
-use log::{debug, trace, warn};
+use log::{debug, error, info, trace, warn};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::convert::TryInto;
@@ -10,14 +10,18 @@ use std::time::{Duration, Instant};
 
 use ndcell_core::prelude::*;
 
+use super::algorithms::bresenham;
+use super::drag::{Drag, DragCancelFn, DragOutcome, DragUpdateFn};
 use super::history::{History, HistoryBase, HistoryManager};
 use super::render::{RenderParams, RenderResult};
+use super::screenpos::{OperationPos, OperationPosTrait, ScreenPosTrait};
 use super::selection::Selection;
-use super::viewpoint::{Interpolate, Interpolator, Viewpoint};
+use super::viewpoint::{Interpolator, Viewpoint};
 use super::worker::*;
-use super::{DragHandler, DragOutcome, DragType, WorkType};
+use super::WorkType;
 use crate::commands::*;
-use crate::CONFIG;
+use crate::mouse::MouseState;
+use crate::{Face, Scale, CONFIG};
 
 /// Number of previous frame times to track. If this is too low, viewpoint
 /// interpolation may not work.
@@ -26,16 +30,29 @@ const MAX_LAST_FRAME_TIMES: usize = 2;
 /// steps per second.
 const MAX_LAST_SIM_TIMES: usize = 4;
 
+macro_rules! ignore_command {
+    ($c:expr) => {{
+        warn!("Ignoring {:?} in GridView{}D", $c, D::NDIM);
+        return;
+    }};
+    ($c:expr, if $cond:expr) => {{
+        if $cond {
+            ignore_command!($c);
+        }
+    }};
+}
+
 /// Dimension-generic interactive cellular automaton interface.
-pub struct GenericGridView<G: GridViewDimension> {
-    pub automaton: NdAutomaton<G::D>,
-    pub selection: Option<Selection<G::D>>,
-    pub viewpoint_interpolator: Interpolator<G::D, G::Viewpoint>,
-    history: HistoryManager<HistoryEntry<G>>,
-    dimensionality: G,
+pub struct GenericGridView<D: GridViewDimension> {
+    pub automaton: NdAutomaton<D>,
+    pub selection: Option<Selection<D>>,
+    pub viewpoint_interpolator: Interpolator<D, D::Viewpoint>,
+    history: HistoryManager<HistoryEntry<D>>,
+    /// Dimension-specific data.
+    pub(super) dim_data: D::Data,
 
     /// Queue of pending commands to be executed on the next frame.
-    command_queue: Mutex<VecDeque<Command>>,
+    command_queue: Mutex<VecDeque<CmdMsg>>,
     /// Thread to offload long-running computations onto.
     worker_thread: WorkerThread,
     /// What kind of work the worker thread is doing right now.
@@ -44,10 +61,8 @@ pub struct GenericGridView<G: GridViewDimension> {
     /// Communication channel with the garbage collection thread.
     gc_channel: Option<mpsc::Receiver<()>>,
 
-    /// Mouse drag handler.
-    drag_handler: Option<DragHandler<Self>>,
-    /// Type of mouse drag being handled.
-    drag_type: Option<DragType>,
+    /// Mouse drag in progress.
+    drag: Option<Drag<D>>,
 
     /// Time that the last several frames completed.
     last_frame_times: VecDeque<Instant>,
@@ -59,22 +74,22 @@ pub struct GenericGridView<G: GridViewDimension> {
     /// Selected cell state.
     pub selected_cell_state: u8,
 }
-impl<G: GridViewDimension> From<NdAutomaton<G::D>> for GenericGridView<G> {
-    fn from(automaton: NdAutomaton<G::D>) -> Self {
+impl<D: GridViewDimension> From<NdAutomaton<D>> for GenericGridView<D> {
+    fn from(automaton: NdAutomaton<D>) -> Self {
         Self {
             automaton,
             ..Default::default()
         }
     }
 }
-impl<G: GridViewDimension> Default for GenericGridView<G> {
+impl<D: GridViewDimension> Default for GenericGridView<D> {
     fn default() -> Self {
         Self {
             automaton: Default::default(),
             selection: Default::default(),
             viewpoint_interpolator: Default::default(),
             history: Default::default(),
-            dimensionality: Default::default(),
+            dim_data: Default::default(),
 
             command_queue: Default::default(),
             worker_thread: Default::default(),
@@ -82,8 +97,7 @@ impl<G: GridViewDimension> Default for GenericGridView<G> {
 
             gc_channel: Default::default(),
 
-            drag_handler: Default::default(),
-            drag_type: Default::default(),
+            drag: Default::default(),
 
             last_frame_times: Default::default(),
             last_sim_times: Default::default(),
@@ -94,7 +108,7 @@ impl<G: GridViewDimension> Default for GenericGridView<G> {
         }
     }
 }
-impl<G: GridViewDimension> AsSimulate for GenericGridView<G> {
+impl<D: GridViewDimension> AsSimulate for GenericGridView<D> {
     fn as_sim(&self) -> &dyn Simulate {
         &self.automaton
     }
@@ -102,8 +116,8 @@ impl<G: GridViewDimension> AsSimulate for GenericGridView<G> {
         &mut self.automaton
     }
 }
-impl<G: GridViewDimension> HistoryBase for GenericGridView<G> {
-    type Entry = HistoryEntry<G>;
+impl<D: GridViewDimension> HistoryBase for GenericGridView<D> {
+    type Entry = HistoryEntry<D>;
 
     fn history_entry(&self) -> Self::Entry {
         HistoryEntry {
@@ -118,9 +132,9 @@ impl<G: GridViewDimension> HistoryBase for GenericGridView<G> {
             automaton: std::mem::replace(&mut self.automaton, entry.automaton),
             selection: Selection::restore_history_entry(&mut self.selection, entry.selection),
             viewpoint: if CONFIG.lock().hist.record_view {
-                std::mem::replace(&mut self.viewpoint_interpolator.target, entry.viewpoint)
+                std::mem::replace(self.target_viewpoint(), entry.viewpoint)
             } else {
-                self.viewpoint_interpolator.target.clone()
+                self.target_viewpoint().clone()
             },
         }
     }
@@ -132,11 +146,11 @@ impl<G: GridViewDimension> HistoryBase for GenericGridView<G> {
         &mut self.history
     }
 }
-impl<G: GridViewDimension> GenericGridView<G> {
+impl<D: GridViewDimension> GenericGridView<D> {
     /// Enqueues a command to be executed on the next frame.
     ///
     /// This should be preferred to executing commands immediately.
-    pub fn enqueue(&self, command: impl Into<Command>) {
+    pub fn enqueue(&self, command: impl Into<CmdMsg>) {
         self.command_queue.lock().push_back(command.into());
     }
 
@@ -162,7 +176,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
                     self.set_new_values(work_type, new_values?)?;
                     self.work_type = None;
                 }
-                Err(WorkerIdle) => return Err(anyhow!("Worker is idle but work type is not None")),
+                Err(WorkerIdle) => bail!("Worker is idle but work type is not None"),
             }
         }
 
@@ -174,8 +188,8 @@ impl<G: GridViewDimension> GenericGridView<G> {
 
         // Execute commands.
         let old_command_queue = std::mem::replace(self.command_queue.get_mut(), VecDeque::new());
-        for command in old_command_queue {
-            self.do_command(command)?;
+        for cmd_msg in old_command_queue {
+            self.do_command(cmd_msg)?;
         }
 
         // Trigger breakpoint.
@@ -200,146 +214,514 @@ impl<G: GridViewDimension> GenericGridView<G> {
 
         Ok(())
     }
-    /// Executes a `Command`.
-    pub(super) fn do_command(&mut self, command: impl Into<Command>) -> Result<()> {
-        match command.into() {
-            Command::Sim(c) => self.do_sim_command(c),
-            Command::History(c) => self.do_history_command(c),
-            Command::View(c) => self.do_view_command(c),
-            Command::Draw(c) => self.do_draw_command(c),
-            Command::Select(c) => self.do_select_command(c),
-            Command::GarbageCollect => Ok(self.schedule_gc()),
+    /// Executes a command.
+    pub(super) fn do_command(
+        &mut self,
+        CmdMsg {
+            command,
+            cursor_pos,
+        }: CmdMsg,
+    ) -> Result<()> {
+        const MISSING_CURSOR_POS_MSG: &str = "Missing cursor position for command that requires it";
 
-            Command::ContinueDrag(cursor_pos) => self.continue_drag(cursor_pos),
-            Command::StopDrag => Ok(self.stop_drag()),
+        let screen_pos = cursor_pos
+            .clone()
+            .context(MISSING_CURSOR_POS_MSG)
+            .map(|p| self.screen_pos(p));
+        let cursor_pos = cursor_pos.context(MISSING_CURSOR_POS_MSG);
 
-            Command::Cancel => {
-                if self.reset_worker_thread() {
-                    Ok(())
-                } else if self.is_drawing() {
-                    self.do_command(DrawCommand::Cancel)
-                } else {
-                    self.do_command(SelectCommand::Cancel)
-                }
+        match command {
+            Cmd::BeginDrag(cmd) => Ok(self.begin_drag(cmd, cursor_pos?)),
+            Cmd::ContinueDrag => self.continue_drag(cursor_pos?),
+            Cmd::EndDrag => Ok(self.end_drag()),
+            Cmd::CancelDrag => Ok(self.cancel_drag()),
+
+            Cmd::Cancel => Ok(self.cancel()),
+
+            Cmd::Undo => {
+                self.end_drag();
+                self.reset_worker_thread();
+                self.undo();
+                Ok(())
+            }
+            Cmd::Redo => {
+                self.end_drag();
+                self.reset_worker_thread();
+                self.redo();
+                Ok(())
+            }
+            Cmd::Reset => {
+                self.end_drag();
+                self.reset_worker_thread();
+                self.reset();
+                Ok(())
+            }
+
+            Cmd::Move2D(movement) => Ok(self.target_viewpoint().apply_move_2d(movement)),
+            Cmd::Move3D(movement) => Ok(self.target_viewpoint().apply_move_3d(movement)),
+            Cmd::Scale(log2_factor) => Ok(self
+                .viewpoint_interpolator
+                .target
+                .scale_by_log2_factor(r64(log2_factor), None)),
+            Cmd::ScaleToCursor(log2_factor) => Ok(self
+                .target_viewpoint()
+                .scale_by_log2_factor(r64(log2_factor), screen_pos?.scale_invariant_pos())),
+
+            Cmd::SnapPos => Ok(self.target_viewpoint().snap_center()),
+            Cmd::SnapScale => Ok(self.target_viewpoint().snap_scale(None)),
+            Cmd::SnapScaleToCursor => Ok(self
+                .target_viewpoint()
+                .snap_scale(screen_pos?.scale_invariant_pos())),
+
+            Cmd::ResetView => Ok(self.go_to_origin()),
+            Cmd::FitView => Ok(self.fit_view()),
+            Cmd::FocusCursor => Ok(D::focus(self, &screen_pos?)),
+
+            Cmd::SetDrawState(state) => Ok(self.selected_cell_state = state),
+            Cmd::NextDrawState { wrap } => Ok(self.select_next_cell_state(1, wrap)),
+            Cmd::PrevDrawState { wrap } => Ok(self.select_next_cell_state(-1, wrap)),
+            Cmd::ConfirmDraw => Ok(self.confirm_draw()),
+            Cmd::CancelDraw => Ok(self.cancel_draw()),
+
+            Cmd::SelectAll => Ok(self.select_all()),
+            Cmd::Deselect => {
+                self.deselect();
+                Ok(())
+            }
+            Cmd::CopySelection(format) => self.copy_selection(format),
+            Cmd::PasteSelection => self.paste_selection(),
+            Cmd::DeleteSelection => Ok(self.delete_selection()),
+            Cmd::CancelSelection => Ok(self.cancel_selection()),
+
+            // For all the simulation-related commands, ignore failures due to
+            // existing background tasks, drawing, etc.
+            Cmd::Step(step_size) => self.step(step_size.into()),
+            Cmd::StepStepSize => self.step(CONFIG.lock().sim.step_size.clone()),
+            Cmd::StartRunning => self.start_running().map(|_is_running| ()),
+            Cmd::StopRunning => {
+                self.stop_running();
+                Ok(())
+            }
+            Cmd::ToggleRunning => self.toggle_running().map(|_is_running| ()),
+            Cmd::UpdateStepSize => self.update_step_size(),
+            Cmd::CancelSim => Ok(self.cancel_sim()),
+
+            Cmd::ClearCache => Ok(self.schedule_gc()),
+        }
+    }
+
+    /// Executes a `Cancel` command.
+    fn cancel(&mut self) {
+        if self.is_dragging() {
+            self.cancel_drag();
+        } else if self.reset_worker_thread() {
+            // ok
+        } else if self.is_drawing() {
+            self.cancel_draw()
+        } else {
+            self.cancel_selection()
+        }
+    }
+    /// Executes a `CancelDrag` command.
+    fn cancel_drag(&mut self) {
+        if let Some(drag) = self.drag.take() {
+            if let Some(cancel_fn) = drag.cancel_fn {
+                cancel_fn(self);
             }
         }
     }
-    /// Executes a `SimCommand`.
-    fn do_sim_command(&mut self, command: SimCommand) -> Result<()> {
-        match command {
-            SimCommand::Step(step_size) => {
-                self.try_step(step_size)?;
+    /// Executes a `CancelDraw` command.
+    fn cancel_draw(&mut self) {
+        if self.is_drawing() {
+            self.cancel_drag();
+        }
+    }
+    /// Executes a `CancelSelection` command.
+    fn cancel_selection(&mut self) {
+        if let Some(sel) = &self.selection {
+            if sel.cells.is_some() {
+                self.drop_selected_cells();
+            } else {
+                self.deselect();
             }
-            SimCommand::StepStepSize => {
-                self.try_step(CONFIG.lock().sim.step_size.clone())?;
+        }
+    }
+    /// Executes a `CancelSim` command.
+    fn cancel_sim(&mut self) {
+        match self.work_type {
+            Some(WorkType::SimStep) | Some(WorkType::SimContinuous) => {
+                self.reset_worker_thread();
             }
+            None => (),
+        }
+    }
 
-            SimCommand::StartRunning => {
-                // If this fails (e.g. because the user is drawing), ignore the
-                // error.
-                let _ = self.start_running();
-            }
-            SimCommand::StopRunning => {
-                self.stop_running();
-            }
-            SimCommand::ToggleRunning => {
-                if self.is_running() {
-                    self.stop_running();
-                } else {
-                    // If this fails, ignore the error.
-                    let _ = self.start_running();
-                }
-            }
+    /// Executes a `ConfirmDraw` command.
+    fn confirm_draw(&mut self) {
+        if self.is_drawing() {
+            self.end_drag();
+        }
+    }
 
-            SimCommand::UpdateStepSize => {
-                if self.is_running() {
-                    self.stop_running();
-                    // This should not fail.
-                    self.start_running()?;
-                }
-            }
+    /// Executes a `Reset` command.
+    fn reset(&mut self) {
+        // TODO: Instead of looping, track the oldest known state or do binary
+        // search on history stack.
+        while self.automaton.generation_count().is_positive() && self.can_undo() {
+            self.undo();
+        }
+    }
 
-            SimCommand::Cancel => {
-                if let Some(work_type) = self.work_type {
-                    match work_type {
-                        WorkType::SimStep | WorkType::SimContinuous => {
-                            self.reset_worker_thread();
-                        }
+    /// Executes a `GoToOrigin` command.
+    fn go_to_origin(&mut self) {
+        self.target_viewpoint().set_center(NdVec::origin());
+    }
+    /// Executes a `FitView` command.
+    fn fit_view(&mut self) {
+        if let Some(pattern_bounding_rect) = self.automaton.ndtree.bounding_rect() {
+            // Set position.
+            let center = pattern_bounding_rect.center().to_fixedvec();
+            self.target_viewpoint().set_center(center);
+            // Set scale.
+            let pattern_size = pattern_bounding_rect.size();
+            let target_size = self.viewpoint().target_dimensions();
+            let scale = Scale::from_fit(pattern_size, target_size).floor();
+            self.target_viewpoint().set_scale(scale);
+        }
+    }
+
+    /// Selects the next or previous cell state (depending on the sign of
+    /// `delta`), optionally using wrapping arithmetic.
+    fn select_next_cell_state(&mut self, delta: isize, wrap: bool) {
+        let mut new_cell_state = self.selected_cell_state as isize + delta;
+        let max_state = self.automaton.rule.max_state() as isize;
+        let state_count = max_state + 1;
+        if wrap {
+            new_cell_state = new_cell_state.rem_euclid(state_count);
+        } else {
+            new_cell_state = new_cell_state.clamp(0, max_state);
+        }
+        self.selected_cell_state = new_cell_state as u8;
+        assert!(self.selected_cell_state <= max_state as u8);
+    }
+
+    /// Executes a `CopySelection` command.
+    fn copy_selection(&mut self, format: CaFormat) -> Result<()> {
+        if self.selection.is_some() {
+            let s = self
+                .export(format)
+                .context("Error while serializing pattern")?;
+            crate::clipboard_compat::clipboard_set(s)?;
+        }
+
+        Ok(())
+    }
+    /// Executes a `PasteSelection` command.
+    fn paste_selection(&mut self) -> Result<()> {
+        let old_sel_rect = self.selection_rect();
+
+        self.record();
+        let string_from_clipboard = crate::clipboard_compat::clipboard_get()?;
+        let result = Selection::from_str(&string_from_clipboard, self.automaton.ndtree.pool());
+        match result {
+            Ok(sel) => {
+                self.set_selection(sel);
+                self.ensure_selection_visible();
+
+                // If selection size is the same, preserve position.
+                if let Some((old_rect, new_sel)) = old_sel_rect.zip(self.selection.as_mut()) {
+                    if old_rect.size() == new_sel.rect.size() {
+                        *new_sel = new_sel.move_by(old_rect.min() - new_sel.rect.min());
                     }
                 }
             }
+            Err(errors) => info!("Failed to load pattern: {:?}", errors),
         }
+
         Ok(())
     }
-    /// Executes a `HistoryCommand`.
-    fn do_history_command(&mut self, command: HistoryCommand) -> Result<()> {
-        if self.is_drawing() {
-            trace!("Ignoring {:?} command while drawing", command);
-            return Ok(());
+    /// Executes a `DeleteSelection` command.
+    fn delete_selection(&mut self) {
+        if self.selection.is_some() {
+            self.record();
+            self.selection.as_mut().unwrap().cells = None;
+            self.grab_selected_cells();
+            self.selection.as_mut().unwrap().cells = None;
         }
-        match command {
-            HistoryCommand::Undo => {
-                self.reset_worker_thread();
-                self.undo();
-            }
-            HistoryCommand::Redo => {
-                if self.can_redo() {
-                    self.reset_worker_thread();
-                    self.redo();
-                }
-            }
-            // TODO make this JumpTo instead of UndoTo
-            HistoryCommand::UndoTo(gen) => {
-                self.reset_worker_thread();
-                while self.generation_count() > &gen && self.can_undo() {
-                    self.undo();
-                }
-            }
-        }
-        Ok(())
-    }
-    /// Executes a `View` command.
-    fn do_view_command(&mut self, command: ViewCommand) -> Result<()> {
-        // `View` commands depend on the number of dimensions.
-        G::do_view_command(self, command)
-    }
-    /// Executes a `Draw` command.
-    fn do_draw_command(&mut self, command: DrawCommand) -> Result<()> {
-        // `Draw` commands depend on the number of dimensions.
-        G::do_draw_command(self, command)
-    }
-    /// Executes a `Select` command.
-    fn do_select_command(&mut self, command: SelectCommand) -> Result<()> {
-        // `Select` commands depend on the number of dimensions.
-        G::do_select_command(self, command)
     }
 
-    /// Starts a drag event.
+    /// Executes a `Step` command.
+    fn step(&mut self, step_size: BigInt) -> Result<()> {
+        self.try_step(step_size)?;
+        Ok(())
+    }
+    /// Executes an `UpdateStepSize` command.
+    fn update_step_size(&mut self) -> Result<()> {
+        if self.is_running() {
+            self.stop_running();
+            let restarted = self.start_running()?; // This should not fail.
+            if !restarted {
+                error!("Unable to restart simulation after updating step size");
+            }
+        }
+        Ok(())
+    }
+
+    /// Begins dragging.
     ///
-    /// Do not call this method from within a drag handler.
-    pub(super) fn start_drag(&mut self, drag_type: DragType, drag_handler: DragHandler<Self>) {
-        self.drag_type = Some(drag_type);
-        self.drag_handler = Some(drag_handler);
+    /// Do not call this method from within a drag update function.
+    pub(super) fn begin_drag(&mut self, command: DragCmd, pixel: FVec2D) {
+        if self.drag.is_some() {
+            warn!("Attempted to start new drag while still in the middle of one");
+        } else {
+            let initial_screen_pos = self.screen_pos(pixel);
+
+            let update_fn = match &command {
+                DragCmd::View(cmd) => self.make_drag_view_update_fn(*cmd, pixel),
+
+                DragCmd::DrawFreeform(draw_mode) => {
+                    self.make_drag_draw_update_fn(*draw_mode, initial_screen_pos)
+                }
+
+                DragCmd::SelectNewRect => {
+                    self.deselect();
+                    self.make_drag_select_new_rect_update_fn()
+                }
+                DragCmd::ResizeSelectionToCursor => {
+                    self.make_drag_resize_selection_to_cursor_update_fn(initial_screen_pos)
+                }
+                DragCmd::ResizeSelection2D(direction) => {
+                    ignore_command!(command, if D::NDIM != 2);
+                    self.make_drag_resize_selection_update_fn(
+                        initial_screen_pos,
+                        direction.vector(),
+                    )
+                }
+                DragCmd::ResizeSelection3D(face) => {
+                    ignore_command!(command, if D::NDIM != 3);
+                    self.make_drag_resize_selection_update_fn(
+                        initial_screen_pos,
+                        face.normal_ivec(),
+                    )
+                }
+                DragCmd::MoveSelection(face) => {
+                    self.make_drag_move_selection_update_fn(*face, initial_screen_pos, |this| {
+                        // To move the selection, we must first drop the
+                        // selected cells.
+                        this.drop_selected_cells();
+                    })
+                }
+
+                DragCmd::MoveSelectedCells(face) => {
+                    self.make_drag_move_selection_update_fn(*face, initial_screen_pos, |this| {
+                        // To move the selected cells, we must first grab those
+                        // cells.
+                        this.grab_selected_cells();
+                    })
+                }
+
+                DragCmd::CopySelectedCells(face) => {
+                    self.make_drag_move_selection_update_fn(*face, initial_screen_pos, |this| {
+                        // To copy the selected cells, we must first grab a copy
+                        // of those cells. If the cells are already grabbed,
+                        // this does nothing.
+                        this.grab_copy_of_selected_cells();
+                    })
+                }
+            };
+
+            if update_fn.is_some() {
+                let cancel_fn: Option<DragCancelFn<Self>>;
+
+                if CONFIG
+                    .lock()
+                    .hist
+                    .should_record_history_for_drag_command(&command)
+                {
+                    self.reset_worker_thread();
+                    self.record();
+
+                    cancel_fn = Some(Box::new(|this| {
+                        this.undo();
+                    }));
+                } else {
+                    let old_ndtree = self.automaton.ndtree.clone();
+                    let old_selection = self.selection.clone();
+                    cancel_fn = Some(Box::new(move |this| {
+                        this.automaton.ndtree = old_ndtree;
+                        this.selection = old_selection;
+                    }));
+                }
+
+                // Recreate `initial_screen_pos` because it may have been
+                // consumed in the big `match`.
+                let initial_screen_pos = self.screen_pos(pixel);
+                let waiting_for_drag_threshold = command.always_uses_movement_threshold();
+                self.drag = Some(Drag {
+                    command,
+                    initial_screen_pos,
+                    waiting_for_drag_threshold,
+
+                    update_fn,
+                    cancel_fn,
+
+                    ndtree_base_pos: self.automaton.ndtree.base_pos().clone(),
+                });
+            }
+        }
     }
     /// Executes a `ContinueDrag` command, calling the drag handler.
     ///
     /// Do not call this method from within a drag handler.
     pub(super) fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()> {
-        if let Some(mut drag_handler) = self.drag_handler.take() {
-            match drag_handler(self, cursor_pos)? {
-                DragOutcome::Continue => self.drag_handler = Some(drag_handler),
-                DragOutcome::Cancel => self.stop_drag(),
+        if let Some(mut drag) = self.drag.take() {
+            let screen_pos = self.screen_pos(cursor_pos);
+            let outcome = drag.update(self, &screen_pos)?;
+            self.drag = Some(drag);
+            match outcome {
+                DragOutcome::Continue => (),
+                DragOutcome::Cancel => self.end_drag(),
             }
         }
         Ok(())
     }
-    /// Executes a `StopDrag` command.
+    /// Executes an `EndDrag` command.
     ///
     /// Do not call this method from within a drag handler; instead return
     /// `DragOutcome::Cancel`.
-    pub(super) fn stop_drag(&mut self) {
-        self.drag_type = None;
-        self.drag_handler = None;
+    pub(super) fn end_drag(&mut self) {
+        self.drag = None;
+    }
+
+    fn make_drag_view_update_fn(
+        &self,
+        command: DragViewCmd,
+        cursor_start: FVec2D,
+    ) -> Option<DragUpdateFn<D>> {
+        self.viewpoint_interpolator
+            .make_drag_update_fn(command, cursor_start)
+            .map(|mut viewpoint_update_fn| -> DragUpdateFn<D> {
+                Box::new(move |_drag, this, new_screen_pos| {
+                    viewpoint_update_fn(&mut this.viewpoint_interpolator, new_screen_pos.pixel())
+                })
+            })
+    }
+    fn make_drag_draw_update_fn(
+        &self,
+        draw_mode: DrawMode,
+        initial_pos: D::ScreenPos,
+    ) -> Option<DragUpdateFn<D>> {
+        let initial_cell = initial_pos
+            .op_pos_for_drag_command(&DragCmd::DrawFreeform(draw_mode))?
+            .into_cell();
+        let new_cell_state = draw_mode.cell_state(
+            self.automaton.ndtree.get_cell(&initial_cell),
+            self.selected_cell_state,
+        );
+
+        let mut pos1 = initial_cell;
+        Some(Box::new(move |drag, this, new_screen_pos| {
+            if let Some(pos2) = drag.new_pos(&new_screen_pos).map(|p| p.into_cell()) {
+                for pos in bresenham::line(pos1.clone(), pos2.clone()) {
+                    this.automaton.ndtree.set_cell(&pos, new_cell_state);
+                }
+                pos1 = pos2;
+                Ok(DragOutcome::Continue)
+            } else {
+                Ok(DragOutcome::Cancel)
+            }
+        }))
+    }
+    fn make_drag_select_new_rect_update_fn(&self) -> Option<DragUpdateFn<D>> {
+        Some(Box::new(move |drag, this, new_pos| {
+            if let Some(resize_start) = drag.initial_render_cell_rect() {
+                if let Some(resize_end) = drag.new_render_cell_rect(&new_pos) {
+                    this.set_selection_rect(Some(NdRect::span_rects(&resize_start, &resize_end)));
+                }
+                Ok(DragOutcome::Continue)
+            } else {
+                Ok(DragOutcome::Cancel)
+            }
+        }))
+    }
+    fn make_drag_resize_selection_to_cursor_update_fn(
+        &self,
+        initial_pos: D::ScreenPos,
+    ) -> Option<DragUpdateFn<D>> {
+        let mut initial_selection = None;
+        let resize_start = initial_pos.absolute_selection_resize_start_pos()?;
+        Some(Box::new(move |drag, this, new_pos| {
+            initial_selection = initial_selection.take().or_else(|| this.deselect());
+            if let Some(s) = &initial_selection {
+                if let Some(resize_end) = drag.new_render_cell_rect(&new_pos) {
+                    this.set_selection_rect(Some(D::resize_selection_to_cursor(
+                        &s.rect,
+                        &resize_start,
+                        &resize_end,
+                        &drag,
+                    )));
+                } else {
+                    this.set_selection_rect(Some(s.rect.clone()));
+                }
+                Ok(DragOutcome::Continue)
+            } else {
+                // There is no selection to resize.
+                Ok(DragOutcome::Cancel)
+            }
+        }))
+    }
+    fn make_drag_resize_selection_update_fn<D2: Dim>(
+        &self,
+        initial_pos: D::ScreenPos,
+        resize_vector: IVec<D2>,
+    ) -> Option<DragUpdateFn<D>> {
+        // Attempt to cast `resize_vector` to the correct number of dimensions.
+        let resize_vector: IVec<D> = AnyDimIVec::from(resize_vector).try_into().ok()?;
+
+        let mut initial_selection = None;
+        Some(Box::new(move |_drag, this, new_pos| {
+            initial_selection = initial_selection.take().or_else(|| this.deselect());
+            if let Some(s) = &initial_selection {
+                if let Some(resize_delta) =
+                    new_pos.rect_resize_delta(&s.rect.to_fixedrect(), &initial_pos, &resize_vector)
+                {
+                    this.set_selection_rect(Some(super::selection::resize_selection_relative(
+                        &s.rect,
+                        &resize_delta,
+                        &resize_vector,
+                    )));
+                }
+                Ok(DragOutcome::Continue)
+            } else {
+                // There is no selection to resize.
+                Ok(DragOutcome::Cancel)
+            }
+        }))
+    }
+    fn make_drag_move_selection_update_fn(
+        &self,
+        face: Option<Face>,
+        initial_pos: D::ScreenPos,
+        selection_setup_fn: impl 'static + Fn(&mut Self),
+    ) -> Option<DragUpdateFn<D>> {
+        let mut initial_selection = None;
+        Some(Box::new(move |_drag, this, new_pos| {
+            initial_selection = initial_selection.take().or_else(|| {
+                selection_setup_fn(this);
+                this.selection.take()
+            });
+            if let Some(s) = &initial_selection {
+                if let Some(delta) =
+                    new_pos.rect_move_delta(&s.rect.to_fixedrect(), &initial_pos, face)
+                {
+                    this.selection = Some(s.move_by(delta.round()));
+                }
+                Ok(DragOutcome::Continue)
+            } else {
+                // There is no selection to move.
+                Ok(DragOutcome::Cancel)
+            }
+        }))
     }
 
     /// Submits a request to the worker thread. Returns an error if the worker
@@ -416,12 +798,14 @@ impl<G: GridViewDimension> GenericGridView<G> {
         }
     }
     /// Starts continuous simulation; does nothing if it is already running.
-    /// Returns an error if unsuccessful (e.g. the user is drawing).
-    fn start_running(&mut self) -> Result<()> {
+    /// Returns `true` if the simulation is now running, or false if another
+    /// running operation prevented starting it (e.g. drawing or some other
+    /// background task).
+    fn start_running(&mut self) -> Result<bool> {
         if self.is_running() {
-            return Ok(());
+            return Ok(true);
         } else if self.is_drawing() {
-            return Err(anyhow!("Cannot start simulation while drawing"));
+            return Ok(false);
         }
 
         self.reset_worker_thread();
@@ -446,7 +830,17 @@ impl<G: GridViewDimension> GenericGridView<G> {
             }),
         )?;
         self.record();
-        Ok(())
+        Ok(true)
+    }
+    /// Toggles continuous simulation. Returns `true` if the simulation is now
+    /// running, or `false` if it is not. The operation may not succeed.
+    fn toggle_running(&mut self) -> Result<bool> {
+        if self.is_running() {
+            self.stop_running();
+            Ok(false) // `stop_running()` always succeeds.
+        } else {
+            self.start_running()
+        }
     }
     /// Returns whether the simulation is running (i.e. stepping forward every
     /// frame automatically with no user input).
@@ -508,31 +902,35 @@ impl<G: GridViewDimension> GenericGridView<G> {
 
     /// Sets the selection, or returns an error if the dimensionality of the
     /// selection does not match the dimensionality of the gridview.
-    fn set_selection_nd<D: Dim>(&mut self, new_selection: Option<Selection<D>>) -> Result<()> {
-        if G::D::NDIM == D::NDIM {
-            self.set_selection(unsafe {
-                *std::mem::transmute::<Box<Option<Selection<D>>>, Box<Option<Selection<G::D>>>>(
-                    Box::new(new_selection),
-                )
-            });
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "set_selection_nd() received Selection of wrong dimensionality"
+    fn set_selection_nd<D2: Dim>(&mut self, new_selection: Option<Selection<D2>>) -> Result<()> {
+        ensure!(
+            D::NDIM == D2::NDIM,
+            "set_selection_nd() received Selection of wrong dimensionality",
+        );
+
+        self.set_selection(unsafe {
+            *std::mem::transmute::<Box<Option<Selection<D2>>>, Box<Option<Selection<D>>>>(Box::new(
+                new_selection,
             ))
-        }
+        });
+        Ok(())
     }
     /// Deselects and sets a new selection.
-    pub(super) fn set_selection(&mut self, new_selection: Option<Selection<G::D>>) {
+    pub(super) fn set_selection(&mut self, new_selection: Option<Selection<D>>) {
         self.deselect();
         self.selection = new_selection;
     }
     /// Deselects and sets a new selection rectangle.
-    pub(super) fn set_selection_rect(&mut self, new_selection_rect: Option<BigRect<G::D>>) {
+    pub(super) fn set_selection_rect(&mut self, new_selection_rect: Option<BigRect<D>>) {
         self.set_selection(new_selection_rect.map(Selection::from))
     }
+    /// Selects all cells in the pattern.
+    pub(super) fn select_all(&mut self) {
+        self.deselect(); // Include pasted cells.
+        self.set_selection(self.automaton.ndtree.bounding_rect().map(Selection::from));
+    }
     /// Returns the selection rectangle.
-    pub(super) fn selection_rect(&self) -> Option<BigRect<G::D>> {
+    pub(super) fn selection_rect(&self) -> Option<BigRect<D>> {
         if let Some(s) = &self.selection {
             Some(s.rect.clone())
         } else {
@@ -540,7 +938,7 @@ impl<G: GridViewDimension> GenericGridView<G> {
         }
     }
     /// Deselects all and returns the old selection.
-    pub(super) fn deselect(&mut self) -> Option<Selection<G::D>> {
+    pub(super) fn deselect(&mut self) -> Option<Selection<D>> {
         if let Some(sel) = self.selection.clone() {
             if let Some(cells) = sel.cells {
                 self.record();
@@ -562,6 +960,42 @@ impl<G: GridViewDimension> GenericGridView<G> {
             }
         }
         self.selection.take()
+    }
+    /// Moves the selection to the center of the screen along each axis for
+    /// which it is outside the viewport.
+    fn ensure_selection_visible(&mut self) {
+        if let Some(mut sel) = self.selection.take() {
+            // The number of render cells of padding to ensure.
+            const PADDING: usize = 2;
+
+            let render_cell_layer = self.viewpoint().render_cell_layer();
+
+            // Convert to render cells.
+            let sel_rect = sel.rect.div_outward(&render_cell_layer.big_len());
+            let visible_rect = self
+                .viewpoint()
+                .global_visible_rect()
+                .div_outward(&render_cell_layer.big_len());
+
+            let sel_min = sel_rect.min();
+            let sel_max = sel_rect.max();
+            let sel_center = sel_rect.center();
+            let visible_min = visible_rect.min();
+            let visible_max = visible_rect.max();
+            let view_center = self.viewpoint().center().floor();
+
+            for &ax in Dim2D::axes() {
+                if sel_max[ax] < visible_min[ax].clone() + PADDING
+                    || visible_max[ax] < sel_min[ax].clone() + PADDING
+                {
+                    // Move selection to center along this axis.
+                    sel =
+                        sel.move_by(NdVec::unit(ax) * (view_center[ax].clone() - &sel_center[ax]));
+                }
+            }
+
+            self.set_selection(Some(sel));
+        }
     }
     /// Moves the selected cells from the selection to the main grid. Outputs a
     /// warning in the log if there is no selection.
@@ -598,18 +1032,21 @@ impl<G: GridViewDimension> GenericGridView<G> {
         }
     }
 
-    /// Returns whether the user is currently drawing.
-    pub fn is_drawing(&self) -> bool {
-        self.drag_type == Some(DragType::Drawing)
-    }
-    /// Returns whether the user is currently moving the viewpoint by dragging
-    /// the mouse.
-    pub fn is_dragging_view(&self) -> bool {
-        self.drag_type == Some(DragType::MovingView)
-    }
     /// Returns whether the user is currently dragging the mouse.
     pub fn is_dragging(&self) -> bool {
-        self.drag_type.is_some()
+        self.drag.is_some()
+    }
+    /// Returns the current mouse drag.
+    pub fn get_drag(&self) -> Option<&Drag<D>> {
+        self.drag.as_ref()
+    }
+    /// Returns whether the user is currently drawing.
+    pub fn is_drawing(&self) -> bool {
+        if let Some(drag) = &self.drag {
+            drag.command.is_draw_cmd()
+        } else {
+            false
+        }
     }
 
     /// Returns the type of operation currently happening in the background.
@@ -672,8 +1109,12 @@ impl<G: GridViewDimension> GenericGridView<G> {
     }
 
     /// Returns the current viewpoint.
-    pub fn viewpoint(&self) -> &G::Viewpoint {
+    pub fn viewpoint(&self) -> &D::Viewpoint {
         &self.viewpoint_interpolator.current
+    }
+    /// Returns a mutable reference to the target viewpoint.
+    pub fn target_viewpoint(&mut self) -> &mut D::Viewpoint {
+        &mut self.viewpoint_interpolator.target
     }
     /// Updates viewpoint parameters and renders the gridview, recording and
     /// returning the result.
@@ -686,12 +1127,37 @@ impl<G: GridViewDimension> GenericGridView<G> {
             .set_target_dimensions(params.target.get_dimensions());
 
         // Render the grid to the target, then save and return the result.
-        self.last_render_result = G::render(self, params)?;
+        self.last_render_result = D::render(self, params)?;
         Ok(self.last_render_result())
     }
     /// Returns data generated by the most recent render.
     pub fn last_render_result(&self) -> &RenderResult {
         &self.last_render_result
+    }
+    /// Returns a useful representation of a pixel position on the screen.
+    pub fn screen_pos(&self, pixel: FVec2D) -> D::ScreenPos {
+        D::screen_pos(self, pixel)
+    }
+    /// Returns the cell to highlight for a given mouse display mode.
+    pub(super) fn cell_to_highlight(&self, mouse: &MouseState) -> Option<OperationPos<D>> {
+        let screen_pos = self.screen_pos(mouse.pos?);
+        if let Some(drag) = self.get_drag() {
+            drag.new_pos(&screen_pos)
+        } else {
+            screen_pos.op_pos_for_mouse_display_mode(mouse.display_mode)
+        }
+    }
+    /// Returns the rectangle of the render cell to highlight for a given mouse
+    /// display mode.
+    pub(super) fn render_cell_rect_to_highlight(&self, mouse: &MouseState) -> Option<BigRect<D>> {
+        Some(
+            self.viewpoint()
+                .render_cell_layer()
+                .round_rect_with_base_pos(
+                    BigRect::single_cell(self.cell_to_highlight(mouse)?.into_cell()),
+                    self.automaton.ndtree.base_pos(),
+                ),
+        )
     }
 
     /// Returns the time duration measured between the last two frames, or
@@ -705,24 +1171,35 @@ impl<G: GridViewDimension> GenericGridView<G> {
     }
 }
 
-pub trait GridViewDimension: fmt::Debug + Default {
-    type D: Dim;
-    type Viewpoint: Viewpoint<Self::D>;
+pub trait GridViewDimension: Dim {
+    type Viewpoint: Viewpoint<Self>;
+    type ScreenPos: ScreenPosTrait<D = Self>;
 
-    /// Executes a `View` command.
-    fn do_view_command(this: &mut GenericGridView<Self>, command: ViewCommand) -> Result<()>;
-    /// Executes a `Draw` command.
-    fn do_draw_command(this: &mut GenericGridView<Self>, command: DrawCommand) -> Result<()>;
-    /// Executes a `Select` command.
-    fn do_select_command(this: &mut GenericGridView<Self>, command: SelectCommand) -> Result<()>;
+    /// Extra data stored for a `GridView` with this number of dimensions.
+    type Data: fmt::Debug + Default;
+
+    /// Executes a `FocusCursor` command. This has different behavior in 2D vs.
+    /// 3D.
+    fn focus(this: &mut GenericGridView<Self>, pos: &Self::ScreenPos);
+    /// Resizes a selection rectangle to the cell at the cursor. This has
+    /// different behavior in 2D vs. 3D.
+    fn resize_selection_to_cursor(
+        rect: &BigRect<Self>,
+        start: &FixedVec<Self>,
+        end: &BigRect<Self>,
+        drag: &Drag<Self>,
+    ) -> BigRect<Self>;
 
     /// Renders the gridview.
     fn render(this: &mut GenericGridView<Self>, params: RenderParams<'_>) -> Result<RenderResult>;
+
+    /// Returns a useful representation of a pixel position on the screen.
+    fn screen_pos(this: &GenericGridView<Self>, pixel: FVec2D) -> Self::ScreenPos;
 }
 
 #[derive(Debug, Clone)]
-pub struct HistoryEntry<G: GridViewDimension> {
-    automaton: NdAutomaton<G::D>,
-    selection: Option<Selection<G::D>>,
-    viewpoint: G::Viewpoint,
+pub struct HistoryEntry<D: GridViewDimension> {
+    automaton: NdAutomaton<D>,
+    selection: Option<Selection<D>>,
+    viewpoint: D::Viewpoint,
 }

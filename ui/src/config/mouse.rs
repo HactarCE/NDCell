@@ -1,20 +1,42 @@
-use glium::glutin::event::{ModifiersState, MouseButton};
+use glium::glutin::event::{ModifiersState, MouseButton as GlutinMouseButton};
+use std::convert::{TryFrom, TryInto};
 use std::ops::{Index, IndexMut};
 
-mod click;
-mod drag;
+use crate::commands::{Cmd, DragCmd, DragViewCmd, DrawMode};
 
-pub use click::*;
-pub use drag::*;
+/// Left, right, or middle mouse button.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
+impl Default for MouseButton {
+    fn default() -> Self {
+        Self::Left
+    }
+}
+impl TryFrom<GlutinMouseButton> for MouseButton {
+    type Error = OtherMouseButton;
 
-use crate::commands::{DrawDragCommand, DrawMode, DrawShape, SelectDragCommand, ViewDragCommand};
+    fn try_from(button: GlutinMouseButton) -> Result<Self, Self::Error> {
+        match button {
+            GlutinMouseButton::Left => Ok(Self::Left),
+            GlutinMouseButton::Right => Ok(Self::Right),
+            GlutinMouseButton::Middle => Ok(Self::Middle),
+            GlutinMouseButton::Other(n) => Err(OtherMouseButton(n)),
+        }
+    }
+}
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+struct OtherMouseButton(u16);
 
 #[derive(Debug)]
 pub struct MouseConfig {
-    pub click_bindings_2d: MouseBindings<Option<MouseClickBinding>>,
-    pub click_bindings_3d: MouseBindings<Option<MouseClickBinding>>,
-    pub drag_bindings_2d: MouseBindings<Option<MouseDragBinding>>,
-    pub drag_bindings_3d: MouseBindings<Option<MouseDragBinding>>,
+    pub click_bindings_2d: MouseBindings<Option<Cmd>>,
+    pub click_bindings_3d: MouseBindings<Option<Cmd>>,
+    pub drag_bindings_2d: MouseBindings<Option<DragCmd>>,
+    pub drag_bindings_3d: MouseBindings<Option<DragCmd>>,
     pub drag_threshold: f64,
 }
 impl Default for MouseConfig {
@@ -25,43 +47,29 @@ impl Default for MouseConfig {
         const NONE: ModifiersState = ModifiersState::empty();
 
         use MouseButton::{Left, Middle, Right};
-        use MouseDragBinding::{Draw, Select, View};
-
-        let freeform_2d: DrawDragBinding = DrawDragCommand {
-            mode: DrawMode::Replace,
-            shape: DrawShape::Freeform,
-        }
-        .into();
-        let line_2d: DrawDragBinding = DrawDragCommand {
-            mode: DrawMode::Replace,
-            shape: DrawShape::Line,
-        }
-        .into();
 
         Self {
             click_bindings_2d: vec![].into_iter().collect(),
             click_bindings_3d: vec![].into_iter().collect(),
             drag_bindings_2d: vec![
-                (NONE, Left, Draw(freeform_2d)),
-                (SHIFT, Left, Draw(line_2d)),
-                (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
-                (
-                    CTRL | SHIFT,
-                    Left,
-                    Select(SelectDragCommand::ResizeToCell.into()),
-                ),
-                (NONE, Right, View(ViewDragCommand::Pan.into())),
-                (CTRL, Right, View(ViewDragCommand::Scale.into())),
-                (NONE, Middle, View(ViewDragCommand::Pan.into())),
+                (NONE, Left, DragCmd::DrawFreeform(DrawMode::Replace)),
+                (CTRL, Left, DragCmd::SelectNewRect),
+                (CTRL | SHIFT, Left, DragCmd::ResizeSelectionToCursor),
+                (NONE, Right, DragViewCmd::Pan.into()),
+                (CTRL, Right, DragViewCmd::Scale.into()),
+                (NONE, Middle, DragViewCmd::Pan.into()),
             ]
             .into_iter()
             .collect(),
             drag_bindings_3d: vec![
-                (CTRL, Left, Select(SelectDragCommand::NewRect.into())),
-                (NONE, Right, View(ViewDragCommand::Orbit.into())),
-                (CTRL, Right, View(ViewDragCommand::Scale.into())),
-                (NONE, Middle, View(ViewDragCommand::Pan.into())),
-                (SHIFT, Middle, View(ViewDragCommand::PanHorizontal.into())),
+                (NONE, Left, DragCmd::DrawFreeform(DrawMode::Place)),
+                (SHIFT, Left, DragCmd::DrawFreeform(DrawMode::Erase)),
+                (CTRL, Left, DragCmd::SelectNewRect),
+                (CTRL | SHIFT, Left, DragCmd::ResizeSelectionToCursor),
+                (NONE, Right, DragViewCmd::Orbit3D.into()),
+                (CTRL, Right, DragViewCmd::Scale.into()),
+                (NONE, Middle, DragViewCmd::Pan.into()),
+                (SHIFT, Middle, DragViewCmd::PanHorizontal3D.into()),
             ]
             .into_iter()
             .collect(),
@@ -75,8 +83,13 @@ impl MouseConfig {
         &self,
         ndim: usize,
         mods: ModifiersState,
-        button: MouseButton,
-    ) -> (&Option<MouseClickBinding>, &Option<MouseDragBinding>) {
+        button: GlutinMouseButton,
+    ) -> (&Option<Cmd>, &Option<DragCmd>) {
+        let button = match button.try_into() {
+            Ok(b) => b,
+            Err(_) => return (&None, &None),
+        };
+
         match ndim {
             2 => (
                 &self.click_bindings_2d[(mods, button)],
@@ -119,7 +132,6 @@ impl<T> Index<(ModifiersState, MouseButton)> for MouseBindings<T> {
             MouseButton::Left => &self[mods].0,
             MouseButton::Right => &self[mods].1,
             MouseButton::Middle => &self[mods].2,
-            _ => panic!("Cannot assign binding to non-standard mouse button"),
         }
     }
 }
@@ -129,7 +141,6 @@ impl<T> IndexMut<(ModifiersState, MouseButton)> for MouseBindings<T> {
             MouseButton::Left => &mut self[mods].0,
             MouseButton::Right => &mut self[mods].1,
             MouseButton::Middle => &mut self[mods].2,
-            _ => panic!("Cannot assign binding to non-standard mouse button"),
         }
     }
 }

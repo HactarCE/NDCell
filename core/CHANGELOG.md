@@ -4,13 +4,16 @@ All notable changes to `ndcell_core` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2020-02-21
 
 ### Added
 
+- `Layer` method `round_rect_with_base_pos()`
 - `NdVec` methods `min_component()` and `max_component()`
 - `NdRect` method `span_rects()`
 - Re-export of `num` modules `cast`, `iter`, and `pow` from `crate::num`
+- Implementation of `std::error::Error` for `CaFormatError`
+- Implementation of `std::iter::{Product, Sum}` for `NdVec`
 
 ### Changed
 

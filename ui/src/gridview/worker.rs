@@ -152,7 +152,7 @@ impl WorkerThread {
             let mut state = lock.lock();
             loop {
                 match std::mem::replace(&mut *state, State::Idle) {
-                    s @ State::Idle | s @ State::Done { .. } => {
+                    s @ State::Idle | s @ State::Done(_) => {
                         *state = s;
                         // Wait for the main thread to send more work.
                         condvar.wait(&mut state);
@@ -166,7 +166,7 @@ impl WorkerThread {
                             *state = State::Done(result);
                         }
                     }
-                    State::Working { .. } => {
+                    State::Working(_) => {
                         // This should not happen, because the `Working` state
                         // should only exist while this thread is doing work.
                         error!("Worker thread woken in state {:?}", state);

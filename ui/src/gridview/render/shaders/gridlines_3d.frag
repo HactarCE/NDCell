@@ -1,19 +1,24 @@
-#version 140
+#version 150
 
 in vec3 pos_3d;
 in vec2 grid_pos;
 
 out vec4 color;
 
-uniform vec4 grid_color;
+layout(std140) uniform GridlineParams {
+    vec4 grid_color;
 
-uniform int grid_base; // exponential base
-uniform ivec2 grid_max_exponents;
+    vec3 grid_origin;
 
-uniform float min_line_spacing;
-uniform float max_line_spacing;
+    float grid_width; // measured as a fraction of a render cell
 
-uniform float line_width; // measured as a fraction of a render cell unit
+    ivec3 grid_max_exponents;
+    float grid_coefficient;
+    int grid_base; // exponential base
+
+    float grid_max_spacing;
+    float grid_min_spacing;
+};
 
 // This line includes another file in this GLSL program. See `shaders/mod.rs`.
 //#include util/fog.frag
@@ -62,13 +67,13 @@ void main() {
 
     // The gridline must be at least one pixel thick.
     vec2 delta = fwidth(grid_pos); // d(grid pos)/d(pixel pos)
-    vec2 line_width = max(vec2(line_width), delta);
+    vec2 line_width = max(vec2(grid_width), delta);
 
-    // Convert `min`/`max_line_spacing` from pixels to cells, and then take the
+    // Convert `grid_(min|max)_spacing` from pixels to cells, and then take the
     // `grid_base`th root (which we can do using division in logarithm land).
     float log2_grid_base = log2(grid_base);
-    vec2 min_exponent = log2(min_line_spacing * delta) / log2_grid_base;
-    vec2 max_exponent = log2(max_line_spacing * delta) / log2_grid_base;
+    vec2 min_exponent = log2(grid_min_spacing * delta) / log2_grid_base;
+    vec2 max_exponent = log2(grid_max_spacing * delta) / log2_grid_base;
 
     // Compute the exponent of the smallest possible gridline that would be
     // visible. The exponent must be positive, because we never show gridlines

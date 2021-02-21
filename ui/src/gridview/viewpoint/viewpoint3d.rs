@@ -1,4 +1,3 @@
-use anyhow::Result;
 use cgmath::prelude::*;
 use cgmath::{Basis3, Decomposed, Deg, Matrix4};
 use log::warn;
@@ -7,11 +6,18 @@ use ndcell_core::prelude::*;
 use Axis::{X, Y, Z};
 
 use super::{
-    CellTransform3D, DragHandler, DragOutcome, ProjectionType, Scale, Viewpoint, MIN_TARGET_SIZE,
+    CellTransform3D, DragOutcome, DragUpdateViewFn, ProjectionType, Scale, Viewpoint,
+    MIN_TARGET_SIZE,
 };
-use crate::commands::{ViewCommand, ViewDragCommand};
+use crate::commands::{Cmd, Move2D, Move3D};
 use crate::config::{ForwardAxis3D, UpAxis3D};
-use crate::CONFIG;
+use crate::{Plane, CONFIG};
+
+macro_rules! ignore_command {
+    ($c:expr) => {
+        warn!("Ignoring {:?} in Viewpoint3D", $c);
+    };
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Viewpoint3D {
@@ -52,7 +58,7 @@ impl Viewpoint3D {
     pub const DEFAULT_YAW: Deg<f32> = Deg(20.0);
 
     /// Radius of visible cells, measured in "scaled units". (See `Scale` docs.)
-    pub const VIEW_RADIUS: f32 = 5000.0;
+    pub const VIEW_RADIUS: f32 = super::VIEW_RADIUS_3D;
 
     /// Returns the yaw of the camera.
     pub fn yaw(&self) -> Deg<f32> {
@@ -63,6 +69,10 @@ impl Viewpoint3D {
         // Clamp yaw to -180..+180.
         self.yaw = yaw.normalize_signed();
     }
+    /// Adds yaw to the camera.
+    pub fn add_yaw(&mut self, dyaw: Deg<f32>) {
+        self.set_yaw(self.yaw + dyaw);
+    }
     /// Returns the pitch of the camera.
     pub fn pitch(&self) -> Deg<f32> {
         self.pitch
@@ -70,13 +80,11 @@ impl Viewpoint3D {
     /// Sets the pitch of the camera.
     pub fn set_pitch(&mut self, pitch: Deg<f32>) {
         // Clamp pitch to -90..+90.
-        self.pitch = pitch.normalize_signed();
-        if self.pitch > Deg(90.0) {
-            self.pitch = Deg(90.0);
-        }
-        if self.pitch < Deg(-90.0) {
-            self.pitch = Deg(-90.0);
-        }
+        self.pitch = Deg(pitch.0.clamp(-90.0, 90.0));
+    }
+    /// Adds pitch to the camera.
+    pub fn add_pitch(&mut self, dpitch: Deg<f32>) {
+        self.set_pitch(self.pitch + dpitch);
     }
 
     /// Returns the orientation of the camera.
@@ -93,7 +101,7 @@ impl Viewpoint3D {
     pub fn look_vector(&self) -> FVec3D {
         fvec3d_from_basis3(Z, self.orientation())
     }
-    /// Returns the position of the camera (not the pivot).
+    /// Returns the global position of the camera (not the pivot).
     pub fn camera_pos(&self) -> FixedVec3D {
         let distance =
             self.scale.inv_factor() * FixedPoint::from(r64(Self::DISTANCE_TO_PIVOT as f64));
@@ -155,10 +163,10 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
     fn center(&self) -> &FixedVec<Dim3D> {
         &self.pivot
     }
-    fn set_pos(&mut self, pos: FixedVec<Dim3D>) {
+    fn set_center(&mut self, pos: FixedVec<Dim3D>) {
         self.pivot = pos
     }
-    fn snap_pos(&mut self) {
+    fn snap_center(&mut self) {
         self.pivot = self.pivot.round().to_fixedvec();
     }
 
@@ -238,129 +246,69 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
         render_cell_layer.round_rect(&BigRect3D::centered(pivot, &cell_radius))
     }
 
-    fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
+    fn drag_orbit_3d(&self, cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>> {
         let config = CONFIG.lock();
-
-        match command {
-            ViewCommand::Drag(c, cursor_start) => match c {
-                ViewDragCommand::Orbit => {
-                    let orbit_factor = r64(config.ctrl.mouse_orbit_speed / config.gfx.dpi);
-                    let old_yaw = self.yaw();
-                    let old_pitch = self.pitch();
-                    Ok(Some(Box::new(move |this, cursor_end| {
-                        let delta = (cursor_end - cursor_start) * orbit_factor;
-                        this.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
-                        this.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
-                        Ok(DragOutcome::Continue)
-                    })))
-                }
-
-                ViewDragCommand::Pan => {
-                    let z = Self::DISTANCE_TO_PIVOT;
-                    let start = self.cell_transform().pixel_to_global_pos(cursor_start, z);
-                    Ok(Some(Box::new(move |this, cursor_end| {
-                        let end = this.cell_transform().pixel_to_global_pos(cursor_end, z);
-                        this.pivot += &start - &end;
-                        Ok(DragOutcome::Continue)
-                    })))
-                }
-                ViewDragCommand::PanAligned => {
-                    todo!("pan aligned");
-                }
-                ViewDragCommand::PanAlignedVertical => {
-                    todo!("pan aligned vertical");
-                }
-                ViewDragCommand::PanHorizontal => {
-                    let y = self.pivot[Y].clone();
-                    let start = self
-                        .cell_transform()
-                        .pixel_to_global_pos_in_plane(cursor_start, (Y, &y));
-                    Ok(Some(Box::new(move |this, cursor_end| {
-                        let end = this
-                            .cell_transform()
-                            .pixel_to_global_pos_in_plane(cursor_end, (Y, &y));
-                        if let (Some(start), Some(end)) = (&start, &end) {
-                            this.pivot += start - end;
-                        }
-                        Ok(DragOutcome::Continue)
-                    })))
-                }
-
-                ViewDragCommand::Scale => todo!("Scale using click & drag"),
-            },
-
-            ViewCommand::GoTo2D { .. } => {
-                warn!("Ignoring {:?} in Viewpoint3D", command);
-                Ok(None)
+        let orbit_factor = r64(config.ctrl.mouse_orbit_speed / config.gfx.dpi);
+        let old_yaw = self.yaw();
+        let old_pitch = self.pitch();
+        Some(Box::new(move |this, cursor_end| {
+            let delta = (cursor_end - cursor_start) * orbit_factor;
+            this.set_yaw(old_yaw + Deg(delta[X].raw() as f32));
+            this.set_pitch(old_pitch + Deg(delta[Y].raw() as f32));
+            Ok(DragOutcome::Continue)
+        }))
+    }
+    fn drag_pan(&self, cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>> {
+        let z = Self::DISTANCE_TO_PIVOT;
+        let start = self.cell_transform().pixel_to_global_pos(cursor_start, z);
+        Some(Box::new(move |this, cursor_end| {
+            let end = this.cell_transform().pixel_to_global_pos(cursor_end, z);
+            this.pivot += &start - &end;
+            Ok(DragOutcome::Continue)
+        }))
+    }
+    fn drag_pan_horizontal_3d(&self, cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>> {
+        let plane = Plane {
+            axis: Y,
+            coordinate: self.pivot[Y].clone(),
+        };
+        let start = self
+            .cell_transform()
+            .pixel_to_global_pos_in_plane(cursor_start, &plane);
+        Some(Box::new(move |this, cursor_end| {
+            let end = this
+                .cell_transform()
+                .pixel_to_global_pos_in_plane(cursor_end, &plane);
+            if let (Some(start), Some(end)) = (&start, &end) {
+                this.pivot += start - end;
             }
-            ViewCommand::GoTo3D {
-                mut x,
-                mut y,
-                mut z,
-                yaw,
-                pitch,
-                relative,
-                scaled,
-            } => {
-                if scaled {
-                    x = x.map(|x| self.scale.units_to_cells(x));
-                    y = y.map(|y| self.scale.units_to_cells(y));
-                    z = z.map(|y| self.scale.units_to_cells(y));
-                }
-                if relative {
-                    let right = self.right_vector(config.ctrl.fwd_axis_3d);
-                    let up = self.up_vector(config.ctrl.up_axis_3d);
-                    let fwd = self.forward_vector(config.ctrl.fwd_axis_3d);
-                    self.pivot += right.to_fixedvec() * x.unwrap_or_default();
-                    self.pivot += up.to_fixedvec() * y.unwrap_or_default();
-                    self.pivot += fwd.to_fixedvec() * z.unwrap_or_default();
-                    self.set_yaw(self.yaw() + pitch.unwrap_or(Deg(0.0)));
-                    self.set_pitch(self.pitch() + yaw.unwrap_or(Deg(0.0)));
-                } else {
-                    if let Some(x) = x {
-                        self.pivot[X] = x;
-                    }
-                    if let Some(y) = y {
-                        self.pivot[Y] = y;
-                    }
-                    if let Some(z) = z {
-                        self.pivot[Z] = z;
-                    }
-                    if let Some(yaw) = yaw {
-                        self.set_yaw(yaw);
-                    }
-                    if let Some(pitch) = pitch {
-                        self.set_pitch(pitch);
-                    }
-                }
-                Ok(None)
-            }
-            ViewCommand::GoToScale(scale) => {
-                self.set_scale(scale);
-                Ok(None)
-            }
+            Ok(DragOutcome::Continue)
+        }))
+    }
 
-            ViewCommand::Scale {
-                log2_factor,
-                invariant_pos: _,
-            } => {
-                self.scale_by_log2_factor(r64(log2_factor), None);
-                Ok(None)
-            }
-
-            ViewCommand::SnapPos => {
-                self.snap_pos();
-                Ok(None)
-            }
-            ViewCommand::SnapScale { invariant_pos: _ } => {
-                self.snap_scale(None);
-                Ok(None)
-            }
-
-            ViewCommand::FitView => {
-                todo!("fit view 3D");
-            }
-        }
+    fn apply_move_2d(&mut self, movement: Move2D) {
+        ignore_command!(Cmd::Move2D(movement));
+    }
+    fn apply_move_3d(&mut self, movement: Move3D) {
+        let Move3D {
+            dx,
+            dy,
+            dz,
+            dpitch,
+            dyaw,
+        } = movement;
+        let delta = cgmath::vec3(dx, dy, dz);
+        let delta = delta.cast::<f32>().unwrap_or(cgmath::vec3(0.0, 0.0, 0.0));
+        let delta = self.flat_orientation().invert().rotate_vector(delta);
+        let delta = delta.cast::<f64>().unwrap_or(cgmath::vec3(0.0, 0.0, 0.0));
+        let delta: FVec3D = NdVec([
+            r64(delta.x as f64),
+            r64(delta.y as f64),
+            r64(delta.z as f64),
+        ]);
+        self.pivot += self.scale.units_to_cells(delta.to_fixedvec());
+        self.add_pitch(dpitch);
+        self.add_yaw(dyaw);
     }
 }
 

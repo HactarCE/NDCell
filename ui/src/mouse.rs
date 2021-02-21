@@ -2,39 +2,48 @@ use imgui::MouseCursor;
 
 use ndcell_core::ndvec::FVec2D;
 
-/// What to display for the mouse cursor.
-///
-/// This determines the mouse cursor icon and how/whether to indicate the
-/// highlighted cell in the grid.
+use crate::commands::DrawMode;
+use crate::{Direction, Face};
+
+/// The way to display the mouse cursor and the cell it is hovering over.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum MouseDisplay {
+pub enum MouseDisplayMode {
     Normal,
+
+    Orbit,
     Pan,
-    Draw,
+    Scale,
+
+    Draw(DrawMode),
+
     Select,
-    ResizeEW,
-    ResizeNS,
-    ResizeNESW,
-    ResizeNWSE,
-    ResizeSelectionAbsolute,
+    ResizeSelectionToCursor,
+    ResizeSelectionEdge(Direction),
+    ResizeSelectionFace(Face),
+
     Move,
 }
-impl Default for MouseDisplay {
+impl Default for MouseDisplayMode {
     fn default() -> Self {
         Self::Normal
     }
 }
-impl MouseDisplay {
+impl MouseDisplayMode {
     pub fn cursor_icon(self) -> Option<MouseCursor> {
         use MouseCursor::*;
         match self {
-            Self::Pan => Some(Arrow),    // TODO: open palm hand
-            Self::Draw => Some(Arrow),   // TODO: pencil
-            Self::Select => Some(Arrow), // TODO: crosshairs/plus
-            Self::ResizeEW => Some(ResizeEW),
-            Self::ResizeNS => Some(ResizeNS),
-            Self::ResizeNESW => Some(ResizeNESW),
-            Self::ResizeNWSE => Some(ResizeNWSE),
+            Self::Orbit => Some(Arrow),    // TODO: some better icon?
+            Self::Pan => Some(Arrow),      // TODO: open palm hand
+            Self::Scale => Some(ResizeNS), // TODO: some better icon?
+            Self::Draw(_) => Some(Arrow),  // TODO: pencil
+            Self::Select => Some(Arrow),   // TODO: crosshairs/plus
+            Self::ResizeSelectionEdge(direction) => match direction {
+                Direction::N | Direction::S => Some(ResizeNS),
+                Direction::NE | Direction::SW => Some(ResizeNESW),
+                Direction::E | Direction::W => Some(ResizeEW),
+                Direction::SE | Direction::NW => Some(ResizeNWSE),
+            },
+            Self::ResizeSelectionFace(_) => Some(Arrow),
             Self::Move => Some(ResizeAll),
             _ => Some(Arrow),
         }
@@ -54,5 +63,5 @@ pub struct MouseState {
     ///
     /// This determines the mouse cursor icon and how/whether to indicate the
     /// highlighted cell in the grid.
-    pub display: MouseDisplay,
+    pub display_mode: MouseDisplayMode,
 }

@@ -1,4 +1,3 @@
-use anyhow::{anyhow, Context, Result};
 use cgmath::{Matrix4, SquareMatrix};
 use log::warn;
 
@@ -6,10 +5,17 @@ use ndcell_core::prelude::*;
 use Axis::{X, Y};
 
 use super::{
-    CellTransform2D, DragHandler, DragOutcome, ProjectionType, Scale, Viewpoint, MIN_TARGET_SIZE,
+    CellTransform2D, DragOutcome, DragUpdateViewFn, ProjectionType, Scale, Viewpoint,
+    MIN_TARGET_SIZE,
 };
-use crate::commands::{ViewCommand, ViewDragCommand};
+use crate::commands::{Cmd, DragViewCmd, Move2D, Move3D};
 use crate::CONFIG;
+
+macro_rules! ignore_command {
+    ($c:expr) => {
+        warn!("Ignoring {:?} in Viewpoint2D", $c);
+    };
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Viewpoint2D {
@@ -56,10 +62,10 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
     fn center(&self) -> &FixedVec<Dim2D> {
         &self.center
     }
-    fn set_pos(&mut self, pos: FixedVec<Dim2D>) {
+    fn set_center(&mut self, pos: FixedVec<Dim2D>) {
         self.center = pos;
     }
-    fn snap_pos(&mut self) {
+    fn snap_center(&mut self) {
         if CONFIG.lock().ctrl.snap_center_2d {
             self.center = self.center.floor().to_fixedvec() + 0.5;
         } else {
@@ -138,10 +144,10 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
             // cells boundaries line up with pixel boundaries.
             let (target_w, target_h) = self.target_dimensions();
             if target_w % 2 == 1 {
-                center_in_pixel_units[X] -= 0.5_f64;
+                center_in_pixel_units[X] += 0.5_f64;
             }
             if target_h % 2 == 1 {
-                center_in_pixel_units[Y] -= 0.5_f64;
+                center_in_pixel_units[Y] += 0.5_f64;
             }
             self.scale.units_to_cells(center_in_pixel_units)
         } else {
@@ -178,86 +184,28 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
         ))
     }
 
-    fn do_view_command(&mut self, command: ViewCommand) -> Result<Option<DragHandler<Self>>> {
-        match command {
-            ViewCommand::Drag(c, cursor_start) => match c {
-                ViewDragCommand::Orbit => {
-                    warn!("Ignoring {:?} in Viewpoint2D", command);
-                    Ok(None)
-                }
+    fn drag_orbit_3d(&self, _cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>> {
+        ignore_command!(DragViewCmd::Orbit3D);
+        None
+    }
+    fn drag_pan(&self, cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>> {
+        let start = self.cell_transform().pixel_to_global_pos(cursor_start);
+        Some(Box::new(move |this, cursor_end| {
+            let end = this.cell_transform().pixel_to_global_pos(cursor_end);
+            this.center += start.clone() - end;
+            Ok(DragOutcome::Continue)
+        }))
+    }
+    fn drag_pan_horizontal_3d(&self, cursor_start: FVec2D) -> Option<DragUpdateViewFn<Self>> {
+        self.drag_pan(cursor_start)
+    }
 
-                ViewDragCommand::Pan
-                | ViewDragCommand::PanAligned
-                | ViewDragCommand::PanAlignedVertical
-                | ViewDragCommand::PanHorizontal => {
-                    let start = self.cell_transform().pixel_to_global_pos(cursor_start);
-                    Ok(Some(Box::new(move |this, cursor_end| {
-                        let end = this.cell_transform().pixel_to_global_pos(cursor_end);
-                        this.center += start.clone() - end;
-                        Ok(DragOutcome::Continue)
-                    })))
-                }
-
-                ViewDragCommand::Scale => todo!("Scale using click & drag"),
-            },
-
-            ViewCommand::GoTo2D {
-                mut x,
-                mut y,
-                relative,
-                scaled,
-            } => {
-                if scaled {
-                    x = x.map(|x| self.scale.units_to_cells(x));
-                    y = y.map(|y| self.scale.units_to_cells(y));
-                }
-                if relative {
-                    self.center[X] += x.unwrap_or_default();
-                    self.center[Y] += y.unwrap_or_default();
-                } else {
-                    if let Some(x) = x {
-                        self.center[X] = x;
-                    }
-                    if let Some(y) = y {
-                        self.center[Y] = y;
-                    }
-                }
-                Ok(None)
-            }
-            ViewCommand::GoTo3D { .. } => {
-                warn!("Ignoring {:?} in Viewpoint2D", command);
-                Ok(None)
-            }
-            ViewCommand::GoToScale(scale) => {
-                self.set_scale(scale);
-                Ok(None)
-            }
-
-            ViewCommand::Scale {
-                log2_factor,
-                invariant_pos,
-            } => {
-                self.scale_by_log2_factor(
-                    R64::try_new(log2_factor).context("Invalid scale factor")?,
-                    invariant_pos.map(|pixel| self.cell_transform().pixel_to_global_pos(pixel)),
-                );
-                Ok(None)
-            }
-
-            ViewCommand::SnapPos => {
-                self.snap_pos();
-                Ok(None)
-            }
-            ViewCommand::SnapScale { invariant_pos } => {
-                self.snap_scale(
-                    invariant_pos.map(|pixel| self.cell_transform().pixel_to_global_pos(pixel)),
-                );
-                Ok(None)
-            }
-
-            ViewCommand::FitView => Err(anyhow!(
-                "FitView command received in Viewpoint2D (must be converted to GoTo command)"
-            )),
-        }
+    fn apply_move_2d(&mut self, movement: Move2D) {
+        let Move2D { dx, dy } = movement;
+        let delta: FVec2D = NdVec([r64(dx), r64(dy)]);
+        self.center += self.scale.units_to_cells(delta.to_fixedvec());
+    }
+    fn apply_move_3d(&mut self, movement: Move3D) {
+        ignore_command!(Cmd::Move3D(movement));
     }
 }

@@ -101,7 +101,7 @@ jobs:
       - name: Download Mac App Shell script
         uses: actions/checkout@v2
         with:
-          repository: https://github.com/Xeoncross/macappshell
+          repository: Xeoncross/macappshell
       - name: Make app
         run:
           sh macappshell/setup.sh NDCell ui/resources/icon/ndcell.svg

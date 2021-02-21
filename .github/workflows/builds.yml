@@ -98,10 +98,11 @@ jobs:
             override: true
       - name: Build NDCell
         run: cargo build --release
-      - name: Make app
+      - name: Download Mac App Shell script
         uses: actions/checkout@v2
         with:
           repository: https://github.com/Xeoncross/macappshell
+      - name: Make app
         run:
           sh macappshell/setup.sh NDCell ui/resources/icon/ndcell.svg
           mv target/release/ndcell NDCell.app/Contents/MacOS/NDCell

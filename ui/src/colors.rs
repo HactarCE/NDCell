@@ -65,14 +65,14 @@ pub mod selection {
     use super::*;
 
     /// Color given to the region selection.
-    pub const REGION_FILL: Srgba = rgba!(0.6, 0.6, 0.6, 0.25);
+    pub const REGION_FILL: Srgba = rgba!(0.4, 0.6, 0.8, 0.25);
     /// Color of the outline around the region selection.
-    pub const REGION_OUTLINE: Srgb = rgb!(0.6, 0.6, 0.6);
+    pub const REGION_OUTLINE: Srgb = rgb!(0.4, 0.6, 0.8);
 
     /// Color of the cell selection.
-    pub const CELLS_FILL: Srgba = rgba!(0.6, 0.6, 0.6, 0.0);
+    pub const CELLS_FILL: Srgba = rgba!(0.4, 0.6, 0.8, 0.0);
     /// Color of the outline around the cell selection.
-    pub const CELLS_OUTLINE: Srgb = rgb!(0.6, 0.6, 0.6);
+    pub const CELLS_OUTLINE: Srgb = rgb!(0.4, 0.6, 0.8);
 
     /// Color of the selection resize preview.
     pub const RESIZE_FILL: Srgba = rgba!(0.8, 0.4, 0.0, 0.125);

@@ -67,7 +67,7 @@ jobs:
       - name: Build NDCell
         run: cargo build --release
       - name: Make tarball
-          tar -czf ndcell_v${{ env.NDCELL_VERSION }}_linux.tar.gz target/release/ndcell
+        run: tar -czf ndcell_v${{ env.NDCELL_VERSION }}_linux.tar.gz target/release/ndcell
       - name: Upload executable
         uses: actions/upload-artifact@v2
         with:
@@ -106,7 +106,7 @@ jobs:
           ./macappshell/setup.sh NDCell ui/resources/icon/ndcell_512x512.png
           mv target/release/ndcell NDCell.app/Contents/MacOS/NDCell
       - name: Make tarball
-          tar -czf ndcell_v${{ env.NDCELL_VERSION }}_macos.tar.gz NDCell.app
+        run: tar -czf ndcell_v${{ env.NDCELL_VERSION }}_macos.tar.gz NDCell.app
       - name: Upload app
         uses: actions/upload-artifact@v2
         with:

@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Disabled console window on Windows
+- Updated Ubuntu build server from 18.04 to 20.04
 
 ### Fixed
 

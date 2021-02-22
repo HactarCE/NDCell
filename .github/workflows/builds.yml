@@ -66,11 +66,13 @@ jobs:
         run: sudo apt-get install libgtk-3-dev
       - name: Build NDCell
         run: cargo build --release
+      - name: Make tarball
+          tar -czf ndcell_v${{ env.NDCELL_VERSION }}_linux.tar.gz target/release/ndcell
       - name: Upload executable
         uses: actions/upload-artifact@v2
         with:
           name: ndcell_v${{ env.NDCELL_VERSION }}_linux
-          path: target/release/ndcell
+          path: ndcell_v${{ env.NDCELL_VERSION }}_linux.tar.gz
 
   macos:
     name: Build macOS latest
@@ -103,8 +105,10 @@ jobs:
           git clone https://github.com/Xeoncross/macappshell.git
           ./macappshell/setup.sh NDCell ui/resources/icon/ndcell_512x512.png
           mv target/release/ndcell NDCell.app/Contents/MacOS/NDCell
+      - name: Make tarball
+          tar -czf ndcell_v${{ env.NDCELL_VERSION }}_macos.tar.gz NDCell.app
       - name: Upload app
         uses: actions/upload-artifact@v2
         with:
           name: ndcell_v${{ env.NDCELL_VERSION }}_macos
-          path: NDCell.app
+          path: ndcell_v${{ env.NDCELL_VERSION }}_macos.tar.gz

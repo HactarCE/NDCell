@@ -2,7 +2,7 @@
 
 Building NDCell is more difficult compared to most Rust programs because it includes a JIT compiler using LLVM.
 
-The minimum supported Rust version is **1.45.0**.
+The minimum supported Rust version is **1.50.0**.
 
 ## Building on Linux or macOS
 

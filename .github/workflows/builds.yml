@@ -98,10 +98,6 @@ jobs:
             override: true
       - name: Build NDCell
         run: cargo build --release
-      - name: Download Mac App Shell script
-        uses: actions/checkout@v2
-        with:
-          repository:
       - name: Make app
         run: |
           git clone https://github.com/Xeoncross/macappshell.git

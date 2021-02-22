@@ -13,11 +13,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Disabled console window on Windows
-- Updated Ubuntu build server from 18.04 to 20.04
+- Updated Linux build to `libffi7`
 
 ### Fixed
 
 - Missing executable permission on macOS and Linux
+- Selection rendering glitch ([#9][i9])
+- Selection pasting not stopping simulation ([#10][i10])
+
+[i9]: https://github.com/HactarCE/NDCell/issues/9
+[i10]: https://github.com/HactarCE/NDCell/issues/10
 
 ## [0.2.2] Blinker (2020-02-21)
 

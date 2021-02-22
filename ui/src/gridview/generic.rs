@@ -420,6 +420,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
     fn paste_selection(&mut self) -> Result<()> {
         let old_sel_rect = self.selection_rect();
 
+        self.reset_worker_thread();
         self.record();
         let string_from_clipboard = crate::clipboard_compat::clipboard_get()?;
         let result = Selection::from_str(&string_from_clipboard, self.automaton.ndtree.pool());
@@ -443,6 +444,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
     /// Executes a `DeleteSelection` command.
     fn delete_selection(&mut self) {
         if self.selection.is_some() {
+            self.reset_worker_thread();
             self.record();
             self.selection.as_mut().unwrap().cells = None;
             self.grab_selected_cells();
@@ -941,6 +943,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
     pub(super) fn deselect(&mut self) -> Option<Selection<D>> {
         if let Some(sel) = self.selection.clone() {
             if let Some(cells) = sel.cells {
+                self.reset_worker_thread();
                 self.record();
                 // Overwrite.
                 self.automaton.ndtree.paste_custom(

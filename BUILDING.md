@@ -2,7 +2,7 @@
 
 Building NDCell is more difficult compared to most Rust programs because it includes a JIT compiler using LLVM.
 
-The minimum supported Rust version is **1.45.0**.
+The minimum supported Rust version is **1.50.0**.
 
 ## Building on Linux or macOS
 
@@ -47,7 +47,7 @@ Visual Studio is optional if you do not want to build LLVM from source, but the 
 Fair warning: I don't do C or C++ development so it's entirely possible that I've botched the build process, but this is what finally worked for me.
 
 1. Make sure you have CMake installed from the previous steps. WSL or Cygwin `cmake` might work, but I wouldn't count on it.
-2. Download [LLVM](https://releases.llvm.org/download.html) 10.0.0 source code. The precompiled binaries probably won't work, but you can try.
+2. Download [LLVM](https://releases.llvm.org/download.html) 10.0.0 source code. The pre-built binaries won't work because they're missing `llvm-config.exe`.
 3. Extract the LLVM source code somewhere, like `C:\LLVM_source_code`. Now you should have a bunch of folders and files directly inside `C:\LLVM_source_code` including `CMakeLists.txt`.
 4. Make a new empty folder, like `C:\LLVM_solution`.
 5. Run this, replacing the path names accordingly if you used different paths for things:

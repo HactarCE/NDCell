@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  NDCELL_VERSION: 0.3.0-dev
+  NDCELL_VERSION: 0.2.3
 
 jobs:
 
@@ -43,7 +43,7 @@ jobs:
 
   linux:
     name: Build Linux latest
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
       - uses: actions/cache@v2

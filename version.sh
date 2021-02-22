@@ -8,10 +8,10 @@ if [ $# -eq 0 ]; then
 fi
 
 # Set package `version`.
-sed -i "s/^version = \"[[:digit:]\\.]*\"/version = \"$1\"/" ui/Cargo.toml
+sed -ir "s/^version = \"[^\"]*\"/version = \"$1\"/" ui/Cargo.toml
 
 # Set Windows metadata `ProductVersion`.
-sed -i "s/^ProductVersion = \"[[:digit:]\\.]*\"/ProductVersion = \"$1\"/" ui/Cargo.toml
+sed -ir "s/^ProductVersion = \"[^\"]*\"/ProductVersion = \"$1\"/" ui/Cargo.toml
 
 # Set environment variable `NDCELL_VERSION` in GitHub Actions workflow
-sed -i "s/NDCELL_VERSION: [[:digit:]\\.]*/NDCELL_VERSION: $1/" .github/workflows/*.yml
+sed -ir "s/NDCELL_VERSION: [^\\n]*/NDCELL_VERSION: $1/" .github/workflows/*.yml

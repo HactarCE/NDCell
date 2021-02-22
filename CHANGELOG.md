@@ -4,6 +4,26 @@ All notable changes to NDCell will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), except for minor stylistic changes to organize features and accomodate named versions. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with respect to the Rust API for `ndcell_core`, the NDCA API for `ndcell_lang`, and the combined Lua/NDCA API for `ndcell_ui`, the main application.
 
+## [0.2.3] Blinker (2021-02-22)
+
+### Added
+
+- Application icon for Windows, macOS, and Linux
+
+### Changed
+
+- Disabled console window on Windows
+- Updated Linux build to `libffi7`
+
+### Fixed
+
+- Missing executable permission on macOS and Linux
+- Selection rendering glitch ([#9][i9])
+- Selection pasting not stopping simulation ([#10][i10])
+
+[i9]: https://github.com/HactarCE/NDCell/issues/9
+[i10]: https://github.com/HactarCE/NDCell/issues/10
+
 ## [0.2.2] Blinker (2020-02-21)
 
 ### Fixed

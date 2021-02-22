@@ -24,8 +24,6 @@ A fast, flexible, and feature-rich interactive multidimensional cellular automat
 
 Download the **[latest release][Release link]**.
 
-On Linux and macOS, the file might not be executable by default -- to fix this, open a terminal in the same folder as the `ndcell` file and run `chmod a+x ndcell`.
-
 To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 
 ## Screenshots

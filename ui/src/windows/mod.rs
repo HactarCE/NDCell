@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use ndcell_core::prelude::*;
 
-#[cfg(debug_assertions)]
+// #[cfg(debug_assertions)]
 mod debug;
 pub mod error_popup;
 mod setup;
@@ -13,7 +13,7 @@ use crate::commands::Cmd;
 use crate::gridview::*;
 use crate::mouse::MouseState;
 use crate::CONFIG;
-#[cfg(debug_assertions)]
+// #[cfg(debug_assertions)]
 use debug::DebugWindow;
 use setup::SetupWindow;
 use simulation::SimulationWindow;
@@ -31,7 +31,7 @@ pub struct BuildParams<'a> {
 
 #[derive(Debug, Default)]
 pub struct MainWindow {
-    #[cfg(debug_assertions)]
+    // #[cfg(debug_assertions)]
     debug: DebugWindow,
     setup: SetupWindow,
     simulation: SimulationWindow,
@@ -193,11 +193,11 @@ impl MainWindow {
             ui.checkbox(im_str!("Setup"), &mut self.setup.is_visible);
             ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
 
-            #[cfg(debug_assertions)]
+            // #[cfg(debug_assertions)]
             ui.checkbox(im_str!("Debug values"), &mut self.debug.is_visible);
         });
 
-        #[cfg(debug_assertions)]
+        // #[cfg(debug_assertions)]
         self.debug.build(params);
         self.setup.build(params);
         self.simulation.build(params);

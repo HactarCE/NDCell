@@ -30,19 +30,19 @@ macro_rules! load_shader_dynamic {
     };
 }
 
-#[cfg(debug_assertions)]
+// #[cfg(debug_assertions)]
 macro_rules! load_shader {
     ($($tok:tt)*) => {
         load_shader_dynamic!($($tok)*);
     };
 }
 
-#[cfg(not(debug_assertions))]
-macro_rules! load_shader {
-    ($($tok:tt)*) => {
-        StaticWrappedShader(load_shader_static!($($tok)*));
-    };
-}
+// #[cfg(not(debug_assertions))]
+// macro_rules! load_shader {
+//     ($($tok:tt)*) => {
+//         StaticWrappedShader(load_shader_static!($($tok)*));
+//     };
+// }
 
 /// Uses `lazy_static!()` to define a shader that is lazily compiled from files.
 macro_rules! shader {

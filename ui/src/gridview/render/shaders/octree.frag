@@ -53,11 +53,11 @@ float vec3_min(vec3 v) {
 
 // Given the parameters `t0` at which the ray enters a node along each axis and
 // `tm` at which the ray crosses the middle of a node along each axis, returns
-// the `bvec3` of the first child of that node intersected by the ray, convert
-// to a `vec3`.
+// the `bvec3` of the first child of that node intersected by the ray, converted
+// to a `vec3` with values `0.0` or `0.5`.
 vec3 entryChild(vec3 t0, vec3 tm) {
     float max_t0 = vec3_max(t0); // when the ray actually enters the node
-    return vec3(greaterThanEqual(vec3(max_t0), tm));
+    return vec3(greaterThanEqual(vec3(max_t0), tm)) * 0.5;
 }
 
 // Given the parameters `t0` at which the ray enters a node along each axis,
@@ -87,7 +87,7 @@ uint exitAxis(vec3 t1) {
 }
 
 void main() {
-    color = vec4(0.0); // Assume transparent.
+    color = vec4(0.0);  // Assume transparent.
     gl_FragDepth = 1.0; // Assume far plane.
 
     // Compute the ray for this pixel. (based on
@@ -133,134 +133,118 @@ void main() {
     if (max_t0 >= min_t1 || 0 > min_t1) {
         // ... then the ray does not intersect with the root node.
         discard;
-    } else {
-        // Otherwise, the ray does intersect with the root node.
+    }
+    // Otherwise, the ray does intersect with the root node.
 
-        // GLSL doesn't support recursion, so we keep a stack for each local
-        // variable. The octree should never be more than 32 layers deep because
-        // that would cause precision problems and stuff, so that should be
-        // plenty of stack space.
-        int layer = layer_count;    // current layer (used as index into stack)
-        uint[32] node_idx_stack;   // index of current node
-        bool[32] has_next_child;   // whether the ray intersects another child of the current node
-        vec3[32] next_child_stack; // index of the child of the current node that the ray intersects next
-        vec3[32] t0_stack;         // time of entry along axis
-        vec3[32] tm_stack;         // time of reaching middle along axis
-        vec3[32] t1_stack;         // time of exit along axis
+    // GLSL doesn't support recursion, so we keep a stack for each local
+    // variable. The octree should never be more than 32 layers deep because
+    // that would cause precision problems and stuff, so that should be
+    // plenty of stack space.
+    int layer = layer_count;   // current layer (used as index into stack)
+    uint[32] node_idx_stack;   // index of current node
+    vec3[32] next_child_stack; // position of the child of the current node that the ray
+                               // intersects next (0 = low branch, 0.5 = high branch, 1.0 = exited)
+    vec3[32] t0_stack;         // time of entry along each axis
+    vec3[32] t1_stack;         // time of exit along each axis
 
-        // Set initial stack values.
-        node_idx_stack[layer] = root_idx;
-        next_child_stack[layer] = entryChild(t0, tm);
-        has_next_child[layer] = true;
-        t0_stack[layer] = t0;
-        tm_stack[layer] = (t0 + t1) / 2.0;
-        t1_stack[layer] = t1;
+    // Set initial stack values.
+    node_idx_stack[layer] = root_idx;
+    next_child_stack[layer] = entryChild(t0, tm);
+    t0_stack[layer] = t0;
+    t1_stack[layer] = t1;
 
-        int count = 0;
+    int count = 0;
 
-        while (layer <= layer_count) {
-            if (!has_next_child[layer]) {
-                // The ray has exited the current node, so backtrack up a layer.
-                layer++;
+    while (layer <= layer_count) {
+        vec3 next_child = next_child_stack[layer];
+
+        if (next_child.x == 1.0 || next_child.y == 1.0 || next_child.z == 1.0) {
+            // The ray has exited the current node, so backtrack up a layer.
+            layer++;
+        } else {
+            count++;
+
+            // Compute the parameter `t` values for the `next_child`.
+            t0 = mix(t0_stack[layer], t1_stack[layer], next_child);
+            t1 = mix(t0_stack[layer], t1_stack[layer], next_child + 0.5);
+
+            // Compute the sibling of `next_child` to visit after this one.
+            uint exit_axis = exitAxis(t1);
+            // Advance along `exit_axis` to get the next child to visit.
+            next_child_stack[layer][exit_axis] += 0.5;
+
+            if (
+                // This node is completely behind the camera; skip it.
+                t1.x < 0 || t1.y < 0 || t1.z < 0
+                // This is a leaf node and the camera is inside it; skip it.
+                || layer == 1 && t1.x < 0 && t1.y < 0 && t1.z < 0
+            ) continue;
+
+            bvec3 tmp_child_index = notEqual(next_child * 2.0, invert_mask); // logical XOR
+            uint child_value = getNodeChild(node_idx_stack[layer], tmp_child_index);
+            if (child_value == 0u) {
+                // This is an empty node; skip it.
+            } else if (layer > 1) {
+                // This is a non-leaf node; set stack values and descend one
+                // layer.
+                layer--;
+                node_idx_stack[layer] = child_value;
+                next_child_stack[layer] = entryChild(t0, mix(t0, t1, 0.5));
+                t0_stack[layer] = t0;
+                t1_stack[layer] = t1;
             } else {
-                count++;
+                // This is a nonzero leaf node, so set the color and break
+                // out of the loop.
 
-                vec3 next_child = next_child_stack[layer];
+                // RGBA, big-endian; convert from 0-255 to 0.0-1.0
+                float r = float((child_value >> 24) & 255u) / 255.0;
+                float g = float((child_value >> 16) & 255u) / 255.0;
+                float b = float((child_value >>  8) & 255u) / 255.0;
+                float a = float( child_value        & 255u) / 255.0;
+                color = vec4(r, g, b, a * alpha);
 
-                // Compute the parameter `t` values for the `next_child`.
-                t0 = mix(t0_stack[layer], tm_stack[layer], next_child);
-                t1 = mix(tm_stack[layer], t1_stack[layer], next_child);
-                tm = (t0 + t1) / 2.0;
+                // Compute lighting using a normal vector based on the entry
+                // axis for the node.
+                vec3 normal = vec3(0.0);
+                uint axis = entryAxis(t0);
+                normal[axis] = mix(-1, 1, invert_mask[axis]);
+                color.rgb *= compute_lighting(normal);
 
-                // Compute the sibling of `next_child` to visit after this one.
-                uint exit_axis = exitAxis(t1);
-                if (next_child[exit_axis] == 1.0) {
-                    // `next_child` is the last child of the current node that
-                    // the ray intersects.
-                    has_next_child[layer] = false;
-                } else {
-                    // Advance along `exit_axis` to get the next child to visit.
-                    next_child_stack[layer][exit_axis] = 1.0;
-                }
+                // Compute fog using the position where the ray intersects
+                // the node.
+                vec3 pos = original_start + original_delta * vec3_max(t0);
+                color = foggify_color(pos, color);
 
-                if (vec3_min(t1) < 0) {
-                    // This node is completely behind the camera; skip it.
-                    continue;
-                } else if (vec3_max(t0) < 0 && layer == 1) {
-                    // This is a leaf node and the camera is inside it; skip it.
-                    continue;
-                }
+                // Compute depth buffer value.
+                vec4 clip_pos = matrix * vec4(pos, 1.0);
+                float ndc_depth = clip_pos.z / clip_pos.w;
+                gl_FragDepth = 0.5 * (
+                    gl_DepthRange.diff * ndc_depth
+                        + gl_DepthRange.near
+                        + gl_DepthRange.far
+                );
 
-                bvec3 tmp_child_index = notEqual(next_child, invert_mask); // logical XOR
-                uint child_value = getNodeChild(node_idx_stack[layer], tmp_child_index);
-                if (child_value == 0u) {
-                    // This is an empty node; skip it.
-                } else if (layer > 1) {
-                    // This is a non-leaf node; set stack values and descend one
-                    // layer.
-                    layer--;
-                    node_idx_stack[layer] = child_value;
-                    has_next_child[layer] = true;
-                    next_child_stack[layer] = entryChild(t0, tm);
-                    t0_stack[layer] = t0;
-                    tm_stack[layer] = tm;
-                    t1_stack[layer] = t1;
-                } else {
-                    // This is a nonzero leaf node, so set the color and break
-                    // out of the loop.
-
-                    // RGBA, big-endian; convert from 0-255 to 0.0-1.0
-                    float r = float((child_value >> 24) & 255u) / 255.0;
-                    float g = float((child_value >> 16) & 255u) / 255.0;
-                    float b = float((child_value >>  8) & 255u) / 255.0;
-                    float a = float( child_value        & 255u) / 255.0;
-                    color = vec4(r, g, b, a * alpha);
-
-                    // Compute lighting using a normal vector based on the entry
-                    // axis for the node.
-                    vec3 normal = vec3(0.0);
-                    uint axis = entryAxis(t0);
-                    normal[axis] = mix(-1, 1, invert_mask[axis]);
-                    color.rgb *= compute_lighting(normal);
-
-                    // Compute fog using the position where the ray intersects
-                    // the node.
-                    vec3 pos = original_start + original_delta * vec3_max(t0);
-                    color = foggify_color(pos, color);
-
-                    // Compute depth buffer value.
-                    vec4 clip_pos = matrix * vec4(pos, 1.0);
-                    float ndc_depth = clip_pos.z / clip_pos.w;
-                    gl_FragDepth = 0.5 * (
-                        gl_DepthRange.diff * ndc_depth
-                            + gl_DepthRange.near
-                            + gl_DepthRange.far
-                    );
-
-                    break; // Break out of the loop.
-                }
+                break; // Break out of the loop.
             }
         }
+    }
 
-        if (perf_view) {
-            color /= 2.0;
-            if (count < 50.0)
-                color.r += 0.25 + count / 100.0;
-            else if (count < 100.0)
-                color.g += 0.25 + (count - 50.0) / 100.0;
-            else if (count < 150.0)
-                color.b += 0.25 + (count - 100.0) / 100.0;
-            else
-                color.rgb += vec3(0.5);
-            color.a = max(color.a, 0.5);
-        }
+    // Performance debug view
+    /*
+    color /= 2.0;
+    if (count < 50.0)       color.r += 0.25 + count / 100.0;
+    else if (count < 100.0) color.g += 0.25 + (count - 50.0) / 100.0;
+    else if (count < 150.0) color.b += 0.25 + (count - 100.0) / 100.0;
+    else                    color.rgb += vec3(0.5);
+    color.a = max(color.a, 0.5);
+    if (layer > layer_count) color.rgb /= 2.0;
+    */
 
-        // The ray did not intersect any cell.
-        if (layer > layer_count) {
-            if (perf_view)
-                color.rgb /= 2.0;
-            else
-                discard;
-        }
+    // The ray did not intersect any cell.
+    if (layer > layer_count) {
+        if (true)
+            color.rgb /= 2.0;
+        else
+            discard;
     }
 }

@@ -3,9 +3,11 @@ name: build
 on:
   push:
     branches: [ stable ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  NDCELL_VERSION: 0.3.0-dev
 
 jobs:
 
@@ -28,6 +30,7 @@ jobs:
             toolchain: stable
             components: clippy
             override: true
+      - uses: ilammy/msvc-dev-cmd@v1
       - name: Download LLVM
         run: git clone https://github.com/HactarCE/LLVM-MSVC-Win64-Dev C:\LLVM
       - name: Build NDCell
@@ -35,12 +38,12 @@ jobs:
       - name: Upload executable
         uses: actions/upload-artifact@v2
         with:
-          name: Windows build
+          name: ndcell_v${{ env.NDCELL_VERSION }}_win64
           path: target/release/ndcell.exe
 
   linux:
     name: Build Linux latest
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
       - uses: actions/cache@v2
@@ -59,13 +62,17 @@ jobs:
         run: wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 10
       - name: Install ImGui dependencies
         run: sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev
+      - name: Install Native File Dialog dependencies
+        run: sudo apt-get install libgtk-3-dev
       - name: Build NDCell
         run: cargo build --release
+      - name: Make tarball
+        run: tar -czf ndcell_v${{ env.NDCELL_VERSION }}_linux.tar.gz target/release/ndcell
       - name: Upload executable
         uses: actions/upload-artifact@v2
         with:
-          name: Linux build
-          path: target/release/ndcell
+          name: ndcell_v${{ env.NDCELL_VERSION }}_linux
+          path: ndcell_v${{ env.NDCELL_VERSION }}_linux.tar.gz
 
   macos:
     name: Build macOS latest
@@ -93,8 +100,15 @@ jobs:
             override: true
       - name: Build NDCell
         run: cargo build --release
-      - name: Upload executable
+      - name: Make app
+        run: |
+          git clone https://github.com/Xeoncross/macappshell.git
+          ./macappshell/setup.sh NDCell ui/resources/icon/ndcell_512x512.png
+          mv target/release/ndcell NDCell.app/Contents/MacOS/NDCell
+      - name: Make tarball
+        run: tar -czf ndcell_v${{ env.NDCELL_VERSION }}_macos.tar.gz NDCell.app
+      - name: Upload app
         uses: actions/upload-artifact@v2
         with:
-          name: macOS build
-          path: target/release/ndcell
+          name: ndcell_v${{ env.NDCELL_VERSION }}_macos
+          path: ndcell_v${{ env.NDCELL_VERSION }}_macos.tar.gz

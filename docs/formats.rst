@@ -29,7 +29,7 @@ Conventionally Y coordinates increase downwards in an RLE; in NDCell, however, Y
 N-dimensional Macrocell format (NDMC)
 =====================================
 
-For interchanging large patterns, NDCell uses a Macrocell format that is mostly backwards-compatible with Golly's `Macrocell format`__. While Golly has a variant for some two-state algorithms, NDCell always uses the generic format that supports any number of states (though it is able to parse the two-state variant). It introduces the following new features:
+For interchanging large patterns, NDCell uses a Macrocell format that is mostly backwards-compatible with Golly's `Macrocell format`__. While Golly has a variant for some two-state algorithms, NDCell always exports using the generic format that supports any number of states (though it is able to import the two-state variant). It introduces the following new features:
 
 __ http://golly.sourceforge.net/Help/formats.html#mc
 

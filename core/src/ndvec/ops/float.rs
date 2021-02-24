@@ -4,11 +4,37 @@ use super::*;
 use crate::num::{r64, Float, R64};
 
 impl<D: Dim> FixedVec<D> {
-    /// Round each component of this vector to the nearest integer.
+    /// Returns the integer part of each component of the vector.
+    #[inline]
+    pub fn trunc(&self) -> BigVec<D> {
+        NdVec::from_fn(|ax| self[ax].trunc())
+    }
+
+    /// Returns the fractional part of each component of the vector.
+    #[inline]
+    pub fn fract(&self) -> FVec<D> {
+        NdVec::from_fn(|ax| r64(self[ax].fract()))
+    }
+
+    /// Rounds each component of this vector to the nearest integer.
     #[inline]
     #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn round(&self) -> BigVec<D> {
-        BigVec::from_fn(|ax| self[ax].round().0)
+        BigVec::from_fn(|ax| self[ax].round())
+    }
+
+    /// Returns the largest integer less than or equal to each component of the
+    /// vector.
+    #[inline]
+    pub fn floor(&self) -> BigVec<D> {
+        NdVec::from_fn(|ax| self[ax].floor())
+    }
+
+    /// Returns the smallest integer greater than or equal to each component of
+    /// the vector.
+    #[inline]
+    pub fn ceil(&self) -> BigVec<D> {
+        NdVec::from_fn(|ax| self[ax].ceil())
     }
 
     /// Returns the magnitude of the vector.
@@ -20,21 +46,21 @@ impl<D: Dim> FixedVec<D> {
 }
 
 impl<D: Dim> FVec<D> {
-    /// Round each component of this vector to the nearest integer.
+    /// Rounds each component of this vector to the nearest integer.
     #[inline]
     #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn round(&self) -> Self {
         Self::from_fn(|ax| self[ax].round())
     }
 
-    /// Round each component of this vector down.
+    /// Rounds each component of this vector down.
     #[inline]
     #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn floor(&self) -> Self {
         Self::from_fn(|ax| self[ax].floor())
     }
 
-    /// Round each component of this vector up.
+    /// Rounds each component of this vector up.
     #[inline]
     #[must_use = "This method returns a new value instead of mutating its input"]
     pub fn ceil(&self) -> Self {

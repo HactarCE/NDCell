@@ -1,6 +1,6 @@
 use ndcell_core::prelude::*;
 
-use crate::config::Config;
+use crate::{Face, CONFIG};
 
 pub type Selection2D = Selection<Dim2D>;
 pub type Selection3D = Selection<Dim3D>;
@@ -12,14 +12,13 @@ pub struct Selection<D: Dim> {
 }
 impl<D: Dim> Selection<D> {
     pub fn restore_history_entry(
-        config: &Config,
         mut current: &mut Option<Self>,
         entry: Option<Self>,
     ) -> Option<Self> {
         let current_has_cells = current.as_ref().and_then(|s| s.cells.as_ref()).is_some();
         let entry_has_cells = entry.as_ref().and_then(|s| s.cells.as_ref()).is_some();
 
-        if config.hist.record_select || entry_has_cells {
+        if CONFIG.lock().hist.record_select || entry_has_cells {
             std::mem::replace(&mut current, entry)
         } else if current_has_cells {
             std::mem::replace(&mut current, None)
@@ -69,43 +68,55 @@ impl<D: Dim> Selection<D> {
         Self {
             rect: self.rect.clone() + &delta,
             cells: self.cells.clone().map(|mut ndtree| {
-                ndtree.set_offset(ndtree.offset() + delta);
+                ndtree.set_base_pos(ndtree.base_pos() + delta);
                 ndtree
             }),
         }
     }
 }
 
-/// Resizes a selection given cursor movement from `drag_start_pos` to
-/// `drag_end_pos` based on the distance covered during the drag.
+/// Resizes a selection along a global `resize_delta`.
+///
+/// `resize_vector` is a vector where the sign of each component indicates the
+/// direction to resize along that axis, with zero for axes where the selection
+/// rectangle is not resized.
 pub fn resize_selection_relative<D: Dim>(
     initial_selection: &BigRect<D>,
-    drag_start_pos: &FixedVec<D>,
-    drag_end_pos: &FixedVec<D>,
-    axes: AxisSet,
+    resize_delta: &FixedVec<D>,
+    resize_vector: &IVec<D>,
 ) -> BigRect<D> {
-    // Farthest corner stays fixed.
-    let pos1 = initial_selection.farthest_corner(drag_start_pos);
-    // Closest corner varies.
-    let mut pos2 = initial_selection.closest_corner(drag_start_pos);
+    // `pos1` stays fixed; `pos2` varies.
+    let mut pos1 = initial_selection.min();
+    let mut pos2 = initial_selection.max();
+    for &ax in D::axes() {
+        if resize_vector[ax] < 0 {
+            std::mem::swap(&mut pos1[ax], &mut pos2[ax]);
+        }
+    }
 
-    // Use delta from original cursor position to new cursor
-    // position.
-    let delta = drag_end_pos - drag_start_pos;
-    for axis in axes {
-        pos2[axis] += delta[axis].round().0;
+    for &ax in D::axes() {
+        if resize_vector[ax] != 0 {
+            pos2[ax] += resize_delta[ax].round();
+
+            // Clamp to `pos1`; prevent the selection from turning "inside out."
+            if resize_vector[ax] > 0 && pos1[ax] > pos2[ax]
+                || resize_vector[ax] < 0 && pos1[ax] < pos2[ax]
+            {
+                pos2[ax] = pos1[ax].clone()
+            }
+        }
     }
 
     NdRect::span(pos1, pos2)
 }
 
 /// Resizes a selection given cursor movement from `drag_start_pos` to
-/// `drag_end_pos`, using the absolute `drag_start_pos` to infer which axes to
-/// modify.
+/// `drag_end_render_cell`, using the absolute `drag_start_pos` to infer which
+/// axes to modify.
 pub fn resize_selection_absolute<D: Dim>(
     initial_selection: &BigRect<D>,
     drag_start_pos: &FixedVec<D>,
-    drag_end_pos: &FixedVec<D>,
+    drag_end_render_cell: &BigRect<D>,
 ) -> BigRect<D> {
     // Farthest corner stays fixed.
     let pos1 = initial_selection.farthest_corner(drag_start_pos);
@@ -113,9 +124,53 @@ pub fn resize_selection_absolute<D: Dim>(
     let mut pos2 = initial_selection.closest_corner(drag_start_pos);
 
     let axes = absolute_selection_resize_axes(&initial_selection, drag_start_pos);
-    for axis in axes {
-        pos2[axis] = drag_end_pos[axis].floor().0;
+    let drag_end_min = drag_end_render_cell.min();
+    let drag_end_max = drag_end_render_cell.max();
+    for ax in axes {
+        pos2[ax] = if pos2[ax] > pos1[ax] {
+            std::cmp::max(drag_end_max[ax].clone(), pos1[ax].clone())
+        } else {
+            std::cmp::min(drag_end_min[ax].clone(), pos1[ax].clone())
+        };
     }
+
+    NdRect::span(pos1, pos2)
+}
+
+/// Resizes a selection to `face` of `drag_end_render_cell` along the axis
+/// normal to `face`.
+pub fn resize_selection_to_face<D: Dim>(
+    initial_selection: &BigRect<D>,
+    drag_start_pos: &FixedVec<D>,
+    drag_end_render_cell: &BigRect<D>,
+    face: Face,
+) -> BigRect<D> {
+    // Farthest corner stays fixed.
+    let pos1 = initial_selection.farthest_corner(drag_start_pos);
+    // Closest corner varies.
+    let mut pos2 = initial_selection.closest_corner(drag_start_pos);
+
+    let drag_end_min = drag_end_render_cell.min();
+    let drag_end_max = drag_end_render_cell.max();
+
+    let axis = face.normal_axis();
+    pos2[axis] = match face.sign() {
+        Sign::Minus => {
+            if pos2[axis] > pos1[axis] {
+                std::cmp::max(drag_end_min[axis].clone() - 1, pos1[axis].clone())
+            } else {
+                std::cmp::min(drag_end_min[axis].clone(), pos1[axis].clone())
+            }
+        }
+        Sign::NoSign => unreachable!(),
+        Sign::Plus => {
+            if pos2[axis] > pos1[axis] {
+                std::cmp::max(drag_end_max[axis].clone(), pos1[axis].clone())
+            } else {
+                std::cmp::min(drag_end_max[axis].clone() + 1, pos1[axis].clone())
+            }
+        }
+    };
 
     NdRect::span(pos1, pos2)
 }
@@ -140,7 +195,7 @@ pub fn absolute_selection_resize_axes<D: Dim>(
     if edge_distances < NdVec::origin() {
         // If all edge distances are negative, the cursor is inside the
         // selection. In this case, resize along whichever is most positive.
-        AxisSet::single(edge_distances.max_axis(|_, val| val))
+        AxisSet::single(edge_distances.max_axis())
     } else {
         // If any edge distance is positive, resize along the positive ones.
         AxisSet::from_fn(D::NDIM, |ax| edge_distances[ax].is_positive())

@@ -137,7 +137,7 @@ proptest! {
         new_center in proptest_ivec2d(-100..=100),
     ) {
         let mut ndtree = NdTree::default();
-        ndtree.set_center(old_offset.to_bigvec());
+        ndtree.set_center_pos(old_offset.to_bigvec());
 
         let mut hashmap = HashMap::default();
         for (pos, cell) in cells_to_set {
@@ -223,7 +223,7 @@ proptest! {
         }
 
         let mut ndtree_to_paste = NdTree::with_node_pool(ndtree.pool().new_ref());
-        ndtree_to_paste.set_offset(paste_offset.to_bigvec());
+        ndtree_to_paste.set_base_pos(paste_offset.to_bigvec());
         let mut hashmap_pasted = HashMap::default();
         for (pos, state) in cells_to_paste {
             hashmap_pasted.insert(pos, state);

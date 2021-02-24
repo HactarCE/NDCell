@@ -1,37 +1,32 @@
 use anyhow::Result;
 use enum_dispatch::enum_dispatch;
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Duration;
 
 use ndcell_core::prelude::*;
 
-mod camera;
+mod algorithms;
+mod drag;
 mod generic;
 mod history;
 pub mod render;
+mod screenpos;
 mod selection;
 mod view2d;
 mod view3d;
+mod viewpoint;
 mod worker;
 
-use crate::commands::*;
-use crate::config::Config;
-pub use camera::*;
+use crate::commands::{CmdMsg, DragCmd};
 pub use generic::GenericGridView;
 pub use history::History;
 pub use render::{MouseTargetData, RenderParams, RenderResult};
+pub use screenpos::*;
 pub use selection::*;
 pub use view2d::GridView2D;
 pub use view3d::GridView3D;
-
-/// Handler for mouse drag events, when the user starts dragging and called for
-/// each cursor movement until released. Returns whether to continue or cancel
-/// the drag.
-///
-/// It takes as input the current state, which is mutated, and the current mouse
-/// cursor position. If any initial state or mouse cursor history is relevant,
-/// the closure must maintain this information.
-pub type DragHandler<G> = Box<dyn FnMut(&mut G, FVec2D) -> Result<DragOutcome>>;
+pub use viewpoint::*;
 
 /// Abstraction over 2D and 3D gridviews.
 #[enum_dispatch(History)]
@@ -81,6 +76,13 @@ impl GridView {
         }
     }
 
+    pub fn rule(&self) -> Rule {
+        match self {
+            GridView::View2D(view2d) => Rule::Rule2D(Arc::clone(&view2d.automaton.rule)),
+            GridView::View3D(view3d) => Rule::Rule3D(Arc::clone(&view3d.automaton.rule)),
+        }
+    }
+
     pub fn selected_cell_state(&self) -> u8 {
         match self {
             GridView::View2D(view2d) => view2d.selected_cell_state,
@@ -88,10 +90,10 @@ impl GridView {
         }
     }
 
-    pub fn fps(&self, config: &Config) -> f64 {
+    pub fn frame_duration(&self) -> Option<Duration> {
         match self {
-            GridView::View2D(view2d) => view2d.fps(config),
-            GridView::View3D(view3d) => view3d.fps(config),
+            GridView::View2D(view2d) => view2d.frame_duration(),
+            GridView::View3D(view3d) => view3d.frame_duration(),
         }
     }
     pub fn last_render_result(&self) -> &RenderResult {
@@ -113,16 +115,22 @@ impl GridView {
             GridView::View3D(view3d) => view3d.work_type(),
         }
     }
+    pub fn is_dragging(&self) -> bool {
+        match self {
+            GridView::View2D(view2d) => view2d.is_dragging(),
+            GridView::View3D(view3d) => view3d.is_dragging(),
+        }
+    }
+    pub fn drag_cmd(&self) -> Option<&DragCmd> {
+        match self {
+            GridView::View2D(view2d) => view2d.get_drag().map(|d| &d.command),
+            GridView::View3D(view3d) => view3d.get_drag().map(|d| &d.command),
+        }
+    }
     pub fn is_drawing(&self) -> bool {
         match self {
             GridView::View2D(view2d) => view2d.is_drawing(),
             GridView::View3D(view3d) => view3d.is_drawing(),
-        }
-    }
-    pub fn is_dragging_view(&self) -> bool {
-        match self {
-            GridView::View2D(view2d) => view2d.is_dragging_view(),
-            GridView::View3D(view3d) => view3d.is_dragging_view(),
         }
     }
     pub fn is_running(&self) -> bool {
@@ -133,7 +141,7 @@ impl GridView {
     }
 
     /// Enqueues a command to be executed on the next frame.
-    pub fn enqueue(&self, command: impl Into<Command>) {
+    pub fn enqueue(&self, command: impl Into<CmdMsg>) {
         match self {
             GridView::View2D(view2d) => view2d.enqueue(command),
             GridView::View3D(view3d) => view3d.enqueue(command),
@@ -141,18 +149,32 @@ impl GridView {
     }
     /// Does all the frame things: executes commands, advances the simulation,
     /// etc.
-    pub fn do_frame(&mut self, config: &Config) -> Result<()> {
+    pub fn do_frame(&mut self) -> Result<()> {
         match self {
-            GridView::View2D(view2d) => view2d.do_frame(config),
-            GridView::View3D(view3d) => view3d.do_frame(config),
+            GridView::View2D(view2d) => view2d.do_frame(),
+            GridView::View3D(view3d) => view3d.do_frame(),
         }
     }
-    /// Updates camera parameters and renders the gridview, recording and
+    /// Updates viewpoint parameters and renders the gridview, recording and
     /// returning the result.
     pub fn render(&mut self, params: RenderParams<'_>) -> Result<&RenderResult> {
         match self {
             GridView::View2D(view2d) => view2d.render(params),
             GridView::View3D(view3d) => view3d.render(params),
+        }
+    }
+    /// Exports the simulation to a string.
+    pub fn export(&self, format: CaFormat) -> Result<String, CaFormatError> {
+        match self {
+            GridView::View2D(view2d) => view2d.export(format),
+            GridView::View3D(view3d) => view3d.export(format),
+        }
+    }
+    /// Returns whether there is a selection.
+    pub fn has_selection(&self) -> bool {
+        match self {
+            GridView::View2D(view2d) => view2d.selection.is_some(),
+            GridView::View3D(view3d) => view3d.selection.is_some(),
         }
     }
 }
@@ -161,17 +183,4 @@ impl GridView {
 pub enum WorkType {
     SimStep,
     SimContinuous,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum DragType {
-    MovingView,
-    Drawing,
-    Selecting,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum DragOutcome {
-    Continue,
-    Cancel,
 }

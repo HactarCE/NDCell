@@ -11,7 +11,6 @@
 //! stack and then pop an entry from the redo stack to restore. Every operation
 //! besides undo/redo clears the redo stack.
 
-use crate::config::Config;
 use enum_dispatch::enum_dispatch;
 
 /// Undo/redo stacks to manage undo/redo history.
@@ -46,7 +45,7 @@ pub trait HistoryBase {
     /// method.
     ///
     /// This method is analogous to std::mem::replace().
-    fn restore_history_entry(&mut self, config: &Config, entry: Self::Entry) -> Self::Entry;
+    fn restore_history_entry(&mut self, entry: Self::Entry) -> Self::Entry;
 
     /// Returns an immutable reference to the history manager.
     fn as_history(&self) -> &HistoryManager<Self::Entry>;
@@ -65,13 +64,13 @@ pub trait History {
     ///
     /// Returns true if the undo was successful, or false if there was nothing
     /// to undo.
-    fn undo(&mut self, config: &Config) -> bool;
+    fn undo(&mut self) -> bool;
     /// Restores the next state from the redo stack, pushing the current state
     /// onto the undo stack.
     ///
     /// Returns true if the redo was successful, or false if there was nothing
     /// to redo.
-    fn redo(&mut self, config: &Config) -> bool;
+    fn redo(&mut self) -> bool;
 
     /// Returns true if there is something to undo, or false otherwise.
     fn can_undo(&self) -> bool;
@@ -89,18 +88,18 @@ where
         self.as_history_mut().redo_stack.clear();
     }
 
-    fn undo(&mut self, config: &Config) -> bool {
+    fn undo(&mut self) -> bool {
         if let Some(undone_state) = self.as_history_mut().undo_stack.pop() {
-            let original_state = self.restore_history_entry(config, undone_state);
+            let original_state = self.restore_history_entry(undone_state);
             self.as_history_mut().redo_stack.push(original_state);
             true
         } else {
             false
         }
     }
-    fn redo(&mut self, config: &Config) -> bool {
+    fn redo(&mut self) -> bool {
         if let Some(redone_state) = self.as_history_mut().redo_stack.pop() {
-            let original_state = self.restore_history_entry(config, redone_state);
+            let original_state = self.restore_history_entry(redone_state);
             self.as_history_mut().undo_stack.push(original_state);
             true
         } else {
@@ -119,10 +118,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn replace<'a, T>(state: &'a mut T) -> impl 'a + FnMut(T) -> T {
-        move |x| std::mem::replace(state, x)
-    }
 
     struct HistoryTester {
         /// Current value.
@@ -145,7 +140,7 @@ mod tests {
             self.curr
         }
 
-        fn restore_history_entry(&mut self, _config: &Config, entry: i32) -> i32 {
+        fn restore_history_entry(&mut self, entry: i32) -> i32 {
             std::mem::replace(&mut self.curr, entry)
         }
 
@@ -160,7 +155,6 @@ mod tests {
 
     #[test]
     fn test_undo_redo() {
-        let cfg = Config::default();
         let mut h = HistoryTester::new(10);
 
         h.record();
@@ -171,32 +165,31 @@ mod tests {
 
         /* Try undo() */
 
-        assert!(h.undo(&cfg));
+        assert!(h.undo());
         assert_eq!(20, h.curr);
 
-        assert!(h.undo(&cfg));
+        assert!(h.undo());
         assert_eq!(10, h.curr);
 
         // no more undo history; should fail
-        assert!(!h.undo(&cfg));
+        assert!(!h.undo());
         assert_eq!(10, h.curr);
 
         /* Try redo() */
 
-        assert!(h.redo(&cfg));
+        assert!(h.redo());
         assert_eq!(20, h.curr);
 
-        assert!(h.redo(&cfg));
+        assert!(h.redo());
         assert_eq!(30, h.curr);
 
         // no more redo history; should fail
-        assert!(!h.redo(&cfg));
+        assert!(!h.redo());
         assert_eq!(30, h.curr);
     }
 
     #[test]
     fn test_undo_redo_overwrite() {
-        let cfg = Config::default();
         let mut h = HistoryTester::new(10);
 
         h.record();
@@ -208,24 +201,24 @@ mod tests {
         h.record();
         h.curr = 40;
 
-        assert!(h.undo(&cfg));
+        assert!(h.undo());
         assert_eq!(30, h.curr);
 
-        assert!(h.undo(&cfg));
+        assert!(h.undo());
         assert_eq!(20, h.curr);
 
         // should clear redo history but not undo history
         h.record();
         h.curr = 25;
 
-        assert!(h.undo(&cfg));
+        assert!(h.undo());
         assert_eq!(20, h.curr);
 
-        assert!(h.redo(&cfg));
+        assert!(h.redo());
         assert_eq!(25, h.curr);
 
         // redo history was deleted; should fail
-        assert!(!h.redo(&cfg));
+        assert!(!h.redo());
         assert_eq!(25, h.curr);
     }
 }

@@ -2,17 +2,15 @@ use glium::glutin::dpi::{PhysicalPosition, PhysicalSize};
 use glium::glutin::event::*;
 use imgui_winit_support::WinitPlatform;
 use std::collections::HashSet;
-use std::fmt;
 use std::ops::Index;
 use std::time::{Duration, Instant};
 
 use ndcell_core::prelude::*;
 
 use crate::commands::*;
-use crate::config::Config;
 use crate::gridview::GridView;
-use crate::mouse::{MouseDisplay, MouseState};
-use crate::Scale;
+use crate::mouse::{MouseDisplayMode, MouseState};
+use crate::CONFIG;
 
 const SHIFT: ModifiersState = ModifiersState::SHIFT;
 const CTRL: ModifiersState = ModifiersState::CTRL;
@@ -32,6 +30,7 @@ mod sc {
     pub const S: u32 = 1;
     pub const D: u32 = 2;
     pub const Q: u32 = 12;
+    pub const E: u32 = 14;
     pub const Z: u32 = 6;
 }
 #[cfg(not(any(target_os = "macos")))]
@@ -41,6 +40,7 @@ mod sc {
     pub const S: u32 = 31;
     pub const D: u32 = 32;
     pub const Q: u32 = 16;
+    pub const E: u32 = 18;
     pub const Z: u32 = 44;
 }
 
@@ -77,7 +77,6 @@ impl State {
 
     pub fn frame<'a>(
         &'a mut self,
-        config: &'a mut Config,
         gridview: &'a GridView,
         imgui_io: &imgui::Io,
         platform: &WinitPlatform,
@@ -89,7 +88,6 @@ impl State {
         }
         FrameInProgress {
             state: self,
-            config,
             gridview,
 
             has_keyboard,
@@ -103,7 +101,6 @@ impl State {
 #[must_use = "call finish()"]
 pub struct FrameInProgress<'a> {
     state: &'a mut State,
-    config: &'a mut Config,
     gridview: &'a GridView,
 
     /// Whether to handle keyboard input (false if it is captured by imgui).
@@ -147,24 +144,28 @@ impl FrameInProgress<'_> {
                             MouseScrollDelta::LineDelta(x, y) => (x as f64, y as f64),
                             MouseScrollDelta::PixelDelta(PhysicalPosition { x, y }) => (x, y),
                         };
+                        let config = CONFIG.lock();
                         let speed = match (&self.gridview, delta) {
                             (GridView::View2D(_), MouseScrollDelta::LineDelta(_, _)) => {
-                                self.config.ctrl.discrete_scale_speed_2d
+                                config.ctrl.discrete_scale_speed_2d
                             }
                             (GridView::View2D(_), MouseScrollDelta::PixelDelta(_)) => {
-                                self.config.ctrl.smooth_scroll_speed_2d
+                                1.0 / config.ctrl.pixels_per_2x_scale_2d
                             }
                             (GridView::View3D(_), MouseScrollDelta::LineDelta(_, _)) => {
-                                self.config.ctrl.discrete_scale_speed_3d
+                                config.ctrl.discrete_scale_speed_3d
                             }
                             (GridView::View3D(_), MouseScrollDelta::PixelDelta(_)) => {
-                                self.config.ctrl.smooth_scroll_speed_3d
+                                1.0 / config.ctrl.pixels_per_2x_scale_3d
                             }
                         };
-                        self.gridview.enqueue(ViewCommand::Scale {
-                            log2_factor: dy * speed,
-                            invariant_pos: self.state.mouse.pos,
-                        });
+                        let log2_scale_factor = dy * speed;
+                        if let Some(mouse_pos) = self.state.mouse.pos {
+                            self.gridview
+                                .enqueue(Cmd::ScaleToCursor(log2_scale_factor).at(mouse_pos));
+                        } else {
+                            self.gridview.enqueue(Cmd::Scale(log2_scale_factor));
+                        }
                         self.state.scale_snap_cooldown = Some(Instant::now() + SCALE_SNAP_COOLDOWN);
                     }
                     WindowEvent::MouseInput { button, state, .. } => match state {
@@ -183,11 +184,14 @@ impl FrameInProgress<'_> {
     }
 
     fn handle_key(&mut self, input: &KeyboardInput) {
+        let mut config = CONFIG.lock();
+
         match input {
             // Handle key press.
             KeyboardInput {
                 state: ElementState::Pressed,
                 virtual_keycode,
+                scancode,
                 ..
             } => {
                 // We don't care about left vs. right modifiers, so just extract
@@ -196,30 +200,22 @@ impl FrameInProgress<'_> {
 
                 if modifiers.is_empty() {
                     match virtual_keycode {
-                        Some(VirtualKeyCode::Space) => {
-                            self.gridview.enqueue(SimCommand::Step(1.into()))
-                        }
-                        Some(VirtualKeyCode::Tab) => {
-                            self.gridview.enqueue(SimCommand::StepStepSize)
-                        }
-                        Some(VirtualKeyCode::Return) => {
-                            self.gridview.enqueue(SimCommand::ToggleRunning)
-                        }
-                        Some(VirtualKeyCode::Escape) => self.gridview.enqueue(Command::Cancel),
+                        Some(VirtualKeyCode::Space) => self.gridview.enqueue(Cmd::Step(1)),
+                        Some(VirtualKeyCode::Tab) => self.gridview.enqueue(Cmd::StepStepSize),
+                        Some(VirtualKeyCode::Return) => self.gridview.enqueue(Cmd::ToggleRunning),
+                        Some(VirtualKeyCode::Escape) => self.gridview.enqueue(Cmd::Cancel),
                         Some(VirtualKeyCode::Equals) | Some(VirtualKeyCode::NumpadAdd) => {
-                            self.config.sim.step_size *= 2;
-                            self.gridview.enqueue(SimCommand::UpdateStepSize);
+                            config.sim.step_size *= 2;
+                            self.gridview.enqueue(Cmd::UpdateStepSize);
                         }
                         Some(VirtualKeyCode::Minus) | Some(VirtualKeyCode::NumpadSubtract) => {
-                            self.config.sim.step_size /= 2;
-                            if self.config.sim.step_size < 1.into() {
-                                self.config.sim.step_size = 1.into();
+                            config.sim.step_size /= 2;
+                            if config.sim.step_size < 1.into() {
+                                config.sim.step_size = 1.into();
                             }
-                            self.gridview.enqueue(SimCommand::UpdateStepSize);
+                            self.gridview.enqueue(Cmd::UpdateStepSize);
                         }
-                        Some(VirtualKeyCode::Delete) => {
-                            self.gridview.enqueue(SelectCommand::Delete)
-                        }
+                        Some(VirtualKeyCode::Delete) => self.gridview.enqueue(Cmd::DeleteSelection),
                         Some(k @ VirtualKeyCode::LBracket)
                         | Some(k @ VirtualKeyCode::RBracket)
                         | Some(k @ VirtualKeyCode::Key0)
@@ -232,7 +228,7 @@ impl FrameInProgress<'_> {
                         | Some(k @ VirtualKeyCode::Key7)
                         | Some(k @ VirtualKeyCode::Key8)
                         | Some(k @ VirtualKeyCode::Key9) => {
-                            self.gridview.enqueue(DrawCommand::SetState(match k {
+                            self.gridview.enqueue(Cmd::SetDrawState(match k {
                                 // Select the previous cell state.
                                 VirtualKeyCode::LBracket => {
                                     self.gridview.selected_cell_state().wrapping_sub(1)
@@ -254,57 +250,42 @@ impl FrameInProgress<'_> {
                                 _ => unreachable!(),
                             }));
                         }
-                        _ => (),
+                        _ => match *scancode {
+                            sc::E => {
+                                if let Some(mouse_pos) = self.state.mouse.pos {
+                                    self.gridview.enqueue(Cmd::FocusCursor.at(mouse_pos));
+                                }
+                            }
+                            _ => (),
+                        },
                     }
                 }
 
                 if modifiers == CTRL {
                     match virtual_keycode {
                         // Select all.
-                        Some(VirtualKeyCode::A) => self.gridview.enqueue(SelectCommand::SelectAll),
+                        Some(VirtualKeyCode::A) => self.gridview.enqueue(Cmd::SelectAll),
                         // Undo.
-                        Some(VirtualKeyCode::Z) => self.gridview.enqueue(HistoryCommand::Undo),
+                        Some(VirtualKeyCode::Z) => self.gridview.enqueue(Cmd::Undo),
                         // Redo.
-                        Some(VirtualKeyCode::Y) => self.gridview.enqueue(HistoryCommand::Redo),
+                        Some(VirtualKeyCode::Y) => self.gridview.enqueue(Cmd::Redo),
                         // Reset.
-                        Some(VirtualKeyCode::R) => {
-                            self.gridview.enqueue(HistoryCommand::UndoTo(0.into()))
-                        }
+                        Some(VirtualKeyCode::R) => self.gridview.enqueue(Cmd::Reset),
                         // Cut RLE.
                         Some(VirtualKeyCode::X) => {
-                            self.gridview.enqueue(SelectCommand::Copy(CaFormat::Rle));
-                            self.gridview.enqueue(SelectCommand::Delete);
+                            self.gridview.enqueue(Cmd::CopySelection(CaFormat::Rle));
+                            self.gridview.enqueue(Cmd::DeleteSelection);
                         }
                         // Copy RLE.
                         Some(VirtualKeyCode::C) => {
-                            self.gridview.enqueue(SelectCommand::Copy(CaFormat::Rle))
+                            self.gridview.enqueue(Cmd::CopySelection(CaFormat::Rle));
                         }
                         // Paste.
-                        Some(VirtualKeyCode::V) => self.gridview.enqueue(SelectCommand::Paste),
+                        Some(VirtualKeyCode::V) => self.gridview.enqueue(Cmd::PasteSelection),
                         // Center view.
-                        Some(VirtualKeyCode::M) => {
-                            self.gridview.enqueue(match self.gridview {
-                                GridView::View2D(_) => ViewCommand::GoTo2D {
-                                    x: Some(r64(0.0).into()),
-                                    y: Some(r64(0.0).into()),
-                                    relative: false,
-                                    scaled: false,
-                                },
-                                GridView::View3D(_) => ViewCommand::GoTo3D {
-                                    x: Some(r64(0.0).into()),
-                                    y: Some(r64(0.0).into()),
-                                    z: Some(r64(0.0).into()),
-                                    yaw: Some(crate::gridview::Camera3D::DEFAULT_YAW.into()),
-                                    pitch: Some(crate::gridview::Camera3D::DEFAULT_PITCH.into()),
-                                    relative: false,
-                                    scaled: false,
-                                },
-                            });
-                            self.gridview
-                                .enqueue(ViewCommand::GoToScale(Scale::default()));
-                        }
+                        Some(VirtualKeyCode::M) => self.gridview.enqueue(Cmd::ResetView),
                         // Fit view to pattern.
-                        Some(VirtualKeyCode::F) => self.gridview.enqueue(ViewCommand::FitView),
+                        Some(VirtualKeyCode::F) => self.gridview.enqueue(Cmd::FitView),
                         _ => (),
                     }
                 }
@@ -312,17 +293,23 @@ impl FrameInProgress<'_> {
                 if modifiers == SHIFT | CTRL {
                     match virtual_keycode {
                         // Redo.
-                        Some(VirtualKeyCode::Z) => self.gridview.enqueue(HistoryCommand::Redo),
+                        Some(VirtualKeyCode::Z) => self.gridview.enqueue(Cmd::Redo),
                         // Cut Macrocell.
                         Some(VirtualKeyCode::X) => {
                             self.gridview
-                                .enqueue(SelectCommand::Copy(CaFormat::Macrocell));
-                            self.gridview.enqueue(SelectCommand::Delete);
+                                .enqueue(Cmd::CopySelection(CaFormat::Macrocell));
+                            self.gridview.enqueue(Cmd::DeleteSelection);
                         }
                         // Copy Macrocell.
-                        Some(VirtualKeyCode::C) => self
-                            .gridview
-                            .enqueue(SelectCommand::Copy(CaFormat::Macrocell)),
+                        Some(VirtualKeyCode::C) => {
+                            self.gridview
+                                .enqueue(Cmd::CopySelection(CaFormat::Macrocell));
+                        }
+
+                        // Reload shaders (debug build only).
+                        #[cfg(debug_assertions)]
+                        Some(VirtualKeyCode::R) => crate::gridview::render::hot_reload_shaders(),
+
                         _ => (),
                     }
                 }
@@ -333,31 +320,32 @@ impl FrameInProgress<'_> {
     }
 
     fn handle_mouse_press(&mut self, button: MouseButton) {
+        let config = CONFIG.lock();
+
         // Ignore mouse press if we are already dragging.
         if self.state.dragging_button.is_some() {
             return;
         }
 
         // Ignore mouse press if we don't own the mouse cursor.
-        let cursor_pos = match self.state.mouse.pos {
-            Some(pos) => pos,
+        let mouse_pos = match self.state.mouse.pos {
+            Some(mouse_pos) => mouse_pos,
             None => return,
         };
 
         let ndim = self.gridview.ndim();
         let mods = self.state.modifiers;
-        let (click_binding, drag_binding) = self.config.mouse.get_bindings(ndim, mods, button);
+        let (click_binding, drag_binding) = config.mouse.get_bindings(ndim, mods, button);
 
         let maybe_mouse_target = self.gridview.last_render_result().mouse_target.as_ref();
         if button == MouseButton::Left && maybe_mouse_target.is_some() {
             // Possibility #1: Drag mouse target (left mouse button only)
             let mouse_target_data = maybe_mouse_target.unwrap();
-            // Possibility #1: Drag mouse target
-            if let Some(b) = &mouse_target_data.binding {
-                self.state.dragging_button = Some(button);
-                self.state.mouse.display = mouse_target_data.display;
-                self.gridview.enqueue(b.to_command(cursor_pos));
-            }
+            let binding = &mouse_target_data.binding;
+            self.state.dragging_button = Some(button);
+            self.state.mouse.display_mode = binding.mouse_display_mode();
+            self.gridview
+                .enqueue(Cmd::BeginDrag(binding.clone()).at(mouse_pos));
         } else if let Some(b) = click_binding {
             // Possibility #2: Click
             match b {
@@ -368,33 +356,36 @@ impl FrameInProgress<'_> {
         } else if let Some(b) = drag_binding {
             // Possibility #3: Drag
             self.state.dragging_button = Some(button);
-            self.state.mouse.display = b.display();
-            self.gridview.enqueue(b.to_command(cursor_pos));
+            self.state.mouse.display_mode = b.mouse_display_mode();
+            self.gridview
+                .enqueue(Cmd::BeginDrag(b.clone()).at(mouse_pos));
         }
     }
     fn handle_mouse_release(&mut self, button: MouseButton) {
         if self.state.dragging_button == Some(button) {
-            self.gridview.enqueue(Command::StopDrag);
+            self.gridview.enqueue(Cmd::EndDrag);
             self.state.dragging_button = None;
         }
     }
 
     fn update_mouse_state(&mut self) {
+        let config = CONFIG.lock();
+
         self.state.mouse.dragging = self.state.dragging_button.is_some();
 
         if !self.state.mouse.dragging {
-            let (click_binding, drag_binding) = self.config.mouse.get_bindings(
+            let (click_binding, drag_binding) = config.mouse.get_bindings(
                 self.gridview.ndim(),
                 self.state.modifiers,
                 MouseButton::Left,
             );
             if let Some(mouse_target_data) = &self.gridview.last_render_result().mouse_target {
-                self.state.mouse.display = mouse_target_data.display;
+                self.state.mouse.display_mode = mouse_target_data.binding.mouse_display_mode();
             } else {
-                self.state.mouse.display = None
-                    .or(click_binding.as_ref().map(|b| b.display()))
-                    .or(drag_binding.as_ref().map(|b| b.display()))
-                    .unwrap_or(MouseDisplay::Normal);
+                self.state.mouse.display_mode = None
+                    .or(click_binding.as_ref().map(|b| b.mouse_display_mode()))
+                    .or(drag_binding.as_ref().map(|b| b.mouse_display_mode()))
+                    .unwrap_or(MouseDisplayMode::Normal);
             }
         }
     }
@@ -402,26 +393,34 @@ impl FrameInProgress<'_> {
     pub fn finish(mut self) {
         self.update_mouse_state();
 
+        let mut config = CONFIG.lock();
+
         // Update DPI in config.
 
-        self.config.gfx.dpi = self.dpi;
+        config.gfx.dpi = self.dpi;
 
-        // Move the viewport in one step.
+        // Move the viewpoint in one step.
 
         let mut moved = false;
         let mut scaled = false;
 
-        if self.gridview.is_dragging_view() {
-            moved = true;
-            scaled = true;
+        if let Some(drag_cmd) = self.gridview.drag_cmd() {
+            if drag_cmd.is_view_cmd() {
+                moved = true;
+                scaled = true;
+            }
         }
 
-        let speed_per_second = if self.state.modifiers.shift() {
-            self.config.ctrl.speed_modifier
+        let distance_per_second = if self.state.modifiers.shift() {
+            config.ctrl.speed_modifier
         } else {
             1.0
         };
-        let speed = speed_per_second / self.gridview.fps(&self.config);
+        let frame_duration = self
+            .gridview
+            .frame_duration()
+            .unwrap_or(Duration::default()); // .unwrap_or(Duration::zero());
+        let speed = distance_per_second * frame_duration.as_secs_f64();
 
         let keys = &self.state.keys;
 
@@ -451,51 +450,39 @@ impl FrameInProgress<'_> {
         if self.has_keyboard && !self.state.modifiers.intersects(CTRL | ALT | LOGO) {
             match self.gridview {
                 GridView::View2D(view2d) => {
-                    let move_speed = self.config.ctrl.keybd_move_speed_2d * speed * self.dpi;
-                    let pan_x = if pan_left { -move_speed } else { 0.0 }
+                    let move_speed = config.ctrl.keybd_move_speed_2d * speed * self.dpi;
+                    let dx = if pan_left { -move_speed } else { 0.0 }
                         + if pan_right { move_speed } else { 0.0 };
-                    let pan_y = if pan_south { -move_speed } else { 0.0 }
+                    let dy = if pan_south { -move_speed } else { 0.0 }
                         + if pan_north { move_speed } else { 0.0 };
-                    if (pan_x, pan_y) != (0.0, 0.0) {
-                        view2d.enqueue(ViewCommand::GoTo2D {
-                            x: Some(r64(pan_x).into()),
-                            y: Some(r64(pan_y).into()),
-                            relative: true,
-                            scaled: true,
-                        });
+                    if (dx, dy) != (0.0, 0.0) {
+                        view2d.enqueue(Move2D { dx, dy });
                         moved = true;
                     }
 
-                    let scale_speed = self.config.ctrl.keybd_scale_speed_2d * speed;
+                    let scale_speed = config.ctrl.keybd_scale_speed_2d * speed;
                     let log2_factor = if zoom_in { scale_speed } else { 0.0 }
                         + if zoom_out { -scale_speed } else { 0.0 };
                     if log2_factor != 0.0 {
-                        let invariant_pos = None;
-                        view2d.enqueue(ViewCommand::Scale {
-                            log2_factor,
-                            invariant_pos,
-                        });
+                        view2d.enqueue(Cmd::Scale(log2_factor));
                         scaled = true;
                     }
                 }
 
                 GridView::View3D(view3d) => {
-                    let move_speed = self.config.ctrl.keybd_move_speed_3d * speed * self.dpi;
-                    let x = if move_left { -move_speed } else { 0.0 }
+                    let move_speed = config.ctrl.keybd_move_speed_3d * speed * self.dpi;
+                    let dx = if move_left { -move_speed } else { 0.0 }
                         + if move_right { move_speed } else { 0.0 };
-                    let y = if move_down { -move_speed } else { 0.0 }
+                    let dy = if move_down { -move_speed } else { 0.0 }
                         + if move_up { move_speed } else { 0.0 };
-                    let z = if move_back { -move_speed } else { 0.0 }
-                        + if move_fwd { move_speed } else { 0.0 };
-                    if (x, y, z) != (0.0, 0.0, 0.0) {
-                        view3d.enqueue(ViewCommand::GoTo3D {
-                            x: Some(r64(x).into()),
-                            y: Some(r64(y).into()),
-                            z: Some(r64(z).into()),
-                            yaw: None,
-                            pitch: None,
-                            relative: true,
-                            scaled: true,
+                    let dz = if move_fwd { -move_speed } else { 0.0 }
+                        + if move_back { move_speed } else { 0.0 };
+                    if (dx, dy, dz) != (0.0, 0.0, 0.0) {
+                        view3d.enqueue(Move3D {
+                            dx,
+                            dy,
+                            dz,
+                            ..Default::default()
                         });
                         moved = true;
                     }
@@ -503,11 +490,11 @@ impl FrameInProgress<'_> {
             }
         }
         if !moved
-            && ((self.gridview.is_2d() && self.config.ctrl.snap_pos_2d)
-                || (self.gridview.is_3d() && self.config.ctrl.snap_pos_3d))
+            && ((self.gridview.is_2d() && config.ctrl.snap_pos_2d)
+                || (self.gridview.is_3d() && config.ctrl.snap_pos_3d))
         {
             // Snap to the nearest position.
-            self.gridview.enqueue(ViewCommand::SnapPos);
+            self.gridview.enqueue(Cmd::SnapPos);
         }
         if scaled {
             self.state.scale_snap_cooldown = Some(Instant::now() + Duration::from_millis(10));
@@ -516,22 +503,20 @@ impl FrameInProgress<'_> {
         let time_to_snap_scale = self.state.scale_snap_cooldown.is_none()
             || (Instant::now() >= self.state.scale_snap_cooldown.unwrap());
         if time_to_snap_scale
-            && ((self.gridview.is_2d() && self.config.ctrl.snap_scale_2d)
-                || (self.gridview.is_3d() && self.config.ctrl.snap_scale_3d))
+            && ((self.gridview.is_2d() && config.ctrl.snap_scale_2d)
+                || (self.gridview.is_3d() && config.ctrl.snap_scale_3d))
         {
             // Snap to the nearest power-of-2 scale.
-            self.gridview.enqueue(ViewCommand::SnapScale {
-                invariant_pos: None,
-            });
+            self.gridview.enqueue(Cmd::SnapScale);
         }
 
         // Send mouse drag command, if dragging.
 
         if self.state.dragging_button.is_some() {
-            if let Some(pos) = self.state.mouse.pos {
-                self.gridview.enqueue(Command::ContinueDrag(pos));
+            if let Some(mouse_pos) = self.state.mouse.pos {
+                self.gridview.enqueue(Cmd::ContinueDrag.at(mouse_pos));
             } else {
-                self.gridview.enqueue(Command::StopDrag);
+                self.gridview.enqueue(Cmd::EndDrag);
                 self.state.dragging_button = None;
             }
         }
@@ -547,7 +532,7 @@ struct KeysPressed {
     virtual_keycodes: HashSet<VirtualKeyCode>,
 }
 impl KeysPressed {
-    /// Update internal key state based on a KeyboardInput event.
+    /// Updates internal key state based on a KeyboardInput event.
     pub fn update(&mut self, input: &KeyboardInput) {
         match input.state {
             ElementState::Pressed => {
@@ -583,15 +568,5 @@ impl Index<VirtualKeyCode> for KeysPressed {
         } else {
             &false
         }
-    }
-}
-
-struct DragHandler {
-    pub continue_command: Box<dyn Fn(FVec2D) -> Command>,
-    pub stop_command: Command,
-}
-impl fmt::Debug for DragHandler {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "DragHandler  {{ stop: {:?} }}", self.stop_command)
     }
 }

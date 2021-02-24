@@ -42,7 +42,6 @@ pub mod automaton;
 pub mod axis;
 pub mod dim;
 mod lazyvec;
-pub mod math;
 pub mod ndarray;
 pub mod ndrect;
 pub mod ndtree;

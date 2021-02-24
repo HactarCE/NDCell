@@ -21,7 +21,7 @@ mod slice;
 use crate::dim::*;
 use crate::ndrect::{BigRect, CanContain, URect};
 use crate::ndvec::BigVec;
-use crate::num::{BigInt, Signed};
+use crate::num::BigInt;
 pub use aliases::*;
 pub use flat::{FlatNdTree, FlatNdTreeNode};
 pub use node::*;
@@ -36,7 +36,7 @@ pub struct NdTree<D: Dim> {
     /// The root node of this slice.
     root: ArcNode<D>,
     /// Position of the lowest corner of the root node.
-    offset: BigVec<D>,
+    base_pos: BigVec<D>,
 }
 
 impl<D: Dim> Default for NdTree<D> {
@@ -67,7 +67,7 @@ impl<'a, D: Dim> From<NdTreeSlice<'a, D>> for NdTree<D> {
     fn from(slice: NdTreeSlice<'a, D>) -> Self {
         Self {
             root: ArcNode::from(slice.root.as_ref()),
-            offset: slice.offset,
+            base_pos: slice.base_pos,
         }
     }
 }
@@ -87,7 +87,7 @@ impl<D: Dim> NdTree<D> {
     #[inline]
     pub fn with_center(center: BigVec<D>) -> Self {
         let mut ret = Self::new();
-        ret.set_center(center);
+        ret.set_center_pos(center);
         ret
     }
     /// Creates an ND-tree containing the given node centered on the origin.
@@ -103,7 +103,7 @@ impl<D: Dim> NdTree<D> {
         );
         Self {
             root: node.into(),
-            offset: BigVec::repeat(-node.layer().child_layer().big_len()),
+            base_pos: BigVec::repeat(-node.layer().child_layer().big_len()),
         }
     }
     /// Creates an ND-tree containing the given node centered on the given
@@ -115,7 +115,7 @@ impl<D: Dim> NdTree<D> {
     #[inline]
     pub fn from_node_centered_on<'n>(
         node: impl NodeRefTrait<'n, D = D>,
-        offset: BigVec<D>,
+        base_pos: BigVec<D>,
     ) -> Self {
         assert!(
             node.layer() > Layer(0),
@@ -123,7 +123,7 @@ impl<D: Dim> NdTree<D> {
         );
         Self {
             root: node.into(),
-            offset: offset + BigVec::repeat(-node.layer().child_layer().big_len()),
+            base_pos: base_pos + BigVec::repeat(-node.layer().child_layer().big_len()),
         }
     }
 
@@ -153,8 +153,8 @@ impl<D: Dim> NdTree<D> {
         self.root = new_root;
         let new_node_layer = self.layer();
 
-        self.offset += &old_node_layer.child_layer().big_len();
-        self.offset -= &new_node_layer.child_layer().big_len();
+        self.base_pos += &old_node_layer.child_layer().big_len();
+        self.base_pos -= &new_node_layer.child_layer().big_len();
     }
 
     /// Returns the node pool for the ND-tree.
@@ -172,33 +172,33 @@ impl<D: Dim> NdTree<D> {
     pub fn len(&self) -> BigInt {
         self.layer().big_len()
     }
-    /// Returns a lower bound for lowest coordinate in the grid.
+    /// Returns the lowest coordinate of the root node.
     #[inline]
-    pub fn offset(&self) -> &BigVec<D> {
-        &self.offset
+    pub fn base_pos(&self) -> &BigVec<D> {
+        &self.base_pos
     }
-    /// Sets the lowest coordinate of the root node of the grid. This changes
-    /// cell coordinates.
+    /// Sets the lowest coordinate of the root node. This changes cell
+    /// coordinates.
     #[inline]
-    pub fn set_offset(&mut self, offset: BigVec<D>) {
-        self.offset = offset;
+    pub fn set_base_pos(&mut self, base_pos: BigVec<D>) {
+        self.base_pos = base_pos;
     }
     /// Returns the position of the center of the root node of the ND-tree.
     #[inline]
-    pub fn center(&self) -> BigVec<D> {
-        self.offset.clone() + self.layer().child_layer().big_len()
+    pub fn center_pos(&self) -> BigVec<D> {
+        self.base_pos.clone() + self.layer().child_layer().big_len()
     }
     /// Sets the center of the root node of the grid. This changes cell
     /// coordinates.
     #[inline]
-    pub fn set_center(&mut self, center: BigVec<D>) {
-        self.offset += center.clone() - self.center();
-        assert_eq!(center, self.center());
+    pub fn set_center_pos(&mut self, center_pos: BigVec<D>) {
+        self.base_pos += center_pos.clone() - self.center_pos();
+        assert_eq!(center_pos, self.center_pos());
     }
     /// Returns a rectangle encompassing the grid.
     #[inline]
     pub fn rect(&self) -> BigRect<D> {
-        self.layer().big_rect() + self.offset()
+        self.layer().big_rect() + self.base_pos()
     }
 
     /// "Zooms out" the grid by a factor of 2.
@@ -294,7 +294,7 @@ impl<D: Dim> NdTree<D> {
     /// Returns the state of the cell at the given position.
     pub fn get_cell(&self, pos: &BigVec<D>) -> u8 {
         if self.rect().contains(pos) {
-            self.root_ref().cell_at_pos(&(pos - self.offset()))
+            self.root_ref().cell_at_pos(&(pos - self.base_pos()))
         } else {
             0
         }
@@ -303,7 +303,7 @@ impl<D: Dim> NdTree<D> {
     pub fn set_cell(&mut self, pos: &BigVec<D>, cell_state: u8) {
         self.expand_to(pos);
         let root = self.root_ref();
-        let new_root = root.set_cell(&(pos - self.offset()), cell_state);
+        let new_root = root.set_cell(&(pos - self.base_pos()), cell_state);
 
         let new_root = ArcNode::from(new_root);
         drop(root);
@@ -315,7 +315,7 @@ impl<D: Dim> NdTree<D> {
     pub fn as_slice<'a>(&'a self) -> NdTreeSlice<'a, D> {
         NdTreeSlice {
             root: self.root_ref(),
-            offset: self.offset().clone(),
+            base_pos: self.base_pos().clone(),
         }
     }
     /// Returns an `NdTreeSlice` of the smallest node in the grid containing the
@@ -351,7 +351,7 @@ impl<D: Dim> NdTree<D> {
             // includes the desired rectangle. Each axis is in the range from 0
             // to 3.
             let grandchild_rect: URect<D> =
-                ((rect.clone() - &ret.offset) >> grandchild_layer.to_u32()).to_urect();
+                ((rect.clone() - &ret.base_pos) >> grandchild_layer.to_u32()).to_urect();
             let mut new_min = grandchild_rect.min();
             let mut new_max = grandchild_rect.max();
             for &ax in D::axes() {
@@ -387,8 +387,8 @@ impl<D: Dim> NdTree<D> {
             let new_children = grandchild_square.iter().map(|grandchild_pos| {
                 root.grandchild_at_index(Layer(2).leaf_cell_index(grandchild_pos))
             });
-            // Compute the new offset.
-            ret.offset += grandchild_square.min().to_bigvec() << grandchild_layer.to_u32();
+            // Compute the new base position.
+            ret.base_pos += grandchild_square.min().to_bigvec() << grandchild_layer.to_u32();
             // Create the new node.
             ret.root = NodeRefWithGuard::from(node_pool.join_nodes(new_children));
         }
@@ -396,27 +396,27 @@ impl<D: Dim> NdTree<D> {
         // Recreate the `NdTreeSlice` with a different lifetime.
         NdTreeSlice {
             root: NodeRefWithGuard::with_guard(self.pool().access(), ret.root.as_ref()),
-            offset: ret.offset,
+            base_pos: ret.base_pos,
         }
     }
 
     /// Returns `true` if all cells within the rectangle are state #0.
     pub fn rect_is_empty(&self, rect: BigRect<D>) -> bool {
-        self.root_ref().rect_is_empty(&(rect - self.offset()))
+        self.root_ref().rect_is_empty(&(rect - self.base_pos()))
     }
     /// Returns the smallest rectangle containing all nonzero cells, or `None`
     /// if there are no live cells.
     pub fn bounding_rect(&self) -> Option<BigRect<D>> {
         self.root_ref()
             .min_nonzero_rect()
-            .map(|r| r + self.offset())
+            .map(|r| r + self.base_pos())
     }
     /// Shrinks a rectangle as much as possible while still containing the same
     /// nonzero cells. Returns `None` if all cells in the rectangle are zero.
     pub fn shrink_nonzero_rect(&self, rect: BigRect<D>) -> Option<BigRect<D>> {
         self.root_ref()
-            .shrink_nonzero_rect(&(rect - self.offset()))
-            .map(|r| r + self.offset())
+            .shrink_nonzero_rect(&(rect - self.base_pos()))
+            .map(|r| r + self.base_pos())
     }
 
     /// Recenters the ND-tree with the same cell contents at each position, but
@@ -426,11 +426,11 @@ impl<D: Dim> NdTree<D> {
     /// between `new_center` and the existing ND-tree center is not a multiple
     /// of a large power of 2 (relative to pattern size).
     pub fn recenter(&mut self, new_center: &BigVec<D>) {
-        let delta = new_center - self.center();
-        let max_abs_delta = delta[delta.max_axis(|_, x| x.abs())].abs();
+        let delta = new_center - self.center_pos();
+        let max_abs_delta = delta.abs().max_component().clone();
 
-        self.offset += &delta;
-        assert_eq!(*new_center, self.center());
+        self.base_pos += &delta;
+        assert_eq!(*new_center, self.center_pos());
 
         // Expand until half the size of the root node is smaller than (or equal
         // to) the delta vector.
@@ -525,10 +525,10 @@ impl<D: Dim> NdTree<D> {
         mut paste_cell: impl FnMut(u8, u8) -> u8,
     ) {
         // Ensure same center.
-        other.recenter(&self.center());
-        let mut mask = mask.into_ndtree(self.center());
-        assert_eq!(self.center(), other.center());
-        assert_eq!(self.center(), mask.center());
+        other.recenter(&self.center_pos());
+        let mut mask = mask.into_ndtree(self.center_pos());
+        assert_eq!(self.center_pos(), other.center_pos());
+        assert_eq!(self.center_pos(), mask.center_pos());
 
         // Ensure same layer.
         let common_layer = std::cmp::max(std::cmp::max(self.layer(), other.layer()), mask.layer());

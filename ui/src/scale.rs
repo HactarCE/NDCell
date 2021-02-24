@@ -7,7 +7,7 @@ use ndcell_core::prelude::*;
 ///
 /// In 2D, this is the width or height of a cell in "scaled units," which are
 /// pixels in 2D and abstract units in 3D, where the camera is always a fixed
-/// number of "units" away from the pivot point.
+/// number of "units" away from the viewpoint pivot.
 ///
 /// When zoomed in close, the scale factor is large, and the base-2 logarithm of
 /// the scale factor is positive. When zoomed out far away, the scale factor is
@@ -68,10 +68,18 @@ impl Scale {
     }
     /// Returns the largest `Scale` at which a rectangle of cells fits entirely
     /// on the target.
-    pub fn from_fit(cells_size: BigVec2D, target_size: (u32, u32)) -> Self {
+    pub fn from_fit<D: Dim>(cells_size: BigVec<D>, target_size: (u32, u32)) -> Self {
         let log2_cells_size =
-            FVec2D::from_fn(|ax| r64(FixedPoint::from(cells_size[ax].clone()).log2()));
-        let NdVec([log2_cells_w, log2_cells_h]) = log2_cells_size;
+            FVec::<D>::from_fn(|ax| r64(FixedPoint::from(cells_size[ax].clone()).log2()));
+
+        let (log2_cells_w, log2_cells_h) = if D::NDIM == 2 {
+            // Unpack vector into two values.
+            (log2_cells_size[Axis::X], log2_cells_size[Axis::Y])
+        } else {
+            // Clone the same value.
+            let max = *log2_cells_size.max_component();
+            (max, max)
+        };
 
         let log2_target_w: R64 = R64::from_u32(target_size.0).unwrap().log2();
         let log2_target_h: R64 = R64::from_u32(target_size.1).unwrap().log2();
@@ -116,7 +124,7 @@ impl Scale {
     }
     /// Converts a length of cells to a length of scaled units.
     pub fn cells_to_units<X: Div<FixedPoint>>(self, cells: X) -> X::Output {
-        cells / FixedPoint::from(-self.log2_factor()).exp2()
+        cells / self.inv_factor()
     }
 
     /// Returns the length of cells per scaled unit, which is equivalent to the

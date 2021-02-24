@@ -2,6 +2,7 @@
 //!
 //! This module contains everything needed to display NDCell's UI.
 
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(dead_code)] // TODO: remove this line
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
@@ -17,26 +18,41 @@ extern crate glium;
 extern crate lazy_static;
 
 use log::{debug, info, warn};
+use parking_lot::Mutex;
 use std::sync::Arc;
 
 use ndcell_core::prelude::*;
 
+#[macro_use]
+mod debug;
 mod clipboard_compat;
 mod colors;
 mod commands;
 mod config;
+mod direction;
+mod ext;
+mod face;
 mod gridview;
 mod gui;
 mod input;
 mod mouse;
+mod plane;
 mod scale;
 mod windows;
 
+use config::Config;
+use direction::{Direction, DIRECTIONS};
+use face::{Face, FACES};
 use gui::DISPLAY;
+use plane::Plane;
 use scale::Scale;
 
 /// The title of the window (both the OS window, and the main imgui window).
 const TITLE: &str = "NDCell";
+
+lazy_static! {
+    static ref CONFIG: Mutex<Config> = Mutex::new(Config::default());
+}
 
 fn main() {
     simple_logger::SimpleLogger::new()
@@ -110,4 +126,19 @@ fn make_default_gridview(ndim: usize) -> gridview::GridView {
         .into(),
         _ => panic!("Invalid number of dimensions passed to make_default_gridview()"),
     }
+}
+
+fn default_colors() -> [palette::Srgba; 256] {
+    use palette::Srgba;
+    let mut ret = [Srgba::default(); 256];
+
+    ret[0] = crate::colors::cells::DEAD;
+    ret[1] = crate::colors::cells::LIVE;
+
+    for i in 2..256 {
+        let c = colorous::SPECTRAL.eval_rational(i as usize - 2, 255);
+        ret[i] = Srgba::new(c.r, c.g, c.b, u8::MAX).into_format();
+    }
+
+    ret
 }

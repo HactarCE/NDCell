@@ -41,6 +41,7 @@ pub enum CaFormatError {
     RleError(RleError),
     MacrocellError(MacrocellError),
 }
+impl std::error::Error for CaFormatError {}
 impl From<RleError> for CaFormatError {
     fn from(e: RleError) -> Self {
         Self::RleError(e)

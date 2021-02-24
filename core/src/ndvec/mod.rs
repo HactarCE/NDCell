@@ -25,7 +25,7 @@ pub use any::AnyDimVec;
 
 use crate::axis::Axis;
 use crate::dim::{Dim, DimFor};
-use crate::num::{r64, BigInt, FixedPoint, NdVecNum, Signed};
+use crate::num::{BigInt, FixedPoint, NdVecNum, Signed};
 
 /// `D`-dimensional vector with coordinates of type `N`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -172,20 +172,31 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     /// Returns the `Axis` of the component that is the most positive (or one of
     /// them, if there is a tie).
     #[inline]
-    pub fn max_axis<'a, X: std::cmp::Ord>(&'a self, key: impl Fn(Axis, &'a N) -> X) -> Axis {
+    pub fn max_axis<'a>(&'a self) -> Axis {
         *D::Dim::axes()
             .into_iter()
-            .max_by_key(|&&ax| key(ax, &self[ax]))
+            .max_by_key(|&&ax| &self[ax])
             .unwrap()
     }
     /// Returns the `Axis` of the component that is the most negative (or one of
     /// them, if there is a tie).
     #[inline]
-    pub fn min_axis<'a, X: std::cmp::Ord>(&'a self, key: impl Fn(Axis, &'a N) -> X) -> Axis {
+    pub fn min_axis<'a>(&'a self) -> Axis {
         *D::Dim::axes()
             .into_iter()
-            .min_by_key(|&&ax| key(ax, &self[ax]))
+            .min_by_key(|&&ax| &self[ax])
             .unwrap()
+    }
+
+    /// Returns the component that is the most positive.
+    #[inline]
+    pub fn max_component<'a>(&'a self) -> &N {
+        &self[self.max_axis()]
+    }
+    /// Returns the component that is the most negative.
+    #[inline]
+    pub fn min_component<'a>(&'a self) -> &N {
+        &self[self.min_axis()]
     }
 }
 
@@ -194,40 +205,6 @@ impl<D: Dim> BigVec<D> {
     /// Constructs a new BigVec using isize components.
     pub fn big(isize_array: <D as DimFor<isize>>::Array) -> Self {
         NdVec::<D, isize>(isize_array).to_bigvec()
-    }
-}
-
-impl<D: Dim> FixedVec<D> {
-    /// Returns the integer part of the number.
-    #[inline]
-    pub fn trunc(&self) -> BigVec<D> {
-        NdVec::from_fn(|ax| self[ax].trunc())
-    }
-
-    /// Returns the fractional part of the number.
-    #[inline]
-    pub fn fract(&self) -> FVec<D> {
-        NdVec::from_fn(|ax| r64(self[ax].fract()))
-    }
-
-    /// Returns the largest integer less than or equal to the number, along with
-    /// the signed distance to that integer.
-    #[inline]
-    pub fn floor(&self) -> (BigVec<D>, FVec<D>) {
-        (
-            NdVec::from_fn(|ax| self[ax].floor().0),
-            NdVec::from_fn(|ax| r64(self[ax].floor().1)),
-        )
-    }
-
-    /// Returns the smallest integer greater than or equal to the number, along
-    /// with the signed distance to that integer.
-    #[inline]
-    pub fn ceil(&self) -> (BigVec<D>, FVec<D>) {
-        (
-            NdVec::from_fn(|ax| self[ax].ceil().0),
-            NdVec::from_fn(|ax| r64(self[ax].ceil().1)),
-        )
     }
 }
 

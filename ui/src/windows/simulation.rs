@@ -4,29 +4,31 @@ use ndcell_core::prelude::*;
 
 use crate::commands::*;
 use crate::windows::BuildParams;
+use crate::CONFIG;
 
 #[derive(Debug, Default)]
 pub struct SimulationWindow {
     pub is_visible: bool,
 }
 impl SimulationWindow {
-    /// Builds the main window.
+    /// Builds the window.
     pub fn build(&mut self, params: &mut BuildParams<'_>) {
         let BuildParams {
             ui,
-            config,
             mouse: _,
             gridview,
         } = params;
 
         if self.is_visible {
             Window::new(&ImString::new("Simulation")).build(&ui, || {
+                let mut config = CONFIG.lock();
+
                 let mut width = ui.window_content_region_width();
                 if width < 100.0 {
                     width = 200.0;
                 }
                 if ui.button(im_str!("Step 1 generation"), [width, 40.0]) {
-                    gridview.enqueue(SimCommand::Step(1.into()));
+                    gridview.enqueue(Cmd::Step(1));
                 }
                 ui.spacing();
                 ui.spacing();
@@ -50,7 +52,7 @@ impl SimulationWindow {
                     &ImString::new(format!("Step {} generations", config.sim.step_size)),
                     [width, 40.0],
                 ) {
-                    gridview.enqueue(SimCommand::StepStepSize);
+                    gridview.enqueue(Cmd::StepStepSize);
                 }
                 ui.spacing();
                 ui.spacing();
@@ -63,7 +65,7 @@ impl SimulationWindow {
                         },
                         [width, 60.0],
                     ) {
-                        gridview.enqueue(SimCommand::ToggleRunning);
+                        gridview.enqueue(Cmd::ToggleRunning);
                     }
                 }
                 ui.spacing();
@@ -92,18 +94,18 @@ impl SimulationWindow {
                 ui.separator();
                 ui.spacing();
                 ui.spacing();
-                let button_width = (width - 20.0) / 2.0;
+                let button_width = (width - 10.0) / 2.0;
                 if ui.button(im_str!("Undo"), [button_width, 60.0]) {
-                    gridview.enqueue(HistoryCommand::Undo);
+                    gridview.enqueue(Cmd::Undo);
                 }
-                ui.same_line(button_width + 20.0);
+                ui.same_line(button_width + 18.0);
                 if ui.button(im_str!("Redo"), [button_width, 60.0]) {
-                    gridview.enqueue(HistoryCommand::Redo);
+                    gridview.enqueue(Cmd::Redo);
                 }
                 ui.spacing();
                 ui.spacing();
                 if ui.button(im_str!("Reset"), [width, 40.0]) {
-                    gridview.enqueue(HistoryCommand::UndoTo(0.into()));
+                    gridview.enqueue(Cmd::Reset);
                 }
             })
         }

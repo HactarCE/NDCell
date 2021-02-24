@@ -59,32 +59,52 @@ impl<D: Dim, T> FlatNdTree<D, T> {
         assert!(node.layer() >= min_layer);
         FlatNdTreeBuilder {
             min_layer,
-            nodes: vec![],
+            nodes: vec![
+                // Index 0 is always the unique empty node.
+                FlatNdTreeNode::NonLeaf(
+                    vec![0; D::BRANCHING_FACTOR].into_boxed_slice(),
+                    PhantomData,
+                ),
+            ],
             node_indices: HashMap::default(),
             node_to_data,
         }
         .build(node.as_ref())
     }
-    /// Converts this `FlatNdTree` back into a `NodeRef`.
+    /// Converts this `FlatNdTree` back into a `NodeRef`. `data_to_node` must
+    /// return an empty node at `min_layer` when passed `None`.
     pub fn to_node<'s, 'pool>(
         &'s self,
-        data_to_node: impl Fn(&'s T) -> NodeRef<'pool, D>,
+        data_to_node: &'s impl Fn(Option<&'s T>) -> NodeRef<'pool, D>,
     ) -> NodeRef<'pool, D> {
-        self._to_node(&data_to_node, self.root_idx)
+        self._to_node(data_to_node, self.root_idx, self.layers)
     }
     /// Converts a single root node (and its descendants) of this `FlatNdTree`
     /// into a `NodeRef`.
     fn _to_node<'s, 'pool>(
         &'s self,
-        data_to_node: &impl Fn(&'s T) -> NodeRef<'pool, D>,
+        data_to_node: &'s impl Fn(Option<&'s T>) -> NodeRef<'pool, D>,
         root: usize,
+        layers_remaining: usize,
     ) -> NodeRef<'pool, D> {
+        // Handle empty nodes specially.
+        if root == 0 {
+            let empty_node_at_min_layer = data_to_node(None);
+            assert!(empty_node_at_min_layer.is_empty());
+            if layers_remaining == 0 {
+                return empty_node_at_min_layer;
+            } else {
+                let layer = empty_node_at_min_layer.layer() + Layer(layers_remaining as u32);
+                return empty_node_at_min_layer.pool().get_empty(layer);
+            }
+        }
+
         match &self.nodes[root] {
-            FlatNdTreeNode::Leaf(data, _) => data_to_node(data),
+            FlatNdTreeNode::Leaf(data, _) => data_to_node(Some(data)),
             FlatNdTreeNode::NonLeaf(indices, _) => {
                 let mut children = indices
                     .iter()
-                    .map(|&index| self._to_node(data_to_node, index))
+                    .map(|&index| self._to_node(data_to_node, index, layers_remaining - 1))
                     .peekable();
                 let node_pool = children.peek().unwrap().pool();
                 node_pool.join_nodes(children)
@@ -115,7 +135,10 @@ impl<'pool, D: Dim, T, F: Fn(NodeRef<'pool, D>) -> T> FlatNdTreeBuilder<'pool, D
     ///
     /// Panics if `original_node` is layer 0 (single cell).
     fn add_node(&mut self, original_node: NodeRef<'pool, D>) -> usize {
-        if let Some(&node_index) = self.node_indices.get(&original_node) {
+        if original_node.is_empty() {
+            // Index 0 contains an empty node for all layers.
+            return 0;
+        } else if let Some(&node_index) = self.node_indices.get(&original_node) {
             node_index
         } else {
             let flat_node = if original_node.layer() <= self.min_layer {
@@ -179,57 +202,76 @@ mod tests {
         let root = ndtree.root_ref();
         assert_eq!(Layer(3), root.layer());
 
+        let empty_0 = root.pool().get_empty(Layer(0));
+        let empty_1 = root.pool().get_empty(Layer(1));
+        let empty_2 = root.pool().get_empty(Layer(2));
+        let empty_3 = root.pool().get_empty(Layer(3));
+        let empty_10 = root.pool().get_empty(Layer(10));
+
         // The root node is at layer 3 (8x8), and there should be ...
-        //  - three unique layer-2 nodes (4x4)
-        //  - two unique layer-1 nodes (2x2)
-        //  - two unique layer-0 nodes (individual cells)
+        //  - one empty node, shared by all layers
+        //  - two unique non-empty layer-2 nodes (4x4)
+        //  - one unique non-empty layer-1 nodes (2x2)
+        //  - one unique non-empty layer-0 nodes (individual cells)
         //
         // When we make the tree flat down to layer N, we are flattening all
         // nodes of layer >= N, and leaving the rest as `NdTreeNodes`. The
         // number of flat nodes is `flat_N.nodes.len()`.
 
-        // 1+3+2+2 = 8, so there should be a total of eight nodes in this one.
+        // 1+1+2+1+1 = 6, so there should be a total of six nodes in this one.
         let flat_0 = FlatNdTree::from_node(&root, Layer(0), |x| x);
-        assert_eq!(3, flat_0.layers);
-        assert_eq!(8, flat_0.nodes.len());
-        assert_eq!(root, flat_0.to_node(|&x| x));
+        assert_eq!(3, flat_0.layers());
+        assert_eq!(6, flat_0.nodes().len());
+        assert_eq!(root, flat_0.to_node(&|x| *x.unwrap_or(&empty_0)));
         for n in flat_0.nodes() {
             if let FlatNdTreeNode::Leaf(x, _) = n {
                 assert_eq!(Layer(0), x.layer());
             }
         }
 
-        // 1+3+2 = 6, so there should be a total of six nodes in this one.
+        // 1+1+2+1 = 5, so there should be a total of five nodes in this one.
         let flat_1 = FlatNdTree::from_node(&root, Layer(1), |x| x);
-        assert_eq!(2, flat_1.layers);
-        assert_eq!(6, flat_1.nodes.len());
-        assert_eq!(root, flat_1.to_node(|&x| x));
+        assert_eq!(2, flat_1.layers());
+        assert_eq!(5, flat_1.nodes().len());
+        assert_eq!(root, flat_1.to_node(&|x| *x.unwrap_or(&empty_1)));
         for n in flat_1.nodes() {
             if let FlatNdTreeNode::Leaf(x, _) = n {
                 assert_eq!(Layer(1), x.layer());
             }
         }
 
-        // 1+3 = 4
+        // 1+1+2 = 4
         let flat_2 = FlatNdTree::from_node(&root, Layer(2), |x| x);
-        assert_eq!(1, flat_2.layers);
-        assert_eq!(4, flat_2.nodes.len());
-        assert_eq!(root, flat_2.to_node(|&x| x));
+        assert_eq!(1, flat_2.layers());
+        assert_eq!(4, flat_2.nodes().len());
+        assert_eq!(root, flat_2.to_node(&|x| *x.unwrap_or(&empty_2)));
         for n in flat_2.nodes() {
             if let FlatNdTreeNode::Leaf(x, _) = n {
                 assert_eq!(Layer(2), x.layer());
             }
         }
 
-        // 1 = 1
+        // 1+1 = 2
         let flat_3 = FlatNdTree::from_node(&root, Layer(3), |x| x);
-        assert_eq!(0, flat_3.layers);
-        assert_eq!(1, flat_3.nodes.len());
-        assert_eq!(root, flat_3.to_node(|&x| x));
+        assert_eq!(0, flat_3.layers());
+        assert_eq!(2, flat_3.nodes().len());
+        assert_eq!(root, flat_3.to_node(&|x| *x.unwrap_or(&empty_3)));
         for n in flat_3.nodes() {
             if let FlatNdTreeNode::Leaf(x, _) = n {
                 assert_eq!(Layer(3), x.layer());
             }
         }
+
+        // Test empty node.
+        let flat = FlatNdTree::from_node(empty_10, Layer(0), |_| panic!());
+        assert_eq!(10, flat.layers());
+        assert_eq!(1, flat.nodes().len());
+        assert_eq!(
+            empty_10,
+            flat.to_node(&|x| {
+                assert_eq!(None, x);
+                empty_0
+            }),
+        );
     }
 }

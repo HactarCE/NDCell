@@ -53,42 +53,22 @@ impl FixedPoint {
         }
     }
 
-    /// Returns the largest integer less than or equal to the number, along with
-    /// the signed distance to that integer.
+    /// Returns the largest integer less than or equal to the number.
     #[inline]
-    pub fn floor(&self) -> (BigInt, f64) {
-        let mut int = self.trunc();
-        let mut fract = self.fract();
-        if fract < 0.0 {
-            int -= 1;
-            fract += 1.0;
-        }
-        (int, fract)
+    pub fn floor(&self) -> BigInt {
+        self.trunc() + self.fract().floor() as i32
     }
 
-    /// Returns the smallest integer greater than or equal to the number, along
-    /// with the signed distance to that integer.
+    /// Returns the smallest integer greater than or equal to the number.
     #[inline]
-    pub fn ceil(&self) -> (BigInt, f64) {
-        let mut int = self.trunc();
-        let mut fract = self.fract();
-        if fract > 0.0 {
-            int += 1;
-            fract -= 1.0;
-        }
-        (int, fract)
+    pub fn ceil(&self) -> BigInt {
+        self.trunc() + self.fract().ceil() as i32
     }
 
-    /// Returns the smallest integer greater than or equal to the number, along
-    /// with the signed distance to that integer.
+    /// Returns the smallest integer greater than or equal to the number.
     #[inline]
-    pub fn round(&self) -> (BigInt, f64) {
-        let (mut int, mut fract) = self.floor();
-        if fract >= 0.5 {
-            int += 1;
-            fract -= 1.0;
-        }
-        (int, fract)
+    pub fn round(&self) -> BigInt {
+        self.trunc() + self.fract().round() as i32
     }
 
     /// Returns the square root.
@@ -107,7 +87,8 @@ impl FixedPoint {
     #[inline]
     pub fn exp2(&self) -> Self {
         // Split into integer and fraction.
-        let (i, f) = self.floor();
+        let i = self.trunc();
+        let f = self.fract();
         // Exponentiate separately and multiply.
         let ret = Self::from_f64(2.0_f64.powf(f)).unwrap();
         match i.sign() {

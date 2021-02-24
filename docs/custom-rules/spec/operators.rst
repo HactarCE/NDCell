@@ -1,8 +1,12 @@
-.. _operators:
+.. include:: <isonum.txt>
 
 *********
 Operators
 *********
+
+.. note::
+
+  This page is under construction.
 
 Besides the ``is`` operator, both `arguments`__ to any binary (two-input) operator must be of the same type, or one type must be able to implicitly convert to the other. See :ref:`conversions` for more details. Some additional rules apply for operators:
 
@@ -26,31 +30,39 @@ Arithmetic operators
 
 Given two values ``a`` and ``b``:
 
-- ``a + b`` — addition
-- ``a - b`` — subtraction
-- ``a * b`` — multiplication
-- ``a / b`` — division (rounds toward zero)
-- ``a % b`` — remainder
-- ``a ** b`` — exponentiation
-- ``-a`` — negation
-- ``+a`` — no operation
+- ``a + b`` — Addition
+- ``a - b`` — Subtraction
+- ``a * b`` — Multiplication
+- ``a / b`` — Division (rounds toward zero)
+- ``a % b`` — Remainder
+- ``a ** b`` — Exponentiation
+- ``-a`` — Negation
+- ``+a`` — No operation
 
 NOTE: In the future, the behavior of ``/`` and ``%`` with negative numbers may be changed to emulate `floored or euclidean division/modulo`__.
 
 __ https://en.wikipedia.org/wiki/Modulo_operation
 
-All of these operations can be applied to integers and vectors.
+All of these operations can be applied to integers and vectors. Vector operations are applied componentwise.
 
-If an operation is applied to two vectors of different lengths or applied to a vector and an integer, then both arguments are converted to the a vector of the same length:
+If an operation is applied to two vectors of different lengths, one vector is cast to the length of the other before the operation is applied. (See :ref:`vector-vector-conversion`.)
 
-- For ``+`` and ``-``, the length of the shorter vector is used.
--
+- For ``+`` and ``-``, the shorter vector is cast to the length of the **longer** one
+- For ``*``, ``/``, ``%``, and ``**``, the longer vector is cast to the length of the **shorter** one
 
-. (See [Conversions] for more details.) For ``+`` and ``-``, the shorter vector is extended; for ``*``, ``/``, ``%``, and ``**``, the longer vector is truncated.
+If an operation is applied to a vector and an integer, in either order, then the integer is converted to a vector of the same length before the operation is applied. (See :ref:`integer-vector-conversion`.)
 
-Overflow, underflow, or division by zero abort the simulation with an error.
+Overflow, underflow, division by zero, or exponentiation with a negative power cause an error. (See :ref:`errors`.)
 
-[vector lengths]: Types#vector-lengths
+Examples
+--------
+
+- ``2 ** 8`` |rarr| ``256``
+- ``[1, 2] + [10, 20, 30]`` |rarr| ``[11, 22, 30]``
+- ``[1, 2, 3] * [1, 2]`` |rarr| ``[1, 4]``
+- ``12 / [2, 3, 4, 5]`` |rarr| ``[6, 4, 3, 2]``
+- ``[4] % [2, 0, 1]`` |rarr| ``[0]``
+- ``4 % [2, 0, 1]`` causes a division-by-zero error
 
 .. _bitwise-operators:
 
@@ -59,24 +71,24 @@ Bitwise operators
 
 Given two values ``a`` and ``b``:
 
-- ``a & b`` — [bitwise AND]
-- ``a | b`` — [bitwise OR]
-- ``a ^ b`` — [bitwise XOR]
-- ``a >> b`` — [bitshift right (arithmetic/signed)][arithmetic shift]
-- ``a >>> b`` — [bitshift right (logical/unsigned)][logical shift]
-- ``a << b`` — [bitshift left][logical shift]
-- ``~a`` — [bitwise NOT]
+- ``a & b`` — `Bitwise AND <https://en.wikipedia.org/wiki/Bitwise_operation#AND>`_
+- ``a | b`` — `Bitwise OR <https://en.wikipedia.org/wiki/Bitwise_operation#OR>`_
+- ``a ^ b`` — `Bitwise XOR <https://en.wikipedia.org/wiki/Bitwise_operation#XOR>`_
+- ``a >> b`` — `Bitshift right (arithmetic/signed) <https://en.wikipedia.org/wiki/Arithmetic_shift>`_
+- ``a >>> b`` — `Bitshift right (logical/unsigned) <https://en.wikipedia.org/wiki/Logical_shift>`_
+- ``a << b`` — `Bitshift left <https://en.wikipedia.org/wiki/Logical_shift>`_
+- ``~a`` — `Bitwise NOT <https://en.wikipedia.org/wiki/Bitwise_operation#NOT>`_
 
-[bitwise AND]: https://en.wikipedia.org/wiki/Bitwise_operation#AND
-[bitwise OR]: https://en.wikipedia.org/wiki/Bitwise_operation#OR
-[bitwise XOR]: https://en.wikipedia.org/wiki/Bitwise_operation#XOR
-[arithmetic shift]: https://en.wikipedia.org/wiki/Arithmetic_shift
-[logical shift]: https://en.wikipedia.org/wiki/Logical_shift
-[bitwise NOT]: https://en.wikipedia.org/wiki/Bitwise_operation#NOT
+All of these operations can be applied to integers and vectors. Vector operations are applied componentwise.
 
-All of these operations are defined for integers and vectors.
+If an operation is applied to two vectors of different lengths, one vector is cast to the length of the other before the operation is applied. (See :ref:`vector-vector-conversion`.)
 
-Bitshifting by less than 0 or more than 64 aborts the simulation with an error.
+- For ``|``, ``^``, ``>>``, ``<<<``, and ``<<``, the shorter vector is cast to the length of the **longer** one
+- For ``&``, the longer vector is cast to the length of the **shorter** one
+
+If an operation is applied to a vector and an integer (in either order), then the integer is converted to a vector of the same length. (See :ref:`integer-vector-conversion`.)
+
+Bitshifting by less than 0 or more than 64 causes an error. (See :ref:`errors`.)
 
 .. _set-operators:
 
@@ -85,22 +97,19 @@ Set operators
 
 Given two values ``a`` and ``b``:
 
-- ``a & b`` — [intersection]
-- ``a | b`` — [union]
-- ``a ^ b`` — [symmetric difference]
-- ``~a`` — [complement]
+- ``a & b`` — `Intersection <https://en.wikipedia.org/wiki/Intersection_(set_theory)>`_
+- ``a | b`` — `Union <https://en.wikipedia.org/wiki/Union_(set_theory)>`_
+- ``a ^ b`` — `Symmetric difference <https://en.wikipedia.org/wiki/Symmetric_difference>`_
+- ``a &~ b`` — `Relative complement of B in A <https://en.wikipedia.org/wiki/Complement_(set_theory)#Relative_complement>`_
 
-[intersection]: https://en.wikipedia.org/wiki/Intersection_(set_theory)
-[union]: https://en.wikipedia.org/wiki/Union_(set_theory)
-[symmetric difference]: https://en.wikipedia.org/wiki/Symmetric_difference
-[complement]: https://en.wikipedia.org/wiki/Complement_(set_theory)
-
-Set operations are defined for cell filters. If one of these operators is applied to a cell, it is automatically converted to a cell filter that matches only that cell.
+All of these operations can be applied to any :ref:`set/filter type <filter-types>` or its subtypes.
 
 .. _comparison-operators:
 
 Comparison operators
 ====================
+
+Given two values ``a`` and ``b``:
 
 - ``a == b`` — Does ``a`` equal ``b``?
 - ``a != b`` — Does ``a`` not equal ``b``?
@@ -109,22 +118,29 @@ Comparison operators
 - ``a <= b`` — Is ``a`` less than or equal to ``b``?
 - ``a >= b`` — Is ``a`` greater than or equal to ``b``?
 
-All of these operations are defined for integers and vectors. ``==`` and ``!=`` are defined for cell states and patterns.
+All of these comparisons can be applied to integers and vectors. ``==`` and ``!=`` can be applied to cell states and patterns. Vector comparisons are applied componentwise.
+
+If a comparison is applied to two vectors of different lengths, the shorter vector is to the length of the longer one before the operation is applied. (See :ref:`vector-vector-conversion`.)
+
+If a comparison is applied to a vector and an integer (in either order), then the integer is converted to a vector of the same length. (See :ref:`integer-vector-conversion`.)
+
+A ``!=`` comparison between two vectors results in :data:`TRUE` if **any** corresponding components of the two vectors are unequal. All other comparisons between two vectors result in :data:`TRUE` if only if the comparison is :data:`TRUE` for **all** corresponding components of the two vectors. Examples:
+
+- ``[1, 2] == [1, 2, 0]`` |rarr| :data:`TRUE`
+- ``[1, 2] == [1, 2, 3]`` |rarr| :data:`FALSE` because ``0 == 3`` |rarr| :data:`FALSE`
+- ``[1, 2] != [1, 2, 3]`` |rarr| :data:`TRUE` because ``0 != 3`` |rarr| :data:`TRUE`
+- ``[-1, 2] < [0, 4]`` |rarr| :data:`TRUE` because ``-1 < 0`` |rarr| :data:`TRUE` and ``2 < 4`` |rarr| :data:`TRUE`
+- ``[-1, 2] < [0, 1]`` |rarr| :data:`FALSE` because ``2 < 1`` |rarr| :data:`FALSE`
 
 .. _boolean-operators:
 
 Boolean operators
 =================
 
-- ``a and b`` — [logical AND]
-- ``a or b`` — [logical OR]
-- ``a xor b`` — [logical XOR]
-- ``not a`` — [logical NOT]
-
-[logical AND]: https://en.wikipedia.org/wiki/AND_gate
-[logical OR]: https://en.wikipedia.org/wiki/OR_gate
-[logical XOR]: https://en.wikipedia.org/wiki/XOR_gate
-[logical NOT]: https://en.wikipedia.org/wiki/Inverter_(logic_gate)
+- ``a and b`` — `Logical AND <https://en.wikipedia.org/wiki/AND_gate>`_
+- ``a or b`` — `Logical OR <https://en.wikipedia.org/wiki/OR_gate>`_
+- ``a xor b`` — `Logical XOR <https://en.wikipedia.org/wiki/XOR_gate>`_
+- ``not a`` — `Logical NOT <https://en.wikipedia.org/wiki/Inverter_(logic_gate)>`_
 
 .. _range-operator:
 
@@ -133,18 +149,20 @@ Range operator
 
 - ``a..b``
 
-.. _indexing:
+.. _vector-indexing:
 
-Indexing
-========
+Vector indexing
+===============
 
-- ``a[b]``
+- ``v[n]``
+
+Indexing a vector ``v`` by an integer ``n`` results in the ``n``-th component of ``v``. The X component has index ``0``, the Y component has index ``1``, etc. Indexing with a value ``n`` that is not between ``0`` and ``v.len - 1`` (inclusive) causes an error. (See :ref:`errors`.)
 
 .. _is-operator:
 
-Membership test
-===============
+Filter test
+===========
 
 - ``a is b``
 
-This operator takes a basic type for ``a`` and the corresponding filter type for ``b``. (Note that implicit type conversion rules apply)
+This operator takes a basic type for ``a`` and the corresponding filter type for ``b``.

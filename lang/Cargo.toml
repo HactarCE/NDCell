@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 inkwell = { git = "https://github.com/HactarCE/inkwell", branch = "llvm10-0" }
-itertools = "0.9"
+itertools = "0.10"
 lazy_static = "1.4"
 regex = "1"
 seahash = "4.0"

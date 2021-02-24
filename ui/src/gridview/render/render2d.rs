@@ -4,7 +4,7 @@
 //! the future.
 //!
 //! Not including preliminary computations and extra effects like gridlines,
-//! there are four main stages to rendering a grid of cells:
+//! there are three main stages of rendering a grid of cells:
 //!
 //! 1. Create an indexed quadtree of render cells encoded in an OpenGL texture.
 //!    (A "render cell" is a node of the quadtree which is rendered as single
@@ -15,77 +15,129 @@
 //! 3. Blit that texture onto the screen using the "pixel mixing" scaling
 //!    technique; see http://entropymine.com/imageworsener/pixelmixing/ for more
 //!    info.
-//!
-//! There is also some subpixel adjustment happening in `Camera2D`. The position
-//! is offset by 0.5 pixels when the viewport dimensions are odd, and everything
-//! except cells are offset by 0.25 pixels to force consistent rounding behavior
-//! for features that are directly between cells.
 
 use anyhow::{Context, Result};
 use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
 use itertools::Itertools;
+use palette::{Srgb, Srgba};
 
 use ndcell_core::prelude::*;
 use Axis::{X, Y};
 
 use super::consts::*;
-use super::generic::{GenericGridViewRender, GridViewRenderDimension};
+use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoint2D, OverlayFill};
 use super::shaders;
 use super::vertices::Vertex2D;
 use super::CellDrawParams;
-use crate::config::MouseDragBinding;
+use crate::commands::{DragCmd, DrawMode};
+use crate::ext::*;
 use crate::gridview::*;
-use crate::mouse::MouseDisplay;
-use crate::Scale;
+use crate::{Direction, Face, Scale, CONFIG, DIRECTIONS};
 
 pub(in crate::gridview) type GridViewRender2D<'a> = GenericGridViewRender<'a, RenderDim2D>;
 
-#[derive(Default)]
 pub(in crate::gridview) struct RenderDim2D;
-impl GridViewRenderDimension<'_> for RenderDim2D {
+impl<'a> GridViewRenderDimension<'a> for RenderDim2D {
     type D = Dim2D;
-    type Camera = Camera2D;
+    type Viewpoint = Viewpoint2D;
+    type OverlayQuad = OverlayQuad;
 
-    const DEFAULT_COLOR: (f32, f32, f32, f32) = crate::colors::BACKGROUND_2D;
+    const DEFAULT_COLOR: Srgb = crate::colors::BACKGROUND_2D;
     const DEFAULT_DEPTH: f32 = 0.0;
+    const LINE_MIN_PIXEL_WIDTH: f64 = LINE_MIN_PIXEL_WIDTH_2D;
+
+    fn init(_: &GridViewRender2D<'a>) -> Self {
+        Self
+    }
+
+    fn draw_overlay_quads(this: &mut GridViewRender2D<'a>) -> Result<()> {
+        // Reborrow is necessary in order to split borrow.
+        let cache = &mut *this.cache;
+        let vbos = &mut cache.vbos;
+        let ibos = &mut cache.ibos;
+
+        let gl_matrix = this.xform.gl_matrix_with_subpixel_offset();
+
+        let mut verts = vec![];
+        for chunk in this.overlay_quads.chunks(QUAD_BATCH_SIZE) {
+            // Generate vertices.
+            verts.clear();
+            for quad in chunk {
+                verts.extend_from_slice(&quad.verts());
+            }
+
+            // Populate VBO and IBO.
+            let quad_count = chunk.len();
+            let vbo = vbos.quad_verts_2d(quad_count);
+            vbo.write(&verts);
+            let ibo = ibos.quad_indices(quad_count);
+
+            // Draw quads.
+            this.params
+                .target
+                .draw(
+                    vbo,
+                    &ibo,
+                    &shaders::RGBA_2D.load(),
+                    &uniform! { matrix: gl_matrix },
+                    &glium::DrawParameters {
+                        blend: glium::Blend::alpha_blending(),
+                        depth: glium::Depth {
+                            test: glium::DepthTest::Overwrite,
+                            write: true,
+                            ..Default::default()
+                        },
+                        multisampling: false,
+                        ..Default::default()
+                    },
+                )
+                .context("Drawing 2D overlay quads")?;
+        }
+        Ok(())
+    }
 }
 
 impl GridViewRender2D<'_> {
     /// Draw an ND-tree to scale on the target.
     pub fn draw_cells(&mut self, params: CellDrawParams<'_, Dim2D>) -> Result<()> {
-        let (visible_quadtree, visible_rect) =
-            match self.clip_ndtree_to_visible_render_cells(&params) {
-                Some(x) => x,
-                None => return Ok(()), // There is nothing to draw.
-            };
+        let visible_quadtree = match self.clip_ndtree_to_visible(&params) {
+            Some(x) => x,
+            None => return Ok(()), // There is nothing to draw.
+        };
 
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
 
         // Steps #1: encode the quadtree as a texture.
-        let gl_quadtree = cache.gl_quadtrees.gl_quadtree_from_node(
+        let gl_quadtree = cache.gl_quadtrees.gl_ndtree_from_node(
             (&visible_quadtree.root).into(),
-            self.render_cell_layer,
-            Self::ndtree_node_color,
+            self.xform.render_cell_layer,
         )?;
-        // Step #2: draw at 1 pixel per render cell, including only the cells
-        // inside `visible_rect`.
-        let cells_w = visible_rect.len(X) as u32;
-        let cells_h = visible_rect.len(Y) as u32;
+        // Step #2: draw at 1 pixel per render cell, including only the render
+        // cells inside `self.local_visible_rect`.
+        let cells_w = self.local_visible_rect.len(X) as u32;
+        let cells_h = self.local_visible_rect.len(Y) as u32;
         let (cells_texture, mut cells_fbo, cells_texture_viewport) =
             cache.textures.cells(cells_w, cells_h);
+        let local_quadtree_base = self
+            .xform
+            .global_to_local_int(&visible_quadtree.base_pos)
+            .unwrap();
+        let relative_quadtree_base = local_quadtree_base - self.local_visible_rect.min();
         cells_fbo
             .draw(
-                &*vbos.quadtree_quad_with_quadtree_coords(visible_rect),
+                vbos.ndtree_quad(),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::QUADTREE,
+                &shaders::QUADTREE.load(),
                 &uniform! {
                     quadtree_texture: &gl_quadtree.texture,
-                    layer_count: gl_quadtree.layers as i32,
-                    root_idx: gl_quadtree.root_idx as u32,
+                    layer_count: gl_quadtree.layers,
+                    root_idx: gl_quadtree.root_idx,
+
+                    quadtree_base: relative_quadtree_base.to_i32_array(),
                 },
                 &glium::DrawParameters {
                     viewport: Some(cells_texture_viewport),
@@ -95,28 +147,25 @@ impl GridViewRender2D<'_> {
             .context("cells_fbo.draw()")?;
 
         // Step #3: scale and render that onto the screen.
-        let (target_w, target_h) = self.params.target.get_dimensions();
-        let target_size = NdVec([r64(target_w as f64), r64(target_h as f64)]);
-        let render_cells_size = target_size / self.render_cell_scale.units_per_cell();
-        let render_cells_center =
-            self.camera.render_cell_pos(&visible_quadtree.offset) - visible_rect.min().to_fvec();
-        let render_cells_rect = FRect2D::centered(render_cells_center, render_cells_size / 2.0);
-        let texture_coords_rect = render_cells_rect / visible_rect.size().to_fvec();
+        let local_screen_rect = self.xform.local_screen_rect();
+        let vis_rect = self.local_visible_rect.to_frect();
+        let texture_coords_rect = (local_screen_rect - vis_rect.min()) / vis_rect.size();
 
         self.params
             .target
             .draw(
                 &*vbos.blit_quad_with_src_coords(texture_coords_rect),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::PIXMIX,
+                &shaders::PIXMIX.load(),
                 &uniform! {
                     alpha: params.alpha,
                     src_texture: cells_texture.sampled(),
-                    scale_factor: self.render_cell_scale.units_per_cell().raw() as f32,
+                    scale_factor: self.xform.render_cell_scale.units_per_cell().raw() as f32,
                     active_tex_size: (cells_w as f32, cells_h as f32)
                 },
                 &glium::DrawParameters {
                     blend: glium::Blend::alpha_blending(),
+                    multisampling: false,
                     ..Default::default()
                 },
             )
@@ -146,488 +195,316 @@ impl GridViewRender2D<'_> {
         Ok(())
     }
 
-    /// Draws gridlines at varying opacity and spacing depending on scaling.
-    ///
-    /// TOOD: support arbitrary exponential base and factor (a*b^n for any a, b)
-    pub fn draw_gridlines(&mut self, width: f64) -> Result<()> {
-        // Compute the minimum pixel spacing between maximum-opacity gridlines.
-        let log2_max_pixel_spacing = r64(MAX_GRIDLINE_SPACING).log2();
-        // Compute the cell spacing between the gridlines that will be drawn
-        // with the maximum opacity.
-        let log2_cell_spacing = log2_max_pixel_spacing - self.camera.scale().log2_factor();
-        // Round up to the nearest power of GRIDLINE_SPACING_BASE.
-        let log2_spacing_base = (GRIDLINE_SPACING_BASE as f64).log2();
-        let log2_cell_spacing = (log2_cell_spacing / log2_spacing_base).ceil() * log2_spacing_base;
-        // Convert from cells to render cells.
-        let log2_render_cell_spacing = log2_cell_spacing - self.render_cell_layer.to_u32() as f64;
-        let mut spacing = log2_render_cell_spacing.exp2().raw() as usize;
-        // Convert from render cells to pixels.
-        let mut pixel_spacing = spacing as f64 * self.render_cell_scale.units_per_cell().raw();
+    /// Adds gridlines to the overlay.
+    pub fn add_gridlines_overlay(&mut self) {
+        let min_gridline_exponent =
+            self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING);
+        let max_gridline_exponent =
+            self.gridline_cell_spacing_exponent(GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING);
+        let range = (min_gridline_exponent..=max_gridline_exponent).rev();
 
-        let cell_offset = -self
-            .global_visible_rect
-            .min()
-            .div_floor(&self.render_cell_layer.big_len());
-        while spacing > 0 && pixel_spacing > MIN_GRIDLINE_SPACING {
-            // Compute grid color, including alpha.
-            let mut color = crate::colors::GRIDLINES;
-            let alpha = gridline_alpha(pixel_spacing, self.camera.scale()) as f32;
-            color[3] *= alpha;
-            // Draw gridlines with the given spacing.
-            let offset = cell_offset.mod_floor(&BigInt::from(spacing)).to_uvec();
-            self.draw_cell_overlay_rects(
-                &self.generate_solid_cell_borders(
-                    self.visible_rect
-                        .axis_range(X)
-                        .skip(offset[X])
-                        .step_by(spacing),
-                    self.visible_rect
-                        .axis_range(Y)
-                        .skip(offset[Y])
-                        .step_by(spacing),
-                    GRIDLINE_DEPTH,
-                    width,
-                    color,
-                ),
-            )
-            .context("Drawing gridlines")?;
-            // Decrease the spacing.
-            spacing /= GRIDLINE_SPACING_BASE;
-            pixel_spacing /= GRIDLINE_SPACING_BASE as f64;
+        for gridline_exponent in range {
+            self.add_gridline_set_overlay(gridline_exponent, X);
+            self.add_gridline_set_overlay(gridline_exponent, Y);
         }
-        Ok(())
     }
 
-    /// Draws a highlight on the render cell under the mouse cursor.
-    pub fn draw_hover_highlight(
-        &mut self,
-        cell_pos: &BigVec2D,
-        width: f64,
-        color: [f32; 4],
-    ) -> Result<()> {
-        self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-            IRect2D::single_cell(self.clip_cell_pos_to_visible_render_cells(cell_pos)),
-            CURSOR_DEPTH,
-            width,
-            color,
-            RectHighlightParams {
-                fill: true,
-                crosshairs: true,
-            },
-        ))
-        .context("Drawing cursor highlight")
-    }
-    /// Draws a highlight around the selected rectangle.
-    pub fn draw_selection_highlight(
-        &mut self,
-        selection_rect: BigRect2D,
-        width: f64,
-        fill: bool,
-    ) -> Result<()> {
-        let visible_selection_rect = self.clip_cell_rect_to_visible_render_cells(&selection_rect);
+    /// Adds a set of gridlines at one exponential power along one axis.
+    fn add_gridline_set_overlay(&mut self, gridline_exponent: u32, perpendicular_axis: Axis) {
+        let alpha = gridline_alpha(gridline_exponent, self.viewpoint.scale()) as f32;
 
-        self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-            visible_selection_rect,
-            SELECTION_DEPTH,
-            width,
-            crate::colors::SELECTION,
-            RectHighlightParams {
-                fill,
-                crosshairs: false,
-            },
-        ))
-        .context("Drawing selection highlight")?;
+        let global_spacing: BigInt = BigInt::from(GRIDLINE_SPACING_COEFF)
+            * BigInt::from(GRIDLINE_SPACING_BASE).pow(gridline_exponent);
+        let global_gridline_origin = self.xform.origin.div_floor(&global_spacing) * &global_spacing;
+        let local_gridline_origin = self
+            .xform
+            .global_to_local_float(&global_gridline_origin.to_fixedvec())
+            .unwrap();
+        let local_offset: R64 = local_gridline_origin[perpendicular_axis];
+        let global_spacing: FixedPoint = global_spacing.into();
+        let local_spacing: FixedPoint = global_spacing >> self.xform.render_cell_layer.to_u32();
+        let local_spacing: R64 = r64(local_spacing.to_f64().unwrap());
+
+        // Compute the coordinate of the first gridline by rounding to the
+        // nearest multiple of `local_spacing` (offset by `local_offset`).
+        let cell_start_coord: R64 = r64(self.local_visible_rect.min()[perpendicular_axis] as f64);
+        let cell_start_coord = ((cell_start_coord - local_offset) / local_spacing).ceil()
+            * local_spacing
+            + local_offset;
+
+        let cell_end_coord = r64(self.local_visible_rect.max()[perpendicular_axis] as f64);
+
+        let cell_coords = itertools::iterate(cell_start_coord, |&coord| coord + local_spacing)
+            .take_while(|&coord| coord <= cell_end_coord);
+
+        let visible_rect = self.local_visible_rect.to_frect();
+
+        for coordinate in cell_coords {
+            // Generate an individual line.
+            let mut color = crate::colors::GRIDLINES;
+            color.alpha *= alpha; // (Alpha channel is linear according to OpenGL.)
+
+            let mut a = visible_rect.min();
+            let mut b = visible_rect.max();
+            a[perpendicular_axis] = coordinate;
+            b[perpendicular_axis] = coordinate;
+
+            self.add_line_overlay(
+                LineEndpoint2D::include(a, color),
+                LineEndpoint2D::include(b, color),
+                r64(GRIDLINE_WIDTH),
+            );
+        }
+    }
+
+    /// Adds a highlight on the render cell under the mouse cursor when using
+    /// the drawing tool.
+    pub fn add_hover_draw_overlay(&mut self, cell_pos: &BigVec2D, draw_mode: DrawMode) {
+        self.add_hover_overlay(cell_pos, draw_mode.fill_color(), draw_mode.outline_color());
+    }
+    /// Adds a highlight on the render cell under the mouse cursor when using
+    /// the selection tool.
+    pub fn add_hover_select_overlay(&mut self, cell_pos: &BigVec2D) {
+        use crate::colors::hover::*;
+        self.add_hover_overlay(cell_pos, SELECT_FILL, SELECT_OUTLINE);
+    }
+    /// Adds a highlight on the render cell under the mouse cursor.
+    fn add_hover_overlay(&mut self, cell_pos: &BigVec2D, fill_color: Srgba, outline_color: Srgb) {
+        let local_rect = IRect::single_cell(self.clamp_int_pos_to_visible(cell_pos));
+        let width = r64(HOVER_HIGHLIGHT_WIDTH);
+        self.add_rect_fill_overlay(local_rect, fill_color);
+        self.add_rect_crosshairs_overlay(local_rect, outline_color, width);
+    }
+
+    /// Adds a highlight around the selection when the selection includes cells.
+    pub fn add_selection_cells_highlight_overlay(&mut self, selection_rect: &BigRect2D) {
+        use crate::colors::selection::*;
+        self.add_selection_highlight_overlay(selection_rect, CELLS_FILL, CELLS_OUTLINE)
+    }
+    /// Adds a highlight around the selection when the selection does not
+    /// include cells.
+    pub fn add_selection_region_highlight_overlay(&mut self, selection_rect: &BigRect2D) {
+        use crate::colors::selection::*;
+        self.add_selection_highlight_overlay(selection_rect, REGION_FILL, REGION_OUTLINE)
+    }
+    /// Adds a highlight around the selection.
+    fn add_selection_highlight_overlay(
+        &mut self,
+        selection_rect: &BigRect2D,
+        fill_color: Srgba,
+        outline_color: Srgb,
+    ) {
+        let local_rect = self.clip_int_rect_to_visible(selection_rect);
+        let width = r64(SELECTION_HIGHLIGHT_WIDTH);
+        self.add_rect_fill_overlay(local_rect, fill_color);
+        self.add_rect_outline_overlay(local_rect, outline_color, width);
+
+        let local_rect = local_rect.to_frect();
 
         // "Move selected cells" target.
         self.add_mouse_target_quad(
-            ModifiersState::empty(),
-            visible_selection_rect.to_frect(),
+            local_rect,
+            Some(ModifiersState::empty()),
             MouseTargetData {
-                binding: Some(MouseDragBinding::Select(
-                    SelectDragCommand::MoveCells.into(),
-                )),
-                display: MouseDisplay::Move,
+                binding: DragCmd::MoveSelectedCells(None),
             },
         );
+
         // "Move selection" target.
         self.add_mouse_target_quad(
-            ModifiersState::SHIFT,
-            visible_selection_rect.to_frect(),
+            local_rect,
+            Some(ModifiersState::SHIFT),
             MouseTargetData {
-                binding: Some(MouseDragBinding::Select(
-                    SelectDragCommand::MoveSelection.into(),
-                )),
-                display: MouseDisplay::Move,
+                binding: DragCmd::MoveSelection(None),
             },
         );
+
         // "Move copy of cells" target.
         self.add_mouse_target_quad(
-            ModifiersState::CTRL,
-            visible_selection_rect.to_frect(),
+            local_rect,
+            Some(ModifiersState::CTRL),
             MouseTargetData {
-                binding: Some(MouseDragBinding::Select(
-                    SelectDragCommand::CopyCells.into(),
-                )),
-                display: MouseDisplay::Move,
+                binding: DragCmd::CopySelectedCells(None),
             },
         );
 
         // "Resize selection" target.
-        let click_target_width = self.params.config.ctrl.selection_resize_drag_target_width
-            * self.render_cell_scale.inv_factor().to_f64().unwrap();
-        let (min, max) = (
-            visible_selection_rect.min(),
-            visible_selection_rect.max() + 1,
-        );
+        let click_target_width = r64(CONFIG.lock().ctrl.selection_resize_drag_target_width)
+            * self.xform.render_cell_scale.inv_factor().to_f64().unwrap();
+        let (min, max) = (local_rect.min(), local_rect.max());
         let xs = vec![
-            r64(min[X] as f64 - click_target_width * 0.75),
-            r64(min[X] as f64 + click_target_width * 0.25),
-            r64(max[X] as f64 - click_target_width * 0.25),
-            r64(max[X] as f64 + click_target_width * 0.75),
+            min[X] - click_target_width * 0.75,
+            min[X] + click_target_width * 0.25,
+            max[X] - click_target_width * 0.25,
+            max[X] + click_target_width * 0.75,
         ];
         let ys = vec![
-            r64(min[Y] as f64 - click_target_width * 0.75),
-            r64(min[Y] as f64 + click_target_width * 0.25),
-            r64(max[Y] as f64 - click_target_width * 0.25),
-            r64(max[Y] as f64 + click_target_width * 0.75),
+            min[Y] - click_target_width * 0.75,
+            min[Y] + click_target_width * 0.25,
+            max[Y] - click_target_width * 0.25,
+            max[Y] + click_target_width * 0.75,
         ];
-        let x_indices = vec![0, 1, 2, 0, 2, 0, 1, 2];
-        let y_indices = vec![0, 0, 0, 1, 1, 2, 2, 2];
-        let mouse_displays = vec![
-            MouseDisplay::ResizeNESW,
-            MouseDisplay::ResizeNS,
-            MouseDisplay::ResizeNWSE,
-            MouseDisplay::ResizeEW,
-            MouseDisplay::ResizeEW,
-            MouseDisplay::ResizeNWSE,
-            MouseDisplay::ResizeNS,
-            MouseDisplay::ResizeNESW,
-        ];
-        for ((xi, yi), display) in x_indices.into_iter().zip(y_indices).zip(mouse_displays) {
-            let mut axes = AxisSet::empty();
-            if xi != 1 {
-                axes.add(X);
-            }
-            if yi != 1 {
-                axes.add(Y);
-            }
-            let binding = Some(MouseDragBinding::Select(
-                SelectDragCommand::Resize { axes, plane: None }.into(),
-            ));
+        for &direction in &DIRECTIONS {
+            let binding = DragCmd::ResizeSelection2D(direction);
+            let NdVec([dx, dy]) = direction.vector();
             self.add_mouse_target_quad(
-                ModifiersState::empty(),
-                FRect::span(NdVec([xs[xi], ys[yi]]), NdVec([xs[xi + 1], ys[yi + 1]])),
-                MouseTargetData { binding, display },
+                FRect::span(
+                    NdVec([xs[(dx + 1) as usize], ys[(dy + 1) as usize]]),
+                    NdVec([xs[(dx + 2) as usize], ys[(dy + 2) as usize]]),
+                ),
+                Some(ModifiersState::empty()),
+                MouseTargetData { binding },
             );
         }
-
-        Ok(())
     }
-    /// Draws a highlight indicating how the selection will be resized.
-    pub fn draw_absolute_selection_resize_preview(
+    /// Adds a highlight indicating how the selection will be resized.
+    pub fn add_selection_resize_preview_overlay(&mut self, selection_preview_rect: &BigRect2D) {
+        let local_rect = self.clip_int_rect_to_visible(&selection_preview_rect);
+        let width = r64(SELECTION_HIGHLIGHT_WIDTH);
+        use crate::colors::selection::*;
+        self.add_rect_fill_overlay(local_rect, RESIZE_FILL);
+        self.add_rect_outline_overlay(local_rect, RESIZE_OUTLINE, width);
+    }
+    /// Adds a highlight indicating which edge(s) of the selection will be resized.
+    pub fn add_selection_edge_resize_overlay(
         &mut self,
-        selection_rect: BigRect2D,
-        mouse_pos: &ScreenPos2D,
-        width: f64,
-    ) -> Result<()> {
-        let selection_preview_rect = selection::resize_selection_absolute(
-            &selection_rect,
-            mouse_pos.cell(),
-            mouse_pos.cell(),
-        );
-        let visible_selection_preview_rect =
-            self.clip_cell_rect_to_visible_render_cells(&selection_preview_rect);
-        self.draw_cell_overlay_rects(&self.generate_cell_rect_outline(
-            visible_selection_preview_rect,
-            SELECTION_RESIZE_DEPTH,
-            width,
-            crate::colors::SELECTION_RESIZE,
-            RectHighlightParams {
-                fill: true,
-                crosshairs: false,
-            },
-        ))
-        .context("Drawing selection resize highlight")?;
-        Ok(())
+        selection_rect: &BigRect2D,
+        direction: Direction,
+    ) {
+        let color = crate::colors::selection::RESIZE_OUTLINE;
+        let rect = self._adjust_rect_for_overlay(self.clip_int_rect_to_visible(selection_rect));
+        for &ax in Dim2D::axes() {
+            let mut min = rect.min();
+            let mut max = rect.max();
+            match direction.vector()[ax] {
+                -1 => max[ax] = min[ax],
+                1 => min[ax] = max[ax],
+                _ => continue,
+            };
+            self.add_line_overlay(
+                LineEndpoint2D::include(min, color),
+                LineEndpoint2D::include(max, color),
+                r64(SELECTION_HIGHLIGHT_WIDTH),
+            );
+        }
     }
 
-    /// Generates a cell overlay to outline the given cell rectangle, with
-    /// optional fill and crosshairs.
-    #[must_use = "This method only generates the rectangles; call `draw_cell_overlay_rects` to draw them"]
-    fn generate_cell_rect_outline(
-        &self,
-        rect: IRect2D,
-        z: f32,
-        width: f64,
-        color: [f32; 4],
-        params: RectHighlightParams,
-    ) -> Vec<CellOverlayRect> {
-        let bright_color = color;
-        let mut dull_color = color;
-        dull_color[3] *= 0.25;
-        let mut fill_color = color;
-        fill_color[0] *= 0.5;
-        fill_color[1] *= 0.5;
-        fill_color[2] *= 0.5;
-        fill_color[3] *= 0.75;
+    /// Adds a filled-in rectangle with a solid color.
+    fn add_rect_fill_overlay(&mut self, rect: IRect2D, color: Srgba) {
+        self.overlay_quads.push(OverlayQuad {
+            rect: self._adjust_rect_for_overlay(rect),
+            fill: OverlayFill::Solid(color),
+        });
+    }
+    /// Adds a rectangular outline with a solid color.
+    fn add_rect_outline_overlay(&mut self, rect: IRect2D, color: Srgb, width: R64) {
+        let rect = self._adjust_rect_for_overlay(rect);
+        let NdVec([ax, ay]) = rect.min();
+        let NdVec([bx, by]) = rect.max();
 
-        let NdVec([min_x, min_y]) = self.visible_rect.min();
-        let NdVec([max_x, max_y]) = self.visible_rect.max() + 1;
-
-        // If there are more than 1.5 pixels per render cell, the upper boundary
-        // should be *between* cells (+1). If there are fewer, the upper
-        // boundary should be *on* the cell (+0).
-        let pixels_per_cell = self.render_cell_scale.units_per_cell();
-        let a = rect.min();
-        let b = rect.max() + (pixels_per_cell > 1.5) as isize;
-        let NdVec([ax, ay]) = a;
-        let NdVec([bx, by]) = b;
-
-        let mut h_stops = vec![
-            (min_x, dull_color),
-            (ax - 1, dull_color),
-            (ax, bright_color),
-            (bx, bright_color),
-            (bx + 1, dull_color),
-            (max_x, dull_color),
-        ];
-        let mut v_stops = vec![
-            (min_y, dull_color),
-            (ay - 1, dull_color),
-            (ay, bright_color),
-            (by, bright_color),
-            (by + 1, dull_color),
-            (max_y, dull_color),
+        let corners = [
+            NdVec([ax, ay]),
+            NdVec([bx, ay]),
+            NdVec([bx, by]),
+            NdVec([ax, by]),
         ];
 
-        // Optionally remove crosshairs.
-        if !params.crosshairs {
-            h_stops = h_stops
-                .into_iter()
-                .filter(|&(_, color)| color == bright_color)
-                .collect();
-            v_stops = v_stops
-                .into_iter()
-                .filter(|&(_, color)| color == bright_color)
-                .collect();
-        }
-
-        let mut ret = vec![];
-
-        // In case the crosshairs/outline is transparent, render gridlines
-        // beneath it. Draw order works in our favor here:
-        // https://stackoverflow.com/a/20231235/4958484
-        if params.crosshairs {
-            ret.extend_from_slice(&self.generate_solid_cell_borders(
-                vec![ax, bx],
-                vec![ay, by],
-                z - TINY_OFFSET,
+        for (&corner1, &corner2) in corners.iter().circular_tuple_windows() {
+            self.add_line_overlay(
+                LineEndpoint2D::include(corner1, color),
+                LineEndpoint2D::include(corner2, color),
                 width,
-                crate::colors::GRIDLINES,
-            ));
+            );
         }
+    }
+    /// Adds crosshairs around a rectangle with a solid color that fades into
+    /// the gridline color toward the edges.
+    fn add_rect_crosshairs_overlay(&mut self, rect: IRect2D, color: Srgb, width: R64) {
+        let rect = self._adjust_rect_for_overlay(rect);
+        let NdVec([ax, ay]) = rect.min();
+        let NdVec([bx, by]) = rect.max();
 
-        // Generate lines.
-        for &x in &[ax, bx] {
-            ret.extend_from_slice(&self.generate_gradient_cell_border(
-                v_stops.iter().map(|&(y, color)| (NdVec([x, y]), color)),
-                z,
-                width,
-                Y,
-            ));
+        self.add_single_crosshair_overlay(X, ax, bx, ay, width, color); // bottom
+        self.add_single_crosshair_overlay(X, ax, bx, by, width, color); // top
+        self.add_single_crosshair_overlay(Y, ay, by, ax, width, color); // left
+        self.add_single_crosshair_overlay(Y, ay, by, bx, width, color); // right
+    }
+    fn add_single_crosshair_overlay(
+        &mut self,
+        parallel_axis: Axis,
+        a: R64,
+        b: R64,
+        perpendicular_coord: R64,
+        width: R64,
+        color: Srgb,
+    ) {
+        let mut pos = NdVec::repeat(perpendicular_coord);
+        pos[parallel_axis] = a;
+        let endpoint_pairs = self.make_crosshair_endpoints(parallel_axis, a, b, pos, color);
+        for [start, end] in endpoint_pairs {
+            self.add_line_overlay(start, end, width);
         }
-        for &y in &[ay, by] {
-            ret.extend_from_slice(&self.generate_gradient_cell_border(
-                h_stops.iter().map(|&(x, color)| (NdVec([x, y]), color)),
-                z,
-                width,
-                X,
-            ));
-        }
-
-        // Generate fill after lines.
-        if params.fill {
-            ret.push(CellOverlayRect {
-                start: a,
-                end: b,
-                z,
-                start_color: fill_color,
-                end_color: fill_color,
-                line_params: None,
-            })
-        }
-
-        ret
+    }
+    fn add_line_overlay(&mut self, mut start: LineEndpoint2D, mut end: LineEndpoint2D, width: R64) {
+        let (rect, axis) = self.make_line_ndrect(&mut start, &mut end, width);
+        let fill = OverlayFill::gradient(axis, start.color, end.color);
+        self.overlay_quads.push(OverlayQuad { rect, fill })
     }
 
-    /// Generates a cell overlay for solid borders along the given columns and
-    /// rows.
-    #[must_use = "This method only generates the rectangles; call `draw_cell_overlay_rects` to draw them"]
-    fn generate_solid_cell_borders(
-        &self,
-        columns: impl IntoIterator<Item = isize>,
-        rows: impl IntoIterator<Item = isize>,
-        z: f32,
-        width: f64,
-        color: [f32; 4],
-    ) -> Vec<CellOverlayRect> {
-        let min = self.visible_rect.min();
-        let max = self.visible_rect.max() + 1;
-        let min_x = min[X];
-        let min_y = min[Y];
-        let max_x = max[X];
-        let max_y = max[Y];
-
-        let h_line_params = Some(LineParams {
-            width,
-            include_endpoints: true,
-            axis: X,
-        });
-        let v_line_params = Some(LineParams {
-            width,
-            include_endpoints: true,
-            axis: Y,
-        });
-
-        let mut ret = Vec::with_capacity(4 * self.visible_rect.size().sum() as usize);
-        for x in columns {
-            ret.push(CellOverlayRect {
-                start: NdVec([x, min_y]),
-                end: NdVec([x, max_y]),
-                z,
-                start_color: color,
-                end_color: color,
-                line_params: v_line_params,
-            });
-        }
-        for y in rows {
-            ret.push(CellOverlayRect {
-                start: NdVec([min_x, y]),
-                end: NdVec([max_x, y]),
-                z,
-                start_color: color,
-                end_color: color,
-                line_params: h_line_params,
-            });
-        }
-        ret
+    fn add_mouse_target_quad(
+        &mut self,
+        rect: FRect2D,
+        modifiers: Option<ModifiersState>,
+        data: MouseTargetData,
+    ) {
+        let NdVec([x1, y1]) = rect.min();
+        let NdVec([x2, y2]) = rect.max();
+        let z = r64(0.0);
+        let corners = [
+            NdVec([x1, y1, z]),
+            NdVec([x2, y1, z]),
+            NdVec([x1, y2, z]),
+            NdVec([x2, y2, z]),
+        ];
+        let target_id = self.add_mouse_target(data);
+        self.add_mouse_target_tri(modifiers, [corners[0], corners[1], corners[2]], target_id);
+        self.add_mouse_target_tri(modifiers, [corners[3], corners[2], corners[1]], target_id);
     }
 
-    /// Generates a cell overlay for a gradient cell border.
-    #[must_use = "This method only generates the rectangles; call `draw_cell_overlay_rects` to draw them"]
-    fn generate_gradient_cell_border(
-        &self,
-        stops: impl IntoIterator<Item = (IVec2D, [f32; 4])>,
-        z: f32,
-        width: f64,
-        axis: Axis,
-    ) -> Vec<CellOverlayRect> {
-        // Generate a rectangle for each stop (so that there is a definitive
-        // color at each point) AND a rectangle between each adjacent pair of
-        // stops.
-        let mut ret = vec![];
-        let mut prev_stop = None;
-        let btwn_stops_line_params = Some(LineParams {
-            width,
-            include_endpoints: false,
-            axis,
-        });
-        let single_stop_line_params = Some(LineParams {
-            width,
-            include_endpoints: true,
-            axis,
-        });
-        for stop in stops {
-            let (pos, color) = stop;
-            if let Some((prev_pos, prev_color)) = prev_stop {
-                ret.push(CellOverlayRect {
-                    start: prev_pos,
-                    end: pos,
-                    z,
-                    start_color: prev_color,
-                    end_color: color,
-                    line_params: btwn_stops_line_params,
-                });
-            }
-            ret.push(CellOverlayRect {
-                start: pos,
-                end: pos,
-                z,
-                start_color: color,
-                end_color: color,
-                line_params: single_stop_line_params,
-            });
-            prev_stop = Some(stop);
-        }
-        ret
-    }
-
-    /// Draws a cell overlay.
-    fn draw_cell_overlay_rects(&mut self, rects: &[CellOverlayRect]) -> Result<()> {
-        // Draw the rectangles in batches, because the VBO might not be able to
-        // hold all the vertices at once.
-        for rect_batch in rects.chunks(QUAD_BATCH_SIZE) {
-            let count = rect_batch.len();
-            // Generate vertices.
-            let verts = rect_batch
-                .iter()
-                .flat_map(|&rect| rect.verts(self.render_cell_scale).to_vec())
-                .collect_vec();
-
-            // Reborrow is necessary in order to split borrow.
-            let cache = &mut *self.cache;
-            let ibos = &mut cache.ibos;
-            let vbos = &mut cache.vbos;
-
-            // Put the data in a slice of the VBO.
-            let vbo_slice = vbos.quad_verts_2d(count);
-            vbo_slice.write(&verts);
-            // Draw rectangles.
-            self.params
-                .target
-                .draw(
-                    vbo_slice,
-                    &ibos.quad_indices(count),
-                    &shaders::RGBA,
-                    &uniform! { matrix: self.transform.gl_matrix() },
-                    &glium::DrawParameters {
-                        blend: glium::Blend::alpha_blending(),
-                        depth: glium::Depth {
-                            test: glium::DepthTest::IfMore,
-                            write: true,
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    },
-                )
-                .context("Drawing cell-aligned rectangles")?;
-        }
-        Ok(())
+    fn _adjust_rect_for_overlay(&self, rect: IRect2D) -> FRect2D {
+        // If there are more than 1.5 pixels per render cell, the upper outline
+        // should be *between* cells (+0.0). If there are fewer, the upper
+        // outline should be *on* the cell below (-1.0).
+        let pix_per_cell = self.xform.render_cell_scale.units_per_cell();
+        let upper_offset = if pix_per_cell > 1.5 { 0.0 } else { -1.0 };
+        rect.to_frect().offset_min_max(r64(0.0), r64(upper_offset))
     }
 }
 
-fn gridline_alpha(pixel_spacing: f64, scale: Scale) -> f64 {
-    // Fade maximum grid alpha as zooming out beyond 1 cell per pixel.
+fn gridline_alpha(cell_spacing_exponent: u32, scale: Scale) -> f64 {
+    // Logarithms turn multiplication into addition and exponentiation into
+    // multiplication.
+    let log2_cell_spacing = (GRIDLINE_SPACING_COEFF as f64).log2()
+        + (GRIDLINE_SPACING_BASE as f64).log2() * cell_spacing_exponent as f64;
+    let log2_pixel_spacing = log2_cell_spacing + scale.log2_factor().raw();
+
+    // Fade maximum grid alpha as zooming out beyond 1:1.
     let max_alpha = clamped_interpolate(
         scale.log2_factor().raw(),
         0.0,
         1.0,
-        ZOOMED_OUT_MAX_GRID_ALPHA,
+        GRIDLINE_ALPHA_ZOOMED_OUT_MULT_2D,
         1.0,
     );
     let alpha = clamped_interpolate(
-        pixel_spacing.log2(),
-        (MIN_GRIDLINE_SPACING).log2(),
-        (MAX_GRIDLINE_SPACING).log2(),
+        log2_pixel_spacing,
+        GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING.log2(),
+        GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING.log2(),
         0.0,
-        1.0,
+        max_alpha,
     );
-    // Clamp to max alpha.
-    if alpha > max_alpha {
-        max_alpha
-    } else {
-        alpha
-    }
+
+    alpha
 }
 
 fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: f64) -> f64 {
@@ -646,89 +523,22 @@ fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: 
 /// Because `glLineWidth` is not supported on all platforms, we draw rectangles
 /// to vary gridline width.
 #[derive(Debug, Copy, Clone)]
-struct CellOverlayRect {
-    /// Start point of a line, or one corner of a rectangle.
-    start: IVec2D,
-    /// End point of a line, or other corner of a rectangle.
-    end: IVec2D,
-    /// Z order.
-    z: f32,
-    /// Color at the start of the line.
-    start_color: [f32; 4],
-    /// Color at the end of the line.
-    end_color: [f32; 4],
-    /// Optional parameters for lines.
-    line_params: Option<LineParams>,
+pub struct OverlayQuad {
+    /// 2D region.
+    rect: FRect2D,
+    /// Color fill.
+    fill: OverlayFill,
 }
-impl CellOverlayRect {
-    fn solid_rect(rect: IRect2D, z: f32, color: [f32; 4]) -> Self {
-        Self {
-            start: rect.min(),
-            end: rect.max() + 1,
-            z,
-            start_color: color,
-            end_color: color,
-            line_params: None,
-        }
-    }
-    fn verts(self, render_cell_scale: Scale) -> [Vertex2D; 4] {
-        let mut a = self.start.to_fvec();
-        let mut b = self.end.to_fvec();
-        let mut colors = [
-            self.start_color,
-            self.start_color,
-            self.end_color,
-            self.end_color,
-        ];
-        if let Some(LineParams {
-            width,
-            include_endpoints,
-            axis,
-        }) = self.line_params
-        {
-            let width = width.round().max(1.0);
-            // At this point, the rectangle should have zero width.
-            let cells_per_pixel = render_cell_scale.cells_per_unit();
-            let offset = FVec::repeat(cells_per_pixel * width / 2.0) * (b - a).signum();
-            // Expand it in all directions, so now it has the correct width and
-            // includes its endpoints.
-            a -= offset;
-            b += offset;
-            // Now exclude the endpoints, if requested.
-            if !include_endpoints {
-                a[axis] += offset[axis] * 2.0;
-                b[axis] -= offset[axis] * 2.0;
-            }
-            if axis == X {
-                // Use horizontal gradient instead of vertical gradient.
-                colors.swap(1, 2);
-            }
-        }
-        let ax = a[X].to_f32().unwrap();
-        let ay = a[Y].to_f32().unwrap();
-        let bx = b[X].to_f32().unwrap();
-        let by = b[Y].to_f32().unwrap();
+impl OverlayQuad {
+    fn verts(self) -> [Vertex2D; 4] {
+        let [x1, y1] = self.rect.min().to_f32_array();
+        let [x2, y2] = self.rect.max().to_f32_array();
+        let colors = self.fill.vertex_colors(Face::PosZ);
         [
-            Vertex2D::from(([ax, ay, self.z], colors[0])),
-            Vertex2D::from(([bx, ay, self.z], colors[1])),
-            Vertex2D::from(([ax, by, self.z], colors[2])),
-            Vertex2D::from(([bx, by, self.z], colors[3])),
+            Vertex2D::new([x1, y1], colors[0]),
+            Vertex2D::new([x2, y1], colors[1]),
+            Vertex2D::new([x1, y2], colors[2]),
+            Vertex2D::new([x2, y2], colors[3]),
         ]
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-struct LineParams {
-    /// Line width.
-    pub width: f64,
-    /// Whether to include the squares at the endpoints of this line.
-    pub include_endpoints: bool,
-    /// The axis this line is along.
-    pub axis: Axis,
-}
-
-#[derive(Debug, Copy, Clone)]
-struct RectHighlightParams {
-    pub fill: bool,
-    pub crosshairs: bool,
 }

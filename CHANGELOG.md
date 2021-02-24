@@ -1,26 +1,83 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to NDCell will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), except for minor stylistic changes to organize features and accomodate named versions. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with respect to the Rust API for `ndcell_core`, the NDCA API for `ndcell_lang`, and the combined Lua/NDCA API for `ndcell_ui`, the main application.
 
-## [Unreleased]
+## [0.2.3] Blinker (2021-02-22)
+
+### Added
+
+- Application icon for Windows, macOS, and Linux
+
+### Changed
+
+- Disabled console window on Windows
+- Updated Linux build to `libffi7`
+
+### Fixed
+
+- Missing executable permission on macOS and Linux
+- Selection rendering glitch ([#9][i9])
+- Selection pasting not stopping simulation ([#10][i10])
+
+[i9]: https://github.com/HactarCE/NDCell/issues/9
+[i10]: https://github.com/HactarCE/NDCell/issues/10
+
+## [0.2.2] Blinker (2020-02-21)
+
+### Fixed
+
+- Crash on placing grid plane with an NVIDIA GPU
+
+## [0.2.1] Blinker (2020-02-21)
+
+### Fixed
+
+- Crash on startup with an NVIDIA GPU
+
+## [0.2.0] Blinker (2020-02-21)
+
+![Blinker](https://user-images.githubusercontent.com/6060305/108616710-f3316780-73dd-11eb-858f-1cda97cad993.png)
 
 ### Added
 
 - **Simulation**
+  - 3D rendering and simulation
   - Advance one generation (<kbd>Space</kbd>)
   - Advance one step (<kbd>Tab</kbd>)
+  - Place grid plane on cell face (<kbd>E</kbd>)
+- **Selection**
+  - Added edge resize indicator
+  - Cancel selection drag (<kbd>Esc</kbd>)
+- **Navigation**
+  - 3D orbit (right mouse drag)
+  - 3D pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or middle mouse drag)
+  - 3D pan horizontally (middle mouse drag with <kbd>Shift</kbd>)
+  - Zoom (right mouse drag with <kbd>Ctrl</kbd>)
+- **GUI**
+  - Load/save file
 
 ### Changed
 
+- **Simulation**
+  - Cells align better to pixel boundaries when zoomed out, appearing crisper
+  - Optimized 2D rendering of empty areas
+- **Selection**
+  - Selection edge resizing now clamps to the opposite corner
 - **GUI**
-  - Rename "UPS" (updates per second) to "step/sec" (steps per second)
+  - Disabled rounded window borders
   - Display "RUNNING" or "STEPPING" accordingly instead of "SIMULATING"
+  - Relabeled "Trigger garbage collection" button to "Clear cache"
+  - Replaced inaccurate maximum simulation speed with average simulation time.
+- Tweaked colors
 
 ### Fixed
 
 - Changing the step size while the simulation is running now takes effect immediately ([#6][i6])
+- Selected cells no longer appear to be tiled infinitely
+- Touchpad scrolling now zooms in/out at a reasonable pace
+- Crash when pressing an exotic mouse button
 
 [i6]: https://github.com/HactarCE/NDCell/issues/6
 
@@ -28,7 +85,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- Fix crash when selecting cells
+- Crash when selecting cells
 
 ## [0.1.0] Block (2020-12-17)
 
@@ -44,11 +101,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - Blue for drawing
     - White for selecting
 - **Navigation**
-  - Pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right/middle mouse drag)
+  - 2D pan (<kbd>↑</kbd>/<kbd>←</kbd>/<kbd>↓</kbd>/<kbd>→</kbd>, <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>, or right/middle mouse drag)
   - Zoom (scroll wheel or <kbd>Q</kbd>/<kbd>Z</kbd>)
   - Pan/zoom faster while holding <kbd>Shift</kbd>
-  - Reset viewport (<kbd>Ctrl</kbd>+<kbd>M</kbd>)
-  - Fit pattern in viewport (<kbd>Ctrl</kbd>+<kbd>F</kbd>)
+  - Reset view (<kbd>Ctrl</kbd>+<kbd>M</kbd>)
+  - Fit pattern in view (<kbd>Ctrl</kbd>+<kbd>F</kbd>)
 - **Drawing**
   - Toggle cells (left mouse click/drag)
   - Select numbered cell state (<kbd>0</kbd>-<kbd>9</kbd>)
@@ -79,7 +136,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Display estimated maximum simulation update rate (with color)
   - Display generation count
   - Display total population
-  - Display viewport scale and position
+  - Display view scale and position
   - Display cursor position
   - Display estimated HashLife node pool memory usage
   - Display selected cell state

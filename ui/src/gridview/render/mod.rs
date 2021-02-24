@@ -6,11 +6,11 @@ use std::cell::RefCell;
 
 use ndcell_core::prelude::*;
 
-use crate::config::{Config, MouseDragBinding};
-use crate::mouse::{MouseDisplay, MouseState};
+use crate::commands::DragCmd;
+use crate::mouse::MouseState;
 
 mod generic;
-mod gl_quadtree;
+mod gl_ndtree;
 mod ibos;
 mod picker;
 mod render2d;
@@ -25,43 +25,68 @@ pub(super) use render2d::GridViewRender2D;
 pub(super) use render3d::GridViewRender3D;
 
 mod consts {
-    /// Exponential base to use when fading out gridlines. 16 = 16 small gridlines
-    /// between each large gridline.
-    pub const GRIDLINE_SPACING_BASE: usize = 16;
-    /// Minimum number of pixels between gridlines.
-    pub const MIN_GRIDLINE_SPACING: f64 = 4.0;
-    /// Minimum number of pixels between gridlines with full opacity.
-    pub const MAX_GRIDLINE_SPACING: f64 = 256.0;
-    /// Maximum opacity of gridlines when zoomed out beyond one cell per pixel.
+    /// Minimum pixel width of 2D lines.
+    pub const LINE_MIN_PIXEL_WIDTH_2D: f64 = 1.0;
+    /// Minimum pixel width of 3D lines.
+    pub const LINE_MIN_PIXEL_WIDTH_3D: f64 = 0.75;
+
+    /// Minimum pixel length of the crosshair gradient.
+    pub const CROSSHAIR_GRADIENT_MIN_PIXEL_LEN: f64 = 16.0;
+    /// Minimum render cell length of the crosshair gradient.
+    pub const CROSSHAIR_GRADIENT_MIN_CELL_LEN: f64 = 1.0;
+
+    /// Small value for avoiding Z-fighting.
+    pub const Z_EPSILON: f64 = 1.0 / 256.0;
+    /// Padding added to integer cuboid overlays, measured in render cells.
+    pub const CUBOID_OVERLAY_PADDING: f64 = GRIDLINE_WIDTH / 2.0;
+
+    /// Width of gridlines, measured in cells.
+    pub const GRIDLINE_WIDTH: f64 = 1.0 / 32.0;
+    /// Width of hover outline, measured in cells.
+    pub const HOVER_HIGHLIGHT_WIDTH: f64 = 2.0 * GRIDLINE_WIDTH;
+    /// Width of selection outline, measured in cells.
+    pub const SELECTION_HIGHLIGHT_WIDTH: f64 = 4.0 * GRIDLINE_WIDTH;
+    /// Multiplicative fudge factor to prevent Z-fighting on outlines.
+    pub const WIDTH_FUDGE_FACTOR_3D: f64 = 1.125;
+
+    /// Coefficient to use for gridline spacing.
     ///
-    /// This is so that gridlines do not completely obscure the presence of
-    /// cells.
-    pub const ZOOMED_OUT_MAX_GRID_ALPHA: f64 = 0.75;
+    /// `a` in `a * b^n`
+    pub const GRIDLINE_SPACING_COEFF: usize = 1;
+    /// Exponential base to use for gridline spacing.
+    ///
+    /// `b` in `a * b^n`
+    ///
+    /// The value of `n` linearly influences the pixel spacing between
+    /// gridlines, which is used to determine their opacity via GLSL
+    /// `smoothstep()`; see `GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING` and
+    /// `GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING`.
+    pub const GRIDLINE_SPACING_BASE: usize = 8;
+    /// Maximum pixel spacing between gridlines with zero opacity (low end of
+    /// gradient).
+    pub const GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING: f64 = 4.0;
+    /// Minimum pixel spacing between gridlines with full opacity (high end of
+    /// gradient).
+    pub const GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING: f64 = 256.0;
+    /// 2D gridline opacity multiplier when zoomed out beyond 1:1.
+    ///
+    /// This prevents gridlines from completely obscuring the presence of cells.
+    pub const GRIDLINE_ALPHA_ZOOMED_OUT_MULT_2D: f64 = 0.75;
 
     /// Number of quads in each render batch.
     pub const QUAD_BATCH_SIZE: usize = 4096;
     /// Number of mouse target rectangles in each render batch.
     pub const MOUSE_TARGET_BATCH_SIZE: usize = 256;
 
-    /// Depth at which to render gridlines.
-    pub const GRIDLINE_DEPTH: f32 = 0.1;
-    /// Depth at which to render highlight/crosshairs.
-    pub const CURSOR_DEPTH: f32 = 0.2;
-    /// Depth at which to render selection rectangle.
-    pub const SELECTION_DEPTH: f32 = 0.3;
-    /// Depth at which to render selection resize preview.
-    pub const SELECTION_RESIZE_DEPTH: f32 = 0.4;
-
     /// Direction that 3D light comes from (normalized in GLSL).
     pub const LIGHT_DIRECTION: [f32; 3] = [1.0, 7.0, -3.0];
     /// Proportion of 3D light that is ambient, as opposed to directional.
     pub const LIGHT_AMBIENTNESS: f32 = 0.4;
-    /// Maximum 3D light level.
-    pub const MAX_LIGHT: f32 = 1.0;
+    /// Constant 3D lighting multiplier.
+    pub const LIGHT_MULTIPLIER: f32 = 1.0;
 
-    /// A small offset used to force correct Z order or align things at the
-    /// sub-pixel scale.
-    pub const TINY_OFFSET: f32 = 1.0 / 16.0;
+    /// Proportional radius of the visible area beyond which there is fog.
+    pub const FOG_START_FACTOR: f32 = 0.5;
 }
 
 lazy_static! {
@@ -73,8 +98,6 @@ lazy_static! {
 pub struct RenderParams<'a> {
     /// Render target.
     pub target: &'a mut glium::Frame,
-    /// User configuration.
-    pub config: &'a Config,
     /// Mouse state.
     pub mouse: MouseState,
     /// Modifiers held on the keyboard.
@@ -95,17 +118,16 @@ pub(super) struct CellDrawParams<'a, D: Dim> {
     pub rect: Option<&'a BigRect<D>>,
     /// Alpha value for the whole ND-tree.
     pub alpha: f32,
+    /// Whether these cells can be interacted with.
+    pub interactive: bool,
 }
 
 /// How to handle a mouse hover or click on a particular location on the screen.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct MouseTargetData {
     /// Mouse binding for clicking the left mouse button over the target and
     /// dragging.
-    pub binding: Option<MouseDragBinding>,
-    /// Display mode for the cursor when hovering over the target or clicking on
-    /// it and dragging.
-    pub display: MouseDisplay,
+    pub binding: DragCmd,
 }
 
 #[derive(Default)]
@@ -114,10 +136,21 @@ struct RenderCache {
     pub vbos: vbos::VboCache,
     pub textures: textures::TextureCache,
     pub picker: picker::MousePicker,
-    pub gl_quadtrees: gl_quadtree::GlQuadtreeCache,
+    pub gl_quadtrees: gl_ndtree::GlQuadtreeCache,
+    pub gl_octrees: gl_ndtree::GlOctreeCache,
 }
 
 pub fn post_frame_clean_cache() {
     let mut cache = CACHE.borrow_mut();
     cache.gl_quadtrees.post_frame_clean_cache();
+}
+
+pub fn invalidate_gl_ndtree_cache() {
+    let mut cache = CACHE.borrow_mut();
+    cache.gl_quadtrees.invalidate_all();
+    cache.gl_octrees.invalidate_all();
+}
+
+pub fn hot_reload_shaders() {
+    shaders::hot_reload_all();
 }

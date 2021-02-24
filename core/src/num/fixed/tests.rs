@@ -9,7 +9,7 @@ macro_rules! assert_approx_eq {
     ($leeway_factor:expr, $expected:expr, $actual:expr) => {
         let expected: f64 = $expected;
         let actual: FixedPoint = $actual;
-        // Skip if `f32` can't handle it.
+        // Skip if `f64` can't handle it.
         let allowed_error = TINY * ($leeway_factor + expected.abs());
         if expected.is_finite() && allowed_error.is_finite() {
             assert!(
@@ -27,11 +27,23 @@ macro_rules! assert_approx_eq {
 
 proptest! {
     #[test]
+    fn test_fixed_point_rounding(a: f64) {
+        let a = (a * (2.0_f64.powi(16))).round() / (2.0_f64.powi(16));
+        prop_assume!(a.is_finite());
+        let fa: FixedPoint = a.try_into().unwrap();
+        assert_eq!(a.trunc(), fa.trunc().to_f64().unwrap());
+        assert_eq!(a.fract(), fa.fract());
+        assert_eq!(a.floor(), fa.floor().to_f64().unwrap());
+        assert_eq!(a.ceil(), fa.ceil().to_f64().unwrap());
+        assert_eq!(a.round(), fa.round().to_f64().unwrap());
+    }
+
+    #[test]
     fn test_fixed_point_self_ops(a: f64, b: f64) {
+        let a = (a * (2.0_f64.powi(16))).round() / (2.0_f64.powi(16));
+        let b = (b * (2.0_f64.powi(16))).round() / (2.0_f64.powi(16));
         prop_assume!(a.is_finite());
         prop_assume!(b.is_finite());
-        prop_assume!(a.abs() > TINY || a == 0.0);
-        prop_assume!(b.abs() > TINY || b == 0.0);
 
         let leeway_factor = 1.0 + a.abs() + b.abs();
         prop_assume!(leeway_factor.is_finite());

@@ -1,7 +1,6 @@
-# NDCell [![Release badge]][Release link] [![Tests badge]][Tests link] [![Dependencies badge]][Dependencies status link] [![Discord badge]][Discord link]
+# NDCell [![Release badge]][Release link] [![Tests badge]][Tests link] [![Discord badge]][Discord link]
 
 [Dependencies badge]: https://deps.rs/repo/github/HactarCE/NDCell/status.svg "Dependencies status"
-[Dependencies status link]: https://deps.rs/repo/github/HactarCE/NDCell "GitHub release (latest)"
 [Discord badge]: https://img.shields.io/discord/560924453245288459.svg?colorB=7289DA "Discord server invite"
 [Discord link]: https://discord.gg/vdJwHQF
 [Release badge]: https://img.shields.io/github/v/release/HactarCE/NDCell
@@ -19,22 +18,30 @@ _Any computable transition function_
 
 **Simulate _any_ deterministic cellular automaton**
 
-An N-dimensional cellular automaton simulation program. Maybe. Someday.
+A fast, flexible, and feature-rich interactive multidimensional cellular automaton simulator written in Rust.
 
 ## Downloads
 
 Download the **[latest release][Release link]**.
 
-On Linux and macOS, the file might not be executable by default -- to fix this, open a terminal in the same folder as the `ndcell` file and run `chmod a+x ndcell`.
-
 To build NDCell yourself, see [BUILDING.md](BUILDING.md).
 
 ## Screenshots
 
-<img src="https://i.imgur.com/vRMLNYC.png" alt="Gosper's Glider Gun simulated for 57 generations" width="512" />
-<img src="https://i.imgur.com/uKiOxqy.png" alt="Catacryst simulated for almost 8 million generations" width="512" />
+Click to view full resolution / play video.
+
+<p float="left">
+  <img src="https://i.imgur.com/vRMLNYC.png" alt="Gosper's Glider Gun simulated for 57 generations" width="384" />
+  <img src="https://i.imgur.com/uKiOxqy.png" alt="Catacryst simulated for 7.9 million generations" width="384" />
+  <img src="https://i.imgur.com/NAxRaYd.png" alt="WireWorld primes calculator simulated for 2.9 million generations, displaying the number 23" width="384" />
+  <a href="https://i.imgur.com/xAhILIO.mp4"><img src="https://i.imgur.com/aWGsV9Y.png" alt="3D WireWorld XOR gate supporting 3-micron signals" width="384" /></a>
+</p>
 
 ## What works right now
+
+- **2D and 3D rendering, simulation, and editing**
+- **Copy/paste**
+- **Save/load files**
 
 See the [Changelog](CHANGELOG.md) for the latest list of features.
 
@@ -42,21 +49,21 @@ See the [Changelog](CHANGELOG.md) for the latest list of features.
 
 In roughly descending order of priority/likelihood:
 
-- **[Everything on the short-term to-do list](TODO.md)**, including **3D rendering/simulation**
+- **[Everything on the short-term to-do list](TODO.md)**
 - **Arbitrary range and neighborhood** within a reasonable limit.
 - **Custom symmetries** with different cell states for each orientation. Any symmetry can be used in part or all of the transition function.
 - **Custom colors and icons** with several built-in presets and primitives.
-- **3D simulation and editing**
 - **Custom 3D models** with several built-in presets and primitives.
-- **Anywhere from 1 to 6 dimensions** - Only a 2D or 3D slice of spacetime will be shown at any time; the position of the slice along the hidden axes will be adjustable.
+- **Lua scripting** for custom rule generators and other plugins.
 - **Command-line interface** for use in scripts and other automated tools.
-- **Lua scripting** - Still working out the details -- I'll update this when I have a more concrete plan.
+- **Anywhere from 4 to 6 spatial dimensions** supported via CLI.
+- **2D and 3D spacetime** for 1D and 2D rules respectively.
 - **Spacetime residue** - Rules will be able to define several arbitrary "spacetime residues" (linear combination of spatial and temporal positions, modulo some value) available for use in the transition function, within some reasonable limit. This means a rule like [Busy Boxes] would only need 2 states instead of 7.
 - **Block CA** such as Margolus - This would be possible anyway with the spacetime residues above (using `x + time mod 2` and `y + time mod 2`), but native support would improve ergonomics.
-- **Custom regular tilings** - Only those that are an affine transformation away from square/cubic. (Hexagonal and triangular neighborhoods qualify!)
+- **Custom regular tilings** including hexagonal and triangular neighborhoods.
 - **Reversible CA** - "Go back in time" in a reversible CA, if an inverse transition function is defined.
 - **Grid topology** - Each axis will be able to be infinite, half-infinite, finite, looped (torus), looped with an offset (twisted torus), or flipped (Möbius loop),
-- **Infinite agars** and **true support for "B0" rules**
+- **Infinite agars** and **native support for "B0" rules**
 
 [Busy Boxes]: http://busyboxes.org/
 

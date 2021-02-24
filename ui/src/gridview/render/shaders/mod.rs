@@ -13,10 +13,10 @@ mod wrapped;
 
 use wrapped::*;
 
-#[cfg(debug_assertions)]
+// #[cfg(debug_assertions)]
 pub type WrappedShader = DynamicWrappedShader;
-#[cfg(not(debug_assertions))]
-pub type WrappedShader = StaticWrappedShader;
+// #[cfg(not(debug_assertions))]
+// pub type WrappedShader = StaticWrappedShader;
 
 shader!(RGBA_2D      = { srgb: true,  "rgba_2d" });
 shader!(RGBA_3D      = { srgb: true,  "rgba_3d" });
@@ -30,7 +30,7 @@ shader!(PICKER       = { srgb: false, "picker" });
 shader!(PIXMIX       = { srgb: false, "pixmix" });
 
 pub fn hot_reload_all() {
-    #[cfg(debug_assertions)]
+    // #[cfg(debug_assertions)]
     {
         log::info!("Reloading shaders");
 
@@ -46,8 +46,8 @@ pub fn hot_reload_all() {
         PIXMIX.try_reload();
     }
 
-    #[cfg(not(debug_assertions))]
-    error!("Cannot reload shaders in this build");
+    // #[cfg(not(debug_assertions))]
+    // error!("Cannot reload shaders in this build");
 }
 
 fn compile_shader(

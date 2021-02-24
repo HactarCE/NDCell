@@ -9,7 +9,7 @@ use glium::index::PrimitiveType;
 use glium::uniforms::UniformBuffer;
 use glium::Surface;
 use itertools::Itertools;
-use palette::{Pixel, Srgb, Srgba};
+use palette::{Mix, Pixel, Srgb, Srgba};
 use sloth::Lazy;
 
 use ndcell_core::prelude::*;
@@ -26,7 +26,7 @@ use super::CellDrawParams;
 use crate::commands::{DragCmd, DrawMode};
 use crate::ext::*;
 use crate::gridview::*;
-use crate::{Face, CONFIG, DISPLAY, FACES};
+use crate::{Face, DISPLAY, FACES};
 use fog::FogParams;
 use gridlines::GridlineParams;
 use lighting::LightingParams;
@@ -476,6 +476,36 @@ impl GridViewRender3D<'_> {
         let (rect, axis) = self.make_line_ndrect(&mut start, &mut end, width);
         let fill = OverlayFill::gradient(axis, start.color, end.color);
         self.add_cuboid_fill_overlay(rect, fill);
+    }
+
+    /// Adds a visualization for the ND-tree path to a cell.
+    pub fn add_ndtree_visualization(
+        &mut self,
+        min_layer: Layer,
+        max_layer: Layer,
+        base_pos: &BigVec3D,
+        cell_pos: &BigVec3D,
+    ) {
+        if min_layer >= max_layer {
+            return;
+        }
+
+        let single_cell = BigRect::single_cell(cell_pos.clone());
+        let color1 = crate::colors::debug::NDTREE_COLOR_1.into_linear();
+        let color2 = crate::colors::debug::NDTREE_COLOR_2.into_linear();
+        let width = r64(0.0);
+
+        for layer in (min_layer.0..=max_layer.0).map(Layer) {
+            let cuboid = layer.round_rect_with_base_pos(single_cell.clone(), base_pos);
+            let proportion = {
+                let cur = layer.0 as f32;
+                let min = min_layer.0 as f32;
+                let max = max_layer.0 as f32;
+                (cur - min) / (max - min)
+            };
+            let color = Srgb::from_linear(color1.mix(&color2, proportion));
+            self.add_cuboid_outline_overlay(self.clip_int_rect_to_visible(&cuboid), color, width);
+        }
     }
 
     /// Draws many transparent intersecting planes of different colors to test

@@ -1,15 +1,18 @@
 // This file is included in shader programs using an awful hack.
 // See `shaders/mod.rs`.
 
-uniform mat4 matrix;
-uniform mat4 inv_matrix;
-
 // One "render cell" per node; each pixel contains four uints (2 pixels per node).
 uniform usampler2D octree_texture;
-uniform int layer_count;
-uniform uint root_idx;
 
-uniform ivec3 octree_base;
+layout(std140) uniform OctreeParams {
+    mat4 matrix;
+    mat4 inv_matrix;
+
+    ivec3 octree_base;
+    int layer_count;
+    uint root_idx;
+};
+
 uint texture_width = uint(textureSize(octree_texture, 0).x);
 float octree_side_len = (1 << layer_count);
 

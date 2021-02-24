@@ -17,6 +17,7 @@ use ndcell_core::prelude::*;
 mod fog;
 mod gridlines;
 mod lighting;
+mod octree;
 
 use super::consts::*;
 use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoint3D, OverlayFill};
@@ -30,6 +31,7 @@ use crate::{Face, DISPLAY, FACES};
 use fog::FogParams;
 use gridlines::GridlineParams;
 use lighting::LightingParams;
+use octree::OctreeParams;
 
 pub(in crate::gridview) type GridViewRender3D<'a> = GenericGridViewRender<'a, RenderDim3D>;
 
@@ -163,6 +165,19 @@ impl GridViewRender3D<'_> {
             .gl_octrees
             .gl_ndtree_from_node((&visible_octree.root).into(), self.xform.render_cell_layer)?;
 
+        let octree_params = UniformBuffer::new(
+            &**DISPLAY,
+            OctreeParams {
+                matrix: self.xform.gl_matrix(),
+                inv_matrix: self.xform.inv_gl_matrix(),
+
+                octree_base: octree_base.to_i32_array(),
+                layer_count: gl_octree.layers,
+                root_idx: gl_octree.root_idx,
+            },
+        )
+        .expect("Failed to create uniform buffer");
+
         self.params
             .target
             .draw(
@@ -170,19 +185,13 @@ impl GridViewRender3D<'_> {
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
                 &shaders::OCTREE.load(),
                 &uniform! {
-                    matrix: self.xform.gl_matrix(),
-                    inv_matrix: self.xform.inv_gl_matrix(),
-
                     octree_texture: &gl_octree.texture,
-                    layer_count: gl_octree.layers,
-                    root_idx: gl_octree.root_idx,
-
-                    octree_base: octree_base.to_i32_array(),
 
                     alpha: params.alpha,
 
                     FogParams: &**self.dim.as_ref().unwrap().fog_uniform,
                     LightingParams: &**self.dim.as_ref().unwrap().lighting_uniform,
+                    OctreeParams: &octree_params,
                 },
                 &glium::DrawParameters {
                     depth: glium::Depth {

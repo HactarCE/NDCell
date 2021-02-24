@@ -27,7 +27,7 @@ lazy_static! {
             .with_title(super::TITLE.to_owned())
             .with_window_icon(load_application_icon());
         let cb = ContextBuilder::new()
-            .with_vsync(true)
+            .with_vsync(false)
             .with_multisampling(CONFIG.lock().gfx.msaa as u16);
         glium::Display::new(wb, cb, EVENT_LOOP.borrow().as_ref().unwrap())
             .expect("Failed to initialize display")

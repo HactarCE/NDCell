@@ -10,7 +10,7 @@ in vec2 ndc_xy; // -1.0 ... +1.0 (same as `gl_Position`)
 out vec4 color;
 
 uniform mat4 matrix;
-mat4 inv_matrix = inverse(matrix);
+uniform mat4 inv_matrix;
 
 // One "render cell" per node; each pixel contains four uints (2 pixels per node).
 uniform usampler2D octree_texture;

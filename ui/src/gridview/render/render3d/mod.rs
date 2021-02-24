@@ -171,6 +171,7 @@ impl GridViewRender3D<'_> {
                 &shaders::OCTREE.load(),
                 &uniform! {
                     matrix: self.xform.gl_matrix(),
+                    inv_matrix: self.xform.inv_gl_matrix(),
 
                     octree_texture: &gl_octree.texture,
                     layer_count: gl_octree.layers,

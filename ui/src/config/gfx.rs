@@ -16,7 +16,7 @@ impl Default for GfxConfig {
     fn default() -> Self {
         Self {
             dpi: 1.0,
-            fps: 60.0,
+            fps: 1000.0,
             font_size: 16.0,
 
             msaa: Msaa::_8,

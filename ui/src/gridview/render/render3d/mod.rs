@@ -178,8 +178,6 @@ impl GridViewRender3D<'_> {
 
                     octree_base: octree_base.to_i32_array(),
 
-                    perf_view: CONFIG.lock().gfx.octree_perf_view,
-
                     alpha: params.alpha,
 
                     FogParams: &**self.dim.as_ref().unwrap().fog_uniform,

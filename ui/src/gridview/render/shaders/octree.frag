@@ -3,6 +3,8 @@
 
 #version 150
 
+const bool SHOW_ITERATIONS = false;
+
 in vec2 ndc_xy; // -1.0 ... +1.0 (same as `gl_Position`)
 
 out vec4 color;
@@ -18,8 +20,6 @@ uniform uint root_idx;
 uniform ivec3 octree_base;
 uint texture_width = uint(textureSize(octree_texture, 0).x);
 float octree_side_len = (1 << layer_count);
-
-uniform bool perf_view;
 
 uniform float alpha;
 
@@ -230,21 +230,18 @@ void main() {
     }
 
     // Performance debug view
-    /*
-    color /= 2.0;
-    if (count < 50.0)       color.r += 0.25 + count / 100.0;
-    else if (count < 100.0) color.g += 0.25 + (count - 50.0) / 100.0;
-    else if (count < 150.0) color.b += 0.25 + (count - 100.0) / 100.0;
-    else                    color.rgb += vec3(0.5);
-    color.a = max(color.a, 0.5);
-    if (layer > layer_count) color.rgb /= 2.0;
-    */
+    if (SHOW_ITERATIONS) {
+        color /= 2.0;
+        if (count < 50.0)       color.r += 0.25 + count / 100.0;
+        else if (count < 100.0) color.g += 0.25 + (count - 50.0) / 100.0;
+        else if (count < 150.0) color.b += 0.25 + (count - 100.0) / 100.0;
+        else                    color.rgb += vec3(0.5);
+        color.a = max(color.a, 0.5);
+        if (layer > layer_count) color.rgb /= 2.0;
+    }
 
     // The ray did not intersect any cell.
-    if (layer > layer_count) {
-        if (true)
-            color.rgb /= 2.0;
-        else
-            discard;
+    if (layer > layer_count && !SHOW_ITERATIONS) {
+        discard;
     }
 }

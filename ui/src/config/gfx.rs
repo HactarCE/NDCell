@@ -8,8 +8,6 @@ pub struct GfxConfig {
 
     pub msaa: Msaa,
 
-    pub octree_perf_view: bool,
-
     pub cell_colors: [Srgba; 256],
 }
 impl Default for GfxConfig {
@@ -20,8 +18,6 @@ impl Default for GfxConfig {
             font_size: 16.0,
 
             msaa: Msaa::_8,
-
-            octree_perf_view: false,
 
             cell_colors: crate::default_colors(),
         }

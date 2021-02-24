@@ -86,6 +86,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
     }
 
     /// Returns a `RenderResult` from this render.
+    #[optick_attr::profile]
     pub fn finish(mut self) -> Result<RenderResult> {
         R::draw_overlay_quads(&mut self).context("Drawing overlay")?;
         Ok(RenderResult {

@@ -208,6 +208,7 @@ impl<D: Dim> NdTree<D> {
     /// node twice the size containing that old NE child in its SW corner. The
     /// final result is that the entire tree contains the same contents as
     /// before, but with 25% padding along each edge.
+    #[optick_attr::profile]
     pub fn expand(&mut self) {
         let root = self.root_ref();
         let node_pool = root.pool();
@@ -234,6 +235,7 @@ impl<D: Dim> NdTree<D> {
     }
     /// "Zooms out" the grid by calling `NdTree::expand()` until the tree
     /// includes the given position or rectangle.
+    #[optick_attr::profile]
     pub fn expand_to<T>(&mut self, pos_or_rect: &T)
     where
         BigRect<D>: CanContain<T>,
@@ -325,6 +327,7 @@ impl<D: Dim> NdTree<D> {
     /// centered on an existing node, and thus composed out of smaller existing
     /// nodes. The only guarantee is that the node will be either a leaf node or
     /// less than twice as big as it needs to be.
+    #[optick_attr::profile]
     pub fn slice_containing<'a>(&'a self, rect: &BigRect<D>) -> NdTreeSlice<'a, D> {
         let node_pool = self.pool().access();
 
@@ -337,6 +340,7 @@ impl<D: Dim> NdTree<D> {
         // can't shrink any more. Each iteration of the loop "zooms in" by a
         // factor of 2.
         'outer: loop {
+            optick::event!("outer loop");
             // If the node is a leaf node, don't zoom in any more; this is small
             // enough.
             if ret.root.is_leaf() {

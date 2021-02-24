@@ -215,6 +215,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
         Ok(())
     }
     /// Executes a command.
+    #[optick_attr::profile]
     pub(super) fn do_command(
         &mut self,
         CmdMsg {
@@ -472,6 +473,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
     /// Begins dragging.
     ///
     /// Do not call this method from within a drag update function.
+    #[optick_attr::profile]
     pub(super) fn begin_drag(&mut self, command: DragCmd, pixel: FVec2D) {
         if self.drag.is_some() {
             warn!("Attempted to start new drag while still in the middle of one");
@@ -575,6 +577,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
     /// Executes a `ContinueDrag` command, calling the drag handler.
     ///
     /// Do not call this method from within a drag handler.
+    #[optick_attr::profile]
     pub(super) fn continue_drag(&mut self, cursor_pos: FVec2D) -> Result<()> {
         if let Some(mut drag) = self.drag.take() {
             let screen_pos = self.screen_pos(cursor_pos);

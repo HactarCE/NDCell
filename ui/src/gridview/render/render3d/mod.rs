@@ -165,40 +165,43 @@ impl GridViewRender3D<'_> {
             .gl_octrees
             .gl_ndtree_from_node((&visible_octree.root).into(), self.xform.render_cell_layer)?;
 
-        self.params
-            .target
-            .draw(
-                &*vbos.ndtree_quad(),
-                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::OCTREE.load(),
-                &uniform! {
-                    matrix: self.xform.gl_matrix(),
+        {
+            optick::event!("draw call for cells");
+            self.params
+                .target
+                .draw(
+                    &*vbos.ndtree_quad(),
+                    &glium::index::NoIndices(PrimitiveType::TriangleStrip),
+                    &shaders::OCTREE.load(),
+                    &uniform! {
+                        matrix: self.xform.gl_matrix(),
 
-                    octree_texture: &gl_octree.texture,
-                    layer_count: gl_octree.layers,
-                    root_idx: gl_octree.root_idx,
+                        octree_texture: &gl_octree.texture,
+                        layer_count: gl_octree.layers,
+                        root_idx: gl_octree.root_idx,
 
-                    octree_base: octree_base.to_i32_array(),
+                        octree_base: octree_base.to_i32_array(),
 
-                    perf_view: CONFIG.lock().gfx.octree_perf_view,
+                        perf_view: CONFIG.lock().gfx.octree_perf_view,
 
-                    alpha: params.alpha,
+                        alpha: params.alpha,
 
-                    FogParams: &**self.dim.as_ref().unwrap().fog_uniform,
-                    LightingParams: &**self.dim.as_ref().unwrap().lighting_uniform,
-                },
-                &glium::DrawParameters {
-                    depth: glium::Depth {
-                        test: glium::DepthTest::IfLessOrEqual,
-                        write: true,
+                        FogParams: &**self.dim.as_ref().unwrap().fog_uniform,
+                        LightingParams: &**self.dim.as_ref().unwrap().lighting_uniform,
+                    },
+                    &glium::DrawParameters {
+                        depth: glium::Depth {
+                            test: glium::DepthTest::IfLessOrEqual,
+                            write: true,
+                            ..Default::default()
+                        },
+                        blend: glium::Blend::alpha_blending(),
+                        multisampling: false,
                         ..Default::default()
                     },
-                    blend: glium::Blend::alpha_blending(),
-                    multisampling: false,
-                    ..Default::default()
-                },
-            )
-            .expect("Drawing cells");
+                )
+                .expect("Drawing cells");
+        }
 
         // If the mouse is hovering over a cell, and these cells are
         // interactive, draw that on the mouse picker.
@@ -212,6 +215,7 @@ impl GridViewRender3D<'_> {
                     visible_octree.root.as_ref(),
                 );
                 if let Some(hit) = raycast {
+                    optick::event!("Handling mouse raycast hit");
                     let cuboid = IRect::single_cell(hit.pos_int + octree_base).to_frect();
                     let face = hit.face;
                     let modifiers = None;

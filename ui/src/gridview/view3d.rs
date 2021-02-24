@@ -147,6 +147,7 @@ impl GridViewDimension for Dim3D {
         frame.finish()
     }
 
+    #[optick_attr::profile]
     fn screen_pos(this: &GridView3D, pixel: FVec2D) -> ScreenPos3D {
         let layer = this.viewpoint().render_cell_layer();
 

@@ -11,6 +11,7 @@ use crate::dim::Dim;
 /// # Panics
 ///
 /// This function panics if the length of `cells` is not (2^n)^NDIM for some n, or if `index` is greater than 2^NDIM-1.
+#[optick_attr::profile]
 pub fn get_corner<'a, D: Dim>(cells: &'a [u8], index: usize) -> Result<Box<[u8]>, u8> {
     // Return early if there is only one cell.
     if let [cell] = cells {
@@ -35,6 +36,7 @@ pub fn get_corner<'a, D: Dim>(cells: &'a [u8], index: usize) -> Result<Box<[u8]>
 /// # Panics
 ///
 /// This function panics if the length of `cells` is not (2^n)^NDIM for some n.
+#[optick_attr::profile]
 pub fn subdivide<'a, D: Dim>(cells: &'a [u8]) -> Result<impl 'a + Iterator<Item = Box<[u8]>>, u8> {
     // Return early if there is only one cell.
     if let [cell] = cells {
@@ -50,6 +52,7 @@ pub fn subdivide<'a, D: Dim>(cells: &'a [u8]) -> Result<impl 'a + Iterator<Item 
 /// # Panics
 ///
 /// This function panics if the length of `cells` is not (2^n)^NDIM for some n.
+#[optick_attr::profile]
 pub fn join<D: Dim>(children: &[&[u8]]) -> Box<[u8]> {
     assert_eq!(D::BRANCHING_FACTOR, children.len());
     let old_layer = Layer::from_num_cells::<D>(children[0].len()).unwrap();
@@ -78,6 +81,7 @@ pub fn join<D: Dim>(children: &[&[u8]]) -> Box<[u8]> {
 /// # Panics
 ///
 /// This function panics if the length of `cells` is not (2^n)^NDIM for some n.
+#[optick_attr::profile]
 pub fn expand_centered<D: Dim>(cells: &[u8]) -> Result<Box<[u8]>, u8> {
     // Return early if there is only one cell.
     if let [cell] = cells {
@@ -103,6 +107,7 @@ pub fn expand_centered<D: Dim>(cells: &[u8]) -> Result<Box<[u8]>, u8> {
 /// # Panics
 ///
 /// This function panics if the length of `cells` is not (2^n)^NDIM for some n.
+#[optick_attr::profile]
 pub fn shrink_centered<D: Dim>(cells: &[u8]) -> Result<Box<[u8]>, LayerTooSmall> {
     let old_layer = Layer::from_num_cells::<D>(cells.len()).unwrap();
     if old_layer < Layer(2) {

@@ -264,6 +264,7 @@ impl<D: Dim> NodePool<D> {
         self.get_empty(Layer::base::<D>())
     }
     /// Returns the canonical node at the given layer containing only state #0.
+    #[optick_attr::profile]
     pub fn get_empty<'pool>(&'pool self, layer: Layer) -> NodeRef<'pool, D> {
         let mut empty_nodes = self.empty_nodes.lock();
         // Add empty nodes until we have enough.
@@ -285,6 +286,7 @@ impl<D: Dim> NodePool<D> {
 
     /// Returns the canonical instance of a node, adding it to the pool if one
     /// does not exist.
+    #[optick_attr::profile]
     fn get<'pool>(&'pool self, raw_node: RawNode<D>) -> NodeRef<'pool, D> {
         let (ret, already_present) = self.nodes.get_or_insert(raw_node);
         if !already_present {
@@ -303,6 +305,7 @@ impl<D: Dim> NodePool<D> {
     ///
     /// This method panics in debug mode if the children are not all at the same
     /// layer.
+    #[optick_attr::profile]
     pub fn join_nodes<'pool, 'children, N: NodeRefTrait<'children, D = D>>(
         &'pool self,
         children: impl IntoIterator<Item = N>,
@@ -336,6 +339,7 @@ impl<D: Dim> NodePool<D> {
         }
     }
     /// Creates a node containing the given cells.
+    #[optick_attr::profile]
     pub fn get_from_cells<'pool>(&'pool self, cells: impl Into<Box<[u8]>>) -> NodeRef<'pool, D> {
         let cells = cells.into();
         let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid cell count");
@@ -360,6 +364,7 @@ impl<D: Dim> NodePool<D> {
     /// # Panics
     ///
     /// This method panics if the size of the node does not fit in a `usize`.
+    #[optick_attr::profile]
     pub fn get_from_fn<'pool>(
         &'pool self,
         layer: Layer,
@@ -396,6 +401,7 @@ impl<D: Dim> NodePool<D> {
     /// is a leaf.
     ///
     /// This is equivalent to taking one element of the result of `subdivide()`.
+    #[optick_attr::profile]
     pub fn get_corner<'pool>(
         &'pool self,
         node: impl NodeRefTrait<'pool, D = D>,
@@ -415,6 +421,7 @@ impl<D: Dim> NodePool<D> {
     ///
     /// The return value is borrowed if `node` is a non-leaf and owned if `node`
     /// is a leaf.
+    #[optick_attr::profile]
     pub fn subdivide<'pool>(
         &'pool self,
         node: impl NodeRefTrait<'pool, D = D>,
@@ -427,6 +434,7 @@ impl<D: Dim> NodePool<D> {
     /// the node.
     ///
     /// If the node is below `Layer(2)`, returns `Err(LayerTooSmall)`.
+    #[optick_attr::profile]
     pub fn centered_inner<'pool>(
         &'pool self,
         node: impl NodeRefTrait<'pool, D = D>,
@@ -461,6 +469,7 @@ impl<D: Dim> NodePool<D> {
     }
     /// Creates a node from a 2^NDIM block of nodes at the same layer, but the
     /// result is offset by a vector (modulo the size of a node at that layer).
+    #[optick_attr::profile]
     pub fn get_offset_child<'pool>(
         &'pool self,
         offset: &BigVec<D>,
@@ -581,6 +590,7 @@ impl<D: Dim> NodePool<D> {
     /// Creates an identical node except with the cell at the given position
     /// (modulo the node length along each axis) modified.
     #[must_use = "This method returns a new value instead of mutating its input"]
+    #[optick_attr::profile]
     pub fn set_cell<'pool>(
         &'pool self,
         node: impl NodeRefTrait<'pool, D = D>,

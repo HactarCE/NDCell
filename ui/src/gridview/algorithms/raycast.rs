@@ -32,6 +32,7 @@ impl Hit {
 
 /// Computes a 3D raycast into an octree. `start` and `delta` are both in units
 /// of `min_layer` nodes, and `start` is relative to the lower corner of `node`.
+#[optick_attr::profile]
 pub fn intersect_octree(
     mut start: FVec3D,
     mut delta: FVec3D,
@@ -105,6 +106,7 @@ pub fn intersect_octree(
     }
 }
 
+#[optick_attr::profile]
 fn raycast_node_child(
     start: FVec3D,
     delta: FVec3D,
@@ -176,6 +178,7 @@ fn raycast_node_child(
 }
 
 /// Computes the intersection of a 3D ray and a plane.
+#[optick_attr::profile]
 pub fn intersect_plane(
     start: FVec3D,
     delta: FVec3D,
@@ -213,6 +216,7 @@ pub fn intersect_plane(
 }
 
 /// Computes the intersection of a 3D ray and a cuboid.
+#[optick_attr::profile]
 pub fn intersect_cuboid(start: FVec3D, mut delta: FVec3D, cuboid: FRect3D) -> Option<Hit> {
     let mut entry_corner = cuboid.min();
     let mut exit_corner = cuboid.max();

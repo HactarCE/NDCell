@@ -1,5 +1,6 @@
-// Octree traversal algorithm based on An Efficient Parametric Algorithm for
-// Octree Traversal by J. Revelles, C. Ureña, M. Lastra.
+// Second pass for sparse voxel octree rendering algorihtm based on Efficient
+// Sparse Voxel Octrees by S. Laine, T. Karras.
+// (https://users.aalto.fi/~laines9/publications/laine2010i3d_paper.pdf)
 
 #version 150
 

@@ -18,16 +18,17 @@ pub type WrappedShader = DynamicWrappedShader;
 #[cfg(not(debug_assertions))]
 pub type WrappedShader = StaticWrappedShader;
 
-shader!(RGBA_2D      = { srgb: true,  "rgba_2d" });
-shader!(RGBA_3D      = { srgb: true,  "rgba_3d" });
+shader!(RGBA_2D       = { srgb: true,  "rgba_2d" });
+shader!(RGBA_3D       = { srgb: true,  "rgba_3d" });
 
-shader!(QUADTREE     = { srgb: true,  vert: "ndc_xy", frag: "quadtree" });
-shader!(OCTREE       = { srgb: true,  vert: "ndc_xy", frag: "octree" });
+shader!(QUADTREE      = { srgb: true,  vert: "ndc_xy", frag: "quadtree" });
+shader!(OCTREE_PASS_1 = { srgb: true,  vert: "ndc_xy", frag: "octree_pass_1" });
+shader!(OCTREE_PASS_2 = { srgb: true,  vert: "ndc_xy", frag: "octree_pass_2" });
 
-shader!(GRIDLINES_3D = { srgb: true,  "gridlines_3d" });
+shader!(GRIDLINES_3D  = { srgb: true,  "gridlines_3d" });
 
-shader!(PICKER       = { srgb: false, "picker" });
-shader!(PIXMIX       = { srgb: false, "pixmix" });
+shader!(PICKER        = { srgb: false, "picker" });
+shader!(PIXMIX        = { srgb: false, "pixmix" });
 
 pub fn hot_reload_all() {
     #[cfg(debug_assertions)]
@@ -38,7 +39,8 @@ pub fn hot_reload_all() {
         RGBA_3D.try_reload();
 
         QUADTREE.try_reload();
-        OCTREE.try_reload();
+        OCTREE_PASS_1.try_reload();
+        OCTREE_PASS_2.try_reload();
 
         GRIDLINES_3D.try_reload();
 

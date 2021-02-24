@@ -183,7 +183,7 @@ impl GridViewRender3D<'_> {
             .draw(
                 &*vbos.ndtree_quad(),
                 &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::OCTREE.load(),
+                &shaders::OCTREE_PASS_2.load(),
                 &uniform! {
                     octree_texture: &gl_octree.texture,
 

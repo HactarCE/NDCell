@@ -1,3 +1,7 @@
+// Octree traversal algorithm based on An Efficient Parametric Algorithm for
+// Octree Traversal by J. Revelles, C. Ureña, M. Lastra.
+// (http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.29.987)
+
 // This file is included in shader programs using an awful hack.
 // See `shaders/mod.rs`.
 

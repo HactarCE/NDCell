@@ -189,12 +189,18 @@ pub fn show_gui() -> ! {
                 // Render imgui.
                 platform.prepare_render(&ui, gl_window.window());
                 let draw_data = ui.render();
-                renderer
-                    .render(&mut target, draw_data)
-                    .expect("Error while rendering imgui");
+                {
+                    optick::event!("Rendering imgui");
+                    renderer
+                        .render(&mut target, draw_data)
+                        .expect("Error while rendering imgui");
+                }
 
                 // Put it all on the screen.
-                target.finish().expect("Failed to swap buffers");
+                {
+                    optick::event!("Finishing frame");
+                    target.finish().expect("Failed to swap buffers");
+                }
 
                 // Clean render cache.
                 super::gridview::render::post_frame_clean_cache();

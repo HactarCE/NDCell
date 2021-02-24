@@ -307,7 +307,7 @@ impl FrameInProgress<'_> {
                         }
 
                         // Reload shaders (debug build only).
-                        #[cfg(debug_assertions)]
+                        // #[cfg(debug_assertions)]
                         Some(VirtualKeyCode::R) => crate::gridview::render::hot_reload_shaders(),
 
                         _ => (),

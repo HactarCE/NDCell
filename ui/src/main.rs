@@ -2,7 +2,7 @@
 //!
 //! This module contains everything needed to display NDCell's UI.
 
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(dead_code)] // TODO: remove this line
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]

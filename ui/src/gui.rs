@@ -73,8 +73,6 @@ pub fn show_gui() -> ! {
         .take()
         .unwrap()
         .run(move |event, _ev_loop, control_flow| {
-            optick::next_frame();
-
             // Handle events.
             let mut now = Instant::now();
             let mut do_frame = false;
@@ -106,6 +104,8 @@ pub fn show_gui() -> ! {
             };
 
             if do_frame && next_frame_time <= now {
+                optick::next_frame();
+
                 next_frame_time = now + CONFIG.lock().gfx.frame_duration();
                 if next_frame_time < Instant::now() {
                     // Skip a frame (or several).

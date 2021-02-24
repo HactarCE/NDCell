@@ -88,6 +88,7 @@ fn preprocess_glsl(glsl: &str) -> String {
             let file_to_include = match line.trim_start_matches("//#include ") {
                 "util/fog.frag" => include_str!("util/fog.frag"),
                 "util/lighting.frag" => include_str!("util/lighting.frag"),
+                "util/octree.frag" => include_str!("util/octree.frag"),
                 other => panic!(
                     "Invalid `//#include` preprocessor directive in some GLSL file somewhere: {:?}",
                     other,

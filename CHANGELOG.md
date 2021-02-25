@@ -4,6 +4,12 @@ All notable changes to NDCell will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), except for minor stylistic changes to organize features and accomodate named versions. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with respect to the Rust API for `ndcell_core`, the NDCA API for `ndcell_lang`, and the combined Lua/NDCA API for `ndcell_ui`, the main application.
 
+## [0.2.4] Blinder (2021-02-25)
+
+### Optimized
+
+- 3D rendering performance (5x-20x FPS)
+
 ## [0.2.3] Blinker (2021-02-22)
 
 ### Added

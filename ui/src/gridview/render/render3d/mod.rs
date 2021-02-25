@@ -9,7 +9,7 @@ use glium::index::PrimitiveType;
 use glium::uniforms::UniformBuffer;
 use glium::Surface;
 use itertools::Itertools;
-use palette::{Pixel, Srgb, Srgba};
+use palette::{Mix, Pixel, Srgb, Srgba};
 use sloth::Lazy;
 
 use ndcell_core::prelude::*;
@@ -17,6 +17,7 @@ use ndcell_core::prelude::*;
 mod fog;
 mod gridlines;
 mod lighting;
+mod octree;
 
 use super::consts::*;
 use super::generic::{GenericGridViewRender, GridViewRenderDimension, LineEndpoint3D, OverlayFill};
@@ -26,10 +27,11 @@ use super::CellDrawParams;
 use crate::commands::{DragCmd, DrawMode};
 use crate::ext::*;
 use crate::gridview::*;
-use crate::{Face, CONFIG, DISPLAY, FACES};
+use crate::{Face, DISPLAY, FACES};
 use fog::FogParams;
 use gridlines::GridlineParams;
 use lighting::LightingParams;
+use octree::OctreeParams;
 
 pub(in crate::gridview) type GridViewRender3D<'a> = GenericGridViewRender<'a, RenderDim3D>;
 
@@ -158,32 +160,75 @@ impl GridViewRender3D<'_> {
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
+        let textures = &mut cache.textures;
 
         let gl_octree = cache
             .gl_octrees
             .gl_ndtree_from_node((&visible_octree.root).into(), self.xform.render_cell_layer)?;
 
+        let octree_params = UniformBuffer::new(
+            &**DISPLAY,
+            OctreeParams {
+                matrix: self.xform.gl_matrix(),
+                inv_matrix: self.xform.inv_gl_matrix(),
+
+                octree_base: octree_base.to_i32_array(),
+                layer_count: gl_octree.layers,
+                root_idx: gl_octree.root_idx,
+            },
+        )
+        .expect("Failed to create uniform buffer");
+
+        let vbo = &*vbos.ndtree_quad();
+        let indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
+
+        let (w, h) = self.params.target.get_dimensions();
+        const BLOCK_SIZE: u32 = 8; // Some experimentation suggests 8 is optimal.
+        let first_pass_w = w.div_ceil(&BLOCK_SIZE) + 1;
+        let first_pass_h = h.div_ceil(&BLOCK_SIZE) + 1;
+        let (init_t_texture, mut init_t_fbo, init_t_texture_viewport) =
+            textures.octree_init_t(first_pass_w, first_pass_h);
+
+        // First pass: render a depth map at 1/8 scale (1/64 number of pixels).
+        init_t_fbo
+            .draw(
+                vbo,
+                &indices,
+                &shaders::OCTREE_PASS_1.load(),
+                &uniform! {
+                    initial_t_tex_dimensions: (first_pass_w, first_pass_h),
+
+                    FogParams: &**self.dim.as_ref().unwrap().fog_uniform,
+                    LightingParams: &**self.dim.as_ref().unwrap().lighting_uniform,
+                    OctreeParams: &octree_params,
+                    octree_texture: &gl_octree.texture,
+                },
+                &glium::DrawParameters {
+                    multisampling: false,
+                    viewport: Some(init_t_texture_viewport),
+                    ..Default::default()
+                },
+            )
+            .expect("Drawing cells (first pass)");
+
+        // Second pass: render the final result, using the first pass to
+        // determine the starting point for each ray.
         self.params
             .target
             .draw(
-                &*vbos.ndtree_quad(),
-                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
-                &shaders::OCTREE.load(),
+                vbo,
+                &indices,
+                &shaders::OCTREE_PASS_2.load(),
                 &uniform! {
-                    matrix: self.xform.gl_matrix(),
-
-                    octree_texture: &gl_octree.texture,
-                    layer_count: gl_octree.layers,
-                    root_idx: gl_octree.root_idx,
-
-                    octree_base: octree_base.to_i32_array(),
-
-                    perf_view: CONFIG.lock().gfx.octree_perf_view,
+                    initial_t_texture: init_t_texture.sampled(),
+                    initial_t_tex_dimensions: (first_pass_w, first_pass_h),
 
                     alpha: params.alpha,
 
                     FogParams: &**self.dim.as_ref().unwrap().fog_uniform,
                     LightingParams: &**self.dim.as_ref().unwrap().lighting_uniform,
+                    OctreeParams: &octree_params,
+                    octree_texture: &gl_octree.texture,
                 },
                 &glium::DrawParameters {
                     depth: glium::Depth {
@@ -196,7 +241,7 @@ impl GridViewRender3D<'_> {
                     ..Default::default()
                 },
             )
-            .expect("Drawing cells");
+            .expect("Drawing cells (second pass)");
 
         // If the mouse is hovering over a cell, and these cells are
         // interactive, draw that on the mouse picker.
@@ -478,6 +523,36 @@ impl GridViewRender3D<'_> {
         let (rect, axis) = self.make_line_ndrect(&mut start, &mut end, width);
         let fill = OverlayFill::gradient(axis, start.color, end.color);
         self.add_cuboid_fill_overlay(rect, fill);
+    }
+
+    /// Adds a visualization for the ND-tree path to a cell.
+    pub fn add_ndtree_visualization(
+        &mut self,
+        min_layer: Layer,
+        max_layer: Layer,
+        base_pos: &BigVec3D,
+        cell_pos: &BigVec3D,
+    ) {
+        if min_layer >= max_layer {
+            return;
+        }
+
+        let single_cell = BigRect::single_cell(cell_pos.clone());
+        let color1 = crate::colors::debug::NDTREE_COLOR_1.into_linear();
+        let color2 = crate::colors::debug::NDTREE_COLOR_2.into_linear();
+        let width = r64(0.0);
+
+        for layer in (min_layer.0..=max_layer.0).map(Layer) {
+            let cuboid = layer.round_rect_with_base_pos(single_cell.clone(), base_pos);
+            let proportion = {
+                let cur = layer.0 as f32;
+                let min = min_layer.0 as f32;
+                let max = max_layer.0 as f32;
+                (cur - min) / (max - min)
+            };
+            let color = Srgb::from_linear(color1.mix(&color2, proportion));
+            self.add_cuboid_outline_overlay(self.clip_int_rect_to_visible(&cuboid), color, width);
+        }
     }
 
     /// Draws many transparent intersecting planes of different colors to test

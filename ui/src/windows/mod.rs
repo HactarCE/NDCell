@@ -87,7 +87,7 @@ impl MainWindow {
             }
 
             ui.text("");
-            let fps = ui.io().framerate.ceil() as usize;
+            let fps = ui.io().framerate.round() as usize;
             ui.text_colored(fps_color(fps), format!("Framerate = {} FPS", fps));
             let total_sim_time: Duration = gridview
                 .last_sim_times()

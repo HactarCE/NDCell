@@ -21,7 +21,7 @@ use glium::glutin::event::ModifiersState;
 use glium::index::PrimitiveType;
 use glium::{uniform, Surface};
 use itertools::Itertools;
-use palette::{Srgb, Srgba};
+use palette::{Mix, Srgb, Srgba};
 
 use ndcell_core::prelude::*;
 use Axis::{X, Y};
@@ -121,7 +121,7 @@ impl GridViewRender2D<'_> {
         let cells_w = self.local_visible_rect.len(X) as u32;
         let cells_h = self.local_visible_rect.len(Y) as u32;
         let (cells_texture, mut cells_fbo, cells_texture_viewport) =
-            cache.textures.cells(cells_w, cells_h);
+            cache.textures.cells_2d(cells_w, cells_h);
         let local_quadtree_base = self
             .xform
             .global_to_local_int(&visible_quadtree.base_pos)
@@ -386,6 +386,36 @@ impl GridViewRender2D<'_> {
                 LineEndpoint2D::include(max, color),
                 r64(SELECTION_HIGHLIGHT_WIDTH),
             );
+        }
+    }
+
+    /// Adds a visualization for the ND-tree path to a cell.
+    pub fn add_ndtree_visualization(
+        &mut self,
+        min_layer: Layer,
+        max_layer: Layer,
+        base_pos: &BigVec2D,
+        cell_pos: &BigVec2D,
+    ) {
+        if min_layer >= max_layer {
+            return;
+        }
+
+        let single_cell = BigRect::single_cell(cell_pos.clone());
+        let color1 = crate::colors::debug::NDTREE_COLOR_1.into_linear();
+        let color2 = crate::colors::debug::NDTREE_COLOR_2.into_linear();
+        let width = r64(0.0);
+
+        for layer in (min_layer.0..=max_layer.0).map(Layer) {
+            let rect = layer.round_rect_with_base_pos(single_cell.clone(), base_pos);
+            let proportion = {
+                let cur = layer.0 as f32;
+                let min = min_layer.0 as f32;
+                let max = max_layer.0 as f32;
+                (cur - min) / (max - min)
+            };
+            let color = Srgb::from_linear(color1.mix(&color2, proportion));
+            self.add_rect_outline_overlay(self.clip_int_rect_to_visible(&rect), color, width);
         }
     }
 

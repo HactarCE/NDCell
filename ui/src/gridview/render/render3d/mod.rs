@@ -160,6 +160,7 @@ impl GridViewRender3D<'_> {
         // Reborrow is necessary in order to split borrow.
         let cache = &mut *self.cache;
         let vbos = &mut cache.vbos;
+        let textures = &mut cache.textures;
 
         let gl_octree = cache
             .gl_octrees
@@ -178,20 +179,56 @@ impl GridViewRender3D<'_> {
         )
         .expect("Failed to create uniform buffer");
 
+        let vbo = &*vbos.ndtree_quad();
+        let indices = glium::index::NoIndices(PrimitiveType::TriangleStrip);
+
+        let (w, h) = self.params.target.get_dimensions();
+        const BLOCK_SIZE: u32 = 8; // Some experimentation suggests 8 is optimal.
+        let first_pass_w = w.div_ceil(&BLOCK_SIZE) + 1;
+        let first_pass_h = h.div_ceil(&BLOCK_SIZE) + 1;
+        let (init_t_texture, mut init_t_fbo, init_t_texture_viewport) =
+            textures.octree_init_t(first_pass_w, first_pass_h);
+
+        // First pass: render a depth map at 1/8 scale (1/64 number of pixels).
+        init_t_fbo
+            .draw(
+                vbo,
+                &indices,
+                &shaders::OCTREE_PASS_1.load(),
+                &uniform! {
+                    initial_t_tex_dimensions: (first_pass_w, first_pass_h),
+
+                    FogParams: &**self.dim.as_ref().unwrap().fog_uniform,
+                    LightingParams: &**self.dim.as_ref().unwrap().lighting_uniform,
+                    OctreeParams: &octree_params,
+                    octree_texture: &gl_octree.texture,
+                },
+                &glium::DrawParameters {
+                    multisampling: false,
+                    viewport: Some(init_t_texture_viewport),
+                    ..Default::default()
+                },
+            )
+            .expect("Drawing cells (first pass)");
+
+        // Second pass: render the final result, using the first pass to
+        // determine the starting point for each ray.
         self.params
             .target
             .draw(
-                &*vbos.ndtree_quad(),
-                &glium::index::NoIndices(PrimitiveType::TriangleStrip),
+                vbo,
+                &indices,
                 &shaders::OCTREE_PASS_2.load(),
                 &uniform! {
-                    octree_texture: &gl_octree.texture,
+                    initial_t_texture: init_t_texture.sampled(),
+                    initial_t_tex_dimensions: (first_pass_w, first_pass_h),
 
                     alpha: params.alpha,
 
                     FogParams: &**self.dim.as_ref().unwrap().fog_uniform,
                     LightingParams: &**self.dim.as_ref().unwrap().lighting_uniform,
                     OctreeParams: &octree_params,
+                    octree_texture: &gl_octree.texture,
                 },
                 &glium::DrawParameters {
                     depth: glium::Depth {
@@ -204,7 +241,7 @@ impl GridViewRender3D<'_> {
                     ..Default::default()
                 },
             )
-            .expect("Drawing cells");
+            .expect("Drawing cells (second pass)");
 
         // If the mouse is hovering over a cell, and these cells are
         // interactive, draw that on the mouse picker.

@@ -121,7 +121,7 @@ impl GridViewRender2D<'_> {
         let cells_w = self.local_visible_rect.len(X) as u32;
         let cells_h = self.local_visible_rect.len(Y) as u32;
         let (cells_texture, mut cells_fbo, cells_texture_viewport) =
-            cache.textures.cells(cells_w, cells_h);
+            cache.textures.cells_2d(cells_w, cells_h);
         let local_quadtree_base = self
             .xform
             .global_to_local_int(&visible_quadtree.base_pos)

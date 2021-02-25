@@ -5,9 +5,6 @@
 // This file is included in shader programs using an awful hack.
 // See `shaders/mod.rs`.
 
-// One "render cell" per node; each pixel contains four uints (2 pixels per node).
-uniform usampler2D octree_texture;
-
 layout(std140) uniform OctreeParams {
     mat4 matrix;
     mat4 inv_matrix;
@@ -17,7 +14,10 @@ layout(std140) uniform OctreeParams {
     uint root_idx;
 };
 
-uint texture_width = uint(textureSize(octree_texture, 0).x);
+// One "render cell" per node; each pixel contains four uints (2 pixels per node).
+uniform usampler2D octree_texture;
+
+uint octree_texture_width = uint(textureSize(octree_texture, 0).x);
 float octree_side_len = (1 << layer_count);
 
 // Returns the value of the given child of the given node. `node` is the index
@@ -26,8 +26,8 @@ float octree_side_len = (1 << layer_count);
 uint getNodeChild(uint node, bvec3 which_child) {
     uint texel_index = (node << 1) + uint(which_child.z); // node*2 + Z
     ivec2 texel_pos = ivec2(
-        texel_index % texture_width,
-        texel_index / texture_width
+        texel_index % octree_texture_width,
+        texel_index / octree_texture_width
     );
 
     uint child_index = uint(which_child.x)
@@ -91,13 +91,17 @@ struct OctreeRaycastResult {
     float t;
     uint iterations;
 
+    // These members may be uninitialized if `hit` is false.
+    bool leaf;
     vec3 pos;
     uint layer;
+
+    // These members may be uninitialized if `hit` or `leaf` is false.
     vec4 color;
     vec3 normal;
 };
 
-OctreeRaycastResult octree_raycast(float initial_t) {
+OctreeRaycastResult octree_raycast(vec2 ndc_xy, float t_start, float node_collision_size_factor) {
     // Compute the ray for this pixel. (based on
     // https://stackoverflow.com/a/42634961)
     vec3 start, delta;
@@ -110,8 +114,9 @@ OctreeRaycastResult octree_raycast(float initial_t) {
         start = near.xyz;                      // ray start position
         delta = normalize(far.xyz - near.xyz); // ray delta vector
     }
-    // Skip some space if a previous pass lets us do that.
-    start += delta * initial_t;
+
+    vec3 pixel_width_start = fwidth(start);
+    vec3 pixel_width_delta = fwidth(delta);
 
     vec3 original_start = start;
     vec3 original_delta = delta;
@@ -182,17 +187,41 @@ OctreeRaycastResult octree_raycast(float initial_t) {
 
             if (
                 // This node is completely behind the camera; skip it.
-                t1.x < 0 || t1.y < 0 || t1.z < 0
+                t1.x < t_start || t1.y < t_start || t1.z < t_start
                 // This is a leaf node and the camera is inside it; skip it.
-                || layer == 1 && t1.x < 0 && t1.y < 0 && t1.z < 0
+                || layer == 1 && t0.x < 0 && t0.y < 0 && t0.z < 0
             ) continue;
 
             bvec3 tmp_child_index = notEqual(next_child * 2.0, invert_mask); // logical XOR
             uint child_value = getNodeChild(node_idx_stack[layer], tmp_child_index);
             if (child_value == 0u) {
                 // This is an empty node; skip it.
-            } else if (layer > 1) {
-                // This is a non-leaf node; set stack values and descend one
+            } else if (layer > 1 || node_collision_size_factor > 0.0) {
+                // This is a non-leaf node; first, check if it's small enough
+                // for a collision anyway.
+                float node_width = float(1 << layer);
+                float pixel_width = vec3_max(pixel_width_start + pixel_width_delta * vec3_min(t1));
+                if (node_width < pixel_width * node_collision_size_factor || layer == 1) {
+                    // The node is small enough that it's only a fraction of a
+                    // pixel large; return a hit.
+                    bool hit = true;
+                    vec3 t_before = mix(t0, t1, vec3(-1.0)); // move back one node
+                    float t = vec3_max(t_before);
+
+                    bool leaf = false;
+                    vec3 pos = original_start + original_delta * t;
+                    vec4 color; vec3 normal; // uninitialized
+
+                    color = vec4(pixel_width, 0.0, 0.0, 1.0);
+
+                    return OctreeRaycastResult(
+                        hit, t, iterations,
+                        leaf, pos, layer,
+                        color, normal
+                    );
+                }
+
+                // It's not small enough, so set stack values and descend one
                 // layer.
                 layer--;
                 node_idx_stack[layer] = child_value;
@@ -203,6 +232,8 @@ OctreeRaycastResult octree_raycast(float initial_t) {
                 // This is a nonzero leaf node, so return from the function.
                 bool hit = true;
                 float t = vec3_max(t0);
+
+                bool leaf = true;
                 vec3 pos = original_start + original_delta * t;
 
                 // Color is RGBA, big-endian; convert from 0-255 to 0.0-1.0
@@ -210,7 +241,7 @@ OctreeRaycastResult octree_raycast(float initial_t) {
                 float g = float((child_value >> 16) & 255u) / 255.0;
                 float b = float((child_value >>  8) & 255u) / 255.0;
                 float a = float( child_value        & 255u) / 255.0;
-                color = vec4(r, g, b, a * alpha);
+                vec4 color = vec4(r, g, b, a);
 
                 // Compute normal vector based on the entry axis for the node.
                 vec3 normal = vec3(0.0);
@@ -219,7 +250,8 @@ OctreeRaycastResult octree_raycast(float initial_t) {
 
                 return OctreeRaycastResult(
                     hit, t, iterations,
-                    pos, layer, color, normal
+                    leaf, pos, layer,
+                    color, normal
                 );
             }
         }
@@ -229,10 +261,11 @@ OctreeRaycastResult octree_raycast(float initial_t) {
     float t = min_t1;
     vec3 pos = original_start + original_delta * t;
 
-    vec4 color; vec3 normal; // uninitialized
+    bool leaf; vec4 color; vec3 normal; // uninitialized
 
     return OctreeRaycastResult(
         hit, t, iterations,
-        pos, layer, color, normal
+        leaf, pos, layer,
+        color, normal
     );
 }

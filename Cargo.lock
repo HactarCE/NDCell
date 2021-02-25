@@ -1174,7 +1174,7 @@ dependencies = [
 
 [[package]]
 name = "ndcell"
-version = "0.3.0-dev"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "cgmath",

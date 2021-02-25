@@ -1,6 +1,6 @@
 [package]
 name = "ndcell"
-version = "0.2.4"
+version = "0.3.0-dev"
 authors = ["HactarCE <6060305+HactarCE@users.noreply.github.com>"]
 edition = "2018"
 build = "build.rs"
@@ -43,6 +43,6 @@ proptest = "0.10"
 [package.metadata.winres]
 FileDescription = "NDCell"
 ProductName = "NDCell"
-ProductVersion = "0.2.4"
+ProductVersion = "0.3.0-dev"
 OriginalFilename = "ndcell.exe"
 LegalCopyright = "Copyright © 2021 HactarCE"

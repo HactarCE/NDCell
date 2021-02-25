@@ -9,6 +9,7 @@ use super::render::{CellDrawParams, GridViewRender3D, RenderParams, RenderResult
 use super::screenpos::{RaycastHit, RaycastHitThing, ScreenPos3D, ScreenPosTrait};
 use super::viewpoint::{Viewpoint, Viewpoint3D};
 use crate::mouse::MouseDisplayMode;
+use crate::CONFIG;
 
 pub type GridView3D = GenericGridView<Dim3D>;
 
@@ -122,7 +123,9 @@ impl GridViewDimension for Dim3D {
                     // current selection.
                     frame.add_selection_resize_preview_overlay(&selection.rect);
                 } else if let (Some(resize_start), Some(resize_end)) = (
-                    screen_pos.and_then(|pos| pos.absolute_selection_resize_start_pos()),
+                    screen_pos
+                        .as_ref()
+                        .and_then(|pos| pos.absolute_selection_resize_start_pos()),
                     rect_cell_to_highlight,
                 ) {
                     // Show what *would* happen if the user resized the
@@ -141,6 +144,19 @@ impl GridViewDimension for Dim3D {
             // Draw relative selection resize preview after drawing selection.
             if let MouseDisplayMode::ResizeSelectionFace(face) = mouse.display_mode {
                 frame.add_selection_face_resize_overlay(&selection.rect, face);
+            }
+        }
+
+        if CONFIG.lock().gfx.ndtree_visualization {
+            if let Some(screen_pos) = &screen_pos {
+                if let Some(hit) = &screen_pos.raycast {
+                    frame.add_ndtree_visualization(
+                        this.viewpoint().render_cell_layer() + Layer(1),
+                        this.automaton.ndtree.layer(),
+                        this.automaton.ndtree.base_pos(),
+                        &hit.inside_cell(),
+                    );
+                }
             }
         }
 

@@ -8,9 +8,9 @@ pub struct GfxConfig {
 
     pub msaa: Msaa,
 
-    pub octree_perf_view: bool,
-
     pub cell_colors: [Srgba; 256],
+
+    pub ndtree_visualization: bool,
 }
 impl Default for GfxConfig {
     fn default() -> Self {
@@ -21,9 +21,9 @@ impl Default for GfxConfig {
 
             msaa: Msaa::_8,
 
-            octree_perf_view: false,
-
             cell_colors: crate::default_colors(),
+
+            ndtree_visualization: false,
         }
     }
 }

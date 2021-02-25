@@ -1,5 +1,6 @@
 //! Octree traversal algorithm based on An Efficient Parametric Algorithm for
 //! Octree Traversal by J. Revelles, C. Ureña, M. Lastra.
+//! (http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.29.987)
 //!
 //! This is also implemented in GLSL in the octree fragment shader.
 

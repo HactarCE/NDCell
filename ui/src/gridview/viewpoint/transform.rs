@@ -234,6 +234,14 @@ impl<D: Dim> NdCellTransform<D> {
     pub fn gl_matrix(&self) -> [[f32; 4]; 4] {
         (self.projection_transform * self.render_cell_transform).into()
     }
+    /// Returns a GL-compatible matrix representing the transformation from NDC
+    /// back to local space.
+    pub fn inv_gl_matrix(&self) -> [[f32; 4]; 4] {
+        (self.projection_transform * self.render_cell_transform)
+            .inverse_transform()
+            .unwrap_or(Matrix4::identity())
+            .into()
+    }
     /// Returns a GL-compatible matrix representing the transformation from
     /// local space to NDC, plus a quarter-pixel offset to align elements that
     /// would otherwise land on a pixel boundary (such as single-pixel-wide

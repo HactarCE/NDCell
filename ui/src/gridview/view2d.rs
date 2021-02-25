@@ -8,6 +8,7 @@ use super::render::{CellDrawParams, GridViewRender2D, RenderParams, RenderResult
 use super::screenpos::{ScreenPos2D, ScreenPosTrait};
 use super::viewpoint::{Viewpoint, Viewpoint2D};
 use crate::mouse::MouseDisplayMode;
+use crate::CONFIG;
 
 pub type GridView2D = GenericGridView<Dim2D>;
 
@@ -87,7 +88,9 @@ impl GridViewDimension for Dim2D {
                     // current selection.
                     frame.add_selection_resize_preview_overlay(&selection.rect);
                 } else if let (Some(resize_start), Some(resize_end)) = (
-                    screen_pos.and_then(|pos| pos.absolute_selection_resize_start_pos()),
+                    screen_pos
+                        .as_ref()
+                        .and_then(|pos| pos.absolute_selection_resize_start_pos()),
                     rect_cell_to_highlight,
                 ) {
                     // Show what *would* happen if the user resized the
@@ -105,6 +108,17 @@ impl GridViewDimension for Dim2D {
             // Draw relative selection resize preview after drawing selection.
             if let MouseDisplayMode::ResizeSelectionEdge(edge) = mouse.display_mode {
                 frame.add_selection_edge_resize_overlay(&selection.rect, edge);
+            }
+        }
+
+        if CONFIG.lock().gfx.ndtree_visualization {
+            if let Some(screen_pos) = &screen_pos {
+                frame.add_ndtree_visualization(
+                    this.viewpoint().render_cell_layer() + Layer(1),
+                    this.automaton.ndtree.layer(),
+                    this.automaton.ndtree.base_pos(),
+                    &screen_pos.cell(),
+                );
             }
         }
 

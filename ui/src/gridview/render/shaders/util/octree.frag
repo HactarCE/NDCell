@@ -94,7 +94,7 @@ struct OctreeRaycastResult {
     // These members may be uninitialized if `hit` is false.
     bool leaf;
     vec3 pos;
-    uint layer;
+    int layer;
 
     // These members may be uninitialized if `hit` or `leaf` is false.
     vec4 color;
@@ -165,7 +165,7 @@ OctreeRaycastResult octree_raycast(vec2 ndc_xy, float t_start, float node_collis
     t1_stack[layer] = t1;
     next_child_stack[layer] = entryChild(t0, t1);
 
-    int iterations = 0;
+    uint iterations = 0u;
 
     while (layer <= layer_count) {
         vec3 next_child = next_child_stack[layer];
@@ -246,7 +246,7 @@ OctreeRaycastResult octree_raycast(vec2 ndc_xy, float t_start, float node_collis
                 // Compute normal vector based on the entry axis for the node.
                 vec3 normal = vec3(0.0);
                 uint axis = entryAxis(t0);
-                normal[axis] = mix(-1, 1, invert_mask[axis]);
+                normal[axis] = mix(-1.0, 1.0, invert_mask[axis]);
 
                 return OctreeRaycastResult(
                     hit, t, iterations,

@@ -198,7 +198,11 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             Some(rect) => match rect.intersection(&self.global_visible_rect) {
                 // Only draw the intersection of the viewport and the rectangle
                 // in the draw parameters.
-                Some(intersection) => self.xform.render_cell_layer.round_rect(&intersection),
+                Some(intersection) => self
+                    .xform
+                    .render_cell_layer
+                    .parent_layer()
+                    .round_rect_with_base_pos(intersection, params.ndtree.base_pos()),
                 // The rectangle in the draw parameters does not intersect the
                 // viewport, so there is nothing to draw.
                 None => return None,

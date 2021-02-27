@@ -79,19 +79,13 @@ void main() {
 
     // Debug overlays
     if (OVERLAY_ITERATIONS) {
-        uint iters = result.iterations;
-        const float N = 25.0;
-        color /= 2.0;
-        if (iters < N)              color.r += 0.25 + iters / (2.0 * N);
-        else if (iters < (2.0 * N)) color.g += 0.25 + (iters - N) / (2.0 * N);
-        else if (iters < (3.0 * N)) color.b += 0.25 + (iters - (2.0 * N)) / (2.0 * N);
-        else                    color.rgb += vec3(0.5);
-        color.a = max(color.a, 0.5);
-        if (!result.hit) color.rgb /= 2.0;
+        float iters = float(result.iterations);
+        if (iters <= 4.0) discard;
+        color.rgb = mix(color.rgb, vec3(0.1 + iters / 150.0), 0.5);
+        color.a = 1.0;
     }
     if (OVERLAY_DEPTH_ESTIMATE) {
         color.rg = mix(color.rg, 1 - vec2(t_lower_bound) / vec2(10.0, 100.0), 0.5);
         color.a = max(color.a, 0.5);
-        return;
     }
 }

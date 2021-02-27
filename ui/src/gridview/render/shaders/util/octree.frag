@@ -189,7 +189,7 @@ OctreeRaycastResult octree_raycast(vec2 ndc_xy, float t_start, float node_collis
                 // This node is completely behind the camera; skip it.
                 t1.x < t_start || t1.y < t_start || t1.z < t_start
                 // This is a leaf node and the camera is inside it; skip it.
-                || layer == 1 && t0.x < 0 && t0.y < 0 && t0.z < 0
+                || layer == 1 && t0.x < t_start && t0.y < t_start && t0.z < t_start
             ) continue;
 
             bvec3 tmp_child_index = notEqual(next_child * 2.0, invert_mask); // logical XOR
@@ -205,8 +205,9 @@ OctreeRaycastResult octree_raycast(vec2 ndc_xy, float t_start, float node_collis
                     // The node is small enough that it's only a fraction of a
                     // pixel large; return a hit.
                     bool hit = true;
-                    vec3 t_before = mix(t0, t1, vec3(-1.0)); // move back one node
-                    float t = vec3_max(t_before);
+                    // Move back by the width of one pixel, in case the corner
+                    // of the node sticks out toward the screen.
+                    float t = vec3_max(t0) - pixel_width;
 
                     bool leaf = false;
                     vec3 pos = original_start + original_delta * t;

@@ -24,7 +24,7 @@ void main() {
 
     // It's better to overestimate node size and get false positives than to
     // miss nodes completely.
-    float node_collision_size_factor = 8.0;
+    float node_collision_size_factor = 4.0;
 
     OctreeRaycastResult result = octree_raycast(
         (tex_uv * 2.0 - 1.0),

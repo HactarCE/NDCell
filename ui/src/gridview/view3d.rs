@@ -147,6 +147,8 @@ impl GridViewDimension for Dim3D {
             }
         }
 
+        frame.add_pivot_crosshairs();
+
         if CONFIG.lock().gfx.ndtree_visualization {
             if let Some(screen_pos) = &screen_pos {
                 if let Some(hit) = &screen_pos.raycast {

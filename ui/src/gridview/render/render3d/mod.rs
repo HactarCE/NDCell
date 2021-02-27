@@ -303,6 +303,16 @@ impl GridViewRender3D<'_> {
             face: Face::negative(perpendicular_axis),
             fill: OverlayFill::Gridlines3D,
         });
+
+        let mut center = self
+            .xform
+            .global_to_local_float(self.viewpoint.center())
+            .unwrap();
+        center[perpendicular_axis] = local_perpendicular_coordinate;
+        self.add_cuboid_fill_overlay(
+            NdRect::centered(center, r64(0.1)),
+            Srgba::from(crate::colors::PIVOT_CROSSHAIRS),
+        );
     }
 
     /// Adds a highlight on the render cell face under the mouse cursor when
@@ -523,6 +533,23 @@ impl GridViewRender3D<'_> {
         let (rect, axis) = self.make_line_ndrect(&mut start, &mut end, width);
         let fill = OverlayFill::gradient(axis, start.color, end.color);
         self.add_cuboid_fill_overlay(rect, fill);
+    }
+
+    pub fn add_pivot_crosshairs(&mut self) {
+        let pivot = self
+            .xform
+            .global_to_local_float(self.viewpoint.center())
+            .unwrap();
+        for &ax in Dim3D::axes() {
+            self.add_single_crosshair_overlay(
+                ax,
+                pivot[ax],
+                pivot[ax],
+                pivot,
+                r64(0.0),
+                crate::colors::PIVOT_CROSSHAIRS,
+            );
+        }
     }
 
     /// Adds a visualization for the ND-tree path to a cell.

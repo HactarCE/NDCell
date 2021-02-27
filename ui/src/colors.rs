@@ -34,6 +34,9 @@ pub const GRIDLINES: Srgba = rgba!(0.25, 0.25, 0.25, 1.0);
 /// Crosshair opacity change.
 pub const CROSSHAIR_OPACITY: f32 = 0.2;
 
+/// Color of the 3D pivot crosshairs.
+pub const PIVOT_CROSSHAIRS: Srgb = rgb!(1.0, 1.0, 0.0);
+
 pub mod debug {
     use super::*;
 

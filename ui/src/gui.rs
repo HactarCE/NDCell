@@ -147,11 +147,15 @@ pub fn show_gui() -> ! {
                 // Prep imgui for rendering.
                 let imgui_has_mouse = imgui_io.want_capture_mouse;
                 let ui = imgui.frame();
-                main_window.build(&mut windows::BuildParams {
-                    ui: &ui,
-                    mouse: input_state.mouse(),
-                    gridview: &mut gridview,
-                });
+                {
+                    let mut params = windows::BuildParams {
+                        ui: &ui,
+                        mouse: input_state.mouse(),
+                        gridview: &mut gridview,
+                    };
+                    windows::menu_bar::build(&mut params);
+                    main_window.build(&mut params);
+                }
                 if !imgui_has_mouse {
                     ui.set_mouse_cursor(input_state.mouse().display_mode.cursor_icon());
                 }

@@ -1,0 +1,12 @@
+@ndim 3
+
+@transition {
+    sum = 0
+    for cell in nbhd { sum += cell == #1 }
+    if this is #0 {
+        if sum == 3 { become #1 }
+    } else {
+        if 2 <= sum <= 3 { become #1 }
+    }
+    become #0
+}

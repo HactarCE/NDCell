@@ -310,7 +310,10 @@ impl GridViewRender3D<'_> {
             .unwrap();
         center[perpendicular_axis] = local_perpendicular_coordinate;
         self.add_cuboid_fill_overlay(
-            NdRect::centered(center, r64(0.1)),
+            NdRect::centered(
+                center,
+                r64(2.0) / self.xform.render_cell_scale.units_per_cell(),
+            ),
             Srgba::from(crate::colors::PIVOT_CROSSHAIRS),
         );
     }

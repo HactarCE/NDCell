@@ -44,13 +44,13 @@ void main() {
     float initial_t = t_lower_bound;
     if (IGNORE_DEPTH_ESTIMATE) initial_t = 0.0;
 
-    // Only look for leaf collisions.
-    float node_collision_size_factor = 0.0;
+    // This is the second pass.
+    float first_pass_factor = 0.0;
 
     OctreeRaycastResult result = octree_raycast(
         ndc_xy,
         initial_t,
-        node_collision_size_factor
+        first_pass_factor
     );
 
     if (result.hit) {

@@ -101,7 +101,7 @@ struct OctreeRaycastResult {
     vec3 normal;
 };
 
-OctreeRaycastResult octree_raycast(vec2 ndc_xy, float t_start, float node_collision_size_factor) {
+OctreeRaycastResult octree_raycast(vec2 ndc_xy, float t_start, float first_pass_factor) {
     // Compute the ray for this pixel. (based on
     // https://stackoverflow.com/a/42634961)
     vec3 start, delta;
@@ -192,37 +192,37 @@ OctreeRaycastResult octree_raycast(vec2 ndc_xy, float t_start, float node_collis
                 || layer == 1 && t0.x < t_start && t0.y < t_start && t0.z < t_start
             ) continue;
 
+            float node_width = float(1 << layer);
+            float pixel_width = vec3_max(pixel_width_start + pixel_width_delta * vec3_min(t1));
+            bool abort_first_pass = layer == 1 && first_pass_factor > 0.0
+                                    || node_width <= pixel_width * first_pass_factor;
+
             bvec3 tmp_child_index = notEqual(next_child * 2.0, invert_mask); // logical XOR
             uint child_value = getNodeChild(node_idx_stack[layer], tmp_child_index);
+
             if (child_value == 0u) {
                 // This is an empty node; skip it.
-            } else if (layer > 1 || node_collision_size_factor > 0.0) {
-                // This is a non-leaf node; first, check if it's small enough
-                // for a collision anyway.
-                float node_width = float(1 << layer);
-                float pixel_width = vec3_max(pixel_width_start + pixel_width_delta * vec3_min(t1));
-                if (node_width < pixel_width * node_collision_size_factor || layer == 1) {
-                    // The node is small enough that it's only a fraction of a
-                    // pixel large; return a hit.
-                    bool hit = true;
-                    // Move back by the width of one pixel, in case the corner
-                    // of the node sticks out toward the screen.
-                    float t = vec3_max(t0) - pixel_width;
+            } else if (abort_first_pass) {
+                // The node is small enough that it's less than one pixel wide;
+                // return a hit.
+                bool hit = true;
+                // Move back by the width of one pixel, in case the corner
+                // of the node sticks out toward the screen.
+                float t = vec3_max(t0) - pixel_width;
 
-                    bool leaf = false;
-                    vec3 pos = original_start + original_delta * t;
-                    vec4 color; vec3 normal; // uninitialized
+                bool leaf = false;
+                vec3 pos = original_start + original_delta * t;
+                vec4 color; vec3 normal; // uninitialized
 
-                    color = vec4(pixel_width, 0.0, 0.0, 1.0);
+                color = vec4(pixel_width, 0.0, 0.0, 1.0);
 
-                    return OctreeRaycastResult(
-                        hit, t, iterations,
-                        leaf, pos, layer,
-                        color, normal
-                    );
-                }
-
-                // It's not small enough, so set stack values and descend one
+                return OctreeRaycastResult(
+                    hit, t, iterations,
+                    leaf, pos, layer,
+                    color, normal
+                );
+            } else if (layer > 1) {
+                // This is a non-leaf node, so set stack values and descend one
                 // layer.
                 layer--;
                 node_idx_stack[layer] = child_value;

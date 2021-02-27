@@ -23,13 +23,14 @@ void main() {
     ) / vec2(initial_t_tex_dimensions - uvec2(1u));
 
     // It's better to overestimate node size and get false positives than to
-    // miss nodes completely.
-    float node_collision_size_factor = 4.0;
+    // miss nodes completely. Decreasing this number makes the optimization more
+    // aggressive, but may fail to draw lone cells.
+    float first_pass_factor = 4.0;
 
     OctreeRaycastResult result = octree_raycast(
         (tex_uv * 2.0 - 1.0),
         initial_t,
-        node_collision_size_factor
+        first_pass_factor
     );
 
     if (result.hit) {

@@ -1,5 +1,7 @@
 use itertools::Itertools;
 
+use ndcell_core::num::Integer;
+
 use super::{LangCellState, LangUint, INT_BITS};
 
 /// Cell state filter value.
@@ -86,7 +88,7 @@ impl CellStateFilter {
     /// Returns the vector length required for a cell state filter given the
     /// number of states in the automaton.
     pub fn vec_len_for_state_count(state_count: usize) -> usize {
-        crate::utils::div_ceil(state_count, INT_BITS as usize)
+        state_count.div_ceil(&(INT_BITS as usize))
     }
 }
 

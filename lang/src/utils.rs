@@ -16,11 +16,6 @@ pub fn join_with_conjunction(conjunction: &str, items: &[impl std::fmt::Display]
     }
 }
 
-/// Divides one number by another, rounding up.
-pub fn div_ceil(n: usize, d: usize) -> usize {
-    (n + d - 1) / d
-}
-
 #[test]
 fn test_join_with_conjunction() {
     let strs = &["X", "Y", "Z"];
@@ -29,21 +24,6 @@ fn test_join_with_conjunction() {
     assert_eq!(join_with_conjunction("and", &strs[..2]), "X and Y");
     // Oxford comma!
     assert_eq!(join_with_conjunction("and", &strs[..3]), "X, Y, and Z");
-}
-
-#[test]
-fn test_div_ceil() {
-    assert_eq!(div_ceil(0, 5), 0);
-    assert_eq!(div_ceil(1, 5), 1);
-    assert_eq!(div_ceil(2, 5), 1);
-    assert_eq!(div_ceil(3, 5), 1);
-    assert_eq!(div_ceil(4, 5), 1);
-    assert_eq!(div_ceil(5, 5), 1);
-    assert_eq!(div_ceil(6, 5), 2);
-    assert_eq!(div_ceil(7, 5), 2);
-    assert_eq!(div_ceil(8, 5), 2);
-    assert_eq!(div_ceil(9, 5), 2);
-    assert_eq!(div_ceil(10, 5), 2);
 }
 
 /// Automatically implements std::fmt::Display and std::str::FromStr on an enum

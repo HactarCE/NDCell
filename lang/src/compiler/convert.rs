@@ -3,6 +3,8 @@ use inkwell::types::StructType;
 use itertools::Itertools;
 use std::convert::TryInto;
 
+use ndcell_core::num::Integer;
+
 use crate::compiler::types::size_of;
 use crate::errors::NO_RUNTIME_REPRESENTATION;
 use crate::types::{CellStateFilter, LangCellState, LangInt, LangUint, INT_BYTES};
@@ -45,7 +47,7 @@ impl ValueConverter {
 
         // Allocate bytes.
         let size = size_of(&ty, target_data);
-        let bytes = vec![0_u64; crate::utils::div_ceil(size, std::mem::size_of::<u64>())];
+        let bytes = vec![0_u64; size.div_ceil(&std::mem::size_of::<u64>())];
 
         Self { ty, offsets, bytes }
     }

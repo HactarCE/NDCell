@@ -9,7 +9,7 @@ use crate::ast::{AssignableFunction, ErrorPointRef, FuncCallInfo, FuncCallInfoMu
 use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::{ConstValue, Type};
-use LangErrorMsg::{IndexOutOfBounds, Unimplemented};
+use ErrorKind::{AccessOutOfBounds, Unimplemented};
 
 /// Built-in function that returns a single cell state from a cell pattern.
 #[derive(Debug)]
@@ -21,7 +21,7 @@ impl Access {
     /// Returns a constructor for a new Access instance that returns the
     /// cell state at the given position.
     pub fn construct(info: &mut FuncCallInfoMut) -> FuncResult {
-        let out_of_bounds_error = info.add_error_point(IndexOutOfBounds);
+        let out_of_bounds_error = info.add_error_point(AccessOutOfBounds);
         Ok(Box::new(Self {
             out_of_bounds_error,
         }))

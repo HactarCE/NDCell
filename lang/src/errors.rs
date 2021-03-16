@@ -1,345 +1,234 @@
 //! Error reporting functionality for compilation and runtime.
 
+use codemap::{Span, Spanned};
 use std::borrow::Cow;
-use std::error::Error;
 use std::fmt;
 
-use crate::lexer::ComparisonToken;
-use crate::types::{TypeDesc, MAX_VECTOR_LEN};
-use crate::{Span, Type, MAX_NDIM, MAX_STATE_COUNT};
-
-/// Result of a LangError with an accompanying line of source code.
-pub type CompleteLangResult<T> = Result<T, LangErrorWithSource>;
-/// Result of a LangError.
-pub type LangResult<T> = Result<T, LangError>;
+use crate::data::{Type, TypeClass, MAX_VECTOR_LEN};
+use crate::{MAX_NDIM, MAX_STATE_COUNT};
 
 pub const NO_RUNTIME_REPRESENTATION: &str = "Type has no runtime representation!";
 
-/// An error type and an accompanying line and span of source code.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LangErrorWithSource {
-    /// The string of source code of the error location (if any).
-    pub source_line: Option<String>,
-    /// The 1-indexed line number of the error location (if any).
-    pub line_num: Option<usize>,
-    /// The 1-indexed character span of the error location within the given line
-    /// (if any).
-    pub span: Option<(usize, usize)>,
-    /// The type of error.
-    pub msg: LangErrorMsg,
+/// `Result` type alias for NDCA compile-time and runtime errors.
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// Extension trait for converting a value to an `Option<Span>`.
+pub trait SpanConvertExt {
+    /// Converts the value to an `Option<Span>`.
+    fn to_span(&self) -> Option<Span>;
 }
-impl fmt::Display for LangErrorWithSource {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let (Some(line), Some(line_num), Some((start, end))) =
-            (&self.source_line, self.line_num, self.span)
-        {
-            // Write line and column numbers.
-            writeln!(f, "Error at line {}; column {}", line_num, start)?;
-            // Remove initial whitespace.
-            let trimmed_len = line.len() - line.trim_start().len();
-            let trimmed_start = start - trimmed_len;
-            // Write line of source code.
-            writeln!(f, "{}", line.trim())?;
-            for _ in 0..(trimmed_start - 1) {
-                write!(f, " ")?;
-            }
-            // Write arrows pointing to the part with the error.
-            for _ in start..end {
-                write!(f, "^")?;
-            }
-            write!(f, "   ")?;
-        }
-        // Write the error message.
-        write!(f, "{}", self.msg)?;
-        Ok(())
+impl<T: SpanConvertExt> SpanConvertExt for &T {
+    fn to_span(&self) -> Option<Span> {
+        (*self).to_span()
     }
 }
-impl Error for LangErrorWithSource {}
-impl LangErrorWithSource {
-    /// Returns a pair (source_code, error_msg) that succinctly gives the error
-    /// location; especially useful in tests, since the exact formatting of
-    /// errors may change in the future.
-    pub fn pair(&self) -> (String, String) {
-        let source: String;
-        if let (Some(line), Some((start, end))) = (&self.source_line, self.span) {
-            source = line[(start - 1)..(end - 1)].to_owned();
-        } else {
-            source = "".to_owned();
-        }
-        (source, self.msg.to_string())
+impl SpanConvertExt for Option<Span> {
+    fn to_span(&self) -> Option<Span> {
+        *self
+    }
+}
+impl SpanConvertExt for Span {
+    fn to_span(&self) -> Option<Span> {
+        Some(*self)
     }
 }
 
-/// An error type and an accompanying span.
-#[derive(Debug, Clone)]
-pub struct LangError {
-    /// The span of the error location (if any).
-    pub span: Option<Span>,
-    /// The type of error.
-    pub msg: LangErrorMsg,
+/// Whether a problem is an error or a warning.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Severity {
+    /// Problem that prevents running the code.
+    Error,
+    /// Problem that does not prevent running the code.
+    Warning,
 }
-impl LangError {
-    /// Attaches a span to this LangError, if it does not already have one.
-    pub fn with_span(mut self, span: impl Into<Span>) -> Self {
+
+macro_rules! error_fn {
+    ($severity:ident; fn $fn_name:ident(
+        $fmt_str:tt $(,
+            $arg_name:ident: $arg_type:ty
+            $(=> $lambda:expr)?
+        )* $(,
+            _ => $fmt_expr:expr
+        )* $(,)?
+    )) => {
+        paste! {
+            #[doc = "Returns an error with the template `" $fmt_str "`."]
+            pub(crate) fn $fn_name(span: impl SpanConvertExt $(, $arg_name: $arg_type)*) -> Error {
+                Error {
+                    msg: format!(
+                        $fmt_str $(,
+                            error_fn!(@@ $arg_name $(=> $lambda)?)
+                        )* $(,
+                            $fmt_expr
+                        )*
+                    ),
+                    span: span.to_span(),
+                    severity: Severity::$severity,
+                }
+            }
+        }
+    };
+
+    (@@ $arg_name:ident) => {
+        $arg_name
+    };
+    (@@ $arg_name:ident => $lambda:expr) => {
+        ($lambda)($arg_name)
+    };
+}
+
+/// Error or warning in user code.
+#[derive(Debug, Clone)]
+pub struct Error {
+    /// Error message.
+    pub msg: String,
+    /// Location of error in source code (if any).
+    pub span: Option<Span>,
+    /// Severity of error.
+    pub severity: Severity,
+}
+impl Error {
+    /// Attaches a span to the error, if it does not already have one.
+    pub fn with_span(mut self, span: impl SpanConvertExt) -> Self {
         if self.span.is_none() {
-            self.span = Some(span.into());
+            self.span = span.to_span();
         }
         self
     }
-    /// Provides a line of source code as context to this error, returning a
-    /// LangErrorWithSource.
-    pub fn with_source(self, src: &str) -> LangErrorWithSource {
-        if let Some(span) = self.span {
-            let (start_tp, end_tp) = span.textpoints(src);
-            let start = start_tp.column();
-            // If the error spans multiple lines, use a zero-length span on the
-            // first line.
-            let mut end = start;
-            if start_tp.line() == end_tp.line() && end_tp.column() > start_tp.column() {
-                end = end_tp.column();
-            }
-            LangErrorWithSource {
-                source_line: src
-                    .lines()
-                    .skip(start_tp.line() - 1)
-                    .next()
-                    .map(str::to_owned),
-                line_num: Some(start_tp.line()),
-                span: Some((start, end)),
-                msg: self.msg,
-            }
-        } else {
-            LangErrorWithSource {
-                source_line: None,
-                line_num: None,
-                span: None,
-                msg: self.msg,
-            }
-        }
-    }
-}
 
-/// Information about the type of error that occurred.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LangErrorMsg {
     // Miscellaneous errors
-    Unimplemented,
-    UnknownError,
-    InternalError(Cow<'static, str>),
-    IntegerOutOfRange,
-    CellStateOutOfRange,
+
+    error_fn!(Error; fn unimplemented(
+        "This feature is unimplemented",
+    ));
+
+    error_fn!(Error; fn internal(
+        "{}", msg: impl fmt::Display,
+    ));
 
     // Compile errors
-    Unterminated(&'static str),
-    Expected(String),
-    ReservedWord,
-    ElseWithoutIf,
-    InvalidDirectiveName,
-    RepeatDirective(&'static str),
-    FunctionNameConflict,
-    InvalidDimensionCount,
-    InvalidStateCount,
-    TypeError {
-        expected: TypeDesc,
-        got: Type,
-    },
-    CustomTypeError {
-        expected: String,
-        got: Type,
-    },
-    CmpError {
-        lhs: Type,
-        cmp: ComparisonToken,
-        rhs: Type,
-    },
-    InvalidArguments {
+
+    error_fn!(Error; fn unterminated(
+        "This {} never ends",
+        thing: impl fmt::Display,
+    ));
+
+    error_fn!(Error; fn invalid_symbol(
+        "Invalid symbol",
+    ));
+
+    error_fn!(Error; fn expected(
+        "Expected {}",
+        expected: impl fmt::Display => crate::utils::a,
+    ));
+
+    error_fn!(Error; fn name_in_use(
+        "This name is already in use",
+    ));
+
+    error_fn!(Warning; fn name_in_use_by_builtin(
+        "This hides a built-in with the same name",
+    ));
+
+    error_fn!(Error; fn reserved_word(
+        "This is a reserved word",
+    ));
+
+    error_fn!(Error; fn cannot_resolve_name(
+        "Can't find anything with this name that is accessible from here",
+    ));
+
+    error_fn!(Error; fn else_without_if(
+        "This 'else' has no matching 'if'",
+    ));
+
+    error_fn!(Error; fn invalid_integer_literal(
+        "Can't parse this; it looks like an integer literal, but {}",
+        integer_parse_error: impl fmt::Display,
+    ));
+
+    error_fn!(Error; fn ambiguous_octothorpe(
+        "This is ambiguous; if it is a tag name, remove the space after '#'; if it is a variable name, wrap it in parentheses",
+    ));
+
+    error_fn!(Error; fn missing_directive(
+        "Directive '{}' is required, but not present",
+        directive: impl fmt::Display,
+    ));
+
+    error_fn!(Error; fn invalid_directive_name(
+        "This isn't a valid directive name",
+    ));
+
+    error_fn!(Error; fn invalid_directive_name_with_suggestion(
+        "This isn't a valid directive name; did you mean '{}'",
+        suggested: impl fmt::Display,
+    ));
+
+    error_fn!(Error; fn duplicate_directive(
+        "There can only be one '{}' directive; this is a duplicate",
+        directive: impl fmt::Display,
+    ));
+
+    error_fn!(Error; fn dependency_cycle(
+        "Cyclic dependency in '{}' directive",
+        directive: impl fmt::Display,
+    ));
+
+    error_fn!(Error; fn invalid_dimension_count(
+        "The number of dimensions must be an integer from 1 to {}",
+        _ => MAX_NDIM,
+    ));
+
+    error_fn!(Error; fn invalid_state_count(
+        "The number of states must be an integer from 1 to {}",
+        _ => MAX_STATE_COUNT,
+    ));
+
+    error_fn!(Error; fn cannot_const_eval(
+        "Cannot evaluate this at compile-time",
+    ));
+
+    error_fn!(Error; fn type_error(
+        "Mismatched types: expected {} but got {}",
+        expected: impl fmt::Display,
+        got: &Type,
+    ));
+
+    error_fn!(Error; fn cmp_type_error(
+        "Mismatched types: cannot compare {0} to {2} using '{1}'{3}",
+        lhs: &Type,
+        cmp: &str,
+        rhs: &Type,
+        _ => if *lhs == Type::Cell && *rhs == Type::Cell {
+            "; convert them to integers first using the '#id' tag"
+        } else {
+            ""
+        },
+    ));
+
+    error_fn!(Error; fn invalid_arguments(
+        "These arguments have types {1}, which are invalid for {0}",
         name: String,
-        arg_types: Vec<Type>,
-    },
-    CannotIndexType(Type),
-    CannotAssignToExpr,
-    CannotAssignTypeToVariable(Type),
-    UseOfUninitializedVariable,
-    BecomeInHelperFunction,
-    ReturnInTransitionFunction,
-    MustBeConstant,
-    CannotEvalAsConst,
-    VectorTooBig,
-    FunctionLookupError,
-    NotInLoop,
+        arg_types: &[Type] => crate::utils::display_bracketed_list,
+    ));
 
-    // Runtime errors
-    IntegerOverflow,
-    DivideByZero,
-    NegativeExponent,
-    IndexOutOfBounds,
-    AssertionFailed(Option<String>),
-    UserError(Option<String>),
-}
-impl fmt::Display for LangErrorMsg {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Unimplemented => {
-                write!(f, "This feature is unimplemented")?;
-            }
-            Self::UnknownError => {
-                write!(f, "(unknown error)")?;
-            }
-            Self::InternalError(s) => {
-                write!(f, "Internal error: {}\nThis is a bug in NDCell, not your cellular automaton. Please report this to the developer!", s)?;
-            }
-            Self::IntegerOutOfRange => {
-                write!(f, "Integer out of range")?;
-            }
-            Self::CellStateOutOfRange => {
-                write!(f, "Cell state out of range")?;
-            }
+    error_fn!(Error; fn cannot_index_type(
+        "Cannot index into value of type {}",
+        ty: Type,
+    ));
 
-            Self::Unterminated(s) => {
-                write!(f, "This {} never ends", s)?;
-            }
-            Self::Expected(s) => {
-                write!(f, "Expected {}", s)?;
-            }
-            Self::ReservedWord => {
-                write!(f, "This is a reserved word")?;
-            }
-            Self::ElseWithoutIf => {
-                write!(f, "This 'else' has no matching 'if'")?;
-            }
-            Self::InvalidDirectiveName => {
-                write!(f, "Invalid directive name")?;
-            }
-            Self::RepeatDirective(name) => {
-                write!(f, "Multiple {:?} directives; only one is allowed", name)?;
-            }
-            Self::FunctionNameConflict => {
-                write!(f, "There is already a function with this name")?;
-            }
-            Self::InvalidDimensionCount => {
-                write!(f, "Number of dimensions must range from 1 to {}", MAX_NDIM)?;
-            }
-            Self::InvalidStateCount => {
-                write!(
-                    f,
-                    "Number of states must range from 1 to {}",
-                    MAX_STATE_COUNT,
-                )?;
-            }
+    error_fn!(Error; fn cannot_assign_to_expr(
+        "This expression cannot have a value assigned to it",
+    ));
 
-            Self::TypeError { expected, got } => {
-                write!(f, "Type error: expected {} but got {}", expected, got)?;
-            }
-            Self::CustomTypeError { expected, got } => {
-                write!(f, "Type error: expected {} but got {}", expected, got)?;
-            }
-            Self::CmpError { lhs, cmp, rhs } => {
-                write!(
-                    f,
-                    "Type error: cannot compare {} to {} using '{}'",
-                    lhs, rhs, cmp,
-                )?;
-                if *lhs == Type::CellState && *rhs == Type::CellState {
-                    write!(f, "; convert them to integers first using the '#id' tag")?;
-                }
-            }
-            Self::InvalidArguments { name, arg_types } => {
-                write!(f, "Invalid arguments {:?} for {}", arg_types, name,)?;
-            }
-            Self::CannotIndexType(ty) => {
-                write!(f, "Cannot index {}", ty)?;
-            }
-            Self::CannotAssignToExpr => {
-                write!(f, "Cannot assign to this expression")?;
-            }
-            Self::CannotAssignTypeToVariable(ty) => {
-                write!(f, "Cannot assign {} to variable", ty)?;
-            }
-            Self::UseOfUninitializedVariable => {
-                write!(f, "This variable must be initialized before it is used")?;
-            }
-            Self::BecomeInHelperFunction => {
-                write!(
-                    f,
-                    "Use 'return' instead of 'become' outside of transition functions",
-                )?;
-            }
-            Self::ReturnInTransitionFunction => {
-                write!(
-                    f,
-                    "Use 'become' instead of 'return' in transition functions",
-                )?;
-            }
-            Self::MustBeConstant => {
-                write!(f, "This type of value can only be a constant")?;
-            }
-            Self::CannotEvalAsConst => {
-                write!(f, "Cannot evaluate this expression as a constant")?;
-            }
-            Self::VectorTooBig => {
-                write!(
-                    f,
-                    "Too many elements in {}; maximum is {}",
-                    TypeDesc::Vector,
-                    MAX_VECTOR_LEN,
-                )?;
-            }
-            Self::FunctionLookupError => {
-                write!(f, "There is no function with this name")?;
-            }
-            Self::NotInLoop => {
-                write!(f, "This is only allowed a loop")?;
-            }
+    error_fn!(Error; fn return_in_transition_fn(
+        "'return' is not allowed in the transition function; use 'become' or 'remain' instead",
+    ));
 
-            Self::IntegerOverflow => {
-                write!(f, "Integer overflow")?;
-            }
-            Self::DivideByZero => {
-                write!(f, "Divide by zero")?;
-            }
-            Self::NegativeExponent => {
-                write!(f, "Negative exponent")?;
-            }
-            Self::IndexOutOfBounds => {
-                write!(f, "Index out of bounds")?;
-            }
-            Self::AssertionFailed(msg) => {
-                write!(f, "Assertion failed")?;
-                if let Some(msg) = msg {
-                    write!(f, ": {:?}", msg)?;
-                }
-            }
-            Self::UserError(msg) => {
-                write!(f, "Error")?;
-                if let Some(msg) = msg {
-                    write!(f, ": {:?}", msg)?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
-impl LangErrorMsg {
-    /// Attaches a span to this error message, returning a LangError.
-    pub fn with_span(self, span: impl Into<Span>) -> LangError {
-        LangError {
-            span: Some(span.into()),
-            msg: self,
-        }
-    }
-    /// Returns a LangError from this error message, without a span.
-    pub const fn without_span(self) -> LangError {
-        LangError {
-            span: None,
-            msg: self,
-        }
-    }
-}
-
-impl<T: Into<LangErrorMsg>> From<T> for LangError {
-    fn from(msg: T) -> Self {
-        msg.into().without_span()
-    }
+    error_fn!(Error; fn become_or_remain_in_helper_fn(
+        "'become' and 'remain' are not allowed outside the transition function; use 'return' instead",
+    ));
 }
 
 /// Handles internal errors in the NDCA compiler. Panics in debug mode, but
@@ -349,36 +238,20 @@ impl<T: Into<LangErrorMsg>> From<T> for LangError {
 /// Prefer internal_error!(); be careful not to call this and then throw away
 /// the error it returns, because in debug mode it will still panic.
 macro_rules! internal_error_value {
-    // Don't allocate a new String for &'static str literals.
-    ( $msg:expr ) => {{
-        // Panic in a debug build (for stack trace).
-        #[cfg(debug_assertions)]
-        #[allow(unused)]
-        let ret: crate::errors::LangError = panic!("{}", $msg);
-        // Give nice error message for user in release build.
-        #[cfg(not(debug_assertions))]
-        #[allow(unused)]
-        let ret: crate::errors::LangError = crate::errors::LangErrorMsg::InternalError(
-            std::borrow::Cow::Borrowed($msg),
-        )
-        .without_span();
-        #[allow(unreachable_code)]
-        ret
-    }};
-    // Automatically format!() arguments.
+    // Automatically format arguments.
     ( $( $args:expr ),+ $(,)? ) => {{
+        #[allow(unused)]
+        let ret: crate::errors::Error;
 
-        // Panic in a debug build (for stack trace).
-        #[cfg(debug_assertions)]
-        #[allow(unused)]
-        let ret: crate::errors::LangError = panic!($( $args ),+);
-        // Give nice error message for user in release build.
-        #[cfg(not(debug_assertions))]
-        #[allow(unused)]
-        let ret: crate::errors::LangError =
-            crate::errors::LangErrorMsg::InternalError(format!($( $args ),+).into()).without_span();
-        #[allow(unreachable_code)]
-        ret
+        if cfg!(debug_assertions) {
+            // Panic in a debug build (for stack trace).
+            panic!($( $args ),+)
+
+        } else {
+            // Give a nice error message for the user in a release build.
+            let msg: String = format!($( $args ),+).into();
+            crate::errors::Error::internal(None, msg)
+        }
     }};
 }
 
@@ -406,5 +279,8 @@ macro_rules! arg_out_of_range {
 macro_rules! uncaught_type_error {
     () => {
         internal_error!("Uncaught type error")
+    };
+    (in $loc:ident) => {
+        internal_error!(concat!("Uncaught type error in ", stringify!($loc)))
     };
 }

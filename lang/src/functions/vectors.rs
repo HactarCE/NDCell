@@ -12,7 +12,7 @@ use crate::compiler::{const_int, const_uint, Compiler, Value};
 use crate::errors::*;
 use crate::types::LangInt;
 use crate::{ConstValue, Type};
-use LangErrorMsg::{IndexOutOfBounds, IntegerOverflow};
+use ErrorKind::{AccessOutOfBounds, IntegerOverflow};
 
 /// Built-in function that returns a single component of a vector.
 #[derive(Debug)]
@@ -28,7 +28,7 @@ impl Access {
     /// component at the given index.
     pub fn with_component_idx(component_idx: Option<LangInt>) -> FuncConstructor {
         Box::new(move |info| {
-            let out_of_bounds_error = info.add_error_point(IndexOutOfBounds);
+            let out_of_bounds_error = info.add_error_point(AccessOutOfBounds);
             Ok(Box::new(Self {
                 component_idx,
                 out_of_bounds_error,

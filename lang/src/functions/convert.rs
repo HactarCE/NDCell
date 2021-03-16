@@ -8,7 +8,7 @@ use crate::compiler::{self, const_int, Compiler, Value};
 use crate::errors::*;
 use crate::types::{LangCellState, LangInt};
 use crate::{ConstValue, Type};
-use LangErrorMsg::CellStateOutOfRange;
+use ErrorKind::CellStateOutOfRange;
 
 /// Built-in function that returns the cell state with the given ID.
 #[derive(Debug)]

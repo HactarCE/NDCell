@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::types::{FnSignature, PatternShape};
+use crate::data::{FnSignature, VectorSet};
 use crate::{DEFAULT_NBHD_RADIUS, DEFAULT_NDIM, DEFAULT_STATE_COUNT};
 
 // TODO: move error points to RuleMeta
@@ -15,7 +15,7 @@ pub struct RuleMeta {
     /// Map of names and signatures of helper functions.
     pub helper_function_signatures: HashMap<String, FnSignature>,
 
-    /// Number of dimensions (from 1 to 6).
+    /// Number of dimensions.
     pub ndim: usize,
     /// Neighborhood shape.
     pub nbhd_shape: PatternShape,

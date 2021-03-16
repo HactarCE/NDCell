@@ -8,7 +8,7 @@ use crate::compiler::{const_int, Compiler, Value};
 use crate::errors::*;
 use crate::types::{CellStateFilter, LangInt, Stencil, MAX_VECTOR_LEN};
 use crate::{ConstValue, Type};
-use LangErrorMsg::{MustBeConstant, VectorTooBig};
+use ErrorKind::{CannotEvalAsConst, VectorTooBig};
 
 /// Built-in function that returns a fixed integer.
 #[derive(Debug)]
@@ -53,7 +53,7 @@ impl Function for ConstStencil {
         Ok(Type::Stencil)
     }
     fn compile(&self, _compiler: &mut Compiler, info: FuncCallInfo) -> LangResult<Value> {
-        Err(MustBeConstant.with_span(info.span))
+        Err(CannotEvalAsConst.with_span(info.span))
     }
     fn const_eval(&self, _info: FuncCallInfo) -> LangResult<ConstValue> {
         Ok(ConstValue::Stencil(self.0.clone()))

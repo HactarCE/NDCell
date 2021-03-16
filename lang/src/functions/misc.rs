@@ -8,7 +8,7 @@ use crate::compiler::{Compiler, Value};
 use crate::errors::*;
 use crate::types::FnSignature;
 use crate::{ConstValue, Type};
-use LangErrorMsg::Unimplemented;
+use ErrorKind::Unimplemented;
 
 /// Built-in function that returns a fixed variable.
 #[derive(Debug)]

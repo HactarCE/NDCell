@@ -11,7 +11,7 @@ use crate::errors::*;
 use crate::lexer::ComparisonToken;
 use crate::types::LangInt;
 use crate::{ConstValue, Span, Type};
-use LangErrorMsg::{CannotEvalAsConst, CmpError};
+use ErrorKind::{CannotEvalAsConst, CmpError};
 
 /// Built-in function that performs some fixed number of comparisons.
 #[derive(Debug)]

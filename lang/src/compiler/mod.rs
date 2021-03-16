@@ -45,7 +45,7 @@ pub use function::CompiledFunction;
 pub use value::{PatternValue, Value};
 
 use crate::errors::*;
-use crate::types::{CellStateFilter, LangInt, TypeDesc, CELL_STATE_BITS, INT_BITS};
+use crate::types::{CellStateFilter, LangInt, TypeClass, CELL_STATE_BITS, INT_BITS};
 use crate::{ConstValue, Type};
 
 /// Name of the LLVM module.
@@ -1163,7 +1163,7 @@ impl Compiler {
                     .builder()
                     .build_shuffle_vector(left, right, mask, "vectorCast"))
             }
-            _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeDesc::Vector),
+            _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeClass::Vector),
         }
     }
     /// Builds a cast from an integer, vector, integer range, or rectangle of
@@ -1185,7 +1185,7 @@ impl Compiler {
                 let (start, end) = self.build_split_rectangle(r);
                 (Value::Vector(start), Value::Vector(end))
             }
-            _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeDesc::Rectangle),
+            _ => internal_error!("Cannot convert {} to {}", value.ty(), TypeClass::Rectangle),
         };
         let new_start = self.build_vector_cast(old_start, ndim)?;
         let new_end = self.build_vector_cast(old_end, ndim)?;
@@ -1213,7 +1213,7 @@ impl Compiler {
             _ => internal_error!(
                 "Cannot convert {} to {}",
                 value.ty(),
-                TypeDesc::CellStateFilter,
+                TypeClass::CellStateFilter,
             ),
         }
     }

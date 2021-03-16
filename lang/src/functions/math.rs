@@ -15,7 +15,7 @@ use crate::errors::*;
 use crate::lexer::OperatorToken;
 use crate::types::{CellStateFilter, LangInt, LangUint};
 use crate::{ConstValue, Type};
-use LangErrorMsg::{DivideByZero, IntegerOverflow, NegativeExponent};
+use ErrorKind::{DivideByZero, IntegerOverflow, NegativeExponent};
 
 /// Built-in function that negates an integer or vector or takes its absolute value.
 #[derive(Debug)]

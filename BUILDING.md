@@ -12,8 +12,8 @@ The minimum supported Rust version is **1.50.0**.
 4. Clone this project and build/run:
 
 ```sh
-git clone https://github.com/HactarCE/NDCA
-cd NDCA
+git clone https://github.com/HactarCE/NDCell
+cd NDCell
 cargo run --release
 ```
 
@@ -68,9 +68,9 @@ By the way, **do not use cmake-gui**. I don't think there's any way to make it u
 10. Also copy the contents of `C:\LLVM_source_code\include` into `C:\LLVM_solution\MinSizeRel\include`, merging the contents. There might be a file or two that are overwritten and that's fine.
 11. Finally, make a new environment variable (system variable or user variable, doesn't matter) called `LLVM_SYS_100_PREFIX` with the value `C:\LLVM_solution\MinSizeRel`. Reboot to make sure this takes effect.
 
-### Part 3 - Building NDCA
+### Part 3 - Building NDCell
 
 1. Download this project and extract it somewhere.
-2. Open a terminal in the folder where you extracted NDCA (it should have `Cargo.toml` in it) and build it using `cargo build --release` or run it using `cargo run --release`.
+2. Open a terminal in the folder where you extracted NDCell (it should have `Cargo.toml` in it) and build it using `cargo build --release` or run it using `cargo run --release`.
 
 The first build may take ~10 minutes or more. Remove `--release` to disable optimizations, which makes building faster but NDCell will be much slower.

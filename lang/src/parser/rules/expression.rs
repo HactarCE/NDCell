@@ -6,8 +6,8 @@ use super::{
     TryFromToken, VectorLiteral,
 };
 use crate::ast::{self, ExprId};
-use crate::data::Value;
 use crate::errors::Result;
+use crate::exec::eval::Value;
 use crate::lexer::Token;
 
 /// Operator precedence table.

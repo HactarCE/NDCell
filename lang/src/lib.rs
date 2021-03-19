@@ -19,6 +19,7 @@ pub mod errors;
 #[macro_use]
 mod data;
 mod ast;
+mod exec;
 // mod compiler;
 // mod constvalue;
 // mod functions;

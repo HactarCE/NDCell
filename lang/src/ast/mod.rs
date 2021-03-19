@@ -9,8 +9,9 @@ mod cellstate;
 mod globals;
 mod nodes;
 
-use crate::data::{LangInt, Type, Value};
+use crate::data::{LangInt, Type};
 use crate::errors::{Error, Result};
+use crate::exec::eval::Value;
 use crate::lexer::Token;
 use crate::parser;
 pub use cellstate::CellState;

@@ -1,4 +1,4 @@
-use super::{Array, CellSet, IntegerSet, LangCellState, LangInt, Pattern, Type, VectorSet};
+use crate::data::{Array, CellSet, IntegerSet, LangCellState, LangInt, Pattern, Type, VectorSet};
 use crate::Result;
 use std::rc::Rc;
 

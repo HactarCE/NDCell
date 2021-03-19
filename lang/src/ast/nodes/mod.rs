@@ -8,7 +8,7 @@ mod statement;
 mod variable;
 
 use super::*;
-use crate::data::Value;
+use crate::exec::eval::Value;
 use crate::lexer::Token;
 pub use directive::*;
 pub use expression::*;

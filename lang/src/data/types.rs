@@ -6,7 +6,8 @@
 //! - Add new variant to `TypeClass` if necessary
 //! - Add new token to `Token` enum
 //! - Update `TryFrom<Token>` impl for `TypeClass`
-//! - Add new variant to `Value`
+//! - Add new variant to `eval::Value`
+//! - Add new variant to `compile::Value`
 //! - Add new method in `generate_type_unwrap_methods!`
 
 use codemap::Spanned;

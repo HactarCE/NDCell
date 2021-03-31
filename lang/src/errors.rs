@@ -86,11 +86,11 @@ impl Error {
     // Miscellaneous errors
 
     error_fn!(Error; fn unimplemented(
-        "This feature is unimplemented",
+        "this feature is unimplemented",
     ));
 
     error_fn!(Error; fn internal(
-        "Internal error occurred! This is a bug in NDCell. ({})",
+        "internal error occurred! This is a bug in NDCell. ({})",
         msg: impl fmt::Display,
     ));
 
@@ -102,94 +102,94 @@ impl Error {
     // Compile errors
 
     error_fn!(Error; fn unterminated(
-        "This {} never ends",
+        "this {} never ends",
         thing: impl fmt::Display,
     ));
 
     error_fn!(Error; fn invalid_symbol(
-        "Invalid symbol",
+        "invalid symbol",
     ));
 
     error_fn!(Error; fn expected(
-        "Expected {}",
+        "expected {}",
         expected: impl fmt::Display => crate::utils::a,
     ));
 
     error_fn!(Error; fn name_in_use(
-        "This name is already in use",
+        "this name is already in use",
     ));
 
     error_fn!(Warning; fn name_in_use_by_builtin(
-        "This hides a built-in with the same name",
+        "this hides a built-in with the same name",
     ));
 
     error_fn!(Error; fn reserved_word(
-        "This is a reserved word",
+        "this is a reserved word",
     ));
 
     error_fn!(Error; fn cannot_resolve_name(
-        "Can't find anything with this name that is accessible from here",
+        "can't find anything with this name that is accessible from here",
     ));
 
     error_fn!(Error; fn else_without_if(
-        "This 'else' has no matching 'if'",
+        "this 'else' has no matching 'if'",
     ));
 
     error_fn!(Error; fn invalid_integer_literal(
-        "Can't parse this; it looks like an integer literal, but {}",
+        "can't parse this; it looks like an integer literal, but {}",
         integer_parse_error: impl fmt::Display,
     ));
 
     error_fn!(Error; fn ambiguous_octothorpe(
-        "This is ambiguous; if it is a tag name, remove the space after '#'; if it is a variable name, wrap it in parentheses",
+        "this is ambiguous; if it is a tag name, remove the space after '#'; if it is a variable name, wrap it in parentheses",
     ));
 
     error_fn!(Error; fn missing_directive(
-        "Directive '{}' is required, but not present",
+        "directive '{}' is required, but not present",
         directive: impl fmt::Display,
     ));
 
     error_fn!(Error; fn invalid_directive_name(
-        "This isn't a valid directive name",
+        "this isn't a valid directive name",
     ));
 
     error_fn!(Error; fn invalid_directive_name_with_suggestion(
-        "This isn't a valid directive name; did you mean '{}'",
+        "this isn't a valid directive name; did you mean '{}'",
         suggested: impl fmt::Display,
     ));
 
     error_fn!(Error; fn duplicate_directive(
-        "There can only be one '{}' directive; this is a duplicate",
+        "there can only be one '{}' directive; this is a duplicate",
         directive: impl fmt::Display,
     ));
 
     error_fn!(Error; fn dependency_cycle(
-        "Cyclic dependency in '{}' directive",
+        "cyclic dependency in '{}' directive",
         directive: impl fmt::Display,
     ));
 
     error_fn!(Error; fn invalid_dimension_count(
-        "The number of dimensions must be an integer from 1 to {}",
+        "the number of dimensions must be an integer from 1 to {}",
         _ => MAX_NDIM,
     ));
 
     error_fn!(Error; fn invalid_state_count(
-        "The number of states must be an integer from 1 to {}",
+        "the number of states must be an integer from 1 to {}",
         _ => MAX_STATE_COUNT,
     ));
 
     error_fn!(Error; fn cannot_const_eval(
-        "Cannot evaluate this at compile-time",
+        "cannot evaluate this at compile-time",
     ));
 
     error_fn!(Error; fn type_error(
-        "Mismatched types: expected {} but got {}",
+        "mismatched types: expected {} but got {}",
         expected: impl fmt::Display,
         got: &Type,
     ));
 
     error_fn!(Error; fn cmp_type_error(
-        "Mismatched types: cannot compare {0} to {2} using '{1}'{3}",
+        "mismatched types: cannot compare {0} to {2} using '{1}'{3}",
         lhs: &Type,
         cmp: &str,
         rhs: &Type,
@@ -201,32 +201,32 @@ impl Error {
     ));
 
     error_fn!(Error; fn invalid_arguments(
-        "These arguments have types {1}, which are invalid for {0}",
+        "these arguments have types {1}, which are invalid for {0}",
         name: String,
         arg_types: &[Type] => crate::utils::display_bracketed_list,
     ));
 
     error_fn!(Error; fn cannot_index_type(
-        "Cannot index into value of type {}",
+        "cannot index into value of type {}",
         ty: Type,
     ));
 
-    error_fn!(Error; fn uninitialized_variable("This variable doesn't exist or hasn't been assigned a value"));
+    error_fn!(Error; fn uninitialized_variable("this variable doesn't exist or hasn't been assigned a value"));
 
-    error_fn!(Error; fn cannot_assign_to("Cannot assign to this expression"));
+    error_fn!(Error; fn cannot_assign_to("cannot assign to this expression"));
 
-    error_fn!(Error; fn break_not_in_loop("Cannot 'break' when not in a loop"));
-    error_fn!(Error; fn continue_not_in_loop("Cannot 'continue' when not in a loop"));
+    error_fn!(Error; fn break_not_in_loop("cannot 'break' when not in a loop"));
+    error_fn!(Error; fn continue_not_in_loop("cannot 'continue' when not in a loop"));
 
-    error_fn!(Error; fn return_not_in_fn("Cannot 'return' when not in a function"));
-    error_fn!(Error; fn become_not_in_fn("Cannot 'become' when not in the transition function"));
-    error_fn!(Error; fn remain_not_in_fn("Cannot 'return' when not in a function"));
+    error_fn!(Error; fn return_not_in_fn("cannot 'return' when not in a function"));
+    error_fn!(Error; fn become_not_in_fn("cannot 'become' when not in the transition function"));
+    error_fn!(Error; fn remain_not_in_fn("cannot 'return' when not in a function"));
 
     error_fn!(Error; fn return_in_transition_fn("'return' is not allowed in the transition function; use 'become' or 'remain' instead"));
     error_fn!(Error; fn become_in_helper_fn("'become' is only allowed in the transition function; use 'return' instead"));
     error_fn!(Error; fn remain_in_helper_fn("'remain' is only allowed in the transition function; use 'return' instead"));
 
-    error_fn!(Error; fn integer_overflow("Integer overflow"));
+    error_fn!(Error; fn integer_overflow("integer overflow"));
 }
 
 /// Handles internal errors in the NDCA compiler. Panics in debug mode, but

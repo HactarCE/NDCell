@@ -2,13 +2,19 @@ use super::*;
 
 #[test]
 fn test_integer_plus() {
-    use Value::Integer as Int;
+    use Value::Integer;
 
     test_expr(
         "x0 + x1",
-        &[
-            (&[Int(2), Int(3)], Ok(Int(5))),
-            (&[Int(-1), Int(-5)], Ok(Int(-6))),
-        ],
+        &iproduct!(test_values::<LangInt>(), test_values::<LangInt>())
+            .map(|(&a, &b)| {
+                let expected = match a.checked_add(b) {
+                    Some(sum) => Ok(Integer(sum)),
+                    None => Err(("+", "Integer overflow")),
+                };
+
+                (vec![Integer(a), Integer(b)], expected)
+            })
+            .collect_vec(),
     );
 }

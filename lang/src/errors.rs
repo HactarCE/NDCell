@@ -225,6 +225,8 @@ impl Error {
     error_fn!(Error; fn return_in_transition_fn("'return' is not allowed in the transition function; use 'become' or 'remain' instead"));
     error_fn!(Error; fn become_in_helper_fn("'become' is only allowed in the transition function; use 'return' instead"));
     error_fn!(Error; fn remain_in_helper_fn("'remain' is only allowed in the transition function; use 'return' instead"));
+
+    error_fn!(Error; fn integer_overflow("Integer overflow"));
 }
 
 /// Handles internal errors in the NDCA compiler. Panics in debug mode, but

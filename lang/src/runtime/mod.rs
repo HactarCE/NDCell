@@ -247,7 +247,10 @@ impl Runtime {
     ) -> Result<Spanned<Value>> {
         let span = op.span.merge(lhs.span).merge(rhs.span);
         let value = match op.node {
-            ast::BinaryOp::Add => Value::Integer(lhs.as_integer()? + rhs.as_integer()?),
+            ast::BinaryOp::Add => match lhs.as_integer()?.checked_add(rhs.as_integer()?) {
+                Some(sum) => Value::Integer(sum),
+                None => Err(Error::integer_overflow(op.span))?,
+            },
             ast::BinaryOp::Sub => Err(Error::unimplemented(op.span))?,
             ast::BinaryOp::Mul => Err(Error::unimplemented(op.span))?,
             ast::BinaryOp::Div => Err(Error::unimplemented(op.span))?,

@@ -1,5 +1,6 @@
 //! NDCA black-box test suite.
 
+use itertools::Itertools;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
@@ -7,9 +8,9 @@ use std::thread::LocalKey;
 // mod branch;
 // mod byterepr;
 // mod cmp;
-// emod debug;
-// meod filters;
-// moed funcs;
+// mod debug;
+// mod filters;
+// mod funcs;
 // mod is;
 // mod loops;
 mod math;
@@ -22,17 +23,13 @@ mod values;
 // mod vecs;
 
 use crate::ast;
-use crate::data::Value;
+use crate::data::{LangInt, Value};
 use crate::errors::Error;
-// use crate::compiler::CompiledFunction;
-// use crate::errors::CompleteLangResult;
-// use crate::types::{CellStateFilter, LangInt, Pattern, PatternShape};
-// use crate::ConstValue;
-// use values::*;
+use values::*;
 
 fn test_expr(
     source: &str,
-    inputs_and_expected_results: &[(&[Value], Result<Value, (&str, &str)>)],
+    inputs_and_expected_results: &[(Vec<Value>, Result<Value, (&str, &str)>)],
 ) {
     let mut ast = ast::Program::new();
     let file = ast.add_file("expression.test".to_owned(), source.to_owned());

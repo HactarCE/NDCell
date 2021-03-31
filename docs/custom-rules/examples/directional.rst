@@ -70,6 +70,7 @@ NOTE: this rule uses several features that are not yet implemented and VERY subj
     where ^ is #n
     where > is #e
     where v is #s
+    where . is ~(#n | #e | #s | #w)
   `
 
   @mask `
@@ -82,6 +83,12 @@ NOTE: this rule uses several features that are not yet implemented and VERY subj
     this_type = (#space, #wall) from this
     with symmetry rotate4 {
       match nbhd {
+        // No particles
+        case `
+          .
+        . * .
+          .
+        ` { become this_type }
         // One particle
         case `
             .

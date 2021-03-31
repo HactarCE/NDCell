@@ -83,75 +83,41 @@ macro_rules! error_fn {
 #[derive(Debug, Clone)]
 pub struct Error(pub Diagnostic);
 impl Error {
+    // Syntax/parsing errors
+    error_fn!(Error; fn else_without_if("this 'else' has no matching 'if'"));
+    error_fn!(Error; fn expected("expected {}", expected: impl fmt::Display => crate::utils::a));
+    error_fn!(Error; fn invalid_integer_literal("can't parse this; it looks like an integer literal, but {}", integer_parse_error: impl fmt::Display));
+    error_fn!(Error; fn invalid_symbol("invalid symbol"));
+    error_fn!(Error; fn reserved_word("this is a reserved word"));
+    error_fn!(Error; fn unterminated("this {} never ends", thing: impl fmt::Display));
+
     // Miscellaneous errors
 
-    error_fn!(Error; fn unimplemented(
-        "this feature is unimplemented",
-    ));
+    error_fn!(Error; fn unimplemented("this feature is unimplemented"));
 
     error_fn!(Error; fn internal(
         "internal error occurred! This is a bug in NDCell. ({})",
         msg: impl fmt::Display,
     ));
 
-    error_fn!(Error; fn custom(
-        "{}",
-        msg: impl fmt::Display,
-    ));
+    error_fn!(Error; fn custom("{}", msg: impl fmt::Display));
 
     // Compile errors
 
-    error_fn!(Error; fn unterminated(
-        "this {} never ends",
-        thing: impl fmt::Display,
-    ));
+    error_fn!(Error; fn name_in_use("this name is already in use"));
 
-    error_fn!(Error; fn invalid_symbol(
-        "invalid symbol",
-    ));
+    error_fn!(Warning; fn name_in_use_by_builtin("this hides a built-in with the same name"));
 
-    error_fn!(Error; fn expected(
-        "expected {}",
-        expected: impl fmt::Display => crate::utils::a,
-    ));
+    error_fn!(Error; fn cannot_resolve_name("can't find anything with this name that is accessible from here"));
 
-    error_fn!(Error; fn name_in_use(
-        "this name is already in use",
-    ));
-
-    error_fn!(Warning; fn name_in_use_by_builtin(
-        "this hides a built-in with the same name",
-    ));
-
-    error_fn!(Error; fn reserved_word(
-        "this is a reserved word",
-    ));
-
-    error_fn!(Error; fn cannot_resolve_name(
-        "can't find anything with this name that is accessible from here",
-    ));
-
-    error_fn!(Error; fn else_without_if(
-        "this 'else' has no matching 'if'",
-    ));
-
-    error_fn!(Error; fn invalid_integer_literal(
-        "can't parse this; it looks like an integer literal, but {}",
-        integer_parse_error: impl fmt::Display,
-    ));
-
-    error_fn!(Error; fn ambiguous_octothorpe(
-        "this is ambiguous; if it is a tag name, remove the space after '#'; if it is a variable name, wrap it in parentheses",
-    ));
+    error_fn!(Error; fn ambiguous_octothorpe("this is ambiguous; if it is a tag name, remove the space after '#'; if it is a variable name, wrap it in parentheses"));
 
     error_fn!(Error; fn missing_directive(
         "directive '{}' is required, but not present",
         directive: impl fmt::Display,
     ));
 
-    error_fn!(Error; fn invalid_directive_name(
-        "this isn't a valid directive name",
-    ));
+    error_fn!(Error; fn invalid_directive_name("this isn't a valid directive name"));
 
     error_fn!(Error; fn invalid_directive_name_with_suggestion(
         "this isn't a valid directive name; did you mean '{}'",

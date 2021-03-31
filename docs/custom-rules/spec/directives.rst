@@ -9,12 +9,19 @@ All directives are optional.
 Automaton directives
 ====================
 
+.. data:: @init
+
+  Initialization code (may appear multiple times).
+
+  :status: Fully implemented
+  :type: :ref:`Code block <code-block>` (interpreted)
+
 .. data:: @states
 
   The number of states in the automaton.
 
   :status: Partially implemented; more functionality planned
-  :type: :data:`Int`
+  :type: :data:`Integer`
   :default value: ``2``
   :examples:
 
@@ -28,7 +35,7 @@ Automaton directives
   __ https://en.wikipedia.org/wiki/Chebyshev_distance
 
   :status: Fully implemented
-  :type: :data:`Int` (nonnegative)
+  :type: :data:`Integer` (nonnegative)
   :default value: ``1``
   :examples:
 
@@ -41,7 +48,7 @@ Automaton directives
   TODO: describe special variables ``this``, ``neighborhood``, and ``nbhd``.
 
   :status: Fully implemented
-  :type: :ref:`Code block <code-block>`
+  :type: :ref:`Code block <code-block>` (compiled)
   :default value: ``{ remain }``
   :examples: See :ref:`examples`
 

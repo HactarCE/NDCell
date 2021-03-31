@@ -6,16 +6,16 @@ Methods
 
   This page is under construction.
 
-.. _int-methods:
+.. _integer-methods:
 
-``Int`` methods
+``Integer`` methods
 ===============
 
 TODO
 
-.. _vec-methods:
+.. _vector-methods:
 
-``Vec`` methods
+``Vector`` methods
 ===============
 
 TODO

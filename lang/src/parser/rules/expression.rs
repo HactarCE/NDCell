@@ -7,7 +7,7 @@ use super::{
 use crate::ast;
 use crate::data::Value;
 use crate::errors::Result;
-use crate::lexer::Token;
+use crate::lexer::{Keyword, Token};
 
 /// Operator precedence table.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -195,39 +195,41 @@ impl SyntaxRule for ExpressionWithPrecedence {
                 | Token::AssignPipe
                 | Token::AssignCaret => false,
 
-                Token::KeywordOr | Token::KeywordXor | Token::KeywordAnd => false,
+                Token::Keyword(kw) => match kw {
+                    Keyword::Or | Keyword::Xor | Keyword::And => false,
 
-                Token::KeywordNot => true,
+                    Keyword::Not => true,
 
-                Token::KeywordIs | Token::KeywordIn => false,
+                    Keyword::Is | Keyword::In => false,
 
-                Token::KeywordTypeInteger
-                | Token::KeywordTypeCell
-                | Token::KeywordTypeTag
-                | Token::KeywordTypeString
-                | Token::KeywordTypeType
-                | Token::KeywordTypeNull
-                | Token::KeywordTypeVector
-                | Token::KeywordTypeArray
-                | Token::KeywordTypeIntegerSet
-                | Token::KeywordTypeCellSet
-                | Token::KeywordTypeVectorSet
-                | Token::KeywordTypePattern
-                | Token::KeywordTypeRegex => true,
+                    Keyword::TypeInteger
+                    | Keyword::TypeCell
+                    | Keyword::TypeTag
+                    | Keyword::TypeString
+                    | Keyword::TypeType
+                    | Keyword::TypeNull
+                    | Keyword::TypeVector
+                    | Keyword::TypeArray
+                    | Keyword::TypeIntegerSet
+                    | Keyword::TypeCellSet
+                    | Keyword::TypeVectorSet
+                    | Keyword::TypePattern
+                    | Keyword::TypeRegex => true,
 
-                Token::KeywordBreak
-                | Token::KeywordContinue
-                | Token::KeywordFor
-                | Token::KeywordBecome
-                | Token::KeywordRemain
-                | Token::KeywordReturn
-                | Token::KeywordIf
-                | Token::KeywordElse
-                | Token::KeywordUnless
-                | Token::KeywordCase
-                | Token::KeywordMatch
-                | Token::KeywordAssert
-                | Token::KeywordError => false,
+                    Keyword::Break
+                    | Keyword::Continue
+                    | Keyword::For
+                    | Keyword::Become
+                    | Keyword::Remain
+                    | Keyword::Return
+                    | Keyword::If
+                    | Keyword::Else
+                    | Keyword::Unless
+                    | Keyword::Case
+                    | Keyword::Match
+                    | Keyword::Assert
+                    | Keyword::Error => false,
+                },
 
                 Token::Comment | Token::UnterminatedBlockComment => false,
 

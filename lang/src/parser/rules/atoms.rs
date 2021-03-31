@@ -15,20 +15,22 @@ impl SyntaxRule for Identifier {
     type Output = Spanned<Arc<String>>;
 
     fn might_match(&self, mut p: Parser<'_>) -> bool {
-        p.next() == Some(Token::Ident)
+        matches!(p.next(), Some(Token::Ident) | Some(Token::Keyword(_)))
     }
     fn consume_match(
         &self,
         p: &mut Parser<'_>,
         _ast: &'_ mut ast::Program,
     ) -> Result<Self::Output> {
-        if p.next() == Some(Token::Ident) {
-            Ok(Spanned {
+        match p.next() {
+            Some(Token::Ident) => Ok(Spanned {
                 span: p.span(),
                 node: Arc::new(p.string().to_owned()),
-            })
-        } else {
-            p.expected(self)
+            }),
+
+            Some(Token::Keyword(kw)) => Err(Error::reserved_word(p.span())),
+
+            _ => p.expected(self),
         }
     }
 }

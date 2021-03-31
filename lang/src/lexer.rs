@@ -2,6 +2,7 @@ use codemap::{File, Spanned};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::fmt;
+use std::str::FromStr;
 
 pub fn tokenize<'a>(file: &'a File) -> impl 'a + Iterator<Item = Spanned<Token>> {
     let mut token_start = 0;
@@ -121,28 +122,8 @@ pub enum Token {
     AssignDoubleLessThan, AssignDoubleGreaterThan, AssignTripleGreaterThan,
     AssignAmpersand, AssignPipe, AssignCaret,
 
-    // Keywords (operators)
-    KeywordOr, KeywordXor, KeywordAnd, KeywordNot,
-    KeywordIs, KeywordIn,
-
-    // Keywords (type names)
-    KeywordTypeInteger, KeywordTypeCell, KeywordTypeTag, KeywordTypeString, KeywordTypeType, KeywordTypeNull,
-    KeywordTypeVector, KeywordTypeArray,
-    KeywordTypeIntegerSet, KeywordTypeCellSet, KeywordTypeVectorSet, KeywordTypePattern, KeywordTypeRegex,
-
-    // Keywords (loops)
-    KeywordBreak, KeywordContinue, KeywordFor,
-
-    // Keywords (returns)
-    KeywordBecome, KeywordRemain, KeywordReturn,
-
-    // Keywords (branching)
-    KeywordIf, KeywordElse,
-    KeywordUnless,
-    KeywordCase, KeywordMatch,
-
-    // Keywords (debugging)
-    KeywordAssert, KeywordError,
+    // Keywords
+    Keyword(Keyword),
 
     // Comments
     Comment, UnterminatedBlockComment,
@@ -211,43 +192,7 @@ impl fmt::Display for Token {
             Self::AssignPipe => "'|='",
             Self::AssignCaret => "'^='",
 
-            Self::KeywordOr => "'or'",
-            Self::KeywordXor => "'xor'",
-            Self::KeywordAnd => "'and'",
-            Self::KeywordNot => "'not'",
-            Self::KeywordIs => "'is'",
-            Self::KeywordIn => "'in'",
-
-            Self::KeywordTypeInteger => "'Integer'",
-            Self::KeywordTypeCell => "'Cell'",
-            Self::KeywordTypeTag => "'Tag'",
-            Self::KeywordTypeString => "'String'",
-            Self::KeywordTypeType => "'Type'",
-            Self::KeywordTypeNull => "'Null'",
-            Self::KeywordTypeVector => "'Vector'",
-            Self::KeywordTypeArray => "'Array'",
-            Self::KeywordTypeIntegerSet => "'IntegerSet'",
-            Self::KeywordTypeCellSet => "'CellSet'",
-            Self::KeywordTypeVectorSet => "'VectorSet'",
-            Self::KeywordTypePattern => "'Pattern'",
-            Self::KeywordTypeRegex => "'Regex'",
-
-            Self::KeywordBreak => "'break'",
-            Self::KeywordContinue => "'continue'",
-            Self::KeywordFor => "'for'",
-
-            Self::KeywordBecome => "'become'",
-            Self::KeywordRemain => "'remain'",
-            Self::KeywordReturn => "'return'",
-
-            Self::KeywordIf => "'if'",
-            Self::KeywordElse => "'else'",
-            Self::KeywordUnless => "'unless'",
-            Self::KeywordCase => "'case'",
-            Self::KeywordMatch => "'match'",
-
-            Self::KeywordAssert => "'assert'",
-            Self::KeywordError => "'error'",
+            Self::Keyword(kw) => return write!(f, "'{}'", kw),
 
             Token::Comment => "comment",
             Token::UnterminatedBlockComment => "unterminated block comment",
@@ -266,6 +211,10 @@ impl Token {
         // Find next token.
         TOKEN_REGEX.find_at(f.source(), start).map(|m| {
             let mut end = m.end();
+
+            if let Ok(kw) = m.as_str().parse() {
+                return (Self::Keyword(kw), end);
+            }
 
             let token = match m.as_str() {
                 // Match a keyword or symbol.
@@ -323,44 +272,6 @@ impl Token {
                 "|=" => Self::AssignPipe,
                 "^=" => Self::AssignCaret,
 
-                "or" => Self::KeywordOr,
-                "xor" => Self::KeywordXor,
-                "and" => Self::KeywordAnd,
-                "not" => Self::KeywordNot,
-                "is" => Self::KeywordIs,
-                "in" => Self::KeywordIn,
-
-                "Integer" => Self::KeywordTypeInteger,
-                "Cell" => Self::KeywordTypeCell,
-                "Tag" => Self::KeywordTypeTag,
-                "String" => Self::KeywordTypeString,
-                "Type" => Self::KeywordTypeType,
-                "Null" => Self::KeywordTypeNull,
-                "Vector" => Self::KeywordTypeVector,
-                "Array" => Self::KeywordTypeArray,
-                "IntegerSet" => Self::KeywordTypeIntegerSet,
-                "CellSet" => Self::KeywordTypeCellSet,
-                "VectorSet" => Self::KeywordTypeVectorSet,
-                "Pattern" => Self::KeywordTypePattern,
-                "Regex" => Self::KeywordTypeRegex,
-
-                "break" => Self::KeywordBreak,
-                "continue" => Self::KeywordContinue,
-                "for" => Self::KeywordFor,
-
-                "become" => Self::KeywordBecome,
-                "remain" => Self::KeywordRemain,
-                "return" => Self::KeywordReturn,
-
-                "if" => Self::KeywordIf,
-                "else" => Self::KeywordElse,
-                "unless" => Self::KeywordUnless,
-                "case" => Self::KeywordCase,
-                "match" => Self::KeywordMatch,
-
-                "assert" => Self::KeywordAssert,
-                "error" => Self::KeywordError,
-
                 // Match a line comment.
                 s if s.starts_with("//") => Self::Comment,
 
@@ -411,22 +322,197 @@ impl Token {
     pub fn is_skip(self) -> bool {
         matches!(self, Self::Comment | Self::Whitespace)
     }
+}
 
-    pub const STATEMENT_KEYWORDS: &'static [Self] = &[
-        Self::KeywordAssert,
-        Self::KeywordBecome,
-        Self::KeywordBreak,
-        Self::KeywordCase,
-        Self::KeywordContinue,
-        Self::KeywordElse,
-        Self::KeywordError,
-        Self::KeywordFor,
-        Self::KeywordIf,
-        Self::KeywordMatch,
-        Self::KeywordRemain,
-        Self::KeywordReturn,
-        Self::KeywordUnless,
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Keyword {
+    // Operators
+    Or,
+    Xor,
+    And,
+    Not,
+    Is,
+    In,
+
+    // Type names
+    TypeInteger,
+    TypeCell,
+    TypeTag,
+    TypeString,
+    TypeType,
+    TypeNull,
+    TypeVector,
+    TypeArray,
+    TypeIntegerSet,
+    TypeCellSet,
+    TypeVectorSet,
+    TypePattern,
+    TypeRegex,
+
+    // Loops
+    Break,
+    Continue,
+    For,
+
+    // Returns
+    Become,
+    Remain,
+    Return,
+
+    // Branching
+    If,
+    Else,
+    Unless,
+    Case,
+    Match,
+
+    // Debugging
+    Assert,
+    Error,
+}
+impl fmt::Display for Keyword {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Or => "or",
+            Self::Xor => "xor",
+            Self::And => "and",
+            Self::Not => "not",
+            Self::Is => "is",
+            Self::In => "in",
+
+            Self::TypeInteger => "Integer",
+            Self::TypeCell => "Cell",
+            Self::TypeTag => "Tag",
+            Self::TypeString => "String",
+            Self::TypeType => "Type",
+            Self::TypeNull => "Null",
+            Self::TypeVector => "Vector",
+            Self::TypeArray => "Array",
+            Self::TypeIntegerSet => "IntegerSet",
+            Self::TypeCellSet => "CellSet",
+            Self::TypeVectorSet => "VectorSet",
+            Self::TypePattern => "Pattern",
+            Self::TypeRegex => "Regex",
+
+            Self::Break => "break",
+            Self::Continue => "continue",
+            Self::For => "for",
+
+            Self::Become => "become",
+            Self::Remain => "remain",
+            Self::Return => "return",
+
+            Self::If => "if",
+            Self::Else => "else",
+            Self::Unless => "unless",
+            Self::Case => "case",
+            Self::Match => "match",
+
+            Self::Assert => "assert",
+            Self::Error => "error",
+        };
+        write!(f, "{}", s)
+    }
+}
+impl FromStr for Keyword {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "or" => Ok(Self::Or),
+            "xor" => Ok(Self::Xor),
+            "and" => Ok(Self::And),
+            "not" => Ok(Self::Not),
+            "is" => Ok(Self::Is),
+            "in" => Ok(Self::In),
+
+            "Integer" => Ok(Self::TypeInteger),
+            "Cell" => Ok(Self::TypeCell),
+            "Tag" => Ok(Self::TypeTag),
+            "String" => Ok(Self::TypeString),
+            "Type" => Ok(Self::TypeType),
+            "Null" => Ok(Self::TypeNull),
+            "Vector" => Ok(Self::TypeVector),
+            "Array" => Ok(Self::TypeArray),
+            "IntegerSet" => Ok(Self::TypeIntegerSet),
+            "CellSet" => Ok(Self::TypeCellSet),
+            "VectorSet" => Ok(Self::TypeVectorSet),
+            "Pattern" => Ok(Self::TypePattern),
+            "Regex" => Ok(Self::TypeRegex),
+
+            "break" => Ok(Self::Break),
+            "continue" => Ok(Self::Continue),
+            "for" => Ok(Self::For),
+
+            "become" => Ok(Self::Become),
+            "remain" => Ok(Self::Remain),
+            "return" => Ok(Self::Return),
+
+            "if" => Ok(Self::If),
+            "else" => Ok(Self::Else),
+            "unless" => Ok(Self::Unless),
+            "case" => Ok(Self::Case),
+            "match" => Ok(Self::Match),
+
+            "assert" => Ok(Self::Assert),
+            "error" => Ok(Self::Error),
+
+            _ => Err(()),
+        }
+    }
+}
+impl Keyword {
+    /// List of keywords that start statements.
+    pub const STATEMENT_STARTERS: &'static [Self] = &[
+        Self::Break,
+        Self::Continue,
+        Self::For,
+        Self::Become,
+        Self::Remain,
+        Self::Return,
+        Self::If,
+        Self::Else,
+        Self::Unless,
+        Self::Case,
+        Self::Match,
+        Self::Assert,
+        Self::Error,
     ];
+
+    /// Returns true if the keyword starts a statement.
+    pub fn starts_statement(self) -> bool {
+        match self {
+            Self::Or | Self::Xor | Self::And | Self::Not | Self::Is | Self::In => false,
+
+            Self::TypeInteger
+            | Self::TypeCell
+            | Self::TypeTag
+            | Self::TypeString
+            | Self::TypeType
+            | Self::TypeNull
+            | Self::TypeVector
+            | Self::TypeArray
+            | Self::TypeIntegerSet
+            | Self::TypeCellSet
+            | Self::TypeVectorSet
+            | Self::TypePattern
+            | Self::TypeRegex => false,
+
+            Self::Break
+            | Self::Continue
+            | Self::For
+            | Self::Become
+            | Self::Remain
+            | Self::Return
+            | Self::If
+            | Self::Else
+            | Self::Unless
+            | Self::Case
+            | Self::Match
+            | Self::Assert
+            | Self::Error => true,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -578,25 +664,31 @@ mod tests {
         assert_eq!(it.next().unwrap(), ("{", Token::LBrace));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
 
-        assert_eq!(it.next().unwrap(), ("match", Token::KeywordMatch));
+        assert_eq!(
+            it.next().unwrap(),
+            ("match", Token::Keyword(Keyword::Match))
+        );
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap(), ("this", Token::Ident));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap(), ("{", Token::LBrace));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
 
-        assert_eq!(it.next().unwrap(), ("case", Token::KeywordCase));
+        assert_eq!(it.next().unwrap(), ("case", Token::Keyword(Keyword::Case)));
         assert_eq!(it.next().unwrap(), ("#dead", Token::Ident));
         assert_eq!(it.next().unwrap(), ("{", Token::LBrace));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap().1, Token::Comment);
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
-        assert_eq!(it.next().unwrap(), ("remain", Token::KeywordRemain));
+        assert_eq!(
+            it.next().unwrap(),
+            ("remain", Token::Keyword(Keyword::Remain))
+        );
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap(), ("}", Token::RBrace));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
 
-        assert_eq!(it.next().unwrap(), ("case", Token::KeywordCase));
+        assert_eq!(it.next().unwrap(), ("case", Token::Keyword(Keyword::Case)));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap(), ("#", Token::Octothorpe));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
@@ -606,7 +698,10 @@ mod tests {
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap().1, Token::Comment);
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
-        assert_eq!(it.next().unwrap(), ("become", Token::KeywordBecome));
+        assert_eq!(
+            it.next().unwrap(),
+            ("become", Token::Keyword(Keyword::Become))
+        );
         assert_eq!(it.next().unwrap(), ("(", Token::LParen));
         assert_eq!(it.next().unwrap(), ("#", Token::Octothorpe));
         assert_eq!(it.next().unwrap(), ("50", Token::IntegerLiteral));

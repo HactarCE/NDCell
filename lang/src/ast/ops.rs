@@ -1,6 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 
-use crate::lexer::Token;
+use crate::lexer::{Keyword, Token};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AssignOp {
@@ -113,10 +113,10 @@ impl TryFrom<Token> for BinaryOp {
 
             Token::DotDot => Ok(Self::Range),
 
-            Token::KeywordOr => Ok(Self::LogicalOr),
-            Token::KeywordXor => Ok(Self::LogicalXor),
-            Token::KeywordAnd => Ok(Self::LogicalAnd),
-            Token::KeywordIs => Ok(Self::Is),
+            Token::Keyword(Keyword::Or) => Ok(Self::LogicalOr),
+            Token::Keyword(Keyword::Xor) => Ok(Self::LogicalXor),
+            Token::Keyword(Keyword::And) => Ok(Self::LogicalAnd),
+            Token::Keyword(Keyword::Is) => Ok(Self::Is),
 
             _ => Err(()),
         }
@@ -142,7 +142,7 @@ impl TryFrom<Token> for PrefixOp {
             Token::Minus => Ok(Self::Neg),
 
             Token::Tilde => Ok(Self::BitwiseNot),
-            Token::KeywordNot => Ok(Self::LogicalNot),
+            Token::Keyword(Keyword::Not) => Ok(Self::LogicalNot),
 
             Token::Octothorpe => Ok(Self::IntToCell),
 

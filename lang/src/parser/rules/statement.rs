@@ -1,7 +1,7 @@
 use super::{Expression, Identifier, Parser, StringLiteral, SyntaxRule, TryFromToken};
 use crate::ast;
 use crate::errors::{Error, Result};
-use crate::lexer::Token;
+use crate::lexer::{Keyword, Token};
 
 /// Consumes a block of statements, surrounded by curly braces.
 #[derive(Debug, Copy, Clone)]
@@ -33,87 +33,85 @@ impl SyntaxRule for StatementBlock {
 pub struct Statement;
 impl_display!(
     for Statement,
-    "statement starting with {}",
-    crate::utils::join_with_conjunction("or", Token::STATEMENT_KEYWORDS),
+    "statement starting with {} or assignment such as 'x = y'",
+    crate::utils::join_with_conjunction("or", Keyword::STATEMENT_STARTERS),
 );
 impl SyntaxRule for Statement {
     type Output = ast::StmtId;
 
     fn might_match(&self, mut p: Parser<'_>) -> bool {
         AssignStatement.might_match(p)
-            || p.next()
-                .filter(|t| Token::STATEMENT_KEYWORDS.contains(t))
-                .is_some()
+            || matches!(p.next(), Some(Token::Keyword(kw)) if kw.starts_statement())
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         if let Some(result) = p.try_parse(ast, AssignStatement) {
             return result;
         }
 
-        match p.next() {
-            // Loops
-            Some(Token::KeywordBreak) => {
-                p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Break))
+        if let Some(Token::Keyword(kw)) = p.next() {
+            match kw {
+                // Loops
+                Keyword::Break => p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Break)),
+                Keyword::Continue => {
+                    p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Continue))
+                }
+                Keyword::For => {
+                    p.prev();
+                    p.parse(ast, ForLoop)
+                }
+
+                // Returns
+                Keyword::Become => p.parse_and_add_ast_node(ast, |p, ast| {
+                    Ok(ast::StmtData::Become(p.parse(ast, Expression)?))
+                }),
+                Keyword::Remain => p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Remain)),
+                Keyword::Return => p.parse_and_add_ast_node(ast, |p, ast| {
+                    Ok(ast::StmtData::Return(
+                        p.try_parse(ast, Expression).transpose()?,
+                    ))
+                }),
+
+                // Branching
+                Keyword::If => p.parse(ast, IfStatement),
+                Keyword::Else => Err(Error::else_without_if(p.span())),
+                Keyword::Unless => p.parse_and_add_ast_node(ast, |p, ast| {
+                    Ok(ast::StmtData::IfElse {
+                        condition: p.parse(ast, Expression)?,
+                        if_true: None,
+                        if_false: Some(p.parse(ast, StatementBlock)?),
+                    })
+                }),
+
+                Keyword::Case => Err(Error::unimplemented(p.span())),
+                Keyword::Match => Err(Error::unimplemented(p.span())),
+
+                // Debugging
+                Keyword::Assert => p.parse_and_add_ast_node(ast, |p, ast| {
+                    Ok(ast::StmtData::Assert {
+                        condition: p.parse(ast, Expression)?,
+                        msg: if p.peek_next() == Some(Token::Comma) {
+                            p.next();
+                            Some(p.parse(ast, StringLiteral)?)
+                        } else {
+                            None
+                        },
+                    })
+                }),
+                Keyword::Error => p.parse_and_add_ast_node(ast, |p, ast| {
+                    Ok(ast::StmtData::Error {
+                        msg: if p.peek_next() == Some(Token::Comma) {
+                            p.next();
+                            Some(p.parse(ast, StringLiteral)?)
+                        } else {
+                            None
+                        },
+                    })
+                }),
+
+                _ => p.expected(self),
             }
-            Some(Token::KeywordContinue) => {
-                p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Continue))
-            }
-            Some(Token::KeywordFor) => {
-                p.prev();
-                p.parse(ast, ForLoop)
-            }
-
-            // Returns
-            Some(Token::KeywordBecome) => p.parse_and_add_ast_node(ast, |p, ast| {
-                Ok(ast::StmtData::Become(p.parse(ast, Expression)?))
-            }),
-            Some(Token::KeywordRemain) => {
-                p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Remain))
-            }
-            Some(Token::KeywordReturn) => p.parse_and_add_ast_node(ast, |p, ast| {
-                Ok(ast::StmtData::Return(
-                    p.try_parse(ast, Expression).transpose()?,
-                ))
-            }),
-
-            // Branching
-            Some(Token::KeywordIf) => p.parse(ast, IfStatement),
-            Some(Token::KeywordElse) => Err(Error::else_without_if(p.span())),
-            Some(Token::KeywordUnless) => p.parse_and_add_ast_node(ast, |p, ast| {
-                Ok(ast::StmtData::IfElse {
-                    condition: p.parse(ast, Expression)?,
-                    if_true: None,
-                    if_false: Some(p.parse(ast, StatementBlock)?),
-                })
-            }),
-
-            Some(Token::KeywordCase) => Err(Error::unimplemented(p.span())),
-            Some(Token::KeywordMatch) => Err(Error::unimplemented(p.span())),
-
-            // Debugging
-            Some(Token::KeywordAssert) => p.parse_and_add_ast_node(ast, |p, ast| {
-                Ok(ast::StmtData::Assert {
-                    condition: p.parse(ast, Expression)?,
-                    msg: if p.peek_next() == Some(Token::Comma) {
-                        p.next();
-                        Some(p.parse(ast, StringLiteral)?)
-                    } else {
-                        None
-                    },
-                })
-            }),
-            Some(Token::KeywordError) => p.parse_and_add_ast_node(ast, |p, ast| {
-                Ok(ast::StmtData::Error {
-                    msg: if p.peek_next() == Some(Token::Comma) {
-                        p.next();
-                        Some(p.parse(ast, StringLiteral)?)
-                    } else {
-                        None
-                    },
-                })
-            }),
-
-            _ => p.expected(self),
+        } else {
+            p.expected(self)
         }
     }
 }
@@ -121,18 +119,18 @@ impl SyntaxRule for Statement {
 /// Consumes a `for` loop.
 #[derive(Debug, Copy, Clone)]
 struct ForLoop;
-impl_display!(for ForLoop, "{} loop", Token::KeywordFor);
+impl_display!(for ForLoop, "{} loop", Token::Keyword(Keyword::For));
 impl SyntaxRule for ForLoop {
     type Output = ast::StmtId;
 
     fn might_match(&self, mut p: Parser<'_>) -> bool {
-        p.next() == Some(Token::KeywordFor)
+        p.next() == Some(Token::Keyword(Keyword::For))
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
-        p.parse(ast, Token::KeywordFor)?;
+        p.parse(ast, Token::Keyword(Keyword::For))?;
 
         let iter_var = p.parse(ast, Identifier)?;
-        p.parse(ast, Token::KeywordIn)?;
+        p.parse(ast, Token::Keyword(Keyword::In))?;
         let iter_expr = p.parse(ast, Expression)?;
         let block = p.parse(ast, StatementBlock)?;
 
@@ -149,12 +147,12 @@ impl SyntaxRule for ForLoop {
 /// Consumes an `if` statement.
 #[derive(Debug, Copy, Clone)]
 struct IfStatement;
-impl_display!(for IfStatement, "{} statement", Token::KeywordIf);
+impl_display!(for IfStatement, "{} statement", Token::Keyword(Keyword::If));
 impl SyntaxRule for IfStatement {
     type Output = ast::StmtId;
 
     fn might_match(&self, mut p: Parser<'_>) -> bool {
-        p.next() == Some(Token::KeywordIf)
+        p.next() == Some(Token::Keyword(Keyword::If))
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
@@ -170,15 +168,15 @@ impl SyntaxRule for IfStatement {
 /// Consumes an `else` block or `else if` statement.
 #[derive(Debug, Copy, Clone)]
 struct ElseStatement;
-impl_display!(for ElseStatement, "{} statement", Token::KeywordElse);
+impl_display!(for ElseStatement, "{} statement", Token::Keyword(Keyword::Else));
 impl SyntaxRule for ElseStatement {
     type Output = ast::StmtId;
 
     fn might_match(&self, mut p: Parser<'_>) -> bool {
-        p.next() == Some(Token::KeywordElse)
+        p.next() == Some(Token::Keyword(Keyword::Else))
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
-        p.parse(ast, Token::KeywordElse)?;
+        p.parse(ast, Token::Keyword(Keyword::Else))?;
         parse_one_of!(p, ast, [IfStatement, StatementBlock])
     }
 }

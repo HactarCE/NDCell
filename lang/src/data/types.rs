@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use super::VectorSet;
 use crate::errors::Error;
-use crate::lexer::Token;
+use crate::lexer::Keyword;
 
 /// Specific data type.
 ///
@@ -112,24 +112,24 @@ impl fmt::Display for Type {
         }
     }
 }
-impl TryFrom<Token> for Type {
+impl TryFrom<Keyword> for Type {
     type Error = ();
 
-    fn try_from(token: Token) -> Result<Self, Self::Error> {
+    fn try_from(token: Keyword) -> Result<Self, Self::Error> {
         match token {
-            Token::KeywordTypeInteger => Ok(Self::Integer),
-            Token::KeywordTypeCell => Ok(Self::Cell),
-            Token::KeywordTypeTag => Ok(Self::Tag),
-            Token::KeywordTypeString => Ok(Self::String),
-            Token::KeywordTypeType => Ok(Self::Type),
-            Token::KeywordTypeNull => Ok(Self::Null),
-            Token::KeywordTypeVector => Ok(Self::Vector(None)),
-            Token::KeywordTypeArray => Ok(Self::Array(None)),
-            Token::KeywordTypeIntegerSet => Ok(Self::IntegerSet),
-            Token::KeywordTypeCellSet => Ok(Self::CellSet),
-            Token::KeywordTypeVectorSet => Ok(Self::VectorSet(None)),
-            Token::KeywordTypePattern => Ok(Self::Pattern(None)),
-            Token::KeywordTypeRegex => Ok(Self::Regex),
+            Keyword::TypeInteger => Ok(Self::Integer),
+            Keyword::TypeCell => Ok(Self::Cell),
+            Keyword::TypeTag => Ok(Self::Tag),
+            Keyword::TypeString => Ok(Self::String),
+            Keyword::TypeType => Ok(Self::Type),
+            Keyword::TypeNull => Ok(Self::Null),
+            Keyword::TypeVector => Ok(Self::Vector(None)),
+            Keyword::TypeArray => Ok(Self::Array(None)),
+            Keyword::TypeIntegerSet => Ok(Self::IntegerSet),
+            Keyword::TypeCellSet => Ok(Self::CellSet),
+            Keyword::TypeVectorSet => Ok(Self::VectorSet(None)),
+            Keyword::TypePattern => Ok(Self::Pattern(None)),
+            Keyword::TypeRegex => Ok(Self::Regex),
             _ => Err(()),
         }
     }

@@ -20,6 +20,7 @@ __ https://www.github.com/HactarCE/NDCell
 
    Specification <custom-rules/spec>
    custom-rules/rationale
+   custom-rules/examples
 
 .. toctree::
    :maxdepth: 2

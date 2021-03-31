@@ -6,7 +6,8 @@ mod directive;
 mod expression;
 mod statement;
 
-use super::{Ctx, Parser};
+use super::Parser;
+use crate::ast;
 use crate::errors::Result;
 use crate::lexer::Token;
 pub use atoms::*;
@@ -26,7 +27,7 @@ pub trait SyntaxRule: fmt::Display {
     fn might_match(&self, p: Parser<'_>) -> bool;
     /// Consumes the tokens that are part of this syntax structure, returning
     /// the AST node produced. Does NOT restore the `Parser` if matching fails.
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output>;
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output>;
 
     /// Applies a function to the output of this syntax rule.
     fn map<B, F: Fn(Self::Output) -> B>(self, f: F) -> TokenMapper<Self, F>
@@ -48,8 +49,8 @@ impl<O, T: SyntaxRule<Output = O> + ?Sized> SyntaxRule for Box<T> {
     fn might_match(&self, p: Parser<'_>) -> bool {
         self.as_ref().might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        self.as_ref().consume_match(p, ctx)
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        self.as_ref().consume_match(p, ast)
     }
 }
 
@@ -60,7 +61,11 @@ impl SyntaxRule for Token {
     fn might_match(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(*self)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, _ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(
+        &self,
+        p: &mut Parser<'_>,
+        _ast: &'_ mut ast::Program,
+    ) -> Result<Self::Output> {
         if p.next() == Some(*self) {
             Ok(())
         } else {
@@ -74,7 +79,7 @@ impl<T: SyntaxRule> SyntaxRule for &T {
     fn might_match(&self, p: Parser<'_>) -> bool {
         (*self).might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        (*self).consume_match(p, ctx)
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        (*self).consume_match(p, ast)
     }
 }

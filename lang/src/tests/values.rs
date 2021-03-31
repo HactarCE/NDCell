@@ -1,4 +1,4 @@
-use super::LangInt;
+use crate::data::LangInt;
 
 pub fn test_values<T: TestValues>() -> &'static [T] {
     T::test_values()

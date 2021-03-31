@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 codemap = "0.1"
+codemap-diagnostic = "0.1"
 inkwell = { git = "https://github.com/HactarCE/inkwell", branch = "llvm10-0" }
 itertools = "0.10"
 lazy_static = "1.4"

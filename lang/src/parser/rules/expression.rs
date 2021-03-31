@@ -1,13 +1,12 @@
 use codemap::Spanned;
-use std::rc::Rc;
 
 use super::{
-    Ctx, Epsilon, Identifier, IntegerLiteral, List, Parser, StringLiteral, Surround, SyntaxRule,
+    Epsilon, Identifier, IntegerLiteral, List, Parser, StringLiteral, Surround, SyntaxRule,
     TryFromToken, VectorLiteral,
 };
-use crate::ast::{self, ExprId};
+use crate::ast;
+use crate::data::Value;
 use crate::errors::Result;
-use crate::exec::eval::Value;
 use crate::lexer::Token;
 
 /// Operator precedence table.
@@ -137,8 +136,8 @@ impl SyntaxRule for Expression {
     fn might_match(&self, p: Parser<'_>) -> bool {
         ExpressionWithPrecedence::default().might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        p.parse(ctx, ExpressionWithPrecedence::default())
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse(ast, ExpressionWithPrecedence::default())
     }
 }
 
@@ -150,98 +149,107 @@ impl SyntaxRule for ExpressionWithPrecedence {
     type Output = ast::ExprId;
 
     fn might_match(&self, mut p: Parser<'_>) -> bool {
-        match p.next().unwrap() {
-            Token::LParen | Token::LBracket => true,
+        if let Some(t) = p.next() {
+            // There are so many tokens that might match, it's more reliable to
+            // just match all of them.
+            match t {
+                Token::LParen | Token::LBracket => true,
 
-            Token::LBrace => false,
-            Token::RParen | Token::RBracket | Token::RBrace => false,
+                Token::LBrace => false,
+                Token::RParen | Token::RBracket | Token::RBrace => false,
 
-            Token::Backtick => true,
+                Token::Backtick => true,
 
-            Token::Colon | Token::Comma | Token::Period | Token::Semicolon => false,
-            Token::Eql | Token::Neq | Token::Lt | Token::Gt | Token::Lte | Token::Gte => false,
+                Token::Colon | Token::Comma | Token::Period | Token::Semicolon => false,
+                Token::Eql | Token::Neq | Token::Lt | Token::Gt | Token::Lte | Token::Gte => false,
 
-            Token::Plus | Token::Minus => true,
+                Token::Plus | Token::Minus => true,
 
-            Token::Asterisk
-            | Token::Slash
-            | Token::Percent
-            | Token::DoubleAsterisk
-            | Token::DoubleLessThan
-            | Token::DoubleGreaterThan
-            | Token::TripleGreaterThan
-            | Token::Ampersand
-            | Token::Pipe
-            | Token::Caret
-            | Token::Tilde
-            | Token::Arrow
-            | Token::DotDot => false,
+                Token::Asterisk
+                | Token::Slash
+                | Token::Percent
+                | Token::DoubleAsterisk
+                | Token::DoubleLessThan
+                | Token::DoubleGreaterThan
+                | Token::TripleGreaterThan
+                | Token::Ampersand
+                | Token::Pipe
+                | Token::Caret
+                | Token::Tilde
+                | Token::Arrow
+                | Token::DotDot => false,
 
-            Token::Octothorpe => true,
+                Token::Octothorpe => true,
 
-            Token::Assign
-            | Token::AssignPlus
-            | Token::AssignMinus
-            | Token::AssignAsterisk
-            | Token::AssignSlash
-            | Token::AssignPercent
-            | Token::AssignDoubleAsterisk
-            | Token::AssignDoubleLessThan
-            | Token::AssignDoubleGreaterThan
-            | Token::AssignTripleGreaterThan
-            | Token::AssignAmpersand
-            | Token::AssignPipe
-            | Token::AssignCaret => false,
+                Token::Assign
+                | Token::AssignPlus
+                | Token::AssignMinus
+                | Token::AssignAsterisk
+                | Token::AssignSlash
+                | Token::AssignPercent
+                | Token::AssignDoubleAsterisk
+                | Token::AssignDoubleLessThan
+                | Token::AssignDoubleGreaterThan
+                | Token::AssignTripleGreaterThan
+                | Token::AssignAmpersand
+                | Token::AssignPipe
+                | Token::AssignCaret => false,
 
-            Token::KeywordOr | Token::KeywordXor | Token::KeywordAnd => false,
+                Token::KeywordOr | Token::KeywordXor | Token::KeywordAnd => false,
 
-            Token::KeywordNot => true,
+                Token::KeywordNot => true,
 
-            Token::KeywordIs | Token::KeywordIn => false,
+                Token::KeywordIs | Token::KeywordIn => false,
 
-            Token::KeywordInteger
-            | Token::KeywordVector
-            | Token::KeywordCell
-            | Token::KeywordArray
-            | Token::KeywordIntegerSet
-            | Token::KeywordVectorSet
-            | Token::KeywordCellSet
-            | Token::KeywordPattern
-            | Token::KeywordString
-            | Token::KeywordType
-            | Token::KeywordTag => true,
+                Token::KeywordTypeInteger
+                | Token::KeywordTypeCell
+                | Token::KeywordTypeTag
+                | Token::KeywordTypeString
+                | Token::KeywordTypeType
+                | Token::KeywordTypeNull
+                | Token::KeywordTypeVector
+                | Token::KeywordTypeArray
+                | Token::KeywordTypeIntegerSet
+                | Token::KeywordTypeCellSet
+                | Token::KeywordTypeVectorSet
+                | Token::KeywordTypePattern
+                | Token::KeywordTypeRegex => true,
 
-            Token::KeywordBreak
-            | Token::KeywordContinue
-            | Token::KeywordFor
-            | Token::KeywordBecome
-            | Token::KeywordRemain
-            | Token::KeywordReturn
-            | Token::KeywordIf
-            | Token::KeywordElse
-            | Token::KeywordUnless
-            | Token::KeywordCase
-            | Token::KeywordMatch
-            | Token::KeywordAssert
-            | Token::KeywordError => false,
+                Token::KeywordBreak
+                | Token::KeywordContinue
+                | Token::KeywordFor
+                | Token::KeywordBecome
+                | Token::KeywordRemain
+                | Token::KeywordReturn
+                | Token::KeywordIf
+                | Token::KeywordElse
+                | Token::KeywordUnless
+                | Token::KeywordCase
+                | Token::KeywordMatch
+                | Token::KeywordAssert
+                | Token::KeywordError => false,
 
-            Token::Comment | Token::UnterminatedBlockComment => false,
+                Token::Comment | Token::UnterminatedBlockComment => false,
 
-            Token::StringLiteral | Token::UnterminatedStringLiteral => true,
-            Token::IntegerLiteral => true,
-            Token::Ident => true,
+                Token::StringLiteral
+                | Token::UnterminatedStringLiteral
+                | Token::IntegerLiteral
+                | Token::Ident => true,
 
-            Token::Whitespace => false,
-            Token::Unknown => false,
+                Token::Whitespace => false,
+                Token::Unknown => false,
+            }
+        } else {
+            false
         }
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         // Consume an expression at the given precedence level, which may
         // consist of expressions with higher precedence.
         match self.0 {
             OpPrecedence::Atom => parse_one_of!(
                 p,
-                ctx,
+                ast,
                 [
                     IdentifierExpression.map(Some),
                     StringLiteralExpression.map(Some),
@@ -254,9 +262,12 @@ impl SyntaxRule for ExpressionWithPrecedence {
             .transpose()
             .unwrap_or_else(|| p.expected(self)),
 
-            OpPrecedence::Suffix => parse_suffix_expr(p, ctx),
-            prec if !prec.binary_ops().is_empty() => parse_binary_ops_expr(p, ctx, prec),
-            prec if !prec.prefix_ops().is_empty() => parse_prefix_ops(p, ctx, prec),
+            OpPrecedence::Suffix => parse_suffix_expr(p, ast),
+
+            OpPrecedence::Comparison => parse_cmp_chain_expr(p, ast),
+
+            prec if !prec.binary_ops().is_empty() => parse_binary_ops_expr(p, ast, prec),
+            prec if !prec.prefix_ops().is_empty() => parse_prefix_ops(p, ast, prec),
             prec => internal_error!("don't know what to do for precedence {:?}", prec),
         }
     }
@@ -266,7 +277,7 @@ impl SyntaxRule for ExpressionWithPrecedence {
 /// precedence level.
 fn parse_binary_ops_expr(
     p: &mut Parser<'_>,
-    ctx: &mut Ctx<'_>,
+    ast: &'_ mut ast::Program,
     precedence: OpPrecedence,
 ) -> Result<ast::ExprId> {
     let recursive_expression = ExpressionWithPrecedence(precedence.next());
@@ -276,16 +287,18 @@ fn parse_binary_ops_expr(
     // First, just make a list of operators and expressions. `ops.len()`
     // should always be equal to `exprs.len() - 1`.
     let mut ops: Vec<Spanned<ast::BinaryOp>> = vec![];
-    let mut exprs: Vec<ast::ExprId> = vec![p.parse(ctx, recursive_expression)?];
+    let mut exprs: Vec<ast::ExprId> = vec![p.parse(ast, recursive_expression)?];
     let op_syntax_rule =
         TryFromToken::<ast::BinaryOp>::with_display("binary operator, such as '+' or '*'");
-    while let Some(op) = p
-        .parse(ctx, op_syntax_rule)
-        .ok()
-        .filter(|op| allowed_ops.contains(op))
-    {
-        ops.push(op);
-        exprs.push(p.parse(ctx, recursive_expression)?);
+    loop {
+        if let Ok(op) = p.clone().parse(ast, op_syntax_rule) {
+            if allowed_ops.contains(&op.node) {
+                ops.push(p.parse(ast, op_syntax_rule)?);
+                exprs.push(p.parse(ast, recursive_expression)?);
+                continue;
+            }
+        }
+        break;
     }
 
     let mut ret: ast::ExprId;
@@ -297,11 +310,11 @@ fn parse_binary_ops_expr(
         // AST node using the previous iteration as the right-hand side of
         // the expression.
         for (lhs, op) in exprs.into_iter().zip(ops).rev() {
-            let lhs_span = ctx.get_node(lhs).span();
-            let ret_span = ctx.get_node(ret).span();
+            let lhs_span = ast.get_node(lhs).span();
+            let ret_span = ast.get_node(ret).span();
             let span = ret_span.merge(lhs_span);
 
-            ret = ctx.add_node(span, ast::ExprData::BinaryOp(lhs, op, ret));
+            ret = ast.add_node(span, ast::ExprData::BinaryOp(lhs, op, ret));
         }
     } else {
         // Take out the first/leftmost expression; that's the deepest
@@ -312,11 +325,11 @@ fn parse_binary_ops_expr(
         // AST node using the previous iteration as the left-hand side of
         // the expression.
         for (op, rhs) in ops.into_iter().zip(exprs_iter) {
-            let ret_span = ctx.get_node(ret).span();
-            let rhs_span = ctx.get_node(rhs).span();
+            let ret_span = ast.get_node(ret).span();
+            let rhs_span = ast.get_node(rhs).span();
             let span = ret_span.merge(rhs_span);
 
-            ret = ctx.add_node(span, ast::ExprData::BinaryOp(ret, op, rhs));
+            ret = ast.add_node(span, ast::ExprData::BinaryOp(ret, op, rhs));
         }
     }
     Ok(ret)
@@ -325,7 +338,7 @@ fn parse_binary_ops_expr(
 /// Parses an expression with any number of prefix operators.
 fn parse_prefix_ops(
     p: &mut Parser<'_>,
-    ctx: &mut Ctx<'_>,
+    ast: &'_ mut ast::Program,
     precedence: OpPrecedence,
 ) -> Result<ast::ExprId> {
     let allowed_ops = precedence.prefix_ops();
@@ -335,31 +348,34 @@ fn parse_prefix_ops(
     let mut ops: Vec<Spanned<ast::PrefixOp>> = vec![];
     let op_syntax_rule =
         TryFromToken::<ast::PrefixOp>::with_display("prefix operator, such as '-' or '~'");
-    while let Some(op) = p
-        .parse(ctx, op_syntax_rule)
-        .ok()
-        .filter(|op| allowed_ops.contains(op))
-    {
-        ops.push(op);
+    loop {
+        if let Ok(op) = p.clone().parse(ast, op_syntax_rule) {
+            if allowed_ops.contains(&op.node) {
+                ops.push(p.parse(ast, op_syntax_rule)?);
+                continue;
+            }
+        }
+        break;
     }
-    let mut ret = p.parse(ctx, ExpressionWithPrecedence(precedence.next()))?;
-    let mut span = ctx.get_node(ret).span();
+    let mut ret = p.parse(ast, ExpressionWithPrecedence(precedence.next()))?;
+    let mut span = ast.get_node(ret).span();
     // Now pop the operators off the list from right-to-left.
     for op in ops {
         span = span.merge(op.span);
-        ret = ctx.add_node(span, ast::ExprData::PrefixOp(op, ret));
+        ret = ast.add_node(span, ast::ExprData::PrefixOp(op, ret));
     }
     Ok(ret)
 }
 
 /// Parses an expression with any number of suffixes.
-fn parse_suffix_expr(p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<ast::ExprId> {
+fn parse_suffix_expr(p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<ast::ExprId> {
     // Parse the initial expression.
-    let mut ret = p.parse(ctx, ExpressionWithPrecedence(OpPrecedence::Suffix.next()))?;
+    let mut ret = p.parse(ast, ExpressionWithPrecedence(OpPrecedence::Suffix.next()))?;
+
     // Repeatedly try to consume a suffix.
     while let Some(result) = parse_one_of!(
         p,
-        ctx,
+        ast,
         [
             MethodCallSuffix(ret).map(Some),
             FuncCallSuffix(ret).map(Some),
@@ -372,9 +388,35 @@ fn parse_suffix_expr(p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<ast::ExprI
     Ok(ret)
 }
 
+/// Parse an expression consisting of a comparison chain, such as `a < b == c > d`.
+fn parse_cmp_chain_expr(p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<ast::ExprId> {
+    let recursive_expression = ExpressionWithPrecedence(OpPrecedence::Comparison.next());
+
+    // Parse the initial expression.
+    let ret = p.parse(ast, recursive_expression)?;
+
+    let op_syntax_rule =
+        TryFromToken::<ast::CompareOp>::with_display("comparison operator, such as '<' or '=='");
+    if op_syntax_rule.might_match(*p) {
+        // If there is a comparison operator, parse a comparison chain.
+        let mut exprs = vec![ret];
+        let mut ops = vec![];
+        while let Some(op) = p.try_parse(ast, op_syntax_rule) {
+            ops.push(op?);
+            exprs.push(p.parse(ast, recursive_expression)?);
+        }
+        let span1 = ast.get_node(exprs[0]).span();
+        let span2 = ast.get_node(exprs[exprs.len() - 1]).span();
+        Ok(ast.add_node(span1.merge(span2), ast::ExprData::CmpChain(exprs, ops)))
+    } else {
+        // Otherwise, just return the first expression.
+        Ok(ret)
+    }
+}
+
 /// Matches an attribute access or method call suffix, such as `.y` or `.y()`
 /// (presumably preceded by an expression).
-struct MethodCallSuffix(ExprId);
+struct MethodCallSuffix(ast::ExprId);
 impl_display!(for MethodCallSuffix, "method/attribute access");
 impl SyntaxRule for MethodCallSuffix {
     type Output = ast::ExprId;
@@ -382,13 +424,13 @@ impl SyntaxRule for MethodCallSuffix {
     fn might_match(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::Period)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        p.parse(ctx, Token::Period)?;
-        let attr = p.parse(ctx, Identifier)?;
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse(ast, Token::Period)?;
+        let attr = p.parse(ast, Identifier)?;
 
         let obj = self.0;
         let args_list = p
-            .try_parse(ctx, List::paren_comma_sep(Expression))
+            .try_parse(ast, List::paren_comma_sep(Expression))
             .unwrap_or(Ok(Spanned {
                 span: attr.span,
                 node: vec![],
@@ -396,15 +438,15 @@ impl SyntaxRule for MethodCallSuffix {
         let args = args_list.node;
         let expr_data = ast::ExprData::MethodCall { obj, attr, args };
 
-        let obj_expr_span = ctx.get_node(obj).span();
+        let obj_expr_span = ast.get_node(obj).span();
         let total_span = obj_expr_span.merge(args_list.span);
-        Ok(ctx.add_node(total_span, expr_data))
+        Ok(ast.add_node(total_span, expr_data))
     }
 }
 
 /// Matches a function call suffix, such as `(arg1, arg2)` (presumably preceded by an
 /// expression that evaluates to a function value).
-struct FuncCallSuffix(ExprId);
+struct FuncCallSuffix(ast::ExprId);
 impl_display!(for FuncCallSuffix, "function call");
 impl SyntaxRule for FuncCallSuffix {
     type Output = ast::ExprId;
@@ -412,21 +454,21 @@ impl SyntaxRule for FuncCallSuffix {
     fn might_match(&self, p: Parser<'_>) -> bool {
         List::paren_comma_sep(Expression).might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let func = self.0;
-        let args_list = p.parse(ctx, List::paren_comma_sep(Expression))?;
+        let args_list = p.parse(ast, List::paren_comma_sep(Expression))?;
         let args = args_list.node;
         let expr_data = ast::ExprData::FuncCall { func, args };
 
-        let func_expr_span = ctx.get_node(func).span();
+        let func_expr_span = ast.get_node(func).span();
         let total_span = func_expr_span.merge(args_list.span);
-        Ok(ctx.add_node(total_span, expr_data))
+        Ok(ast.add_node(total_span, expr_data))
     }
 }
 
 /// Matches an indexing suffix, such as `[x, y]` (presumably preceded by an
 /// expression).
-struct IndexSuffix(ExprId);
+struct IndexSuffix(ast::ExprId);
 impl_display!(for IndexSuffix, "indexing expression using square brackets");
 impl SyntaxRule for IndexSuffix {
     type Output = ast::ExprId;
@@ -434,15 +476,15 @@ impl SyntaxRule for IndexSuffix {
     fn might_match(&self, p: Parser<'_>) -> bool {
         List::bracket_comma_sep(Expression).might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let obj = self.0;
-        let args_list = p.parse(ctx, List::paren_comma_sep(Expression))?;
+        let args_list = p.parse(ast, List::paren_comma_sep(Expression))?;
         let args = args_list.node;
         let expr_data = ast::ExprData::IndexOp { obj, args };
 
-        let obj_expr_span = ctx.get_node(obj).span();
+        let obj_expr_span = ast.get_node(obj).span();
         let total_span = obj_expr_span.merge(args_list.span);
-        Ok(ctx.add_node(total_span, expr_data))
+        Ok(ast.add_node(total_span, expr_data))
     }
 }
 
@@ -456,10 +498,9 @@ impl SyntaxRule for IdentifierExpression {
     fn might_match(&self, p: Parser<'_>) -> bool {
         Identifier.might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        p.parse_and_add_ast_node(ctx, |p, ctx| {
-            let ident = p.parse(ctx, Identifier)?;
-            Ok(ctx.lookup_symbol(ident.span, &ident.node))
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse_and_add_ast_node(ast, |p, ast| {
+            Ok(ast::ExprData::Identifier(p.parse(ast, Identifier)?.node))
         })
     }
 }
@@ -474,11 +515,11 @@ impl SyntaxRule for StringLiteralExpression {
     fn might_match(&self, p: Parser<'_>) -> bool {
         StringLiteral.might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        p.parse_and_add_ast_node(ctx, |p, ctx| {
-            Ok(ast::ExprData::Constant(Ok(Value::String(Rc::new(
-                p.parse(ctx, StringLiteral)?.node,
-            )))))
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse_and_add_ast_node(ast, |p, ast| {
+            Ok(ast::ExprData::Constant(Value::String(
+                p.parse(ast, StringLiteral)?.node,
+            )))
         })
     }
 }
@@ -493,11 +534,11 @@ impl SyntaxRule for IntegerLiteralExpression {
     fn might_match(&self, p: Parser<'_>) -> bool {
         IntegerLiteral.might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        p.parse_and_add_ast_node(ctx, |p, ctx| {
-            Ok(ast::ExprData::Constant(Ok(Value::Integer(
-                p.parse(ctx, IntegerLiteral)?,
-            ))))
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse_and_add_ast_node(ast, |p, ast| {
+            Ok(ast::ExprData::Constant(Value::Integer(
+                p.parse(ast, IntegerLiteral)?,
+            )))
         })
     }
 }
@@ -512,10 +553,10 @@ impl SyntaxRule for VectorLiteralExpression {
     fn might_match(&self, p: Parser<'_>) -> bool {
         VectorLiteral.might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        p.parse_and_add_ast_node(ctx, |p, ctx| {
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse_and_add_ast_node(ast, |p, ast| {
             Ok(ast::ExprData::VectorConstruct(
-                p.parse(ctx, VectorLiteral)?.node,
+                p.parse(ast, VectorLiteral)?.node,
             ))
         })
     }
@@ -530,10 +571,10 @@ impl SyntaxRule for ParenExpression {
     fn might_match(&self, p: Parser<'_>) -> bool {
         Surround::paren(Expression).might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        p.parse_and_add_ast_node(ctx, |p, ctx| {
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse_and_add_ast_node(ast, |p, ast| {
             Ok(ast::ExprData::Paren(
-                p.parse(ctx, Surround::paren(Expression))?.node,
+                p.parse(ast, Surround::paren(Expression))?.node,
             ))
         })
     }

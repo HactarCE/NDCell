@@ -1,0 +1,183 @@
+use std::convert::{TryFrom, TryInto};
+
+use crate::lexer::Token;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum AssignOp {
+    NoOp,
+
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Pow,
+
+    Shl,
+    ShrSigned,
+    ShrUnsigned,
+
+    And,
+    Or,
+    Xor,
+}
+impl TryFrom<Token> for AssignOp {
+    type Error = ();
+
+    fn try_from(token: Token) -> std::result::Result<Self, Self::Error> {
+        match token {
+            Token::Assign => Ok(Self::NoOp),
+
+            Token::AssignPlus => Ok(Self::Add),
+            Token::AssignMinus => Ok(Self::Sub),
+            Token::AssignAsterisk => Ok(Self::Mul),
+            Token::AssignSlash => Ok(Self::Div),
+            Token::AssignPercent => Ok(Self::Mod),
+            Token::AssignDoubleAsterisk => Ok(Self::Pow),
+            Token::AssignDoubleLessThan => Ok(Self::Shl),
+            Token::AssignDoubleGreaterThan => Ok(Self::ShrSigned),
+            Token::AssignTripleGreaterThan => Ok(Self::ShrUnsigned),
+            Token::AssignAmpersand => Ok(Self::And),
+            Token::AssignPipe => Ok(Self::Or),
+            Token::AssignCaret => Ok(Self::Xor),
+
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Pow,
+
+    Shl,
+    ShrSigned,
+    ShrUnsigned,
+
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseXor,
+
+    LogicalAnd,
+    LogicalOr,
+    LogicalXor,
+
+    Range,
+
+    Is,
+}
+impl From<AssignOp> for Option<BinaryOp> {
+    fn from(op: AssignOp) -> Self {
+        match op {
+            AssignOp::NoOp => None,
+
+            AssignOp::Add => Some(BinaryOp::Add),
+            AssignOp::Sub => Some(BinaryOp::Sub),
+            AssignOp::Mul => Some(BinaryOp::Mul),
+            AssignOp::Div => Some(BinaryOp::Div),
+            AssignOp::Mod => Some(BinaryOp::Mod),
+            AssignOp::Pow => Some(BinaryOp::Pow),
+
+            AssignOp::Shl => Some(BinaryOp::Shl),
+            AssignOp::ShrSigned => Some(BinaryOp::ShrSigned),
+            AssignOp::ShrUnsigned => Some(BinaryOp::ShrUnsigned),
+
+            AssignOp::And => Some(BinaryOp::BitwiseAnd),
+            AssignOp::Or => Some(BinaryOp::BitwiseOr),
+            AssignOp::Xor => Some(BinaryOp::BitwiseXor),
+        }
+    }
+}
+impl TryFrom<Token> for BinaryOp {
+    type Error = ();
+
+    fn try_from(token: Token) -> std::result::Result<Self, Self::Error> {
+        match token {
+            Token::Plus => Ok(Self::Add),
+            Token::Minus => Ok(Self::Sub),
+            Token::Asterisk => Ok(Self::Mul),
+            Token::Slash => Ok(Self::Div),
+            Token::Percent => Ok(Self::Mod),
+            Token::DoubleAsterisk => Ok(Self::Pow),
+            Token::DoubleLessThan => Ok(Self::Shl),
+            Token::DoubleGreaterThan => Ok(Self::ShrSigned),
+            Token::TripleGreaterThan => Ok(Self::ShrUnsigned),
+            Token::Ampersand => Ok(Self::BitwiseAnd),
+            Token::Pipe => Ok(Self::BitwiseOr),
+            Token::Caret => Ok(Self::BitwiseXor),
+
+            Token::DotDot => Ok(Self::Range),
+
+            Token::KeywordOr => Ok(Self::LogicalOr),
+            Token::KeywordXor => Ok(Self::LogicalXor),
+            Token::KeywordAnd => Ok(Self::LogicalAnd),
+            Token::KeywordIs => Ok(Self::Is),
+
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PrefixOp {
+    Pos,
+    Neg,
+
+    BitwiseNot,
+    LogicalNot,
+
+    IntToCell, // TODO: error if applied directly to identifier
+}
+impl TryFrom<Token> for PrefixOp {
+    type Error = ();
+
+    fn try_from(token: Token) -> std::result::Result<Self, Self::Error> {
+        match token {
+            Token::Plus => Ok(Self::Pos),
+            Token::Minus => Ok(Self::Neg),
+
+            Token::Tilde => Ok(Self::BitwiseNot),
+            Token::KeywordNot => Ok(Self::LogicalNot),
+
+            Token::Octothorpe => Ok(Self::IntToCell),
+
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum CompareOp {
+    /// Equal `==`.
+    Eql,
+    /// Not equal `!=`.
+    Neq,
+    /// Less than `<`.
+    Lt,
+    /// Greater than `>`.
+    Gt,
+    /// Less than or equal `<=`.
+    Lte,
+    /// Greater than or equal `>=`.
+    Gte,
+}
+impl TryFrom<Token> for CompareOp {
+    type Error = ();
+
+    fn try_from(token: Token) -> std::result::Result<Self, Self::Error> {
+        match token {
+            Token::Eql => Ok(Self::Eql),
+            Token::Neq => Ok(Self::Neq),
+            Token::Lt => Ok(Self::Lt),
+            Token::Gt => Ok(Self::Gt),
+            Token::Lte => Ok(Self::Lte),
+            Token::Gte => Ok(Self::Gte),
+            _ => Err(()),
+        }
+    }
+}

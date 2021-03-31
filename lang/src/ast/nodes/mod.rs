@@ -1,20 +1,22 @@
 use codemap::Spanned;
 use std::convert::{TryFrom, TryInto};
+use std::fmt;
+use std::hash::{Hash, Hasher};
 
 mod directive;
 mod expression;
 mod function;
 mod statement;
-mod variable;
+mod string;
 
 use super::*;
-use crate::exec::eval::Value;
+use crate::data::Value;
 use crate::lexer::Token;
 pub use directive::*;
 pub use expression::*;
 pub use function::*;
 pub use statement::*;
-pub use variable::*;
+pub use string::*;
 
 #[derive(Debug)]
 pub struct Node<D> {
@@ -29,7 +31,6 @@ pub enum AnyNode {
     Expr(ExprNode),
     Func(FuncNode),
     Stmt(StmtNode),
-    Var(VarNode),
 }
 
 pub struct NodeId<N>(pub(super) usize, pub(super) PhantomData<N>);
@@ -50,8 +51,13 @@ impl<N> PartialEq for NodeId<N> {
     }
 }
 impl<N> Eq for NodeId<N> {}
+impl<N> Hash for NodeId<N> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
 
-pub trait NodeTrait: Sized {
+pub trait NodeTrait: Sized + fmt::Debug {
     fn id(&self) -> NodeId<Self>;
     fn span(&self) -> Span;
 
@@ -98,11 +104,10 @@ impl_node_trait!(for AnyNode::Directive(Node<DirectiveData>));
 impl_node_trait!(for AnyNode::Expr(Node<ExprData>));
 impl_node_trait!(for AnyNode::Func(Node<FuncData>));
 impl_node_trait!(for AnyNode::Stmt(Node<StmtData>));
-impl_node_trait!(for AnyNode::Var(Node<VarData>));
 macro_rules! match_any_node {
     (match $match_expr:expr; $node:ident => $result:expr) => {
         match_any_node!(match $match_expr; $node => $result;
-            for Directive, Expr, Func, Stmt, Var
+            for Directive, Expr, Func, Stmt
         );
     };
     (match $match_expr:expr; $node:ident => $result:expr; for $($variant:ident),+) => {
@@ -146,7 +151,7 @@ impl<N: NodeTrait> IndexMut<NodeId<N>> for Program {
 }
 
 pub struct AstNode<'ast, N> {
-    pub ast: &'ast mut Program,
+    pub ast: &'ast Program,
     pub id: NodeId<N>,
 }
 impl<N> fmt::Debug for AstNode<'_, N> {
@@ -154,14 +159,20 @@ impl<N> fmt::Debug for AstNode<'_, N> {
         write!(f, "{:?}", self.id)
     }
 }
+impl<N> Copy for AstNode<'_, N> {}
+impl<N> Clone for AstNode<'_, N> {
+    fn clone(&self) -> Self {
+        Self {
+            ast: self.ast,
+            id: self.id,
+        }
+    }
+}
 impl<'ast, N: NodeTrait> AstNode<'ast, N> {
-    pub fn node(&self) -> &N {
+    pub fn node(self) -> &'ast N {
         &self.ast[self.id]
     }
-    pub fn node_mut(&mut self) -> &mut N {
-        &mut self.ast[self.id]
-    }
-    pub fn span(&self) -> Span {
+    pub fn span(self) -> Span {
         self.node().span()
     }
 }
@@ -169,10 +180,7 @@ impl<'ast, D> AstNode<'ast, Node<D>>
 where
     Node<D>: NodeTrait,
 {
-    pub fn data(&self) -> &D {
+    pub fn data(self) -> &'ast D {
         &self.node().data
-    }
-    pub fn data_mut(&mut self) -> &mut D {
-        &mut self.node_mut().data
     }
 }

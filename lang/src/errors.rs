@@ -1,10 +1,12 @@
 //! Error reporting functionality for compilation and runtime.
 
 use codemap::{Span, Spanned};
+use codemap_diagnostic::{Diagnostic, Level, SpanLabel, SpanStyle};
+use itertools::Itertools;
 use std::borrow::Cow;
 use std::fmt;
 
-use crate::data::{Type, TypeClass, MAX_VECTOR_LEN};
+use crate::data::{Type, MAX_VECTOR_LEN};
 use crate::{MAX_NDIM, MAX_STATE_COUNT};
 
 pub const NO_RUNTIME_REPRESENTATION: &str = "Type has no runtime representation!";
@@ -33,17 +35,8 @@ impl SpanConvertExt for Span {
     }
 }
 
-/// Whether a problem is an error or a warning.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Severity {
-    /// Problem that prevents running the code.
-    Error,
-    /// Problem that does not prevent running the code.
-    Warning,
-}
-
 macro_rules! error_fn {
-    ($severity:ident; fn $fn_name:ident(
+    ($level:ident; fn $fn_name:ident(
         $fmt_str:tt $(,
             $arg_name:ident: $arg_type:ty
             $(=> $lambda:expr)?
@@ -54,17 +47,26 @@ macro_rules! error_fn {
         paste! {
             #[doc = "Returns an error with the template `" $fmt_str "`."]
             pub(crate) fn $fn_name(span: impl SpanConvertExt $(, $arg_name: $arg_type)*) -> Error {
-                Error {
-                    msg: format!(
+                Error(Diagnostic {
+                    level: Level::$level,
+                    message: format!(
                         $fmt_str $(,
                             error_fn!(@@ $arg_name $(=> $lambda)?)
                         )* $(,
                             $fmt_expr
                         )*
                     ),
-                    span: span.to_span(),
-                    severity: Severity::$severity,
-                }
+                    code: None,
+                    spans: span
+                        .to_span()
+                        .into_iter()
+                        .map(|span| SpanLabel {
+                            span,
+                            label: None,
+                            style: SpanStyle::Primary,
+                        })
+                        .collect_vec(),
+                })
             }
         }
     };
@@ -79,23 +81,8 @@ macro_rules! error_fn {
 
 /// Error or warning in user code.
 #[derive(Debug, Clone)]
-pub struct Error {
-    /// Error message.
-    pub msg: String,
-    /// Location of error in source code (if any).
-    pub span: Option<Span>,
-    /// Severity of error.
-    pub severity: Severity,
-}
+pub struct Error(pub Diagnostic);
 impl Error {
-    /// Attaches a span to the error, if it does not already have one.
-    pub fn with_span(mut self, span: impl SpanConvertExt) -> Self {
-        if self.span.is_none() {
-            self.span = span.to_span();
-        }
-        self
-    }
-
     // Miscellaneous errors
 
     error_fn!(Error; fn unimplemented(
@@ -103,7 +90,13 @@ impl Error {
     ));
 
     error_fn!(Error; fn internal(
-        "{}", msg: impl fmt::Display,
+        "Internal error occurred! This is a bug in NDCell. ({})",
+        msg: impl fmt::Display,
+    ));
+
+    error_fn!(Error; fn custom(
+        "{}",
+        msg: impl fmt::Display,
     ));
 
     // Compile errors
@@ -218,22 +211,25 @@ impl Error {
         ty: Type,
     ));
 
-    error_fn!(Error; fn cannot_assign_to_expr(
-        "This expression cannot have a value assigned to it",
-    ));
+    error_fn!(Error; fn uninitialized_variable("This variable doesn't exist or hasn't been assigned a value"));
 
-    error_fn!(Error; fn return_in_transition_fn(
-        "'return' is not allowed in the transition function; use 'become' or 'remain' instead",
-    ));
+    error_fn!(Error; fn cannot_assign_to("Cannot assign to this expression"));
 
-    error_fn!(Error; fn become_or_remain_in_helper_fn(
-        "'become' and 'remain' are not allowed outside the transition function; use 'return' instead",
-    ));
+    error_fn!(Error; fn break_not_in_loop("Cannot 'break' when not in a loop"));
+    error_fn!(Error; fn continue_not_in_loop("Cannot 'continue' when not in a loop"));
+
+    error_fn!(Error; fn return_not_in_fn("Cannot 'return' when not in a function"));
+    error_fn!(Error; fn become_not_in_fn("Cannot 'become' when not in the transition function"));
+    error_fn!(Error; fn remain_not_in_fn("Cannot 'return' when not in a function"));
+
+    error_fn!(Error; fn return_in_transition_fn("'return' is not allowed in the transition function; use 'become' or 'remain' instead"));
+    error_fn!(Error; fn become_in_helper_fn("'become' is only allowed in the transition function; use 'return' instead"));
+    error_fn!(Error; fn remain_in_helper_fn("'remain' is only allowed in the transition function; use 'return' instead"));
 }
 
 /// Handles internal errors in the NDCA compiler. Panics in debug mode, but
-/// returns a nice error message in release mode (so that the program doesn't
-/// immediately crash on the user).
+/// returns a nice error message in release mode so that the program doesn't
+/// immediately crash.
 ///
 /// Prefer internal_error!(); be careful not to call this and then throw away
 /// the error it returns, because in debug mode it will still panic.
@@ -259,7 +255,8 @@ macro_rules! internal_error_value {
 /// returns a nice error message in release mode (so that the program doesn't
 /// immediately crash on the user).
 ///
-/// Note that this macro actually returns the error from the caller; it does not just provide the value.
+/// Note that this macro actually returns the error from the caller; it does not
+/// just provide the value.
 macro_rules! internal_error {
     ( $( $args:expr ),+ $(,)? ) => {
         return Err(internal_error_value!($( $args ),+))
@@ -273,6 +270,8 @@ macro_rules! arg_out_of_range {
         internal_error!("Argument index out of range")
     };
 }
+
+// TODO: remove uncaught_type_error; handle these gracefully
 
 // Emits an error for when a TypeError occurs in a place where it should have
 // already been caught.

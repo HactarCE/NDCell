@@ -19,14 +19,14 @@ pub mod errors;
 #[macro_use]
 mod data;
 mod ast;
-mod exec;
 // mod compiler;
 // mod constvalue;
 // mod functions;
 mod lexer;
 // mod meta;
-// mod parser;
 mod parser;
+mod regex;
+mod runtime;
 
 // pub use crate::meta::{CellState, RuleMeta};
 // pub use constvalue::ConstValue;
@@ -123,5 +123,5 @@ const THROWAWAY_VARIABLE: &'static str = "_";
 #[macro_use]
 extern crate itertools;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;

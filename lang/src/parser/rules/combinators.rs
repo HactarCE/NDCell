@@ -3,7 +3,8 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::marker::PhantomData;
 
-use super::{Ctx, Parser, SyntaxRule};
+use super::{Parser, SyntaxRule};
+use crate::ast;
 use crate::errors::Result;
 use crate::lexer::Token;
 
@@ -27,8 +28,8 @@ impl<B, R: SyntaxRule, F: Fn(R::Output) -> B> SyntaxRule for TokenMapper<R, F> {
     fn might_match(&self, p: Parser<'_>) -> bool {
         self.inner.might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        self.inner.consume_match(p, ctx).map(&self.f)
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        self.inner.consume_match(p, ast).map(&self.f)
     }
 }
 
@@ -79,12 +80,12 @@ impl<R: Copy + SyntaxRule> SyntaxRule for Surround<R> {
     fn might_match(&self, p: Parser<'_>) -> bool {
         self.start.might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let span1 = p.peek_next_span();
 
-        p.parse(ctx, self.start)?;
-        let ret = p.parse(ctx, self.inner)?;
-        p.parse(ctx, self.end)?;
+        p.parse(ast, self.start)?;
+        let ret = p.parse(ast, self.inner)?;
+        p.parse(ast, self.end)?;
 
         let span2 = p.span();
         let span = span1.merge(span2);
@@ -150,22 +151,22 @@ impl<R: Copy + SyntaxRule> SyntaxRule for List<R> {
     fn might_match(&self, p: Parser<'_>) -> bool {
         self.start.might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let span1 = p.peek_next_span();
 
         let mut items = vec![];
-        p.parse(ctx, self.start)?;
+        p.parse(ast, self.start)?;
         loop {
             // End the list or consume an item.
             if let Some(item) =
-                parse_one_of!(p, ctx, [self.inner.map(Some), self.end.map(|_| None)])?
+                parse_one_of!(p, ast, [self.inner.map(Some), self.end.map(|_| None)])?
             {
                 items.push(item); // There is an item.
             } else {
                 break; // End of list; empty list, or trailing separator.
             }
             // End the list or consume a separator.
-            if let Some(_) = parse_one_of!(p, ctx, [self.sep.map(Some), self.end.map(|_| None)])? {
+            if let Some(_) = parse_one_of!(p, ast, [self.sep.map(Some), self.end.map(|_| None)])? {
                 continue; // There is a separator.
             } else {
                 break; // End of list, no trailing separator.
@@ -198,7 +199,11 @@ impl<T: TryFrom<Token>> SyntaxRule for TryFromToken<T> {
     fn might_match(&self, mut p: Parser<'_>) -> bool {
         p.next().and_then(|t| T::try_from(t).ok()).is_some()
     }
-    fn consume_match(&self, p: &mut Parser<'_>, _ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(
+        &self,
+        p: &mut Parser<'_>,
+        _ast: &'_ mut ast::Program,
+    ) -> Result<Self::Output> {
         p.next()
             .and_then(|t| T::try_from(t).ok())
             .map(|t| Spanned {
@@ -219,7 +224,11 @@ impl SyntaxRule for Epsilon {
     fn might_match(&self, _p: Parser<'_>) -> bool {
         true
     }
-    fn consume_match(&self, _p: &mut Parser<'_>, _ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(
+        &self,
+        _p: &mut Parser<'_>,
+        _ast: &'_ mut ast::Program,
+    ) -> Result<Self::Output> {
         Ok(())
     }
 }
@@ -232,7 +241,11 @@ impl SyntaxRule for EndOfFile {
     fn might_match(&self, mut p: Parser<'_>) -> bool {
         p.next().is_none()
     }
-    fn consume_match(&self, p: &mut Parser<'_>, _ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(
+        &self,
+        p: &mut Parser<'_>,
+        _ast: &'_ mut ast::Program,
+    ) -> Result<Self::Output> {
         match p.next() {
             Some(_) => Ok(()),
             None => p.expected(self),

@@ -6,8 +6,8 @@ pub type FuncNode = Node<FuncData>;
 
 #[derive(Debug)]
 pub struct FuncData {
-    pub name: Spanned<String>,
-    pub params: Vec<VarId>,
-    pub ret_type: Fallible<Type>,
-    pub body: StmtId,
+    // pub name: Spanned<String>,
+// pub param_names: Vec<Spanned<String>>,
+// pub ret_type: Fallible<Type>,
+// pub body: StmtId,
 }

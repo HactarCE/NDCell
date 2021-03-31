@@ -16,59 +16,45 @@
 
 use codemap::{File, Span, Spanned};
 use itertools::Itertools;
+use std::fmt;
 
 #[macro_use]
 mod macros;
-mod context;
 pub mod rules;
 
 use crate::ast;
 use crate::errors::{Error, Result};
 use crate::lexer::{self, Token};
-pub use context::Ctx;
 use rules::SyntaxRule;
 
-/// Tokenize a file and split the token list by directive.
-pub fn tokenize_and_split_directives(file: &File) -> Result<Vec<Vec<Spanned<Token>>>> {
-    // Tokenize the file.
+pub fn parse_file(ast: &mut ast::Program, file: &File) -> Result<()> {
     let tokens = lexer::tokenize(file).filter(|t| !t.is_skip()).collect_vec();
-
-    // Return an error if there is an invalid token.
-    for token in &tokens {
-        match token.node {
-            Token::UnterminatedBlockComment => {
-                return Err(Error::unterminated(token.span, "block comment"));
-            }
-            Token::UnterminatedStringLiteral => {
-                return Err(Error::unterminated(token.span, "string literal"));
-            }
-            Token::Unknown => {
-                return Err(Error::invalid_symbol(token.span));
-            }
-            _ => (),
-        }
+    let mut p = Parser::new(file, &tokens)?;
+    while p.peek_next().is_some() {
+        p.parse(ast, rules::Directive)?;
     }
+    Ok(())
+}
 
-    // Split the tokens list by directive.
-    let mut directive_token_slices = vec![];
-    let mut i = 0;
-    let mut j = 0;
-    while i < tokens.len() {
-        // Find the beginning of the next directive. Directives are the only
-        // tokens that start with `@`.
-        while j < tokens.len() && !file.source_slice(tokens[j].span).starts_with('@') {
-            j += 1;
-        }
-        // If this is not the empty span before the first `@`, save the
-        // token slice.
-        if j > 0 {
-            directive_token_slices.push(tokens[i..j].to_vec());
-        }
-        i = j;
-        j += 1;
+pub fn parse_statement(ast: &mut ast::Program, file: &File) -> Result<ast::StmtId> {
+    parse_exactly_one(ast, file, rules::Statement)
+}
+
+pub fn parse_expression(ast: &mut ast::Program, file: &File) -> Result<ast::ExprId> {
+    parse_exactly_one(ast, file, rules::Expression)
+}
+
+fn parse_exactly_one<R: SyntaxRule>(
+    ast: &mut ast::Program,
+    file: &File,
+    rule: R,
+) -> Result<R::Output> {
+    let tokens = lexer::tokenize(file).filter(|t| !t.is_skip()).collect_vec();
+    let mut p = Parser::new(file, &tokens)?;
+    match p.parse(ast, rule) {
+        Ok(_) if p.next().is_some() => p.expected("EOF"),
+        result => result,
     }
-
-    Ok(directive_token_slices)
 }
 
 /// Token parser used to assemble an AST.
@@ -79,16 +65,11 @@ pub struct Parser<'a> {
     /// Tokens to feed.
     tokens: &'a [Spanned<Token>],
     /// Index of the "current" token (None = before start).
-    cursor: Option<usize>,
+    pub cursor: Option<usize>,
 }
 impl<'a> Parser<'a> {
     /// Constructs a parser for a file.
-    ///
-    /// `tokens` must be from `file` and must be nonempty.
     pub fn new(file: &'a File, tokens: &'a [Spanned<Token>]) -> Result<Self> {
-        if tokens.is_empty() {
-            internal_error!("empty tokens for parser");
-        }
         Ok(Self {
             file,
             tokens,
@@ -96,11 +77,12 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /// Returns the span from the first token to the last token.
-    pub fn total_span(self) -> Span {
-        let span1 = self.tokens.first().unwrap().span;
-        let span2 = self.tokens.last().unwrap().span;
-        span1.merge(span2)
+    /// Returns whether a directive, such as `"@ndim"` is present.
+    pub fn has_directive(self, directive_name: &str) -> bool {
+        self.tokens
+            .iter()
+            .map(move |t| self.file.source_slice(t.span))
+            .any(|s| s == directive_name)
     }
 
     /// Returns the token at the cursor.
@@ -117,7 +99,7 @@ impl<'a> Parser<'a> {
             } else {
                 // This is the end of the region; return an empty span at the
                 // end of the region.
-                let len = self.total_span().len();
+                let len = self.file.span.len();
                 self.file.span.subspan(len, len)
             }
         } else {
@@ -163,7 +145,7 @@ impl<'a> Parser<'a> {
     pub fn next(&mut self) -> Option<Token> {
         loop {
             self.next_noskip();
-            if self.is_skip() {
+            if !self.is_skip() {
                 return self.current();
             }
         }
@@ -172,7 +154,7 @@ impl<'a> Parser<'a> {
     pub fn prev(&mut self) -> Option<Token> {
         loop {
             self.prev_noskip();
-            if self.is_skip() {
+            if !self.is_skip() {
                 return self.current();
             }
         }
@@ -203,8 +185,12 @@ impl<'a> Parser<'a> {
     /// error if it fails. This should only be used when this syntax rule
     /// represents the only valid parse; if there are other options,
     /// `try_parse()` is preferred.
-    pub fn parse<R: SyntaxRule>(&mut self, ctx: &mut Ctx<'_>, rule: R) -> Result<R::Output> {
-        self.try_parse(ctx, &rule)
+    pub fn parse<R: SyntaxRule>(
+        &mut self,
+        ast: &'_ mut ast::Program,
+        rule: R,
+    ) -> Result<R::Output> {
+        self.try_parse(ast, &rule)
             .unwrap_or_else(|| self.expected(rule))
     }
     /// Applies a syntax rule starting at the cursor, returning `None` if the
@@ -212,12 +198,12 @@ impl<'a> Parser<'a> {
     /// implementation returned false).
     pub fn try_parse<R: SyntaxRule>(
         &mut self,
-        ctx: &mut Ctx<'_>,
+        ast: &'_ mut ast::Program,
         rule: R,
     ) -> Option<Result<R::Output>> {
         rule.might_match(*self).then(|| {
             let old_state = *self; // Save state.
-            let ret = rule.consume_match(self, ctx);
+            let ret = rule.consume_match(self, ast);
             if ret.is_err() {
                 // Restore prior state on failure.
                 *self = old_state;
@@ -226,22 +212,22 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_and_add_ast_node<'b, D>(
-        &'b mut self,
-        ctx: &'b mut Ctx<'_>,
-        f: impl 'b + FnOnce(&mut Self, &mut Ctx<'_>) -> Result<D>,
+    pub fn parse_and_add_ast_node<'b, D: fmt::Debug>(
+        &mut self,
+        ast: &mut ast::Program,
+        f: impl FnOnce(&mut Self, &mut ast::Program) -> Result<D>,
     ) -> Result<ast::NodeId<ast::Node<D>>>
     where
         ast::Node<D>: ast::NodeTrait,
     {
         let span1 = self.peek_next_span();
-        let node_data = f(self, ctx)?;
+        let node_data = f(self, ast)?;
         let span2 = self.span();
-        Ok(ctx.add_node(span1.merge(span2), node_data))
+        Ok(ast.add_node(span1.merge(span2), node_data))
     }
 
     /// Returns an error describing that `expected` was expected.
-    pub fn expected<T>(mut self, expected: impl ToString) -> Result<T> {
+    pub fn expected<T>(self, expected: impl ToString) -> Result<T> {
         // TODO: when #[feature(never_type)] stabalizes, use that here and
         // return Result<!>.
         Err(self.expected_err(expected))

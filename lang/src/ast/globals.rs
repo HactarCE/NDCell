@@ -1,4 +1,4 @@
-use crate::exec::eval::Value;
+use crate::data::Value;
 
 pub fn lookup_builtin(s: &str) -> Option<Value> {
     todo!()

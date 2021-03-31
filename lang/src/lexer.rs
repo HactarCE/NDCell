@@ -14,6 +14,10 @@ pub fn tokenize<'a>(file: &'a File) -> impl 'a + Iterator<Item = Spanned<Token>>
     })
 }
 
+fn new_fullmatch_regex(s: &str) -> Regex {
+    Regex::new(&("^(".to_owned() + s + ")")).unwrap()
+}
+
 /// Identifier consisting of a letter or underscore followed by any letters,
 /// digits, and/or underscores, with an optional `#` in front for tags or `@` in
 /// front for directives.
@@ -67,23 +71,23 @@ lazy_static! {
 
     /// Regex that matches a valid identifier or keyword.
     pub static ref IDENT_REGEX: Regex =
-        Regex::new(IDENT_PATTERN).unwrap();
+        new_fullmatch_regex(IDENT_PATTERN);
 
     /// Regex that matches a valid unsigned decimal, binary, octal, or
     /// hexadecimal integer literal and some invalid integer literals.
     pub static ref INTEGER_LITERAL_REGEX: Regex =
-        Regex::new(INTEGER_LITERAL_PATTERN).unwrap();
+        new_fullmatch_regex(INTEGER_LITERAL_PATTERN);
 
     /// Regex that matches a valid string literal.
     pub static ref STRING_LITERAL_REGEX: Regex =
-        Regex::new(&[
+        new_fullmatch_regex(&[
             SINGLE_QUOTE_STRING_LITERAL_PATTERN,
             DOUBLE_QUOTE_STRING_LITERAL_PATTERN,
-        ].join("|")).unwrap();
+        ].join("|"));
 
     /// Regex that matches an unterminated string literal.
     pub static ref UNTERMINATED_STRING_LITERAL_REGEX: Regex =
-        Regex::new(UNTERMINATED_STRING_LITERAL_PATTERN).unwrap();
+        new_fullmatch_regex(UNTERMINATED_STRING_LITERAL_PATTERN);
 }
 
 #[rustfmt::skip]
@@ -122,11 +126,9 @@ pub enum Token {
     KeywordIs, KeywordIn,
 
     // Keywords (type names)
-    KeywordInteger, KeywordVector, KeywordCell, KeywordArray,
-    KeywordIntegerSet, KeywordVectorSet, KeywordCellSet, KeywordPattern,
-    KeywordString,
-    KeywordType,
-    KeywordTag,
+    KeywordTypeInteger, KeywordTypeCell, KeywordTypeTag, KeywordTypeString, KeywordTypeType, KeywordTypeNull,
+    KeywordTypeVector, KeywordTypeArray,
+    KeywordTypeIntegerSet, KeywordTypeCellSet, KeywordTypeVectorSet, KeywordTypePattern, KeywordTypeRegex,
 
     // Keywords (loops)
     KeywordBreak, KeywordContinue, KeywordFor,
@@ -216,17 +218,19 @@ impl fmt::Display for Token {
             Self::KeywordIs => "'is'",
             Self::KeywordIn => "'in'",
 
-            Self::KeywordInteger => "'Integer'",
-            Self::KeywordVector => "'Vector'",
-            Self::KeywordCell => "'Cell'",
-            Self::KeywordArray => "'Array'",
-            Self::KeywordIntegerSet => "'IntegerSet'",
-            Self::KeywordVectorSet => "'VectorSet'",
-            Self::KeywordCellSet => "'CellSet'",
-            Self::KeywordPattern => "'Pattern'",
-            Self::KeywordString => "'String'",
-            Self::KeywordType => "'Type'",
-            Self::KeywordTag => "'Tag'",
+            Self::KeywordTypeInteger => "'Integer'",
+            Self::KeywordTypeCell => "'Cell'",
+            Self::KeywordTypeTag => "'Tag'",
+            Self::KeywordTypeString => "'String'",
+            Self::KeywordTypeType => "'Type'",
+            Self::KeywordTypeNull => "'Null'",
+            Self::KeywordTypeVector => "'Vector'",
+            Self::KeywordTypeArray => "'Array'",
+            Self::KeywordTypeIntegerSet => "'IntegerSet'",
+            Self::KeywordTypeCellSet => "'CellSet'",
+            Self::KeywordTypeVectorSet => "'VectorSet'",
+            Self::KeywordTypePattern => "'Pattern'",
+            Self::KeywordTypeRegex => "'Regex'",
 
             Self::KeywordBreak => "'break'",
             Self::KeywordContinue => "'continue'",
@@ -326,17 +330,19 @@ impl Token {
                 "is" => Self::KeywordIs,
                 "in" => Self::KeywordIn,
 
-                "Integer" => Self::KeywordInteger,
-                "Vector" => Self::KeywordVector,
-                "Cell" => Self::KeywordCell,
-                "Array" => Self::KeywordArray,
-                "IntegerSet" => Self::KeywordIntegerSet,
-                "VectorSet" => Self::KeywordVectorSet,
-                "CellSet" => Self::KeywordCellSet,
-                "Pattern" => Self::KeywordPattern,
-                "String" => Self::KeywordString,
-                "Type" => Self::KeywordType,
-                "Tag" => Self::KeywordTag,
+                "Integer" => Self::KeywordTypeInteger,
+                "Cell" => Self::KeywordTypeCell,
+                "Tag" => Self::KeywordTypeTag,
+                "String" => Self::KeywordTypeString,
+                "Type" => Self::KeywordTypeType,
+                "Null" => Self::KeywordTypeNull,
+                "Vector" => Self::KeywordTypeVector,
+                "Array" => Self::KeywordTypeArray,
+                "IntegerSet" => Self::KeywordTypeIntegerSet,
+                "CellSet" => Self::KeywordTypeCellSet,
+                "VectorSet" => Self::KeywordTypeVectorSet,
+                "Pattern" => Self::KeywordTypePattern,
+                "Regex" => Self::KeywordTypeRegex,
 
                 "break" => Self::KeywordBreak,
                 "continue" => Self::KeywordContinue,

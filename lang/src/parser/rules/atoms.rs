@@ -1,6 +1,7 @@
 use codemap::Spanned;
+use std::sync::Arc;
 
-use super::{Ctx, Expression, List, Parser, SyntaxRule};
+use super::{Expression, List, Parser, SyntaxRule};
 use crate::ast;
 use crate::data::LangInt;
 use crate::errors::{Error, Result};
@@ -11,16 +12,20 @@ use crate::lexer::Token;
 pub struct Identifier;
 impl_display!(for Identifier, "identifier, such as a variable or function name");
 impl SyntaxRule for Identifier {
-    type Output = Spanned<String>;
+    type Output = Spanned<Arc<String>>;
 
     fn might_match(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::Ident)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, _ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(
+        &self,
+        p: &mut Parser<'_>,
+        _ast: &'_ mut ast::Program,
+    ) -> Result<Self::Output> {
         if p.next() == Some(Token::Ident) {
             Ok(Spanned {
                 span: p.span(),
-                node: p.string().to_owned(),
+                node: Arc::new(p.string().to_owned()),
             })
         } else {
             p.expected(self)
@@ -33,12 +38,16 @@ impl SyntaxRule for Identifier {
 pub struct StringLiteral;
 impl_display!(for StringLiteral, "string literal");
 impl SyntaxRule for StringLiteral {
-    type Output = Spanned<String>;
+    type Output = Spanned<Arc<String>>;
 
     fn might_match(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::StringLiteral)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, _ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(
+        &self,
+        p: &mut Parser<'_>,
+        _ast: &'_ mut ast::Program,
+    ) -> Result<Self::Output> {
         if p.next() != Some(Token::StringLiteral) {
             return p.expected(self);
         }
@@ -63,7 +72,7 @@ impl SyntaxRule for StringLiteral {
                 // End of token, as expected.
                 Some(Spanned {
                     span: p.span(),
-                    node: string_contents,
+                    node: Arc::new(string_contents),
                 })
             } else {
                 // Why is there more after the closing quote?
@@ -84,7 +93,11 @@ impl SyntaxRule for IntegerLiteral {
     fn might_match(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::IntegerLiteral)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, _ctx: &mut Ctx<'_>) -> Result<Self::Output> {
+    fn consume_match(
+        &self,
+        p: &mut Parser<'_>,
+        _ast: &'_ mut ast::Program,
+    ) -> Result<Self::Output> {
         match p.next() {
             Some(Token::IntegerLiteral) => parse_int::parse::<LangInt>(p.string())
                 .map_err(|e| Error::invalid_integer_literal(p.span(), e.to_string())),
@@ -102,7 +115,7 @@ impl SyntaxRule for VectorLiteral {
     fn might_match(&self, p: Parser<'_>) -> bool {
         List::bracket_comma_sep(Expression).might_match(p)
     }
-    fn consume_match(&self, p: &mut Parser<'_>, ctx: &mut Ctx<'_>) -> Result<Self::Output> {
-        p.parse(ctx, List::bracket_comma_sep(Expression))
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse(ast, List::bracket_comma_sep(Expression))
     }
 }

@@ -227,6 +227,14 @@ impl Error {
     error_fn!(Error; fn remain_in_helper_fn("'remain' is only allowed in the transition function; use 'return' instead"));
 
     error_fn!(Error; fn integer_overflow("integer overflow"));
+    error_fn!(Error; fn division_by_zero("division by zero"));
+    error_fn!(Error; fn negative_exponent("negative exponent"));
+    error_fn!(Error; fn index_out_of_bounds("index out of bounds"));
+
+    error_fn!(Error; fn user_error("error"));
+    error_fn!(Error; fn assertion_failed("assertion failed"));
+    error_fn!(Error; fn user_error_with_msg("{}", msg: &str));
+    error_fn!(Error; fn assertion_failed_with_msg("{}", msg: &str));
 }
 
 /// Handles internal errors in the NDCA compiler. Panics in debug mode, but

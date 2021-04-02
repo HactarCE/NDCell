@@ -144,9 +144,8 @@ impl Error {
         _ => MAX_STATE_COUNT,
     ));
 
-    error_fn!(Error; fn cannot_const_eval(
-        "cannot evaluate this at compile-time",
-    ));
+    error_fn!(Error; fn cannot_const_eval("depends on contents of simulation"));
+    error_fn!(Error; fn cannot_compile("must not depend on contents of simulation"));
 
     error_fn!(Error; fn type_error(
         "mismatched types: expected {} but got {}",
@@ -167,8 +166,8 @@ impl Error {
     ));
 
     error_fn!(Error; fn invalid_arguments(
-        "these arguments have types {1}, which are invalid for {0}",
-        name: String,
+        "'{}' cannot take arguments of types {}",
+        name: impl fmt::Display,
         arg_types: &[Type] => crate::utils::display_bracketed_list,
     ));
 

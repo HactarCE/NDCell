@@ -5,8 +5,26 @@ use std::sync::Arc;
 use crate::ast;
 use crate::data::{SpannedValueExt, Value};
 use crate::errors::{Error, Result};
+use crate::functions::{self, FuncCall, Function};
 
-/// NDCA interpreter state.
+pub enum RuntimeError {
+    CannotConstEval(Span),
+    Other(Error),
+}
+impl From<Error> for RuntimeError {
+    fn from(e: Error) -> Self {
+        Self::Other(e)
+    }
+}
+pub type RuntimeResult<T> = std::result::Result<T, RuntimeError>;
+
+pub struct AssignableValue<'f, R, V, E> {
+    assign_fn: Box<dyn 'f + FnOnce(&mut R, Spanned<V>) -> std::result::Result<(), E>>,
+    lhs_value: std::result::Result<Spanned<V>, E>,
+}
+pub type AssignableRuntimeValue<'f> = AssignableValue<'f, Runtime, Value, RuntimeError>;
+
+/// NDCA runtime state.
 #[derive(Debug, Default, Clone)]
 pub struct Runtime {
     /// Variable values.
@@ -17,6 +35,7 @@ pub struct Runtime {
     // ndim: Option<usize>,
     // /// Number of states.
     // states: Option<usize>,
+    errors: Vec<Error>,
 }
 
 /// Control flow command.
@@ -53,25 +72,58 @@ impl Runtime {
         Self::default()
     }
 
-    pub fn run_init(&mut self, ast: &ast::Program) -> Result<()> {
+    pub(crate) fn error(&mut self, e: Error) -> ast::AlreadyReported {
+        self.errors.push(e);
+        ast::AlreadyReported
+    }
+
+    pub fn run_init(&mut self, ast: &ast::Program) -> std::result::Result<(), &[Error]> {
         for &directive_id in ast.directives() {
             match ast.get_node(directive_id).data() {
-                ast::DirectiveData::Init(block) => match self.exec_stmt(ast.get_node(*block))? {
-                    Flow::Proceed => (),
+                ast::DirectiveData::Init(block) => match self.exec_stmt(ast.get_node(*block)) {
+                    Ok(Flow::Proceed) => (),
 
-                    Flow::Break(span) => return Err(Error::break_not_in_loop(span)),
-                    Flow::Continue(span) => return Err(Error::continue_not_in_loop(span)),
+                    Ok(Flow::Break(span)) => {
+                        self.error(Error::break_not_in_loop(span));
+                        break;
+                    }
+                    Ok(Flow::Continue(span)) => {
+                        self.error(Error::continue_not_in_loop(span));
+                        break;
+                    }
 
-                    Flow::Return(span, _) => return Err(Error::return_not_in_fn(span)),
-                    Flow::Remain(span) => return Err(Error::remain_not_in_fn(span)),
-                    Flow::Become(span, _) => return Err(Error::become_not_in_fn(span)),
+                    Ok(Flow::Return(span, _)) => {
+                        self.error(Error::return_not_in_fn(span));
+                        break;
+                    }
+                    Ok(Flow::Remain(span)) => {
+                        self.error(Error::remain_not_in_fn(span));
+                        break;
+                    }
+                    Ok(Flow::Become(span, _)) => {
+                        self.error(Error::become_not_in_fn(span));
+                        break;
+                    }
+
+                    Err(RuntimeError::CannotConstEval(_)) => {
+                        self.error(internal_error_value!("run_init() got CannotConstEval"));
+                        break;
+                    }
+                    Err(RuntimeError::Other(e)) => {
+                        self.error(e);
+                        break;
+                    }
                 },
             }
         }
-        Ok(())
+        if self.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(&self.errors)
+        }
     }
 
-    fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> Result<Flow> {
+    fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> RuntimeResult<Flow> {
         let ast = stmt.ast;
         match stmt.data() {
             ast::StmtData::Block(stmt_ids) => {
@@ -89,21 +141,19 @@ impl Runtime {
                 let rhs = ast.get_node(*rhs);
                 let mut rhs_value = self.eval_expr(rhs)?;
 
-                let (lhs_assign_fn, lhs_value) = self.eval_expr_assignable(lhs)?;
+                let AssignableValue {
+                    assign_fn,
+                    lhs_value,
+                } = self.eval_expr_assignable(lhs)?;
 
-                let op_span = op.span;
-                if let Some(op) = Option::<ast::BinaryOp>::from(op.node) {
-                    rhs_value = self.eval_bin_op(
-                        lhs_value?,
-                        Spanned {
-                            span: op_span,
-                            node: op,
-                        },
-                        rhs_value,
-                    )?;
+                if let Some(op_func) = Option::<functions::math::BinaryOp>::from(op.node) {
+                    rhs_value = Spanned {
+                        node: op_func.eval_on_values(op.span, lhs_value?, rhs_value)?,
+                        span: lhs.span().merge(rhs.span()),
+                    };
                 }
 
-                lhs_assign_fn(self, rhs_value)?;
+                assign_fn(self, rhs_value)?;
 
                 Ok(Flow::Proceed)
             }
@@ -124,22 +174,20 @@ impl Runtime {
             ast::StmtData::Assert { condition, msg } => {
                 let condition = ast.get_node(*condition);
                 if self.eval_expr(condition)?.to_bool()? {
-                    let msg = match msg {
-                        Some(s) => s.node.as_ref(),
-                        None => "Assertion failed",
-                    };
-                    Err(Error::custom(stmt.span(), msg))
+                    Err(match msg {
+                        Some(msg) => Error::assertion_failed_with_msg(stmt.span(), msg),
+                        None => Error::assertion_failed(stmt.span()),
+                    }
+                    .into())
                 } else {
                     Ok(Flow::Proceed)
                 }
             }
-            ast::StmtData::Error { msg } => {
-                let msg = match msg {
-                    Some(s) => s.node.as_ref(),
-                    None => "Error",
-                };
-                Err(Error::custom(stmt.span(), msg))
+            ast::StmtData::Error { msg } => Err(match msg {
+                Some(msg) => Error::user_error_with_msg(stmt.span(), msg),
+                None => Error::user_error(stmt.span()),
             }
+            .into()),
 
             ast::StmtData::Break => Ok(Flow::Break(stmt.span())),
             ast::StmtData::Continue => Ok(Flow::Continue(stmt.span())),
@@ -179,10 +227,7 @@ impl Runtime {
     fn eval_expr_assignable<'ast>(
         &mut self,
         expr: ast::Expr<'ast>,
-    ) -> Result<(
-        Box<dyn 'ast + FnOnce(&mut Runtime, Spanned<Value>) -> Result<()>>,
-        Result<Spanned<Value>>,
-    )> {
+    ) -> RuntimeResult<AssignableRuntimeValue<'ast>> {
         let ast = expr.ast;
         match expr.data() {
             ast::ExprData::Identifier(var_name) => {
@@ -190,22 +235,24 @@ impl Runtime {
                 // that here to avoid the extra `Arc::clone()` (and
                 // consider changing `vars` to a `HashMap<String,
                 // Value>`)
-                Ok((
-                    Box::new(move |state, new_value| {
+                Ok(AssignableRuntimeValue {
+                    assign_fn: Box::new(move |state, new_value| {
                         state.vars.insert(Arc::clone(var_name), new_value.node);
                         Ok(())
                     }),
-                    self.eval_expr(expr),
-                ))
+                    lhs_value: self.eval_expr(expr),
+                })
             }
-            ast::ExprData::MethodCall { obj, attr, args } => Err(Error::unimplemented(expr.span())),
-            ast::ExprData::IndexOp { obj, args } => Err(Error::unimplemented(expr.span())),
+            ast::ExprData::MethodCall { obj, attr, args } => {
+                Err(Error::unimplemented(expr.span()).into())
+            }
+            ast::ExprData::IndexOp { obj, args } => Err(Error::unimplemented(expr.span()).into()),
 
-            _ => Err(Error::cannot_assign_to(expr.span())),
+            _ => Err(Error::cannot_assign_to(expr.span()).into()),
         }
     }
 
-    pub fn eval_expr(&mut self, expr: ast::Expr<'_>) -> Result<Spanned<Value>> {
+    pub fn eval_expr(&mut self, expr: ast::Expr<'_>) -> RuntimeResult<Spanned<Value>> {
         let ast = expr.ast;
         let value = match expr.data() {
             ast::ExprData::Paren(expr_id) => self.eval_expr(ast.get_node(*expr_id))?.node,
@@ -218,11 +265,13 @@ impl Runtime {
 
             ast::ExprData::Constant(value) => value.clone(),
 
-            ast::ExprData::BinaryOp(lhs, op, rhs) => {
-                let lhs = self.eval_expr(ast.get_node(*lhs))?;
-                let rhs = self.eval_expr(ast.get_node(*rhs))?;
-                self.eval_bin_op(lhs, *op, rhs)?.node
-            }
+            ast::ExprData::BinaryOp(lhs, op, rhs) => Box::<dyn Function>::from(op.node).eval(
+                self,
+                FuncCall {
+                    span: op.span,
+                    args: &vec![ast.get_node(*lhs), ast.get_node(*rhs)],
+                },
+            )?,
             ast::ExprData::PrefixOp(_, _) => todo!(),
             ast::ExprData::CmpChain(_, _) => todo!(),
 
@@ -237,71 +286,5 @@ impl Runtime {
             node: value,
             span: expr.span(),
         })
-    }
-
-    fn eval_bin_op(
-        &mut self,
-        lhs: Spanned<Value>,
-        op: Spanned<ast::BinaryOp>,
-        rhs: Spanned<Value>,
-    ) -> Result<Spanned<Value>> {
-        let span = op.span.merge(lhs.span).merge(rhs.span);
-        let value = match op.node {
-            ast::BinaryOp::Add => match lhs.as_integer()?.checked_add(rhs.as_integer()?) {
-                Some(sum) => Value::Integer(sum),
-                None => Err(Error::integer_overflow(op.span))?,
-            },
-            ast::BinaryOp::Sub => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::Mul => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::Div => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::Mod => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::Pow => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::Shl => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::ShrSigned => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::ShrUnsigned => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::BitwiseAnd => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::BitwiseOr => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::BitwiseXor => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::LogicalAnd => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::LogicalOr => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::LogicalXor => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::Range => Err(Error::unimplemented(op.span))?,
-            ast::BinaryOp::Is => Err(Error::unimplemented(op.span))?,
-        };
-        Ok(Spanned { node: value, span })
-        // match (lhs, rhs) {
-        //     (Value::Integer(_), Value::Integer(_)) => {}
-        //     (Value::Integer(_), Value::Cell(_)) => {}
-        //     (Value::Integer(_), Value::Vector(_)) => {}
-        //     (Value::Vector(_), Value::Integer(_)) => {}
-        //     (Value::Vector(_), Value::Vector(_)) => {}
-        //     (Value::Array(_), Value::Integer(_)) => {}
-        //     (Value::Array(_), Value::Vector(_)) => {}
-        //     (Value::IntegerSet(_), Value::Integer(_)) => {}
-        //     (Value::VectorSet(_), Value::Integer(_)) => {}
-        //     (Value::VectorSet(_), Value::Vector(_)) => {}
-        //     (Value::Pattern(_), Value::Integer(_)) => {}
-        //     (Value::Pattern(_), Value::Vector(_)) => {}
-        // }
-        // match op.node {
-        //     ast::BinaryOp::Compare(_) => {}
-        //     ast::BinaryOp::Add => {}
-        //     ast::BinaryOp::Sub => {}
-        //     ast::BinaryOp::Mul => {}
-        //     ast::BinaryOp::Div => {}
-        //     ast::BinaryOp::Mod => {}
-        //     ast::BinaryOp::Pow => {}
-        //     ast::BinaryOp::Shl => {}
-        //     ast::BinaryOp::ShrSigned => {}
-        //     ast::BinaryOp::ShrUnsigned => {}
-        //     ast::BinaryOp::BitwiseAnd => {}
-        //     ast::BinaryOp::BitwiseOr => {}
-        //     ast::BinaryOp::BitwiseXor => {}
-        //     ast::BinaryOp::LogicalAnd => {}
-        //     ast::BinaryOp::LogicalOr => {}
-        //     ast::BinaryOp::LogicalXor => {}
-        //     ast::BinaryOp::Range => {}
-        //     ast::BinaryOp::Is => {}
-        // }
     }
 }

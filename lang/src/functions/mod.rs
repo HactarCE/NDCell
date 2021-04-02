@@ -1,170 +1,122 @@
-//! Built-in functions, methods/properties, and operators.
-
-use regex::Regex;
-
-pub mod cmp;
-pub mod convert;
-pub mod enums;
-pub mod literals;
-pub mod logic;
-pub mod math;
-pub mod misc;
-pub mod patterns;
-pub mod ranges;
-pub mod vectors;
+use codemap::{Span, Spanned};
+use std::fmt;
 
 use crate::ast;
-use crate::errors::*;
-use crate::lexer::{OperatorToken, TypeToken};
-use crate::types::{LangInt, AXES, MAX_VECTOR_LEN};
-use crate::Type;
+use crate::compiler::{CompileValue, Compiler};
+use crate::data::Value;
+use crate::errors::Error;
+use crate::runtime::{
+    AssignableRuntimeValue, AssignableValue, Runtime, RuntimeError, RuntimeResult,
+};
 
-lazy_static! {
-    static ref VEC_FN_PATTERN: Regex = Regex::new(r#"vec(?:tor)?([1-9]\d*)"#).unwrap();
-    static ref RECT_FN_PATTERN: Regex = Regex::new(r#"rect(?:angle)?([1-9]\d*)"#).unwrap();
-}
+pub mod math;
 
-/// FnOnce that constructs a Box<dyn ast::Function>, given some standard
-/// arguments.
-pub type FuncConstructor = Box<dyn FnOnce(&mut ast::FuncCallInfoMut) -> FuncResult>;
-/// Shorthand for LangResult<Box<dyn ast::Function>>, which is returned from a
-/// FuncConstructor.
-pub type FuncResult = LangResult<Box<dyn ast::Function>>;
+pub type CompileResult<T> = Result<T, Error>; // TODO: redundant with crate::errors::Result
 
-/// Returns a constructor for the function with the given name, if one exists.
-pub fn lookup_function(name: &str) -> Option<FuncConstructor> {
-    // vecN()
-    if let Some(captures) = VEC_FN_PATTERN.captures(name) {
-        match captures.get(1).unwrap().as_str().parse() {
-            Ok(len @ 1..=MAX_VECTOR_LEN) => return Some(convert::ToVector::with_len(Some(len))),
-            _ => (),
+pub type AssignableCompileValue<'f> =
+    AssignableValue<'f, Compiler, CompileValue, ast::AlreadyReported>;
+
+impl From<ast::BinaryOp> for Box<dyn Function> {
+    fn from(op: ast::BinaryOp) -> Self {
+        match op {
+            ast::BinaryOp::Add => Box::new(math::BinaryOp::Add),
+            ast::BinaryOp::Sub => Box::new(math::BinaryOp::Sub),
+            ast::BinaryOp::Mul => Box::new(math::BinaryOp::Mul),
+            ast::BinaryOp::Div => Box::new(math::BinaryOp::Div),
+            ast::BinaryOp::Mod => Box::new(math::BinaryOp::Mod),
+            ast::BinaryOp::Pow => Box::new(math::BinaryOp::Pow),
+            ast::BinaryOp::Shl => Box::new(math::BinaryOp::Shl),
+            ast::BinaryOp::ShrSigned => Box::new(math::BinaryOp::ShrSigned),
+            ast::BinaryOp::ShrUnsigned => Box::new(math::BinaryOp::ShrUnsigned),
+            ast::BinaryOp::BitwiseAnd => Box::new(math::BinaryOp::BitwiseAnd),
+            ast::BinaryOp::BitwiseOr => Box::new(math::BinaryOp::BitwiseOr),
+            ast::BinaryOp::BitwiseXor => Box::new(math::BinaryOp::BitwiseXor),
+            ast::BinaryOp::LogicalAnd => todo!(),
+            ast::BinaryOp::LogicalOr => todo!(),
+            ast::BinaryOp::LogicalXor => todo!(),
+            ast::BinaryOp::Range => todo!(),
+            ast::BinaryOp::Is => todo!(),
         }
     }
-    // rectN()
-    if let Some(captures) = RECT_FN_PATTERN.captures(name) {
-        match captures.get(1).unwrap().as_str().parse() {
-            Ok(ndim @ 1..=MAX_VECTOR_LEN) => {
-                return Some(convert::ToRectangle::with_ndim(Some(ndim)))
-            }
-            _ => (),
-        }
-    }
-    // Other functions
-    match name {
-        "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsFunc)),
-        "bool" => Some(Box::new(convert::ToBool::construct)),
-        "max" => Some(math::MinMax::max()),
-        "min" => Some(math::MinMax::min()),
-        "rect" => Some(convert::ToRectangle::with_ndim(None)),
-        "vec" => Some(convert::ToVector::with_len(None)),
-        _ => None,
+}
+
+/// Statement that can be executed and/or compiled.
+///
+/// Most of the interpreter and compiler code is in implementations of this
+/// trait and [`Function`].
+pub trait Statement: fmt::Debug {
+    /// Executes the statement.
+    fn execute(&self, runtime: &mut Runtime, call: FuncCall<'_>) -> RuntimeResult<()>;
+    /// Compiles code to execute the statement.
+    ///
+    /// The default implementation unconditionally returns an error stating that
+    /// this expression cannot be compiled.
+    fn compile(&self, compiler: &mut Compiler, call: FuncCall<'_>) -> CompileResult<()> {
+        Err(Error::cannot_compile(call.span))
     }
 }
 
-/// Returns a constructor for the method on the given type with the given name,
-/// if one exists.
-pub fn lookup_method(ty: Type, name: &str) -> Option<FuncConstructor> {
-    if ty.has_runtime_representation() {
-        if name == "new" {
-            return Some(misc::New::with_type(ty));
-        }
+/// Function that can be evaluated and/or compiled, taking zero or more
+/// arguments and returning a value.
+///
+/// Most of the interpreter and compiler code is in implementations of this
+/// trait and [`Statement`].
+pub trait Function: fmt::Debug + fmt::Display {
+    /// Executes the expression and returns the resulting value.
+    fn eval(&self, runtime: &mut Runtime, call: FuncCall<'_>) -> RuntimeResult<Value>;
+    /// Compiles code to evaluate the expression and returns the resulting
+    /// value.
+    ///
+    /// The default implementation unconditionally returns an error stating that
+    /// this expression cannot be compiled.
+    fn compile(
+        &self,
+        compiler: &mut Compiler,
+        call: FuncCall<'_>,
+    ) -> CompileResult<Spanned<CompileValue>> {
+        Err(Error::cannot_compile(call.span))
     }
-    match ty {
-        Type::Void => None,
-        Type::Int => match name {
-            "abs" => Some(math::NegOrAbs::with_mode(math::NegOrAbsMode::AbsMethod)),
-            _ => None,
-        },
-        Type::CellState => match name {
-            "id" => Some(Box::new(convert::CellStateToInt::construct)),
-            _ => None,
-        },
-        Type::Vector(_) => match name {
-            // Reductions
-            "max" => Some(vectors::MinMax::max()),
-            "min" => Some(vectors::MinMax::min()),
-            "sum" => Some(vectors::Reduce::sum()),
-            "product" => Some(vectors::Reduce::product()),
-            // Component access
-            "x" | "y" | "z" | "w" | "u" | "v" => Some(vectors::Access::with_component_idx(Some(
-                AXES.find(&name).unwrap() as LangInt,
-            ))),
-            // Miscellaneous
-            "len" => Some(Box::new(vectors::GetLen::construct)),
-            _ => None,
-        },
-        Type::Pattern { .. } => match name {
-            "count" => todo!("count cells in pattern"),
-            "find" => todo!("find cell in pattern"),
-            "outer" => todo!("exclude center cell from pattern"),
-            "shape" => todo!("get pattern mask"),
-            "size" => todo!("get pattern size"),
-            "min" => todo!("get pattern lower corner"),
-            "max" => todo!("get pattern upper corner"),
-            _ => None,
-        },
-        Type::IntRange => match name {
-            "by" => Some(Box::new(ranges::StepBy::construct)),
-            "start" => Some(ranges::Access::with_prop(ranges::RangeProperty::Start)),
-            "end" => Some(ranges::Access::with_prop(ranges::RangeProperty::End)),
-            "step" => Some(ranges::Access::with_prop(ranges::RangeProperty::Step)),
-            _ => None,
-        },
-        Type::Rectangle(_) => match name {
-            "start" => Some(ranges::Access::with_prop(ranges::RangeProperty::Start)),
-            "end" => Some(ranges::Access::with_prop(ranges::RangeProperty::End)),
-            // Component access
-            "x" | "y" | "z" | "w" | "u" | "v" => Some(vectors::Access::with_component_idx(Some(
-                AXES.find(&name).unwrap() as LangInt,
-            ))),
-            // Miscellaneous
-            "ndim" => Some(Box::new(vectors::GetLen::construct)),
-            _ => None,
-        },
-        Type::CellStateFilter(_) => match name {
-            "any" => todo!("return true if any cell state matches"),
-            "count" => todo!("count cell states matching"),
-            "first" => todo!("first cell state matching"),
-            "last" => todo!("last cell state matching"),
-            _ => None,
-        },
-        Type::Stencil => None,
+
+    /// Executes an assignment to the expression.
+    ///
+    /// The default implementation unconditionally returns an expression stating
+    /// that the expression cannot be assigned to.
+    fn execute_assign<'a>(
+        &'a self,
+        runtime: &mut Runtime,
+        call: FuncCall,
+        _assign_rhs: Value,
+    ) -> RuntimeResult<AssignableRuntimeValue<'a>> {
+        Err(Error::cannot_assign_to(call.span).into())
+    }
+    /// Compiles code to assign to the expression.
+    ///
+    /// **Override this method for any expression that can be assigned to, even
+    /// if it cannot be compiled.** The default implementation unconditionally
+    /// returns an error stating that the expression cannot be assigned to.
+    fn compile_assign<'a>(
+        &'a self,
+        compiler: &mut Compiler,
+        call: FuncCall,
+        _assign_rhs: CompileValue,
+    ) -> CompileResult<AssignableCompileValue<'a>> {
+        Err(Error::cannot_assign_to(call.span))
     }
 }
 
-/// Returns a constructor for the function with the same name as the given type.
-pub fn lookup_type_function(ty: TypeToken) -> Option<FuncConstructor> {
-    match ty {
-        TypeToken::Vector(maybe_len) => Some(convert::ToVector::with_len(maybe_len)),
-        _ => None,
-    }
+/// Data associated with a function call.
+#[derive(Debug, Copy, Clone)]
+pub struct FuncCall<'a> {
+    /// Span of this expression in the original source code.
+    pub span: Span,
+    /// Arguments (other expressions) passed to the function.
+    pub args: &'a [ast::Expr<'a>],
 }
-
-/// Returns a constructor for the function that applies the given unary operator
-/// to the given type, or returns an appropriate error if the operator cannot be
-/// applied to the given type.
-pub fn lookup_unary_operator(op: OperatorToken) -> LangResult<FuncConstructor> {
-    use OperatorToken::*;
-    match op {
-        Plus => Ok(Box::new(math::UnaryPlus::construct)),
-        Minus => Ok(math::NegOrAbs::with_mode(math::NegOrAbsMode::Negate)),
-        Tilde => Ok(Box::new(math::BitwiseNot::construct)),
-        Tag => Ok(Box::new(convert::IntToCellState::construct)),
-        _ => internal_error!("Invalid unary operator {:?}", op.to_string()),
-    }
-}
-
-/// Returns a constructor for the function that applies the given binary
-/// operator to the given types, or returns an appropriate error if the operator
-/// cannot be applied to the given types.
-pub fn lookup_binary_operator(op: OperatorToken) -> LangResult<FuncConstructor> {
-    use OperatorToken::*;
-    match op {
-        Plus | Minus | Asterisk | Slash | Percent | DoubleAsterisk | DoubleLessThan
-        | DoubleGreaterThan | TripleGreaterThan | Ampersand | Pipe | Caret | Tilde => {
-            Ok(math::BinaryOp::with_op(op))
-        }
-        DotDot => Ok(Box::new(literals::Range::construct)),
-        _ => internal_error!("Invalid binary operator {:?}", op.to_string()),
+impl FuncCall<'_> {
+    pub fn eval_args(self, runtime: &mut Runtime) -> RuntimeResult<Vec<Spanned<Value>>> {
+        self.args
+            .iter()
+            .map(|&arg_expr| runtime.eval_expr(arg_expr))
+            .collect()
     }
 }

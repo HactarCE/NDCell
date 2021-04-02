@@ -10,7 +10,7 @@ fn test_integer_plus() {
             .map(|(&a, &b)| {
                 let expected = match a.checked_add(b) {
                     Some(sum) => Ok(Integer(sum)),
-                    None => Err(("+", "Integer overflow")),
+                    None => Err(&[("+", "integer overflow")][..]),
                 };
 
                 (vec![Integer(a), Integer(b)], expected)

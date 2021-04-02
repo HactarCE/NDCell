@@ -1,6 +1,8 @@
 //! NDCA black-box test suite.
 
+use codemap::Spanned;
 use itertools::Itertools;
+use std::fmt;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
@@ -25,76 +27,107 @@ mod values;
 use crate::ast;
 use crate::data::{LangInt, Value};
 use crate::errors::Error;
+use crate::runtime::{Runtime, RuntimeError};
 use values::*;
 
 fn test_expr(
     source: &str,
-    inputs_and_expected_results: &[(Vec<Value>, Result<Value, (&str, &str)>)],
+    inputs_and_expected_results: &[(Vec<Value>, Result<Value, &[(&str, &str)]>)],
 ) {
     let mut ast = ast::Program::new();
     let file = ast.add_file("expression.test".to_owned(), source.to_owned());
     let expr_id = match crate::parser::parse_expression(&mut ast, &file) {
         Ok(id) => id,
-        Err(e) => panic!("NDCA syntax error:\n{}", format_actual_error(&ast, e)),
+        Err(e) => panic!("NDCA syntax error:\n{}", format_actual_errors(&ast, &[e])),
     };
     let expr = ast.get_node(expr_id);
 
-    let mut runtime = crate::runtime::Runtime::new();
+    let mut runtime = Runtime::new();
     for (inputs, expected_result) in inputs_and_expected_results {
+        let task_str = &format!("evaluating {:?} with inputs {:?}", source, inputs);
+        // Set input variables.
         for (i, value) in inputs.iter().enumerate() {
             let var_name = Arc::new(format!("x{}", i));
             runtime.vars.insert(var_name, value.clone());
         }
-        let actual_result = runtime.eval_expr(expr);
-
-        match (actual_result, expected_result) {
-            (Ok(actual_ok), Ok(expected_ok)) => {
-                if *expected_ok != actual_ok.node {
-                    panic!(
-                        "Expected {:?} but got {:?} when evaluating {:?} with inputs {:?}",
-                        expected_ok, actual_ok.node, source, inputs,
-                    );
+        // Evaluate expression.
+        let mut errors = vec![];
+        let actual_result = runtime
+            .eval_expr(expr)
+            .map(|v| v.node)
+            .map_err(|e| match e {
+                RuntimeError::CannotConstEval(_) => panic!("cannot const eval when {}", task_str),
+                RuntimeError::Other(e) => {
+                    errors.push(e);
+                    &errors[..]
                 }
-            }
+            });
+        // Verify result.
+        assert_results_eq(&ast, task_str, &actual_result, expected_result);
+    }
+}
 
-            (Ok(actual_ok), Err((expected_loc, expected_msg))) => {
+fn format_actual_errors(ast: &ast::Program, errors: &[Error]) -> String {
+    let mut v = vec![];
+    {
+        let mut emitter = codemap_diagnostic::Emitter::vec(&mut v, Some(ast.codemap()));
+        emitter.emit(&errors.iter().map(|e| e.0.clone()).collect_vec());
+    }
+    String::from_utf8(v)
+        .unwrap_or_else(|e| format!("diagnostic message contains invalid UTF-8: {}", e))
+}
+
+fn assert_results_eq<T: fmt::Debug + PartialEq>(
+    ast: &ast::Program,
+    task_str: &str,
+    actual_result: &Result<T, &[Error]>,
+    expected_result: &Result<T, &[(&str, &str)]>,
+) {
+    match (actual_result, expected_result) {
+        (_, Err([])) => panic!("empty expected error list is invalid"),
+
+        (Ok(actual_ok), Ok(expected_ok)) => {
+            if *expected_ok != *actual_ok {
                 panic!(
-                    "Expected error at {:?} with message {:?} but got {:?} when evaluating {:?} with inputs {:?}",
-                    expected_loc, expected_msg, actual_ok.node, source, inputs,
+                    "Expected {:?} but got {:?} when {}",
+                    expected_ok, actual_ok, task_str,
                 );
             }
+        }
 
-            (Err(actual_err), Ok(expected_ok)) => {
-                let formatted_actual_err = format_actual_error(&ast, actual_err);
-                panic!(
-                    "Expected {:?} but got error when evaluating {:?} with inputs {:?}:\n{}",
-                    expected_ok, source, inputs, formatted_actual_err,
-                );
-            }
+        (Ok(actual_ok), Err([(expected_loc, expected_msg), ..])) => {
+            panic!(
+                "Expected error at {:?} with message {:?} but got {:?} when {}",
+                expected_loc, expected_msg, actual_ok, task_str,
+            );
+        }
 
-            (Err(actual_err), Err((expected_loc, expected_msg))) => {
-                if *expected_loc != file.source_slice(actual_err.0.spans[0].span)
-                    || *expected_msg != actual_err.0.message
+        (Err(actual_errors), Ok(expected_ok)) => {
+            let formatted_actual_err = format_actual_errors(&ast, actual_errors);
+            panic!(
+                "Expected {:?} but got error when {}:\n{}",
+                expected_ok, task_str, formatted_actual_err,
+            );
+        }
+
+        (Err(actual_errors), Err(expected_errors)) => {
+            for (actual_error, (expected_loc, expected_msg)) in
+                actual_errors.iter().zip(expected_errors.iter())
+            {
+                let span = actual_errors[0].0.spans[0].span;
+                let file = ast.codemap().look_up_span(span).file;
+                if *expected_loc != file.source_slice(span)
+                    || *expected_msg != actual_errors[0].0.message
                 {
-                    let formatted_actual_err = format_actual_error(&ast, actual_err);
+                    let formatted_actual_err = format_actual_errors(&ast, actual_errors);
                     panic!(
-                        "Expected error at {:?} with message {:?} but got a different error when evaluating {:?} with inputs {:?}:\n{}",
-                        expected_loc, expected_msg, source, inputs, formatted_actual_err,
+                        "Expected error at {:?} with message {:?} but got a different error when {}:\n{}",
+                        expected_loc, expected_msg, task_str, formatted_actual_err,
                     );
                 }
             }
         }
     }
-}
-
-fn format_actual_error(ast: &ast::Program, error: Error) -> String {
-    let mut v = vec![];
-    {
-        let mut emitter = codemap_diagnostic::Emitter::vec(&mut v, Some(ast.codemap()));
-        emitter.emit(&[error.0]);
-    }
-    String::from_utf8(v)
-        .unwrap_or_else(|e| format!("diagnostic message contains invalid UTF-8: {}", e))
 }
 
 // /// Asserts that the given source code produces the given error when attempting

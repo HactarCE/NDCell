@@ -122,6 +122,29 @@ impl TryFrom<Token> for BinaryOp {
         }
     }
 }
+impl BinaryOp {
+    pub fn function_name(self) -> &'static str {
+        match self {
+            BinaryOp::Add => "'+'",
+            BinaryOp::Sub => "'-'",
+            BinaryOp::Mul => "'*'",
+            BinaryOp::Div => "'/'",
+            BinaryOp::Mod => "'%'",
+            BinaryOp::Pow => "'**'",
+            BinaryOp::Shl => "'<<'",
+            BinaryOp::ShrSigned => "'>>'",
+            BinaryOp::ShrUnsigned => "'>>>'",
+            BinaryOp::BitwiseAnd => "'&'",
+            BinaryOp::BitwiseOr => "'|'",
+            BinaryOp::BitwiseXor => "'^'",
+            BinaryOp::LogicalAnd => "'and'",
+            BinaryOp::LogicalOr => "'or'",
+            BinaryOp::LogicalXor => "'xor'",
+            BinaryOp::Range => "'..'",
+            BinaryOp::Is => "'is'",
+        }
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PrefixOp {

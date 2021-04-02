@@ -1,3 +1,52 @@
+use inkwell::basic_block::BasicBlock;
+
+use crate::ast;
+use crate::data::Value;
+use crate::errors::Error;
+use crate::runtime::Runtime;
+
+pub struct Compiler {
+    /// Runtime used for compile-time evaluation.
+    pub runtime: Runtime,
+    // /// LLVM module.
+    // module: Module<'static>,
+    // /// LLVM JIT execution engine.
+    // execution_engine: ExecutionEngine<'static>,
+    // /// Function currently being built.
+    // function: Option<FunctionInProgress>,
+    // /// Compiler configuration.
+    // config: CompilerConfig,
+
+    // /// Stack of jump targets for 'continue' statements.
+    // loop_entry_points: Vec<BasicBlock<'static>>,
+    // /// Stack of jump targets for 'break' statements.
+    // loop_exit_points: Vec<BasicBlock<'static>>,
+    /// Stack of loops we are currently inside.
+    loop_stack: Vec<Loop>,
+}
+impl Compiler {
+    /// Report a compile error.
+    pub fn error(&mut self, e: Error) -> ast::AlreadyReported {
+        self.runtime.error(e)
+    }
+}
+
+struct Loop {
+    /// Jump target for a 'continue' statement.
+    continue_bb: BasicBlock<'static>,
+    /// Jump target for a 'break' statement.
+    break_bb: BasicBlock<'static>,
+}
+
+pub enum CompileValue {
+    Integer(/* LLVM IntValue */),
+    Cell(/* LLVM IntValue */),
+    Vector(/* LLVM VectorValue */),
+    Const(Value),
+}
+
+/*
+
 //! JIT compiler for the language.
 //!
 //! Most of the logic of compiling individual statements and functions is
@@ -1631,3 +1680,5 @@ impl<'a> PhiMergeable for BasicValueEnum<'a> {
         phi.as_basic_value()
     }
 }
+
+*/

@@ -11,7 +11,6 @@ mod ops;
 
 use crate::data::Type;
 use crate::errors::Error;
-use crate::parser;
 pub use cellstate::CellState;
 pub use nodes::*;
 pub use ops::*;
@@ -23,9 +22,6 @@ pub struct Program {
 
     nodes: Vec<AnyNode>,
     directives: Vec<DirectiveId>,
-
-    compile_errors: Vec<Error>,
-    runtime_errors: Vec<Error>,
 }
 impl Program {
     pub fn new() -> Self {
@@ -52,10 +48,6 @@ impl Program {
         let id = self.nodes.len();
         self.nodes.push(Node { id, span, data }.into_any_node());
         NodeId(id, PhantomData)
-    }
-    pub fn compile_error(&mut self, error: Error) -> AlreadyReported {
-        self.compile_errors.push(error);
-        AlreadyReported
     }
 
     pub fn get_node<'ast, N: NodeTrait>(&'ast self, id: NodeId<N>) -> AstNode<'ast, N> {

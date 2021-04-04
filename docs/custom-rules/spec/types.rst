@@ -67,7 +67,7 @@ __ https://en.wikipedia.org/wiki/Dependent_type
 Variability
 -----------
 
-In compiled code, such as the transition function, only :data:`Integer`, :data:`Cell`, :data:`Vector`, :data:`Array`, and :data:`CellSet` values may vary. All other values must be constant once the rule has been loaded.
+In compiled code, such as the transition function, only :data:`Integer`, :data:`Cell`, :data:`Tag`, :data:`Vector`, :data:`Array`, and :data:`CellSet` values may vary. All other values must be constant in compiled code.
 
 The length of a :data:`Vector` value must be constant in compiled code. The size and shape of an :data:`Array` value also must be constant in compiled code.
 

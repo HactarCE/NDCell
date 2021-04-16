@@ -1246,6 +1246,7 @@ dependencies = [
  "itertools 0.10.0",
  "lazy_static 1.4.0",
  "ndcell_core",
+ "parking_lot 0.11.1",
  "parse_int",
  "paste",
  "proptest",

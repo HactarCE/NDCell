@@ -1,12 +1,13 @@
 use codemap::Spanned;
+use std::sync::Arc;
 
 use super::{
     Epsilon, Identifier, IntegerLiteral, List, Parser, StringLiteral, Surround, SyntaxRule,
     TryFromToken, VectorLiteral,
 };
 use crate::ast;
-use crate::data::Value;
-use crate::errors::Result;
+use crate::data::RtVal;
+use crate::errors::{Error, Result};
 use crate::lexer::{Keyword, Token};
 
 /// Operator precedence table.
@@ -201,20 +202,6 @@ impl SyntaxRule for ExpressionWithPrecedence {
                     Keyword::Not => true,
 
                     Keyword::Is | Keyword::In => false,
-
-                    Keyword::TypeInteger
-                    | Keyword::TypeCell
-                    | Keyword::TypeTag
-                    | Keyword::TypeString
-                    | Keyword::TypeType
-                    | Keyword::TypeNull
-                    | Keyword::TypeVector
-                    | Keyword::TypeArray
-                    | Keyword::TypeIntegerSet
-                    | Keyword::TypeCellSet
-                    | Keyword::TypeVectorSet
-                    | Keyword::TypePattern
-                    | Keyword::TypeRegex => true,
 
                     Keyword::Break
                     | Keyword::Continue
@@ -457,13 +444,21 @@ impl SyntaxRule for FuncCallSuffix {
         List::paren_comma_sep(Expression).might_match(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
-        let func = self.0;
+        let func_name_expr = ast.get_node(self.0);
+        let func_name_span = func_name_expr.span();
+        let func = match func_name_expr.data() {
+            ast::ExprData::Identifier(func_name) => Spanned {
+                node: Arc::clone(func_name),
+                span: func_name_span,
+            },
+            _ => return Err(Error::cannot_call_arbitrary_expression(func_name_span)),
+        };
+
         let args_list = p.parse(ast, List::paren_comma_sep(Expression))?;
         let args = args_list.node;
         let expr_data = ast::ExprData::FuncCall { func, args };
 
-        let func_expr_span = ast.get_node(func).span();
-        let total_span = func_expr_span.merge(args_list.span);
+        let total_span = func_name_span.merge(args_list.span);
         Ok(ast.add_node(total_span, expr_data))
     }
 }
@@ -519,7 +514,7 @@ impl SyntaxRule for StringLiteralExpression {
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
-            Ok(ast::ExprData::Constant(Value::String(
+            Ok(ast::ExprData::Constant(RtVal::String(
                 p.parse(ast, StringLiteral)?.node,
             )))
         })
@@ -538,7 +533,7 @@ impl SyntaxRule for IntegerLiteralExpression {
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
-            Ok(ast::ExprData::Constant(Value::Integer(
+            Ok(ast::ExprData::Constant(RtVal::Integer(
                 p.parse(ast, IntegerLiteral)?,
             )))
         })

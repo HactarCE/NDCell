@@ -334,21 +334,6 @@ pub enum Keyword {
     Is,
     In,
 
-    // Type names
-    TypeInteger,
-    TypeCell,
-    TypeTag,
-    TypeString,
-    TypeType,
-    TypeNull,
-    TypeVector,
-    TypeArray,
-    TypeIntegerSet,
-    TypeCellSet,
-    TypeVectorSet,
-    TypePattern,
-    TypeRegex,
-
     // Loops
     Break,
     Continue,
@@ -379,20 +364,6 @@ impl fmt::Display for Keyword {
             Self::Not => "not",
             Self::Is => "is",
             Self::In => "in",
-
-            Self::TypeInteger => "Integer",
-            Self::TypeCell => "Cell",
-            Self::TypeTag => "Tag",
-            Self::TypeString => "String",
-            Self::TypeType => "Type",
-            Self::TypeNull => "Null",
-            Self::TypeVector => "Vector",
-            Self::TypeArray => "Array",
-            Self::TypeIntegerSet => "IntegerSet",
-            Self::TypeCellSet => "CellSet",
-            Self::TypeVectorSet => "VectorSet",
-            Self::TypePattern => "Pattern",
-            Self::TypeRegex => "Regex",
 
             Self::Break => "break",
             Self::Continue => "continue",
@@ -425,20 +396,6 @@ impl FromStr for Keyword {
             "not" => Ok(Self::Not),
             "is" => Ok(Self::Is),
             "in" => Ok(Self::In),
-
-            "Integer" => Ok(Self::TypeInteger),
-            "Cell" => Ok(Self::TypeCell),
-            "Tag" => Ok(Self::TypeTag),
-            "String" => Ok(Self::TypeString),
-            "Type" => Ok(Self::TypeType),
-            "Null" => Ok(Self::TypeNull),
-            "Vector" => Ok(Self::TypeVector),
-            "Array" => Ok(Self::TypeArray),
-            "IntegerSet" => Ok(Self::TypeIntegerSet),
-            "CellSet" => Ok(Self::TypeCellSet),
-            "VectorSet" => Ok(Self::TypeVectorSet),
-            "Pattern" => Ok(Self::TypePattern),
-            "Regex" => Ok(Self::TypeRegex),
 
             "break" => Ok(Self::Break),
             "continue" => Ok(Self::Continue),
@@ -483,20 +440,6 @@ impl Keyword {
     pub fn starts_statement(self) -> bool {
         match self {
             Self::Or | Self::Xor | Self::And | Self::Not | Self::Is | Self::In => false,
-
-            Self::TypeInteger
-            | Self::TypeCell
-            | Self::TypeTag
-            | Self::TypeString
-            | Self::TypeType
-            | Self::TypeNull
-            | Self::TypeVector
-            | Self::TypeArray
-            | Self::TypeIntegerSet
-            | Self::TypeCellSet
-            | Self::TypeVectorSet
-            | Self::TypePattern
-            | Self::TypeRegex => false,
 
             Self::Break
             | Self::Continue

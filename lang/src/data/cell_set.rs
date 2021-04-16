@@ -1,7 +1,7 @@
 use super::LangCell;
 
 /// 256-bit array, where each bit corresponds to a cell state.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct CellSet([u64; 4]);
 
 impl CellSet {

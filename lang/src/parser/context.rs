@@ -37,12 +37,12 @@
 //         &'b mut self,
 //         file: &'b File,
 //         tokens: &'b [Spanned<Token>],
-//     ) -> ast::Fallible<Parser> {
+//     ) -> Fallible<Parser> {
 //         match Parser::new(file, tokens) {
 //             Ok(ok) => Ok(ok),
 //             Err(e) => {
 //                 self.program.compile_error(e);
-//                 Err(ast::AlreadyReported)
+//                 Err(AlreadyReported)
 //             }
 //         }
 //     }
@@ -117,12 +117,12 @@
 //         var_id
 //     }
 
-//     pub fn err<T>(&mut self, error: Error) -> ast::Fallible<T> {
+//     pub fn err<T>(&mut self, error: Error) -> Fallible<T> {
 //         // TODO: when #[feature(never_type)] stabalizes, use that here and
-//         // return `ast::Fallible<!>`.
+//         // return `Fallible<!>`.
 //         Err(self.error(error))
 //     }
-//     pub fn error(&mut self, error: Error) -> ast::AlreadyReported {
+//     pub fn error(&mut self, error: Error) -> AlreadyReported {
 //         self.program.compile_error(error)
 //     }
 

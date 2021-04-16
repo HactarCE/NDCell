@@ -112,38 +112,7 @@ impl fmt::Display for Type {
         }
     }
 }
-impl TryFrom<Keyword> for Type {
-    type Error = ();
-
-    fn try_from(token: Keyword) -> Result<Self, Self::Error> {
-        match token {
-            Keyword::TypeInteger => Ok(Self::Integer),
-            Keyword::TypeCell => Ok(Self::Cell),
-            Keyword::TypeTag => Ok(Self::Tag),
-            Keyword::TypeString => Ok(Self::String),
-            Keyword::TypeType => Ok(Self::Type),
-            Keyword::TypeNull => Ok(Self::Null),
-            Keyword::TypeVector => Ok(Self::Vector(None)),
-            Keyword::TypeArray => Ok(Self::Array(None)),
-            Keyword::TypeIntegerSet => Ok(Self::IntegerSet),
-            Keyword::TypeCellSet => Ok(Self::CellSet),
-            Keyword::TypeVectorSet => Ok(Self::VectorSet(None)),
-            Keyword::TypePattern => Ok(Self::Pattern(None)),
-            Keyword::TypeRegex => Ok(Self::Regex),
-            _ => Err(()),
-        }
-    }
-}
 impl Type {
-    /// Returns whether a variable of this type can be assigned a new value
-    /// after its declaration.
-    pub fn is_variable_when_compiled(&self) -> bool {
-        matches!(
-            self,
-            Type::Integer | Type::Cell | Type::Vector(_) | Type::Array(_) | Type::CellSet,
-        )
-    }
-
     /// Returns true if this type can be converted to a boolean, or false
     /// otherwise.
     ///

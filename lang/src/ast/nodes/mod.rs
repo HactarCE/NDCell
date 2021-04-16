@@ -1,5 +1,4 @@
 use codemap::Spanned;
-use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -10,8 +9,7 @@ mod statement;
 mod string;
 
 use super::*;
-use crate::data::Value;
-use crate::lexer::Token;
+use crate::data::RtVal;
 pub use directive::*;
 pub use expression::*;
 pub use function::*;

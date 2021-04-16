@@ -1,10 +1,8 @@
 //! NDCA black-box test suite.
 
-use codemap::Spanned;
 use itertools::Itertools;
 use std::fmt;
 use std::sync::Arc;
-use std::thread::LocalKey;
 
 // mod bools;
 // mod branch;
@@ -25,14 +23,82 @@ mod values;
 // mod vecs;
 
 use crate::ast;
-use crate::data::{LangInt, Value};
+use crate::compiler::{Compiler, CompilerConfig};
+use crate::data::{LangInt, RtVal, Type, Val};
 use crate::errors::Error;
-use crate::runtime::{Runtime, RuntimeError};
+use crate::runtime::Runtime;
+use crate::utils;
 use values::*;
 
 fn test_expr(
+    expr_source: &str,
+    param_types: &[Type],
+    inputs_and_expected_results: &[(Vec<RtVal>, Result<RtVal, &[(&str, &str)]>)],
+) {
+    test_expr_interpreted(expr_source, inputs_and_expected_results);
+    test_expr_compiled(expr_source, param_types, inputs_and_expected_results);
+}
+
+fn test_expr_compiled(
+    expr_source: &str,
+    param_types: &[Type],
+    inputs_and_expected_results: &[(Vec<RtVal>, Result<RtVal, &[(&str, &str)]>)],
+) {
+    let mut source = format!(
+        "@compile {} {{\n",
+        utils::display_bracketed_list(param_types),
+    );
+    let n = param_types.len();
+    for i in 0..(n - 1) {
+        source.push_str(&format!("x{} = __compiled_arg__({})\n", i, i));
+    }
+    source.push_str(&format!("__compiled_arg__({}) = {}\n", n, expr_source));
+    source.push_str("}");
+
+    let mut ast = ast::Program::new();
+    let file = ast.add_file("expression.test".to_owned(), source.clone());
+    match crate::parser::parse_file(&mut ast, &file) {
+        Ok(id) => id,
+        Err(e) => panic!("NDCA syntax error:\n{}", format_actual_errors(&ast, &[e])),
+    };
+    let ast = Arc::new(ast);
+    let mut runtime = Runtime::new();
+    runtime.run_init(&ast).unwrap();
+    let mut f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
+        Ok(ok) => ok,
+        Err(e) => panic!("\n{}", format_actual_errors(&ast, &e)),
+    };
+
+    for (inputs, expected_result) in inputs_and_expected_results {
+        let task_str = &format!("evaluating {:?} with inputs {:?}", source, inputs);
+        // Set input parameters.
+        let mut arg_values = inputs.to_vec();
+        arg_values.push(match param_types[n] {
+            Type::Integer => RtVal::Integer(0),
+            Type::Cell => RtVal::Cell(0),
+            Type::Tag => todo!("tag default value"),
+            Type::Vector(Some(len)) => RtVal::Vector(vec![0; len]),
+            Type::Array(_) => todo!("array default value"),
+            Type::CellSet => todo!("cell set default value"),
+            _ => panic!("no default for this type"),
+        });
+        // Call function.
+        let mut errors = vec![];
+        let actual_result = match f.call(&mut arg_values) {
+            Ok(()) => Ok(arg_values[n].clone()),
+            Err(e) => {
+                errors.push(e);
+                Err(&errors[..])
+            }
+        };
+        // Check result.
+        assert_results_eq(&ast, task_str, &actual_result, expected_result);
+    }
+}
+
+fn test_expr_interpreted(
     source: &str,
-    inputs_and_expected_results: &[(Vec<Value>, Result<Value, &[(&str, &str)]>)],
+    inputs_and_expected_results: &[(Vec<RtVal>, Result<RtVal, &[(&str, &str)]>)],
 ) {
     let mut ast = ast::Program::new();
     let file = ast.add_file("expression.test".to_owned(), source.to_owned());
@@ -48,21 +114,14 @@ fn test_expr(
         // Set input variables.
         for (i, value) in inputs.iter().enumerate() {
             let var_name = Arc::new(format!("x{}", i));
-            runtime.vars.insert(var_name, value.clone());
+            runtime.vars.insert(var_name, Val::Rt(value.clone()));
         }
         // Evaluate expression.
-        let mut errors = vec![];
         let actual_result = runtime
             .eval_expr(expr)
             .map(|v| v.node)
-            .map_err(|e| match e {
-                RuntimeError::CannotConstEval(_) => panic!("cannot const eval when {}", task_str),
-                RuntimeError::Other(e) => {
-                    errors.push(e);
-                    &errors[..]
-                }
-            });
-        // Verify result.
+            .map_err(|_| &runtime.errors[..]);
+        // Check result.
         assert_results_eq(&ast, task_str, &actual_result, expected_result);
     }
 }
@@ -103,10 +162,10 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
         }
 
         (Err(actual_errors), Ok(expected_ok)) => {
-            let formatted_actual_err = format_actual_errors(&ast, actual_errors);
+            let formatted_actual_errors = format_actual_errors(&ast, actual_errors);
             panic!(
                 "Expected {:?} but got error when {}:\n{}",
-                expected_ok, task_str, formatted_actual_err,
+                expected_ok, task_str, formatted_actual_errors,
             );
         }
 
@@ -114,15 +173,15 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
             for (actual_error, (expected_loc, expected_msg)) in
                 actual_errors.iter().zip(expected_errors.iter())
             {
-                let span = actual_errors[0].0.spans[0].span;
+                let span = actual_error.0.spans[0].span;
                 let file = ast.codemap().look_up_span(span).file;
                 if *expected_loc != file.source_slice(span)
-                    || *expected_msg != actual_errors[0].0.message
+                    || *expected_msg != actual_error.0.message
                 {
-                    let formatted_actual_err = format_actual_errors(&ast, actual_errors);
+                    let formatted_actual_errors = format_actual_errors(&ast, actual_errors);
                     panic!(
                         "Expected error at {:?} with message {:?} but got a different error when {}:\n{}",
-                        expected_loc, expected_msg, task_str, formatted_actual_err,
+                        expected_loc, expected_msg, task_str, formatted_actual_errors,
                     );
                 }
             }

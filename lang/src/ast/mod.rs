@@ -5,7 +5,6 @@ use std::ops::{Index, IndexMut};
 use std::sync::Arc;
 
 mod cellstate;
-mod globals;
 mod nodes;
 mod ops;
 
@@ -41,13 +40,17 @@ impl Program {
         &self.codemap
     }
 
-    pub fn add_node<D>(&mut self, span: Span, data: D) -> NodeId<Node<D>>
+    pub(crate) fn add_node<D>(&mut self, span: Span, data: D) -> NodeId<Node<D>>
     where
         Node<D>: NodeTrait,
     {
         let id = self.nodes.len();
         self.nodes.push(Node { id, span, data }.into_any_node());
         NodeId(id, PhantomData)
+    }
+
+    pub(crate) fn add_directive(&mut self, id: DirectiveId) {
+        self.directives.push(id);
     }
 
     pub fn get_node<'ast, N: NodeTrait>(&'ast self, id: NodeId<N>) -> AstNode<'ast, N> {
@@ -225,7 +228,3 @@ impl Program {
 //     /// already been reported.
 //     Parsed(Fallible<DirectiveContents>),
 // }
-
-pub type Fallible<T> = std::result::Result<T, AlreadyReported>;
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-pub struct AlreadyReported;

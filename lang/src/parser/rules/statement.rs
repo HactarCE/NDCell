@@ -10,8 +10,8 @@ impl_display!(for StatementBlock, "block of code surrounded by '{{' and '}}'");
 impl SyntaxRule for StatementBlock {
     type Output = ast::StmtId;
 
-    fn might_match(&self, p: Parser<'_>) -> bool {
-        Statement.might_match(p)
+    fn might_match(&self, mut p: Parser<'_>) -> bool {
+        p.next() == Some(Token::LBrace)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
@@ -19,7 +19,7 @@ impl SyntaxRule for StatementBlock {
                 return p.expected(self);
             }
             let statements = std::iter::from_fn(|| {
-                parse_one_of!(p, ast, [Statement.map(Some), Token::RBracket.map(|_| None)])
+                parse_one_of!(p, ast, [Statement.map(Some), Token::RBrace.map(|_| None)])
                     .transpose() // Result<Option<T>> -> Option<Result<T>>
             })
             .collect::<Result<Vec<ast::StmtId>>>()?;

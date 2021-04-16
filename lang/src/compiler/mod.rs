@@ -1,48 +1,701 @@
-use inkwell::basic_block::BasicBlock;
+//! JIT compiler for the language.
+//!
+//! Most of the logic of compiling individual statements and expressions is
+//! present in implementations of [`Statement`] and [`Expression`], but this
+//! module manages all the setup and teardown required and provides low-level
+//! utilities.
+//!
+//! # Passing arguments
+//!
+//! When we compile a function, we don't statically know how many arguments it
+//! takes or what its return type is, so we can't encode this in Rust's type
+//! system. Instead we create an array containing pointers to all of the inputs
+//! and outputs of the function and pass a pointer to that array as the
+//! argument. The actual return value of the function is just an integer to
+//! indicate any error.
+//!
+//! # Thread safety
+//!
+//! We would like to share the same JIT-compiled function across multiple
+//! threads but the [`llvm::JitFunction`] must be dropped from the same thread
+//! that originally compiled it. So we spawn a new thread to the compile the
+//! function and then wake that thread when the last [`CompiledFunction`] is
+//! dropped so that it can then drop the underlying [`llvm::JitFunction`]. This
+//! guarantees that the [`llvm::JitFunction`] (and therefore the
+//! [`llvm::ExecutionEngine`]) will last as long as the [`CompiledFunction`].
+
+use codemap::{Span, Spanned};
+use itertools::Itertools;
+use parking_lot::{Condvar, Mutex};
+use std::collections::HashMap;
+use std::sync::{mpsc, Arc};
+
+mod config;
+mod function;
+mod loops;
+mod param;
 
 use crate::ast;
-use crate::data::Value;
-use crate::errors::Error;
-use crate::runtime::Runtime;
+use crate::builtins::{self, FuncCall, Function};
+use crate::data::{
+    Array, CellSet, CpVal, LangCell, LangInt, RtVal, SpannedRuntimeValueExt, Type, Val, VectorSet,
+};
+use crate::errors::{AlreadyReported, Error, Fallible, Result};
+use crate::llvm::{self, traits::*};
+use crate::runtime::{self, Runtime};
+pub use config::CompilerConfig;
+pub use function::CompiledFunction;
+use loops::Loop;
+use param::{Param, ParamType};
 
+#[derive(Debug)]
 pub struct Compiler {
     /// Runtime used for compile-time evaluation.
     pub runtime: Runtime,
-    // /// LLVM module.
-    // module: Module<'static>,
-    // /// LLVM JIT execution engine.
-    // execution_engine: ExecutionEngine<'static>,
-    // /// Function currently being built.
-    // function: Option<FunctionInProgress>,
-    // /// Compiler configuration.
-    // config: CompilerConfig,
-
-    // /// Stack of jump targets for 'continue' statements.
-    // loop_entry_points: Vec<BasicBlock<'static>>,
-    // /// Stack of jump targets for 'break' statements.
-    // loop_exit_points: Vec<BasicBlock<'static>>,
     /// Stack of loops we are currently inside.
     loop_stack: Vec<Loop>,
+
+    /// LLVM module.
+    module: llvm::Module,
+    /// LLVM JIT execution engine.
+    execution_engine: llvm::ExecutionEngine,
+    /// Compiler configuration.
+    config: CompilerConfig,
+
+    /// Function being built.
+    llvm_fn: llvm::FunctionValue,
+    /// Parameters of the function being built.
+    param_types: Vec<Spanned<ParamType>>,
+    /// List of possible runtime errors.
+    error_points: Vec<Error>,
+
+    /// LLVM instruction builder.
+    builder: llvm::Builder,
 }
+
 impl Compiler {
-    /// Report a compile error.
-    pub fn error(&mut self, e: Error) -> ast::AlreadyReported {
+    /// Name of the LLVM module.
+    const MODULE_NAME: &'static str = "ndca";
+    /// Name of the LLVM main function.
+    const MAIN_FUNCTION_NAME: &'static str = "main";
+
+    /// Compiles a program, including executing initialization sections.
+    pub fn compile(
+        ast: Arc<ast::Program>,
+        mut runtime: Runtime,
+        config: CompilerConfig,
+    ) -> std::result::Result<CompiledFunction, Vec<Error>> {
+        // See module documentation for justification of this thread spawning
+        // and channel nonsense.
+        let (tx, rx) = mpsc::channel::<std::result::Result<CompiledFunction, Vec<Error>>>();
+
+        std::thread::spawn(move || {
+            let mut runtime = Runtime::new();
+            runtime.run_init(&ast);
+
+            // SAFETY: We take responsibility here for dropping the JIT function
+            // on the same thread that created it after all references to the
+            // `CompiledFunction` have been dropped.
+            let result = runtime
+                .compile_directive
+                .ok_or_else(|| vec![Error::missing_directive(None, "@compile")])
+                .and_then(|directive_id| {
+                    let compile_directive = ast.get_node(directive_id);
+                    unsafe { Self::compile_on_same_thread(compile_directive, runtime, config) }
+                });
+
+            match result {
+                Err(e) => {
+                    // If the receiver is dropped, we don't care.
+                    let _ = tx.send(Err(e));
+                }
+
+                Ok((jit_fn, wrapper)) => {
+                    // Get another reference to the counter and condvar.
+                    let counter = Arc::clone(&wrapper.counter);
+                    let condvar = Arc::clone(&wrapper.condvar);
+
+                    // If the receiver is dropped, we don't care.
+                    let _ = tx.send(Ok(wrapper));
+
+                    // Wait until there are no other references to the JIT
+                    // function.
+                    let mut counter = counter.lock();
+                    while *counter != 0 {
+                        condvar.wait(&mut counter);
+                    }
+
+                    // Now drop the JIT function.
+                    drop(jit_fn);
+                }
+            }
+        });
+
+        rx.recv()
+            .unwrap_or_else(|e| Err(vec![internal_error_value!("compiler thread exited: {}", e)]))
+    }
+
+    /// Compiles a program, assuming initialization sections have already been
+    /// executed using the interpreter.
+    ///
+    /// # Safety
+    ///
+    /// The [`llvm::JitFunction`] returned by this function must be dropped on
+    /// the same thread it was created (i.e. the one that called this function)
+    /// _after_ the last reference to the [`CompiledFunction`] returned by this
+    /// function is dropped. Prefer [`Compiler::compile()`] instead.
+    unsafe fn compile_on_same_thread(
+        compile_directive: ast::Directive<'_>,
+        mut runtime: Runtime,
+        config: CompilerConfig,
+    ) -> std::result::Result<(llvm::JitFunction, CompiledFunction), Vec<Error>> {
+        let module = llvm::ctx().create_module(Self::MODULE_NAME);
+        let execution_engine = module
+            .create_jit_execution_engine(config.optimization_level)
+            .map_err(|e| {
+                vec![internal_error_value!(
+                    "Error creating JIT execution engine: {:?}",
+                    e
+                )]
+            })?;
+
+        let llvm_fn =
+            module.add_function(Self::MAIN_FUNCTION_NAME, llvm::main_function_type(), None);
+        let builder = llvm::ctx().create_builder();
+
+        // Make sure we have a `@compile` directive.
+        let ast = compile_directive.ast;
+        let (param_type_exprs, function_body) = match compile_directive.data() {
+            ast::DirectiveData::Compile { param_types, body } => (param_types, body),
+            _ => {
+                runtime.error(internal_error_value!(
+                    "cannot compile non-@compile directive"
+                ));
+                return Err(runtime.errors);
+            }
+        };
+
+        // Determine argument types.
+        let param_types = param_type_exprs
+            .node
+            .iter()
+            .map(|&expr_id| match runtime.eval_expr(ast.get_node(expr_id)) {
+                Ok(Spanned {
+                    node: RtVal::Type(ty),
+                    span,
+                }) => match ty {
+                    Type::Integer => Ok(ParamType::Integer),
+                    Type::Cell => Ok(ParamType::Cell),
+                    Type::Tag => todo!("tag param"),
+                    Type::Vector(_) => todo!("vector param"),
+                    Type::Array(_) => todo!("array param"),
+                    Type::CellSet => todo!("cell set param"),
+                    _ => Err(runtime.error(Error::cannot_compile(span))),
+                }
+                .map(|ok| Spanned { node: ok, span }),
+
+                Ok(other) => Err(runtime.error(Error::expected(other.span, Type::Type))),
+
+                Err(e) => Err(e),
+            })
+            .collect::<Fallible<Vec<Spanned<ParamType>>>>();
+
+        let param_types = match param_types {
+            Ok(x) => x,
+            Err(_) => return Err(runtime.errors),
+        };
+
+        let mut this = Self {
+            runtime,
+            loop_stack: vec![],
+
+            module,
+            execution_engine,
+            config,
+
+            llvm_fn,
+            param_types,
+            error_points: vec![],
+
+            builder,
+        };
+
+        match this.build_jit_function(ast.get_node(*function_body)) {
+            Ok(ret) => Ok(ret),
+            Err(AlreadyReported) => Err(this.runtime.errors),
+        }
+    }
+    fn build_jit_function(
+        &mut self,
+        function_body: ast::Stmt<'_>,
+    ) -> Fallible<(llvm::JitFunction, CompiledFunction)> {
+        // Build the LLVM IR for the function.
+        let params = self.begin_jit_function();
+        self.build_stmt(function_body);
+
+        // Don't compile the JIT function if there are any errors.
+        if !self.runtime.errors.is_empty() {
+            return Err(AlreadyReported);
+        }
+
+        // Here we take responsibility for the inherent unsafety of compiling
+        // JITted code and turning it into a raw function pointer.
+        let jit_fn = unsafe { self.finish_jit_function() }?;
+        let jit_fn_ptr = unsafe { jit_fn.raw_fn_ptr() };
+
+        // Construct the `CompiledFunction`.
+        Ok((
+            jit_fn,
+            CompiledFunction::new(jit_fn_ptr, params, self.error_points.clone()),
+        ))
+    }
+
+    /// JIT-compiles a new function that can be called from Rust code.
+    ///
+    /// All parameters to the function are "in/out" parameters, so any return
+    /// values must be included as parameters.
+    ///
+    /// Returns the [`Param`]s for the function.
+    fn begin_jit_function(&mut self) -> Vec<Param> {
+        // The LLVM function will take a single argument, a pointer to a struct
+        // containing the real arguments and return values, if any.
+        let llvm_param_types = self
+            .param_types
+            .iter()
+            .map(|param_type| {
+                self.llvm_type(&param_type.node.clone().into())
+                    .expect("param type has no LLVM representation")
+            })
+            .collect_vec();
+        let params_struct_type = llvm::ctx().struct_type(&llvm_param_types, false);
+        let params_struct_ptr_type = params_struct_type
+            .ptr_type(llvm::AddressSpace::Generic)
+            .as_basic_type_enum();
+
+        // The actual return value just signals whether there was an error.
+        let fn_type = llvm::error_index_type().fn_type(&[params_struct_ptr_type], false);
+
+        let entry_bb = self.append_basic_block("entry");
+        self.builder().position_at_end(entry_bb);
+
+        llvm::struct_offsets(&params_struct_type, self.target_data())
+            .zip(&params_struct_type.get_field_types())
+            .zip(&self.param_types)
+            .map(|((offset, llvm_type), param_type)| Param {
+                offset,
+                size: self.target_data().get_store_size(llvm_type) as usize,
+
+                ty: param_type.node.clone(),
+            })
+            .collect()
+    }
+    /// Finishes JIT compiling a function and returns a function pointer to
+    /// executable assembly.
+    unsafe fn finish_jit_function(&mut self) -> Fallible<llvm::JitFunction> {
+        // Check that there are no errors in the LLVM code.
+        if !self.llvm_fn.verify(true) {
+            eprint!(
+                "Error encountered during function compilation; dumping LLVM function to stderr"
+            );
+            self.llvm_fn.print_to_stderr();
+            return Err(self.error(internal_error_value!("LLVM function is invalid")));
+        }
+
+        match self.llvm_fn.get_name().to_str() {
+            Ok(fn_name) => self.execution_engine.get_function(fn_name).map_err(|e| {
+                internal_error_value!("Failed to find JIT-compiled function {:?}: {}", fn_name, e)
+            }),
+            Err(e) => Err(internal_error_value!(
+                "Invalid UTF-8 in LLVM function name (seriously, wtf?): {}",
+                e,
+            )),
+        }
+        .map_err(|e| self.error(e))
+    }
+
+    /// Returns the LLVM TargetData that this compiler uses when JIT compiling
+    /// code.
+    pub fn target_data(&self) -> &llvm::TargetData {
+        self.execution_engine.get_target_data()
+    }
+
+    /// Reports a compile error.
+    pub fn error(&mut self, e: Error) -> AlreadyReported {
         self.runtime.error(e)
+    }
+
+    pub fn builder(&mut self) -> &mut llvm::Builder {
+        &mut self.builder
     }
 }
 
-struct Loop {
-    /// Jump target for a 'continue' statement.
-    continue_bb: BasicBlock<'static>,
-    /// Jump target for a 'break' statement.
-    break_bb: BasicBlock<'static>,
+/*
+ * TYPES AND VALUES
+ */
+impl Compiler {
+    pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<Type>> {
+        self.runtime.get_val_type(v)
+    }
+    pub(crate) fn get_rt_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<RtVal>> {
+        self.runtime.get_rt_val(v)
+    }
+    // TODO: probably remove this
+    pub(crate) fn get_cp_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<CpVal>> {
+        let span = v.span;
+        match v.node {
+            Val::Rt(v) => todo!("compile-time constant"),
+            Val::Cp(v) => Ok(v),
+            Val::Unknown(ty) => Err(self.error(Error::ambiguous_variable_type(span))),
+            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
+            Val::Err(e) => Err(e),
+        }
+        .map(|node| Spanned { node, span })
+    }
+
+    /// Returs the LLVM type used for an NDCA type.
+    pub fn llvm_type(&self, ty: &Type) -> Option<llvm::BasicTypeEnum> {
+        match ty {
+            Type::Integer => Some(llvm::int_type().into()),
+            Type::Cell => Some(llvm::cell_type().into()),
+            Type::Tag => Some(llvm::tag_type().into()),
+            Type::Vector(len) => Some(llvm::vector_type((*len)?).into()),
+            Type::Array(shape) => Some(self.array_type(shape.as_ref()?).into()),
+            Type::CellSet => Some(self.cell_set_type().into()),
+            _ => None,
+        }
+    }
+
+    /// Returns the LLVM type used for cell arrays.
+    pub fn array_type(&self, shape: &VectorSet) -> llvm::BasicTypeEnum {
+        todo!("array type")
+    }
+    /// Returns the LLVM type used for cell sets.
+    pub fn cell_set_type(&self) -> llvm::VectorType {
+        todo!("cell set type, depends on max cell state ID")
+    }
+
+    /// Builds instructions to construct a vector with a constant value.
+    pub fn build_const_tag(&mut self, t: &str) -> llvm::VectorValue {
+        let b = self.builder();
+        todo!("build const tag")
+    }
+    /// Builds instructions to construct a vector with a constant value.
+    pub fn build_const_vector(&mut self, v: &[LangInt]) -> llvm::VectorValue {
+        let b = self.builder();
+        todo!("build const vector")
+    }
+    /// Builds instructions to construct a cell array with a constant value.
+    pub fn build_const_array(&mut self, a: &Array) -> () {
+        let b = self.builder();
+        todo!("array type")
+    }
+    /// Builds instructions to construct a cell set with a constant value.
+    pub fn build_const_cell_set(&mut self, s: CellSet) -> llvm::VectorValue {
+        let b = self.builder();
+        todo!("cell set type")
+    }
+
+    /// Returns the value inside if given a `Constant` value; otherwise returns
+    /// an error stating the value must be a compile-time constant.
+    fn as_const(&self, v: Spanned<CpVal>) -> Result<RtVal> {
+        match v.node {
+            _ => Err(Error::cannot_compile(v.span)),
+        }
+    }
+
+    /// Returns the value inside if given an `Integer` value or subtype of one;
+    /// otherwise returns a type error.
+    fn as_integer(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
+        match &v.node {
+            CpVal::Integer(x) => Ok(*x),
+            _ => Err(Error::type_error(v.span, Type::Integer, &v.ty())),
+        }
+    }
+    /// Returns the value inside if given a `Cell` value or subtype of one;
+    /// otherwise returns a type error.
+    fn as_cell(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
+        match &v.node {
+            CpVal::Cell(x) => Ok(*x),
+            _ => Err(Error::type_error(v.span, Type::Cell, &v.ty())),
+        }
+    }
+    /// Returns the value inside if given a `Vector` value or subtype of one;
+    /// otherwise returns a type error.
+    fn as_vector(&mut self, v: &Spanned<CpVal>) -> Result<llvm::VectorValue> {
+        match &v.node {
+            CpVal::Vector(x) => Ok(*x),
+            _ => Err(Error::type_error(v.span, Type::Vector(None), &v.ty())),
+        }
+    }
+    /// Returns the value inside if given an `Array` value or subtype of one;
+    /// otherwise returns a type error.
+    fn as_array(&mut self, v: &Spanned<CpVal>) -> Result<()> {
+        match &v.node {
+            CpVal::Array() => Ok(()),
+            _ => Err(Error::type_error(v.span, Type::Array(None), &v.ty())),
+        }
+    }
+    /// Returns the value inside if given a `CellSet` value or subtype of one;
+    /// otherwise returns a type error.
+    fn as_cell_set(&mut self, v: &Spanned<CpVal>) -> Result<llvm::VectorValue> {
+        match &v.node {
+            CpVal::CellSet(x) => Ok(*x),
+            _ => Err(Error::type_error(v.span, Type::CellSet, &v.ty())),
+        }
+    }
+
+    /// Builds instructions to cast the value to a boolean, represented using
+    /// the LLVM equivalent of [`LangInt`]. Returns an error if the value cannot
+    /// be converted to a boolean.
+    fn build_convert_to_bool(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
+        let b = self.builder();
+        use llvm::IntPredicate::NE as NOT_EQUAL;
+
+        match &v.node {
+            _ => todo!("built convert to bool"),
+        }
+    }
 }
 
-pub enum CompileValue {
-    Integer(/* LLVM IntValue */),
-    Cell(/* LLVM IntValue */),
-    Vector(/* LLVM VectorValue */),
-    Const(Value),
+/*
+ * LOW-LEVEL CONTROL FLOW
+ */
+impl Compiler {
+    /// Returns the Inkwell basic block currently being appended to, panicking
+    /// if there is none.
+    pub fn current_block(&mut self) -> llvm::BasicBlock {
+        self.builder()
+            .get_insert_block()
+            .expect("Tried to access current insert block, but there is none")
+    }
+    /// Appends an LLVM BasicBlock to the end of the current LLVM function and
+    /// returns the new BasicBlock.
+    pub fn append_basic_block(&mut self, name: &str) -> llvm::BasicBlock {
+        llvm::ctx().append_basic_block(self.llvm_fn, name)
+    }
+    /// Appends an LLVM BasicBlock with a PHI node to the end of the current
+    /// LLVM function and returns the new BasicBlock and PhiValue.
+    ///
+    /// The instruction builder is placed at the end of the basic block it was
+    /// on before calling this function (so if it's already at the end of a
+    /// basic block, it will stay there).
+    pub fn append_basic_block_with_phi(
+        &mut self,
+        bb_name: &str,
+        ty: impl BasicType<'static>,
+        phi_name: &str,
+    ) -> (llvm::BasicBlock, llvm::PhiValue) {
+        let old_bb = self.current_block();
+        let new_bb = self.append_basic_block(bb_name);
+        self.builder().position_at_end(new_bb);
+        let phi = self.builder().build_phi(ty, phi_name);
+        self.builder().position_at_end(old_bb);
+        (new_bb, phi)
+    }
+    /// Returns whether the current LLVM BasicBlock still needs a terminator
+    /// instruction (i.e. whether it does NOT yet have one).
+    pub fn needs_terminator(&mut self) -> bool {
+        self.builder()
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+    }
+}
+
+/*
+ * HIGH-LEVEL CONSTRUCTS
+ */
+impl Compiler {
+    pub fn build_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<()> {
+        let ast = stmt.ast;
+        match stmt.data() {
+            ast::StmtData::Block(stmt_ids) => {
+                for &stmt_id in stmt_ids {
+                    // If there is an error while building a statement, keep
+                    // going to see if there are more errors to report.
+                    let _ = self.build_stmt(ast.get_node(stmt_id));
+                }
+            }
+
+            ast::StmtData::Assign { lhs, op, rhs } => {
+                let lhs = ast.get_node(*lhs);
+                let rhs = ast.get_node(*rhs);
+                let mut rhs_value = self.compile_expr(rhs)?;
+
+                let runtime::AssignableValue {
+                    assign_fn,
+                    lhs_value,
+                } = self.compile_expr_assignable(lhs)?;
+
+                if let Some(op_func) = Option::<builtins::math::BinaryOp>::from(op.node) {
+                    rhs_value = Spanned {
+                        node: op_func.compile_for_values(self, op.span, lhs_value?, rhs_value)?,
+                        span: lhs.span().merge(rhs.span()),
+                    };
+                }
+
+                assign_fn(self, rhs_value)?;
+            }
+
+            ast::StmtData::IfElse {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                todo!("compile if/else");
+                // let condition = ast.get_node(*condition);
+                // if self.eval_expr(condition)?.to_bool()? {
+                //     if_true.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
+                // } else {
+                //     if_false.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
+                // }
+            }
+
+            ast::StmtData::Assert { condition, msg } => {
+                todo!("compile assert");
+                // let condition = ast.get_node(*condition);
+                // if self.eval_expr(condition)?.to_bool()? {
+                //     Err(match msg {
+                //         Some(msg) => Error::assertion_failed_with_msg(stmt.span(), msg),
+                //         None => Error::assertion_failed(stmt.span()),
+                //     }
+                //     .into())
+                // } else {
+                //     Ok(Flow::Proceed)
+                // }
+            }
+            ast::StmtData::Error { msg } => {
+                todo!("compile user error");
+                // Err(match msg {
+                //     Some(msg) => Error::user_error_with_msg(stmt.span(), msg),
+                //     None => Error::user_error(stmt.span()),
+                // }
+                // .into())
+            }
+
+            ast::StmtData::Break => todo!("compile break"),
+            ast::StmtData::Continue => todo!("compile continue"),
+            ast::StmtData::ForLoop {
+                iter_var,
+                iter_expr: iter_expr_id,
+                block,
+            } => {
+                let iter_expr = ast.get_node(*iter_expr_id);
+                todo!("compile for loop");
+                // for it in self.eval_expr(iter_expr)?.iterate()? {
+                //     // TODO: when #[feature(hash_raw_entry)] stabalizes, use
+                //     // that here to avoid the extra `Arc::clone()` (and consider
+                //     // changing `vars` to a `HashMap<String, CpVal>`)
+                //     self.vars.insert(Arc::clone(&iter_var), it.node);
+                //     match self.exec_stmt(ast.get_node(*block))? {
+                //         Flow::Proceed | Flow::Continue(_) => (),
+                //         Flow::Break(_) => break,
+                //         flow => return Ok(flow),
+                //     }
+                // }
+                // Ok(Flow::Proceed)
+            }
+
+            ast::StmtData::Become(expr_id) => {
+                todo!("compile become");
+                // let expr = ast.get_node(*expr_id);
+                // Ok(Flow::Become(stmt.span(), self.eval_expr(expr)?))
+            }
+            ast::StmtData::Remain => todo!("compile remain"),
+            ast::StmtData::Return(None) => todo!("compile return"),
+            ast::StmtData::Return(Some(expr_id)) => {
+                let expr = ast.get_node(*expr_id);
+                todo!("compile return");
+                // Ok(Flow::Return(stmt.span(), Some(self.eval_expr(expr)?)))
+            }
+        }
+
+        Ok(())
+    }
+
+    fn compile_expr_assignable<'ast>(
+        &mut self,
+        expr: ast::Expr<'ast>,
+    ) -> Fallible<builtins::AssignableCompileValue<'ast>> {
+        let ast = expr.ast;
+        match expr.data() {
+            ast::ExprData::Identifier(var_name) => {
+                // TODO: when #[feature(hash_raw_entry)] stabalizes, use
+                // that here to avoid the extra `Arc::clone()` (and
+                // consider changing `vars` to a `HashMap<String,
+                // CpVal>`)
+                Ok(runtime::AssignableValue {
+                    assign_fn: Box::new(move |compiler, new_value| {
+                        compiler
+                            .runtime
+                            .vars
+                            .insert(Arc::clone(var_name), new_value.node);
+                        Ok(())
+                    }),
+                    lhs_value: self.compile_expr(expr),
+                })
+            }
+            ast::ExprData::MethodCall { obj, attr, args } => {
+                Err(self.error(Error::unimplemented(expr.span()).into()))
+            }
+            ast::ExprData::IndexOp { obj, args } => {
+                Err(self.error(Error::unimplemented(expr.span()).into()))
+            }
+
+            _ => Err(self.error(Error::cannot_assign_to(expr.span()).into())),
+        }
+    }
+
+    pub fn compile_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<Val>> {
+        let ast = expr.ast;
+        let value = match expr.data() {
+            ast::ExprData::Paren(expr_id) => self.compile_expr(ast.get_node(*expr_id))?.node,
+
+            ast::ExprData::Identifier(var_name) => self
+                .runtime
+                .vars
+                .get(var_name)
+                .cloned()
+                .or_else(|| builtins::resolve_constant(var_name))
+                .ok_or_else(|| self.error(Error::uninitialized_variable(expr.span())))?,
+
+            ast::ExprData::Constant(value) => Val::Rt(value.clone()),
+
+            ast::ExprData::BinaryOp(lhs, op, rhs) => Box::<dyn Function>::from(op.node).compile(
+                self,
+                FuncCall {
+                    span: op.span,
+                    args: &vec![ast.get_node(*lhs), ast.get_node(*rhs)],
+                },
+            )?,
+            ast::ExprData::PrefixOp(_, _) => todo!("compile PrefixOp"),
+            ast::ExprData::CmpChain(_, _) => todo!("compile CmpChain"),
+
+            ast::ExprData::MethodCall { obj, attr, args } => todo!("compile MethodCall"),
+            ast::ExprData::FuncCall { func, args } => {
+                let func = builtins::resolve_function(&func.node)
+                    .ok_or_else(|| self.error(Error::unimplemented(func.span)))?;
+                let args = args.iter().map(|&arg| ast.get_node(arg)).collect_vec();
+
+                func.compile(
+                    self,
+                    FuncCall {
+                        span: expr.span(),
+                        args: &args,
+                    },
+                )?
+            }
+            ast::ExprData::IndexOp { obj, args } => todo!("compile IndexOp"),
+
+            ast::ExprData::VectorConstruct(_) => todo!("compile VectorConstruct"),
+        };
+
+        Ok(Spanned {
+            node: value,
+            span: expr.span(),
+        })
+    }
 }
 
 /*

@@ -1,20 +1,46 @@
+//! Built-in values and functions; the "standard library" of NDCA.
+
 use codemap::{Span, Spanned};
 use std::fmt;
 
-use crate::ast;
-use crate::compiler::{CompileValue, Compiler};
-use crate::data::Value;
-use crate::errors::Error;
-use crate::runtime::{
-    AssignableRuntimeValue, AssignableValue, Runtime, RuntimeError, RuntimeResult,
-};
-
 pub mod math;
 
-pub type CompileResult<T> = Result<T, Error>; // TODO: redundant with crate::errors::Result
+use crate::ast;
+use crate::compiler::Compiler;
+use crate::data::{CpVal, RtVal, Type, Val};
+use crate::errors::{AlreadyReported, Error, Fallible};
+use crate::runtime::{AssignableRuntimeValue, AssignableValue, Runtime};
 
-pub type AssignableCompileValue<'f> =
-    AssignableValue<'f, Compiler, CompileValue, ast::AlreadyReported>;
+pub type AssignableCompileValue<'f> = AssignableValue<'f, Compiler>;
+
+/// Returns the built-in function with the given name.
+pub fn resolve_function(name: &str) -> Option<Box<dyn Function>> {
+    match name {
+        _ => None,
+    }
+}
+
+/// Returns the built-in constant with the given name.
+pub fn resolve_constant(name: &str) -> Option<Val> {
+    match name {
+        // Type keywords
+        "Integer" => Some(RtVal::Type(Type::Integer).into()),
+        "Cell" => Some(RtVal::Type(Type::Cell).into()),
+        "Tag" => Some(RtVal::Type(Type::Tag).into()),
+        "String" => Some(RtVal::Type(Type::String).into()),
+        "Type" => Some(RtVal::Type(Type::Type).into()),
+        "Null" => Some(RtVal::Type(Type::Null).into()),
+        "Vector" => Some(RtVal::Type(Type::Vector(None)).into()),
+        "Array" => Some(RtVal::Type(Type::Array(None)).into()),
+        "IntegerSet" => Some(RtVal::Type(Type::IntegerSet).into()),
+        "CellSet" => Some(RtVal::Type(Type::CellSet).into()),
+        "VectorSet" => Some(RtVal::Type(Type::VectorSet(None)).into()),
+        "Pattern" => Some(RtVal::Type(Type::Pattern(None)).into()),
+        "Regex" => Some(RtVal::Type(Type::Regex).into()),
+
+        _ => None,
+    }
+}
 
 impl From<ast::BinaryOp> for Box<dyn Function> {
     fn from(op: ast::BinaryOp) -> Self {
@@ -46,13 +72,13 @@ impl From<ast::BinaryOp> for Box<dyn Function> {
 /// trait and [`Function`].
 pub trait Statement: fmt::Debug {
     /// Executes the statement.
-    fn execute(&self, runtime: &mut Runtime, call: FuncCall<'_>) -> RuntimeResult<()>;
+    fn execute(&self, runtime: &mut Runtime, call: FuncCall<'_>) -> Fallible<()>;
     /// Compiles code to execute the statement.
     ///
     /// The default implementation unconditionally returns an error stating that
     /// this expression cannot be compiled.
-    fn compile(&self, compiler: &mut Compiler, call: FuncCall<'_>) -> CompileResult<()> {
-        Err(Error::cannot_compile(call.span))
+    fn compile(&self, compiler: &mut Compiler, call: FuncCall<'_>) -> Fallible<()> {
+        Err(compiler.error(Error::cannot_compile(call.span)))
     }
 }
 
@@ -63,18 +89,14 @@ pub trait Statement: fmt::Debug {
 /// trait and [`Statement`].
 pub trait Function: fmt::Debug + fmt::Display {
     /// Executes the expression and returns the resulting value.
-    fn eval(&self, runtime: &mut Runtime, call: FuncCall<'_>) -> RuntimeResult<Value>;
+    fn eval(&self, runtime: &mut Runtime, call: FuncCall<'_>) -> Fallible<RtVal>;
     /// Compiles code to evaluate the expression and returns the resulting
     /// value.
     ///
     /// The default implementation unconditionally returns an error stating that
     /// this expression cannot be compiled.
-    fn compile(
-        &self,
-        compiler: &mut Compiler,
-        call: FuncCall<'_>,
-    ) -> CompileResult<Spanned<CompileValue>> {
-        Err(Error::cannot_compile(call.span))
+    fn compile(&self, compiler: &mut Compiler, call: FuncCall<'_>) -> Fallible<Val> {
+        Err(compiler.error(Error::cannot_compile(call.span)))
     }
 
     /// Executes an assignment to the expression.
@@ -85,9 +107,9 @@ pub trait Function: fmt::Debug + fmt::Display {
         &'a self,
         runtime: &mut Runtime,
         call: FuncCall,
-        _assign_rhs: Value,
-    ) -> RuntimeResult<AssignableRuntimeValue<'a>> {
-        Err(Error::cannot_assign_to(call.span).into())
+        _assign_rhs: RtVal,
+    ) -> Fallible<AssignableRuntimeValue<'a>> {
+        Err(runtime.error(Error::cannot_assign_to(call.span).into()))
     }
     /// Compiles code to assign to the expression.
     ///
@@ -98,9 +120,9 @@ pub trait Function: fmt::Debug + fmt::Display {
         &'a self,
         compiler: &mut Compiler,
         call: FuncCall,
-        _assign_rhs: CompileValue,
-    ) -> CompileResult<AssignableCompileValue<'a>> {
-        Err(Error::cannot_assign_to(call.span))
+        _assign_rhs: Val,
+    ) -> Fallible<AssignableCompileValue<'a>> {
+        Err(compiler.error(Error::cannot_assign_to(call.span)))
     }
 }
 
@@ -113,10 +135,17 @@ pub struct FuncCall<'a> {
     pub args: &'a [ast::Expr<'a>],
 }
 impl FuncCall<'_> {
-    pub fn eval_args(self, runtime: &mut Runtime) -> RuntimeResult<Vec<Spanned<Value>>> {
+    pub fn eval_args(self, runtime: &mut Runtime) -> Fallible<Vec<Spanned<RtVal>>> {
         self.args
             .iter()
             .map(|&arg_expr| runtime.eval_expr(arg_expr))
+            .collect()
+    }
+
+    pub fn compile_args(self, compiler: &mut Compiler) -> Fallible<Vec<Spanned<Val>>> {
+        self.args
+            .iter()
+            .map(|&arg_expr| compiler.compile_expr(arg_expr))
             .collect()
     }
 }

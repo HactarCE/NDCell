@@ -9,10 +9,12 @@ use std::fmt;
 use crate::data::{Type, MAX_VECTOR_LEN};
 use crate::{MAX_NDIM, MAX_STATE_COUNT};
 
-pub const NO_RUNTIME_REPRESENTATION: &str = "Type has no runtime representation!";
-
 /// `Result` type alias for NDCA compile-time and runtime errors.
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub type Fallible<T> = std::result::Result<T, AlreadyReported>;
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct AlreadyReported;
 
 /// Extension trait for converting a value to an `Option<Span>`.
 pub trait SpanConvertExt {
@@ -83,6 +85,15 @@ macro_rules! error_fn {
 #[derive(Debug, Clone)]
 pub struct Error(pub Diagnostic);
 impl Error {
+    pub fn plus_note(mut self, span: Span, msg: impl fmt::Display) -> Self {
+        self.0.spans.push(SpanLabel {
+            span,
+            label: Some(msg.to_string()),
+            style: SpanStyle::Secondary,
+        });
+        self
+    }
+
     // Syntax/parsing errors
     error_fn!(Error; fn else_without_if("this 'else' has no matching 'if'"));
     error_fn!(Error; fn expected("expected {}", expected: impl fmt::Display => crate::utils::a));
@@ -100,7 +111,7 @@ impl Error {
         msg: impl fmt::Display,
     ));
 
-    error_fn!(Error; fn custom("{}", msg: impl fmt::Display));
+    error_fn!(Error; fn custom("{}", msg: impl fmt::Display)); // TODO: find and remove uses of `Error::custom()`
 
     // Compile errors
 
@@ -144,6 +155,7 @@ impl Error {
         _ => MAX_STATE_COUNT,
     ));
 
+    // TODO: review uses of these two error messages
     error_fn!(Error; fn cannot_const_eval("depends on contents of simulation"));
     error_fn!(Error; fn cannot_compile("must not depend on contents of simulation"));
 
@@ -175,8 +187,11 @@ impl Error {
         "cannot index into value of type {}",
         ty: Type,
     ));
+    error_fn!(Error; fn cannot_call_arbitrary_expression("cannot call arbitrary expression"));
 
     error_fn!(Error; fn uninitialized_variable("this variable doesn't exist or hasn't been assigned a value"));
+    error_fn!(Error; fn maybe_uninitialized_variable("this variable might not have been assigned a value"));
+    error_fn!(Error; fn ambiguous_variable_type("the type of this variable cannot be determined"));
 
     error_fn!(Error; fn cannot_assign_to("cannot assign to this expression"));
 

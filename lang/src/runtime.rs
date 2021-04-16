@@ -3,39 +3,32 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::ast;
-use crate::data::{SpannedValueExt, Value};
-use crate::errors::{Error, Result};
-use crate::functions::{self, FuncCall, Function};
+use crate::builtins::{self, FuncCall, Function};
+use crate::data::{CpVal, RtVal, SpannedRuntimeValueExt, Type, Val};
+use crate::errors::{AlreadyReported, Error, Fallible};
 
-pub enum RuntimeError {
-    CannotConstEval(Span),
-    Other(Error),
+pub struct AssignableValue<'f, R> {
+    pub assign_fn: Box<dyn 'f + FnOnce(&mut R, Spanned<Val>) -> Fallible<()>>,
+    pub lhs_value: Fallible<Spanned<Val>>,
 }
-impl From<Error> for RuntimeError {
-    fn from(e: Error) -> Self {
-        Self::Other(e)
-    }
-}
-pub type RuntimeResult<T> = std::result::Result<T, RuntimeError>;
-
-pub struct AssignableValue<'f, R, V, E> {
-    assign_fn: Box<dyn 'f + FnOnce(&mut R, Spanned<V>) -> std::result::Result<(), E>>,
-    lhs_value: std::result::Result<Spanned<V>, E>,
-}
-pub type AssignableRuntimeValue<'f> = AssignableValue<'f, Runtime, Value, RuntimeError>;
+pub type AssignableRuntimeValue<'f> = AssignableValue<'f, Runtime>;
 
 /// NDCA runtime state.
 #[derive(Debug, Default, Clone)]
 pub struct Runtime {
     /// Variable values.
-    pub vars: HashMap<Arc<String>, Value>,
+    pub vars: HashMap<Arc<String>, Val>,
     // /// Rule name.
     // rule_name: Option<String>,
     // /// Number of dimensions.
     // ndim: Option<usize>,
     // /// Number of states.
     // states: Option<usize>,
-    errors: Vec<Error>,
+    /// Runtime and compile-time errors.
+    pub errors: Vec<Error>,
+
+    /// `@compile` directive. (There must be exactly one.)
+    pub compile_directive: Option<ast::DirectiveId>,
 }
 
 /// Control flow command.
@@ -53,13 +46,13 @@ enum Flow {
 
     /// Return from a function (contains span of `return` statement and value
     /// returned).
-    Return(Span, Option<Spanned<Value>>),
+    Return(Span, Option<Spanned<RtVal>>),
     /// Return from the transition function without modifying the cell (contains
     /// span of `remain` statement).
     Remain(Span),
     /// Return from the transition function (contains span of `become` statement
     /// and value returned).
-    Become(Span, Spanned<Value>),
+    Become(Span, Spanned<RtVal>),
 }
 impl Default for Flow {
     fn default() -> Self {
@@ -72,14 +65,49 @@ impl Runtime {
         Self::default()
     }
 
-    pub(crate) fn error(&mut self, e: Error) -> ast::AlreadyReported {
+    pub(crate) fn error(&mut self, e: Error) -> AlreadyReported {
         self.errors.push(e);
-        ast::AlreadyReported
+        AlreadyReported
+    }
+    pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<Type>> {
+        let span = v.span;
+        match &v.node {
+            Val::Rt(v) => Ok(v.ty()),
+            Val::Cp(v) => Ok(v.ty()),
+            Val::Unknown(Some(ty)) => Ok(ty.clone()),
+            Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
+            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
+            Val::Err(e) => Err(*e),
+        }
+        .map(|node| Spanned { node, span })
+    }
+    pub(crate) fn get_rt_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<RtVal>> {
+        let span = v.span;
+        match v.node {
+            Val::Rt(v) => Ok(v),
+            Val::Cp(_) => Err(self.error(Error::cannot_const_eval(span))),
+            Val::Unknown(ty) => Err(self.error(Error::ambiguous_variable_type(span))),
+            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
+            Val::Err(e) => Err(e),
+        }
+        .map(|node| Spanned { node, span })
     }
 
-    pub fn run_init(&mut self, ast: &ast::Program) -> std::result::Result<(), &[Error]> {
+    pub fn run_init(&mut self, ast: &ast::Program) -> Result<(), &[Error]> {
         for &directive_id in ast.directives() {
-            match ast.get_node(directive_id).data() {
+            let directive = ast.get_node(directive_id);
+            match directive.data() {
+                ast::DirectiveData::Compile { .. } => match self.compile_directive {
+                    Some(_) => {
+                        // Lie to the user; tell them this directive name is
+                        // invalid, because they shouldn't be using it!
+                        self.error(Error::invalid_directive_name(directive.span()));
+                    }
+                    None => {
+                        self.compile_directive = Some(directive_id);
+                    }
+                },
+
                 ast::DirectiveData::Init(block) => match self.exec_stmt(ast.get_node(*block)) {
                     Ok(Flow::Proceed) => (),
 
@@ -105,14 +133,7 @@ impl Runtime {
                         break;
                     }
 
-                    Err(RuntimeError::CannotConstEval(_)) => {
-                        self.error(internal_error_value!("run_init() got CannotConstEval"));
-                        break;
-                    }
-                    Err(RuntimeError::Other(e)) => {
-                        self.error(e);
-                        break;
-                    }
+                    Err(AlreadyReported) => (),
                 },
             }
         }
@@ -123,7 +144,7 @@ impl Runtime {
         }
     }
 
-    fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> RuntimeResult<Flow> {
+    fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<Flow> {
         let ast = stmt.ast;
         match stmt.data() {
             ast::StmtData::Block(stmt_ids) => {
@@ -146,14 +167,16 @@ impl Runtime {
                     lhs_value,
                 } = self.eval_expr_assignable(lhs)?;
 
-                if let Some(op_func) = Option::<functions::math::BinaryOp>::from(op.node) {
+                if let Some(op_func) = Option::<builtins::math::BinaryOp>::from(op.node) {
                     rhs_value = Spanned {
-                        node: op_func.eval_on_values(op.span, lhs_value?, rhs_value)?,
+                        node: op_func
+                            .eval_on_values(op.span, self.get_rt_val(lhs_value?)?, rhs_value)
+                            .map_err(|e| self.error(e))?,
                         span: lhs.span().merge(rhs.span()),
                     };
                 }
 
-                assign_fn(self, rhs_value)?;
+                assign_fn(self, rhs_value.map_node(Val::Rt))?;
 
                 Ok(Flow::Proceed)
             }
@@ -164,7 +187,11 @@ impl Runtime {
                 if_false,
             } => {
                 let condition = ast.get_node(*condition);
-                if self.eval_expr(condition)?.to_bool()? {
+                if self
+                    .eval_expr(condition)?
+                    .to_bool()
+                    .map_err(|e| self.error(e))?
+                {
                     if_true.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
                 } else {
                     if_false.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
@@ -173,21 +200,23 @@ impl Runtime {
 
             ast::StmtData::Assert { condition, msg } => {
                 let condition = ast.get_node(*condition);
-                if self.eval_expr(condition)?.to_bool()? {
-                    Err(match msg {
+                if self
+                    .eval_expr(condition)?
+                    .to_bool()
+                    .map_err(|e| self.error(e))?
+                {
+                    Err(self.error(match msg {
                         Some(msg) => Error::assertion_failed_with_msg(stmt.span(), msg),
                         None => Error::assertion_failed(stmt.span()),
-                    }
-                    .into())
+                    }))
                 } else {
                     Ok(Flow::Proceed)
                 }
             }
-            ast::StmtData::Error { msg } => Err(match msg {
+            ast::StmtData::Error { msg } => Err(self.error(match msg {
                 Some(msg) => Error::user_error_with_msg(stmt.span(), msg),
                 None => Error::user_error(stmt.span()),
-            }
-            .into()),
+            })),
 
             ast::StmtData::Break => Ok(Flow::Break(stmt.span())),
             ast::StmtData::Continue => Ok(Flow::Continue(stmt.span())),
@@ -197,11 +226,15 @@ impl Runtime {
                 block,
             } => {
                 let iter_expr = ast.get_node(*iter_expr_id);
-                for it in self.eval_expr(iter_expr)?.iterate()? {
+                for it in self
+                    .eval_expr(iter_expr)?
+                    .iterate()
+                    .map_err(|e| self.error(e))?
+                {
                     // TODO: when #[feature(hash_raw_entry)] stabalizes, use
                     // that here to avoid the extra `Arc::clone()` (and consider
-                    // changing `vars` to a `HashMap<String, Value>`)
-                    self.vars.insert(Arc::clone(&iter_var), it.node);
+                    // changing `vars` to a `HashMap<String, Val>`)
+                    self.vars.insert(Arc::clone(&iter_var), Val::Rt(it.node));
                     match self.exec_stmt(ast.get_node(*block))? {
                         Flow::Proceed | Flow::Continue(_) => (),
                         Flow::Break(_) => break,
@@ -227,41 +260,49 @@ impl Runtime {
     fn eval_expr_assignable<'ast>(
         &mut self,
         expr: ast::Expr<'ast>,
-    ) -> RuntimeResult<AssignableRuntimeValue<'ast>> {
+    ) -> Fallible<AssignableRuntimeValue<'ast>> {
         let ast = expr.ast;
         match expr.data() {
             ast::ExprData::Identifier(var_name) => {
                 // TODO: when #[feature(hash_raw_entry)] stabalizes, use
                 // that here to avoid the extra `Arc::clone()` (and
                 // consider changing `vars` to a `HashMap<String,
-                // Value>`)
-                Ok(AssignableRuntimeValue {
-                    assign_fn: Box::new(move |state, new_value| {
-                        state.vars.insert(Arc::clone(var_name), new_value.node);
+                // Val>`)
+                Ok(AssignableValue {
+                    assign_fn: Box::new(move |rt, new_value| {
+                        rt.vars.insert(Arc::clone(var_name), new_value.node);
                         Ok(())
                     }),
-                    lhs_value: self.eval_expr(expr),
+                    lhs_value: self.eval_expr(expr).map(|x| x.map_node(Val::Rt)),
                 })
             }
             ast::ExprData::MethodCall { obj, attr, args } => {
-                Err(Error::unimplemented(expr.span()).into())
+                Err(self.error(Error::unimplemented(expr.span())))
             }
-            ast::ExprData::IndexOp { obj, args } => Err(Error::unimplemented(expr.span()).into()),
+            ast::ExprData::IndexOp { obj, args } => {
+                Err(self.error(Error::unimplemented(expr.span())))
+            }
 
-            _ => Err(Error::cannot_assign_to(expr.span()).into()),
+            _ => Err(self.error(Error::cannot_assign_to(expr.span()))),
         }
     }
 
-    pub fn eval_expr(&mut self, expr: ast::Expr<'_>) -> RuntimeResult<Spanned<Value>> {
+    pub fn eval_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<RtVal>> {
         let ast = expr.ast;
+        let span = expr.span();
         let value = match expr.data() {
             ast::ExprData::Paren(expr_id) => self.eval_expr(ast.get_node(*expr_id))?.node,
 
-            ast::ExprData::Identifier(var_name) => self
-                .vars
-                .get(var_name)
-                .cloned()
-                .ok_or_else(|| Error::uninitialized_variable(expr.span()))?,
+            ast::ExprData::Identifier(var_name) => {
+                return self
+                    .vars
+                    .get(var_name)
+                    .cloned()
+                    .or_else(|| builtins::resolve_constant(var_name))
+                    .ok_or_else(|| self.error(Error::uninitialized_variable(expr.span())))
+                    .map(|node| Spanned { node, span })
+                    .and_then(|v| self.get_rt_val(v))
+            }
 
             ast::ExprData::Constant(value) => value.clone(),
 
@@ -282,9 +323,6 @@ impl Runtime {
             ast::ExprData::VectorConstruct(_) => todo!(),
         };
 
-        Ok(Spanned {
-            node: value,
-            span: expr.span(),
-        })
+        Ok(Spanned { node: value, span })
     }
 }

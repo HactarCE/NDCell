@@ -19,15 +19,18 @@ use std::fmt;
 // use crate::{ConstValue, Type};
 // use ErrorKind::{DivideByZero, IntegerOverflow, NegativeExponent};
 
-use super::{CompileResult, FuncCall, Function};
+use super::{FuncCall, Function};
 use crate::ast;
-use crate::compiler::{CompileValue, Compiler};
-use crate::data::{LangInt, LangUint, SpannedTypeExt, SpannedValueExt, Value};
-use crate::errors::{Error, Result};
-use crate::runtime::{Runtime, RuntimeResult};
+use crate::compiler::Compiler;
+use crate::data::{
+    CpVal, LangInt, LangUint, RtVal, SpannedRuntimeValueExt, SpannedTypeExt, Type, Val,
+};
+use crate::errors::{Error, Fallible, Result};
+use crate::llvm;
+use crate::runtime::Runtime;
 
 /// Built-in function that performs a fixed two-input integer math operation.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -83,7 +86,7 @@ impl From<ast::AssignOp> for Option<BinaryOp> {
 }
 impl BinaryOp {
     /// Evaluates this operation for two integers.
-    fn eval_on_integers(&self, lhs: LangInt, rhs: LangInt, span: Span) -> Result<LangInt> {
+    fn eval_on_integers(self, span: Span, lhs: LangInt, rhs: LangInt) -> Result<LangInt> {
         // Perform the operation.
         match self {
             Self::Add => lhs.checked_add(rhs),
@@ -131,30 +134,78 @@ impl BinaryOp {
     ///
     /// `span` is the span of the operator, not the entire expression.
     pub fn eval_on_values(
-        &self,
+        self,
         span: Span,
-        lhs: Spanned<Value>,
-        rhs: Spanned<Value>,
-    ) -> Result<Value> {
+        lhs: Spanned<RtVal>,
+        rhs: Spanned<RtVal>,
+    ) -> Result<RtVal> {
         if let (Ok(l), Ok(r)) = (lhs.clone().as_integer(), rhs.clone().as_integer()) {
-            self.eval_on_integers(l, r, span).map(Value::Integer)
+            self.eval_on_integers(span, l, r).map(RtVal::Integer)
         } else {
             Err(Error::invalid_arguments(span, self, &[lhs.ty(), rhs.ty()]))
         }
     }
+
+    pub fn compile_for_int_math_values<M: llvm::IntMathValue<'static>>(
+        self,
+        compiler: &mut Compiler,
+        span: Span,
+        lhs: M,
+        rhs: M,
+    ) -> CpVal {
+        match self {
+            Self::Add => todo!("compile op Add"),
+            Self::Sub => todo!("compile op Sub"),
+            Self::Mul => todo!("compile op Mul"),
+            Self::Div => todo!("compile op Div"),
+            Self::Mod => todo!("compile op Mod"),
+            Self::Pow => todo!("compile op Pow"),
+            Self::Shl => todo!("compile op Shl"),
+            Self::ShrSigned => todo!("compile op ShrSigned"),
+            Self::ShrUnsigned => todo!("compile op ShrUnsigned"),
+            Self::BitwiseAnd => todo!("compile op BitwiseAnd"),
+            Self::BitwiseOr => todo!("compile op BitwiseOr"),
+            Self::BitwiseXor => todo!("compile op BitwiseXor"),
+        }
+    }
+
+    pub fn compile_for_values(
+        self,
+        compiler: &mut Compiler,
+        span: Span,
+        lhs: Spanned<Val>,
+        rhs: Spanned<Val>,
+    ) -> Fallible<Val> {
+        todo!("cast and apply binary math operation")
+    }
 }
 impl Function for BinaryOp {
-    fn eval(&self, runtime: &mut Runtime, call: FuncCall<'_>) -> RuntimeResult<Value> {
+    fn eval(&self, runtime: &mut Runtime, call: FuncCall<'_>) -> Fallible<RtVal> {
         let args = call.eval_args(runtime)?;
 
         if call.args.len() == 2 {
-            let result = self.eval_on_values(call.span, args[0].clone(), args[1].clone());
-            return Ok(result?); // `?` casts from `Error` to `RuntimeError`
+            self.eval_on_values(call.span, args[0].clone(), args[1].clone())
+                .map_err(|e| runtime.error(e))
+        } else {
+            Err(runtime.error(Error::invalid_arguments(
+                call.span,
+                self,
+                &args.iter().map(|v| v.ty()).collect_vec(),
+            )))
         }
+    }
 
-        Err(
-            Error::invalid_arguments(call.span, self, &args.iter().map(|v| v.ty()).collect_vec())
-                .into(),
-        )
+    fn compile(&self, compiler: &mut Compiler, call: FuncCall<'_>) -> Fallible<Val> {
+        let args = call.compile_args(compiler)?;
+
+        if call.args.len() == 2 {
+            self.compile_for_values(compiler, call.span, args[0].clone(), args[1].clone())
+        } else {
+            let arg_types = args
+                .iter()
+                .map(|v| compiler.get_val_type(v).map(|ty| ty.node))
+                .collect::<Fallible<Vec<Type>>>()?;
+            Err(compiler.error(Error::invalid_arguments(call.span, self, &arg_types).into()))
+        }
     }
 }

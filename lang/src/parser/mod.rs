@@ -31,7 +31,8 @@ pub fn parse_file(ast: &mut ast::Program, file: &File) -> Result<()> {
     let tokens = lexer::tokenize(file).filter(|t| !t.is_skip()).collect_vec();
     let mut p = Parser::new(file, &tokens)?;
     while p.peek_next().is_some() {
-        p.parse(ast, rules::Directive)?;
+        let directive = p.parse(ast, rules::Directive)?;
+        ast.add_directive(directive);
     }
     Ok(())
 }

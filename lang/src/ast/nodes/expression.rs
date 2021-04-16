@@ -13,7 +13,7 @@ pub enum ExprData {
     Identifier(Arc<String>),
 
     /// Constant value.
-    Constant(Value),
+    Constant(RtVal),
 
     /// Binary operator.
     BinaryOp(ExprId, Spanned<BinaryOp>, ExprId),
@@ -29,7 +29,10 @@ pub enum ExprData {
         args: Vec<ExprId>,
     },
     /// Function call.
-    FuncCall { func: ExprId, args: Vec<ExprId> },
+    FuncCall {
+        func: Spanned<Arc<String>>,
+        args: Vec<ExprId>,
+    },
     /// Index operation.
     IndexOp { obj: ExprId, args: Vec<ExprId> },
 

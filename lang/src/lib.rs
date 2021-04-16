@@ -19,10 +19,11 @@ pub mod errors;
 #[macro_use]
 mod data;
 mod ast;
+mod builtins;
 mod compiler;
 // mod constvalue;
-mod functions;
 mod lexer;
+mod llvm;
 // mod meta;
 mod parser;
 mod regex;

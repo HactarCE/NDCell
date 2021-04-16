@@ -1,4 +1,4 @@
-use super::{Expression, Parser, StatementBlock, StringLiteral, SyntaxRule};
+use super::{Expression, List, Parser, StatementBlock, StringLiteral, SyntaxRule};
 use crate::ast;
 use crate::errors::{Error, Result};
 use crate::lexer::Token;
@@ -20,6 +20,11 @@ impl SyntaxRule for Directive {
                 return p.expected(self);
             }
             match p.string() {
+                "@compile" => Ok(ast::DirectiveData::Compile {
+                    param_types: p.parse(ast, List::bracket_comma_sep(TypeExpression))?,
+                    body: p.parse(ast, StatementBlock)?,
+                }),
+
                 "@init" => Ok(ast::DirectiveData::Init(p.parse(ast, StatementBlock)?)),
                 "@func" => Err(Error::unimplemented(p.span())),
                 // "@func" => Ok(ast::DirectiveData::Function(p.parse(ast, FunctionDefinition)?)),

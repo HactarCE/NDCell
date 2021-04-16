@@ -26,8 +26,7 @@
 
 use codemap::{Span, Spanned};
 use itertools::Itertools;
-use parking_lot::{Condvar, Mutex};
-use std::collections::HashMap;
+use std::convert::TryInto;
 use std::sync::{mpsc, Arc};
 
 mod config;
@@ -46,7 +45,7 @@ use crate::runtime::{self, Runtime};
 pub use config::CompilerConfig;
 pub use function::CompiledFunction;
 use loops::Loop;
-use param::{Param, ParamType};
+pub use param::{Param, ParamType};
 
 #[derive(Debug)]
 pub struct Compiler {
@@ -62,8 +61,8 @@ pub struct Compiler {
     /// Compiler configuration.
     config: CompilerConfig,
 
-    /// Function being built.
-    llvm_fn: llvm::FunctionValue,
+    /// Function being built (may not be initialized very early on).
+    llvm_fn: Option<llvm::FunctionValue>,
     /// Parameters of the function being built.
     param_types: Vec<Spanned<ParamType>>,
     /// List of possible runtime errors.
@@ -91,7 +90,11 @@ impl Compiler {
 
         std::thread::spawn(move || {
             let mut runtime = Runtime::new();
-            runtime.run_init(&ast);
+            if let Err(e) = runtime.run_init(&ast) {
+                // If the receiver is dropped, we don't care.
+                let _ = tx.send(Err(e.to_vec()));
+                return;
+            }
 
             // SAFETY: We take responsibility here for dropping the JIT function
             // on the same thread that created it after all references to the
@@ -159,10 +162,6 @@ impl Compiler {
                 )]
             })?;
 
-        let llvm_fn =
-            module.add_function(Self::MAIN_FUNCTION_NAME, llvm::main_function_type(), None);
-        let builder = llvm::ctx().create_builder();
-
         // Make sure we have a `@compile` directive.
         let ast = compile_directive.ast;
         let (param_type_exprs, function_body) = match compile_directive.data() {
@@ -198,12 +197,8 @@ impl Compiler {
 
                 Err(e) => Err(e),
             })
-            .collect::<Fallible<Vec<Spanned<ParamType>>>>();
-
-        let param_types = match param_types {
-            Ok(x) => x,
-            Err(_) => return Err(runtime.errors),
-        };
+            .collect::<Fallible<Vec<Spanned<ParamType>>>>()
+            .map_err(|_| runtime.errors.clone())?;
 
         let mut this = Self {
             runtime,
@@ -213,25 +208,55 @@ impl Compiler {
             execution_engine,
             config,
 
-            llvm_fn,
+            llvm_fn: None,
             param_types,
             error_points: vec![],
 
-            builder,
+            builder: llvm::ctx().create_builder(),
         };
+
+        // The LLVM function will take a single argument, a pointer to a struct
+        // containing the real arguments and return values, if any.
+        let llvm_param_types = this
+            .param_types
+            .iter()
+            .map(|param_type| {
+                this.llvm_type(&param_type.node.clone().into())
+                    .expect("param type has no LLVM representation")
+            })
+            .collect_vec();
+        let params_struct_type = llvm::ctx().struct_type(&llvm_param_types, false);
+        let params_struct_ptr_type = params_struct_type
+            .ptr_type(llvm::AddressSpace::Generic)
+            .as_basic_type_enum();
+
+        // Declare the LLVM function. The actual return value just signals
+        // whether there was an error.
+        let fn_name = Self::MAIN_FUNCTION_NAME;
+        let fn_type = llvm::error_index_type().fn_type(&[params_struct_ptr_type], false);
+        let fn_linkage = None;
+        this.llvm_fn = Some(this.module.add_function(fn_name, fn_type, fn_linkage));
 
         match this.build_jit_function(ast.get_node(*function_body)) {
             Ok(ret) => Ok(ret),
             Err(AlreadyReported) => Err(this.runtime.errors),
         }
     }
+    /// JIT-compiles a new function that can be called from Rust code.
+    ///
+    /// All parameters to the function are "in/out" parameters, so any return
+    /// values must be included as parameters.
     fn build_jit_function(
         &mut self,
         function_body: ast::Stmt<'_>,
     ) -> Fallible<(llvm::JitFunction, CompiledFunction)> {
         // Build the LLVM IR for the function.
-        let params = self.begin_jit_function();
-        self.build_stmt(function_body);
+        let entry_bb = self.append_basic_block("entry");
+        self.builder().position_at_end(entry_bb);
+        self.build_stmt(function_body)?;
+        if self.needs_terminator() {
+            self.build_return_ok();
+        }
 
         // Don't compile the JIT function if there are any errors.
         if !self.runtime.errors.is_empty() {
@@ -243,42 +268,9 @@ impl Compiler {
         let jit_fn = unsafe { self.finish_jit_function() }?;
         let jit_fn_ptr = unsafe { jit_fn.raw_fn_ptr() };
 
-        // Construct the `CompiledFunction`.
-        Ok((
-            jit_fn,
-            CompiledFunction::new(jit_fn_ptr, params, self.error_points.clone()),
-        ))
-    }
-
-    /// JIT-compiles a new function that can be called from Rust code.
-    ///
-    /// All parameters to the function are "in/out" parameters, so any return
-    /// values must be included as parameters.
-    ///
-    /// Returns the [`Param`]s for the function.
-    fn begin_jit_function(&mut self) -> Vec<Param> {
-        // The LLVM function will take a single argument, a pointer to a struct
-        // containing the real arguments and return values, if any.
-        let llvm_param_types = self
-            .param_types
-            .iter()
-            .map(|param_type| {
-                self.llvm_type(&param_type.node.clone().into())
-                    .expect("param type has no LLVM representation")
-            })
-            .collect_vec();
-        let params_struct_type = llvm::ctx().struct_type(&llvm_param_types, false);
-        let params_struct_ptr_type = params_struct_type
-            .ptr_type(llvm::AddressSpace::Generic)
-            .as_basic_type_enum();
-
-        // The actual return value just signals whether there was an error.
-        let fn_type = llvm::error_index_type().fn_type(&[params_struct_ptr_type], false);
-
-        let entry_bb = self.append_basic_block("entry");
-        self.builder().position_at_end(entry_bb);
-
-        llvm::struct_offsets(&params_struct_type, self.target_data())
+        // Prepare the parameter info.
+        let params_struct_type = self.params_struct_type();
+        let params = llvm::struct_offsets(&params_struct_type, self.target_data())
             .zip(&params_struct_type.get_field_types())
             .zip(&self.param_types)
             .map(|((offset, llvm_type), param_type)| Param {
@@ -287,21 +279,28 @@ impl Compiler {
 
                 ty: param_type.node.clone(),
             })
-            .collect()
+            .collect();
+
+        // Construct the `CompiledFunction`.
+        Ok((
+            jit_fn,
+            CompiledFunction::new(jit_fn_ptr, params, self.error_points.clone()),
+        ))
     }
+
     /// Finishes JIT compiling a function and returns a function pointer to
     /// executable assembly.
     unsafe fn finish_jit_function(&mut self) -> Fallible<llvm::JitFunction> {
         // Check that there are no errors in the LLVM code.
-        if !self.llvm_fn.verify(true) {
+        if !self.llvm_fn().verify(true) {
             eprint!(
                 "Error encountered during function compilation; dumping LLVM function to stderr"
             );
-            self.llvm_fn.print_to_stderr();
+            self.llvm_fn().print_to_stderr();
             return Err(self.error(internal_error_value!("LLVM function is invalid")));
         }
 
-        match self.llvm_fn.get_name().to_str() {
+        match self.llvm_fn().get_name().to_str() {
             Ok(fn_name) => self.execution_engine.get_function(fn_name).map_err(|e| {
                 internal_error_value!("Failed to find JIT-compiled function {:?}: {}", fn_name, e)
             }),
@@ -311,6 +310,17 @@ impl Compiler {
             )),
         }
         .map_err(|e| self.error(e))
+    }
+
+    /// Returns the struct type used to hold parameters to the LLVM function.
+    pub fn params_struct_type(&self) -> llvm::StructType {
+        self.llvm_fn()
+            .get_first_param()
+            .unwrap()
+            .get_type()
+            .into_pointer_type()
+            .get_element_type()
+            .into_struct_type()
     }
 
     /// Returns the LLVM TargetData that this compiler uses when JIT compiling
@@ -458,7 +468,25 @@ impl Compiler {
 }
 
 /*
- * LOW-LEVEL CONTROL FLOW
+ * SIMPLE IMMUTABLE GETTERS
+ */
+impl Compiler {
+    /// Returns the LLVM function currently being compiled.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the LLVM function has not yet been initialized.
+    pub fn llvm_fn(&self) -> llvm::FunctionValue {
+        self.llvm_fn.unwrap()
+    }
+    /// Returns the types of the parameters to the compiled function.
+    pub fn param_types(&self) -> &[Spanned<ParamType>] {
+        &self.param_types
+    }
+}
+
+/*
+ * CONTROL FLOW
  */
 impl Compiler {
     /// Returns the Inkwell basic block currently being appended to, panicking
@@ -471,7 +499,13 @@ impl Compiler {
     /// Appends an LLVM BasicBlock to the end of the current LLVM function and
     /// returns the new BasicBlock.
     pub fn append_basic_block(&mut self, name: &str) -> llvm::BasicBlock {
-        llvm::ctx().append_basic_block(self.llvm_fn, name)
+        llvm::ctx().append_basic_block(self.llvm_fn(), name)
+    }
+    /// Adds a new basic block intended to be unreachable and positions the
+    /// builder at the end of it.
+    pub fn append_unreachable_basic_block(&mut self) {
+        let bb = self.append_basic_block("unreachableBlock");
+        self.builder().position_at_end(bb);
     }
     /// Appends an LLVM BasicBlock with a PHI node to the end of the current
     /// LLVM function and returns the new BasicBlock and PhiValue.
@@ -501,12 +535,244 @@ impl Compiler {
             .get_terminator()
             .is_none()
     }
+
+    /// Builds a conditional expression, using an IntValue of any width. Any
+    /// nonzero value is truthy, and zero is falsey.
+    ///
+    /// If the given closures return a basic value, then this method will return
+    /// the value of a phi node that takes the result of whichever of the two
+    /// closures executes.
+    pub fn build_conditional<V: PhiMergeable>(
+        &mut self,
+        condition_value: llvm::IntValue,
+        build_if_true: impl FnOnce(&mut Self) -> Fallible<V>,
+        build_if_false: impl FnOnce(&mut Self) -> Fallible<V>,
+    ) -> Fallible<V> {
+        // Build the destination blocks.
+        let if_true_bb = self.append_basic_block("ifTrue");
+        let if_false_bb = self.append_basic_block("ifFalse");
+        let merge_bb = self.append_basic_block("endIf");
+
+        // Build the switch instruction (because condition_value might not be
+        // 1-bit).
+        self.builder().build_switch(
+            condition_value,
+            if_true_bb,
+            &[(condition_value.get_type().const_zero(), if_false_bb)],
+        );
+
+        // Build the instructions to execute if true.
+        self.builder().position_at_end(if_true_bb);
+        let value_if_true = build_if_true(self)?;
+        let if_true_end_bb = self.current_block();
+        let if_true_needs_terminator = self.needs_terminator();
+        if self.needs_terminator() {
+            self.builder().build_unconditional_branch(merge_bb);
+        }
+
+        // Build the instructions to execute if false.
+        self.builder().position_at_end(if_false_bb);
+        let value_if_false = build_if_false(self)?;
+        let if_false_end_bb = self.current_block();
+        let if_false_needs_terminator = self.needs_terminator();
+        if self.needs_terminator() {
+            self.builder().build_unconditional_branch(merge_bb);
+        }
+
+        // Merge values if the closures provided any.
+        self.builder().position_at_end(merge_bb);
+        let ret = match (if_true_needs_terminator, if_false_needs_terminator) {
+            (true, false) => value_if_true,
+            (false, true) => value_if_false,
+            _ => PhiMergeable::merge(
+                value_if_true,
+                value_if_false,
+                if_true_end_bb,
+                if_false_end_bb,
+                self,
+            ),
+        };
+        Ok(ret)
+    }
+
+    /// Returns an LLVM intrinsic given its name and function signature.
+    pub fn get_llvm_intrinisic(
+        &mut self,
+        name: &str,
+        fn_type: llvm::FunctionType,
+    ) -> Fallible<llvm::FunctionValue> {
+        match self.module.get_function(name) {
+            Some(fn_value) => {
+                if fn_value.get_type() == fn_type {
+                    Ok(fn_value)
+                } else {
+                    Err(self.error(internal_error_value!(
+                        "Requested multiple LLVM intrinsics with same name but different type signatures",
+                    )))
+                }
+            }
+            None => Ok(self.module.add_function(name, fn_type, None)),
+        }
+    }
+
+    /// Builds instructions to return with no error.
+    pub fn build_return_ok(&mut self) {
+        self.build_return_err(llvm::MAX_ERROR_INDEX as usize);
+    }
+    /// Builds instructions to return an error.
+    pub fn build_return_err(&mut self, error_index: usize) {
+        let llvm_return_value = llvm::error_index_type().const_int(error_index as u64, false);
+        self.builder().build_return(Some(&llvm_return_value));
+    }
+}
+
+/*
+ * MATH
+ */
+impl Compiler {
+    /// Builds instructions to perform checked integer arithmetic using an LLVM
+    /// intrinsic and returns an error if overflow occurs. Both operands must
+    /// either be integers or vectors of the same length.
+    pub fn build_checked_int_arithmetic<T: llvm::IntMathValue<'static>>(
+        &mut self,
+        lhs: T,
+        rhs: T,
+        name: &str,
+        overflow_error: Error,
+    ) -> Fallible<llvm::BasicValueEnum> {
+        let arg_type = lhs.as_basic_value_enum().get_type();
+
+        // LLVM has intrinsics that perform some math with overflow checks.
+        // First, get the name of the intrinsic we want to use (e.g.
+        // "llvm.sadd.with.overflow.i64" for signed addition on i64).
+        let intrinsic_name = format!(
+            "llvm.{}.with.overflow.{}",
+            name,
+            llvm::intrinsic_type_name(arg_type),
+        );
+        // That intrinsic will return a struct containing the result and a
+        // boolean indicated whether overflow occurred. But if we're doing this
+        // on a vector then the overflow flag will be a whole vector of booleans
+        // instead.
+        let bool_type;
+        if arg_type.is_vector_type() {
+            bool_type = llvm::bool_type()
+                .vec_type(arg_type.into_vector_type().get_size())
+                .into();
+        } else {
+            bool_type = llvm::bool_type().into();
+        }
+        let intrinsic_return_type = llvm::ctx().struct_type(&[arg_type, bool_type], false);
+        let intrinsic_fn_type = intrinsic_return_type.fn_type(&[arg_type; 2], false);
+        let intrinsic_fn = self.get_llvm_intrinisic(&intrinsic_name, intrinsic_fn_type)?;
+        let intrinsic_args = &[lhs.as_basic_value_enum(), rhs.as_basic_value_enum()];
+
+        // Build a call to an LLVM intrinsic to do the operation.
+        let call_site_value =
+            self.builder()
+                .build_call(intrinsic_fn, intrinsic_args, "tmp_checked_result");
+
+        // Get the actual return value of the function.
+        let return_value = call_site_value
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_struct_value();
+
+        // This return value is a struct with two elements: the result of the
+        // operation, and a boolean value which is true if overflow occurred.
+        // Extract each of those.
+        let result_value = self
+            .builder()
+            .build_extract_value(return_value, 0, "tmp_result")
+            .unwrap();
+        let is_overflow_vec = self
+            .builder()
+            .build_extract_value(return_value, 1, "tmp_overflow")
+            .unwrap();
+        let is_overflow = self.build_reduce("or", is_overflow_vec)?;
+
+        let error_index = self.error_points.len();
+        self.error_points.push(overflow_error);
+
+        // Branch based on whether there is overflow.
+        self.build_conditional(
+            is_overflow,
+            // Return an error if there is overflow.
+            |c| Ok(c.build_return_err(error_index)),
+            // Otherwise proceed.
+            |_| Ok(()),
+        )?;
+
+        Ok(result_value)
+    }
+
+    /// Builds a reduction of a vector to an integer using the given operation.
+    /// If the argument is already an integer, returns the integer.
+    pub fn build_reduce(
+        &mut self,
+        op: &str,
+        value: llvm::BasicValueEnum,
+    ) -> Fallible<llvm::IntValue> {
+        match value {
+            llvm::BasicValueEnum::ArrayValue(_) => unimplemented!(),
+            llvm::BasicValueEnum::FloatValue(_) => unimplemented!(),
+            llvm::BasicValueEnum::IntValue(i) => Ok(i),
+            llvm::BasicValueEnum::PointerValue(_) => unimplemented!(),
+            llvm::BasicValueEnum::StructValue(_) => unimplemented!(),
+            llvm::BasicValueEnum::VectorValue(v) => {
+                let fn_type = v
+                    .get_type()
+                    .get_element_type()
+                    .fn_type(&[value.get_type()], false);
+                let reduce_fn = self.get_llvm_intrinisic(
+                    &format!(
+                        "llvm.experimental.vector.reduce.{}.{}",
+                        op,
+                        // Get name of input type.
+                        llvm::intrinsic_type_name(value.get_type()),
+                    ),
+                    fn_type,
+                )?;
+                Ok(self
+                    .builder()
+                    .build_call(reduce_fn, &[value], &format!("reduce_{}", op))
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap()
+                    .into_int_value())
+            }
+        }
+    }
 }
 
 /*
  * HIGH-LEVEL CONSTRUCTS
  */
 impl Compiler {
+    pub fn build_get_arg_ptr(
+        &mut self,
+        idx: u32,
+        span: Span,
+    ) -> Fallible<(ParamType, llvm::PointerValue)> {
+        let ty = self
+            .param_types()
+            .get(idx as usize)
+            .cloned()
+            .map(|ty| ty.node);
+        let arg_struct_ptr = self
+            .llvm_fn()
+            .get_nth_param(0) // LLVM parameters are 1-indexed apparently
+            .unwrap()
+            .into_pointer_value();
+        let arg_ptr =
+            self.builder()
+                .build_struct_gep(arg_struct_ptr, idx, &format!("arg_{}_ptr", idx));
+
+        ty.zip(arg_ptr.ok())
+            .ok_or_else(|| self.error(Error::custom(span, "compiled arg index out of range")))
+    }
+
     pub fn build_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<()> {
         let ast = stmt.ast;
         match stmt.data() {
@@ -521,16 +787,17 @@ impl Compiler {
             ast::StmtData::Assign { lhs, op, rhs } => {
                 let lhs = ast.get_node(*lhs);
                 let rhs = ast.get_node(*rhs);
-                let mut rhs_value = self.compile_expr(rhs)?;
+                let mut rhs_value = self.build_expr(rhs)?;
 
                 let runtime::AssignableValue {
                     assign_fn,
-                    lhs_value,
-                } = self.compile_expr_assignable(lhs)?;
+                    get_existing_value,
+                } = self.build_expr_assignable(lhs)?;
 
                 if let Some(op_func) = Option::<builtins::math::BinaryOp>::from(op.node) {
+                    let lhs_value = get_existing_value(self)?;
                     rhs_value = Spanned {
-                        node: op_func.compile_for_values(self, op.span, lhs_value?, rhs_value)?,
+                        node: op_func.compile_for_values(self, op.span, lhs_value, rhs_value)?,
                         span: lhs.span().merge(rhs.span()),
                     };
                 }
@@ -614,7 +881,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_expr_assignable<'ast>(
+    fn build_expr_assignable<'ast>(
         &mut self,
         expr: ast::Expr<'ast>,
     ) -> Fallible<builtins::AssignableCompileValue<'ast>> {
@@ -633,24 +900,38 @@ impl Compiler {
                             .insert(Arc::clone(var_name), new_value.node);
                         Ok(())
                     }),
-                    lhs_value: self.compile_expr(expr),
+                    get_existing_value: Box::new(move |compiler| compiler.build_expr(expr)),
                 })
             }
             ast::ExprData::MethodCall { obj, attr, args } => {
-                Err(self.error(Error::unimplemented(expr.span()).into()))
+                Err(self.error(Error::unimplemented(expr.span())))
+            }
+            ast::ExprData::FuncCall { func, args } => {
+                let func = builtins::resolve_function(&func.node)
+                    .ok_or_else(|| self.error(Error::unimplemented(func.span)))?;
+                let args = args.iter().map(|&arg| ast.get_node(arg)).collect_vec();
+
+                let x: Fallible<builtins::AssignableCompileValue<'ast>> = func.compile_assign(
+                    self,
+                    FuncCall {
+                        span: expr.span(),
+                        args: &args,
+                    },
+                );
+                x
             }
             ast::ExprData::IndexOp { obj, args } => {
-                Err(self.error(Error::unimplemented(expr.span()).into()))
+                Err(self.error(Error::unimplemented(expr.span())))
             }
 
-            _ => Err(self.error(Error::cannot_assign_to(expr.span()).into())),
+            _ => Err(self.error(Error::cannot_assign_to(expr.span()))),
         }
     }
 
-    pub fn compile_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<Val>> {
+    pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<Val>> {
         let ast = expr.ast;
         let value = match expr.data() {
-            ast::ExprData::Paren(expr_id) => self.compile_expr(ast.get_node(*expr_id))?.node,
+            ast::ExprData::Paren(expr_id) => self.build_expr(ast.get_node(*expr_id))?.node,
 
             ast::ExprData::Identifier(var_name) => self
                 .runtime
@@ -2296,14 +2577,15 @@ pub struct Variable {
     /// The LLVM pointer to where this variable is stored.
     pub ptr: PointerValue<'static>,
 }
+*/
 
-/// Trait implemented for () and BasicValueEnum.
+/// Trait implemented for `()` and [`llvm::BasicValueEnum`].
 pub trait PhiMergeable: Sized {
     fn merge(
         self,
         other: Self,
-        self_bb: BasicBlock<'static>,
-        other_bb: BasicBlock<'static>,
+        self_bb: llvm::BasicBlock,
+        other_bb: llvm::BasicBlock,
         compiler: &mut Compiler,
     ) -> Self;
 }
@@ -2311,19 +2593,19 @@ impl PhiMergeable for () {
     fn merge(
         self,
         _other: (),
-        _self_bb: BasicBlock<'static>,
-        _other_bb: BasicBlock<'static>,
+        _self_bb: llvm::BasicBlock,
+        _other_bb: llvm::BasicBlock,
         _compiler: &mut Compiler,
     ) -> () {
         ()
     }
 }
-impl<'a> PhiMergeable for BasicValueEnum<'a> {
+impl PhiMergeable for llvm::BasicValueEnum {
     fn merge(
         self,
         other: Self,
-        self_bb: BasicBlock<'static>,
-        other_bb: BasicBlock<'static>,
+        self_bb: llvm::BasicBlock,
+        other_bb: llvm::BasicBlock,
         compiler: &mut Compiler,
     ) -> Self {
         let phi = compiler
@@ -2333,5 +2615,3 @@ impl<'a> PhiMergeable for BasicValueEnum<'a> {
         phi.as_basic_value()
     }
 }
-
-*/

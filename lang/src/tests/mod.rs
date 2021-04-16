@@ -52,7 +52,7 @@ fn test_expr_compiled(
     for i in 0..(n - 1) {
         source.push_str(&format!("x{} = __compiled_arg__({})\n", i, i));
     }
-    source.push_str(&format!("__compiled_arg__({}) = {}\n", n, expr_source));
+    source.push_str(&format!("__compiled_arg__({}) = {}\n", n - 1, expr_source));
     source.push_str("}");
 
     let mut ast = ast::Program::new();
@@ -73,7 +73,7 @@ fn test_expr_compiled(
         let task_str = &format!("evaluating {:?} with inputs {:?}", source, inputs);
         // Set input parameters.
         let mut arg_values = inputs.to_vec();
-        arg_values.push(match param_types[n] {
+        arg_values.push(match param_types[n - 1] {
             Type::Integer => RtVal::Integer(0),
             Type::Cell => RtVal::Cell(0),
             Type::Tag => todo!("tag default value"),
@@ -85,7 +85,7 @@ fn test_expr_compiled(
         // Call function.
         let mut errors = vec![];
         let actual_result = match f.call(&mut arg_values) {
-            Ok(()) => Ok(arg_values[n].clone()),
+            Ok(()) => Ok(arg_values[n - 1].clone()),
             Err(e) => {
                 errors.push(e);
                 Err(&errors[..])

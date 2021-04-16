@@ -8,22 +8,12 @@ use itertools::Itertools;
 use std::convert::TryInto;
 use std::fmt;
 
-// pub use super::enums::{MinMaxMode, NegOrAbsMode};
-
-// use super::{FuncConstructor, FuncResult};
-// use crate::ast::{ErrorPointRef, FuncCallInfo, FuncCallInfoMut, Function};
-// use crate::compiler::{const_int, const_uint, Compiler, Value};
-// use crate::errors::*;
-// use crate::lexer::OperatorToken;
-// use crate::types::{CellStateFilter, LangInt, LangUint};
-// use crate::{ConstValue, Type};
-// use ErrorKind::{DivideByZero, IntegerOverflow, NegativeExponent};
-
 use super::{FuncCall, Function};
 use crate::ast;
 use crate::compiler::Compiler;
 use crate::data::{
-    CpVal, LangInt, LangUint, RtVal, SpannedRuntimeValueExt, SpannedTypeExt, Type, Val,
+    CpVal, LangInt, LangUint, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt,
+    SpannedTypeExt, Type, Val,
 };
 use crate::errors::{Error, Fallible, Result};
 use crate::llvm;
@@ -152,9 +142,14 @@ impl BinaryOp {
         span: Span,
         lhs: M,
         rhs: M,
-    ) -> CpVal {
+    ) -> Fallible<llvm::BasicValueEnum> {
         match self {
-            Self::Add => todo!("compile op Add"),
+            Self::Add => compiler.build_checked_int_arithmetic(
+                lhs,
+                rhs,
+                "sadd",
+                Error::integer_overflow(span),
+            ),
             Self::Sub => todo!("compile op Sub"),
             Self::Mul => todo!("compile op Mul"),
             Self::Div => todo!("compile op Div"),
@@ -176,7 +171,18 @@ impl BinaryOp {
         lhs: Spanned<Val>,
         rhs: Spanned<Val>,
     ) -> Fallible<Val> {
-        todo!("cast and apply binary math operation")
+        let l = compiler
+            .get_cp_val(lhs)?
+            .as_integer()
+            .map_err(|e| compiler.error(e))?;
+        let r = compiler
+            .get_cp_val(rhs)?
+            .as_integer()
+            .map_err(|e| compiler.error(e))?;
+        Ok(Val::Cp(CpVal::Integer(
+            self.compile_for_int_math_values(compiler, span, l, r)?
+                .into_int_value(),
+        )))
     }
 }
 impl Function for BinaryOp {
@@ -205,7 +211,7 @@ impl Function for BinaryOp {
                 .iter()
                 .map(|v| compiler.get_val_type(v).map(|ty| ty.node))
                 .collect::<Fallible<Vec<Type>>>()?;
-            Err(compiler.error(Error::invalid_arguments(call.span, self, &arg_types).into()))
+            Err(compiler.error(Error::invalid_arguments(call.span, self, &arg_types)))
         }
     }
 }

@@ -111,7 +111,8 @@ impl CompiledFunction {
         drop(args_pointer);
 
         // Update argument values.
-        read_args_from_bytes(&self.arg_bytes, &self.params, arg_values);
+        read_args_from_bytes(&self.arg_bytes, &self.params, arg_values)
+            .map_err(|_| internal_error_value!("Error reading arguments from compiled function"))?;
 
         if ret == u32::MAX {
             // No error occurred.

@@ -1,4 +1,4 @@
-//! Type aliases and static refs for LLVM things.
+//! Type aliases, static refs and utility functions for low-level LLVM things.
 
 pub use inkwell::context::Context;
 pub use inkwell::targets::TargetData;
@@ -65,15 +65,6 @@ pub fn true_() -> IntValue {
     ctx().bool_type().const_all_ones()
 }
 
-/// Returns the type of the compiled main function.
-pub fn main_function_type() -> FunctionType {
-    let arg_ptr_type = ctx()
-        .i8_type()
-        .ptr_type(AddressSpace::Generic)
-        .as_basic_type_enum();
-    ctx().i32_type().fn_type(&[arg_ptr_type], false)
-}
-
 /// Returns the LLVM type used for booleans.
 pub fn bool_type() -> IntType {
     ctx().bool_type()
@@ -82,6 +73,8 @@ pub fn bool_type() -> IntType {
 pub fn error_index_type() -> IntType {
     ctx().i32_type()
 }
+/// Maximum error index, which is a sentinel value indicating no error.
+pub const MAX_ERROR_INDEX: u32 = u32::MAX;
 
 /// Returns the LLVM type used for integers.
 pub fn int_type() -> IntType {
@@ -114,4 +107,21 @@ pub fn const_int(i: LangInt) -> IntValue {
 /// Returns a constant cell state LLVM value.
 pub fn const_cell(i: LangCell) -> IntValue {
     cell_type().const_int(i as u64, false)
+}
+
+/// Returns the name of an LLVM type used in names of intrinsics (e.g. "i32" for
+/// a 32-bit integer, or "v3i64" for a vector of three 64-bit integers).
+pub fn intrinsic_type_name(ty: impl BasicType<'static>) -> String {
+    match ty.as_basic_type_enum() {
+        BasicTypeEnum::ArrayType(_) => unimplemented!(),
+        BasicTypeEnum::IntType(ty) => format!("i{}", ty.get_bit_width()),
+        BasicTypeEnum::FloatType(_) => unimplemented!(),
+        BasicTypeEnum::PointerType(_) => unimplemented!(),
+        BasicTypeEnum::StructType(_) => unimplemented!(),
+        BasicTypeEnum::VectorType(ty) => format!(
+            "v{}{}",
+            ty.get_size(),
+            intrinsic_type_name(ty.get_element_type()),
+        ),
+    }
 }

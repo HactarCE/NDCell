@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use crate::ast;
 use crate::builtins::{self, FuncCall, Function};
-use crate::data::{CpVal, RtVal, SpannedRuntimeValueExt, Type, Val};
+use crate::data::{RtVal, SpannedRuntimeValueExt, Type, Val};
 use crate::errors::{AlreadyReported, Error, Fallible};
 
 pub struct AssignableValue<'f, R> {
     pub assign_fn: Box<dyn 'f + FnOnce(&mut R, Spanned<Val>) -> Fallible<()>>,
-    pub lhs_value: Fallible<Spanned<Val>>,
+    pub get_existing_value: Box<dyn 'f + FnOnce(&mut R) -> Fallible<Spanned<Val>>>,
 }
 pub type AssignableRuntimeValue<'f> = AssignableValue<'f, Runtime>;
 
@@ -164,13 +164,15 @@ impl Runtime {
 
                 let AssignableValue {
                     assign_fn,
-                    lhs_value,
+                    get_existing_value,
                 } = self.eval_expr_assignable(lhs)?;
 
                 if let Some(op_func) = Option::<builtins::math::BinaryOp>::from(op.node) {
+                    let lhs_value = get_existing_value(self)?;
+                    let lhs_value = self.get_rt_val(lhs_value)?;
                     rhs_value = Spanned {
                         node: op_func
-                            .eval_on_values(op.span, self.get_rt_val(lhs_value?)?, rhs_value)
+                            .eval_on_values(op.span, lhs_value, rhs_value)
                             .map_err(|e| self.error(e))?,
                         span: lhs.span().merge(rhs.span()),
                     };
@@ -269,11 +271,13 @@ impl Runtime {
                 // consider changing `vars` to a `HashMap<String,
                 // Val>`)
                 Ok(AssignableValue {
-                    assign_fn: Box::new(move |rt, new_value| {
-                        rt.vars.insert(Arc::clone(var_name), new_value.node);
+                    assign_fn: Box::new(move |runtime, new_value| {
+                        runtime.vars.insert(Arc::clone(var_name), new_value.node);
                         Ok(())
                     }),
-                    lhs_value: self.eval_expr(expr).map(|x| x.map_node(Val::Rt)),
+                    get_existing_value: Box::new(move |runtime| {
+                        runtime.eval_expr(expr).map(|x| x.map_node(Val::Rt))
+                    }),
                 })
             }
             ast::ExprData::MethodCall { obj, attr, args } => {

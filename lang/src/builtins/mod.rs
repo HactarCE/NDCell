@@ -3,6 +3,7 @@
 use codemap::{Span, Spanned};
 use std::fmt;
 
+pub mod intrinsics;
 pub mod math;
 
 use crate::ast;
@@ -14,8 +15,10 @@ use crate::runtime::{AssignableRuntimeValue, AssignableValue, Runtime};
 pub type AssignableCompileValue<'f> = AssignableValue<'f, Compiler>;
 
 /// Returns the built-in function with the given name.
-pub fn resolve_function(name: &str) -> Option<Box<dyn Function>> {
+pub fn resolve_function(name: &str) -> Option<Box<dyn 'static + Function>> {
     match name {
+        "__compiled_arg__" => Some(Box::new(intrinsics::CompiledArg)),
+
         _ => None,
     }
 }
@@ -103,25 +106,24 @@ pub trait Function: fmt::Debug + fmt::Display {
     ///
     /// The default implementation unconditionally returns an expression stating
     /// that the expression cannot be assigned to.
-    fn execute_assign<'a>(
-        &'a self,
+    fn execute_assign(
+        &self,
         runtime: &mut Runtime,
         call: FuncCall,
         _assign_rhs: RtVal,
-    ) -> Fallible<AssignableRuntimeValue<'a>> {
-        Err(runtime.error(Error::cannot_assign_to(call.span).into()))
+    ) -> Fallible<AssignableRuntimeValue<'_>> {
+        Err(runtime.error(Error::cannot_assign_to(call.span)))
     }
     /// Compiles code to assign to the expression.
     ///
     /// **Override this method for any expression that can be assigned to, even
     /// if it cannot be compiled.** The default implementation unconditionally
     /// returns an error stating that the expression cannot be assigned to.
-    fn compile_assign<'a>(
-        &'a self,
+    fn compile_assign<'f>(
+        &self,
         compiler: &mut Compiler,
         call: FuncCall,
-        _assign_rhs: Val,
-    ) -> Fallible<AssignableCompileValue<'a>> {
+    ) -> Fallible<AssignableCompileValue<'f>> {
         Err(compiler.error(Error::cannot_assign_to(call.span)))
     }
 }
@@ -145,7 +147,7 @@ impl FuncCall<'_> {
     pub fn compile_args(self, compiler: &mut Compiler) -> Fallible<Vec<Spanned<Val>>> {
         self.args
             .iter()
-            .map(|&arg_expr| compiler.compile_expr(arg_expr))
+            .map(|&arg_expr| compiler.build_expr(arg_expr))
             .collect()
     }
 }

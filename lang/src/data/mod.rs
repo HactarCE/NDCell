@@ -14,7 +14,7 @@ mod vec_set;
 pub use array::Array;
 pub use cell_lut::CellLut;
 pub use cell_set::CellSet;
-pub use compile_value::CpVal;
+pub use compile_value::{CpVal, SpannedCompileValueExt};
 pub use int_set::IntegerSet;
 pub use pattern::Pattern;
 pub use runtime_value::{RtVal, SpannedRuntimeValueExt};

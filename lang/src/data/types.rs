@@ -12,13 +12,11 @@
 
 use codemap::Spanned;
 use itertools::Itertools;
-use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
 
 use super::VectorSet;
-use crate::errors::Error;
-use crate::lexer::Keyword;
+use crate::errors::{Error, Fallible, Result};
 
 /// Specific data type.
 ///
@@ -163,18 +161,18 @@ impl Type {
 pub trait SpannedTypeExt {
     /// Returns a type error if this type does not match the given expected
     /// type(s).
-    fn typecheck(&self, expected: impl TypeChecker) -> crate::Result<()>;
+    fn typecheck(&self, expected: impl TypeChecker) -> Result<()>;
 
     /// Returns a CustomTypeError if this type cannot be converted to a boolean.
-    fn typecheck_can_convert_to_bool(&self) -> crate::Result<()>;
+    fn typecheck_can_convert_to_bool(&self) -> Result<()>;
 
     /// Returns the type yielded by iterating over this type, or a
     /// CustomTypeError if this type cannot be iterated over.
-    fn typecheck_can_iterate(&self) -> crate::Result<Type>;
+    fn typecheck_can_iterate(&self) -> Result<Type>;
 }
 
 impl SpannedTypeExt for Spanned<Type> {
-    fn typecheck(&self, expected: impl TypeChecker) -> crate::Result<()> {
+    fn typecheck(&self, expected: impl TypeChecker) -> Result<()> {
         if expected.matches(&self.node) {
             Ok(())
         } else {
@@ -182,7 +180,7 @@ impl SpannedTypeExt for Spanned<Type> {
         }
     }
 
-    fn typecheck_can_convert_to_bool(&self) -> crate::Result<()> {
+    fn typecheck_can_convert_to_bool(&self) -> Result<()> {
         if self.node.can_convert_to_bool() {
             Ok(())
         } else {
@@ -194,7 +192,7 @@ impl SpannedTypeExt for Spanned<Type> {
         }
     }
 
-    fn typecheck_can_iterate(&self) -> crate::Result<Type> {
+    fn typecheck_can_iterate(&self) -> Result<Type> {
         self.node.iteration_type().ok_or_else(|| {
             Error::type_error(self.span, "type that can be iterated over", &self.node)
         })

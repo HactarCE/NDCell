@@ -19,7 +19,7 @@ pub use int_set::IntegerSet;
 pub use pattern::Pattern;
 pub use runtime_value::{RtVal, SpannedRuntimeValueExt};
 pub use types::{FnSignature, SpannedTypeExt, Type};
-pub use value::Val;
+pub use value::{FallibleTypeOf, Val};
 pub use vec_set::VectorSet;
 
 /// Rust type used for NDCA integers.

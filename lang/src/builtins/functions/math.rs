@@ -8,14 +8,14 @@ use itertools::Itertools;
 use std::convert::TryInto;
 use std::fmt;
 
-use super::{FuncCall, Function};
+use super::{CallInfo, Function};
 use crate::ast;
 use crate::compiler::Compiler;
 use crate::data::{
     CpVal, LangInt, LangUint, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt,
     SpannedTypeExt, Type, Val,
 };
-use crate::errors::{Error, Fallible, Result};
+use crate::errors::{Error, Fallible, ReportError, Result};
 use crate::llvm;
 use crate::runtime::Runtime;
 
@@ -125,14 +125,17 @@ impl BinaryOp {
     /// `span` is the span of the operator, not the entire expression.
     pub fn eval_on_values(
         self,
+        runtime: &mut Runtime,
         span: Span,
         lhs: Spanned<RtVal>,
         rhs: Spanned<RtVal>,
-    ) -> Result<RtVal> {
+    ) -> Fallible<RtVal> {
         if let (Ok(l), Ok(r)) = (lhs.clone().as_integer(), rhs.clone().as_integer()) {
-            self.eval_on_integers(span, l, r).map(RtVal::Integer)
+            self.eval_on_integers(span, l, r)
+                .map(RtVal::Integer)
+                .map_err(|e| runtime.error(e))
         } else {
-            Err(Error::invalid_arguments(span, self, &[lhs.ty(), rhs.ty()]))
+            Err(runtime.error(Error::invalid_arguments(span, self, &[lhs.ty(), rhs.ty()])))
         }
     }
 
@@ -186,32 +189,15 @@ impl BinaryOp {
     }
 }
 impl Function for BinaryOp {
-    fn eval(&self, runtime: &mut Runtime, call: FuncCall<'_>) -> Fallible<RtVal> {
-        let args = call.eval_args(runtime)?;
-
-        if call.args.len() == 2 {
-            self.eval_on_values(call.span, args[0].clone(), args[1].clone())
-                .map_err(|e| runtime.error(e))
-        } else {
-            Err(runtime.error(Error::invalid_arguments(
-                call.span,
-                self,
-                &args.iter().map(|v| v.ty()).collect_vec(),
-            )))
-        }
+    fn eval(&self, runtime: &mut Runtime, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(2, runtime, self);
+        let lhs = call.args[0].clone();
+        let rhs = call.args[1].clone();
+        self.eval_on_values(runtime, call.span, lhs, rhs)
     }
-
-    fn compile(&self, compiler: &mut Compiler, call: FuncCall<'_>) -> Fallible<Val> {
-        let args = call.compile_args(compiler)?;
-
-        if call.args.len() == 2 {
-            self.compile_for_values(compiler, call.span, args[0].clone(), args[1].clone())
-        } else {
-            let arg_types = args
-                .iter()
-                .map(|v| compiler.get_val_type(v).map(|ty| ty.node))
-                .collect::<Fallible<Vec<Type>>>()?;
-            Err(compiler.error(Error::invalid_arguments(call.span, self, &arg_types)))
-        }
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
+        let lhs = call.args[0].clone();
+        let rhs = call.args[1].clone();
+        self.compile_for_values(compiler, call.span, lhs, rhs)
     }
 }

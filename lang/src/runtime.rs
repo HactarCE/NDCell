@@ -3,15 +3,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::ast;
-use crate::builtins::{self, FuncCall, Function};
+use crate::builtins::{self, Expression};
 use crate::data::{RtVal, SpannedRuntimeValueExt, Type, Val};
-use crate::errors::{AlreadyReported, Error, Fallible};
+use crate::errors::{AlreadyReported, Error, Fallible, ReportError};
 
-pub struct AssignableValue<'f, R> {
-    pub assign_fn: Box<dyn 'f + FnOnce(&mut R, Spanned<Val>) -> Fallible<()>>,
-    pub get_existing_value: Box<dyn 'f + FnOnce(&mut R) -> Fallible<Spanned<Val>>>,
-}
-pub type AssignableRuntimeValue<'f> = AssignableValue<'f, Runtime>;
+// TODO: when `#[feature(hash_raw_entry)]` stabalizes, consider changing `vars`
+// to a `HashMap<String, Val>`
 
 /// NDCA runtime state.
 #[derive(Debug, Default, Clone)]
@@ -29,6 +26,12 @@ pub struct Runtime {
 
     /// `@compile` directive. (There must be exactly one.)
     pub compile_directive: Option<ast::DirectiveId>,
+}
+impl ReportError for Runtime {
+    fn error(&mut self, e: Error) -> AlreadyReported {
+        self.errors.push(e);
+        AlreadyReported
+    }
 }
 
 /// Control flow command.
@@ -65,10 +68,6 @@ impl Runtime {
         Self::default()
     }
 
-    pub(crate) fn error(&mut self, e: Error) -> AlreadyReported {
-        self.errors.push(e);
-        AlreadyReported
-    }
     pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<Type>> {
         let span = v.span;
         match &v.node {
@@ -160,25 +159,10 @@ impl Runtime {
             ast::StmtData::Assign { lhs, op, rhs } => {
                 let lhs = ast.get_node(*lhs);
                 let rhs = ast.get_node(*rhs);
-                let mut rhs_value = self.eval_expr(rhs)?;
+                let new_value = self.eval_expr(rhs)?;
 
-                let AssignableValue {
-                    assign_fn,
-                    get_existing_value,
-                } = self.eval_expr_assignable(lhs)?;
-
-                if let Some(op_func) = Option::<builtins::math::BinaryOp>::from(op.node) {
-                    let lhs_value = get_existing_value(self)?;
-                    let lhs_value = self.get_rt_val(lhs_value)?;
-                    rhs_value = Spanned {
-                        node: op_func
-                            .eval_on_values(op.span, lhs_value, rhs_value)
-                            .map_err(|e| self.error(e))?,
-                        span: lhs.span().merge(rhs.span()),
-                    };
-                }
-
-                assign_fn(self, rhs_value.map_node(Val::Rt))?;
+                let lhs_expression = Box::<dyn builtins::Expression>::from(lhs);
+                lhs_expression.eval_assign(self, lhs.span(), *op, new_value)?;
 
                 Ok(Flow::Proceed)
             }
@@ -259,74 +243,48 @@ impl Runtime {
         }
     }
 
-    fn eval_expr_assignable<'ast>(
-        &mut self,
-        expr: ast::Expr<'ast>,
-    ) -> Fallible<AssignableRuntimeValue<'ast>> {
-        let ast = expr.ast;
-        match expr.data() {
-            ast::ExprData::Identifier(var_name) => {
-                // TODO: when #[feature(hash_raw_entry)] stabalizes, use
-                // that here to avoid the extra `Arc::clone()` (and
-                // consider changing `vars` to a `HashMap<String,
-                // Val>`)
-                Ok(AssignableValue {
-                    assign_fn: Box::new(move |runtime, new_value| {
-                        runtime.vars.insert(Arc::clone(var_name), new_value.node);
-                        Ok(())
-                    }),
-                    get_existing_value: Box::new(move |runtime| {
-                        runtime.eval_expr(expr).map(|x| x.map_node(Val::Rt))
-                    }),
-                })
-            }
-            ast::ExprData::MethodCall { obj, attr, args } => {
-                Err(self.error(Error::unimplemented(expr.span())))
-            }
-            ast::ExprData::IndexOp { obj, args } => {
-                Err(self.error(Error::unimplemented(expr.span())))
-            }
-
-            _ => Err(self.error(Error::cannot_assign_to(expr.span()))),
-        }
-    }
-
     pub fn eval_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<RtVal>> {
-        let ast = expr.ast;
         let span = expr.span();
-        let value = match expr.data() {
-            ast::ExprData::Paren(expr_id) => self.eval_expr(ast.get_node(*expr_id))?.node,
+        let expression = Box::<dyn Expression>::from(expr);
+        expression
+            .eval(self, span)
+            .map(|v| Spanned { node: v, span })
 
-            ast::ExprData::Identifier(var_name) => {
-                return self
-                    .vars
-                    .get(var_name)
-                    .cloned()
-                    .or_else(|| builtins::resolve_constant(var_name))
-                    .ok_or_else(|| self.error(Error::uninitialized_variable(expr.span())))
-                    .map(|node| Spanned { node, span })
-                    .and_then(|v| self.get_rt_val(v))
-            }
+        // let ast = expr.ast;
+        // let span = expr.span();
+        // let value = match expr.data() {
+        //     ast::ExprData::Paren(expr_id) => self.eval_expr(ast.get_node(*expr_id))?.node,
 
-            ast::ExprData::Constant(value) => value.clone(),
+        //     ast::ExprData::Identifier(var_name) => {
+        //         return self
+        //             .vars
+        //             .get(var_name)
+        //             .cloned()
+        //             .or_else(|| builtins::resolve_constant(var_name))
+        //             .ok_or_else(|| self.error(Error::uninitialized_variable(expr.span())))
+        //             .map(|node| Spanned { node, span })
+        //             .and_then(|v| self.get_rt_val(v))
+        //     }
 
-            ast::ExprData::BinaryOp(lhs, op, rhs) => Box::<dyn Function>::from(op.node).eval(
-                self,
-                FuncCall {
-                    span: op.span,
-                    args: &vec![ast.get_node(*lhs), ast.get_node(*rhs)],
-                },
-            )?,
-            ast::ExprData::PrefixOp(_, _) => todo!(),
-            ast::ExprData::CmpChain(_, _) => todo!(),
+        //     ast::ExprData::Constant(value) => value.clone(),
 
-            ast::ExprData::MethodCall { obj, attr, args } => todo!(),
-            ast::ExprData::FuncCall { func, args } => todo!(),
-            ast::ExprData::IndexOp { obj, args } => todo!(),
+        //     ast::ExprData::BinaryOp(lhs, op, rhs) => Box::<dyn Function>::from(op.node).eval(
+        //         self,
+        //         FuncCall {
+        //             span: op.span,
+        //             args: &vec![ast.get_node(*lhs), ast.get_node(*rhs)],
+        //         },
+        //     )?,
+        //     ast::ExprData::PrefixOp(_, _) => todo!(),
+        //     ast::ExprData::CmpChain(_, _) => todo!(),
 
-            ast::ExprData::VectorConstruct(_) => todo!(),
-        };
+        //     ast::ExprData::MethodCall { obj, attr, args } => todo!(),
+        //     ast::ExprData::FuncCall { func, args } => todo!(),
+        //     ast::ExprData::IndexOp { obj, args } => todo!(),
 
-        Ok(Spanned { node: value, span })
+        //     ast::ExprData::VectorConstruct(_) => todo!(),
+        // };
+
+        // Ok(Spanned { node: value, span })
     }
 }

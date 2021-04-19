@@ -50,9 +50,9 @@ fn test_expr_compiled(
     );
     let n = param_types.len();
     for i in 0..(n - 1) {
-        source.push_str(&format!("x{} = __compiled_arg__({})\n", i, i));
+        source.push_str(&format!("x{} = __compiled_arg__[{}]\n", i, i));
     }
-    source.push_str(&format!("__compiled_arg__({}) = {}\n", n - 1, expr_source));
+    source.push_str(&format!("__compiled_arg__[{}] = {}\n", n - 1, expr_source));
     source.push_str("}");
 
     let mut ast = ast::Program::new();

@@ -16,6 +16,12 @@ pub type Fallible<T> = std::result::Result<T, AlreadyReported>;
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct AlreadyReported;
 
+/// Error-reporting trait.
+pub trait ReportError {
+    /// Reports an error.
+    fn error(&mut self, e: Error) -> AlreadyReported;
+}
+
 /// Extension trait for converting a value to an `Option<Span>`.
 pub trait SpanConvertExt {
     /// Converts the value to an `Option<Span>`.
@@ -191,7 +197,7 @@ impl Error {
 
     error_fn!(Error; fn uninitialized_variable("this variable doesn't exist or hasn't been assigned a value"));
     error_fn!(Error; fn maybe_uninitialized_variable("this variable might not have been assigned a value"));
-    error_fn!(Error; fn ambiguous_variable_type("the type of this variable cannot be determined"));
+    error_fn!(Error; fn ambiguous_variable_type("this variable's type is ambiguous"));
 
     error_fn!(Error; fn cannot_assign_to("cannot assign to this expression"));
 

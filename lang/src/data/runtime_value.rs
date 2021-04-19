@@ -111,7 +111,6 @@ pub trait SpannedRuntimeValueExt {
     /// returns a type error.
     fn iterate(self) -> Result<Box<dyn Iterator<Item = Self>>>;
 }
-
 impl SpannedRuntimeValueExt for Spanned<RtVal> {
     fn as_integer(self) -> Result<LangInt> {
         match self.node {

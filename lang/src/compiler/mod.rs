@@ -35,11 +35,12 @@ mod loops;
 mod param;
 
 use crate::ast;
-use crate::builtins::{self, FuncCall, Function};
+use crate::builtins::{self, Expression};
 use crate::data::{
-    Array, CellSet, CpVal, LangCell, LangInt, RtVal, SpannedRuntimeValueExt, Type, Val, VectorSet,
+    Array, CellSet, CpVal, FallibleTypeOf, LangCell, LangInt, RtVal, SpannedRuntimeValueExt, Type,
+    Val, VectorSet,
 };
-use crate::errors::{AlreadyReported, Error, Fallible, Result};
+use crate::errors::{AlreadyReported, Error, Fallible, ReportError, Result};
 use crate::llvm::{self, traits::*};
 use crate::runtime::{self, Runtime};
 pub use config::CompilerConfig;
@@ -70,6 +71,12 @@ pub struct Compiler {
 
     /// LLVM instruction builder.
     builder: llvm::Builder,
+}
+
+impl ReportError for Compiler {
+    fn error(&mut self, e: Error) -> AlreadyReported {
+        self.runtime.error(e)
+    }
 }
 
 impl Compiler {
@@ -327,11 +334,6 @@ impl Compiler {
     /// code.
     pub fn target_data(&self) -> &llvm::TargetData {
         self.execution_engine.get_target_data()
-    }
-
-    /// Reports a compile error.
-    pub fn error(&mut self, e: Error) -> AlreadyReported {
-        self.runtime.error(e)
     }
 
     pub fn builder(&mut self) -> &mut llvm::Builder {
@@ -750,27 +752,63 @@ impl Compiler {
  * HIGH-LEVEL CONSTRUCTS
  */
 impl Compiler {
-    pub fn build_get_arg_ptr(
+    fn build_get_arg_ptr(
         &mut self,
-        idx: u32,
-        span: Span,
+        idx: Spanned<u32>,
     ) -> Fallible<(ParamType, llvm::PointerValue)> {
         let ty = self
             .param_types()
-            .get(idx as usize)
+            .get(idx.node as usize)
             .cloned()
             .map(|ty| ty.node);
         let arg_struct_ptr = self
             .llvm_fn()
-            .get_nth_param(0) // LLVM parameters are 1-indexed apparently
+            .get_nth_param(0)
             .unwrap()
             .into_pointer_value();
-        let arg_ptr =
-            self.builder()
-                .build_struct_gep(arg_struct_ptr, idx, &format!("arg_{}_ptr", idx));
+        let arg_ptr = self.builder().build_struct_gep(
+            arg_struct_ptr,
+            idx.node,
+            &format!("arg_{}_ptr", idx.node),
+        );
 
         ty.zip(arg_ptr.ok())
-            .ok_or_else(|| self.error(Error::custom(span, "compiled arg index out of range")))
+            .ok_or_else(|| self.error(Error::custom(idx.span, "compiled arg index out of range")))
+    }
+
+    pub fn build_load_arg(&mut self, idx: Spanned<u32>) -> Fallible<CpVal> {
+        let (arg_ty, arg_ptr) = self.build_get_arg_ptr(idx)?;
+
+        let arg_value = self
+            .builder()
+            .build_load(arg_ptr, &format!("arg_{}", idx.node));
+        Ok(match arg_ty {
+            ParamType::Integer => CpVal::Integer(arg_value.into_int_value()),
+            ParamType::Cell => CpVal::Cell(arg_value.into_int_value()),
+            ParamType::Vector(_) => CpVal::Vector(arg_value.into_vector_value()),
+        })
+    }
+    pub fn build_store_arg(
+        &mut self,
+        idx: Spanned<u32>,
+        new_arg_value: Spanned<Val>,
+    ) -> Fallible<()> {
+        let (arg_ty, arg_ptr) = self.build_get_arg_ptr(idx)?;
+
+        // Typecheck.
+        let expected_type = Type::from(arg_ty);
+        let got_type = new_arg_value.fallible_ty()?.map_err(|e| self.error(e))?;
+        if got_type != expected_type {
+            return Err(self.error(Error::type_error(
+                new_arg_value.span,
+                expected_type,
+                &got_type,
+            )));
+        }
+
+        let new_arg_llvm_value = self.get_cp_val(new_arg_value)?.llvm_value();
+        self.builder().build_store(arg_ptr, new_arg_llvm_value);
+        Ok(())
     }
 
     pub fn build_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<()> {
@@ -787,22 +825,10 @@ impl Compiler {
             ast::StmtData::Assign { lhs, op, rhs } => {
                 let lhs = ast.get_node(*lhs);
                 let rhs = ast.get_node(*rhs);
-                let mut rhs_value = self.build_expr(rhs)?;
+                let new_value = self.build_expr(rhs)?;
 
-                let runtime::AssignableValue {
-                    assign_fn,
-                    get_existing_value,
-                } = self.build_expr_assignable(lhs)?;
-
-                if let Some(op_func) = Option::<builtins::math::BinaryOp>::from(op.node) {
-                    let lhs_value = get_existing_value(self)?;
-                    rhs_value = Spanned {
-                        node: op_func.compile_for_values(self, op.span, lhs_value, rhs_value)?,
-                        span: lhs.span().merge(rhs.span()),
-                    };
-                }
-
-                assign_fn(self, rhs_value)?;
+                let lhs_expression = Box::<dyn builtins::Expression>::from(lhs);
+                lhs_expression.compile_assign(self, lhs.span(), *op, new_value)?;
             }
 
             ast::StmtData::IfElse {
@@ -881,101 +907,108 @@ impl Compiler {
         Ok(())
     }
 
-    fn build_expr_assignable<'ast>(
-        &mut self,
-        expr: ast::Expr<'ast>,
-    ) -> Fallible<builtins::AssignableCompileValue<'ast>> {
-        let ast = expr.ast;
-        match expr.data() {
-            ast::ExprData::Identifier(var_name) => {
-                // TODO: when #[feature(hash_raw_entry)] stabalizes, use
-                // that here to avoid the extra `Arc::clone()` (and
-                // consider changing `vars` to a `HashMap<String,
-                // CpVal>`)
-                Ok(runtime::AssignableValue {
-                    assign_fn: Box::new(move |compiler, new_value| {
-                        compiler
-                            .runtime
-                            .vars
-                            .insert(Arc::clone(var_name), new_value.node);
-                        Ok(())
-                    }),
-                    get_existing_value: Box::new(move |compiler| compiler.build_expr(expr)),
-                })
-            }
-            ast::ExprData::MethodCall { obj, attr, args } => {
-                Err(self.error(Error::unimplemented(expr.span())))
-            }
-            ast::ExprData::FuncCall { func, args } => {
-                let func = builtins::resolve_function(&func.node)
-                    .ok_or_else(|| self.error(Error::unimplemented(func.span)))?;
-                let args = args.iter().map(|&arg| ast.get_node(arg)).collect_vec();
+    // fn build_assignment_stmt<'ast>(
+    //     &mut self,
+    //     expr: ast::Expr<'ast>,
+    //     assign_op_fn: impl FnOnce(Val) -> Val,
+    // ) -> Fallible<()> {
+    //     let ast = expr.ast;
+    //     match expr.data() {
+    //         ast::ExprData::Identifier(var_name) => {
+    //             // TODO: when #[feature(hash_raw_entry)] stabalizes, use
+    //             // that here to avoid the extra `Arc::clone()` (and
+    //             // consider changing `vars` to a `HashMap<String,
+    //             // CpVal>`)
+    //             Ok(runtime::AssignableValue {
+    //                 assign_fn: Box::new(move |compiler, new_value| {
+    //                     compiler
+    //                         .runtime
+    //                         .vars
+    //                         .insert(Arc::clone(var_name), new_value.node);
+    //                     Ok(())
+    //                 }),
+    //                 get_existing_value: Box::new(move |compiler| compiler.build_expr(expr)),
+    //             })
+    //         }
+    //         ast::ExprData::MethodCall { obj, attr, args } => {
+    //             Err(self.error(Error::unimplemented(expr.span())))
+    //         }
+    //         ast::ExprData::FuncCall { func, args } => {
+    //             let func = builtins::resolve_function(&func.node)
+    //                 .ok_or_else(|| self.error(Error::unimplemented(func.span)))?;
+    //             let args = args.iter().map(|&arg| ast.get_node(arg)).collect_vec();
 
-                let x: Fallible<builtins::AssignableCompileValue<'ast>> = func.compile_assign(
-                    self,
-                    FuncCall {
-                        span: expr.span(),
-                        args: &args,
-                    },
-                );
-                x
-            }
-            ast::ExprData::IndexOp { obj, args } => {
-                Err(self.error(Error::unimplemented(expr.span())))
-            }
+    //             let x: Fallible<builtins::AssignableCompileValue<'ast>> = func.compile_assign(
+    //                 self,
+    //                 FuncCall {
+    //                     span: expr.span(),
+    //                     args: &args,
+    //                 },
+    //             );
+    //             x
+    //         }
+    //         ast::ExprData::IndexOp { obj, args } => {
+    //             Err(self.error(Error::unimplemented(expr.span())))
+    //         }
 
-            _ => Err(self.error(Error::cannot_assign_to(expr.span()))),
-        }
-    }
+    //         _ => Err(self.error(Error::cannot_assign_to(expr.span()))),
+    //     }
+    // }
 
     pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<Val>> {
-        let ast = expr.ast;
-        let value = match expr.data() {
-            ast::ExprData::Paren(expr_id) => self.build_expr(ast.get_node(*expr_id))?.node,
+        let span = expr.span();
+        let expression = Box::<dyn Expression>::from(expr);
+        expression
+            .compile(self, span)
+            .map(|v| Spanned { node: v, span })
 
-            ast::ExprData::Identifier(var_name) => self
-                .runtime
-                .vars
-                .get(var_name)
-                .cloned()
-                .or_else(|| builtins::resolve_constant(var_name))
-                .ok_or_else(|| self.error(Error::uninitialized_variable(expr.span())))?,
+        // let ast = expr.ast;
+        // let value = match expr.data() {
+        //     ast::ExprData::Paren(expr_id) => self.build_expr(ast.get_node(*expr_id))?.node,
 
-            ast::ExprData::Constant(value) => Val::Rt(value.clone()),
+        //     ast::ExprData::Identifier(var_name) => self
+        //         .runtime
+        //         .vars
+        //         .get(var_name)
+        //         .cloned()
+        //         .or_else(|| builtins::resolve_constant(var_name))
+        //         .ok_or_else(|| self.error(Error::uninitialized_variable(expr.span())))?,
 
-            ast::ExprData::BinaryOp(lhs, op, rhs) => Box::<dyn Function>::from(op.node).compile(
-                self,
-                FuncCall {
-                    span: op.span,
-                    args: &vec![ast.get_node(*lhs), ast.get_node(*rhs)],
-                },
-            )?,
-            ast::ExprData::PrefixOp(_, _) => todo!("compile PrefixOp"),
-            ast::ExprData::CmpChain(_, _) => todo!("compile CmpChain"),
+        //     ast::ExprData::Constant(value) => Val::Rt(value.clone()),
 
-            ast::ExprData::MethodCall { obj, attr, args } => todo!("compile MethodCall"),
-            ast::ExprData::FuncCall { func, args } => {
-                let func = builtins::resolve_function(&func.node)
-                    .ok_or_else(|| self.error(Error::unimplemented(func.span)))?;
-                let args = args.iter().map(|&arg| ast.get_node(arg)).collect_vec();
+        //     ast::ExprData::BinaryOp(lhs, op, rhs) => Box::<dyn Function>::from(op.node).compile(
+        //         self,
+        //         FuncCall {
+        //             span: op.span,
+        //             args: &vec![ast.get_node(*lhs), ast.get_node(*rhs)],
+        //         },
+        //     )?,
+        //     ast::ExprData::PrefixOp(_, _) => todo!("compile PrefixOp"),
+        //     ast::ExprData::CmpChain(_, _) => todo!("compile CmpChain"),
 
-                func.compile(
-                    self,
-                    FuncCall {
-                        span: expr.span(),
-                        args: &args,
-                    },
-                )?
-            }
-            ast::ExprData::IndexOp { obj, args } => todo!("compile IndexOp"),
+        //     ast::ExprData::MethodCall { obj, attr, args } => todo!("compile MethodCall"),
+        //     ast::ExprData::FuncCall { func, args } => {
+        //         let func = builtins::resolve_function(&func.node)
+        //             .ok_or_else(|| self.error(Error::unimplemented(func.span)))?;
+        //         let args = args.iter().map(|&arg| ast.get_node(arg)).collect_vec();
 
-            ast::ExprData::VectorConstruct(_) => todo!("compile VectorConstruct"),
-        };
+        //         func.compile(
+        //             self,
+        //             FuncCall {
+        //                 span: expr.span(),
+        //                 args: &args,
+        //             },
+        //         )?
+        //     }
+        //     ast::ExprData::IndexOp { obj, args } => todo!("compile IndexOp"),
 
-        Ok(Spanned {
-            node: value,
-            span: expr.span(),
-        })
+        //     ast::ExprData::VectorConstruct(_) => todo!("compile VectorConstruct"),
+        // };
+
+        // Ok(Spanned {
+        //     node: value,
+        //     span: expr.span(),
+        // })
     }
 }
 

@@ -1,9 +1,8 @@
 use codemap::Spanned;
 
-use crate::data::Type;
+use super::Type;
 use crate::errors::{Error, Result};
 use crate::llvm::{self, traits::*};
-use crate::runtime;
 
 /// Compile-time variable value of any type.
 #[derive(Debug, Clone)]

@@ -475,7 +475,7 @@ impl SyntaxRule for IndexSuffix {
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let obj = self.0;
-        let args_list = p.parse(ast, List::paren_comma_sep(Expression))?;
+        let args_list = p.parse(ast, List::bracket_comma_sep(Expression))?;
         let args = args_list.node;
         let expr_data = ast::ExprData::IndexOp { obj, args };
 

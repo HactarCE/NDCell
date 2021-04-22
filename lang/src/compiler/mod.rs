@@ -24,9 +24,9 @@
 //! guarantees that the [`llvm::JitFunction`] (and therefore the
 //! [`llvm::ExecutionEngine`]) will last as long as the [`CompiledFunction`].
 
-use codemap::{Span, Spanned};
+use codemap::Spanned;
 use itertools::Itertools;
-use std::convert::TryInto;
+use std::collections::HashMap;
 use std::sync::{mpsc, Arc};
 
 mod config;
@@ -36,13 +36,10 @@ mod param;
 
 use crate::ast;
 use crate::builtins::{self, Expression};
-use crate::data::{
-    Array, CellSet, CpVal, FallibleTypeOf, LangCell, LangInt, RtVal, SpannedRuntimeValueExt, Type,
-    Val, VectorSet,
-};
+use crate::data::{Array, CellSet, CpVal, FallibleTypeOf, LangInt, RtVal, Type, Val, VectorSet};
 use crate::errors::{AlreadyReported, Error, Fallible, ReportError, Result};
 use crate::llvm::{self, traits::*};
-use crate::runtime::{self, Runtime};
+use crate::runtime::Runtime;
 pub use config::CompilerConfig;
 pub use function::CompiledFunction;
 use loops::Loop;
@@ -50,32 +47,36 @@ pub use param::{Param, ParamType};
 
 #[derive(Debug)]
 pub struct Compiler {
-    /// Runtime used for compile-time evaluation.
-    pub runtime: Runtime,
-    /// Stack of loops we are currently inside.
-    loop_stack: Vec<Loop>,
+    /// Compiler configuration.
+    config: CompilerConfig,
 
     /// LLVM module.
     module: llvm::Module,
     /// LLVM JIT execution engine.
     execution_engine: llvm::ExecutionEngine,
-    /// Compiler configuration.
-    config: CompilerConfig,
-
-    /// Function being built (may not be initialized very early on).
+    /// Function being built (not immediately initialized).
     llvm_fn: Option<llvm::FunctionValue>,
-    /// Parameters of the function being built.
-    param_types: Vec<Spanned<ParamType>>,
-    /// List of possible runtime errors.
-    error_points: Vec<Error>,
-
     /// LLVM instruction builder.
     builder: llvm::Builder,
+
+    /// Variable values.
+    pub vars: HashMap<Arc<String>, Val>,
+    /// Stack of loops containing the statement currently being built. The
+    /// innermost loop is at the top of the stack (end of the list).
+    loop_stack: Vec<Loop>,
+
+    /// Parameter types for the function being built.
+    param_types: Vec<Spanned<ParamType>>,
+    /// List of possible runtime errors.
+    runtime_errors: Vec<Error>,
+    /// List of compile errors. If this list is non-empty, compilation fails.
+    compile_errors: Vec<Error>,
 }
 
 impl ReportError for Compiler {
     fn error(&mut self, e: Error) -> AlreadyReported {
-        self.runtime.error(e)
+        self.compile_errors.push(e);
+        AlreadyReported
     }
 }
 
@@ -85,10 +86,11 @@ impl Compiler {
     /// Name of the LLVM main function.
     const MAIN_FUNCTION_NAME: &'static str = "main";
 
-    /// Compiles a program, including executing initialization sections.
+    /// Compiles a program, given a `Runtime` that has already executed the
+    /// initialization section.
     pub fn compile(
         ast: Arc<ast::Program>,
-        mut runtime: Runtime,
+        runtime: Runtime,
         config: CompilerConfig,
     ) -> std::result::Result<CompiledFunction, Vec<Error>> {
         // See module documentation for justification of this thread spawning
@@ -96,13 +98,6 @@ impl Compiler {
         let (tx, rx) = mpsc::channel::<std::result::Result<CompiledFunction, Vec<Error>>>();
 
         std::thread::spawn(move || {
-            let mut runtime = Runtime::new();
-            if let Err(e) = runtime.run_init(&ast) {
-                // If the receiver is dropped, we don't care.
-                let _ = tx.send(Err(e.to_vec()));
-                return;
-            }
-
             // SAFETY: We take responsibility here for dropping the JIT function
             // on the same thread that created it after all references to the
             // `CompiledFunction` have been dropped.
@@ -207,19 +202,32 @@ impl Compiler {
             .collect::<Fallible<Vec<Spanned<ParamType>>>>()
             .map_err(|_| runtime.errors.clone())?;
 
+        if !runtime.errors.is_empty() {
+            return Err(runtime.errors);
+        }
+
+        // Initialize variables in compiled code with the values from the
+        // `@init` sections.
+        let vars = runtime
+            .vars
+            .into_iter()
+            .map(|(k, v)| (k, Val::Rt(v)))
+            .collect();
+
         let mut this = Self {
-            runtime,
-            loop_stack: vec![],
+            config,
 
             module,
             execution_engine,
-            config,
-
             llvm_fn: None,
-            param_types,
-            error_points: vec![],
-
             builder: llvm::ctx().create_builder(),
+
+            vars,
+            loop_stack: vec![],
+
+            param_types,
+            runtime_errors: vec![],
+            compile_errors: vec![],
         };
 
         // The LLVM function will take a single argument, a pointer to a struct
@@ -246,7 +254,7 @@ impl Compiler {
 
         match this.build_jit_function(ast.get_node(*function_body)) {
             Ok(ret) => Ok(ret),
-            Err(AlreadyReported) => Err(this.runtime.errors),
+            Err(AlreadyReported) => Err(this.compile_errors),
         }
     }
     /// JIT-compiles a new function that can be called from Rust code.
@@ -266,7 +274,7 @@ impl Compiler {
         }
 
         // Don't compile the JIT function if there are any errors.
-        if !self.runtime.errors.is_empty() {
+        if !self.compile_errors.is_empty() {
             return Err(AlreadyReported);
         }
 
@@ -291,7 +299,7 @@ impl Compiler {
         // Construct the `CompiledFunction`.
         Ok((
             jit_fn,
-            CompiledFunction::new(jit_fn_ptr, params, self.error_points.clone()),
+            CompiledFunction::new(jit_fn_ptr, params, self.runtime_errors.clone()),
         ))
     }
 
@@ -346,10 +354,28 @@ impl Compiler {
  */
 impl Compiler {
     pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<Type>> {
-        self.runtime.get_val_type(v)
+        let span = v.span;
+        match &v.node {
+            Val::Rt(v) => Ok(v.ty()),
+            Val::Cp(v) => Ok(v.ty()),
+            Val::Unknown(Some(ty)) => Ok(ty.clone()),
+            Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
+            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
+            Val::Err(e) => Err(*e),
+        }
+        .map(|node| Spanned { node, span })
     }
     pub(crate) fn get_rt_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<RtVal>> {
-        self.runtime.get_rt_val(v)
+        let span = v.span;
+        match v.node {
+            Val::Rt(v) => Ok(v),
+            Val::Cp(_) => Err(self.error(Error::cannot_const_eval(span))),
+            Val::Unknown(Some(ty)) => Err(self.error(Error::unknown_variable_value(span, ty))),
+            Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
+            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
+            Val::Err(e) => Err(e),
+        }
+        .map(|node| Spanned { node, span })
     }
     // TODO: probably remove this
     pub(crate) fn get_cp_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<CpVal>> {
@@ -357,7 +383,8 @@ impl Compiler {
         match v.node {
             Val::Rt(v) => todo!("compile-time constant"),
             Val::Cp(v) => Ok(v),
-            Val::Unknown(ty) => Err(self.error(Error::ambiguous_variable_type(span))),
+            Val::Unknown(Some(ty)) => Err(self.error(Error::unknown_variable_value(span, ty))),
+            Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
             Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
             Val::Err(e) => Err(e),
         }
@@ -694,8 +721,8 @@ impl Compiler {
             .unwrap();
         let is_overflow = self.build_reduce("or", is_overflow_vec)?;
 
-        let error_index = self.error_points.len();
-        self.error_points.push(overflow_error);
+        let error_index = self.runtime_errors.len();
+        self.runtime_errors.push(overflow_error);
 
         // Branch based on whether there is overflow.
         self.build_conditional(
@@ -907,108 +934,15 @@ impl Compiler {
         Ok(())
     }
 
-    // fn build_assignment_stmt<'ast>(
-    //     &mut self,
-    //     expr: ast::Expr<'ast>,
-    //     assign_op_fn: impl FnOnce(Val) -> Val,
-    // ) -> Fallible<()> {
-    //     let ast = expr.ast;
-    //     match expr.data() {
-    //         ast::ExprData::Identifier(var_name) => {
-    //             // TODO: when #[feature(hash_raw_entry)] stabalizes, use
-    //             // that here to avoid the extra `Arc::clone()` (and
-    //             // consider changing `vars` to a `HashMap<String,
-    //             // CpVal>`)
-    //             Ok(runtime::AssignableValue {
-    //                 assign_fn: Box::new(move |compiler, new_value| {
-    //                     compiler
-    //                         .runtime
-    //                         .vars
-    //                         .insert(Arc::clone(var_name), new_value.node);
-    //                     Ok(())
-    //                 }),
-    //                 get_existing_value: Box::new(move |compiler| compiler.build_expr(expr)),
-    //             })
-    //         }
-    //         ast::ExprData::MethodCall { obj, attr, args } => {
-    //             Err(self.error(Error::unimplemented(expr.span())))
-    //         }
-    //         ast::ExprData::FuncCall { func, args } => {
-    //             let func = builtins::resolve_function(&func.node)
-    //                 .ok_or_else(|| self.error(Error::unimplemented(func.span)))?;
-    //             let args = args.iter().map(|&arg| ast.get_node(arg)).collect_vec();
-
-    //             let x: Fallible<builtins::AssignableCompileValue<'ast>> = func.compile_assign(
-    //                 self,
-    //                 FuncCall {
-    //                     span: expr.span(),
-    //                     args: &args,
-    //                 },
-    //             );
-    //             x
-    //         }
-    //         ast::ExprData::IndexOp { obj, args } => {
-    //             Err(self.error(Error::unimplemented(expr.span())))
-    //         }
-
-    //         _ => Err(self.error(Error::cannot_assign_to(expr.span()))),
-    //     }
-    // }
-
     pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<Val>> {
         let span = expr.span();
         let expression = Box::<dyn Expression>::from(expr);
         expression
             .compile(self, span)
             .map(|v| Spanned { node: v, span })
-
-        // let ast = expr.ast;
-        // let value = match expr.data() {
-        //     ast::ExprData::Paren(expr_id) => self.build_expr(ast.get_node(*expr_id))?.node,
-
-        //     ast::ExprData::Identifier(var_name) => self
-        //         .runtime
-        //         .vars
-        //         .get(var_name)
-        //         .cloned()
-        //         .or_else(|| builtins::resolve_constant(var_name))
-        //         .ok_or_else(|| self.error(Error::uninitialized_variable(expr.span())))?,
-
-        //     ast::ExprData::Constant(value) => Val::Rt(value.clone()),
-
-        //     ast::ExprData::BinaryOp(lhs, op, rhs) => Box::<dyn Function>::from(op.node).compile(
-        //         self,
-        //         FuncCall {
-        //             span: op.span,
-        //             args: &vec![ast.get_node(*lhs), ast.get_node(*rhs)],
-        //         },
-        //     )?,
-        //     ast::ExprData::PrefixOp(_, _) => todo!("compile PrefixOp"),
-        //     ast::ExprData::CmpChain(_, _) => todo!("compile CmpChain"),
-
-        //     ast::ExprData::MethodCall { obj, attr, args } => todo!("compile MethodCall"),
-        //     ast::ExprData::FuncCall { func, args } => {
-        //         let func = builtins::resolve_function(&func.node)
-        //             .ok_or_else(|| self.error(Error::unimplemented(func.span)))?;
-        //         let args = args.iter().map(|&arg| ast.get_node(arg)).collect_vec();
-
-        //         func.compile(
-        //             self,
-        //             FuncCall {
-        //                 span: expr.span(),
-        //                 args: &args,
-        //             },
-        //         )?
-        //     }
-        //     ast::ExprData::IndexOp { obj, args } => todo!("compile IndexOp"),
-
-        //     ast::ExprData::VectorConstruct(_) => todo!("compile VectorConstruct"),
-        // };
-
-        // Ok(Spanned {
-        //     node: value,
-        //     span: expr.span(),
-        // })
+    }
+    pub fn build_expr_list(&mut self, exprs: &[ast::Expr<'_>]) -> Fallible<Vec<Spanned<Val>>> {
+        exprs.iter().map(|expr| self.build_expr(*expr)).collect()
     }
 }
 

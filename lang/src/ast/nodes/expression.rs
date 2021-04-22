@@ -22,19 +22,31 @@ pub enum ExprData {
     /// Comparison chain.
     CmpChain(Vec<ExprId>, Vec<Spanned<CompareOp>>),
 
-    /// Attribute access or method call.
-    MethodCall {
-        obj: ExprId,
-        attr: Spanned<Arc<String>>, // TODO: struct/enum for built-in method?
-        args: Vec<ExprId>,
-    },
     /// Function call.
     FuncCall {
+        /// Name of function.
         func: Spanned<Arc<String>>,
+        /// Arguments to the function call.
         args: Vec<ExprId>,
     },
+    /// Attribute access or method call.
+    MethodCall {
+        /// Name of attribute or method.
+        attr: Spanned<Arc<String>>,
+        /// Arguments to the method call (first must be method receiver).
+        ///
+        /// The span covers the pair of parentheses containing all but the first
+        /// argument.
+        args: Spanned<Vec<ExprId>>,
+    },
     /// Index operation.
-    IndexOp { obj: ExprId, args: Vec<ExprId> },
+    IndexOp {
+        /// Index arguments (first must be object being indexed).
+        ///
+        /// The span covers the pair of brackets containing all but the first
+        /// argument.
+        args: Spanned<Vec<ExprId>>,
+    },
 
     /// Vector constructor.
     VectorConstruct(Vec<ExprId>),

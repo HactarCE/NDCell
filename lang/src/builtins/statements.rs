@@ -4,30 +4,21 @@ use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
 
-use super::functions::{self, CallInfo, Function};
 use crate::ast;
 use crate::compiler::Compiler;
 use crate::data::{RtVal, SpannedRuntimeValueExt, Val};
 use crate::errors::{Error, Fallible, ReportError};
 use crate::runtime::Runtime;
 
-/// Expression that can be evaluated and/or compiled, including any relevant
+/// Statement that can be executed and/or compiled, including any relevant
 /// arguments.
-pub trait Expression: fmt::Debug {
-    /// Evaluates the expression, including any necessary sub-expressions, and
-    /// returns the resulting value.
-    ///
-    /// `span` is the span of the whole expression.
-    fn eval(&self, runtime: &mut Runtime, span: Span) -> Fallible<RtVal>;
-    /// Compiles code to evaluate the expression, including any necessary
-    /// sub-expressions, and returns the resulting value.
-    ///
-    /// `span` is the span of the whole expression.
+pub trait Staetment: fmt::Debug {
+    /// Evaluates the expression and returns the resulting control flow.
+    fn exec(&self, runtime: &mut Runtime, span: Span) -> Fallible<RtVal>;
+    /// Compiles code to evaluate the expression and returns the resulting
+    /// value, with the option to lazily evaluate arguments or short-circuit.
     fn compile(&self, compiler: &mut Compiler, span: Span) -> Fallible<Val>;
 
-    /// Assigns a new value to the expression.
-    ///
-    /// `span` is the span of the expression being assigned to.
     fn eval_assign(
         &self,
         runtime: &mut Runtime,
@@ -37,9 +28,6 @@ pub trait Expression: fmt::Debug {
     ) -> Fallible<()> {
         Err(runtime.error(Error::cannot_assign_to(span)))
     }
-    /// Compiles code to assign a new value to the expression.
-    ///
-    /// `span` is the span of the expression being assigned to.
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
@@ -62,19 +50,34 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
             ast::ExprData::Constant(v) => Box::new(Constant(v)),
 
             ast::ExprData::BinaryOp(lhs, op, rhs) => {
-                use crate::ast::BinaryOp::*;
-                match op.node {
-                    Add | Sub | Mul | Div | Mod | Pow | Shl | ShrSigned | ShrUnsigned
-                    | BitwiseAnd | BitwiseOr | BitwiseXor => Box::new(FuncCall {
-                        f: Option::<functions::math::BinaryOp>::from(op.node),
-                        f_span: op.span,
+                use functions::math::BinaryOp;
+
+                let make_binop_func_call = |f| {
+                    Box::new(FuncCall {
+                        f,
+                        span: op.span,
                         args: vec![ast.get_node(*lhs), ast.get_node(*rhs)],
-                    }),
-                    LogicalAnd => todo!("'LogicalAnd' expr"),
-                    LogicalOr => todo!("'LogicalOr' expr"),
-                    LogicalXor => todo!("'LogicalXor' expr"),
-                    Range => todo!("'Range' func"),
-                    Is => todo!("'Is' func"),
+                    })
+                };
+
+                match op.node {
+                    ast::BinaryOp::Add => make_binop_func_call(BinaryOp::Add),
+                    ast::BinaryOp::Sub => make_binop_func_call(BinaryOp::Sub),
+                    ast::BinaryOp::Mul => make_binop_func_call(BinaryOp::Mul),
+                    ast::BinaryOp::Div => make_binop_func_call(BinaryOp::Div),
+                    ast::BinaryOp::Mod => make_binop_func_call(BinaryOp::Mod),
+                    ast::BinaryOp::Pow => make_binop_func_call(BinaryOp::Pow),
+                    ast::BinaryOp::Shl => make_binop_func_call(BinaryOp::Shl),
+                    ast::BinaryOp::ShrSigned => make_binop_func_call(BinaryOp::ShrSigned),
+                    ast::BinaryOp::ShrUnsigned => make_binop_func_call(BinaryOp::ShrUnsigned),
+                    ast::BinaryOp::BitwiseAnd => make_binop_func_call(BinaryOp::BitwiseAnd),
+                    ast::BinaryOp::BitwiseOr => make_binop_func_call(BinaryOp::BitwiseOr),
+                    ast::BinaryOp::BitwiseXor => make_binop_func_call(BinaryOp::BitwiseXor),
+                    ast::BinaryOp::LogicalAnd => todo!("'LogicalAnd' expr"),
+                    ast::BinaryOp::LogicalOr => todo!("'LogicalOr' expr"),
+                    ast::BinaryOp::LogicalXor => todo!("'LogicalXor' expr"),
+                    ast::BinaryOp::Range => todo!("'Range' func"),
+                    ast::BinaryOp::Is => todo!("'Is' func"),
                 }
             }
             ast::ExprData::PrefixOp(_, _) => {
@@ -84,31 +87,17 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 todo!("cmp chain expr")
             }
 
-            ast::ExprData::FuncCall { func, args } => Box::new(FuncCall {
-                f: super::resolve_function(&func.node),
-                f_span: func.span,
-                args: ast.get_node_list(args),
-            }),
-            ast::ExprData::MethodCall { attr, args } => Box::new(MethodCall {
-                attr: Spanned {
-                    // `.map_node()` doesn't work here; I tried.
-                    node: &attr.node,
-                    span: attr.span,
-                },
-                args: ast.get_node_list(args),
-            }),
-            ast::ExprData::IndexOp { args } => match ast.get_node(args[0]).data() {
-                ast::ExprData::Identifier(s) if s.as_str() == "__compiled_arg__" => {
-                    // `[1..]` omits the `__compiled_arg__` expression.
-                    Box::new(CompiledArg(ast.get_node_list(&args[1..])))
-                }
-                _ => Box::new(MethodCall {
-                    attr: Spanned {
-                        node: "index",
-                        span: args.span,
-                    },
-                    args: ast.get_node_list(args),
-                }),
+            ast::ExprData::FuncCall { func, args } => {
+                todo!("find func by name")
+            }
+            ast::ExprData::MethodCall { obj, attr, args } => {
+                todo!("find method by name")
+            }
+            ast::ExprData::IndexOp { obj, args } => match ast.get_node(*obj).data() {
+                ast::ExprData::Identifier(s) if s.as_str() == "__compiled_arg__" => Box::new(
+                    CompiledArg(args.iter().map(|id| ast.get_node(*id)).collect()),
+                ),
+                _ => todo!("index op expr"),
             },
 
             ast::ExprData::VectorConstruct(_) => {
@@ -121,90 +110,34 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
 #[derive(Debug, Clone)]
 pub struct FuncCall<'ast, F> {
     /// Function to call.
-    f: Option<F>,
+    f: F,
     /// Span of the function name.
-    f_span: Span,
+    span: Span,
     /// Arguments to the function.
     args: Vec<ast::Expr<'ast>>,
 }
 impl<F: Function> Expression for FuncCall<'_, F> {
-    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let args = runtime.eval_expr_list(&self.args)?;
-        let span = self.f_span;
+    fn exec(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
+        let args = self
+            .args
+            .iter()
+            .map(|expr| runtime.eval_expr(*expr))
+            .collect::<Fallible<Vec<Spanned<RtVal>>>>()?;
+        let span = self.span;
 
-        match &self.f {
-            Some(f) => f.eval(runtime, CallInfo { span, args }),
-            None => Err(runtime.error(Error::no_such_function(span))),
-        }
+        let call = CallInfo { span, args };
+        self.f.exec(runtime, call)
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let args = compiler.build_expr_list(&self.args)?;
-        let span = self.f_span;
+        let args = self
+            .args
+            .iter()
+            .map(|expr| compiler.build_expr(*expr))
+            .collect::<Fallible<Vec<Spanned<Val>>>>()?;
+        let span = self.span;
 
-        match &self.f {
-            Some(f) => f.compile(compiler, CallInfo { span, args }),
-            None => Err(compiler.error(Error::no_such_function(span))),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct MethodCall<'ast> {
-    /// Name of method to call.
-    attr: Spanned<&'ast str>,
-    /// Arguments to the method, including the receiver. **Calling `eval()` or
-    /// `compile()` panics if this list is empty.**
-    args: Vec<ast::Expr<'ast>>,
-}
-impl Expression for MethodCall<'_> {
-    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let args = runtime.eval_expr_list(&self.args)?;
-        let span = self.attr.span;
-
-        let receiver = args.first().expect("method call has no receiver");
-        let receiver_ty = receiver.node.ty();
-        let f = super::resolve_method(&receiver_ty, &self.attr.node)
-            .ok_or_else(|| runtime.error(Error::no_such_method(span, receiver_ty)))?;
-        f.eval(runtime, CallInfo { span, args })
-    }
-    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let args = compiler.build_expr_list(&self.args)?;
-        let span = self.attr.span;
-
-        let receiver = args.first().expect("method call has no receiver");
-        let receiver_ty = compiler.get_val_type(receiver)?.node;
-        let f = super::resolve_method(&receiver_ty, &self.attr.node)
-            .ok_or_else(|| compiler.error(Error::no_such_method(span, receiver_ty)))?;
-        f.compile(compiler, CallInfo { span, args })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Index<'ast> {
-    /// Indexing arguments, including the object being indexed. **Calling
-    /// `eval()` or `compile()` panics if this list is empty.**
-    args: Spanned<Vec<ast::Expr<'ast>>>,
-}
-impl Expression for Index<'_> {
-    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let args = runtime.eval_expr_list(&self.args.node)?;
-        let span = self.args.span;
-
-        let obj = args.first().expect("method call has no receiver");
-        let obj_ty = obj.node.ty();
-        let f = super::resolve_index_method(&obj_ty)
-            .ok_or_else(|| runtime.error(Error::cannot_index_type(span, obj_ty)))?;
-        f.eval(runtime, CallInfo { span, args })
-    }
-    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let args = compiler.build_expr_list(&self.args.node)?;
-        let span = self.args.span;
-
-        let obj = args.first().expect("method call has no receiver");
-        let obj_ty = compiler.get_val_type(obj)?.node;
-        let f = super::resolve_index_method(&obj_ty)
-            .ok_or_else(|| compiler.error(Error::cannot_index_type(span, obj_ty)))?;
-        f.compile(compiler, CallInfo { span, args })
+        let call = CallInfo { span, args };
+        self.f.compile(compiler, call)
     }
 }
 
@@ -241,7 +174,7 @@ impl<'ast> CompiledArg<'ast> {
     }
 }
 impl Expression for CompiledArg<'_> {
-    fn eval(&self, runtime: &mut Runtime, span: Span) -> Fallible<RtVal> {
+    fn exec(&self, runtime: &mut Runtime, span: Span) -> Fallible<RtVal> {
         Err(runtime.error(Error::cannot_const_eval(span)))
     }
     fn compile(&self, compiler: &mut Compiler, span: Span) -> Fallible<Val> {
@@ -275,7 +208,7 @@ impl Expression for CompiledArg<'_> {
 #[derive(Debug, Clone)]
 pub struct Identifier<'ast>(&'ast Arc<String>);
 impl Expression for Identifier<'_> {
-    fn eval(&self, runtime: &mut Runtime, span: Span) -> Fallible<RtVal> {
+    fn exec(&self, runtime: &mut Runtime, span: Span) -> Fallible<RtVal> {
         runtime
             .vars
             .get(self.0)
@@ -302,7 +235,7 @@ impl Expression for Identifier<'_> {
         new_value: Spanned<RtVal>,
     ) -> Fallible<()> {
         let new_value =
-            eval_assign_op(runtime, |rt| self.eval(rt, span), span, op, new_value)?.node;
+            eval_assign_op(runtime, |rt| self.exec(rt, span), span, op, new_value)?.node;
         runtime.vars.insert(Arc::clone(self.0), new_value);
         Ok(())
     }
@@ -323,7 +256,7 @@ impl Expression for Identifier<'_> {
 #[derive(Debug, Clone)]
 pub struct Constant<'a>(&'a RtVal);
 impl Expression for Constant<'_> {
-    fn eval(&self, _runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
+    fn exec(&self, _runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
         Ok(self.0.clone())
     }
     fn compile(&self, _compiler: &mut Compiler, _span: Span) -> Fallible<Val> {

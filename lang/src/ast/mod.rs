@@ -1,5 +1,4 @@
 use codemap::{CodeMap, File, Span};
-use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 use std::sync::Arc;
@@ -9,7 +8,6 @@ mod nodes;
 mod ops;
 
 use crate::data::Type;
-use crate::errors::Error;
 pub use cellstate::CellState;
 pub use nodes::*;
 pub use ops::*;
@@ -55,6 +53,12 @@ impl Program {
 
     pub fn get_node<'ast, N: NodeTrait>(&'ast self, id: NodeId<N>) -> AstNode<'ast, N> {
         AstNode { ast: self, id }
+    }
+    pub fn get_node_list<'ast, N: NodeTrait>(
+        &'ast self,
+        ids: &[NodeId<N>],
+    ) -> Vec<AstNode<'ast, N>> {
+        ids.iter().map(|&id| self.get_node(id)).collect()
     }
 
     // pub fn try_get_directive<'ast>(

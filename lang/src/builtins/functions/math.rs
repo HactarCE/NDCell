@@ -74,6 +74,29 @@ impl From<ast::AssignOp> for Option<BinaryOp> {
         }
     }
 }
+impl From<ast::BinaryOp> for Option<BinaryOp> {
+    fn from(op: ast::BinaryOp) -> Self {
+        match op {
+            ast::BinaryOp::Add => Some(BinaryOp::Add),
+            ast::BinaryOp::Sub => Some(BinaryOp::Sub),
+            ast::BinaryOp::Mul => Some(BinaryOp::Mul),
+            ast::BinaryOp::Div => Some(BinaryOp::Div),
+            ast::BinaryOp::Mod => Some(BinaryOp::Mod),
+            ast::BinaryOp::Pow => Some(BinaryOp::Pow),
+            ast::BinaryOp::Shl => Some(BinaryOp::Shl),
+            ast::BinaryOp::ShrSigned => Some(BinaryOp::ShrSigned),
+            ast::BinaryOp::ShrUnsigned => Some(BinaryOp::ShrUnsigned),
+            ast::BinaryOp::BitwiseAnd => Some(BinaryOp::BitwiseAnd),
+            ast::BinaryOp::BitwiseOr => Some(BinaryOp::BitwiseOr),
+            ast::BinaryOp::BitwiseXor => Some(BinaryOp::BitwiseXor),
+            ast::BinaryOp::LogicalAnd => None,
+            ast::BinaryOp::LogicalOr => None,
+            ast::BinaryOp::LogicalXor => None,
+            ast::BinaryOp::Range => None,
+            ast::BinaryOp::Is => None,
+        }
+    }
+}
 impl BinaryOp {
     /// Evaluates this operation for two integers.
     fn eval_on_integers(self, span: Span, lhs: LangInt, rhs: LangInt) -> Result<LangInt> {
@@ -190,7 +213,7 @@ impl BinaryOp {
 }
 impl Function for BinaryOp {
     fn eval(&self, runtime: &mut Runtime, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(2, runtime, self);
+        call.check_args_len(2, runtime, self)?;
         let lhs = call.args[0].clone();
         let rhs = call.args[1].clone();
         self.eval_on_values(runtime, call.span, lhs, rhs)

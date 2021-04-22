@@ -5,7 +5,7 @@ pub mod math;
 
 use crate::ast;
 use crate::compiler::Compiler;
-use crate::data::{CpVal, FallibleTypeOf, RtVal, Type, Val};
+use crate::data::{FallibleTypeOf, RtVal, Type, Val};
 use crate::errors::{AlreadyReported, Error, Fallible, ReportError};
 use crate::runtime::Runtime;
 
@@ -24,6 +24,15 @@ pub trait Function: fmt::Debug + fmt::Display {
     /// this expression cannot be compiled.
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         Err(compiler.error(Error::cannot_compile(call.span)))
+    }
+}
+
+impl Function for Box<dyn Function> {
+    fn eval(&self, runtime: &mut Runtime, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        (**self).eval(runtime, call)
+    }
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
+        (**self).compile(compiler, call)
     }
 }
 

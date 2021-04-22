@@ -4,17 +4,14 @@ use std::sync::Arc;
 
 use crate::ast;
 use crate::builtins::{self, Expression};
-use crate::data::{RtVal, SpannedRuntimeValueExt, Type, Val};
+use crate::data::{RtVal, SpannedRuntimeValueExt};
 use crate::errors::{AlreadyReported, Error, Fallible, ReportError};
-
-// TODO: when `#[feature(hash_raw_entry)]` stabalizes, consider changing `vars`
-// to a `HashMap<String, Val>`
 
 /// NDCA runtime state.
 #[derive(Debug, Default, Clone)]
 pub struct Runtime {
     /// Variable values.
-    pub vars: HashMap<Arc<String>, Val>,
+    pub vars: HashMap<Arc<String>, RtVal>,
     // /// Rule name.
     // rule_name: Option<String>,
     // /// Number of dimensions.
@@ -66,30 +63,6 @@ impl Default for Flow {
 impl Runtime {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<Type>> {
-        let span = v.span;
-        match &v.node {
-            Val::Rt(v) => Ok(v.ty()),
-            Val::Cp(v) => Ok(v.ty()),
-            Val::Unknown(Some(ty)) => Ok(ty.clone()),
-            Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
-            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
-            Val::Err(e) => Err(*e),
-        }
-        .map(|node| Spanned { node, span })
-    }
-    pub(crate) fn get_rt_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<RtVal>> {
-        let span = v.span;
-        match v.node {
-            Val::Rt(v) => Ok(v),
-            Val::Cp(_) => Err(self.error(Error::cannot_const_eval(span))),
-            Val::Unknown(ty) => Err(self.error(Error::ambiguous_variable_type(span))),
-            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
-            Val::Err(e) => Err(e),
-        }
-        .map(|node| Spanned { node, span })
     }
 
     pub fn run_init(&mut self, ast: &ast::Program) -> Result<(), &[Error]> {
@@ -217,10 +190,7 @@ impl Runtime {
                     .iterate()
                     .map_err(|e| self.error(e))?
                 {
-                    // TODO: when #[feature(hash_raw_entry)] stabalizes, use
-                    // that here to avoid the extra `Arc::clone()` (and consider
-                    // changing `vars` to a `HashMap<String, Val>`)
-                    self.vars.insert(Arc::clone(&iter_var), Val::Rt(it.node));
+                    self.vars.insert(Arc::clone(&iter_var), it.node);
                     match self.exec_stmt(ast.get_node(*block))? {
                         Flow::Proceed | Flow::Continue(_) => (),
                         Flow::Break(_) => break,
@@ -249,42 +219,8 @@ impl Runtime {
         expression
             .eval(self, span)
             .map(|v| Spanned { node: v, span })
-
-        // let ast = expr.ast;
-        // let span = expr.span();
-        // let value = match expr.data() {
-        //     ast::ExprData::Paren(expr_id) => self.eval_expr(ast.get_node(*expr_id))?.node,
-
-        //     ast::ExprData::Identifier(var_name) => {
-        //         return self
-        //             .vars
-        //             .get(var_name)
-        //             .cloned()
-        //             .or_else(|| builtins::resolve_constant(var_name))
-        //             .ok_or_else(|| self.error(Error::uninitialized_variable(expr.span())))
-        //             .map(|node| Spanned { node, span })
-        //             .and_then(|v| self.get_rt_val(v))
-        //     }
-
-        //     ast::ExprData::Constant(value) => value.clone(),
-
-        //     ast::ExprData::BinaryOp(lhs, op, rhs) => Box::<dyn Function>::from(op.node).eval(
-        //         self,
-        //         FuncCall {
-        //             span: op.span,
-        //             args: &vec![ast.get_node(*lhs), ast.get_node(*rhs)],
-        //         },
-        //     )?,
-        //     ast::ExprData::PrefixOp(_, _) => todo!(),
-        //     ast::ExprData::CmpChain(_, _) => todo!(),
-
-        //     ast::ExprData::MethodCall { obj, attr, args } => todo!(),
-        //     ast::ExprData::FuncCall { func, args } => todo!(),
-        //     ast::ExprData::IndexOp { obj, args } => todo!(),
-
-        //     ast::ExprData::VectorConstruct(_) => todo!(),
-        // };
-
-        // Ok(Spanned { node: value, span })
+    }
+    pub fn eval_expr_list(&mut self, exprs: &[ast::Expr<'_>]) -> Fallible<Vec<Spanned<RtVal>>> {
+        exprs.iter().map(|expr| self.eval_expr(*expr)).collect()
     }
 }

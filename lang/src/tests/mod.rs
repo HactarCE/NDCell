@@ -24,7 +24,7 @@ mod values;
 
 use crate::ast;
 use crate::compiler::{Compiler, CompilerConfig};
-use crate::data::{LangInt, RtVal, Type, Val};
+use crate::data::{LangInt, RtVal, Type};
 use crate::errors::Error;
 use crate::runtime::Runtime;
 use crate::utils;
@@ -114,7 +114,7 @@ fn test_expr_interpreted(
         // Set input variables.
         for (i, value) in inputs.iter().enumerate() {
             let var_name = Arc::new(format!("x{}", i));
-            runtime.vars.insert(var_name, Val::Rt(value.clone()));
+            runtime.vars.insert(var_name, value.clone());
         }
         // Evaluate expression.
         let actual_result = runtime

@@ -24,7 +24,7 @@
 //! guarantees that the [`llvm::JitFunction`] (and therefore the
 //! [`llvm::ExecutionEngine`]) will last as long as the [`CompiledFunction`].
 
-use codemap::Spanned;
+use codemap::{Span, Spanned};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::{mpsc, Arc};
@@ -344,8 +344,15 @@ impl Compiler {
         self.execution_engine.get_target_data()
     }
 
+    /// Returns the LLVM instruction builder.
     pub fn builder(&mut self) -> &mut llvm::Builder {
         &mut self.builder
+    }
+
+    /// Adds a possible runtime error and returns the error index.
+    pub fn add_runtime_error(&mut self, e: Error) -> usize {
+        self.runtime_errors.push(e);
+        self.runtime_errors.len() - 1
     }
 }
 
@@ -488,7 +495,7 @@ impl Compiler {
     /// be converted to a boolean.
     fn build_convert_to_bool(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
         let b = self.builder();
-        use llvm::IntPredicate::NE as NOT_EQUAL;
+        use llvm::IntPredicate::NE;
 
         match &v.node {
             _ => todo!("built convert to bool"),
@@ -667,7 +674,7 @@ impl Compiler {
         lhs: T,
         rhs: T,
         name: &str,
-        overflow_error: Error,
+        error_span: Span,
     ) -> Fallible<llvm::BasicValueEnum> {
         let arg_type = lhs.as_basic_value_enum().get_type();
 
@@ -721,8 +728,7 @@ impl Compiler {
             .unwrap();
         let is_overflow = self.build_reduce("or", is_overflow_vec)?;
 
-        let error_index = self.runtime_errors.len();
-        self.runtime_errors.push(overflow_error);
+        let error_index = self.add_runtime_error(Error::integer_overflow(error_span));
 
         // Branch based on whether there is overflow.
         self.build_conditional(
@@ -744,11 +750,11 @@ impl Compiler {
         value: llvm::BasicValueEnum,
     ) -> Fallible<llvm::IntValue> {
         match value {
-            llvm::BasicValueEnum::ArrayValue(_) => unimplemented!(),
-            llvm::BasicValueEnum::FloatValue(_) => unimplemented!(),
+            llvm::BasicValueEnum::ArrayValue(_) => unimplemented!("cannot reduce ArrayValue"),
+            llvm::BasicValueEnum::FloatValue(_) => unimplemented!("cannot reduce FloatValue"),
             llvm::BasicValueEnum::IntValue(i) => Ok(i),
-            llvm::BasicValueEnum::PointerValue(_) => unimplemented!(),
-            llvm::BasicValueEnum::StructValue(_) => unimplemented!(),
+            llvm::BasicValueEnum::PointerValue(_) => unimplemented!("cannot reduce PointerValue"),
+            llvm::BasicValueEnum::StructValue(_) => unimplemented!("cannot reduce StructValue"),
             llvm::BasicValueEnum::VectorValue(v) => {
                 let fn_type = v
                     .get_type()
@@ -772,6 +778,18 @@ impl Compiler {
                     .into_int_value())
             }
         }
+    }
+
+    /// Build an integer/vector comparison that return true if any element-wise
+    /// comparison is true.
+    pub fn build_any_cmp<M: llvm::IntMathValue<'static>>(
+        &mut self,
+        predicate: llvm::IntPredicate,
+        lhs: M,
+        rhs: M,
+    ) -> Fallible<llvm::IntValue> {
+        let cmp_result = self.builder().build_int_compare(predicate, lhs, rhs, "");
+        self.build_reduce("or", cmp_result.as_basic_value_enum())
     }
 }
 

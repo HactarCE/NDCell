@@ -123,6 +123,8 @@ fn test_expr_interpreted(
             .map_err(|_| &runtime.errors[..]);
         // Check result.
         assert_results_eq(&ast, task_str, &actual_result, expected_result);
+        // Clear errors for next run.
+        runtime.errors.clear();
     }
 }
 

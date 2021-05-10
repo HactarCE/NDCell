@@ -70,7 +70,7 @@ fn test_expr_compiled(
     };
 
     for (inputs, expected_result) in inputs_and_expected_results {
-        let task_str = &format!("evaluating {:?} with inputs {:?}", source, inputs);
+        let task_str = &format!("evaluating compiled {:?} with inputs {:?}", source, inputs);
         // Set input parameters.
         let mut arg_values = inputs.to_vec();
         arg_values.push(match param_types[n - 1] {
@@ -110,7 +110,7 @@ fn test_expr_interpreted(
 
     let mut runtime = Runtime::new();
     for (inputs, expected_result) in inputs_and_expected_results {
-        let task_str = &format!("evaluating {:?} with inputs {:?}", source, inputs);
+        let task_str = &format!("intepreting {:?} with inputs {:?}", source, inputs);
         // Set input variables.
         for (i, value) in inputs.iter().enumerate() {
             let var_name = Arc::new(format!("x{}", i));

@@ -939,6 +939,7 @@ impl Compiler {
  * HIGH-LEVEL CONSTRUCTS
  */
 impl Compiler {
+    /// Builds instructions to get a pointer to a JIT function argument.
     fn build_get_arg_ptr(
         &mut self,
         idx: Spanned<u32>,
@@ -963,6 +964,7 @@ impl Compiler {
             .ok_or_else(|| self.error(Error::custom(idx.span, "compiled arg index out of range")))
     }
 
+    /// Builds instructions to fetch a JIT function argument value.
     pub fn build_load_arg(&mut self, idx: Spanned<u32>) -> Fallible<CpVal> {
         let (arg_ty, arg_ptr) = self.build_get_arg_ptr(idx)?;
 
@@ -975,6 +977,7 @@ impl Compiler {
             ParamType::Vector(_) => CpVal::Vector(arg_value.into_vector_value()),
         })
     }
+    /// Builds instructions to set a JIT function argument value.
     pub fn build_store_arg(
         &mut self,
         idx: Spanned<u32>,
@@ -998,6 +1001,7 @@ impl Compiler {
         Ok(())
     }
 
+    /// Builds instructions to execute a statement.
     pub fn build_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<()> {
         let ast = stmt.ast;
         match stmt.data() {
@@ -1094,6 +1098,7 @@ impl Compiler {
         Ok(())
     }
 
+    /// Builds instructions to evaluate an expression.
     pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<Val>> {
         let span = expr.span();
         let expression = Box::<dyn Expression>::from(expr);
@@ -1101,6 +1106,7 @@ impl Compiler {
             .compile(self, span)
             .map(|v| Spanned { node: v, span })
     }
+    /// Builds instructions to evaluate several expressions in order.
     pub fn build_expr_list(&mut self, exprs: &[ast::Expr<'_>]) -> Fallible<Vec<Spanned<Val>>> {
         exprs.iter().map(|expr| self.build_expr(*expr)).collect()
     }

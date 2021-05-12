@@ -2,32 +2,27 @@ use codemap::{Span, Spanned};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::builtins::{self, Expression};
 use crate::ast;
-use crate::builtins::{self, Expression};
 use crate::data::{RtVal, SpannedRuntimeValueExt};
-use crate::errors::{AlreadyReported, Error, Fallible, ReportError};
+use crate::errors::{AlreadyReported, Error, Fallible};
+use crate::exec::{Ctx, CtxTrait};
+
+// TODO: consider making `vars` only `pub(super)` and adding `fn vars(&mut self) -> &mut HashMap<_, _>`
 
 /// NDCA runtime state.
 #[derive(Debug, Default, Clone)]
 pub struct Runtime {
+    /// Global initialization execution context.
+    pub(super) ctx: Ctx,
+
     /// Variable values.
     pub vars: HashMap<Arc<String>, RtVal>,
-    // /// Rule name.
-    // rule_name: Option<String>,
-    // /// Number of dimensions.
-    // ndim: Option<usize>,
-    // /// Number of states.
-    // states: Option<usize>,
-    /// Runtime and compile-time errors.
-    pub errors: Vec<Error>,
-
-    /// `@compile` directive. (There must be exactly one.)
-    pub compile_directive: Option<ast::DirectiveId>,
 }
-impl ReportError for Runtime {
-    fn error(&mut self, e: Error) -> AlreadyReported {
-        self.errors.push(e);
-        AlreadyReported
+
+impl CtxTrait for Runtime {
+    fn ctx(&mut self) -> &mut Ctx {
+        &mut self.ctx
     }
 }
 
@@ -69,14 +64,14 @@ impl Runtime {
         for &directive_id in ast.directives() {
             let directive = ast.get_node(directive_id);
             match directive.data() {
-                ast::DirectiveData::Compile { .. } => match self.compile_directive {
+                ast::DirectiveData::Compile { .. } => match self.ctx.compile_directive {
                     Some(_) => {
                         // Lie to the user; tell them this directive name is
                         // invalid, because they shouldn't be using it!
                         self.error(Error::invalid_directive_name(directive.span()));
                     }
                     None => {
-                        self.compile_directive = Some(directive_id);
+                        self.ctx.compile_directive = Some(directive_id);
                     }
                 },
 
@@ -109,10 +104,10 @@ impl Runtime {
                 },
             }
         }
-        if self.errors.is_empty() {
+        if self.ctx.errors.is_empty() {
             Ok(())
         } else {
-            Err(&self.errors)
+            Err(&self.ctx.errors)
         }
     }
 

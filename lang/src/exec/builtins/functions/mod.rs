@@ -4,10 +4,9 @@ use std::fmt;
 pub mod math;
 
 use crate::ast;
-use crate::compiler::Compiler;
 use crate::data::{FallibleTypeOf, RtVal, Type, Val};
-use crate::errors::{AlreadyReported, Error, Fallible, ReportError};
-use crate::runtime::Runtime;
+use crate::errors::{AlreadyReported, Error, Fallible};
+use crate::exec::{Compiler, Ctx, CtxTrait, Runtime};
 
 /// Function that can be evaluated and/or compiled, taking zero or more
 /// arguments and returning a value.
@@ -16,7 +15,7 @@ use crate::runtime::Runtime;
 /// trait.
 pub trait Function: fmt::Debug + fmt::Display {
     /// Executes the expression and returns the resulting value.
-    fn eval(&self, runtime: &mut Runtime, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal>;
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal>;
     /// Compiles code to evaluate the expression and returns the resulting
     /// value.
     ///
@@ -28,8 +27,8 @@ pub trait Function: fmt::Debug + fmt::Display {
 }
 
 impl Function for Box<dyn Function> {
-    fn eval(&self, runtime: &mut Runtime, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        (**self).eval(runtime, call)
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        (**self).eval(ctx, call)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         (**self).compile(compiler, call)
@@ -59,39 +58,37 @@ impl CallInfo<ast::Expr<'_>> {
     }
 }
 impl<V: FallibleTypeOf> CallInfo<Spanned<V>> {
-    fn arg_types(&self, reporter: &mut impl ReportError) -> Fallible<Vec<Type>> {
+    fn arg_types(&self, ctx: &mut impl CtxTrait) -> Fallible<Vec<Type>> {
         self.args
             .iter()
             .map(|arg| {
                 arg.fallible_ty()
-                    .and_then(|ty| ty.map_err(|e| reporter.error(e)))
+                    .and_then(|ty| ty.map_err(|e| ctx.error(e)))
             })
             .collect()
     }
 
     fn invalid_args_error(
         &self,
-        reporter: &mut impl ReportError,
+        ctx: &mut impl CtxTrait,
         func_name: impl fmt::Display,
     ) -> AlreadyReported {
-        match self.arg_types(reporter) {
+        match self.arg_types(ctx) {
             Err(AlreadyReported) => AlreadyReported,
-            Ok(arg_types) => {
-                reporter.error(Error::invalid_arguments(self.span, func_name, &arg_types))
-            }
+            Ok(arg_types) => ctx.error(Error::invalid_arguments(self.span, func_name, &arg_types)),
         }
     }
 
     pub fn check_args_len(
         &self,
         n: usize,
-        reporter: &mut impl ReportError,
+        ctx: &mut impl CtxTrait,
         func_name: impl fmt::Display,
     ) -> Fallible<()> {
         if self.args.len() == n {
             Ok(())
         } else {
-            Err(self.invalid_args_error(reporter, func_name))
+            Err(self.invalid_args_error(ctx, func_name))
         }
     }
 }

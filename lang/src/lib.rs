@@ -19,15 +19,11 @@ pub mod errors;
 #[macro_use]
 mod data;
 mod ast;
-mod builtins;
-mod compiler;
-// mod constvalue;
+mod exec;
 mod lexer;
 mod llvm;
-// mod meta;
 mod parser;
 mod regex;
-mod runtime;
 
 // pub use crate::meta::{CellState, RuleMeta};
 // pub use constvalue::ConstValue;

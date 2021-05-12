@@ -16,12 +16,6 @@ pub type Fallible<T> = std::result::Result<T, AlreadyReported>;
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct AlreadyReported;
 
-/// Error-reporting trait.
-pub trait ReportError {
-    /// Reports an error.
-    fn error(&mut self, e: Error) -> AlreadyReported;
-}
-
 /// Extension trait for converting a value to an `Option<Span>`.
 pub trait SpanConvertExt {
     /// Converts the value to an `Option<Span>`.

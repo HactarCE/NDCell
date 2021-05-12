@@ -30,6 +30,26 @@ impl From<CpVal> for Val {
         Self::Cp(v)
     }
 }
+impl Val {
+    /// Returns the value inside if this is an `RtVal` variant; otherwise
+    /// returns `None`.
+    pub fn rt_val(self) -> Option<RtVal> {
+        if let Self::Rt(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+    /// Returns the value inside if this is an `CpVal` variant; otherwise
+    /// returns `None`.
+    pub fn cp_val(self) -> Option<CpVal> {
+        if let Self::Cp(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
 
 /// NDCA value that may have a defined type.
 pub trait FallibleTypeOf {

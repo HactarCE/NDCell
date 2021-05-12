@@ -6,13 +6,12 @@ use std::fmt;
 
 use super::{CallInfo, Function};
 use crate::ast;
-use crate::compiler::Compiler;
 use crate::data::{
     CpVal, LangInt, LangUint, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Val,
 };
-use crate::errors::{Error, Fallible, ReportError, Result};
+use crate::errors::{Error, Fallible, Result};
+use crate::exec::{Compiler, Ctx, CtxTrait};
 use crate::llvm;
-use crate::runtime::Runtime;
 
 /// Built-in function that performs a fixed two-input integer math operation.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -143,7 +142,7 @@ impl BinaryOp {
     /// `span` is the span of the operator, not the entire expression.
     pub fn eval_on_values(
         self,
-        runtime: &mut Runtime,
+        ctx: &mut Ctx,
         span: Span,
         lhs: Spanned<RtVal>,
         rhs: Spanned<RtVal>,
@@ -151,9 +150,9 @@ impl BinaryOp {
         if let (Ok(l), Ok(r)) = (lhs.clone().as_integer(), rhs.clone().as_integer()) {
             self.eval_on_integers(span, l, r)
                 .map(RtVal::Integer)
-                .map_err(|e| runtime.error(e))
+                .map_err(|e| ctx.error(e))
         } else {
-            Err(runtime.error(Error::invalid_arguments(span, self, &[lhs.ty(), rhs.ty()])))
+            Err(ctx.error(Error::invalid_arguments(span, self, &[lhs.ty(), rhs.ty()])))
         }
     }
 
@@ -298,11 +297,11 @@ impl BinaryOp {
     }
 }
 impl Function for BinaryOp {
-    fn eval(&self, runtime: &mut Runtime, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(2, runtime, self)?;
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(2, ctx, self)?;
         let lhs = call.args[0].clone();
         let rhs = call.args[1].clone();
-        self.eval_on_values(runtime, call.span, lhs, rhs)
+        self.eval_on_values(ctx, call.span, lhs, rhs)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         let lhs = call.args[0].clone();

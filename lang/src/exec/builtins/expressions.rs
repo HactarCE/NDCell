@@ -6,10 +6,9 @@ use std::sync::Arc;
 
 use super::functions::{self, CallInfo, Function};
 use crate::ast;
-use crate::compiler::Compiler;
 use crate::data::{RtVal, SpannedRuntimeValueExt, Val};
-use crate::errors::{Error, Fallible, ReportError};
-use crate::runtime::Runtime;
+use crate::errors::{Error, Fallible};
+use crate::exec::{Compiler, CtxTrait, Runtime};
 
 /// Expression that can be evaluated and/or compiled, including any relevant
 /// arguments.
@@ -133,7 +132,7 @@ impl<F: Function> Expression for FuncCall<'_, F> {
         let span = self.f_span;
 
         match &self.f {
-            Some(f) => f.eval(runtime, CallInfo { span, args }),
+            Some(f) => f.eval(runtime.ctx(), CallInfo { span, args }),
             None => Err(runtime.error(Error::no_such_function(span))),
         }
     }
@@ -141,9 +140,6 @@ impl<F: Function> Expression for FuncCall<'_, F> {
         let args = compiler.build_expr_list(&self.args)?;
         let span = self.f_span;
 
-        match &self.f {
-            Some(f) => f.compile(compiler, CallInfo { span, args }),
-            None => Err(compiler.error(Error::no_such_function(span))),
         }
     }
 }
@@ -165,7 +161,7 @@ impl Expression for MethodCall<'_> {
         let receiver_ty = receiver.node.ty();
         let f = super::resolve_method(&receiver_ty, &self.attr.node)
             .ok_or_else(|| runtime.error(Error::no_such_method(span, receiver_ty)))?;
-        f.eval(runtime, CallInfo { span, args })
+        f.eval(runtime.ctx(), CallInfo { span, args })
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
         let args = compiler.build_expr_list(&self.args)?;
@@ -175,9 +171,6 @@ impl Expression for MethodCall<'_> {
         let receiver_ty = compiler.get_val_type(receiver)?.node;
         let f = super::resolve_method(&receiver_ty, &self.attr.node)
             .ok_or_else(|| compiler.error(Error::no_such_method(span, receiver_ty)))?;
-        f.compile(compiler, CallInfo { span, args })
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Index<'ast> {
@@ -194,7 +187,7 @@ impl Expression for Index<'_> {
         let obj_ty = obj.node.ty();
         let f = super::resolve_index_method(&obj_ty)
             .ok_or_else(|| runtime.error(Error::cannot_index_type(span, obj_ty)))?;
-        f.eval(runtime, CallInfo { span, args })
+        f.eval(runtime.ctx(), CallInfo { span, args })
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
         let args = compiler.build_expr_list(&self.args.node)?;
@@ -345,7 +338,7 @@ fn eval_assign_op(
         };
         let span = old_value.span.merge(new_value.span);
         new_value = Spanned {
-            node: op_func.eval_on_values(runtime, op.span, old_value, new_value)?,
+            node: op_func.eval_on_values(runtime.ctx(), op.span, old_value, new_value)?,
             span,
         };
     }
@@ -370,4 +363,18 @@ fn compile_assign_op(
         };
     }
     Ok(new_value)
+}
+
+/// Returns a list of `RtVal`s if all the values are compile-time constants, or
+/// `None` if any of them is not.
+fn all_rt_vals(xs: &[Spanned<Val>]) -> Option<Vec<Spanned<RtVal>>> {
+    xs.iter()
+        .cloned()
+        .map(|v| {
+            Some(Spanned {
+                span: v.span,
+                node: v.node.rt_val()?,
+            })
+        })
+        .collect()
 }

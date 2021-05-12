@@ -34,16 +34,18 @@ mod function;
 mod loops;
 mod param;
 
+use super::builtins::{self, Expression};
 use crate::ast;
-use crate::builtins::{self, Expression};
 use crate::data::{Array, CellSet, CpVal, FallibleTypeOf, LangInt, RtVal, Type, Val, VectorSet};
-use crate::errors::{AlreadyReported, Error, Fallible, ReportError, Result};
+use crate::errors::{AlreadyReported, Error, Fallible, Result};
+use crate::exec::{Ctx, CtxTrait, Runtime};
 use crate::llvm::{self, traits::*};
-use crate::runtime::Runtime;
 pub use config::CompilerConfig;
 pub use function::CompiledFunction;
 use loops::Loop;
 pub use param::{Param, ParamType};
+
+// TODO: consider making `vars` private and adding `fn vars(&mut self) -> &mut HashMap<_, _>`
 
 #[derive(Debug)]
 pub struct Compiler {
@@ -59,6 +61,7 @@ pub struct Compiler {
     /// LLVM instruction builder.
     builder: llvm::Builder,
 
+    ctx: Ctx,
     /// Variable values.
     pub vars: HashMap<Arc<String>, Val>,
     /// Stack of loops containing the statement currently being built. The
@@ -69,14 +72,11 @@ pub struct Compiler {
     param_types: Vec<Spanned<ParamType>>,
     /// List of possible runtime errors.
     runtime_errors: Vec<Error>,
-    /// List of compile errors. If this list is non-empty, compilation fails.
-    compile_errors: Vec<Error>,
 }
 
-impl ReportError for Compiler {
-    fn error(&mut self, e: Error) -> AlreadyReported {
-        self.compile_errors.push(e);
-        AlreadyReported
+impl CtxTrait for Compiler {
+    fn ctx(&mut self) -> &mut Ctx {
+        &mut self.ctx
     }
 }
 
@@ -102,6 +102,7 @@ impl Compiler {
             // on the same thread that created it after all references to the
             // `CompiledFunction` have been dropped.
             let result = runtime
+                .ctx
                 .compile_directive
                 .ok_or_else(|| vec![Error::missing_directive(None, "@compile")])
                 .and_then(|directive_id| {
@@ -172,7 +173,7 @@ impl Compiler {
                 runtime.error(internal_error_value!(
                     "cannot compile non-@compile directive"
                 ));
-                return Err(runtime.errors);
+                return Err(runtime.ctx.errors);
             }
         };
 
@@ -200,10 +201,10 @@ impl Compiler {
                 Err(e) => Err(e),
             })
             .collect::<Fallible<Vec<Spanned<ParamType>>>>()
-            .map_err(|_| runtime.errors.clone())?;
+            .map_err(|_| runtime.ctx.errors.clone())?;
 
-        if !runtime.errors.is_empty() {
-            return Err(runtime.errors);
+        if !runtime.ctx.errors.is_empty() {
+            return Err(runtime.ctx.errors);
         }
 
         // Initialize variables in compiled code with the values from the
@@ -222,12 +223,12 @@ impl Compiler {
             llvm_fn: None,
             builder: llvm::ctx().create_builder(),
 
+            ctx: runtime.ctx,
             vars,
             loop_stack: vec![],
 
             param_types,
             runtime_errors: vec![],
-            compile_errors: vec![],
         };
 
         // The LLVM function will take a single argument, a pointer to a struct
@@ -254,7 +255,7 @@ impl Compiler {
 
         match this.build_jit_function(ast.get_node(*function_body)) {
             Ok(ret) => Ok(ret),
-            Err(AlreadyReported) => Err(this.compile_errors),
+            Err(AlreadyReported) => Err(this.ctx.errors),
         }
     }
     /// JIT-compiles a new function that can be called from Rust code.
@@ -274,7 +275,7 @@ impl Compiler {
         }
 
         // Don't compile the JIT function if there are any errors.
-        if !self.compile_errors.is_empty() {
+        if !self.ctx.errors.is_empty() {
             return Err(AlreadyReported);
         }
 

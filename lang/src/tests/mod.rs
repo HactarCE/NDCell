@@ -24,10 +24,9 @@ mod values;
 // mod vecs;
 
 use crate::ast;
-use crate::compiler::{Compiler, CompilerConfig};
 use crate::data::{LangInt, RtVal, Type};
 use crate::errors::Error;
-use crate::runtime::Runtime;
+use crate::exec::{Compiler, CompilerConfig, CtxTrait, Runtime};
 use crate::utils;
 use values::*;
 
@@ -110,7 +109,7 @@ fn test_expr_interpreted(
             .eval_expr(expr)
             .map(|v| v.node)
             // Clear errors for next test case.
-            .map_err(|_| std::mem::replace(&mut runtime.errors, vec![]));
+            .map_err(|_| std::mem::replace(&mut runtime.ctx().errors, vec![]));
         // Check result.
         assert_results_eq(&ast, task_str, &actual_result, expected_result);
     }

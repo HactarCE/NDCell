@@ -91,7 +91,7 @@ macro_rules! error_fn {
 #[derive(Debug, Clone)]
 pub struct Error(pub Diagnostic);
 impl Error {
-    pub fn plus_note(mut self, span: Span, msg: impl fmt::Display) -> Self {
+    pub fn with_note(mut self, span: Span, msg: impl fmt::Display) -> Self {
         self.0.spans.push(SpanLabel {
             span,
             label: Some(msg.to_string()),

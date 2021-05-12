@@ -9,6 +9,7 @@ use std::sync::Arc;
 // mod byterepr;
 // mod cmp;
 // mod debug;
+mod eager_eval;
 // mod filters;
 // mod funcs;
 // mod is;
@@ -30,6 +31,8 @@ use crate::runtime::Runtime;
 use crate::utils;
 use values::*;
 
+/// Tests an expression using both the compiler and interpreter, which should
+/// produce the same results.
 fn test_expr(
     expr_source: &str,
     param_types: &[Type],
@@ -39,29 +42,15 @@ fn test_expr(
     test_expr_compiled(expr_source, param_types, inputs_and_expected_results);
 }
 
+/// Tests an expression by compiling it once and then calling it with various
+/// input values.
 fn test_expr_compiled(
     expr_source: &str,
     param_types: &[Type],
     inputs_and_expected_results: &[(Vec<RtVal>, Result<RtVal, &[(&str, &str)]>)],
 ) {
-    let mut source = format!(
-        "@compile {} {{\n",
-        utils::display_bracketed_list(param_types),
-    );
-    let n = param_types.len();
-    for i in 0..(n - 1) {
-        source.push_str(&format!("x{} = __compiled_arg__[{}]\n", i, i));
-    }
-    source.push_str(&format!("__compiled_arg__[{}] = {}\n", n - 1, expr_source));
-    source.push_str("}");
+    let ast = make_compiled_expr_ast(expr_source, param_types);
 
-    let mut ast = ast::Program::new();
-    let file = ast.add_file("expression.test".to_owned(), source.clone());
-    match crate::parser::parse_file(&mut ast, &file) {
-        Ok(id) => id,
-        Err(e) => panic!("NDCA syntax error:\n{}", format_actual_errors(&ast, &[e])),
-    };
-    let ast = Arc::new(ast);
     let mut runtime = Runtime::new();
     runtime.run_init(&ast).unwrap();
     let mut f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
@@ -70,32 +59,32 @@ fn test_expr_compiled(
     };
 
     for (inputs, expected_result) in inputs_and_expected_results {
-        let task_str = &format!("evaluating compiled {:?} with inputs {:?}", source, inputs);
+        let task_str = &format!(
+            "evaluating compiled {:?} with inputs {:?}",
+            expr_source, inputs
+        );
         // Set input parameters.
         let mut arg_values = inputs.to_vec();
-        arg_values.push(match param_types[n - 1] {
+        arg_values.push(match param_types.last().unwrap() {
             Type::Integer => RtVal::Integer(0),
             Type::Cell => RtVal::Cell(0),
             Type::Tag => todo!("tag default value"),
-            Type::Vector(Some(len)) => RtVal::Vector(vec![0; len]),
+            Type::Vector(Some(len)) => RtVal::Vector(vec![0; *len]),
             Type::Array(_) => todo!("array default value"),
             Type::CellSet => todo!("cell set default value"),
             _ => panic!("no default for this type"),
         });
         // Call function.
-        let mut errors = vec![];
         let actual_result = match f.call(&mut arg_values) {
-            Ok(()) => Ok(arg_values[n - 1].clone()),
-            Err(e) => {
-                errors.push(e);
-                Err(&errors[..])
-            }
+            Ok(()) => Ok(arg_values.last().unwrap().clone()),
+            Err(e) => Err(vec![e]),
         };
         // Check result.
         assert_results_eq(&ast, task_str, &actual_result, expected_result);
     }
 }
 
+/// Tests an expression by interpreting it with various input values.
 fn test_expr_interpreted(
     source: &str,
     inputs_and_expected_results: &[(Vec<RtVal>, Result<RtVal, &[(&str, &str)]>)],
@@ -120,12 +109,55 @@ fn test_expr_interpreted(
         let actual_result = runtime
             .eval_expr(expr)
             .map(|v| v.node)
-            .map_err(|_| &runtime.errors[..]);
+            // Clear errors for next test case.
+            .map_err(|_| std::mem::replace(&mut runtime.errors, vec![]));
         // Check result.
         assert_results_eq(&ast, task_str, &actual_result, expected_result);
-        // Clear errors for next run.
-        runtime.errors.clear();
     }
+}
+
+/// Asserts that some expression source code produces a compile error (not a
+/// syntax error).
+fn assert_expr_compile_error(
+    expr_source: &str,
+    param_types: &[Type],
+    expected_errors: &[(&str, &str)],
+) {
+    let ast = make_compiled_expr_ast(expr_source, param_types);
+    let mut runtime = Runtime::new();
+    runtime.run_init(&ast).unwrap();
+    let actual_result = Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default())
+        .map(|_| "compiled successfully");
+    let task_str = format!(
+        "compiling {:?} with input types {:?}",
+        expr_source, param_types,
+    );
+    assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
+}
+
+fn make_compiled_expr_ast(expr_source: &str, param_types: &[Type]) -> Arc<ast::Program> {
+    let mut source = format!(
+        "@compile {} {{\n",
+        utils::display_bracketed_list(param_types),
+    );
+    let n = param_types.len();
+    for i in 0..(n - 1) {
+        source.push_str(&format!("x{} = __compiled_arg__[{}]\n", i, i));
+    }
+    source.push_str(&format!("__compiled_arg__[{}] = {}\n", n - 1, expr_source));
+    source.push_str("}");
+
+    make_ast(&source)
+}
+
+fn make_ast(source: &str) -> Arc<ast::Program> {
+    let mut ast = ast::Program::new();
+    let file = ast.add_file("testfile.test".to_owned(), source.to_owned());
+    match crate::parser::parse_file(&mut ast, &file) {
+        Ok(id) => id,
+        Err(e) => panic!("NDCA syntax error:\n{}", format_actual_errors(&ast, &[e])),
+    };
+    Arc::new(ast)
 }
 
 fn format_actual_errors(ast: &ast::Program, errors: &[Error]) -> String {
@@ -141,7 +173,7 @@ fn format_actual_errors(ast: &ast::Program, errors: &[Error]) -> String {
 fn assert_results_eq<T: fmt::Debug + PartialEq>(
     ast: &ast::Program,
     task_str: &str,
-    actual_result: &Result<T, &[Error]>,
+    actual_result: &Result<T, Vec<Error>>,
     expected_result: &Result<T, &[(&str, &str)]>,
 ) {
     match (actual_result, expected_result) {

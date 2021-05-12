@@ -3,60 +3,73 @@ use super::*;
 use RtVal::Integer;
 
 /// Generates a test for a binary integer operator.
-macro_rules! integer_binop_test_fn {
-    (fn $fn_name:ident() { x0 $op:tt x1 == $checked_fn_name:ident } $(with_check_for_div_by $zero:tt)? ) => {
+macro_rules! integer_expr_test_fn {
+    {
+        fn $fn_name:ident() { $expr_code_str:tt == $expected:expr }
+    } => {
         #[test]
         fn $fn_name() {
             test_expr(
-                stringify!(x0 $op x1),
+                $expr_code_str,
                 &[Type::Integer, Type::Integer, Type::Integer],
                 &iproduct!(test_values::<LangInt>(), test_values::<LangInt>())
                     .map(|(&a, &b)| {
-                        let expected = match a.$checked_fn_name(b) {
-                            Some(sum) => Ok(Integer(sum)),
-                            $(
-                                None if b == $zero => Err(&[(stringify!($op), "division by zero")][..]),
-                            )?
-                            None => Err(&[(stringify!($op), "integer overflow")][..]),
-                        };
-
-                        (vec![Integer(a), Integer(b)], expected)
+                        let inputs = vec![Integer(a), Integer(b)];
+                        let expected_output = $expected(a, b);
+                        (inputs, expected_output)
                     })
                     .collect_vec(),
             );
         }
     };
 }
-/// Generates a test for a binary integer operator that causes a
-/// division-by-zero error when the second operand is zero.
-macro_rules! integer_division_binop_test_fn {
+/// Generates tests for binary integer operators that may cause an overflow
+/// error.
+macro_rules! integer_binop_test_fn_with_overflow {
+    {
+        $(fn $fn_name:ident() { x0 $op_expr:tt x1 == $checked_op_func:expr })+
+    } => {
+        $(integer_expr_test_fn!{
+            fn $fn_name() {
+                (stringify!(x0 $op_expr x1))
+                    == |a, b| match $checked_op_func(a, b) {
+                        Some(result) => Ok(Integer(result)),
+                        None => Err(&[(stringify!($op_expr), "integer overflow")][..]),
+                    }
+            }
+        })+
+    };
+}
+/// Generates tests for binary integer operators that may cause overflow or
+/// division-by-zero errors.
+macro_rules! integer_binop_test_fn_with_division {
+    (
+        $(fn $fn_name:ident() { x0 $op_expr:tt x1 == $checked_op_func:expr })+
+    ) => {
+        $(integer_expr_test_fn!{
+            fn $fn_name() {
+                (stringify!(x0 $op_expr x1))
+                    == |a, b| match $checked_op_func(a, b) {
+                        Some(result) => Ok(Integer(result)),
+                        None if b == 0 => Err(&[(stringify!($op_expr), "division by zero")][..]),
+                        None => Err(&[(stringify!($op_expr), "integer overflow")][..]),
+                    }
+            }
+        })+
+    };
+
     ($($t:tt)+) => {
-        integer_binop_test_fn!($($t)+ with_check_for_div_by 0);
+        integer_binop_test_fn!($($t)+ divcheck 0);
     };
 }
 
-integer_binop_test_fn!(
-    fn test_integer_add() {
-        x0 + x1 == checked_add
-    }
-);
-integer_binop_test_fn!(
-    fn test_integer_subtract() {
-        x0 - x1 == checked_sub
-    }
-);
-integer_binop_test_fn!(
-    fn test_integer_multiply() {
-        x0 * x1 == checked_mul
-    }
-);
-integer_division_binop_test_fn!(
-    fn test_integer_divide() {
-        x0 / x1 == checked_div_euclid
-    }
-);
-integer_division_binop_test_fn!(
-    fn test_integer_modulo() {
-        x0 % x1 == checked_rem_euclid
-    }
-);
+integer_binop_test_fn_with_overflow! {
+    fn test_integer_add() { x0 + x1 == LangInt::checked_add }
+    fn test_integer_sub() { x0 - x1 == LangInt::checked_sub }
+    fn test_integer_mul() { x0 * x1 == LangInt::checked_mul }
+}
+
+integer_binop_test_fn_with_division! {
+    fn test_integer_div() { x0 / x1 == LangInt::checked_div_euclid }
+    fn test_integer_rem() { x0 % x1 == LangInt::checked_rem_euclid }
+}

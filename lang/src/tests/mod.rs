@@ -9,7 +9,7 @@ use std::sync::Arc;
 // mod byterepr;
 // mod cmp;
 // mod debug;
-mod eager_eval;
+mod const_eval;
 // mod filters;
 // mod funcs;
 // mod is;

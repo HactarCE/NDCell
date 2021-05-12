@@ -28,7 +28,7 @@ impl SyntaxRule for Identifier {
                 node: Arc::new(p.string().to_owned()),
             }),
 
-            Some(Token::Keyword(kw)) => Err(Error::reserved_word(p.span())),
+            Some(Token::Keyword(_)) => Err(Error::reserved_word(p.span())),
 
             _ => p.expected(self),
         }

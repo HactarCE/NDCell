@@ -134,7 +134,7 @@ impl SyntaxRule for ForLoop {
         let iter_expr = p.parse(ast, Expression)?;
         let block = p.parse(ast, StatementBlock)?;
 
-        p.parse_and_add_ast_node(ast, |p, ast| {
+        p.parse_and_add_ast_node(ast, |_p, _ast| {
             Ok(ast::StmtData::ForLoop {
                 iter_var,
                 iter_expr,

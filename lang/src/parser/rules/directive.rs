@@ -1,4 +1,4 @@
-use super::{Expression, List, Parser, StatementBlock, StringLiteral, SyntaxRule};
+use super::{Expression, List, Parser, StatementBlock, SyntaxRule};
 use crate::ast;
 use crate::errors::{Error, Result};
 use crate::lexer::Token;

@@ -16,7 +16,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::VectorSet;
-use crate::errors::{Error, Fallible, Result};
+use crate::errors::{Error, Result};
 
 /// Specific data type.
 ///

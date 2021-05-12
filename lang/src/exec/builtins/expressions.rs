@@ -140,6 +140,17 @@ impl<F: Function> Expression for FuncCall<'_, F> {
         let args = compiler.build_expr_list(&self.args)?;
         let span = self.f_span;
 
+        let f = self
+            .f
+            .as_ref()
+            .ok_or_else(|| compiler.error(Error::no_such_function(span)))?;
+        if let Some(args) = all_rt_vals(&args) {
+            // All arguments are compile-time constants, so compile-time
+            // evaluate the function call.
+            let x = f.eval(compiler.ctx(), CallInfo { span, args }).map(Val::Rt);
+            x
+        } else {
+            f.compile(compiler, CallInfo { span, args })
         }
     }
 }
@@ -171,6 +182,15 @@ impl Expression for MethodCall<'_> {
         let receiver_ty = compiler.get_val_type(receiver)?.node;
         let f = super::resolve_method(&receiver_ty, &self.attr.node)
             .ok_or_else(|| compiler.error(Error::no_such_method(span, receiver_ty)))?;
+        if let Some(args) = all_rt_vals(&args) {
+            // All arguments are compile-time constants, so compile-time
+            // evaluate the method call.
+            f.eval(compiler.ctx(), CallInfo { span, args }).map(Val::Rt)
+        } else {
+            f.compile(compiler, CallInfo { span, args })
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Index<'ast> {

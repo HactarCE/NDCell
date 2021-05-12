@@ -8,7 +8,9 @@ use thread_local::ThreadLocal;
 pub mod traits {
     pub use inkwell::execution_engine::UnsafeFunctionPointer;
     pub use inkwell::types::BasicType;
-    pub use inkwell::values::{BasicValue, IntMathValue};
+    pub use inkwell::values::BasicValue;
+
+    pub use super::IntMathValue;
 }
 
 use crate::data::{LangCell, LangInt, CELL_STATE_BITS, INT_BITS};
@@ -123,5 +125,60 @@ pub fn intrinsic_type_name(ty: impl BasicType<'static>) -> String {
             ty.get_size(),
             intrinsic_type_name(ty.get_element_type()),
         ),
+    }
+}
+
+/// Trait for [`IntValue`]s and [`VectorValue`]s that provides extra utility beyond
+/// [`inkwell::values::IntMathValue`].
+pub trait IntMathValue: inkwell::values::IntMathValue<'static> + Copy {
+    /// Returns a constant signed value of the same type.
+    fn same_type_const_signed(self, x: i64) -> Self;
+    /// Returns a constant unsigned value of the same type.
+    fn same_type_const_unsigned(self, x: u64) -> Self;
+    /// Returns the minimum possible unsigned value or the maximum possible
+    /// signed value of the same type.
+    fn same_type_const_all_ones(self) -> Self;
+    /// Returns a `0` value of the same type.
+    fn same_type_const_zero(self) -> Self {
+        self.same_type_const_signed(0)
+    }
+    /// Returns a `1` value of the same type.
+    fn same_type_const_one(self) -> Self {
+        self.same_type_const_signed(1)
+    }
+    /// Returns a `-1` value of the same type.
+    fn same_type_const_neg_one(self) -> Self {
+        self.same_type_const_signed(-1)
+    }
+}
+impl IntMathValue for IntValue {
+    fn same_type_const_signed(self, x: i64) -> Self {
+        self.get_type().const_int(x as u64, true)
+    }
+    fn same_type_const_unsigned(self, x: u64) -> Self {
+        self.get_type().const_int(x, false)
+    }
+    fn same_type_const_all_ones(self) -> Self {
+        self.get_type().const_all_ones()
+    }
+}
+impl IntMathValue for VectorValue {
+    fn same_type_const_signed(self, x: i64) -> Self {
+        let elem_ty = self.get_type().get_element_type().into_int_type();
+        let v = elem_ty.const_int(x as u64, true);
+        let len = self.get_type().get_size() as usize;
+        VectorType::const_vector(&vec![v; len])
+    }
+    fn same_type_const_unsigned(self, x: u64) -> Self {
+        let elem_ty = self.get_type().get_element_type().into_int_type();
+        let v = elem_ty.const_int(x, false);
+        let len = self.get_type().get_size() as usize;
+        VectorType::const_vector(&vec![v; len])
+    }
+    fn same_type_const_all_ones(self) -> Self {
+        let elem_ty = self.get_type().get_element_type().into_int_type();
+        let v = elem_ty.const_all_ones();
+        let len = self.get_type().get_size() as usize;
+        VectorType::const_vector(&vec![v; len])
     }
 }

@@ -156,23 +156,21 @@ impl BinaryOp {
         }
     }
 
-    pub fn compile_for_int_math_values<M: llvm::IntMathValue<'static> + Copy>(
+    pub fn compile_for_int_math_values<M: llvm::IntMathValue>(
         self,
         compiler: &mut Compiler,
         span: Span,
         lhs: M,
         rhs: M,
-        zero: M,
-        neg1: M,
-        int_min: M,
     ) -> Fallible<llvm::BasicValueEnum> {
         match self {
-            Self::Add => compiler.build_checked_int_arithmetic(lhs, rhs, "sadd", span),
-            Self::Sub => compiler.build_checked_int_arithmetic(lhs, rhs, "ssub", span),
-            Self::Mul => compiler.build_checked_int_arithmetic(lhs, rhs, "smul", span),
-            Self::Div => compiler.build_checked_int_div_euclid(lhs, rhs, zero, neg1, int_min, span),
-            Self::Mod => compiler.build_checked_int_rem_euclid(lhs, rhs, zero, neg1, int_min, span),
+            Self::Add => compiler.build_checked_int_arithmetic(span, "sadd", lhs, rhs),
+            Self::Sub => compiler.build_checked_int_arithmetic(span, "ssub", lhs, rhs),
+            Self::Mul => compiler.build_checked_int_arithmetic(span, "smul", lhs, rhs),
+            Self::Div => compiler.build_checked_int_div_euclid(span, lhs, rhs),
+            Self::Mod => compiler.build_checked_int_rem_euclid(span, lhs, rhs),
             Self::Pow => todo!("compile op Pow"),
+            // Self::Pow => compiler.build_checked_int_pow(lhs, rhs),
             Self::Shl => todo!("compile op Shl"),
             Self::ShrSigned => todo!("compile op ShrSigned"),
             Self::ShrUnsigned => todo!("compile op ShrUnsigned"),
@@ -197,11 +195,8 @@ impl BinaryOp {
             .get_cp_val(rhs)?
             .as_integer()
             .map_err(|e| compiler.error(e))?;
-        let zero = llvm::const_int(0);
-        let neg1 = llvm::const_int(-1);
-        let int_min = llvm::const_int(LangInt::MIN);
         Ok(Val::Cp(CpVal::Integer(
-            self.compile_for_int_math_values(compiler, span, l, r, zero, neg1, int_min)?
+            self.compile_for_int_math_values(compiler, span, l, r)?
                 .into_int_value(),
         )))
     }

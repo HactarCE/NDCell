@@ -503,7 +503,7 @@ impl Compiler {
     /// be converted to a boolean.
     fn build_convert_to_bool(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
         let b = self.builder();
-        use llvm::IntPredicate::NE;
+        // use llvm::IntPredicate::NE;
 
         match &v.node {
             _ => todo!("built convert to bool"),
@@ -677,12 +677,12 @@ impl Compiler {
     /// Builds instructions to perform checked integer arithmetic using an LLVM
     /// intrinsic and return an error if overflow occurs. Both operands must
     /// either be integers or vectors of the same length.
-    pub fn build_checked_int_arithmetic<M: llvm::IntMathValue<'static>>(
+    pub fn build_checked_int_arithmetic<M: llvm::IntMathValue>(
         &mut self,
+        error_span: Span,
+        name: &str,
         lhs: M,
         rhs: M,
-        name: &str,
-        error_span: Span,
     ) -> Fallible<llvm::BasicValueEnum> {
         let arg_type = lhs.as_basic_value_enum().get_type();
 
@@ -753,21 +753,19 @@ impl Compiler {
     /// Builds instructions to perform checked integer Euclidean division and
     /// return an error if division by zero or overflow occurs. Both operands
     /// must either be integers or vectors of the same length.
-    ///
-    /// `zero`, `neg1`, and `int_min` must be constant values of the same type
-    /// as the operands.
-    pub fn build_checked_int_div_euclid<M: llvm::IntMathValue<'static> + Copy>(
+    pub fn build_checked_int_div_euclid<M: llvm::IntMathValue>(
         &mut self,
+        error_span: Span,
         lhs: M,
         rhs: M,
-        zero: M,
-        neg1: M,
-        int_min: M,
-        error_span: Span,
     ) -> Fallible<llvm::BasicValueEnum> {
         use llvm::IntPredicate::{SGT, SLT};
 
-        self.build_int_div_checks(lhs, rhs, zero, neg1, int_min, error_span)?;
+        let zero = lhs.same_type_const_zero();
+        let pos1 = lhs.same_type_const_one();
+        let neg1 = lhs.same_type_const_neg_one();
+
+        self.build_int_div_checks(error_span, lhs, rhs)?;
 
         let b = self.builder();
         let q = b.build_int_signed_div(lhs, rhs, "raw_quotient");
@@ -790,7 +788,7 @@ impl Compiler {
                     },
                     |c| {
                         Ok(c.builder()
-                            .build_int_sub(q, neg1, "div_result")
+                            .build_int_add(q, pos1, "div_result")
                             .as_basic_value_enum())
                     },
                 )
@@ -802,21 +800,17 @@ impl Compiler {
     /// Builds instructions to perform checked integer Euclidean modulo and
     /// return an error if division by zero or overflow occurs. Both operands
     /// must either be integers or vectors of the same length.
-    ///
-    /// `zero`, `neg1`, and `int_min` must be constant values of the same type
-    /// as the operands.
-    pub fn build_checked_int_rem_euclid<M: llvm::IntMathValue<'static> + Copy>(
+    pub fn build_checked_int_rem_euclid<M: llvm::IntMathValue>(
         &mut self,
+        error_span: Span,
         lhs: M,
         rhs: M,
-        zero: M,
-        neg1: M,
-        int_min: M,
-        error_span: Span,
     ) -> Fallible<llvm::BasicValueEnum> {
         use llvm::IntPredicate::SLT;
 
-        self.build_int_div_checks(lhs, rhs, zero, neg1, int_min, error_span)?;
+        let zero = lhs.same_type_const_zero();
+
+        self.build_int_div_checks(error_span, lhs, rhs)?;
 
         let b = self.builder();
         let r = b.build_int_signed_rem(lhs, rhs, "raw_remainder");
@@ -853,16 +847,17 @@ impl Compiler {
     ///
     /// `zero`, `neg1`, and `int_min` must be constant values of the same type
     /// as the operands.
-    fn build_int_div_checks<M: llvm::IntMathValue<'static> + Copy>(
+    fn build_int_div_checks<M: llvm::IntMathValue>(
         &mut self,
+        error_span: Span,
         lhs: M,
         rhs: M,
-        zero: M,
-        neg1: M,
-        int_min: M,
-        error_span: Span,
     ) -> Fallible<()> {
         use llvm::IntPredicate::EQ;
+
+        let zero = lhs.same_type_const_zero();
+        let neg1 = lhs.same_type_const_neg_one();
+        let min = lhs.same_type_const_signed(LangInt::MIN);
 
         // Check whether the divisor is zero.
         let is_divisor_zero = self.build_any_cmp(EQ, rhs, zero)?;
@@ -875,7 +870,7 @@ impl Compiler {
 
         // Check whether overflow may occur.
         let b = self.builder();
-        let is_dividend_min = b.build_int_compare(EQ, lhs, int_min, "is_dividend_min");
+        let is_dividend_min = b.build_int_compare(EQ, lhs, min, "is_dividend_min");
         let is_divisor_neg1 = b.build_int_compare(EQ, rhs, neg1, "is_divisor_neg1");
         let is_overflow = b.build_and(is_dividend_min, is_divisor_neg1, "is_overflow");
         let is_overflow = self.build_reduce("or", is_overflow.as_basic_value_enum())?;
@@ -929,7 +924,7 @@ impl Compiler {
 
     /// Build an integer/vector comparison that return true if any element-wise
     /// comparison is true.
-    pub fn build_any_cmp<M: llvm::IntMathValue<'static>>(
+    pub fn build_any_cmp<M: llvm::IntMathValue>(
         &mut self,
         predicate: llvm::IntPredicate,
         lhs: M,

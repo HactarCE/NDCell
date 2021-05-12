@@ -675,12 +675,12 @@ impl Compiler {
  */
 impl Compiler {
     /// Builds instructions to perform checked integer arithmetic using an LLVM
-    /// intrinsic and returns an error if overflow occurs. Both operands must
+    /// intrinsic and return an error if overflow occurs. Both operands must
     /// either be integers or vectors of the same length.
-    pub fn build_checked_int_arithmetic<T: llvm::IntMathValue<'static>>(
+    pub fn build_checked_int_arithmetic<M: llvm::IntMathValue<'static>>(
         &mut self,
-        lhs: T,
-        rhs: T,
+        lhs: M,
+        rhs: M,
         name: &str,
         error_span: Span,
     ) -> Fallible<llvm::BasicValueEnum> {
@@ -748,6 +748,145 @@ impl Compiler {
         )?;
 
         Ok(result_value)
+    }
+
+    /// Builds instructions to perform checked integer Euclidean division and
+    /// return an error if division by zero or overflow occurs. Both operands
+    /// must either be integers or vectors of the same length.
+    ///
+    /// `zero`, `neg1`, and `int_min` must be constant values of the same type
+    /// as the operands.
+    pub fn build_checked_int_div_euclid<M: llvm::IntMathValue<'static> + Copy>(
+        &mut self,
+        lhs: M,
+        rhs: M,
+        zero: M,
+        neg1: M,
+        int_min: M,
+        error_span: Span,
+    ) -> Fallible<llvm::BasicValueEnum> {
+        use llvm::IntPredicate::{SGT, SLT};
+
+        self.build_int_div_checks(lhs, rhs, zero, neg1, int_min, error_span)?;
+
+        let b = self.builder();
+        let q = b.build_int_signed_div(lhs, rhs, "raw_quotient");
+        let r = b.build_int_signed_rem(lhs, rhs, "raw_remainder");
+
+        // Euclidean division algorithm based on Rust std lib's
+        // `div_euclid` implementation:
+        // https://github.com/rust-lang/rust/blob/4f0b24fd73ec5f80cf61c4bad30538634660ce9a/library/core/src/num/int_macros.rs#L1623-L1627
+        let r_lt_zero = self.build_any_cmp(SLT, r, zero)?;
+        self.build_conditional(
+            r_lt_zero,
+            |c| {
+                let rhs_gt_zero = c.build_any_cmp(SGT, rhs, zero)?;
+                c.build_conditional(
+                    rhs_gt_zero,
+                    |c| {
+                        Ok(c.builder()
+                            .build_int_add(q, neg1, "div_result")
+                            .as_basic_value_enum())
+                    },
+                    |c| {
+                        Ok(c.builder()
+                            .build_int_sub(q, neg1, "div_result")
+                            .as_basic_value_enum())
+                    },
+                )
+            },
+            |_| Ok(q.as_basic_value_enum()),
+        )
+    }
+
+    /// Builds instructions to perform checked integer Euclidean modulo and
+    /// return an error if division by zero or overflow occurs. Both operands
+    /// must either be integers or vectors of the same length.
+    ///
+    /// `zero`, `neg1`, and `int_min` must be constant values of the same type
+    /// as the operands.
+    pub fn build_checked_int_rem_euclid<M: llvm::IntMathValue<'static> + Copy>(
+        &mut self,
+        lhs: M,
+        rhs: M,
+        zero: M,
+        neg1: M,
+        int_min: M,
+        error_span: Span,
+    ) -> Fallible<llvm::BasicValueEnum> {
+        use llvm::IntPredicate::SLT;
+
+        self.build_int_div_checks(lhs, rhs, zero, neg1, int_min, error_span)?;
+
+        let b = self.builder();
+        let r = b.build_int_signed_rem(lhs, rhs, "raw_remainder");
+
+        // Euclidean modulo algorithm based on Rust std lib's
+        // `rem_euclid` implementation:
+        // https://github.com/rust-lang/rust/blob/4f0b24fd73ec5f80cf61c4bad30538634660ce9a/library/core/src/num/int_macros.rs#L1661-L1670
+        let r_lt_zero = self.build_any_cmp(SLT, r, zero)?;
+        self.build_conditional(
+            r_lt_zero,
+            |c| {
+                let rhs_lt_zero = c.build_any_cmp(SLT, rhs, zero)?;
+                c.build_conditional(
+                    rhs_lt_zero,
+                    |c| {
+                        Ok(c.builder()
+                            .build_int_sub(r, rhs, "mod_result")
+                            .as_basic_value_enum())
+                    },
+                    |c| {
+                        Ok(c.builder()
+                            .build_int_add(r, rhs, "mod_result")
+                            .as_basic_value_enum())
+                    },
+                )
+            },
+            |_| Ok(r.as_basic_value_enum()),
+        )
+    }
+
+    /// Builds instructions to check for division by zero and overflow before
+    /// integer division. Control flow only proceeds if neither error occurs
+    /// (i.e. it is safe to perform division).
+    ///
+    /// `zero`, `neg1`, and `int_min` must be constant values of the same type
+    /// as the operands.
+    fn build_int_div_checks<M: llvm::IntMathValue<'static> + Copy>(
+        &mut self,
+        lhs: M,
+        rhs: M,
+        zero: M,
+        neg1: M,
+        int_min: M,
+        error_span: Span,
+    ) -> Fallible<()> {
+        use llvm::IntPredicate::EQ;
+
+        // Check whether the divisor is zero.
+        let is_divisor_zero = self.build_any_cmp(EQ, rhs, zero)?;
+        let error_index = self.add_runtime_error(Error::division_by_zero(error_span));
+        self.build_conditional(
+            is_divisor_zero,
+            |c| Ok(c.build_return_err(error_index)),
+            |_| Ok(()),
+        )?;
+
+        // Check whether overflow may occur.
+        let b = self.builder();
+        let is_dividend_min = b.build_int_compare(EQ, lhs, int_min, "is_dividend_min");
+        let is_divisor_neg1 = b.build_int_compare(EQ, rhs, neg1, "is_divisor_neg1");
+        let is_overflow = b.build_and(is_dividend_min, is_divisor_neg1, "is_overflow");
+        let is_overflow = self.build_reduce("or", is_overflow.as_basic_value_enum())?;
+        let error_index = self.add_runtime_error(Error::integer_overflow(error_span));
+        self.build_conditional(
+            is_overflow,
+            |c| Ok(c.build_return_err(error_index)),
+            |_| Ok(()),
+        )?;
+
+        Ok(())
     }
 
     /// Builds a reduction of a vector to an integer using the given operation.

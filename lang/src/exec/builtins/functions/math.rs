@@ -167,101 +167,11 @@ impl BinaryOp {
         int_min: M,
     ) -> Fallible<llvm::BasicValueEnum> {
         match self {
-            Self::Add | Self::Sub | Self::Mul => {
-                let op_name = match self {
-                    Self::Add => "sadd",
-                    Self::Sub => "ssub",
-                    Self::Mul => "smul",
-                    _ => unreachable!(),
-                };
-                compiler.build_checked_int_arithmetic(lhs, rhs, op_name, span)
-            }
-            Self::Div | Self::Mod => {
-                use llvm::IntPredicate::{EQ, SGT, SLT};
-
-                // Check whether the divisor is zero.
-                let is_divisor_zero = compiler.build_any_cmp(EQ, rhs, zero)?;
-                let error_index = compiler.add_runtime_error(Error::division_by_zero(span));
-                compiler.build_conditional(
-                    is_divisor_zero,
-                    |c| Ok(c.build_return_err(error_index)),
-                    |_| Ok(()),
-                )?;
-
-                // Check whether overflow may occur.
-                let b = compiler.builder();
-                let is_dividend_min = b.build_int_compare(EQ, lhs, int_min, "is_dividend_min");
-                let is_divisor_neg1 = b.build_int_compare(EQ, rhs, neg1, "is_divisor_neg1");
-                let is_overflow = b.build_and(is_dividend_min, is_divisor_neg1, "is_overflow");
-                let is_overflow = compiler.build_reduce("or", is_overflow.as_basic_value_enum())?;
-                let error_index = compiler.add_runtime_error(Error::integer_overflow(span));
-                compiler.build_conditional(
-                    is_overflow,
-                    |c| Ok(c.build_return_err(error_index)),
-                    |_| Ok(()),
-                )?;
-
-                let b = compiler.builder();
-                let r = b.build_int_signed_rem(lhs, rhs, "raw_remainder");
-
-                match self {
-                    Self::Div => {
-                        let q = b.build_int_signed_div(lhs, rhs, "raw_quotient");
-                        // Euclidean division algorithm based on Rust std lib's
-                        // `div_euclid` implementation:
-                        // https://github.com/rust-lang/rust/blob/4f0b24fd73ec5f80cf61c4bad30538634660ce9a/library/core/src/num/int_macros.rs#L1623-L1627
-                        let r_lt_zero = compiler.build_any_cmp(SLT, r, zero)?;
-                        compiler.build_conditional(
-                            r_lt_zero,
-                            |c| {
-                                let rhs_gt_zero = c.build_any_cmp(SGT, rhs, zero)?;
-                                c.build_conditional(
-                                    rhs_gt_zero,
-                                    |c| {
-                                        Ok(c.builder()
-                                            .build_int_add(q, neg1, "div_result")
-                                            .as_basic_value_enum())
-                                    },
-                                    |c| {
-                                        Ok(c.builder()
-                                            .build_int_sub(q, neg1, "div_result")
-                                            .as_basic_value_enum())
-                                    },
-                                )
-                            },
-                            |_| Ok(q.as_basic_value_enum()),
-                        )
-                    }
-                    Self::Mod => {
-                        let r_lt_zero = compiler.build_any_cmp(SLT, r, zero)?;
-
-                        // Euclidean modulo algorithm based on Rust std lib's
-                        // `rem_euclid` implementation:
-                        // https://github.com/rust-lang/rust/blob/4f0b24fd73ec5f80cf61c4bad30538634660ce9a/library/core/src/num/int_macros.rs#L1661-L1670
-                        compiler.build_conditional(
-                            r_lt_zero,
-                            |c| {
-                                let rhs_lt_zero = c.build_any_cmp(SLT, rhs, zero)?;
-                                c.build_conditional(
-                                    rhs_lt_zero,
-                                    |c| {
-                                        Ok(c.builder()
-                                            .build_int_sub(r, rhs, "mod_result")
-                                            .as_basic_value_enum())
-                                    },
-                                    |c| {
-                                        Ok(c.builder()
-                                            .build_int_add(r, rhs, "mod_result")
-                                            .as_basic_value_enum())
-                                    },
-                                )
-                            },
-                            |_| Ok(r.as_basic_value_enum()),
-                        )
-                    }
-                    _ => unreachable!(),
-                }
-            }
+            Self::Add => compiler.build_checked_int_arithmetic(lhs, rhs, "sadd", span),
+            Self::Sub => compiler.build_checked_int_arithmetic(lhs, rhs, "ssub", span),
+            Self::Mul => compiler.build_checked_int_arithmetic(lhs, rhs, "smul", span),
+            Self::Div => compiler.build_checked_int_div_euclid(lhs, rhs, zero, neg1, int_min, span),
+            Self::Mod => compiler.build_checked_int_rem_euclid(lhs, rhs, zero, neg1, int_min, span),
             Self::Pow => todo!("compile op Pow"),
             Self::Shl => todo!("compile op Shl"),
             Self::ShrSigned => todo!("compile op ShrSigned"),

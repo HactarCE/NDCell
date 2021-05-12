@@ -388,7 +388,14 @@ impl Compiler {
     pub(crate) fn get_cp_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<CpVal>> {
         let span = v.span;
         match v.node {
-            Val::Rt(v) => todo!("compile-time constant"),
+            Val::Rt(v) => match v {
+                RtVal::Integer(i) => Ok(CpVal::Integer(llvm::const_int(i))),
+                RtVal::Cell(i) => Ok(CpVal::Cell(llvm::const_cell(i))),
+                RtVal::Vector(v) => Ok(CpVal::Vector(self.build_const_vector(&v))),
+                RtVal::Array(a) => Ok(CpVal::Array()), // TODO
+                RtVal::CellSet(s) => Ok(CpVal::CellSet(self.build_const_cell_set(&s))),
+                _ => Err(self.error(Error::cannot_compile(span))),
+            },
             Val::Cp(v) => Ok(v),
             Val::Unknown(Some(ty)) => Err(self.error(Error::unknown_variable_value(span, ty))),
             Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
@@ -436,7 +443,7 @@ impl Compiler {
         todo!("array type")
     }
     /// Builds instructions to construct a cell set with a constant value.
-    pub fn build_const_cell_set(&mut self, s: CellSet) -> llvm::VectorValue {
+    pub fn build_const_cell_set(&mut self, s: &CellSet) -> llvm::VectorValue {
         let b = self.builder();
         todo!("cell set type")
     }

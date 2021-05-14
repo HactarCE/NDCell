@@ -759,8 +759,7 @@ impl Compiler {
         use llvm::IntPredicate::{SGT, SLT};
 
         let zero = lhs.same_type_const_zero();
-        let pos1 = lhs.same_type_const_one();
-        let neg1 = lhs.same_type_const_neg_one();
+        let one = lhs.same_type_const_one();
 
         self.build_int_div_checks(error_span, lhs, rhs)?;
 
@@ -771,27 +770,19 @@ impl Compiler {
         // Euclidean division algorithm based on Rust std lib's
         // `div_euclid` implementation:
         // https://github.com/rust-lang/rust/blob/4f0b24fd73ec5f80cf61c4bad30538634660ce9a/library/core/src/num/int_macros.rs#L1623-L1627
-        let r_lt_zero = self.build_any_cmp(SLT, r, zero)?;
-        self.build_conditional(
-            r_lt_zero,
-            |c| {
-                let rhs_gt_zero = c.build_any_cmp(SGT, rhs, zero)?;
-                c.build_conditional(
-                    rhs_gt_zero,
-                    |c| {
-                        Ok(c.builder()
-                            .build_int_add(q, neg1, "div_result")
-                            .as_basic_value_enum())
-                    },
-                    |c| {
-                        Ok(c.builder()
-                            .build_int_add(q, pos1, "div_result")
-                            .as_basic_value_enum())
-                    },
-                )
-            },
-            |_| Ok(q.as_basic_value_enum()),
-        )
+        let r_lt_zero = b.build_int_compare(SLT, r, zero, "remainder_lt_zero");
+        let rhs_gt_zero = b.build_int_compare(SGT, rhs, zero, "div_rhs_gt_zero");
+        let q_minus_1 = b
+            .build_int_sub(q, one, "raw_quotient_minus_1")
+            .as_basic_value_enum();
+        let q_plus_1 = b
+            .build_int_add(q, one, "raw_quotient_plus_1")
+            .as_basic_value_enum();
+        let q = q.as_basic_value_enum();
+        let tmp = b.build_select(rhs_gt_zero, q_minus_1, q_plus_1, "");
+        let ret = b.build_select(r_lt_zero, tmp, q, "quotient");
+
+        Ok(ret)
     }
 
     /// Builds instructions to perform checked integer Euclidean modulo and
@@ -815,35 +806,24 @@ impl Compiler {
         // Euclidean modulo algorithm based on Rust std lib's
         // `rem_euclid` implementation:
         // https://github.com/rust-lang/rust/blob/4f0b24fd73ec5f80cf61c4bad30538634660ce9a/library/core/src/num/int_macros.rs#L1661-L1670
-        let r_lt_zero = self.build_any_cmp(SLT, r, zero)?;
-        self.build_conditional(
-            r_lt_zero,
-            |c| {
-                let rhs_lt_zero = c.build_any_cmp(SLT, rhs, zero)?;
-                c.build_conditional(
-                    rhs_lt_zero,
-                    |c| {
-                        Ok(c.builder()
-                            .build_int_sub(r, rhs, "mod_result")
-                            .as_basic_value_enum())
-                    },
-                    |c| {
-                        Ok(c.builder()
-                            .build_int_add(r, rhs, "mod_result")
-                            .as_basic_value_enum())
-                    },
-                )
-            },
-            |_| Ok(r.as_basic_value_enum()),
-        )
+        let rhs_lt_zero = b.build_int_compare(SLT, rhs, zero, "div_rhs_lt_zero");
+        let r_lt_zero = b.build_int_compare(SLT, r, zero, "remainder_lt_zero");
+        let r_minus_rhs = b
+            .build_int_sub(r, rhs, "raw_remainder_minus_rhs")
+            .as_basic_value_enum();
+        let r_plus_rhs = b
+            .build_int_add(r, rhs, "raw_remainder_plus_rhs")
+            .as_basic_value_enum();
+        let r = r.as_basic_value_enum();
+        let tmp = b.build_select(rhs_lt_zero, r_minus_rhs, r_plus_rhs, "");
+        let ret = b.build_select(r_lt_zero, tmp, r, "remainder");
+
+        Ok(ret)
     }
 
     /// Builds instructions to check for division by zero and overflow before
     /// integer division. Control flow only proceeds if neither error occurs
     /// (i.e. it is safe to perform division).
-    ///
-    /// `zero`, `neg1`, and `int_min` must be constant values of the same type
-    /// as the operands.
     fn build_int_div_checks<M: llvm::IntMathValue>(
         &mut self,
         error_span: Span,

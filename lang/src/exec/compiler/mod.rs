@@ -392,7 +392,9 @@ impl Compiler {
             Val::Rt(v) => match v {
                 RtVal::Integer(i) => Ok(CpVal::Integer(llvm::const_int(i))),
                 RtVal::Cell(i) => Ok(CpVal::Cell(llvm::const_cell(i))),
-                RtVal::Vector(v) => Ok(CpVal::Vector(self.build_const_vector(&v))),
+                RtVal::Vector(v) => Ok(CpVal::Vector(llvm::VectorType::const_vector(
+                    &v.iter().map(|&i| llvm::const_int(i)).collect_vec(),
+                ))),
                 RtVal::Array(a) => Ok(CpVal::Array()), // TODO
                 RtVal::CellSet(s) => Ok(CpVal::CellSet(self.build_const_cell_set(&s))),
                 _ => Err(self.error(Error::cannot_compile(span))),
@@ -432,11 +434,6 @@ impl Compiler {
     pub fn build_const_tag(&mut self, t: &str) -> llvm::VectorValue {
         let b = self.builder();
         todo!("build const tag")
-    }
-    /// Builds instructions to construct a vector with a constant value.
-    pub fn build_const_vector(&mut self, v: &[LangInt]) -> llvm::VectorValue {
-        let b = self.builder();
-        todo!("build const vector")
     }
     /// Builds instructions to construct a cell array with a constant value.
     pub fn build_const_array(&mut self, a: &Array) -> () {

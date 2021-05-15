@@ -117,7 +117,7 @@ impl BinaryOp {
                 if rhs < 0 {
                     Err(Error::negative_exponent(span))?
                 } else {
-                    rhs.try_into().ok().map(|exp| lhs.pow(exp))
+                    crate::utils::checked_pow_i64(lhs, rhs)
                 }
             }
 
@@ -169,8 +169,7 @@ impl BinaryOp {
             Self::Mul => compiler.build_checked_int_arithmetic(span, "smul", lhs, rhs),
             Self::Div => compiler.build_checked_int_div_euclid(span, lhs, rhs),
             Self::Mod => compiler.build_checked_int_rem_euclid(span, lhs, rhs),
-            Self::Pow => todo!("compile op Pow"),
-            // Self::Pow => compiler.build_checked_int_pow(lhs, rhs),
+            Self::Pow => compiler.build_checked_int_pow(span, lhs, rhs),
             Self::Shl => todo!("compile op Shl"),
             Self::ShrSigned => todo!("compile op ShrSigned"),
             Self::ShrUnsigned => todo!("compile op ShrUnsigned"),

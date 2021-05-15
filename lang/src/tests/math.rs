@@ -1,18 +1,20 @@
-use super::*;
+use std::convert::TryFrom;
 
+use super::*;
 use RtVal::Integer;
 
 /// Generates a test for a binary integer operator.
 macro_rules! integer_expr_test_fn {
     {
         fn $fn_name:ident() { $expr_code_str:tt == $expected:expr }
+        from $test_values_expr:expr
     } => {
         #[test]
         fn $fn_name() {
             test_expr(
                 $expr_code_str,
                 &[Type::Integer, Type::Integer, Type::Integer],
-                &iproduct!(test_values::<LangInt>(), test_values::<LangInt>())
+                &iproduct!($test_values_expr, $test_values_expr)
                     .map(|(&a, &b)| {
                         let inputs = vec![Integer(a), Integer(b)];
                         let expected_output = $expected(a, b);
@@ -36,7 +38,7 @@ macro_rules! integer_binop_test_fn_with_overflow {
                         Some(result) => Ok(Integer(result)),
                         None => Err(&[(stringify!($op_expr), "integer overflow")][..]),
                     }
-            }
+            } from test_values::<LangInt>()
         })+
     };
 }
@@ -54,7 +56,7 @@ macro_rules! integer_binop_test_fn_with_division {
                         None if b == 0 => Err(&[(stringify!($op_expr), "division by zero")][..]),
                         None => Err(&[(stringify!($op_expr), "integer overflow")][..]),
                     }
-            }
+            } from test_values::<LangInt>()
         })+
     };
 
@@ -72,4 +74,37 @@ integer_binop_test_fn_with_overflow! {
 integer_binop_test_fn_with_division! {
     fn test_integer_div() { x0 / x1 == LangInt::checked_div_euclid }
     fn test_integer_rem() { x0 % x1 == LangInt::checked_rem_euclid }
+}
+
+integer_expr_test_fn! {
+    fn test_integer_pow() {
+        "x0 ** x1"
+            == |a: LangInt, b: LangInt| {
+                match crate::utils::checked_pow_i64(a, b) {
+                    Some(result) => Ok(Integer(result)),
+                    None if b < 0 => Err(&[("**", "negative exponent")][..]),
+                    None => Err(&[("**", "integer overflow")][..])
+                }
+            }
+    } from &[
+        // `test_values()` isn't great for testing exponentiation, so use these
+        // values instead.
+        LangInt::MIN,
+        LangInt::MIN + 1,
+        -100,
+        -55,
+        -10,
+        -5,
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        5,
+        10,
+        55,
+        100,
+        LangInt::MAX - 1,
+        LangInt::MAX,
+    ]
 }

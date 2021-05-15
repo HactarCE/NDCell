@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use std::convert::TryFrom;
 use std::fmt;
 
 /// Prefixes a string with 'a' or 'an' according to its first character.
@@ -39,6 +40,22 @@ pub fn display_bracketed_list(items: &[impl fmt::Display]) -> String {
             ret.push(']');
             ret
         }
+    }
+}
+
+/// Wrapper around `i64::checked_pow()` that takes an `i64` exponent instead
+/// (and correctly handles all cases where there is no overflow.)
+pub fn checked_pow_i64(base: i64, exp: i64) -> Option<i64> {
+    // Handle special cases where `u32::try_from()` fails even though there's no
+    // overflow.
+    match (base, exp) {
+        _ if exp < 0 => None,
+        (_, 0) => Some(1),
+        (_, 1) => Some(base),
+        (0, _) => Some(0),
+        (1, _) => Some(1),
+        (-1, _) => Some(if exp & 1 == 0 { 1 } else { -1 }),
+        (_, _) => base.checked_pow(u32::try_from(exp).ok()?),
     }
 }
 

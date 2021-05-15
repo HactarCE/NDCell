@@ -509,6 +509,22 @@ impl Compiler {
 }
 
 /*
+ * LOW-LEVEL UTILITIES
+ */
+impl Compiler {
+    /// Builds instructions to split a vector of integers into its components.
+    pub fn build_split_vector(&mut self, vector_value: llvm::VectorValue) -> Vec<llvm::IntValue> {
+        (0..vector_value.get_type().get_size())
+            .map(|i| {
+                self.builder()
+                    .build_extract_element(vector_value, llvm::const_int(i as LangInt), "")
+                    .into_int_value()
+            })
+            .collect()
+    }
+}
+
+/*
  * SIMPLE IMMUTABLE GETTERS
  */
 impl Compiler {
@@ -530,26 +546,27 @@ impl Compiler {
  * CONTROL FLOW
  */
 impl Compiler {
-    /// Returns the Inkwell basic block currently being appended to, panicking
-    /// if there is none.
+    /// Returns the basic block that the instruction builder is currently
+    /// positioned in, or panics if there is none.
     pub fn current_block(&mut self) -> llvm::BasicBlock {
         self.builder()
             .get_insert_block()
             .expect("Tried to access current insert block, but there is none")
     }
-    /// Appends an LLVM BasicBlock to the end of the current LLVM function and
-    /// returns the new BasicBlock.
+    /// Appends a new basic block to the end of the current LLVM function and
+    /// returns the new basic block without moving the instruction builder.
     pub fn append_basic_block(&mut self, name: &str) -> llvm::BasicBlock {
         llvm::ctx().append_basic_block(self.llvm_fn(), name)
     }
-    /// Adds a new basic block intended to be unreachable and positions the
+    /// Appends a new basic block intended to be unreachable and positions the
     /// builder at the end of it.
     pub fn append_unreachable_basic_block(&mut self) {
         let bb = self.append_basic_block("unreachableBlock");
         self.builder().position_at_end(bb);
     }
-    /// Appends an LLVM BasicBlock with a PHI node to the end of the current
-    /// LLVM function and returns the new BasicBlock and PhiValue.
+    /// Appends a new basic block with a phi node to the end of the current
+    /// function and returns the new [`llvm::BasicBlock`] and
+    /// [`llvm::PhiValue`].
     ///
     /// The instruction builder is placed at the end of the basic block it was
     /// on before calling this function (so if it's already at the end of a
@@ -634,6 +651,66 @@ impl Compiler {
             ),
         };
         Ok(ret)
+    }
+
+    /// Builds a loop.
+    ///
+    /// `build_contents()` starts at the header and must end with a branch to
+    /// either the prelatch or exit. `build_prelatch()` starts at the prelatch
+    /// and must NOT end with a jump.
+    pub fn build_loop(
+        &mut self,
+        build_contents: impl FnOnce(&mut Self, Loop) -> Fallible<()>,
+        build_prelatch: impl FnOnce(&mut Self, Loop) -> Fallible<()>,
+    ) -> Fallible<()> {
+        let preheader = self.append_basic_block("preheader");
+        let header = self.append_basic_block("header");
+        let prelatch = self.append_basic_block("prelatch");
+        let latch = self.append_basic_block("latch");
+        let exit = self.append_basic_block("exit");
+
+        // TODO: bröther may I have some `lööp`s
+        let the_loop = Loop {
+            preheader,
+            header,
+            prelatch,
+            latch,
+            exit,
+        };
+        self.loop_stack.push(the_loop);
+
+        self.builder().build_unconditional_branch(preheader);
+
+        // Build preheader.
+        self.builder().position_at_end(preheader);
+        self.builder().build_unconditional_branch(header);
+
+        // Build header and loop contents.
+        self.builder().position_at_end(header);
+        build_contents(self, the_loop)?;
+        // `build_contents()` branches for us.
+
+        // Build prelatch.
+        self.builder().position_at_end(prelatch);
+        build_prelatch(self, the_loop)?;
+        self.builder().build_unconditional_branch(latch);
+
+        // Build latch.
+        self.builder().position_at_end(latch);
+        self.builder().build_unconditional_branch(header);
+
+        // Build exit.
+        self.builder().position_at_end(exit);
+        Ok(())
+    }
+
+    /// Builds an unconditional jump to the end of the inside of the loop.
+    pub fn build_loop_continue(&mut self, l: Loop) {
+        self.builder().build_unconditional_branch(l.prelatch);
+    }
+    /// Builds an unconditional jump to immediately after the loop.
+    pub fn build_loop_break(&mut self, l: Loop) {
+        self.builder().build_unconditional_branch(l.exit);
     }
 
     /// Returns an LLVM intrinsic given its name and function signature.
@@ -859,6 +936,122 @@ impl Compiler {
         )?;
 
         Ok(())
+    }
+
+    /// Builds instructions to perform checked integer exponentiation and return
+    /// an error if overflow occurs. Both operands must either be integers or
+    /// vectors of the same length.
+    pub fn build_checked_int_pow<M: llvm::IntMathValue>(
+        &mut self,
+        error_span: Span,
+        base: M,
+        exp: M,
+    ) -> Fallible<llvm::BasicValueEnum> {
+        match (base.as_basic_value_enum(), exp.as_basic_value_enum()) {
+            (llvm::BasicValueEnum::IntValue(base), llvm::BasicValueEnum::IntValue(exp)) => {
+                let ret = self._build_checked_int_pow(error_span, base, exp)?;
+                Ok(ret.as_basic_value_enum())
+            }
+            (llvm::BasicValueEnum::VectorValue(bases), llvm::BasicValueEnum::VectorValue(exps)) => {
+                let bases = self.build_split_vector(bases);
+                let exps = self.build_split_vector(exps);
+                let results = bases
+                    .into_iter()
+                    .zip(exps)
+                    .map(|(base, exp)| self._build_checked_int_pow(error_span, base, exp))
+                    .collect::<Fallible<Vec<_>>>()?;
+                let ret = llvm::VectorType::const_vector(&results);
+                Ok(ret.as_basic_value_enum())
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    fn _build_checked_int_pow(
+        &mut self,
+        error_span: Span,
+        base: llvm::IntValue,
+        exp: llvm::IntValue,
+    ) -> Fallible<llvm::IntValue> {
+        use llvm::IntPredicate::{EQ, SGT, SLT};
+
+        // Check for negative exponent.
+        let b = self.builder();
+        let exp_lt_zero = b.build_int_compare(SLT, exp, llvm::const_int(0), "exp_lt_zero");
+        let error_index = self.add_runtime_error(Error::negative_exponent(error_span));
+        self.build_conditional(
+            exp_lt_zero,
+            |c| Ok(c.build_return_err(error_index)),
+            |_| Ok(()),
+        )?;
+
+        let one = llvm::const_int(1);
+
+        // Exponentiation algorithm based on Rust std lib's `checked_pow`
+        // implementation:
+        // https://github.com/rust-lang/rust/blob/4f0b24fd73ec5f80cf61c4bad30538634660ce9a/library/core/src/num/int_macros.rs#L707-L724
+        let b = self.builder();
+        let exp_eq_zero = b.build_int_compare(EQ, exp, llvm::const_int(0), "exp_eq_zero");
+        let acc = one;
+        let mut ret = None;
+        let final_result = self.build_conditional(
+            exp_eq_zero,
+            |_| Ok(one.as_basic_value_enum()),
+            |c| {
+                c.build_loop(
+                    |c, l| {
+                        let b = c.builder();
+                        let base_phi = b.build_phi(llvm::int_type(), "base");
+                        let exp_phi = b.build_phi(llvm::int_type(), "exp");
+                        let acc_phi = b.build_phi(llvm::int_type(), "acc");
+                        let old_base = base_phi.as_basic_value().into_int_value();
+                        let old_exp = exp_phi.as_basic_value().into_int_value();
+                        let old_acc = acc_phi.as_basic_value().into_int_value();
+
+                        // `if (exp & 1) == 1`
+                        let exp_and_1 = b.build_and(old_exp, one, "exp_and_1");
+                        let is_exp_odd = b.build_int_compare(EQ, exp_and_1, one, "is_exp_odd");
+
+                        let new_acc = c.build_conditional(
+                            is_exp_odd,
+                            |c| {
+                                Ok(c.build_checked_int_arithmetic(
+                                    error_span, "smul", old_acc, old_base,
+                                )?
+                                .as_basic_value_enum())
+                            },
+                            |_| Ok(old_acc.as_basic_value_enum()),
+                        )?;
+
+                        ret = Some(new_acc);
+
+                        // break out of the loop if `!(exp > 1)`
+                        let exp_gt_1 = c.builder().build_int_compare(SGT, old_exp, one, "exp_gt_1");
+                        c.build_conditional(exp_gt_1, |_| Ok(()), |c| Ok(c.build_loop_break(l)))?;
+
+                        let new_exp = c
+                            .builder()
+                            .build_right_shift(old_exp, one, true, "new_exp")
+                            .as_basic_value_enum();
+                        let new_base = c
+                            .build_checked_int_arithmetic(error_span, "smul", old_base, old_base)?
+                            .as_basic_value_enum();
+
+                        base_phi.add_incoming(&[(&base, l.preheader), (&new_base, l.latch)]);
+                        exp_phi.add_incoming(&[(&exp, l.preheader), (&new_exp, l.latch)]);
+                        acc_phi.add_incoming(&[(&acc, l.preheader), (&new_acc, l.latch)]);
+
+                        c.build_loop_continue(l);
+
+                        Ok(())
+                    },
+                    |_, _| Ok(()),
+                )?;
+
+                Ok(ret.unwrap())
+            },
+        )?;
+        Ok(final_result.into_int_value())
     }
 
     /// Builds a reduction of a vector to an integer using the given operation.

@@ -410,7 +410,7 @@ impl Compiler {
         .map(|node| Spanned { node, span })
     }
 
-    /// Returs the LLVM type used for an NDCA type.
+    /// Returns the LLVM type used for an NDCA type.
     pub fn llvm_type(&self, ty: &Type) -> Option<llvm::BasicTypeEnum> {
         match ty {
             Type::Integer => Some(llvm::int_type().into()),

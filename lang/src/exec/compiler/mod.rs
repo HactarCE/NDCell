@@ -742,6 +742,18 @@ impl Compiler {
         let llvm_return_value = llvm::error_index_type().const_int(error_index as u64, false);
         self.builder().build_return(Some(&llvm_return_value));
     }
+
+    pub fn build_return_err_if(
+        &mut self,
+        condition_value: llvm::IntValue,
+        error_index: usize,
+    ) -> Fallible<()> {
+        self.build_conditional(
+            condition_value,
+            |c| Ok(c.build_return_err(error_index)),
+            |_| Ok(()),
+        )
+    }
 }
 
 /*
@@ -812,14 +824,8 @@ impl Compiler {
 
         let error_index = self.add_runtime_error(Error::integer_overflow(error_span));
 
-        // Branch based on whether there is overflow.
-        self.build_conditional(
-            is_overflow,
-            // Return an error if there is overflow.
-            |c| Ok(c.build_return_err(error_index)),
-            // Otherwise proceed.
-            |_| Ok(()),
-        )?;
+        // Return an error if there was overflow.
+        self.build_return_err_if(is_overflow, error_index)?;
 
         Ok(result_value)
     }
@@ -916,11 +922,7 @@ impl Compiler {
         // Check whether the divisor is zero.
         let is_divisor_zero = self.build_any_cmp(EQ, rhs, zero)?;
         let error_index = self.add_runtime_error(Error::division_by_zero(error_span));
-        self.build_conditional(
-            is_divisor_zero,
-            |c| Ok(c.build_return_err(error_index)),
-            |_| Ok(()),
-        )?;
+        self.build_return_err_if(is_divisor_zero, error_index)?;
 
         // Check whether overflow may occur.
         let b = self.builder();
@@ -929,11 +931,7 @@ impl Compiler {
         let is_overflow = b.build_and(is_dividend_min, is_divisor_neg1, "is_overflow");
         let is_overflow = self.build_reduce("or", is_overflow.as_basic_value_enum())?;
         let error_index = self.add_runtime_error(Error::integer_overflow(error_span));
-        self.build_conditional(
-            is_overflow,
-            |c| Ok(c.build_return_err(error_index)),
-            |_| Ok(()),
-        )?;
+        self.build_return_err_if(is_overflow, error_index)?;
 
         Ok(())
     }
@@ -979,11 +977,7 @@ impl Compiler {
         let b = self.builder();
         let exp_lt_zero = b.build_int_compare(SLT, exp, llvm::const_int(0), "exp_lt_zero");
         let error_index = self.add_runtime_error(Error::negative_exponent(error_span));
-        self.build_conditional(
-            exp_lt_zero,
-            |c| Ok(c.build_return_err(error_index)),
-            |_| Ok(()),
-        )?;
+        self.build_return_err_if(exp_lt_zero, error_index)?;
 
         let one = llvm::const_int(1);
 

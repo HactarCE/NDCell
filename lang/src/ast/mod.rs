@@ -7,7 +7,6 @@ mod cellstate;
 mod nodes;
 mod ops;
 
-use crate::data::Type;
 pub use cellstate::CellState;
 pub use nodes::*;
 pub use ops::*;

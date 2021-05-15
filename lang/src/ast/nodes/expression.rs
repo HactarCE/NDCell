@@ -51,8 +51,3 @@ pub enum ExprData {
     /// Vector constructor.
     VectorConstruct(Vec<ExprId>),
 }
-impl ExprData {
-    pub fn ret_type(&mut self) -> Type {
-        todo!()
-    }
-}

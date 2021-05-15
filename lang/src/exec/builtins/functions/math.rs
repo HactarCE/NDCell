@@ -163,6 +163,7 @@ impl BinaryOp {
         lhs: M,
         rhs: M,
     ) -> Fallible<llvm::BasicValueEnum> {
+        let b = compiler.builder();
         match self {
             Self::Add => compiler.build_checked_int_arithmetic(span, "sadd", lhs, rhs),
             Self::Sub => compiler.build_checked_int_arithmetic(span, "ssub", lhs, rhs),
@@ -170,12 +171,12 @@ impl BinaryOp {
             Self::Div => compiler.build_checked_int_div_euclid(span, lhs, rhs),
             Self::Mod => compiler.build_checked_int_rem_euclid(span, lhs, rhs),
             Self::Pow => compiler.build_checked_int_pow(span, lhs, rhs),
-            Self::Shl => todo!("compile op Shl"),
-            Self::ShrSigned => todo!("compile op ShrSigned"),
-            Self::ShrUnsigned => todo!("compile op ShrUnsigned"),
-            Self::BitwiseAnd => todo!("compile op BitwiseAnd"),
-            Self::BitwiseOr => todo!("compile op BitwiseOr"),
-            Self::BitwiseXor => todo!("compile op BitwiseXor"),
+            Self::Shl => compiler.build_checked_int_shl(span, lhs, rhs),
+            Self::ShrSigned => compiler.build_checked_int_ashr(span, lhs, rhs),
+            Self::ShrUnsigned => compiler.build_checked_int_lshr(span, lhs, rhs),
+            Self::BitwiseAnd => Ok(b.build_and(lhs, rhs, "").as_basic_value_enum()),
+            Self::BitwiseOr => Ok(b.build_or(lhs, rhs, "").as_basic_value_enum()),
+            Self::BitwiseXor => Ok(b.build_xor(lhs, rhs, "").as_basic_value_enum()),
         }
     }
 

@@ -1,5 +1,3 @@
-use std::convert::TryFrom;
-
 use super::*;
 use RtVal::Integer;
 
@@ -76,6 +74,26 @@ integer_binop_test_fn_with_division! {
     fn test_integer_rem() { x0 % x1 == LangInt::checked_rem_euclid }
 }
 
+const POW_TEST_VALUES: &[LangInt] = &[
+    LangInt::MIN,
+    LangInt::MIN + 1,
+    -100,
+    -55,
+    -10,
+    -5,
+    -2,
+    -1,
+    0,
+    1,
+    2,
+    5,
+    10,
+    55,
+    100,
+    LangInt::MAX - 1,
+    LangInt::MAX,
+];
+
 integer_expr_test_fn! {
     fn test_integer_pow() {
         "x0 ** x1"
@@ -86,25 +104,35 @@ integer_expr_test_fn! {
                     None => Err(&[("**", "integer overflow")][..])
                 }
             }
-    } from &[
-        // `test_values()` isn't great for testing exponentiation, so use these
-        // values instead.
-        LangInt::MIN,
-        LangInt::MIN + 1,
-        -100,
-        -55,
-        -10,
-        -5,
-        -2,
-        -1,
-        0,
-        1,
-        2,
-        5,
-        10,
-        55,
-        100,
-        LangInt::MAX - 1,
-        LangInt::MAX,
-    ]
+    } from POW_TEST_VALUES
+}
+
+const BITSHIFT_TEST_VALUES: &[LangInt] = &[
+    LangInt::MIN,
+    LangInt::MIN + 1,
+    -65,
+    -64,
+    -63,
+    -5,
+    -2,
+    -1,
+    0,
+    1,
+    2,
+    5,
+    63,
+    64,
+    65,
+    LangInt::MAX - 1,
+    LangInt::MAX,
+];
+
+integer_expr_test_fn! {
+    fn test_integer_bitand() { "x0 & x1" == |a, b| Ok(Integer(a & b)) } from POW_TEST_VALUES
+}
+integer_expr_test_fn! {
+    fn test_integer_bitor() { "x0 | x1" == |a, b| Ok(Integer(a | b)) } from POW_TEST_VALUES
+}
+integer_expr_test_fn! {
+    fn test_integer_bitxor() { "x0 ^ x1" == |a, b| Ok(Integer(a ^ b)) } from POW_TEST_VALUES
 }

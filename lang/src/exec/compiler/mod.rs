@@ -36,7 +36,9 @@ mod param;
 
 use super::builtins::{self, Expression};
 use crate::ast;
-use crate::data::{Array, CellSet, CpVal, FallibleTypeOf, LangInt, RtVal, Type, Val, VectorSet};
+use crate::data::{
+    Array, CellSet, CpVal, FallibleTypeOf, LangInt, RtVal, Type, Val, VectorSet, INT_BITS,
+};
 use crate::errors::{AlreadyReported, Error, Fallible, Result};
 use crate::exec::{Ctx, CtxTrait, Runtime};
 use crate::llvm::{self, traits::*};
@@ -1046,6 +1048,65 @@ impl Compiler {
             },
         )?;
         Ok(final_result.into_int_value())
+    }
+
+    /// Builds instructions to perform a checked integer left shift.
+    pub fn build_checked_int_shl<M: llvm::IntMathValue>(
+        &mut self,
+        error_span: Span,
+        lhs: M,
+        rhs: M,
+    ) -> Fallible<llvm::BasicValueEnum> {
+        self._build_shift_check_rhs(error_span, rhs)?;
+        Ok(self
+            .builder()
+            .build_left_shift(lhs, rhs, "shl")
+            .as_basic_value_enum())
+    }
+    /// Builds instructions to perform a checked integer arithmetic right shift.
+    pub fn build_checked_int_ashr<M: llvm::IntMathValue>(
+        &mut self,
+        error_span: Span,
+        lhs: M,
+        rhs: M,
+    ) -> Fallible<llvm::BasicValueEnum> {
+        self._build_shift_check_rhs(error_span, rhs)?;
+        let sign_extend = true;
+        Ok(self
+            .builder()
+            .build_right_shift(lhs, rhs, sign_extend, "ashr")
+            .as_basic_value_enum())
+    }
+    /// Builds instructions to perform a checked integer logical right shift.
+    pub fn build_checked_int_lshr<M: llvm::IntMathValue>(
+        &mut self,
+        error_span: Span,
+        lhs: M,
+        rhs: M,
+    ) -> Fallible<llvm::BasicValueEnum> {
+        self._build_shift_check_rhs(error_span, rhs)?;
+        let sign_extend = false;
+        Ok(self
+            .builder()
+            .build_right_shift(lhs, rhs, sign_extend, "lshr")
+            .as_basic_value_enum())
+    }
+
+    fn _build_shift_check_rhs<M: llvm::IntMathValue>(
+        &mut self,
+        error_span: Span,
+        rhs: M,
+    ) -> Fallible<()> {
+        use llvm::IntPredicate::UGE;
+
+        // Treat `rhs` as unsigned; it must be in the range from 0 (inclusive)
+        // to the bit width (exclusive).
+        let rhs_ge_64 =
+            self.build_any_cmp(UGE, rhs, rhs.same_type_const_unsigned(INT_BITS as u64))?;
+        let error_index = self.add_runtime_error(Error::bitshift_out_of_range(error_span));
+        self.build_return_err_if(rhs_ge_64, error_index)?;
+
+        Ok(())
     }
 
     /// Builds a reduction of a vector to an integer using the given operation.

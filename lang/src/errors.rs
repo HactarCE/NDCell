@@ -212,6 +212,7 @@ impl Error {
     error_fn!(Error; fn integer_overflow("integer overflow"));
     error_fn!(Error; fn division_by_zero("division by zero"));
     error_fn!(Error; fn negative_exponent("negative exponent"));
+    error_fn!(Error; fn bitshift_out_of_range("bitshift amount out of range"));
     error_fn!(Error; fn index_out_of_bounds("index out of bounds"));
 
     error_fn!(Error; fn user_error("error"));

@@ -57,7 +57,10 @@ impl CallInfo<ast::Expr<'_>> {
             .collect()
     }
 }
-impl<V: FallibleTypeOf> CallInfo<Spanned<V>> {
+impl<V> CallInfo<Spanned<V>>
+where
+    Spanned<V>: FallibleTypeOf,
+{
     fn arg_types(&self, ctx: &mut impl CtxTrait) -> Fallible<Vec<Type>> {
         self.args
             .iter()

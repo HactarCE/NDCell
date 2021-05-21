@@ -62,6 +62,34 @@ macro_rules! integer_binop_test_fn_with_division {
         integer_binop_test_fn!($($t)+ divcheck 0);
     };
 }
+/// Generatess tests for unary integer operators that may cause an overflow
+/// error.
+macro_rules! integer_unop_test_fn_with_overflow {
+    {
+        $(fn $fn_name:ident() { $op_expr:tt x0 == $checked_op_func:expr })+
+    } => {
+        $(
+            #[test]
+            fn $fn_name() {
+                test_expr(
+                    stringify!($op_expr x0),
+                    &[Type::Integer, Type::Integer],
+                    &test_values::<LangInt>()
+                        .iter()
+                        .map(|&x| {
+                            let inputs = vec![Integer(x)];
+                            let expected_output = match $checked_op_func(x) {
+                                Some(result) => Ok(Integer(result)),
+                                None => Err(&[(stringify!($op_expr), "integer overflow")][..]),
+                            };
+                            (inputs, expected_output)
+                        })
+                        .collect_vec()
+                )
+            }
+        )+
+    };
+}
 
 integer_binop_test_fn_with_overflow! {
     fn test_integer_add() { x0 + x1 == LangInt::checked_add }
@@ -135,4 +163,11 @@ integer_expr_test_fn! {
 }
 integer_expr_test_fn! {
     fn test_integer_bitxor() { "x0 ^ x1" == |a, b| Ok(Integer(a ^ b)) } from POW_TEST_VALUES
+}
+
+integer_unop_test_fn_with_overflow! {
+    fn test_integer_unary_pos() { + x0 == (|x| Some(x)) }
+    fn test_integer_unary_neg() { - x0 == LangInt::checked_neg }
+    fn test_integer_unary_inv() { ~ x0 == (|x: LangInt| Some(!x)) }
+    fn test_integer_unary_not() { not x0 == (|x| Some((x == 0) as LangInt)) }
 }

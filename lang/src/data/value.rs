@@ -78,3 +78,8 @@ impl FallibleTypeOf for CpVal {
         Ok(Ok(self.ty()))
     }
 }
+impl<T: FallibleTypeOf> FallibleTypeOf for Spanned<T> {
+    fn fallible_ty(&self) -> Fallible<Result<Type>> {
+        self.node.fallible_ty()
+    }
+}

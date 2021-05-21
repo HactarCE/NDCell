@@ -131,6 +131,9 @@ pub fn intrinsic_type_name(ty: impl BasicType<'static>) -> String {
 /// Trait for [`IntValue`]s and [`VectorValue`]s that provides extra utility beyond
 /// [`inkwell::values::IntMathValue`].
 pub trait IntMathValue: inkwell::values::IntMathValue<'static> + Copy {
+    /// Returns the base type.
+    fn base_type(self) -> Self::BaseType;
+
     /// Returns a constant signed value of the same type.
     fn same_type_const_signed(self, x: i64) -> Self;
     /// Returns a constant unsigned value of the same type.
@@ -152,6 +155,10 @@ pub trait IntMathValue: inkwell::values::IntMathValue<'static> + Copy {
     }
 }
 impl IntMathValue for IntValue {
+    fn base_type(self) -> Self::BaseType {
+        self.get_type()
+    }
+
     fn same_type_const_signed(self, x: i64) -> Self {
         self.get_type().const_int(x as u64, true)
     }
@@ -163,6 +170,10 @@ impl IntMathValue for IntValue {
     }
 }
 impl IntMathValue for VectorValue {
+    fn base_type(self) -> Self::BaseType {
+        self.get_type()
+    }
+
     fn same_type_const_signed(self, x: i64) -> Self {
         let elem_ty = self.get_type().get_element_type().into_int_type();
         let v = elem_ty.const_int(x as u64, true);

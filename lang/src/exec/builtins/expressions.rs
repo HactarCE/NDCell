@@ -76,8 +76,19 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                     Is => todo!("'Is' func"),
                 }
             }
-            ast::ExprData::PrefixOp(_, _) => {
-                todo!("prefix op func")
+            ast::ExprData::PrefixOp(op, arg) => {
+                use crate::ast::PrefixOp::*;
+                Box::new(FuncCall {
+                    f: match op.node {
+                        Pos => Some(functions::math::UnaryOp::Pos),
+                        Neg => Some(functions::math::UnaryOp::Neg),
+                        BitwiseNot => Some(functions::math::UnaryOp::BitwiseNot),
+                        LogicalNot => Some(functions::math::UnaryOp::LogicalNot),
+                        IntToCell => todo!("convert int to cell"),
+                    },
+                    f_span: op.span,
+                    args: vec![ast.get_node(*arg)],
+                })
             }
             ast::ExprData::CmpChain(_, _) => {
                 todo!("cmp chain expr")

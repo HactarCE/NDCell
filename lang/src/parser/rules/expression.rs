@@ -175,10 +175,11 @@ impl SyntaxRule for ExpressionWithPrecedence {
                 | Token::TripleGreaterThan
                 | Token::Ampersand
                 | Token::Pipe
-                | Token::Caret
-                | Token::Tilde
-                | Token::Arrow
-                | Token::DotDot => false,
+                | Token::Caret => false,
+
+                Token::Tilde => true,
+
+                Token::Arrow | Token::DotDot => false,
 
                 Token::Octothorpe => true,
 

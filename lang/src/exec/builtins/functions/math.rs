@@ -156,6 +156,7 @@ impl BinaryOp {
         }
     }
 
+    /// Compiles this operation for two LLVM math values.
     pub fn compile_for_int_math_values<M: llvm::IntMathValue>(
         self,
         compiler: &mut Compiler,
@@ -180,6 +181,7 @@ impl BinaryOp {
         }
     }
 
+    /// Compiles this operation for two values.
     pub fn compile_for_values(
         self,
         compiler: &mut Compiler,
@@ -209,8 +211,115 @@ impl Function for BinaryOp {
         self.eval_on_values(ctx, call.span, lhs, rhs)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
+        call.check_args_len(2, compiler, self)?;
         let lhs = call.args[0].clone();
         let rhs = call.args[1].clone();
         self.compile_for_values(compiler, call.span, lhs, rhs)
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum UnaryOp {
+    Pos,
+    Neg,
+
+    BitwiseNot,
+    LogicalNot,
+}
+impl fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UnaryOp::Pos => write!(f, "+"),
+            UnaryOp::Neg => write!(f, "-"),
+            UnaryOp::BitwiseNot => write!(f, "not"),
+            UnaryOp::LogicalNot => write!(f, "!"),
+        }
+    }
+}
+impl From<ast::PrefixOp> for Option<UnaryOp> {
+    fn from(op: ast::PrefixOp) -> Self {
+        match op {
+            ast::PrefixOp::Pos => Some(UnaryOp::Pos),
+            ast::PrefixOp::Neg => Some(UnaryOp::Neg),
+            ast::PrefixOp::BitwiseNot => Some(UnaryOp::BitwiseNot),
+            ast::PrefixOp::LogicalNot => Some(UnaryOp::LogicalNot),
+            ast::PrefixOp::IntToCell => None,
+        }
+    }
+}
+impl UnaryOp {
+    /// Evaluates this operation for an integer.
+    fn eval_on_integers(self, span: Span, arg: LangInt) -> Result<LangInt> {
+        match self {
+            Self::Pos => Ok(arg),
+            Self::Neg => arg.checked_neg().ok_or(Error::integer_overflow(span)),
+            Self::BitwiseNot => Ok(!arg),
+            Self::LogicalNot => Ok((arg == 0) as LangInt),
+        }
+    }
+
+    /// Evaluates this operation for a values.
+    pub fn eval_on_values(self, ctx: &mut Ctx, span: Span, arg: Spanned<RtVal>) -> Fallible<RtVal> {
+        if let Ok(x) = arg.clone().as_integer() {
+            self.eval_on_integers(span, x)
+                .map(RtVal::Integer)
+                .map_err(|e| ctx.error(e))
+        } else {
+            Err(ctx.error(Error::invalid_arguments(span, self, &[arg.ty()])))
+        }
+    }
+
+    /// Compiles this operation for an LLVM math value.
+    pub fn compile_for_int_math_values<M: llvm::IntMathValue>(
+        self,
+        compiler: &mut Compiler,
+        span: Span,
+        arg: M,
+    ) -> Fallible<llvm::BasicValueEnum> {
+        use llvm::IntPredicate::EQ;
+
+        let b = compiler.builder();
+        let zero = arg.same_type_const_zero();
+        let ones = arg.same_type_const_all_ones();
+        match self {
+            UnaryOp::Pos => Ok(arg.as_basic_value_enum()),
+            UnaryOp::Neg => BinaryOp::Sub.compile_for_int_math_values(compiler, span, zero, arg),
+            UnaryOp::BitwiseNot => Ok(b.build_xor(arg, ones, "bitwise_not").as_basic_value_enum()),
+            UnaryOp::LogicalNot => {
+                let bool_result = b.build_int_compare(EQ, arg, zero, "logical_not");
+                let zext_result =
+                    b.build_int_z_extend(bool_result, arg.base_type(), "zext_logical_not");
+                Ok(zext_result.as_basic_value_enum())
+            }
+        }
+    }
+
+    /// Compiles this operation for a value.
+    pub fn compile_for_values(
+        self,
+        compiler: &mut Compiler,
+        span: Span,
+        arg: Spanned<Val>,
+    ) -> Fallible<Val> {
+        let x = compiler
+            .get_cp_val(arg)?
+            .as_integer()
+            .map_err(|e| compiler.error(e))?;
+        Ok(Val::Cp(CpVal::Integer(
+            self.compile_for_int_math_values(compiler, span, x)?
+                .into_int_value(),
+        )))
+    }
+}
+impl Function for UnaryOp {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(1, ctx, self)?;
+        let arg = call.args[0].clone();
+        self.eval_on_values(ctx, call.span, arg)
+    }
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
+        call.check_args_len(1, compiler, self)?;
+        let arg = call.args[0].clone();
+        self.compile_for_values(compiler, call.span, arg)
     }
 }

@@ -99,27 +99,9 @@ impl BinaryOp {
             Self::Add => lhs.checked_add(rhs),
             Self::Sub => lhs.checked_sub(rhs),
             Self::Mul => lhs.checked_mul(rhs),
-            Self::Div => {
-                if rhs == 0 {
-                    Err(Error::division_by_zero(span))?
-                } else {
-                    lhs.checked_div_euclid(rhs)
-                }
-            }
-            Self::Mod => {
-                if rhs == 0 {
-                    Err(Error::division_by_zero(span))?
-                } else {
-                    lhs.checked_rem_euclid(rhs)
-                }
-            }
-            Self::Pow => {
-                if rhs < 0 {
-                    Err(Error::negative_exponent(span))?
-                } else {
-                    crate::utils::checked_pow_i64(lhs, rhs)
-                }
-            }
+            Self::Div => lhs.checked_div_euclid(rhs),
+            Self::Mod => lhs.checked_rem_euclid(rhs),
+            Self::Pow => crate::utils::checked_pow_i64(lhs, rhs),
 
             Self::Shl => rhs.try_into().ok().and_then(|rhs| lhs.checked_shl(rhs)),
             Self::ShrSigned => rhs.try_into().ok().and_then(|rhs| lhs.checked_shr(rhs)),
@@ -134,7 +116,12 @@ impl BinaryOp {
             Self::BitwiseXor => Some(lhs ^ rhs),
         }
         // If the operation returned None, assume an integer overflow error.
-        .ok_or_else(|| Error::integer_overflow(span))
+        .ok_or_else(|| match self {
+            Self::Div | Self::Mod if rhs == 0 => Error::division_by_zero(span),
+            Self::Pow if rhs < 0 => Error::negative_exponent(span),
+            Self::Shl | Self::ShrSigned | Self::ShrUnsigned => Error::bitshift_out_of_range(span),
+            _ => Error::integer_overflow(span),
+        })
     }
 
     /// Evaluates this operation for two values.

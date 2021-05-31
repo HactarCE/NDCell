@@ -11,7 +11,7 @@ use crate::exec::{Ctx, CtxTrait};
 // TODO: consider making `vars` only `pub(super)` and adding `fn vars(&mut self) -> &mut HashMap<_, _>`
 
 /// NDCA runtime state.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Runtime {
     /// Global initialization execution context.
     pub(super) ctx: Ctx,
@@ -56,51 +56,50 @@ impl Default for Flow {
 }
 
 impl Runtime {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn run_init(&mut self, ast: &ast::Program) -> Result<(), &[Error]> {
+    pub fn init_new(ast: &ast::Program) -> Self {
         let directives = ast.get_node_list(ast.directives());
 
-        // Fill in defaults for missing directives.
-        self.ctx = Ctx::new(&directives);
+        let mut this = Self {
+            // Fill in defaults for missing directives.
+            ctx: Ctx::new(&directives),
+            vars: HashMap::new(),
+        };
 
         for directive in directives {
             match directive.data() {
-                ast::DirectiveData::Compile { .. } => match self.ctx.compile_directive {
+                ast::DirectiveData::Compile { .. } => match this.ctx.compile_directive {
                     Some(_) => {
                         // Lie to the user; tell them this directive name is
                         // invalid, because they shouldn't be using it!
-                        self.error(Error::invalid_directive_name(directive.span()));
+                        this.error(Error::invalid_directive_name(directive.span()));
                     }
                     None => {
-                        self.ctx.compile_directive = Some(directive.id);
+                        this.ctx.compile_directive = Some(directive.id);
                     }
                 },
 
-                ast::DirectiveData::Init(block) => match self.exec_stmt(ast.get_node(*block)) {
+                ast::DirectiveData::Init(block) => match this.exec_stmt(ast.get_node(*block)) {
                     Ok(Flow::Proceed) => (),
 
                     Ok(Flow::Break(span)) => {
-                        self.error(Error::break_not_in_loop(span));
+                        this.error(Error::break_not_in_loop(span));
                         break;
                     }
                     Ok(Flow::Continue(span)) => {
-                        self.error(Error::continue_not_in_loop(span));
+                        this.error(Error::continue_not_in_loop(span));
                         break;
                     }
 
                     Ok(Flow::Return(span, _)) => {
-                        self.error(Error::return_not_in_fn(span));
+                        this.error(Error::return_not_in_fn(span));
                         break;
                     }
                     Ok(Flow::Remain(span)) => {
-                        self.error(Error::remain_not_in_fn(span));
+                        this.error(Error::remain_not_in_fn(span));
                         break;
                     }
                     Ok(Flow::Become(span, _)) => {
-                        self.error(Error::become_not_in_fn(span));
+                        this.error(Error::become_not_in_fn(span));
                         break;
                     }
 
@@ -108,36 +107,34 @@ impl Runtime {
                 },
 
                 ast::DirectiveData::Ndim(expr) => {
-                    let ndim_expr_result = match self.eval_expr(ast.get_node(*expr)) {
+                    let ndim_expr_result = match this.eval_expr(ast.get_node(*expr)) {
                         Ok(x) => x,
                         Err(AlreadyReported) => break,
                     };
-                    if let Err(e) = self.ctx.set_ndim(directive.span(), ndim_expr_result) {
-                        self.error(e);
+                    if let Err(e) = this.ctx.set_ndim(directive.span(), ndim_expr_result) {
+                        this.error(e);
                         break;
                     }
                 }
 
                 ast::DirectiveData::States(expr) => {
-                    let states_expr_result = match self.eval_expr(ast.get_node(*expr)) {
+                    let states_expr_result = match this.eval_expr(ast.get_node(*expr)) {
                         Ok(x) => x,
                         Err(AlreadyReported) => break,
                     };
-                    if let Err(e) = self.ctx.set_states(directive.span(), states_expr_result) {
-                        self.error(e);
+                    if let Err(e) = this.ctx.set_states(directive.span(), states_expr_result) {
+                        this.error(e);
                         break;
                     }
                 }
             }
         }
-        if !self.ctx.errors.is_empty() {
-            return Err(&self.ctx.errors);
+        if this.ctx.errors.is_empty() {
+            if let Err(e) = this.ctx.error_if_missing_values() {
+                this.error(e);
+            }
         }
-        if let Err(e) = self.ctx.error_if_missing_values() {
-            self.error(e);
-            return Err(&self.ctx.errors);
-        }
-        Ok(())
+        this
     }
 
     pub fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<Flow> {

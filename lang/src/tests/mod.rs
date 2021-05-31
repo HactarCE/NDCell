@@ -143,6 +143,14 @@ impl<'a> TestProgram<'a> {
         Arc::new(ast)
     }
 
+    /// Creates and initializes a new `Runtime`, panicking if any error occurs.
+    fn init_new_runtime(self, ast: &ast::Program) -> Runtime {
+        let mut runtime = Runtime::init_new(&ast);
+        let task_str = format!("initializing {:#?}", self);
+        assert_results_eq(&ast, &task_str, &runtime.get_errors_list(), &Ok(()));
+        runtime
+    }
+
     /// Asserts that attempting to parse the program produces a syntax error.
     pub fn assert_syntax_error(self, expected_error: (&str, &str)) {
         let source = self.source_for_compiler_test();
@@ -159,28 +167,19 @@ impl<'a> TestProgram<'a> {
     /// the program produces a runntime error.
     pub fn assert_init_errors(self, expected_errors: Vec<(&str, &str)>) {
         let ast = self.ast_for_compiler_test();
-        let mut runtime = Runtime::new();
-        let actual_result = match runtime.run_init(&ast) {
-            Ok(_) => Ok("initialization run successfully"),
-            Err(errors) => Err(errors.to_vec()),
-        };
+        let mut runtime = Runtime::init_new(&ast);
+        let actual_result = runtime.get_errors_list();
         let task_str = format!("running initialization for {:#?}", self);
         assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
     }
     /// Asserts that attempting to compile the program produces a compile error.
     pub fn assert_compile_errors(self, expected_errors: Vec<(&str, &str)>) {
         let ast = self.ast_for_compiler_test();
-        let mut runtime = Runtime::new();
-        runtime.run_init(&ast).unwrap();
+        let runtime = self.init_new_runtime(&ast);
         let actual_result = Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default())
             .map(|_| "compiled successfully");
         let task_str = format!("compiling {:#?}", self);
         assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
-    }
-    /// Asserts that attempting to interpret the program produces a runtime
-    /// error.
-    pub fn assert_interp_errors(self, expected_errors: Vec<(&str, &str)>) {
-        todo!()
     }
 
     /// Asserts that all test cases produce the specified output, both when
@@ -199,10 +198,7 @@ impl<'a> TestProgram<'a> {
         inputs_and_expected_results: &[(Vec<RtVal>, Result<Vec<RtVal>, Vec<(&str, &str)>>)],
     ) {
         let (ast, stmt_id, expr_ids) = self.ast_for_interpreter_test();
-
-        let mut clean_runtime = Runtime::new();
-        clean_runtime.run_init(&ast).unwrap();
-
+        let clean_runtime = self.init_new_runtime(&ast);
         for (inputs, expected_result) in inputs_and_expected_results {
             let mut runtime = clean_runtime.clone();
 
@@ -238,9 +234,7 @@ impl<'a> TestProgram<'a> {
         inputs_and_expected_results: &[(Vec<RtVal>, Result<Vec<RtVal>, Vec<(&str, &str)>>)],
     ) {
         let ast = self.ast_for_compiler_test();
-
-        let mut runtime = Runtime::new();
-        runtime.run_init(&ast).unwrap();
+        let runtime = self.init_new_runtime(&ast);
         let mut f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
             Ok(ok) => ok,
             Err(e) => panic!("\n{}", format_actual_errors(&ast, &e)),

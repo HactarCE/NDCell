@@ -142,6 +142,15 @@ pub trait CtxTrait {
         self.ctx().errors.push(e);
         AlreadyReported
     }
+    /// Returns the list of errors that have been reported, or `Ok(())` if there
+    /// are none.
+    fn get_errors_list(&mut self) -> std::result::Result<(), Vec<Error>> {
+        if self.ctx().errors.is_empty() {
+            Ok(())
+        } else {
+            Err(self.ctx().errors.clone())
+        }
+    }
 }
 
 impl CtxTrait for Ctx {

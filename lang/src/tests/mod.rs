@@ -1,6 +1,7 @@
 //! NDCA black-box test suite.
 
 use itertools::Itertools;
+use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
 
@@ -24,139 +25,262 @@ mod values;
 // mod vecs;
 
 use crate::ast;
-use crate::data::{LangInt, RtVal, Type};
+use crate::data::{LangInt, LangUint, RtVal, Type};
 use crate::errors::Error;
 use crate::exec::{Compiler, CompilerConfig, CtxTrait, Runtime};
 use crate::utils;
 use values::*;
 
-/// Tests an expression using both the compiler and interpreter, which should
-/// produce the same results.
-fn test_expr(
-    expr_source: &str,
-    param_types: &[Type],
-    inputs_and_expected_results: &[(Vec<RtVal>, Result<RtVal, &[(&str, &str)]>)],
-) {
-    test_expr_interpreted(expr_source, inputs_and_expected_results);
-    test_expr_compiled(expr_source, param_types, inputs_and_expected_results);
+type TestError<'s> = (&'s str, &'s str);
+type TestResult<'s> = Result<Vec<RtVal>, Vec<TestError<'s>>>;
+type TestCase<'s> = (Vec<RtVal>, TestResult<'s>);
+
+#[derive(Debug, Default, Copy, Clone)]
+struct TestProgram<'a> {
+    setup: &'a str,
+    exec: &'a str,
+    input_types: &'a [Type],
+    result_expressions: &'a [(Type, &'a str)],
 }
-
-/// Tests an expression by compiling it once and then calling it with various
-/// input values.
-fn test_expr_compiled(
-    expr_source: &str,
-    param_types: &[Type],
-    inputs_and_expected_results: &[(Vec<RtVal>, Result<RtVal, &[(&str, &str)]>)],
-) {
-    let ast = make_compiled_expr_ast(expr_source, param_types);
-
-    let mut runtime = Runtime::new();
-    runtime.run_init(&ast).unwrap();
-    let mut f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
-        Ok(ok) => ok,
-        Err(e) => panic!("\n{}", format_actual_errors(&ast, &e)),
-    };
-
-    for (inputs, expected_result) in inputs_and_expected_results {
-        let task_str = &format!(
-            "evaluating compiled {:?} with inputs {:?}",
-            expr_source, inputs
-        );
-        // Set input parameters.
-        let mut arg_values = inputs.to_vec();
-        arg_values.push(match param_types.last().unwrap() {
-            Type::Integer => RtVal::Integer(0),
-            Type::Cell => RtVal::Cell(0),
-            Type::Tag => todo!("tag default value"),
-            Type::Vector(Some(len)) => RtVal::Vector(vec![0; *len]),
-            Type::Array(_) => todo!("array default value"),
-            Type::CellSet => todo!("cell set default value"),
-            _ => panic!("no default for this type"),
-        });
-        // Call function.
-        let actual_result = match f.call(&mut arg_values) {
-            Ok(()) => Ok(arg_values.last().unwrap().clone()),
-            Err(e) => Err(vec![e]),
-        };
-        // Check result.
-        assert_results_eq(&ast, task_str, &actual_result, expected_result);
-    }
-}
-
-/// Tests an expression by interpreting it with various input values.
-fn test_expr_interpreted(
-    source: &str,
-    inputs_and_expected_results: &[(Vec<RtVal>, Result<RtVal, &[(&str, &str)]>)],
-) {
-    let mut ast = ast::Program::new();
-    let file = ast.add_file("expression.test".to_owned(), source.to_owned());
-    let expr_id = match crate::parser::parse_expression(&mut ast, &file) {
-        Ok(id) => id,
-        Err(e) => panic!("NDCA syntax error:\n{}", format_actual_errors(&ast, &[e])),
-    };
-    let expr = ast.get_node(expr_id);
-
-    let mut runtime = Runtime::new();
-    for (inputs, expected_result) in inputs_and_expected_results {
-        let task_str = &format!("intepreting {:?} with inputs {:?}", source, inputs);
-        // Set input variables.
-        for (i, value) in inputs.iter().enumerate() {
-            let var_name = Arc::new(format!("x{}", i));
-            runtime.vars.insert(var_name, value.clone());
+impl<'a> TestProgram<'a> {
+    /// Creates a new blank test program.
+    pub fn new() -> Self {
+        Self {
+            setup: "/* no setup */",
+            exec: "/* no exec */",
+            input_types: &[],
+            result_expressions: &[],
         }
-        // Evaluate expression.
-        let actual_result = runtime
-            .eval_expr(expr)
-            .map(|v| v.node)
-            // Clear errors for next test case.
-            .map_err(|_| std::mem::replace(&mut runtime.ctx().errors, vec![]));
-        // Check result.
-        assert_results_eq(&ast, task_str, &actual_result, expected_result);
+    }
+    /// Adds initialization directives to the top of the program.
+    pub fn with_setup(mut self, setup: &'a str) -> Self {
+        self.setup = setup;
+        self
+    }
+    /// Adds statements to be compiled or interpreted.
+    pub fn with_exec(mut self, exec: &'a str) -> Self {
+        self.exec = exec;
+        self
+    }
+    /// Defines input types to get information into the program.
+    pub fn with_input_types(mut self, input_types: &'a [Type]) -> Self {
+        self.input_types = input_types;
+        self
+    }
+    /// Defines output types and expressions to get information out of the program.
+    pub fn with_result_expressions(mut self, result_expressions: &'a [(Type, &'a str)]) -> Self {
+        self.result_expressions = result_expressions;
+        self
+    }
+
+    /// Returns an AST for interpreting the program.
+    fn ast_for_interpreter_test(self) -> (Arc<ast::Program>, ast::StmtId, Vec<ast::ExprId>) {
+        use crate::parser;
+
+        let mut ast = ast::Program::new();
+
+        parse_or_panic(parser::parse_file, &mut ast, "setup.test", self.setup);
+
+        let stmt_src = format!("{{\n{}\n}}", self.exec);
+        let stmt_id = parse_or_panic(parser::parse_statement, &mut ast, "exec.test", &stmt_src);
+
+        let expr_ids = self
+            .result_expressions
+            .iter()
+            .enumerate()
+            .map(|(i, (_ty, expr))| {
+                parse_or_panic(
+                    parser::parse_expression,
+                    &mut ast,
+                    &format!("expression{}.test", i),
+                    expr,
+                )
+            })
+            .collect();
+
+        (Arc::new(ast), stmt_id, expr_ids)
+    }
+    /// Returns source code for compiling the program.
+    fn source_for_compiler_test(self) -> String {
+        let mut param_types = vec![];
+        param_types.extend_from_slice(self.input_types);
+        param_types.extend(self.result_expressions.iter().map(|(ty, _expr)| ty.clone()));
+
+        let mut source = String::new();
+        source.push_str(self.setup);
+        source.push_str("\n\n");
+        source.push_str(&format!(
+            "@compile {}",
+            utils::display_bracketed_list(&param_types),
+        ));
+
+        source.push_str(" {\n");
+        let n = self.input_types.len();
+        for i in 0..n {
+            source.push_str(&format!("x{} = __compiled_arg__[{}]\n", i, i));
+        }
+        for (i, (_ty, expr)) in self.result_expressions.iter().enumerate() {
+            source.push_str(&format!("__compiled_arg__[{}] = {}\n", n + i, expr));
+        }
+        source.push_str("\n}\n");
+
+        source
+    }
+    /// Returns an AST for compiling the program.
+    fn ast_for_compiler_test(self) -> Arc<ast::Program> {
+        use crate::parser;
+
+        let mut ast = ast::Program::new();
+        parse_or_panic(
+            parser::parse_file,
+            &mut ast,
+            "compiled.test",
+            &self.source_for_compiler_test(),
+        );
+        Arc::new(ast)
+    }
+
+    /// Asserts that attempting to parse the program produces a syntax error.
+    pub fn assert_syntax_error(self, expected_error: (&str, &str)) {
+        let source = self.source_for_compiler_test();
+        let mut ast = ast::Program::new();
+        let file = ast.add_file("testfile.test".to_owned(), source);
+        let actual_result = match crate::parser::parse_file(&mut ast, &file) {
+            Ok(_) => Ok("parsed successfully"),
+            Err(error) => Err(vec![error]),
+        };
+        let task_str = format!("parsing {:#?}", self);
+        assert_results_eq(&ast, &task_str, &actual_result, &Err(vec![expected_error]));
+    }
+    /// Asserts that attempting to interpret the initialization directives of
+    /// the program produces a runntime error.
+    pub fn assert_init_errors(self, expected_errors: Vec<(&str, &str)>) {
+        let ast = self.ast_for_compiler_test();
+        let mut runtime = Runtime::new();
+        let actual_result = match runtime.run_init(&ast) {
+            Ok(_) => Ok("initialization run successfully"),
+            Err(errors) => Err(errors.to_vec()),
+        };
+        let task_str = format!("running initialization for {:#?}", self);
+        assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
+    }
+    /// Asserts that attempting to compile the program produces a compile error.
+    pub fn assert_compile_errors(self, expected_errors: Vec<(&str, &str)>) {
+        let ast = self.ast_for_compiler_test();
+        let mut runtime = Runtime::new();
+        runtime.run_init(&ast).unwrap();
+        let actual_result = Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default())
+            .map(|_| "compiled successfully");
+        let task_str = format!("compiling {:#?}", self);
+        assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
+    }
+    /// Asserts that attempting to interpret the program produces a runtime
+    /// error.
+    pub fn assert_interp_errors(self, expected_errors: Vec<(&str, &str)>) {
+        todo!()
+    }
+
+    /// Asserts that all test cases produce the specified output, both when
+    /// interpreted and when compiled.
+    pub fn assert_test_cases(
+        self,
+        inputs_and_expected_results: &[(Vec<RtVal>, Result<Vec<RtVal>, Vec<(&str, &str)>>)],
+    ) {
+        self.assert_interpreted_test_cases(inputs_and_expected_results);
+        self.assert_compiled_test_cases(inputs_and_expected_results);
+    }
+    /// Asserts that all test cases produce the specified output when
+    /// interpreted.
+    pub fn assert_interpreted_test_cases(
+        self,
+        inputs_and_expected_results: &[(Vec<RtVal>, Result<Vec<RtVal>, Vec<(&str, &str)>>)],
+    ) {
+        let (ast, stmt_id, expr_ids) = self.ast_for_interpreter_test();
+
+        let mut clean_runtime = Runtime::new();
+        clean_runtime.run_init(&ast).unwrap();
+
+        for (inputs, expected_result) in inputs_and_expected_results {
+            let mut runtime = clean_runtime.clone();
+
+            let task_str = &format!("intepreting inputs {:?} on {:#?}", inputs, self);
+            // Set input variables.
+            for (i, value) in inputs.iter().enumerate() {
+                let var_name = Arc::new(format!("x{}", i));
+                runtime.vars.insert(var_name, value.clone());
+            }
+            // Execute statement and result expressions.
+            let actual_result: Result<Vec<_>, _> = runtime
+                .exec_stmt(ast.get_node(stmt_id))
+                .map_err(|_| runtime.ctx().errors.clone())
+                .and_then(|_| {
+                    expr_ids
+                        .iter()
+                        .map(|&expr_id| {
+                            let expr = ast.get_node(expr_id);
+                            runtime
+                                .eval_expr(expr)
+                                .map(|v| v.node)
+                                .map_err(|_| runtime.ctx().errors.clone())
+                        })
+                        .collect()
+                });
+            // Check results.
+            assert_results_eq(&ast, task_str, &actual_result, expected_result);
+        }
+    }
+    /// Asserts that all test cases produce the specified output when compiled.
+    pub fn assert_compiled_test_cases(
+        self,
+        inputs_and_expected_results: &[(Vec<RtVal>, Result<Vec<RtVal>, Vec<(&str, &str)>>)],
+    ) {
+        let ast = self.ast_for_compiler_test();
+
+        let mut runtime = Runtime::new();
+        runtime.run_init(&ast).unwrap();
+        let mut f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
+            Ok(ok) => ok,
+            Err(e) => panic!("\n{}", format_actual_errors(&ast, &e)),
+        };
+
+        for (inputs, expected_result) in inputs_and_expected_results {
+            let task_str = &format!("evaluating inputs {:?} on compiled {:#?}", inputs, self);
+            // Set input parameters.
+            let mut arg_values = inputs.to_vec();
+            for (ty, _expr) in self.result_expressions {
+                arg_values.push(match ty {
+                    Type::Integer => RtVal::Integer(0),
+                    Type::Cell => RtVal::Cell(0),
+                    Type::Tag => todo!("tag default value"),
+                    Type::Vector(Some(len)) => RtVal::Vector(vec![0; *len]),
+                    Type::Array(_) => todo!("array default value"),
+                    Type::CellSet => todo!("cell set default value"),
+                    _ => panic!("no default for this type"),
+                });
+            }
+            // Call function.
+            let n = inputs.len();
+            let actual_result = match f.call(&mut arg_values) {
+                Ok(()) => Ok(arg_values[n..].to_vec()),
+                Err(e) => Err(vec![e]),
+            };
+            // Check result.
+            assert_results_eq(&ast, task_str, &actual_result, expected_result);
+        }
     }
 }
 
-/// Asserts that some expression source code produces a compile error (not a
-/// syntax error).
-fn assert_expr_compile_error(
-    expr_source: &str,
-    param_types: &[Type],
-    expected_errors: &[(&str, &str)],
-) {
-    let ast = make_compiled_expr_ast(expr_source, param_types);
-    let mut runtime = Runtime::new();
-    runtime.run_init(&ast).unwrap();
-    let actual_result = Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default())
-        .map(|_| "compiled successfully");
-    let task_str = format!(
-        "compiling {:?} with input types {:?}",
-        expr_source, param_types,
-    );
-    assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
-}
-
-fn make_compiled_expr_ast(expr_source: &str, param_types: &[Type]) -> Arc<ast::Program> {
-    let mut source = format!(
-        "@compile {} {{\n",
-        utils::display_bracketed_list(param_types),
-    );
-    let n = param_types.len();
-    for i in 0..(n - 1) {
-        source.push_str(&format!("x{} = __compiled_arg__[{}]\n", i, i));
-    }
-    source.push_str(&format!("__compiled_arg__[{}] = {}\n", n - 1, expr_source));
-    source.push_str("}");
-
-    make_ast(&source)
-}
-
-fn make_ast(source: &str) -> Arc<ast::Program> {
-    let mut ast = ast::Program::new();
-    let file = ast.add_file("testfile.test".to_owned(), source.to_owned());
-    match crate::parser::parse_file(&mut ast, &file) {
-        Ok(id) => id,
+fn parse_or_panic<T>(
+    f: fn(&mut ast::Program, &codemap::File) -> Result<T, Error>,
+    ast: &mut ast::Program,
+    file_name: &str,
+    file_contents: &str,
+) -> T {
+    let file = ast.add_file(file_name.to_owned(), file_contents.to_owned());
+    match f(ast, &file) {
+        Ok(x) => x,
         Err(e) => panic!("NDCA syntax error:\n{}", format_actual_errors(&ast, &[e])),
-    };
-    Arc::new(ast)
+    }
 }
 
 fn format_actual_errors(ast: &ast::Program, errors: &[Error]) -> String {
@@ -173,10 +297,12 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
     ast: &ast::Program,
     task_str: &str,
     actual_result: &Result<T, Vec<Error>>,
-    expected_result: &Result<T, &[(&str, &str)]>,
+    expected_result: &Result<T, Vec<(&str, &str)>>,
 ) {
     match (actual_result, expected_result) {
-        (_, Err([])) => panic!("empty expected error list is invalid"),
+        (_, Err(expected_errors)) if expected_errors.is_empty() => {
+            panic!("empty expected error list is invalid");
+        }
 
         (Ok(actual_ok), Ok(expected_ok)) => {
             if *expected_ok != *actual_ok {
@@ -187,7 +313,8 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
             }
         }
 
-        (Ok(actual_ok), Err([(expected_loc, expected_msg), ..])) => {
+        (Ok(actual_ok), Err(expected_errors)) => {
+            let (expected_loc, expected_msg) = expected_errors[0];
             panic!(
                 "Expected error at {:?} with message {:?} but got {:?} when {}",
                 expected_loc, expected_msg, actual_ok, task_str,
@@ -221,89 +348,3 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
         }
     }
 }
-
-// /// Asserts that the given source code produces the given error when attempting
-// /// to produce an AST.
-// fn assert_compile_error(source_code: &str, expected: (&str, &str)) {
-//     let expected_err = (expected.0.to_owned(), expected.1.to_owned());
-//     let actual_result = make_ast(source_code);
-//     match actual_result {
-//         Ok(rule) => assert!(false, "Rule should have produced error {:?}, but instead it produced this AST:\n{:#?}\n\nRule source code:\n{}\n\n", expected_err, rule, source_code),
-//         Err(actual_err) => assert_eq!(
-//             expected_err,
-//             actual_err.pair(),
-//             "<-- actual\n\nRule source code:\n{}\n\n",
-//             source_code,
-//         )
-//     }
-// }
-
-// /// Asserts that the given source code produces the given error when attempting
-// /// to compile the function with the given name (or the transition function, if
-// /// the function name is None).
-// fn assert_fn_compile_error(fn_name: Option<&str>, source_code: &str, expected: (&str, &str)) {
-//     let expected_err = (expected.0.to_owned(), expected.1.to_owned());
-//     let actual_result = compile_fn(fn_name, source_code);
-//     match actual_result {
-
-//         Ok(_) => assert!(false, "Rule should have produced error {:?}, but instead it compiled successfully.\n\nRule source code:\n{}\n\n", expected_err,  source_code),
-//         Err(actual_err) => assert_eq!(
-//             expected_err,
-//             actual_err.pair(),
-//             "<-- actual\n\nRule source code:\n{}\n\n",
-//             source_code,
-//         )
-//     }
-// }
-
-// /// Same as assert_fn_result(), but works with LocalKey for use with
-// /// threadlocal!().
-// fn assert_threadlocal_fn_result(
-//     function: &'static LocalKey<CompiledFunction>,
-//     args: &mut [ConstValue],
-//     expected: Result<ConstValue, (&str, &str)>,
-// ) {
-//     let mut function = function.with(|f| f.clone());
-//     assert_fn_result(&mut function, args, expected);
-// }
-
-// /// Calls the given compiled function with the given arguments and asserts that
-// /// it produces the correct output (whether Err or Ok).
-// fn assert_fn_result(
-//     function: &mut CompiledFunction,
-//     args: &mut [ConstValue],
-//     expected: Result<ConstValue, (&str, &str)>,
-// ) {
-//     let expected_result = expected.map_err(|(a, b)| (a.to_owned(), b.to_owned()));
-//     let actual_result = function
-//         .call(args)
-//         .map_err(|e| e.with_source(&function.rule_meta().source_code));
-//     assert_eq!(
-//         expected_result,
-//         actual_result.map_err(|e| e.pair()),
-//         "<-- actual\n\nRule source code:\n{}\n\n",
-//         function.rule_meta().source_code,
-//     );
-// }
-
-// /// Compiles the function named "test" in the given source code, panicking if compilation fails.
-// fn compile_test_fn(source_code: &str) -> CompiledFunction {
-//     compile_fn(Some("test"), source_code).expect("Compilation failed")
-// }
-
-// /// Compiles the transition function in the given source code, panicking if compilation fails.
-// fn compile_transition_fn(source_code: &str) -> CompiledFunction {
-//     compile_fn(None, source_code).expect("Compilation failed")
-// }
-
-// /// Compiles the specified function of the given source code. If the function
-// /// name is None, then the transition function is returned.
-// fn compile_fn(fn_name: Option<&str>, source_code: &str) -> CompleteLangResult<CompiledFunction> {
-//     crate::compile_blocking(Arc::new(source_code.to_owned()), fn_name.map(str::to_owned))
-//         .map_err(|e| e.with_source(source_code))
-// }
-
-// /// Constructs a Rule AST from the given source code.
-// fn make_ast(source_code: &str) -> CompleteLangResult<ast::Rule> {
-//     ast::make_rule(Arc::new(source_code.to_owned())).map_err(|e| e.with_source(source_code))
-// }

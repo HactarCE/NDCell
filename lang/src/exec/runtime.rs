@@ -29,7 +29,7 @@ impl CtxTrait for Runtime {
 /// Control flow command.
 #[must_use]
 #[derive(Debug, Clone)]
-enum Flow {
+pub enum Flow {
     /// Execute the next statement as normal.
     Proceed,
 
@@ -140,7 +140,7 @@ impl Runtime {
         Ok(())
     }
 
-    fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<Flow> {
+    pub fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<Flow> {
         let ast = stmt.ast;
         match stmt.data() {
             ast::StmtData::Block(stmt_ids) => {

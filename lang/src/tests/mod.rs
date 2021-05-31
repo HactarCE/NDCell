@@ -9,6 +9,7 @@ use std::sync::Arc;
 // mod branch;
 // mod byterepr;
 // mod cmp;
+mod convert;
 // mod debug;
 mod const_eval;
 // mod filters;
@@ -116,13 +117,15 @@ impl<'a> TestProgram<'a> {
 
         source.push_str(" {\n");
         let n = self.input_types.len();
+        source.push_str(self.exec);
+        source.push('\n');
         for i in 0..n {
             source.push_str(&format!("x{} = __compiled_arg__[{}]\n", i, i));
         }
         for (i, (_ty, expr)) in self.result_expressions.iter().enumerate() {
             source.push_str(&format!("__compiled_arg__[{}] = {}\n", n + i, expr));
         }
-        source.push_str("\n}\n");
+        source.push_str("}\n");
 
         source
     }

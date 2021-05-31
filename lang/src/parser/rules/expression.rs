@@ -349,7 +349,7 @@ fn parse_prefix_ops(
     }
     let mut ret = p.parse(ast, ExpressionWithPrecedence(precedence.next()))?;
     let mut span = ast.get_node(ret).span();
-    // Now pop the operators off the list from right-to-left.
+    // Now pop the operators off the list from right to left.
     for op in ops {
         span = span.merge(op.span);
         ret = ast.add_node(span, ast::ExprData::PrefixOp(op, ret));

@@ -71,6 +71,18 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     /// Constructs a parser for a file.
     pub fn new(file: &'a File, tokens: &'a [Spanned<Token>]) -> Result<Self> {
+        // Check for ambiguous octothorpe, such as `# var_name`.
+        if let Some([_octothorpe, ident]) = tokens
+            // TODO: when #[feature(min_const_generics)] stabalizes, use
+            // `array_windows()` instead of `windows()`.
+            .windows(2)
+            .map(|pair| [pair[0], pair[1]])
+            .filter(|[t1, t2]| t1.node == Token::Octothorpe && t2.node == Token::Ident)
+            .next()
+        {
+            return Err(Error::ambiguous_octothorpe(ident.span));
+        }
+
         Ok(Self {
             file,
             tokens,

@@ -30,6 +30,16 @@ fn test_convert_int_to_cell() {
         .with_input_types(&[Type::Integer])
         .with_result_expressions(&[(Type::Cell, "#(x0)")])
         .assert_test_cases(&int_to_cell_test_cases(256));
+
+    // Test before `@states`.
+    TestProgram::new()
+        .with_setup(
+            "
+                @init { x = #(2) }
+                @states 5
+            ",
+        )
+        .assert_init_errors(vec![("#", "not yet reached '@states' directive")]);
 }
 
 fn int_to_cell_test_cases(state_count: LangInt) -> Vec<TestCase<'static>> {

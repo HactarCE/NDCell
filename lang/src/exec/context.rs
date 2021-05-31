@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::ast;
 use crate::data::{LangInt, RtVal, SpannedRuntimeValueExt};
-use crate::errors::{AlreadyReported, Error, Result};
+use crate::errors::{AlreadyReported, Error, Fallible, Result};
 
 /// Global initialization and compile-time execution context.
 ///
@@ -14,7 +14,7 @@ use crate::errors::{AlreadyReported, Error, Result};
 ///
 /// Includes information about the rule (such as number of dimensions) and any
 /// errors during initialization and compilation.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Ctx {
     /// List of all initialization and compiler errors. If this list is
     /// non-empty, the JIT function cannot be produced.
@@ -111,7 +111,6 @@ impl Ctx {
 
         Ok(())
     }
-
     /// Sets the number of states based on the result of an `@states`
     /// expression.
     pub fn set_states(&mut self, directive_span: Span, states: Spanned<RtVal>) -> Result<()> {
@@ -150,6 +149,21 @@ pub trait CtxTrait {
         } else {
             Err(self.ctx().errors.clone())
         }
+    }
+
+    /// Returns the number of dimensions, or an error at `error_span` if yet
+    /// initialized.
+    fn get_ndim(&mut self, error_span: Span) -> Fallible<usize> {
+        self.ctx()
+            .ndim
+            .ok_or_else(|| self.error(Error::not_reached_directive(error_span, "@ndim")))
+    }
+    /// Returns the number of states, or an error at `error_span` if not yet
+    /// initialized.
+    fn get_states(&mut self, error_span: Span) -> Fallible<usize> {
+        self.ctx()
+            .states
+            .ok_or_else(|| self.error(Error::not_reached_directive(error_span, "@states")))
     }
 }
 

@@ -188,6 +188,8 @@ impl Error {
         arg_types: &[Type] => crate::utils::display_bracketed_list,
     ));
 
+    error_fn!(Error; fn not_reached_directive("not yet reached '{}' directive", directive_name: &str));
+
     error_fn!(Error; fn cannot_index_type(
         "cannot index into value of type {}",
         ty: Type,

@@ -214,6 +214,7 @@ impl Error {
     error_fn!(Error; fn negative_exponent("negative exponent"));
     error_fn!(Error; fn bitshift_out_of_range("bitshift amount out of range"));
     error_fn!(Error; fn index_out_of_bounds("index out of bounds"));
+    error_fn!(Error; fn cell_state_out_of_range("invalid cell state ID"));
 
     error_fn!(Error; fn user_error("error"));
     error_fn!(Error; fn assertion_failed("assertion failed"));

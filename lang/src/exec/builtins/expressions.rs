@@ -54,7 +54,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
     fn from(expr: ast::Expr<'ast>) -> Self {
         let ast = expr.ast;
         match expr.data() {
-            ast::ExprData::Paren(_) => todo!("identity func"),
+            ast::ExprData::Paren(expr) => Box::new(Identity(ast.get_node(*expr))),
 
             ast::ExprData::Identifier(name) => Box::new(Identifier(name)),
 
@@ -78,14 +78,15 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
             }
             ast::ExprData::PrefixOp(op, arg) => {
                 use crate::ast::PrefixOp::*;
+                let op_func: Box<dyn Function> = match op.node {
+                    Pos => Box::new(functions::math::UnaryOp::Pos),
+                    Neg => Box::new(functions::math::UnaryOp::Neg),
+                    BitwiseNot => Box::new(functions::math::UnaryOp::BitwiseNot),
+                    LogicalNot => Box::new(functions::math::UnaryOp::LogicalNot),
+                    IntToCell => Box::new(functions::convert::IntToCell),
+                };
                 Box::new(FuncCall {
-                    f: match op.node {
-                        Pos => Some(functions::math::UnaryOp::Pos),
-                        Neg => Some(functions::math::UnaryOp::Neg),
-                        BitwiseNot => Some(functions::math::UnaryOp::BitwiseNot),
-                        LogicalNot => Some(functions::math::UnaryOp::LogicalNot),
-                        IntToCell => todo!("convert int to cell"),
-                    },
+                    f: Some(op_func),
                     f_span: op.span,
                     args: vec![ast.get_node(*arg)],
                 })
@@ -125,6 +126,17 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 todo!("vector construct expr")
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Identity<'ast>(ast::Expr<'ast>);
+impl Expression for Identity<'_> {
+    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
+        Ok(runtime.eval_expr(self.0)?.node)
+    }
+    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
+        Ok(compiler.build_expr(self.0)?.node)
     }
 }
 

@@ -30,14 +30,12 @@ impl SyntaxRule for Directive {
                 // "@func" => Ok(ast::DirectiveData::Function(p.parse(ast, FunctionDefinition)?)),
 
                 // "@rule" => Ok(ast::DirectiveData::Rule(p.parse(ast, StringLiteral)?)),
-                // "@ndim" => Ok(ast::DirectiveData::Ndim(p.parse(ast, Expression)?)),
-                // "@states" => Ok(ast::DirectiveData::States(p.parse(ast, Expression)?)),
+                "@rule" => Err(Error::unimplemented(p.span())),
+                "@ndim" => Ok(ast::DirectiveData::Ndim(p.parse(ast, Expression)?)),
+                "@states" => Ok(ast::DirectiveData::States(p.parse(ast, Expression)?)),
                 // "@transition" => Ok(ast::DirectiveData::Transition(
                 //     p.parse(ast, StatementBlock)?,
                 // )),
-                "@rule" => Err(Error::unimplemented(p.span())),
-                "@ndim" => Err(Error::unimplemented(p.span())),
-                "@states" => Err(Error::unimplemented(p.span())),
                 "@transition" => Err(Error::unimplemented(p.span())),
 
                 s => Err(match s.to_ascii_lowercase().as_str() {

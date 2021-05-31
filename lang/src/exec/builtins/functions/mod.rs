@@ -1,6 +1,7 @@
 use codemap::{Span, Spanned};
 use std::fmt;
 
+pub mod convert;
 pub mod math;
 
 use crate::ast;

@@ -5,6 +5,44 @@ use RtVal::{Cell, Integer};
 fn test_ambiguous_octothorpe_syntax_error() {
     let ambiguous_msg = "this is ambiguous; if it is a tag name, remove the space after '#'; if it is a variable name, wrap it in parentheses";
     TestProgram::new()
-        .with_exec("# x0")
+        .with_exec("a = # x0")
         .assert_syntax_error(("x0", ambiguous_msg));
+}
+
+#[test]
+fn test_convert_int_to_cell() {
+    // Test with no `@states`.
+    TestProgram::new()
+        .with_input_types(&[Type::Integer])
+        .with_result_expressions(&[(Type::Cell, "#(x0)")])
+        .assert_test_cases(&int_to_cell_test_cases(2));
+
+    // Test with 5 states.
+    TestProgram::new()
+        .with_setup("@states 5")
+        .with_input_types(&[Type::Integer])
+        .with_result_expressions(&[(Type::Cell, "#(x0)")])
+        .assert_test_cases(&int_to_cell_test_cases(5));
+
+    // Test with 256 states.
+    TestProgram::new()
+        .with_setup("@states 256")
+        .with_input_types(&[Type::Integer])
+        .with_result_expressions(&[(Type::Cell, "#(x0)")])
+        .assert_test_cases(&int_to_cell_test_cases(256));
+}
+
+fn int_to_cell_test_cases(state_count: LangInt) -> Vec<TestCase<'static>> {
+    (-10..300)
+        .map(|i| {
+            (
+                vec![Integer(i)],
+                if 0 <= i && i < state_count {
+                    Ok(vec![Cell(i as u8)])
+                } else {
+                    Err(vec![("(x0)", "invalid cell state ID")])
+                },
+            )
+        })
+        .collect()
 }

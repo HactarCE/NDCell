@@ -61,8 +61,12 @@ impl Runtime {
     }
 
     pub fn run_init(&mut self, ast: &ast::Program) -> Result<(), &[Error]> {
-        for &directive_id in ast.directives() {
-            let directive = ast.get_node(directive_id);
+        let directives = ast.get_node_list(ast.directives());
+
+        // Fill in defaults for missing directives.
+        self.ctx = Ctx::new(&directives);
+
+        for directive in directives {
             match directive.data() {
                 ast::DirectiveData::Compile { .. } => match self.ctx.compile_directive {
                     Some(_) => {
@@ -71,7 +75,7 @@ impl Runtime {
                         self.error(Error::invalid_directive_name(directive.span()));
                     }
                     None => {
-                        self.ctx.compile_directive = Some(directive_id);
+                        self.ctx.compile_directive = Some(directive.id);
                     }
                 },
 
@@ -102,13 +106,38 @@ impl Runtime {
 
                     Err(AlreadyReported) => (),
                 },
+
+                ast::DirectiveData::Ndim(expr) => {
+                    let ndim_expr_result = match self.eval_expr(ast.get_node(*expr)) {
+                        Ok(x) => x,
+                        Err(AlreadyReported) => break,
+                    };
+                    if let Err(e) = self.ctx.set_ndim(directive.span(), ndim_expr_result) {
+                        self.error(e);
+                        break;
+                    }
+                }
+
+                ast::DirectiveData::States(expr) => {
+                    let states_expr_result = match self.eval_expr(ast.get_node(*expr)) {
+                        Ok(x) => x,
+                        Err(AlreadyReported) => break,
+                    };
+                    if let Err(e) = self.ctx.set_states(directive.span(), states_expr_result) {
+                        self.error(e);
+                        break;
+                    }
+                }
             }
         }
-        if self.ctx.errors.is_empty() {
-            Ok(())
-        } else {
-            Err(&self.ctx.errors)
+        if !self.ctx.errors.is_empty() {
+            return Err(&self.ctx.errors);
         }
+        if let Err(e) = self.ctx.error_if_missing_values() {
+            self.error(e);
+            return Err(&self.ctx.errors);
+        }
+        Ok(())
     }
 
     fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<Flow> {

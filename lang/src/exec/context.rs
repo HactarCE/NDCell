@@ -1,9 +1,10 @@
+use codemap::{Span, Spanned};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::ast;
-use crate::data::RtVal;
-use crate::errors::{AlreadyReported, Error};
+use crate::data::{LangInt, RtVal, SpannedRuntimeValueExt};
+use crate::errors::{AlreadyReported, Error, Result};
 
 /// Global initialization and compile-time execution context.
 ///
@@ -28,17 +29,105 @@ pub struct Ctx {
     /// cause an error.
     pub compile_directive: Option<ast::DirectiveId>,
 
+    /// Number of dimensions.
+    ///
+    /// This is `None` during initialization if an `@ndim` directive exists but
+    /// has not been reached yet; if there is no `@ndim` directive at all, this
+    /// will be filled with a default value before initialization.
+    pub ndim: Option<usize>,
+
     /// Number of states.
     ///
-    /// This is `None` during initialization if no `@ndim` directive has been
-    /// reached yet; if there is no `@ndim` directive at all, this will be
-    /// filled with a default value before compilation.
-    pub ndim: Option<usize>,
+    /// This is `None` during initialization if an `@states` directive exists
+    /// but has not been reached yet; if there is no `@states` directive at all,
+    /// this will be filled with a default value before initialization.
+    pub states: Option<usize>,
 }
 impl Ctx {
-    /// Fills in default values for anything missing.
-    pub fn infer_missing_values(&mut self) {
-        self.ndim.get_or_insert(crate::DEFAULT_NDIM);
+    /// Constructs a new directive, with values missing where they will be
+    /// initialized in the future.
+    pub fn new(directives: &[ast::Directive<'_>]) -> Self {
+        // Infer ndim if there is no `@ndim` directive.
+        let explicit_ndim = directives
+            .iter()
+            .any(|d| matches!(d.data(), ast::DirectiveData::Ndim(_)));
+        let ndim = if explicit_ndim {
+            None
+        } else {
+            Some(crate::DEFAULT_NDIM)
+        };
+
+        // Infer states if there is no `@states` directive.
+        let explicit_states = directives
+            .iter()
+            .any(|d| matches!(d.data(), ast::DirectiveData::States(_)));
+        let states = if explicit_states {
+            None
+        } else {
+            Some(crate::DEFAULT_STATE_COUNT)
+        };
+
+        Self {
+            errors: vec![],
+            global_constants: HashMap::new(),
+            compile_directive: None,
+            ndim,
+            states,
+        }
+    }
+
+    /// Returns an internal error if there are any missing values.
+    pub fn error_if_missing_values(&self) -> Result<()> {
+        // This `match` may look clunky, but it ensures that we aren't
+        // forgetting any fields. If new fields are added to `Ctx` in the
+        // future, this exhaustive pattern-matching expression will produce a
+        // compile error until it is updated.
+        match self {
+            Self {
+                errors: _,
+                global_constants: _,
+                compile_directive: _, // ok if no `@compile` directive
+                ndim: Some(_),
+                states: Some(_),
+            } => Ok(()),
+            _ => internal_error!("context contains missing values: {:#?}", self),
+        }
+    }
+
+    /// Sets the number of dimensions based on the result of an `@ndim`
+    /// expression.
+    pub fn set_ndim(&mut self, directive_span: Span, ndim: Spanned<RtVal>) -> Result<()> {
+        if self.ndim.is_some() {
+            return Err(Error::duplicate_directive(directive_span, "@ndim"));
+        }
+
+        let span = ndim.span;
+        let n = ndim.as_integer()?;
+        if n < 1 && n > crate::MAX_NDIM as LangInt {
+            return Err(Error::invalid_dimension_count(span));
+        }
+
+        self.ndim = Some(n as usize);
+
+        Ok(())
+    }
+
+    /// Sets the number of states based on the result of an `@states`
+    /// expression.
+    pub fn set_states(&mut self, directive_span: Span, states: Spanned<RtVal>) -> Result<()> {
+        if self.states.is_some() {
+            return Err(Error::duplicate_directive(directive_span, "@states"));
+        }
+
+        let span = states.span;
+        let n = states.as_integer()?;
+        if n < 1 && n > crate::MAX_STATE_COUNT as LangInt {
+            return Err(Error::invalid_state_count(span));
+        }
+
+        self.states = Some(n as usize);
+
+        Ok(())
     }
 }
 

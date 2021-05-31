@@ -13,8 +13,8 @@ pub enum DirectiveData {
 
     Init(StmtId),
     // Rule(Spanned<Arc<String>>),
-    // Ndim(ExprId),
-    // States(ExprId),
+    Ndim(ExprId),
+    States(ExprId),
     // Function(FuncId),
     // Transition(StmtId),
 }

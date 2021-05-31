@@ -40,79 +40,84 @@ impl SyntaxRule for Statement {
     type Output = ast::StmtId;
 
     fn might_match(&self, mut p: Parser<'_>) -> bool {
-        AssignStatement.might_match(p)
+        StatementBlock.might_match(p)
+            || AssignStatement.might_match(p)
             || matches!(p.next(), Some(Token::Keyword(kw)) if kw.starts_statement())
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
-        if let Some(result) = p.try_parse(ast, AssignStatement) {
-            return result;
-        }
+        None.or_else(|| p.try_parse(ast, StatementBlock))
+            .or_else(|| p.try_parse(ast, AssignStatement))
+            .unwrap_or_else(|| {
+                if let Some(Token::Keyword(kw)) = p.next() {
+                    match kw {
+                        // Loops
+                        Keyword::Break => {
+                            p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Break))
+                        }
+                        Keyword::Continue => {
+                            p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Continue))
+                        }
+                        Keyword::For => {
+                            p.prev();
+                            p.parse(ast, ForLoop)
+                        }
 
-        if let Some(Token::Keyword(kw)) = p.next() {
-            match kw {
-                // Loops
-                Keyword::Break => p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Break)),
-                Keyword::Continue => {
-                    p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Continue))
+                        // Returns
+                        Keyword::Become => p.parse_and_add_ast_node(ast, |p, ast| {
+                            Ok(ast::StmtData::Become(p.parse(ast, Expression)?))
+                        }),
+                        Keyword::Remain => {
+                            p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Remain))
+                        }
+                        Keyword::Return => p.parse_and_add_ast_node(ast, |p, ast| {
+                            Ok(ast::StmtData::Return(
+                                p.try_parse(ast, Expression).transpose()?,
+                            ))
+                        }),
+
+                        // Branching
+                        Keyword::If => p.parse(ast, IfStatement),
+                        Keyword::Else => Err(Error::else_without_if(p.span())),
+                        Keyword::Unless => p.parse_and_add_ast_node(ast, |p, ast| {
+                            Ok(ast::StmtData::IfElse {
+                                condition: p.parse(ast, Expression)?,
+                                if_true: None,
+                                if_false: Some(p.parse(ast, StatementBlock)?),
+                            })
+                        }),
+
+                        Keyword::Case => Err(Error::unimplemented(p.span())),
+                        Keyword::Match => Err(Error::unimplemented(p.span())),
+
+                        // Debugging
+                        Keyword::Assert => p.parse_and_add_ast_node(ast, |p, ast| {
+                            Ok(ast::StmtData::Assert {
+                                condition: p.parse(ast, Expression)?,
+                                msg: if p.peek_next() == Some(Token::Comma) {
+                                    p.next();
+                                    Some(p.parse(ast, StringLiteral)?)
+                                } else {
+                                    None
+                                },
+                            })
+                        }),
+                        Keyword::Error => p.parse_and_add_ast_node(ast, |p, ast| {
+                            Ok(ast::StmtData::Error {
+                                msg: if p.peek_next() == Some(Token::Comma) {
+                                    p.next();
+                                    Some(p.parse(ast, StringLiteral)?)
+                                } else {
+                                    None
+                                },
+                            })
+                        }),
+
+                        _ => p.expected(self),
+                    }
+                } else {
+                    p.expected(self)
                 }
-                Keyword::For => {
-                    p.prev();
-                    p.parse(ast, ForLoop)
-                }
-
-                // Returns
-                Keyword::Become => p.parse_and_add_ast_node(ast, |p, ast| {
-                    Ok(ast::StmtData::Become(p.parse(ast, Expression)?))
-                }),
-                Keyword::Remain => p.parse_and_add_ast_node(ast, |_, _| Ok(ast::StmtData::Remain)),
-                Keyword::Return => p.parse_and_add_ast_node(ast, |p, ast| {
-                    Ok(ast::StmtData::Return(
-                        p.try_parse(ast, Expression).transpose()?,
-                    ))
-                }),
-
-                // Branching
-                Keyword::If => p.parse(ast, IfStatement),
-                Keyword::Else => Err(Error::else_without_if(p.span())),
-                Keyword::Unless => p.parse_and_add_ast_node(ast, |p, ast| {
-                    Ok(ast::StmtData::IfElse {
-                        condition: p.parse(ast, Expression)?,
-                        if_true: None,
-                        if_false: Some(p.parse(ast, StatementBlock)?),
-                    })
-                }),
-
-                Keyword::Case => Err(Error::unimplemented(p.span())),
-                Keyword::Match => Err(Error::unimplemented(p.span())),
-
-                // Debugging
-                Keyword::Assert => p.parse_and_add_ast_node(ast, |p, ast| {
-                    Ok(ast::StmtData::Assert {
-                        condition: p.parse(ast, Expression)?,
-                        msg: if p.peek_next() == Some(Token::Comma) {
-                            p.next();
-                            Some(p.parse(ast, StringLiteral)?)
-                        } else {
-                            None
-                        },
-                    })
-                }),
-                Keyword::Error => p.parse_and_add_ast_node(ast, |p, ast| {
-                    Ok(ast::StmtData::Error {
-                        msg: if p.peek_next() == Some(Token::Comma) {
-                            p.next();
-                            Some(p.parse(ast, StringLiteral)?)
-                        } else {
-                            None
-                        },
-                    })
-                }),
-
-                _ => p.expected(self),
-            }
-        } else {
-            p.expected(self)
-        }
+            })
     }
 }
 

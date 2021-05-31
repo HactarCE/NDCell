@@ -1,18 +1,22 @@
 //! Error reporting functionality for compilation and runtime.
 
-use codemap::{Span, Spanned};
+use codemap::Span;
 use codemap_diagnostic::{Diagnostic, Level, SpanLabel, SpanStyle};
 use itertools::Itertools;
-use std::borrow::Cow;
 use std::fmt;
 
-use crate::data::{Type, MAX_VECTOR_LEN};
+use crate::data::Type;
 use crate::{MAX_NDIM, MAX_STATE_COUNT};
 
 /// `Result` type alias for NDCA compile-time and runtime errors.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// `Result` type alias for NDCA compile-time and runtime errors that have
+/// already been reported (added to an errors list).
 pub type Fallible<T> = std::result::Result<T, AlreadyReported>;
+
+/// Unit struct indicating that an error has already been recorded in a list of
+/// errors and so its contents are no longer relevant.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct AlreadyReported;
 
@@ -85,6 +89,7 @@ macro_rules! error_fn {
 #[derive(Debug, Clone)]
 pub struct Error(pub Diagnostic);
 impl Error {
+    /// Adds a spanned note to the error message.
     pub fn with_note(mut self, span: Span, msg: impl fmt::Display) -> Self {
         self.0.spans.push(SpanLabel {
             span,
@@ -255,26 +260,5 @@ macro_rules! internal_error_value {
 macro_rules! internal_error {
     ( $( $args:expr ),+ $(,)? ) => {
         return Err(internal_error_value!($( $args ),+))
-    };
-}
-
-// Emits an error for when an argument index is out of range (which should never
-// happen).
-macro_rules! arg_out_of_range {
-    () => {
-        internal_error!("Argument index out of range")
-    };
-}
-
-// TODO: remove uncaught_type_error; handle these gracefully
-
-// Emits an error for when a TypeError occurs in a place where it should have
-// already been caught.
-macro_rules! uncaught_type_error {
-    () => {
-        internal_error!("Uncaught type error")
-    };
-    (in $loc:ident) => {
-        internal_error!(concat!("Uncaught type error in ", stringify!($loc)))
     };
 }

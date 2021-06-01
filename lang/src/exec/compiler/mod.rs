@@ -990,9 +990,9 @@ impl Compiler {
         let exp_eq_zero = b.build_int_compare(EQ, exp, llvm::const_int(0), "exp_eq_zero");
         let acc = one;
         let mut ret = None;
-        let final_result = self.build_conditional(
+        self.build_conditional(
             exp_eq_zero,
-            |_| Ok(one.as_basic_value_enum()),
+            |_| Ok(one),
             |c| {
                 c.build_loop(
                     |c, l| {
@@ -1014,9 +1014,9 @@ impl Compiler {
                                 Ok(c.build_checked_int_arithmetic(
                                     error_span, "smul", old_acc, old_base,
                                 )?
-                                .as_basic_value_enum())
+                                .into_int_value())
                             },
-                            |_| Ok(old_acc.as_basic_value_enum()),
+                            |_| Ok(old_acc),
                         )?;
 
                         ret = Some(new_acc);
@@ -1046,8 +1046,7 @@ impl Compiler {
 
                 Ok(ret.unwrap())
             },
-        )?;
-        Ok(final_result.into_int_value())
+        )
     }
 
     /// Builds instructions to perform a checked integer left shift.
@@ -2973,3 +2972,29 @@ impl PhiMergeable for llvm::BasicValueEnum {
         phi.as_basic_value()
     }
 }
+macro_rules! impl_phi_mergeable_for_basic_value_types {
+    ( $($method:ident() -> $type:ty),+ $(,)? ) => {
+        $(
+            impl PhiMergeable for $type {
+                fn merge(
+                    self,
+                    other: Self,
+                    self_bb: llvm::BasicBlock,
+                    other_bb: llvm::BasicBlock,
+                    compiler: &mut Compiler,
+                ) -> Self {
+                    PhiMergeable::merge(
+                        self.as_basic_value_enum(),
+                        other.as_basic_value_enum(),
+                        self_bb,
+                        other_bb,
+                        compiler,
+                    ).$method()
+                }
+            }
+        )+
+    };
+}
+impl_phi_mergeable_for_basic_value_types!(
+    into_int_value() -> llvm::IntValue,
+);

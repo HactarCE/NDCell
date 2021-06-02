@@ -1249,7 +1249,6 @@ dependencies = [
  "parking_lot 0.11.1",
  "parse_int",
  "paste",
- "proptest",
  "regex",
  "seahash",
  "send_wrapper",

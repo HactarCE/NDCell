@@ -19,6 +19,3 @@ send_wrapper = "0.5"
 thread_local = "1.0"
 
 ndcell_core = { path = "../core" }
-
-[dev-dependencies]
-proptest = "0.10"

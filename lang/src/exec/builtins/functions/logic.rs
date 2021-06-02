@@ -53,7 +53,7 @@ impl Function for LogicalNot {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         call.check_args_len(1, compiler, self)?;
-        let arg = compiler.build_convert_to_bool(call.args[1].clone())?;
+        let arg = compiler.build_convert_to_bool(call.args[0].clone())?;
         Ok(Val::Cp(CpVal::Integer(compiler.builder().build_xor(
             arg,
             llvm::const_int(1),

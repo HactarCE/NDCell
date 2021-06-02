@@ -96,6 +96,20 @@ fn test_logical_xor() {
         ]));
 }
 
+#[test]
+fn test_logical_not() {
+    TestProgram::new()
+        .with_input_types(&[Type::Integer])
+        .with_result_expressions(&[(Type::Integer, "not x0")])
+        .assert_test_cases(boolean_test_cases(&[
+            (&[Integer(0)], true),
+            (&[Integer(2)], false),
+            (&[Integer(1)], false),
+            (&[Integer(6)], false),
+            (&[Integer(-5)], false),
+        ]))
+}
+
 fn boolean_test_cases<'a>(
     cases: &'a [(&'a [RtVal], bool)],
 ) -> impl 'a + IntoIterator<Item = TestCase<'static>> {

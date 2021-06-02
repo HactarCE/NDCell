@@ -146,3 +146,29 @@ fn test_integer_binop_with_values<'s>(
             (inputs, output)
         }));
 }
+
+#[test]
+fn test_integer_math_unary_ops() {
+    // Test unary plus.
+    TestProgram::new()
+        .with_input_types(&[Type::Integer])
+        .with_result_expressions(&[(Type::Integer, "+x0")])
+        .assert_test_cases(test_values().iter().map(|&i| {
+            let input = vec![Integer(i)];
+            let output = Ok(vec![Integer(i)]);
+            (input, output)
+        }));
+
+    // Test unary negation.
+    TestProgram::new()
+        .with_input_types(&[Type::Integer])
+        .with_result_expressions(&[(Type::Integer, "-x0")])
+        .assert_test_cases(test_values().iter().map(|&i| {
+            let input = vec![Integer(i)];
+            let output = match i.checked_neg() {
+                Some(result) => Ok(vec![Integer(result)]),
+                None => Err(vec![("-", "integer overflow")]),
+            };
+            (input, output)
+        }));
+}

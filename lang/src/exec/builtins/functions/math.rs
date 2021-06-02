@@ -264,13 +264,9 @@ impl UnaryMathOp {
         let zero = arg.same_type_const_zero();
         let ones = arg.same_type_const_all_ones();
         match self {
-            UnaryMathOp::Pos => Ok(arg.as_basic_value_enum()),
-            UnaryMathOp::Neg => {
-                BinaryMathOp::Sub.compile_for_int_math_values(compiler, span, zero, arg)
-            }
-            UnaryMathOp::BitwiseNot => {
-                Ok(b.build_xor(arg, ones, "bitwise_not").as_basic_value_enum())
-            }
+            Self::Pos => Ok(arg.as_basic_value_enum()),
+            Self::Neg => compiler.build_checked_int_arithmetic(span, "ssub", zero, arg),
+            Self::BitwiseNot => Ok(b.build_xor(arg, ones, "bitwise_not").as_basic_value_enum()),
         }
     }
 

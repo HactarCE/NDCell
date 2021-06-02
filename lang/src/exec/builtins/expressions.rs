@@ -74,7 +74,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                     LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),
                     LogicalOr => Box::new(LogicalOrExpr { op_span, args }),
                     LogicalXor => Box::new(FuncCall {
-                        f: Some(functions::logic::LogicalNot),
+                        f: Some(functions::logic::LogicalXor),
                         f_span: op_span,
                         args: args.to_vec(),
                     }),
@@ -249,7 +249,7 @@ struct LogicalAndExpr<'ast> {
 impl Expression for LogicalAndExpr<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
         Ok(RtVal::Integer(
-            (runtime.eval_bool_expr(self.args[0])? || runtime.eval_bool_expr(self.args[1])?)
+            (runtime.eval_bool_expr(self.args[0])? && runtime.eval_bool_expr(self.args[1])?)
                 as LangInt,
         ))
     }

@@ -56,6 +56,51 @@ fn test_logical_or() {
         ]));
 }
 
+#[test]
+fn test_logical_and() {
+    // Test with variable values.
+    TestProgram::new()
+        .with_input_types(&[Type::Integer, Type::Integer])
+        .with_result_expressions(&[(Type::Integer, "x0 and x1")])
+        .assert_test_cases(&boolean_test_cases(&[
+            // (&[Integer(0), Integer(0)], false),
+            // (&[Integer(2), Integer(1)], true),
+            (&[Integer(0), Integer(6)], false),
+            (&[Integer(-5), Integer(0)], false),
+        ]));
+
+    // Test short-circuiting with constant `false`.
+    TestProgram::new()
+        .with_input_types(&[Type::Integer])
+        .with_result_expressions(&[(Type::Integer, "0 and semantic['nonsense']")])
+        .assert_test_cases(&boolean_test_cases(&[
+            (&[Integer(0)], false),
+            (&[Integer(-99)], false),
+        ]));
+
+    // Test short-circuiting with constant `true`.
+    TestProgram::new()
+        .with_input_types(&[Type::Integer])
+        .with_result_expressions(&[(Type::Integer, "42 and x0")])
+        .assert_test_cases(&boolean_test_cases(&[
+            (&[Integer(0)], false),
+            (&[Integer(-99)], true),
+        ]));
+}
+
+#[test]
+fn test_logical_xor() {
+    TestProgram::new()
+        .with_input_types(&[Type::Integer, Type::Integer])
+        .with_result_expressions(&[(Type::Integer, "x0 xor x1")])
+        .assert_test_cases(&boolean_test_cases(&[
+            (&[Integer(0), Integer(0)], false),
+            (&[Integer(2), Integer(1)], false),
+            (&[Integer(0), Integer(6)], true),
+            (&[Integer(-5), Integer(0)], true),
+        ]));
+}
+
 fn boolean_test_cases(cases: &[(&[RtVal], bool)]) -> Vec<TestCase<'static>> {
     cases
         .iter()

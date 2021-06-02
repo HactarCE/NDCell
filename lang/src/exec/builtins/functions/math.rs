@@ -260,8 +260,6 @@ impl UnaryMathOp {
         span: Span,
         arg: M,
     ) -> Fallible<llvm::BasicValueEnum> {
-        use llvm::IntPredicate::EQ;
-
         let b = compiler.builder();
         let zero = arg.same_type_const_zero();
         let ones = arg.same_type_const_all_ones();

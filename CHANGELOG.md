@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Optimized
 
-- 3D rendering performance (5x-20x FPS)
+- 3D rendering performance
 
 ## [0.2.3] Blinker (2021-02-22)
 

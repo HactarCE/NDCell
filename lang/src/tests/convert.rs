@@ -15,21 +15,21 @@ fn test_convert_int_to_cell() {
     TestProgram::new()
         .with_input_types(&[Type::Integer])
         .with_result_expressions(&[(Type::Cell, "#(x0)")])
-        .assert_test_cases(&int_to_cell_test_cases(2));
+        .assert_test_cases(int_to_cell_test_cases(2));
 
     // Test with 5 states.
     TestProgram::new()
         .with_setup("@states 5")
         .with_input_types(&[Type::Integer])
         .with_result_expressions(&[(Type::Cell, "#(x0)")])
-        .assert_test_cases(&int_to_cell_test_cases(5));
+        .assert_test_cases(int_to_cell_test_cases(5));
 
     // Test with 256 states.
     TestProgram::new()
         .with_setup("@states 256")
         .with_input_types(&[Type::Integer])
         .with_result_expressions(&[(Type::Cell, "#(x0)")])
-        .assert_test_cases(&int_to_cell_test_cases(256));
+        .assert_test_cases(int_to_cell_test_cases(256));
 
     // Test before `@states`.
     TestProgram::new()
@@ -42,16 +42,14 @@ fn test_convert_int_to_cell() {
         .assert_init_errors(vec![("#", "not yet reached '@states' directive")]);
 }
 
-fn int_to_cell_test_cases(state_count: LangInt) -> Vec<TestCase<'static>> {
-    (-10..300)
-        .map(|i| {
-            let inputs = vec![Integer(i)];
-            let outputs = if 0 <= i && i < state_count {
-                Ok(vec![Cell(i as u8)])
-            } else {
-                Err(vec![("(x0)", "invalid cell state ID")])
-            };
-            (inputs, outputs)
-        })
-        .collect()
+fn int_to_cell_test_cases(state_count: LangInt) -> impl Iterator<Item = TestCase<'static>> {
+    (-10..300).map(move |i| {
+        let inputs = vec![Integer(i)];
+        let outputs = if 0 <= i && i < state_count {
+            Ok(vec![Cell(i as u8)])
+        } else {
+            Err(vec![("(x0)", "invalid cell state ID")])
+        };
+        (inputs, outputs)
+    })
 }

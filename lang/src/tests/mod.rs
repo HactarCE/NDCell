@@ -185,22 +185,20 @@ impl<'a> TestProgram<'a> {
 
     /// Asserts that all test cases produce the specified output, both when
     /// interpreted and when compiled.
-    pub fn assert_test_cases(
-        self,
-        inputs_and_expected_results: &[(Vec<RtVal>, Result<Vec<RtVal>, Vec<(&str, &str)>>)],
-    ) {
-        self.assert_interpreted_test_cases(inputs_and_expected_results);
-        self.assert_compiled_test_cases(inputs_and_expected_results);
+    pub fn assert_test_cases<'s>(self, test_cases: impl IntoIterator<Item = TestCase<'s>>) {
+        let test_cases = test_cases.into_iter().collect_vec();
+        self.assert_interpreted_test_cases(test_cases.iter().cloned());
+        self.assert_compiled_test_cases(test_cases);
     }
     /// Asserts that all test cases produce the specified output when
     /// interpreted.
-    pub fn assert_interpreted_test_cases(
+    pub fn assert_interpreted_test_cases<'s>(
         self,
-        inputs_and_expected_results: &[(Vec<RtVal>, Result<Vec<RtVal>, Vec<(&str, &str)>>)],
+        test_cases: impl IntoIterator<Item = TestCase<'s>>,
     ) {
         let (ast, stmt_id, expr_ids) = self.ast_for_interpreter_test();
         let clean_runtime = self.init_new_runtime(&ast);
-        for (inputs, expected_result) in inputs_and_expected_results {
+        for (inputs, expected_result) in test_cases {
             let mut runtime = clean_runtime.clone();
 
             let task_str = &format!("intepreting inputs {:?} on {:#?}", inputs, self);
@@ -226,13 +224,13 @@ impl<'a> TestProgram<'a> {
                         .collect()
                 });
             // Check results.
-            assert_results_eq(&ast, task_str, &actual_result, expected_result);
+            assert_results_eq(&ast, task_str, &actual_result, &expected_result);
         }
     }
     /// Asserts that all test cases produce the specified output when compiled.
-    pub fn assert_compiled_test_cases(
+    pub fn assert_compiled_test_cases<'s>(
         self,
-        inputs_and_expected_results: &[(Vec<RtVal>, Result<Vec<RtVal>, Vec<(&str, &str)>>)],
+        test_cases: impl IntoIterator<Item = TestCase<'s>>,
     ) {
         let ast = self.ast_for_compiler_test();
         let runtime = self.init_new_runtime(&ast);
@@ -241,7 +239,7 @@ impl<'a> TestProgram<'a> {
             Err(e) => panic!("\n{}", format_actual_errors(&ast, &e)),
         };
 
-        for (inputs, expected_result) in inputs_and_expected_results {
+        for (inputs, expected_result) in test_cases {
             let task_str = &format!("evaluating inputs {:?} on compiled {:#?}", inputs, self);
             // Set input parameters.
             let mut arg_values = inputs.to_vec();
@@ -263,7 +261,7 @@ impl<'a> TestProgram<'a> {
                 Err(e) => Err(vec![e]),
             };
             // Check result.
-            assert_results_eq(&ast, task_str, &actual_result, expected_result);
+            assert_results_eq(&ast, task_str, &actual_result, &expected_result);
         }
     }
 }

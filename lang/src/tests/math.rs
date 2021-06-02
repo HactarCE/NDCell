@@ -42,7 +42,7 @@ const BITSHIFT_TEST_VALUES: &[LangInt] = &[
 ];
 
 #[test]
-fn test_integer_math_ops() {
+fn test_integer_math_binops() {
     // Test addition.
     let ref_impl = op_with_overflow_reference_impl("+", LangInt::checked_add);
     test_integer_binop("+", ref_impl);
@@ -66,7 +66,7 @@ fn test_integer_math_ops() {
 }
 
 #[test]
-fn test_integer_bitwise_ops() {
+fn test_integer_bitwise_binops() {
     // Test bitwise AND.
     let ref_impl = |a, b| Ok(vec![Integer(a & b)]);
     test_integer_binop("&", ref_impl);
@@ -137,12 +137,12 @@ fn test_integer_binop_with_values<'s>(
     op_reference_impl: impl Fn(LangInt, LangInt) -> TestResult<'s>,
     values: &'s [LangInt],
 ) {
-    let test_cases = iproduct!(values, values)
-        .map(|(&a, &b)| (vec![Integer(a), Integer(b)], op_reference_impl(a, b)))
-        .collect_vec();
-
     TestProgram::new()
         .with_input_types(&[Type::Integer, Type::Integer])
         .with_result_expressions(&[(Type::Integer, &format!("x0 {} x1", op_str))])
-        .assert_test_cases(&test_cases);
+        .assert_test_cases(iproduct!(values, values).map(|(&a, &b)| {
+            let inputs = vec![Integer(a), Integer(b)];
+            let output = op_reference_impl(a, b);
+            (inputs, output)
+        }));
 }

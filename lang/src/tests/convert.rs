@@ -45,14 +45,13 @@ fn test_convert_int_to_cell() {
 fn int_to_cell_test_cases(state_count: LangInt) -> Vec<TestCase<'static>> {
     (-10..300)
         .map(|i| {
-            (
-                vec![Integer(i)],
-                if 0 <= i && i < state_count {
-                    Ok(vec![Cell(i as u8)])
-                } else {
-                    Err(vec![("(x0)", "invalid cell state ID")])
-                },
-            )
+            let inputs = vec![Integer(i)];
+            let outputs = if 0 <= i && i < state_count {
+                Ok(vec![Cell(i as u8)])
+            } else {
+                Err(vec![("(x0)", "invalid cell state ID")])
+            };
+            (inputs, outputs)
         })
         .collect()
 }

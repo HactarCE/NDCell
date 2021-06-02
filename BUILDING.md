@@ -42,7 +42,7 @@ Visual Studio is optional if you do not want to build LLVM from source, but the 
 
 ### Part 2 - Building LLVM
 
-**If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://github.com/HactarCE/LLVM-MSVC-Win64-Dev/). Extract that somewhere and skip to step #11, using the path where you extracted it place of `C:\LLVM_solution\MinSizeRel`.** I can't promise that will work, but it's waaaay easier than compiling LLVM yourself.
+**If you don't want to build LLVM from source (and you probably don't) but you trust me, you can download everything you need from [here](https://github.com/HactarCE/LLVM-MSVC-Win64-Dev/). Extract that somewhere and skip to step #11, using the path where you extracted it in place of `C:\LLVM_solution\MinSizeRel`.** I can't promise that will work, but it's waaaay easier than compiling LLVM yourself.
 
 Fair warning: I don't do C or C++ development so it's entirely possible that I've botched the build process, but this is what finally worked for me.
 

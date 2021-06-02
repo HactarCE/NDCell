@@ -429,22 +429,22 @@ impl Expression for CompiledArg<'_> {
 struct Identifier<'ast>(&'ast Arc<String>);
 impl Expression for Identifier<'_> {
     fn eval(&self, runtime: &mut Runtime, span: Span) -> Fallible<RtVal> {
-        runtime
-            .vars
-            .get(self.0)
-            .cloned()
-            .or_else(|| super::resolve_constant(self.0))
-            .ok_or_else(|| runtime.error(Error::uninitialized_variable(span)))
+        if let Some(variable) = runtime.vars.get(self.0) {
+            Ok(variable.clone())
+        } else if let Some(constant) = super::resolve_constant(self.0, span, runtime.ctx()) {
+            constant
+        } else {
+            Err(runtime.error(Error::uninitialized_variable(span)))
+        }
     }
     fn compile(&self, compiler: &mut Compiler, span: Span) -> Fallible<Val> {
-        compiler
-            .vars
-            .get(self.0)
-            .cloned()
-            .or_else(|| super::resolve_constant(self.0).map(Val::Rt))
-            .ok_or_else(|| compiler.error(Error::uninitialized_variable(span)))
-            .map(|node| Spanned { node, span })
-            .map(|v| v.node)
+        if let Some(variable) = compiler.vars.get(self.0) {
+            Ok(variable.clone())
+        } else if let Some(constant) = super::resolve_constant(self.0, span, compiler.ctx()) {
+            constant.map(Val::Rt)
+        } else {
+            Err(compiler.error(Error::uninitialized_variable(span)))
+        }
     }
 
     fn eval_assign(

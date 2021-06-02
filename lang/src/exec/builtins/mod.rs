@@ -1,23 +1,44 @@
 //! Built-in values and functions; the "standard library" of NDCA.
 
+use codemap::Span;
+
 mod expressions;
 pub mod functions;
 
-use crate::data::{RtVal, Type};
+use super::{Ctx, CtxTrait};
+use crate::data::{LangInt, RtVal, Type};
+use crate::errors::Fallible;
 pub use expressions::Expression;
 pub use functions::Function;
 
 /// Returns a built-in function.
 pub fn resolve_function(name: &str) -> Option<Box<dyn Function>> {
-    match name {
-        "bool" => Some(Box::new(functions::convert::ToBool)),
-        _ => None,
-    }
+    Some(match name {
+        "bool" => Box::new(functions::convert::ToBool),
+        _ => None?,
+    })
 }
 
 /// Returns a built-in constant.
-pub fn resolve_constant(name: &str) -> Option<RtVal> {
-    None.or_else(|| resolve_type_keyword(name).map(RtVal::Type))
+pub fn resolve_constant(name: &str, span: Span, ctx: &mut Ctx) -> Option<Fallible<RtVal>> {
+    if let Some(ty) = resolve_type_keyword(name) {
+        Some(Ok(RtVal::Type(ty)))
+    } else {
+        Some(match name {
+            "TRUE" => Ok(RtVal::Integer(1)),
+            "FALSE" => Ok(RtVal::Integer(0)),
+
+            "NDIM" => ctx
+                .get_ndim(span)
+                .map(|ndim| ndim as LangInt)
+                .map(RtVal::Integer),
+            "STATECOUNT" => ctx
+                .get_states(span)
+                .map(|statecount| statecount as LangInt)
+                .map(RtVal::Integer),
+            _ => None?,
+        })
+    }
 }
 fn resolve_type_keyword(name: &str) -> Option<Type> {
     Some(match name {

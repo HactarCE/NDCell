@@ -9,6 +9,7 @@ mod bools;
 // mod branch;
 // mod byterepr;
 // mod cmp;
+mod constants;
 mod convert;
 // mod debug;
 mod const_eval;

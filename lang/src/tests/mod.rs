@@ -5,7 +5,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
 
-// mod bools;
+mod bools;
 // mod branch;
 // mod byterepr;
 // mod cmp;

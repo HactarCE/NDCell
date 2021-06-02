@@ -15,7 +15,7 @@ use crate::llvm;
 
 /// Built-in function that performs a fixed two-input integer math operation.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum BinaryOp {
+pub enum BinaryMathOp {
     Add,
     Sub,
     Mul,
@@ -31,7 +31,7 @@ pub enum BinaryOp {
     BitwiseOr,
     BitwiseXor,
 }
-impl fmt::Display for BinaryOp {
+impl fmt::Display for BinaryMathOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Add => write!(f, "+"),
@@ -49,40 +49,40 @@ impl fmt::Display for BinaryOp {
         }
     }
 }
-impl From<ast::AssignOp> for Option<BinaryOp> {
+impl From<ast::AssignOp> for Option<BinaryMathOp> {
     fn from(op: ast::AssignOp) -> Self {
         match op {
             ast::AssignOp::NoOp => None,
-            ast::AssignOp::Add => Some(BinaryOp::Add),
-            ast::AssignOp::Sub => Some(BinaryOp::Sub),
-            ast::AssignOp::Mul => Some(BinaryOp::Mul),
-            ast::AssignOp::Div => Some(BinaryOp::Div),
-            ast::AssignOp::Mod => Some(BinaryOp::Mod),
-            ast::AssignOp::Pow => Some(BinaryOp::Pow),
-            ast::AssignOp::Shl => Some(BinaryOp::Shl),
-            ast::AssignOp::ShrSigned => Some(BinaryOp::ShrSigned),
-            ast::AssignOp::ShrUnsigned => Some(BinaryOp::ShrUnsigned),
-            ast::AssignOp::And => Some(BinaryOp::BitwiseAnd),
-            ast::AssignOp::Or => Some(BinaryOp::BitwiseOr),
-            ast::AssignOp::Xor => Some(BinaryOp::BitwiseXor),
+            ast::AssignOp::Add => Some(BinaryMathOp::Add),
+            ast::AssignOp::Sub => Some(BinaryMathOp::Sub),
+            ast::AssignOp::Mul => Some(BinaryMathOp::Mul),
+            ast::AssignOp::Div => Some(BinaryMathOp::Div),
+            ast::AssignOp::Mod => Some(BinaryMathOp::Mod),
+            ast::AssignOp::Pow => Some(BinaryMathOp::Pow),
+            ast::AssignOp::Shl => Some(BinaryMathOp::Shl),
+            ast::AssignOp::ShrSigned => Some(BinaryMathOp::ShrSigned),
+            ast::AssignOp::ShrUnsigned => Some(BinaryMathOp::ShrUnsigned),
+            ast::AssignOp::And => Some(BinaryMathOp::BitwiseAnd),
+            ast::AssignOp::Or => Some(BinaryMathOp::BitwiseOr),
+            ast::AssignOp::Xor => Some(BinaryMathOp::BitwiseXor),
         }
     }
 }
-impl From<ast::BinaryOp> for Option<BinaryOp> {
+impl From<ast::BinaryOp> for Option<BinaryMathOp> {
     fn from(op: ast::BinaryOp) -> Self {
         match op {
-            ast::BinaryOp::Add => Some(BinaryOp::Add),
-            ast::BinaryOp::Sub => Some(BinaryOp::Sub),
-            ast::BinaryOp::Mul => Some(BinaryOp::Mul),
-            ast::BinaryOp::Div => Some(BinaryOp::Div),
-            ast::BinaryOp::Mod => Some(BinaryOp::Mod),
-            ast::BinaryOp::Pow => Some(BinaryOp::Pow),
-            ast::BinaryOp::Shl => Some(BinaryOp::Shl),
-            ast::BinaryOp::ShrSigned => Some(BinaryOp::ShrSigned),
-            ast::BinaryOp::ShrUnsigned => Some(BinaryOp::ShrUnsigned),
-            ast::BinaryOp::BitwiseAnd => Some(BinaryOp::BitwiseAnd),
-            ast::BinaryOp::BitwiseOr => Some(BinaryOp::BitwiseOr),
-            ast::BinaryOp::BitwiseXor => Some(BinaryOp::BitwiseXor),
+            ast::BinaryOp::Add => Some(BinaryMathOp::Add),
+            ast::BinaryOp::Sub => Some(BinaryMathOp::Sub),
+            ast::BinaryOp::Mul => Some(BinaryMathOp::Mul),
+            ast::BinaryOp::Div => Some(BinaryMathOp::Div),
+            ast::BinaryOp::Mod => Some(BinaryMathOp::Mod),
+            ast::BinaryOp::Pow => Some(BinaryMathOp::Pow),
+            ast::BinaryOp::Shl => Some(BinaryMathOp::Shl),
+            ast::BinaryOp::ShrSigned => Some(BinaryMathOp::ShrSigned),
+            ast::BinaryOp::ShrUnsigned => Some(BinaryMathOp::ShrUnsigned),
+            ast::BinaryOp::BitwiseAnd => Some(BinaryMathOp::BitwiseAnd),
+            ast::BinaryOp::BitwiseOr => Some(BinaryMathOp::BitwiseOr),
+            ast::BinaryOp::BitwiseXor => Some(BinaryMathOp::BitwiseXor),
             ast::BinaryOp::LogicalAnd => None,
             ast::BinaryOp::LogicalOr => None,
             ast::BinaryOp::LogicalXor => None,
@@ -91,7 +91,7 @@ impl From<ast::BinaryOp> for Option<BinaryOp> {
         }
     }
 }
-impl BinaryOp {
+impl BinaryMathOp {
     /// Evaluates this operation for two integers.
     fn eval_on_integers(self, span: Span, lhs: LangInt, rhs: LangInt) -> Result<LangInt> {
         // Perform the operation.
@@ -190,7 +190,7 @@ impl BinaryOp {
         )))
     }
 }
-impl Function for BinaryOp {
+impl Function for BinaryMathOp {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(2, ctx, self)?;
         let lhs = call.args[0].clone();
@@ -206,42 +206,39 @@ impl Function for BinaryOp {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum UnaryOp {
+pub enum UnaryMathOp {
     Pos,
     Neg,
 
     BitwiseNot,
-    LogicalNot,
 }
-impl fmt::Display for UnaryOp {
+impl fmt::Display for UnaryMathOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UnaryOp::Pos => write!(f, "+"),
-            UnaryOp::Neg => write!(f, "-"),
-            UnaryOp::BitwiseNot => write!(f, "not"),
-            UnaryOp::LogicalNot => write!(f, "!"),
+            UnaryMathOp::Pos => write!(f, "+"),
+            UnaryMathOp::Neg => write!(f, "-"),
+            UnaryMathOp::BitwiseNot => write!(f, "!"),
         }
     }
 }
-impl From<ast::PrefixOp> for Option<UnaryOp> {
+impl From<ast::PrefixOp> for Option<UnaryMathOp> {
     fn from(op: ast::PrefixOp) -> Self {
         match op {
-            ast::PrefixOp::Pos => Some(UnaryOp::Pos),
-            ast::PrefixOp::Neg => Some(UnaryOp::Neg),
-            ast::PrefixOp::BitwiseNot => Some(UnaryOp::BitwiseNot),
-            ast::PrefixOp::LogicalNot => Some(UnaryOp::LogicalNot),
+            ast::PrefixOp::Pos => Some(UnaryMathOp::Pos),
+            ast::PrefixOp::Neg => Some(UnaryMathOp::Neg),
+            ast::PrefixOp::BitwiseNot => Some(UnaryMathOp::BitwiseNot),
+            ast::PrefixOp::LogicalNot => None,
             ast::PrefixOp::IntToCell => None,
         }
     }
 }
-impl UnaryOp {
+impl UnaryMathOp {
     /// Evaluates this operation for an integer.
     fn eval_on_integers(self, span: Span, arg: LangInt) -> Result<LangInt> {
         match self {
             Self::Pos => Ok(arg),
             Self::Neg => arg.checked_neg().ok_or(Error::integer_overflow(span)),
             Self::BitwiseNot => Ok(!arg),
-            Self::LogicalNot => Ok((arg == 0) as LangInt),
         }
     }
 
@@ -269,14 +266,12 @@ impl UnaryOp {
         let zero = arg.same_type_const_zero();
         let ones = arg.same_type_const_all_ones();
         match self {
-            UnaryOp::Pos => Ok(arg.as_basic_value_enum()),
-            UnaryOp::Neg => BinaryOp::Sub.compile_for_int_math_values(compiler, span, zero, arg),
-            UnaryOp::BitwiseNot => Ok(b.build_xor(arg, ones, "bitwise_not").as_basic_value_enum()),
-            UnaryOp::LogicalNot => {
-                let bool_result = b.build_int_compare(EQ, arg, zero, "logical_not");
-                let zext_result =
-                    b.build_int_z_extend(bool_result, arg.base_type(), "zext_logical_not");
-                Ok(zext_result.as_basic_value_enum())
+            UnaryMathOp::Pos => Ok(arg.as_basic_value_enum()),
+            UnaryMathOp::Neg => {
+                BinaryMathOp::Sub.compile_for_int_math_values(compiler, span, zero, arg)
+            }
+            UnaryMathOp::BitwiseNot => {
+                Ok(b.build_xor(arg, ones, "bitwise_not").as_basic_value_enum())
             }
         }
     }
@@ -298,7 +293,7 @@ impl UnaryOp {
         )))
     }
 }
-impl Function for UnaryOp {
+impl Function for UnaryMathOp {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(1, ctx, self)?;
         let arg = call.args[0].clone();

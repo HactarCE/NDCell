@@ -458,7 +458,7 @@ impl Compiler {
 
     /// Returns the value inside if given an `Integer` value or subtype of one;
     /// otherwise returns a type error.
-    fn as_integer(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
+    pub fn as_integer(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
         match &v.node {
             CpVal::Integer(x) => Ok(*x),
             _ => Err(Error::type_error(v.span, Type::Integer, &v.ty())),
@@ -466,7 +466,7 @@ impl Compiler {
     }
     /// Returns the value inside if given a `Cell` value or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
+    pub fn as_cell(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
         match &v.node {
             CpVal::Cell(x) => Ok(*x),
             _ => Err(Error::type_error(v.span, Type::Cell, &v.ty())),
@@ -474,7 +474,7 @@ impl Compiler {
     }
     /// Returns the value inside if given a `Vector` value or subtype of one;
     /// otherwise returns a type error.
-    fn as_vector(&mut self, v: &Spanned<CpVal>) -> Result<llvm::VectorValue> {
+    pub fn as_vector(&mut self, v: &Spanned<CpVal>) -> Result<llvm::VectorValue> {
         match &v.node {
             CpVal::Vector(x) => Ok(*x),
             _ => Err(Error::type_error(v.span, Type::Vector(None), &v.ty())),
@@ -482,7 +482,7 @@ impl Compiler {
     }
     /// Returns the value inside if given an `Array` value or subtype of one;
     /// otherwise returns a type error.
-    fn as_array(&mut self, v: &Spanned<CpVal>) -> Result<()> {
+    pub fn as_array(&mut self, v: &Spanned<CpVal>) -> Result<()> {
         match &v.node {
             CpVal::Array() => Ok(()),
             _ => Err(Error::type_error(v.span, Type::Array(None), &v.ty())),
@@ -490,23 +490,39 @@ impl Compiler {
     }
     /// Returns the value inside if given a `CellSet` value or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell_set(&mut self, v: &Spanned<CpVal>) -> Result<llvm::VectorValue> {
+    pub fn as_cell_set(&mut self, v: &Spanned<CpVal>) -> Result<llvm::VectorValue> {
         match &v.node {
             CpVal::CellSet(x) => Ok(*x),
             _ => Err(Error::type_error(v.span, Type::CellSet, &v.ty())),
         }
     }
 
-    /// Builds instructions to cast the value to a boolean, represented using
-    /// the LLVM equivalent of [`LangInt`]. Returns an error if the value cannot
-    /// be converted to a boolean.
-    fn build_convert_to_bool(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
-        let b = self.builder();
-        // use llvm::IntPredicate::NE;
+    /// Builds instructions to cast a value to a boolean and zero-extend that
+    /// boolean to the width of an integer.
+    pub fn build_convert_to_bool(&mut self, value: Spanned<Val>) -> Fallible<llvm::IntValue> {
+        let cp_val = self.get_cp_val(value)?;
+        self.build_convert_cp_val_to_bool(&cp_val)
+    }
+    /// Builds instructions to cast a value to a boolean and zero-extend that
+    /// boolean to the width of an integer.
+    pub fn build_convert_cp_val_to_bool(
+        &mut self,
+        value: &Spanned<CpVal>,
+    ) -> Fallible<llvm::IntValue> {
+        use llvm::IntPredicate::NE;
 
-        match &v.node {
-            _ => todo!("built convert to bool"),
-        }
+        let bool_result = match value.node {
+            CpVal::Integer(i) | CpVal::Cell(i) => {
+                self.builder()
+                    .build_int_compare(NE, i, llvm::const_int(0), "int_to_bool")
+            }
+            CpVal::Vector(v) => self.build_any_cmp(NE, v, v.same_type_const_zero())?,
+            CpVal::Array() => todo!("convert array to bool"),
+            CpVal::CellSet(_) => todo!("convert cell set to bool"),
+        };
+
+        let b = self.builder();
+        Ok(b.build_int_z_extend(bool_result, llvm::int_type(), "zext_bool"))
     }
 }
 

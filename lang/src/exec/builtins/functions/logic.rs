@@ -1,18 +1,63 @@
+//! Non-short-circuiting logical operators.
+//!
+//! Logical AND and OR do not eagearly evaluate their operands, so they require
+//! custom expression types.
 
-                // Boolean operators 'and' and 'or' short-circuit, so we have to
-                // handle them specially.
-                LogicalAnd => {
-                    let ret =
-                        runtime.eval_expr(lhs)?.to_bool()? && runtime.eval_expr(rhs)?.to_bool()?;
-                    return Ok(Value::Integer(ret as LangInt));
-                }
-                LogicalOr => {
-                    let ret =
-                        runtime.eval_expr(lhs)?.to_bool()? || runtime.eval_expr(rhs)?.to_bool()?;
-                    return Ok(Value::Integer(ret as LangInt));
-                }
-                LogicalXor => {
-                    let ret =
-                        runtime.eval_expr(lhs)?.to_bool()? != runtime.eval_expr(rhs)?.to_bool()?;
-                    return Ok(Value::Integer(ret as LangInt));
-                }
+use codemap::Spanned;
+use std::fmt;
+
+use super::{CallInfo, Function};
+use crate::data::{CpVal, LangInt, RtVal, SpannedRuntimeValueExt, Val};
+use crate::errors::Fallible;
+use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::llvm;
+
+/// Built-in function that performs a two-input logical XOR operation.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct LogicalXor;
+impl fmt::Display for LogicalXor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "xor")
+    }
+}
+impl Function for LogicalXor {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(2, ctx, self)?;
+        let lhs = call.args[0].to_bool().map_err(|e| ctx.error(e));
+        let rhs = call.args[1].to_bool().map_err(|e| ctx.error(e));
+        Ok(RtVal::Integer((lhs != rhs) as LangInt))
+    }
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
+        call.check_args_len(2, compiler, self)?;
+        let lhs = compiler.build_convert_to_bool(call.args[0].clone())?;
+        let rhs = compiler.build_convert_to_bool(call.args[1].clone())?;
+        Ok(Val::Cp(CpVal::Integer(
+            compiler.builder().build_xor(lhs, rhs, "xor"),
+        )))
+    }
+}
+
+/// Built-in function that performs a unary logical NOT operation.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct LogicalNot;
+impl fmt::Display for LogicalNot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "not")
+    }
+}
+impl Function for LogicalNot {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(1, ctx, self)?;
+        let arg = call.args[0].to_bool().map_err(|e| ctx.error(e))?;
+        Ok(RtVal::Integer(!arg as LangInt))
+    }
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
+        call.check_args_len(1, compiler, self)?;
+        let arg = compiler.build_convert_to_bool(call.args[1].clone())?;
+        Ok(Val::Cp(CpVal::Integer(compiler.builder().build_xor(
+            arg,
+            llvm::const_int(1),
+            "logical_not",
+        ))))
+    }
+}

@@ -2,6 +2,7 @@ use codemap::{Span, Spanned};
 use std::fmt;
 
 pub mod convert;
+pub mod logic;
 pub mod math;
 
 use crate::ast;

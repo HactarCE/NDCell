@@ -244,4 +244,7 @@ impl Runtime {
     pub fn eval_expr_list(&mut self, exprs: &[ast::Expr<'_>]) -> Fallible<Vec<Spanned<RtVal>>> {
         exprs.iter().map(|expr| self.eval_expr(*expr)).collect()
     }
+    pub fn eval_bool_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<bool> {
+        self.eval_expr(expr)?.to_bool().map_err(|e| self.error(e))
+    }
 }

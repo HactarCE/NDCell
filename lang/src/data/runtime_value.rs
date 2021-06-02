@@ -60,6 +60,21 @@ impl RtVal {
             Self::Regex(_) => Type::Regex,
         }
     }
+
+    /// Converts the value to a boolean if it can be converted; otherwise
+    /// returns `None`.
+    pub fn to_bool(&self) -> Option<bool> {
+        match self {
+            RtVal::Integer(i) => Some(*i != 0),
+            RtVal::Cell(i) => Some(*i != 0),
+            RtVal::String(s) => Some(!s.is_empty()),
+
+            RtVal::Vector(v) => Some(v.iter().any(|&i| i != 0)),
+            RtVal::Array(a) => Some(a.any_nonzero()),
+
+            _ => None,
+        }
+    }
 }
 
 pub trait SpannedRuntimeValueExt {
@@ -103,11 +118,11 @@ pub trait SpannedRuntimeValueExt {
     /// otherwise returns a type error.
     fn as_regex(self) -> Result<Arc<Regex>>;
 
-    /// Converts this value to a boolean if it can be converted; otherwise
+    /// Converts the value to a boolean if it can be converted; otherwise
     /// returns a type error.
     fn to_bool(&self) -> Result<bool>;
 
-    /// Returns an iterator for this value if it can be iterated over; otherwise
+    /// Returns an iterator for the value if it can be iterated over; otherwise
     /// returns a type error.
     fn iterate(self) -> Result<Box<dyn Iterator<Item = Self>>>;
 }
@@ -202,20 +217,13 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
     }
 
     fn to_bool(&self) -> Result<bool> {
-        match &self.node {
-            RtVal::Integer(i) => Ok(*i != 0),
-            RtVal::Cell(i) => Ok(*i != 0),
-            RtVal::String(s) => Ok(!s.is_empty()),
-
-            RtVal::Vector(v) => Ok(v.iter().any(|&i| i != 0)),
-            RtVal::Array(a) => Ok(a.any_nonzero()),
-
-            _ => Err(Error::type_error(
+        self.node.to_bool().ok_or_else(|| {
+            Error::type_error(
                 self.span,
                 "type that can be converted to boolean",
                 &self.ty(),
-            )),
-        }
+            )
+        })
     }
 
     fn iterate(self) -> Result<Box<dyn Iterator<Item = Self>>> {

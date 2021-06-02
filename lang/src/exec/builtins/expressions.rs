@@ -5,10 +5,10 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::functions::{self, CallInfo, Function};
-use crate::ast;
-use crate::data::{RtVal, SpannedRuntimeValueExt, Val};
-use crate::errors::{Error, Fallible};
+use crate::data::{CpVal, LangInt, RtVal, SpannedRuntimeValueExt, Val};
+use crate::errors::{AlreadyReported, Error, Fallible};
 use crate::exec::{Compiler, CtxTrait, Runtime};
+use crate::{ast, llvm};
 
 /// Expression that can be evaluated and/or compiled, including any relevant
 /// arguments.
@@ -62,16 +62,22 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
 
             ast::ExprData::BinaryOp(lhs, op, rhs) => {
                 use crate::ast::BinaryOp::*;
+                let op_span = op.span;
+                let args = [ast.get_node(*lhs), ast.get_node(*rhs)];
                 match op.node {
                     Add | Sub | Mul | Div | Mod | Pow | Shl | ShrSigned | ShrUnsigned
                     | BitwiseAnd | BitwiseOr | BitwiseXor => Box::new(FuncCall {
-                        f: Option::<functions::math::BinaryOp>::from(op.node),
-                        f_span: op.span,
-                        args: vec![ast.get_node(*lhs), ast.get_node(*rhs)],
+                        f: Option::<functions::math::BinaryMathOp>::from(op.node),
+                        f_span: op_span,
+                        args: args.to_vec(),
                     }),
-                    LogicalAnd => todo!("'LogicalAnd' expr"),
-                    LogicalOr => todo!("'LogicalOr' expr"),
-                    LogicalXor => todo!("'LogicalXor' expr"),
+                    LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),
+                    LogicalOr => Box::new(LogicalOrExpr { op_span, args }),
+                    LogicalXor => Box::new(FuncCall {
+                        f: Some(functions::logic::LogicalNot),
+                        f_span: op_span,
+                        args: args.to_vec(),
+                    }),
                     Range => todo!("'Range' func"),
                     Is => todo!("'Is' func"),
                 }
@@ -79,10 +85,10 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
             ast::ExprData::PrefixOp(op, arg) => {
                 use crate::ast::PrefixOp::*;
                 let op_func: Box<dyn Function> = match op.node {
-                    Pos => Box::new(functions::math::UnaryOp::Pos),
-                    Neg => Box::new(functions::math::UnaryOp::Neg),
-                    BitwiseNot => Box::new(functions::math::UnaryOp::BitwiseNot),
-                    LogicalNot => Box::new(functions::math::UnaryOp::LogicalNot),
+                    Pos => Box::new(functions::math::UnaryMathOp::Pos),
+                    Neg => Box::new(functions::math::UnaryMathOp::Neg),
+                    BitwiseNot => Box::new(functions::math::UnaryMathOp::BitwiseNot),
+                    LogicalNot => Box::new(functions::logic::LogicalNot),
                     IntToCell => Box::new(functions::convert::IntToCell),
                 };
                 Box::new(FuncCall {
@@ -141,7 +147,7 @@ impl Expression for Identity<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncCall<'ast, F> {
+struct FuncCall<'ast, F> {
     /// Function to call.
     f: Option<F>,
     /// Span of the function name.
@@ -170,8 +176,7 @@ impl<F: Function> Expression for FuncCall<'_, F> {
         if let Some(args) = all_rt_vals(&args) {
             // All arguments are compile-time constants, so compile-time
             // evaluate the function call.
-            let x = f.eval(compiler.ctx(), CallInfo { span, args }).map(Val::Rt);
-            x
+            f.eval(compiler.ctx(), CallInfo { span, args }).map(Val::Rt)
         } else {
             f.compile(compiler, CallInfo { span, args })
         }
@@ -179,7 +184,119 @@ impl<F: Function> Expression for FuncCall<'_, F> {
 }
 
 #[derive(Debug, Clone)]
-pub struct MethodCall<'ast> {
+struct LogicalOrExpr<'ast> {
+    /// Span of the operator.
+    op_span: Span,
+    /// Arguments to the operator.
+    args: [ast::Expr<'ast>; 2],
+}
+impl Expression for LogicalOrExpr<'_> {
+    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
+        Ok(RtVal::Integer(
+            (runtime.eval_bool_expr(self.args[0])? || runtime.eval_bool_expr(self.args[1])?)
+                as LangInt,
+        ))
+    }
+    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
+        let lhs = compiler.build_expr(self.args[0])?;
+
+        match lhs.node {
+            Val::Rt(_) => {
+                let l = compiler.get_rt_val(lhs).unwrap();
+                let l_bool = l.to_bool().map_err(|e| compiler.error(e))?;
+                match l_bool {
+                    // LHS is statically `true`; do not compile RHS.
+                    true => Ok(Val::Rt(RtVal::Integer(1))),
+                    // LHS is statically `false`; compile RHS, convert to bool,
+                    // and return it.
+                    false => {
+                        let rhs = compiler.build_expr(self.args[1])?;
+                        Ok(Val::Cp(CpVal::Integer(
+                            compiler.build_convert_to_bool(rhs)?,
+                        )))
+                    }
+                }
+            }
+            Val::Cp(_) => {
+                let l_bool = compiler.build_convert_to_bool(lhs)?;
+                let bool_result = compiler.build_conditional(
+                    l_bool,
+                    // LHS is dynamically `true`; do not evaluate RHS.
+                    |_| Ok(llvm::const_int(1)),
+                    // RHS is dynamically `true`; compile RHS, convert to bool,
+                    // and return it.
+                    |c| {
+                        let rhs = c.build_expr(self.args[1])?;
+                        c.build_convert_to_bool(rhs)
+                    },
+                )?;
+                Ok(Val::Cp(CpVal::Integer(bool_result)))
+            }
+            Val::Unknown(_) => Err(compiler.error(Error::ambiguous_variable_type(lhs.span))),
+            Val::MaybeUninit => Err(compiler.error(Error::maybe_uninitialized_variable(lhs.span))),
+            Val::Err(AlreadyReported) => Err(AlreadyReported),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LogicalAndExpr<'ast> {
+    /// Span of the operator.
+    op_span: Span,
+    /// Arguments to the operator.
+    args: [ast::Expr<'ast>; 2],
+}
+impl Expression for LogicalAndExpr<'_> {
+    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
+        Ok(RtVal::Integer(
+            (runtime.eval_bool_expr(self.args[0])? || runtime.eval_bool_expr(self.args[1])?)
+                as LangInt,
+        ))
+    }
+    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
+        let lhs = compiler.build_expr(self.args[0])?;
+
+        match lhs.node {
+            Val::Rt(_) => {
+                let l = compiler.get_rt_val(lhs).unwrap();
+                let l_bool = l.to_bool().map_err(|e| compiler.error(e))?;
+                match l_bool {
+                    // LHS is statically `true`; compile RHS, convert to bool,
+                    // and return it.
+                    true => {
+                        let rhs = compiler.build_expr(self.args[1])?;
+                        Ok(Val::Cp(CpVal::Integer(
+                            compiler.build_convert_to_bool(rhs)?,
+                        )))
+                    }
+                    // LHS is statically `false`; do not compile RHS.
+                    false => Ok(Val::Rt(RtVal::Integer(0))),
+                }
+            }
+            Val::Cp(_) => {
+                let l_bool = compiler.build_convert_to_bool(lhs)?;
+                let bool_result = compiler.build_conditional(
+                    l_bool,
+                    // LHS is dynamically `true`; compile RHS, convert to bool,
+                    // and return it.
+                    |c| {
+                        let rhs = c.build_expr(self.args[1])?;
+                        c.build_convert_to_bool(rhs)
+                    },
+                    // RHS is dynamically `false`; do not evaluate RHS.
+                    |_| Ok(llvm::const_int(0)),
+                )?;
+                Ok(Val::Cp(CpVal::Integer(bool_result)))
+            }
+            Val::Unknown(_) => Err(compiler.error(Error::ambiguous_variable_type(lhs.span))),
+            Val::MaybeUninit => Err(compiler.error(Error::maybe_uninitialized_variable(lhs.span))),
+            Val::Err(AlreadyReported) => Err(AlreadyReported),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct MethodCall<'ast> {
     /// Name of method to call.
     attr: Spanned<&'ast str>,
     /// Arguments to the method, including the receiver. **Calling `eval()` or
@@ -216,7 +333,7 @@ impl Expression for MethodCall<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Index<'ast> {
+struct Index<'ast> {
     /// Indexing arguments, including the object being indexed. **Calling
     /// `eval()` or `compile()` panics if this list is empty.**
     args: Spanned<Vec<ast::Expr<'ast>>>,
@@ -245,7 +362,7 @@ impl Expression for Index<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub struct CompiledArg<'ast>(Vec<ast::Expr<'ast>>);
+struct CompiledArg<'ast>(Vec<ast::Expr<'ast>>);
 impl<'ast> CompiledArg<'ast> {
     fn arg_index(&self, compiler: &mut Compiler, span: Span) -> Fallible<Spanned<u32>> {
         // There should be exactly one expression.
@@ -309,7 +426,7 @@ impl Expression for CompiledArg<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Identifier<'ast>(&'ast Arc<String>);
+struct Identifier<'ast>(&'ast Arc<String>);
 impl Expression for Identifier<'_> {
     fn eval(&self, runtime: &mut Runtime, span: Span) -> Fallible<RtVal> {
         runtime
@@ -357,7 +474,7 @@ impl Expression for Identifier<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Constant<'a>(&'a RtVal);
+struct Constant<'a>(&'a RtVal);
 impl Expression for Constant<'_> {
     fn eval(&self, _runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
         Ok(self.0.clone())
@@ -374,7 +491,7 @@ fn eval_assign_op(
     op: Spanned<ast::AssignOp>,
     mut new_value: Spanned<RtVal>,
 ) -> Fallible<Spanned<RtVal>> {
-    if let Some(op_func) = Option::<functions::math::BinaryOp>::from(op.node) {
+    if let Some(op_func) = Option::<functions::math::BinaryMathOp>::from(op.node) {
         let old_value = Spanned {
             node: old_value_fn(runtime)?,
             span: old_value_span,
@@ -394,7 +511,7 @@ fn compile_assign_op(
     op: Spanned<ast::AssignOp>,
     mut new_value: Spanned<Val>,
 ) -> Fallible<Spanned<Val>> {
-    if let Some(op_func) = Option::<functions::math::BinaryOp>::from(op.node) {
+    if let Some(op_func) = Option::<functions::math::BinaryMathOp>::from(op.node) {
         let old_value = Spanned {
             node: old_value_fn(compiler)?,
             span: old_value_span,

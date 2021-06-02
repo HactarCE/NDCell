@@ -4,6 +4,7 @@ Functions
 
 .. function:: bool(value)
 
+  :status: Fully implemented
   :param value: The value to convert to a boolean
   :type value: any basic type
   :rtype: :data:`TRUE` if the value is truthy, or :data:`FALSE` if it is falsey
@@ -12,6 +13,7 @@ Functions
 
 .. function:: vec([value=0])
 
+  :status: Not yet implemented; design not finalized
   :param value: The value to convert to a vector
   :type value: integer or vector
   :rtype: vector

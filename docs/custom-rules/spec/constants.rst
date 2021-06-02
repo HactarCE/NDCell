@@ -13,19 +13,26 @@ These constants are automatically available in every program.
 
   The number of dimensions in the simulation.
 
-  :status: Not yet implemented
+  :status: Fully implemented
+  :type: integer
+
+.. data:: STATECOUNT
+
+  The number of unique cell states in the simulation.
+
+  :status: Fully implemented
   :type: integer
 
 .. data:: FALSE
 
   The value ``0``.
 
-  :status: Not yet implemented
+  :status: Fully implemented
   :type: integer
 
 .. data:: TRUE
 
   The value ``1``.
 
-  :status: Not yet implemented
+  :status: Fully implemented
   :type: integer

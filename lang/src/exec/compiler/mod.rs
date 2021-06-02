@@ -513,8 +513,7 @@ impl Compiler {
 
         let bool_result = match value.node {
             CpVal::Integer(i) | CpVal::Cell(i) => {
-                self.builder()
-                    .build_int_compare(NE, i, llvm::const_int(0), "int_to_bool")
+                self.build_any_cmp(NE, i, i.same_type_const_zero())?
             }
             CpVal::Vector(v) => self.build_any_cmp(NE, v, v.same_type_const_zero())?,
             CpVal::Array() => todo!("convert array to bool"),

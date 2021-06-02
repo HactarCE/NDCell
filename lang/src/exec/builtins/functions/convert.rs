@@ -8,7 +8,7 @@ use crate::exec::{Compiler, Ctx, CtxTrait};
 use crate::llvm;
 
 /// Built-in function that converts an integer to a cell state.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct IntToCell;
 impl fmt::Display for IntToCell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -57,5 +57,28 @@ impl Function for IntToCell {
             llvm::cell_type(),
             "cell_state_from_int",
         ))))
+    }
+}
+
+/// Built-in function that converts a value to a boolean.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct ToBool;
+impl fmt::Display for ToBool {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "bool")
+    }
+}
+impl Function for ToBool {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(1, ctx, self)?;
+        Ok(RtVal::Integer(
+            call.args[0].to_bool().map_err(|e| ctx.error(e))? as LangInt,
+        ))
+    }
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
+        call.check_args_len(1, compiler, self)?;
+        Ok(Val::Cp(CpVal::Integer(
+            compiler.build_convert_to_bool(call.args[0].clone())?,
+        )))
     }
 }

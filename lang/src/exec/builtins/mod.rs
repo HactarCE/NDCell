@@ -14,7 +14,7 @@ pub use functions::Function;
 /// Returns a built-in function.
 pub fn resolve_function(name: &str) -> Option<Box<dyn Function>> {
     Some(match name {
-        "bool" => Box::new(functions::convert::ToBool),
+        "bool" => Box::new(functions::bools::ToBool),
         _ => None?,
     })
 }

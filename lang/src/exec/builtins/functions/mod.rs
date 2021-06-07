@@ -1,9 +1,9 @@
 use codemap::{Span, Spanned};
 use std::fmt;
 
-pub mod convert;
-pub mod logic;
-pub mod math;
+pub(super) mod bools;
+pub(super) mod cells;
+pub(super) mod math;
 
 use crate::ast;
 use crate::data::{FallibleTypeOf, RtVal, Type, Val};

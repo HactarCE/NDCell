@@ -74,7 +74,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                     LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),
                     LogicalOr => Box::new(LogicalOrExpr { op_span, args }),
                     LogicalXor => Box::new(FuncCall {
-                        f: Some(functions::logic::LogicalXor),
+                        f: Some(functions::bools::LogicalXor),
                         f_span: op_span,
                         args: args.to_vec(),
                     }),
@@ -88,8 +88,8 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                     Pos => Box::new(functions::math::UnaryMathOp::Pos),
                     Neg => Box::new(functions::math::UnaryMathOp::Neg),
                     BitwiseNot => Box::new(functions::math::UnaryMathOp::BitwiseNot),
-                    LogicalNot => Box::new(functions::logic::LogicalNot),
-                    IntToCell => Box::new(functions::convert::IntToCell),
+                    LogicalNot => Box::new(functions::bools::LogicalNot),
+                    IntToCell => Box::new(functions::cells::IntToCell),
                 };
                 Box::new(FuncCall {
                     f: Some(op_func),

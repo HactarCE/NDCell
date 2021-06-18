@@ -1,14 +1,17 @@
 use codemap::{Span, Spanned};
 use std::fmt;
+use std::sync::Arc;
 
 pub(super) mod bools;
 pub(super) mod cells;
 pub(super) mod math;
+pub(super) mod types;
+pub(super) mod vectors;
 
 use crate::ast;
 use crate::data::{FallibleTypeOf, RtVal, Type, Val};
 use crate::errors::{AlreadyReported, Error, Fallible};
-use crate::exec::{Compiler, Ctx, CtxTrait, Runtime};
+use crate::exec::{Compiler, Ctx, CtxTrait};
 
 /// Function that can be evaluated and/or compiled, taking zero or more
 /// arguments and returning a value.
@@ -16,6 +19,11 @@ use crate::exec::{Compiler, Ctx, CtxTrait, Runtime};
 /// Most of the interpreter and compiler code is in implementations of this
 /// trait.
 pub trait Function: fmt::Debug + fmt::Display {
+    /// Returns a list of allowed keys for keyword arguments.
+    fn kwarg_keys(&self) -> &[&'static str] {
+        &[]
+    }
+
     /// Executes the expression and returns the resulting value.
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal>;
     /// Compiles code to evaluate the expression and returns the resulting
@@ -29,6 +37,10 @@ pub trait Function: fmt::Debug + fmt::Display {
 }
 
 impl Function for Box<dyn Function> {
+    fn kwarg_keys(&self) -> &[&'static str] {
+        (**self).kwarg_keys()
+    }
+
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         (**self).eval(ctx, call)
     }
@@ -44,19 +56,22 @@ pub struct CallInfo<A> {
     pub span: Span,
     /// Arguments passed to the function.
     pub args: Vec<A>,
+    /// Keyword arguments passed to the function.
+    kwargs: Vec<(Arc<String>, A)>,
 }
-impl CallInfo<ast::Expr<'_>> {
-    pub fn eval_args(&self, runtime: &mut Runtime) -> Fallible<Vec<Spanned<RtVal>>> {
-        self.args
+impl<A: Clone> CallInfo<A> {
+    pub fn new(span: Span, args_and_kwargs: Vec<ast::FuncArg<A>>) -> Self {
+        let args = args_and_kwargs
             .iter()
-            .map(|&arg_expr| runtime.eval_expr(arg_expr))
-            .collect()
-    }
-    pub fn compile_args(&self, compiler: &mut Compiler) -> Fallible<Vec<Spanned<Val>>> {
-        self.args
+            .filter(|(k, _)| k.is_none())
+            .map(|(_, v)| v)
+            .cloned()
+            .collect();
+        let kwargs = args_and_kwargs
             .iter()
-            .map(|&arg_expr| compiler.build_expr(arg_expr))
-            .collect()
+            .filter_map(|(k, v)| Some((k.clone()?.node, v.clone())))
+            .collect();
+        Self { span, args, kwargs }
     }
 }
 impl<V> CallInfo<Spanned<V>>
@@ -95,5 +110,17 @@ where
         } else {
             Err(self.invalid_args_error(ctx, func_name))
         }
+    }
+
+    pub fn arg(&self, i: usize, ctx: &mut impl CtxTrait) -> Fallible<&Spanned<V>> {
+        self.args
+            .get(i)
+            .ok_or_else(|| ctx.error(internal_error_value!("arg out of range")))
+    }
+    pub fn kwarg(&self, key: &str) -> Option<&Spanned<V>> {
+        self.kwargs
+            .iter()
+            .find(|(k, _)| &**k == key)
+            .map(|(_, v)| v)
     }
 }

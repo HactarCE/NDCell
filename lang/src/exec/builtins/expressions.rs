@@ -63,20 +63,22 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
             ast::ExprData::BinaryOp(lhs, op, rhs) => {
                 use crate::ast::BinaryOp::*;
                 let op_span = op.span;
-                let args = [ast.get_node(*lhs), ast.get_node(*rhs)];
+                let lhs = ast.get_node(*lhs);
+                let rhs = ast.get_node(*rhs);
+                let args = [lhs, rhs];
                 match op.node {
                     Add | Sub | Mul | Div | Mod | Pow | Shl | ShrSigned | ShrUnsigned
                     | BitwiseAnd | BitwiseOr | BitwiseXor => Box::new(FuncCall {
                         f: Option::<functions::math::BinaryMathOp>::from(op.node),
                         f_span: op_span,
-                        args: args.to_vec(),
+                        args: vec![(None, lhs), (None, rhs)],
                     }),
                     LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),
                     LogicalOr => Box::new(LogicalOrExpr { op_span, args }),
                     LogicalXor => Box::new(FuncCall {
                         f: Some(functions::bools::LogicalXor),
                         f_span: op_span,
-                        args: args.to_vec(),
+                        args: vec![(None, lhs), (None, rhs)],
                     }),
                     Range => todo!("'Range' func"),
                     Is => todo!("'Is' func"),
@@ -94,7 +96,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 Box::new(FuncCall {
                     f: Some(op_func),
                     f_span: op.span,
-                    args: vec![ast.get_node(*arg)],
+                    args: vec![(None, ast.get_node(*arg))],
                 })
             }
             ast::ExprData::CmpChain(_, _) => {
@@ -104,7 +106,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
             ast::ExprData::FuncCall { func, args } => Box::new(FuncCall {
                 f: super::resolve_function(&func.node),
                 f_span: func.span,
-                args: ast.get_node_list(args),
+                args: get_arg_nodes(ast, args),
             }),
             ast::ExprData::MethodCall { attr, args } => Box::new(MethodCall {
                 attr: Spanned {
@@ -112,19 +114,20 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                     node: &attr.node,
                     span: attr.span,
                 },
-                args: ast.get_node_list(args),
+                args: get_arg_nodes(ast, &args.node),
             }),
             ast::ExprData::IndexOp { args } => match ast.get_node(args[0]).data() {
                 ast::ExprData::Identifier(s) if s.as_str() == "__compiled_arg__" => {
                     // `[1..]` omits the `__compiled_arg__` expression.
                     Box::new(CompiledArg(ast.get_node_list(&args[1..])))
                 }
-                _ => Box::new(MethodCall {
-                    attr: Spanned {
-                        node: "index",
-                        span: args.span,
-                    },
-                    args: ast.get_node_list(args),
+                _ => Box::new(Index {
+                    bracket_span: ast.get_node(args[0]).span(),
+                    args: ast
+                        .get_node_list(args)
+                        .into_iter()
+                        .map(|expr| (None, expr))
+                        .collect(),
                 }),
             },
 
@@ -152,33 +155,39 @@ struct FuncCall<'ast, F> {
     f: Option<F>,
     /// Span of the function name.
     f_span: Span,
-    /// Arguments to the function.
-    args: Vec<ast::Expr<'ast>>,
+    /// Arguments to the function, each with an optional keyword.
+    args: Vec<ast::FuncArg<ast::Expr<'ast>>>,
 }
 impl<F: Function> Expression for FuncCall<'_, F> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let args = runtime.eval_expr_list(&self.args)?;
         let span = self.f_span;
+        let args = eval_args_list(runtime, &self.args)?;
 
         match &self.f {
-            Some(f) => f.eval(runtime.ctx(), CallInfo { span, args }),
             None => Err(runtime.error(Error::no_such_function(span))),
+            Some(f) => {
+                check_kwargs(runtime, f, &args)?;
+                f.eval(runtime.ctx(), CallInfo::new(span, args))
+            }
         }
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let args = compiler.build_expr_list(&self.args)?;
         let span = self.f_span;
+        let args = compile_args_list(compiler, &self.args)?;
 
-        let f = self
-            .f
-            .as_ref()
-            .ok_or_else(|| compiler.error(Error::no_such_function(span)))?;
-        if let Some(args) = all_rt_vals(&args) {
-            // All arguments are compile-time constants, so compile-time
-            // evaluate the function call.
-            f.eval(compiler.ctx(), CallInfo { span, args }).map(Val::Rt)
-        } else {
-            f.compile(compiler, CallInfo { span, args })
+        match &self.f {
+            None => Err(compiler.error(Error::no_such_function(span))),
+            Some(f) => {
+                check_kwargs(compiler, f, &args)?;
+                if let Some(args) = all_rt_vals(&args) {
+                    // All arguments are compile-time constants, so compile-time
+                    // evaluate the function call.
+                    f.eval(compiler.ctx(), CallInfo::new(span, args))
+                        .map(Val::Rt)
+                } else {
+                    f.compile(compiler, CallInfo::new(span, args))
+                }
+            }
         }
     }
 }
@@ -299,65 +308,100 @@ impl Expression for LogicalAndExpr<'_> {
 struct MethodCall<'ast> {
     /// Name of method to call.
     attr: Spanned<&'ast str>,
-    /// Arguments to the method, including the receiver. **Calling `eval()` or
-    /// `compile()` panics if this list is empty.**
-    args: Vec<ast::Expr<'ast>>,
+    /// Arguments to the method, including the receiver, each with an optional
+    /// keyword. **Calling `eval()` or `compile()` panics if this list is
+    /// empty.**
+    args: Vec<ast::FuncArg<ast::Expr<'ast>>>,
 }
 impl Expression for MethodCall<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let args = runtime.eval_expr_list(&self.args)?;
         let span = self.attr.span;
+        let args = eval_args_list(runtime, &self.args)?;
 
-        let receiver = args.first().expect("method call has no receiver");
-        let receiver_ty = receiver.node.ty();
-        let f = super::resolve_method(&receiver_ty, &self.attr.node)
-            .ok_or_else(|| runtime.error(Error::no_such_method(span, receiver_ty)))?;
-        f.eval(runtime.ctx(), CallInfo { span, args })
+        // Resolve the method based on the type of the method receiver, which is
+        // the first argument.
+        let receiver = &args
+            .first()
+            .ok_or_else(|| runtime.error(internal_error_value!("method call has no receiver")))?
+            .1;
+        let receiver_type = receiver.node.ty();
+        let f = super::resolve_method(&receiver_type, &self.attr.node)
+            .ok_or_else(|| runtime.error(Error::no_such_method(span, receiver_type)))?;
+
+        check_kwargs(runtime, &f, &args)?;
+        f.eval(runtime.ctx(), CallInfo::new(span, args))
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let args = compiler.build_expr_list(&self.args)?;
         let span = self.attr.span;
+        let args = compile_args_list(compiler, &self.args)?;
 
-        let receiver = args.first().expect("method call has no receiver");
-        let receiver_ty = compiler.get_val_type(receiver)?.node;
-        let f = super::resolve_method(&receiver_ty, &self.attr.node)
-            .ok_or_else(|| compiler.error(Error::no_such_method(span, receiver_ty)))?;
+        // Resolve the method based on the type of the method receiver, which is
+        // the first argument.
+        let receiver = &args
+            .first()
+            .ok_or_else(|| compiler.error(internal_error_value!("method call has no receiver")))?
+            .1;
+        let receiver_type = compiler.get_val_type(&receiver)?.node;
+        let f = super::resolve_method(&receiver_type, &self.attr.node)
+            .ok_or_else(|| compiler.error(Error::no_such_method(span, receiver_type)))?;
+
+        check_kwargs(compiler, &f, &args)?;
         if let Some(args) = all_rt_vals(&args) {
             // All arguments are compile-time constants, so compile-time
             // evaluate the method call.
-            f.eval(compiler.ctx(), CallInfo { span, args }).map(Val::Rt)
+            f.eval(compiler.ctx(), CallInfo::new(span, args))
+                .map(Val::Rt)
         } else {
-            f.compile(compiler, CallInfo { span, args })
+            f.compile(compiler, CallInfo::new(span, args))
         }
     }
 }
 
 #[derive(Debug, Clone)]
 struct Index<'ast> {
+    /// Span of the brackets containing the index arguments.
+    bracket_span: Span,
     /// Indexing arguments, including the object being indexed. **Calling
     /// `eval()` or `compile()` panics if this list is empty.**
-    args: Spanned<Vec<ast::Expr<'ast>>>,
+    args: Vec<ast::FuncArg<ast::Expr<'ast>>>,
 }
 impl Expression for Index<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let args = runtime.eval_expr_list(&self.args.node)?;
-        let span = self.args.span;
+        let span = self.bracket_span;
+        let args = eval_args_list(runtime, &self.args)?;
 
-        let obj = args.first().expect("method call has no receiver");
+        let obj = &args
+            .first()
+            .ok_or_else(|| runtime.error(internal_error_value!("index expr has no receiver")))?
+            .1;
         let obj_ty = obj.node.ty();
         let f = super::resolve_index_method(&obj_ty)
             .ok_or_else(|| runtime.error(Error::cannot_index_type(span, obj_ty)))?;
-        f.eval(runtime.ctx(), CallInfo { span, args })
+
+        check_kwargs(runtime, &f, &args)?;
+        f.eval(runtime.ctx(), CallInfo::new(span, args))
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let args = compiler.build_expr_list(&self.args.node)?;
-        let span = self.args.span;
+        let span = self.bracket_span;
+        let args = compile_args_list(compiler, &self.args)?;
 
-        let obj = args.first().expect("method call has no receiver");
+        let obj = &args
+            .first()
+            .ok_or_else(|| compiler.error(internal_error_value!("index expr has no receiver")))?
+            .1;
         let obj_ty = compiler.get_val_type(obj)?.node;
         let f = super::resolve_index_method(&obj_ty)
             .ok_or_else(|| compiler.error(Error::cannot_index_type(span, obj_ty)))?;
-        f.compile(compiler, CallInfo { span, args })
+
+        check_kwargs(compiler, &f, &args)?;
+        if let Some(args) = all_rt_vals(&args) {
+            // All arguments are compile-time constants, so compile-time
+            // evaluate the index operation.
+            f.eval(compiler.ctx(), CallInfo::new(span, args))
+                .map(Val::Rt)
+        } else {
+            f.compile(compiler, CallInfo::new(span, args))
+        }
     }
 }
 
@@ -527,14 +571,66 @@ fn compile_assign_op(
 
 /// Returns a list of `RtVal`s if all the values are compile-time constants, or
 /// `None` if any of them is not.
-fn all_rt_vals(xs: &[Spanned<Val>]) -> Option<Vec<Spanned<RtVal>>> {
+fn all_rt_vals(xs: &[ast::FuncArg<Spanned<Val>>]) -> Option<Vec<ast::FuncArg<Spanned<RtVal>>>> {
     xs.iter()
         .cloned()
-        .map(|v| {
-            Some(Spanned {
+        .map(|(k, v)| {
+            let v = Spanned {
                 span: v.span,
                 node: v.node.rt_val()?,
-            })
+            };
+            Some((k, v))
         })
         .collect()
+}
+
+fn get_arg_nodes<'ast>(
+    ast: &'ast ast::Program,
+    ids: &[ast::FuncArg<ast::ExprId>],
+) -> Vec<ast::FuncArg<ast::Expr<'ast>>> {
+    ids.iter()
+        .cloned()
+        .map(|(kw, id)| (kw, ast.get_node(id)))
+        .collect()
+}
+
+fn eval_args_list<'ast>(
+    runtime: &mut Runtime,
+    args: &[ast::FuncArg<ast::Expr<'_>>],
+) -> Fallible<Vec<ast::FuncArg<Spanned<RtVal>>>> {
+    args.iter()
+        .cloned()
+        .map(|(k, v)| Ok((k, runtime.eval_expr(v)?)))
+        .collect()
+}
+fn compile_args_list(
+    compiler: &mut Compiler,
+    args: &[ast::FuncArg<ast::Expr<'_>>],
+) -> Fallible<Vec<ast::FuncArg<Spanned<Val>>>> {
+    args.iter()
+        .cloned()
+        .map(|(k, v)| Ok((k, compiler.build_expr(v)?)))
+        .collect()
+}
+
+fn check_kwargs<C: CtxTrait, V>(
+    ctx: &mut C,
+    func: &impl Function,
+    args: &[ast::FuncArg<Spanned<V>>],
+) -> Fallible<()> {
+    let allowed_kwarg_keys = func.kwarg_keys();
+    let mut kwargs_present = vec![false; allowed_kwarg_keys.len()];
+    for (key, expr) in args {
+        if let Some(key) = key {
+            if let Some(i) = allowed_kwarg_keys.iter().position(|&k| k == &***key) {
+                if kwargs_present[i] {
+                    return Err(ctx.error(Error::duplicate_keyword_argument(expr.span)));
+                }
+                kwargs_present[i] = true;
+            } else {
+                return Err(ctx.error(Error::invalid_keyword_argument(expr.span, func)));
+            }
+        }
+    }
+    Ok(())
 }

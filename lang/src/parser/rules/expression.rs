@@ -406,6 +406,7 @@ fn parse_cmp_chain_expr(p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result
 
 /// Matches an attribute access or method call suffix, such as `.y` or `.y()`
 /// (presumably preceded by an expression).
+#[derive(Debug, Copy, Clone)]
 struct MethodCallSuffix(ast::ExprId);
 impl_display!(for MethodCallSuffix, "method/attribute access");
 impl SyntaxRule for MethodCallSuffix {
@@ -420,12 +421,12 @@ impl SyntaxRule for MethodCallSuffix {
 
         let obj = self.0;
         let mut args = p
-            .try_parse(ast, List::paren_comma_sep(Expression))
+            .try_parse(ast, List::paren_comma_sep(FuncArg))
             .unwrap_or(Ok(Spanned {
                 span: attr.span,
                 node: vec![],
             }))?;
-        args.node.insert(0, obj); // Add method reciever as first argument.
+        args.node.insert(0, (None, obj)); // Add method reciever as first argument.
 
         let obj_expr_span = ast.get_node(obj).span();
         let total_span = obj_expr_span.merge(args.span);
@@ -436,6 +437,7 @@ impl SyntaxRule for MethodCallSuffix {
 
 /// Matches a function call suffix, such as `(arg1, arg2)` (presumably preceded by an
 /// expression that evaluates to a function value).
+#[derive(Debug, Copy, Clone)]
 struct FuncCallSuffix(ast::ExprId);
 impl_display!(for FuncCallSuffix, "function call");
 impl SyntaxRule for FuncCallSuffix {
@@ -455,7 +457,7 @@ impl SyntaxRule for FuncCallSuffix {
             _ => return Err(Error::cannot_call_arbitrary_expression(func_name_span)),
         };
 
-        let args_list = p.parse(ast, List::paren_comma_sep(Expression))?;
+        let args_list = p.parse(ast, List::paren_comma_sep(FuncArg))?;
         let args = args_list.node;
         let expr_data = ast::ExprData::FuncCall { func, args };
 
@@ -464,8 +466,33 @@ impl SyntaxRule for FuncCallSuffix {
     }
 }
 
+/// Matches a function argument, which consists of an expression optionally
+/// preceded by an identifier and '='.
+#[derive(Debug, Copy, Clone)]
+struct FuncArg;
+impl_display!(for FuncArg, "expression, optionally preceded by an identifier and '='");
+impl SyntaxRule for FuncArg {
+    type Output = (Option<Spanned<Arc<String>>>, ast::ExprId);
+
+    fn might_match(&self, p: Parser<'_>) -> bool {
+        Identifier.might_match(p) || Expression.might_match(p)
+    }
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        let old_state = *p;
+        {
+            let ident = p.parse(ast, Identifier);
+            if p.next() == Some(Token::Assign) {
+                return Ok((Some(ident?), p.parse(ast, Expression)?));
+            }
+        }
+        *p = old_state;
+        Ok((None, p.parse(ast, Expression)?))
+    }
+}
+
 /// Matches an indexing suffix, such as `[x, y]` (presumably preceded by an
 /// expression).
+#[derive(Debug, Copy, Clone)]
 struct IndexSuffix(ast::ExprId);
 impl_display!(for IndexSuffix, "indexing expression using square brackets");
 impl SyntaxRule for IndexSuffix {

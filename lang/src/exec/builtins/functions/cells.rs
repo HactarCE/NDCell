@@ -30,7 +30,7 @@ impl Function for IntToCell {
                 Err(ctx.error(Error::cell_state_out_of_range(call.args[0].span)))
             }
         } else {
-            Err(ctx.error(Error::invalid_arguments(call.span, self, &[arg.ty()])))
+            Err(call.invalid_args_error(ctx, self))
         }
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {

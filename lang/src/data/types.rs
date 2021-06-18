@@ -10,13 +10,10 @@
 //! - Update `TryFrom<Token>` impl for `TypeClass`
 //! - Add new method in `generate_type_unwrap_methods!`
 
-use codemap::Spanned;
-use itertools::Itertools;
 use std::fmt;
 use std::sync::Arc;
 
 use super::VectorSet;
-use crate::errors::{Error, Result};
 
 /// Specific data type.
 ///
@@ -155,155 +152,5 @@ impl Type {
             Type::Pattern(_) => None,
             Type::Regex => None,
         }
-    }
-}
-
-pub trait SpannedTypeExt {
-    /// Returns a type error if this type does not match the given expected
-    /// type(s).
-    fn typecheck(&self, expected: impl TypeChecker) -> Result<()>;
-
-    /// Returns a CustomTypeError if this type cannot be converted to a boolean.
-    fn typecheck_can_convert_to_bool(&self) -> Result<()>;
-
-    /// Returns the type yielded by iterating over this type, or a
-    /// CustomTypeError if this type cannot be iterated over.
-    fn typecheck_can_iterate(&self) -> Result<Type>;
-}
-
-impl SpannedTypeExt for Spanned<Type> {
-    fn typecheck(&self, expected: impl TypeChecker) -> Result<()> {
-        if expected.matches(&self.node) {
-            Ok(())
-        } else {
-            Err(Error::type_error(self.span, expected, &self.node))
-        }
-    }
-
-    fn typecheck_can_convert_to_bool(&self) -> Result<()> {
-        if self.node.can_convert_to_bool() {
-            Ok(())
-        } else {
-            Err(Error::type_error(
-                self.span,
-                "type that can be converted to boolean",
-                &self.node,
-            ))
-        }
-    }
-
-    fn typecheck_can_iterate(&self) -> Result<Type> {
-        self.node.iteration_type().ok_or_else(|| {
-            Error::type_error(self.span, "type that can be iterated over", &self.node)
-        })
-    }
-}
-
-/// Rust types that can be used to check NDCA types.
-pub trait TypeChecker: fmt::Display {
-    /// Returns true if the given type matches this type checker, or false if it
-    /// does not.
-    fn matches(&self, ty: &Type) -> bool;
-}
-impl TypeChecker for Type {
-    fn matches(&self, ty: &Type) -> bool {
-        match self {
-            Type::Vector(None) => matches!(ty, Type::Vector(_)),
-            Type::Array(None) => matches!(ty, Type::Array(_)),
-            Type::VectorSet(None) => matches!(ty, Type::VectorSet(_)),
-            Type::Pattern(None) => matches!(ty, Type::Pattern(_)),
-            _ => self == ty,
-        }
-    }
-}
-impl<T: TypeChecker> TypeChecker for &T {
-    fn matches(&self, ty: &Type) -> bool {
-        (*self).matches(ty)
-    }
-}
-
-pub struct AnyTypeChecker<'a, T>(&'a [T]);
-impl<T: fmt::Display> fmt::Display for AnyTypeChecker<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            crate::utils::join_with_conjunction(
-                "or",
-                &self.0.iter().map(ToString::to_string).collect_vec(),
-            )
-        )
-    }
-}
-impl<T: TypeChecker> AnyTypeChecker<'_, T> {
-    fn matches(&self, ty: &Type) -> bool {
-        self.0.iter().any(|expected| expected.matches(ty))
-    }
-}
-
-/// Check that the given value matches any one of the given types, returning
-/// Ok(()) if it does match and a type error if it does not match.
-macro_rules! typecheck {
-    ( $got:expr, [ $( $expected:tt ),+ $(,)? ] ) => {
-        $got.typecheck(AnyTypeChecker(&[ $( typeclass!($expected) ),+ ]))
-    };
-    ( $got:expr, $expected:tt $(,)? ) => {
-        $got.typecheck(typeclass!($expected))
-    };
-}
-
-/// Convert type names (such as "Int") or type description name (such as
-/// "Vector" or "Pattern") into a TypeClass.
-macro_rules! typeclass {
-    ( Vector ) => {
-        crate::data::TypeClass::Vector
-    };
-    ( Array ) => {
-        crate::data::TypeClass::Array
-    };
-    ( IntegerSet ) => {
-        crate::data::TypeClass::IntegerSet
-    };
-    ( CellSet ) => {
-        crate::data::TypeClass::CellSet
-    };
-    ( VectorSet(Option<usize>) ) => {
-        crate::data::TypeClass::VectorSet(Option<usize>)
-    };
-    ( Pattern(Option<VectorSet>) ) => {
-        crate::data::TypeClass::Pattern(Option<VectorSet>)
-    };
-    ( $other:tt $($args:tt)? ) => {
-        crate::data::TypeClass::Specific(crate::data::Type::$other $($args)?)
-    };
-}
-
-/// Function signature, consisting of types for the arguments and a return
-/// type.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct FnSignature {
-    pub args: Vec<Type>,
-    pub ret: Option<Type>,
-}
-impl FnSignature {
-    /// Constructs the signature for a function that takes no arguments.
-    pub fn atom(ret: Option<Type>) -> Self {
-        Self::new(vec![], ret)
-    }
-    /// Constructs the signature for a function that takes one argument and
-    /// returns a property of that argument.
-    pub fn property(self_type: Type, ret: Option<Type>) -> Self {
-        Self::new(vec![self_type], ret)
-    }
-    /// Constructs any arbitrary function signature.
-    pub fn new(args: Vec<Type>, ret: Option<Type>) -> Self {
-        let args = args.into();
-        Self { args, ret }
-    }
-
-    /// Returns true if the given argument types match the arguments of this
-    /// function signature.
-    pub fn matches(&self, arg_types: &[Spanned<Type>]) -> bool {
-        arg_types.iter().map(|s| &s.node).eq(&self.args)
     }
 }

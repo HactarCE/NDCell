@@ -3,6 +3,7 @@
 pub use inkwell::context::Context;
 pub use inkwell::targets::TargetData;
 pub use inkwell::{AddressSpace, IntPredicate};
+use itertools::Itertools;
 use thread_local::ThreadLocal;
 
 pub mod traits {
@@ -109,6 +110,10 @@ pub fn const_int(i: LangInt) -> IntValue {
 /// Returns a constant cell state LLVM value.
 pub fn const_cell(i: LangCell) -> IntValue {
     cell_type().const_int(i as u64, false)
+}
+/// Returns a constant vector LLVM value.
+pub fn const_vector(v: impl IntoIterator<Item = LangInt>) -> VectorValue {
+    VectorType::const_vector(&v.into_iter().map(const_int).collect_vec())
 }
 
 /// Returns the name of an LLVM type used in names of intrinsics (e.g. "i32" for

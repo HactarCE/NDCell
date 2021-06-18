@@ -5,7 +5,7 @@ use codemap_diagnostic::{Diagnostic, Level, SpanLabel, SpanStyle};
 use itertools::Itertools;
 use std::fmt;
 
-use crate::data::Type;
+use crate::data::{Type, MAX_VECTOR_LEN};
 use crate::{MAX_NDIM, MAX_STATE_COUNT};
 
 /// `Result` type alias for NDCA compile-time and runtime errors.
@@ -160,16 +160,20 @@ impl Error {
         _ => MAX_STATE_COUNT,
     ));
 
-    // TODO: review uses of these two error messages
-    error_fn!(Error; fn cannot_const_eval("depends on contents of simulation"));
-    error_fn!(Error; fn cannot_compile("must not depend on contents of simulation"));
+    error_fn!(Error; fn invalid_vector_length(
+        "the length of a vector must be an integer from 1 to {}",
+        _ => MAX_VECTOR_LEN,
+    ));
+
+    error_fn!(Error; fn must_be_constant("must be a constant"));
+    error_fn!(Error; fn cannot_compile("not allowed in compiled code"));
+    error_fn!(Error; fn cannot_const_eval("cannot evaluate because evaluation depends on simulation contents"));
 
     error_fn!(Error; fn type_error(
         "mismatched types: expected {} but got {}",
         expected: impl fmt::Display,
         got: &Type,
     ));
-
     error_fn!(Error; fn cmp_type_error(
         "mismatched types: cannot compare {0} to {2} using '{1}'{3}",
         lhs: &Type,
@@ -187,6 +191,8 @@ impl Error {
         name: impl fmt::Display,
         arg_types: &[Type] => crate::utils::display_bracketed_list,
     ));
+    error_fn!(Error; fn duplicate_keyword_argument("duplicate keyword argument"));
+    error_fn!(Error; fn invalid_keyword_argument("invalid keyword argument for '{}'", func: impl fmt::Display));
 
     error_fn!(Error; fn not_reached_directive("not yet reached '{}' directive", directive_name: &str));
 

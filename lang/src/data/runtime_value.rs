@@ -75,6 +75,20 @@ impl RtVal {
             _ => None,
         }
     }
+    /// Converts the value to a vector if it can be converted; otherwise returns
+    /// `None`.
+    pub fn to_vector(&self, len: usize) -> Option<Vec<LangInt>> {
+        match self {
+            RtVal::Integer(i) => Some(vec![*i; len]),
+            RtVal::Vector(v) => {
+                let mut ret = v.clone();
+                ret.resize(len, 0);
+                ret.shrink_to_fit();
+                Some(ret)
+            }
+            _ => None,
+        }
+    }
 }
 
 pub trait SpannedRuntimeValueExt {
@@ -121,6 +135,9 @@ pub trait SpannedRuntimeValueExt {
     /// Converts the value to a boolean if it can be converted; otherwise
     /// returns a type error.
     fn to_bool(&self) -> Result<bool>;
+    /// Converts the value to a vector if it can be converted; otherwise returns
+    /// a type error.
+    fn to_vector(&self, len: usize) -> Result<Vec<LangInt>>;
 
     /// Returns an iterator for the value if it can be iterated over; otherwise
     /// returns a type error.
@@ -221,6 +238,15 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             Error::type_error(
                 self.span,
                 "type that can be converted to boolean",
+                &self.ty(),
+            )
+        })
+    }
+    fn to_vector(&self, len: usize) -> Result<Vec<LangInt>> {
+        self.node.to_vector(len).ok_or_else(|| {
+            Error::type_error(
+                self.span,
+                "type that can be converted to a vector",
                 &self.ty(),
             )
         })

@@ -24,7 +24,7 @@ mod math;
 // mod types;
 mod values;
 // mod vars;
-// mod vecs;
+mod vectors;
 
 use crate::ast;
 use crate::data::{LangInt, LangUint, RtVal, Type};

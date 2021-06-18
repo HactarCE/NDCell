@@ -191,7 +191,7 @@ impl Compiler {
                     Type::Integer => Ok(ParamType::Integer),
                     Type::Cell => Ok(ParamType::Cell),
                     Type::Tag => todo!("tag param"),
-                    Type::Vector(_) => todo!("vector param"),
+                    Type::Vector(Some(len)) => Ok(ParamType::Vector(len)),
                     Type::Array(_) => todo!("array param"),
                     Type::CellSet => todo!("cell set param"),
                     _ => Err(runtime.error(Error::cannot_compile(span))),
@@ -365,21 +365,16 @@ impl Compiler {
 impl Compiler {
     pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<Type>> {
         let span = v.span;
-        match &v.node {
-            Val::Rt(v) => Ok(v.ty()),
-            Val::Cp(v) => Ok(v.ty()),
-            Val::Unknown(Some(ty)) => Ok(ty.clone()),
-            Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
-            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
-            Val::Err(e) => Err(*e),
+        match v.fallible_ty()? {
+            Ok(ty) => Ok(Spanned { node: ty, span }),
+            Err(e) => Err(self.error(e)),
         }
-        .map(|node| Spanned { node, span })
     }
     pub(crate) fn get_rt_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<RtVal>> {
         let span = v.span;
         match v.node {
             Val::Rt(v) => Ok(v),
-            Val::Cp(_) => Err(self.error(Error::cannot_const_eval(span))),
+            Val::Cp(_) => Err(self.error(Error::must_be_constant(span))),
             Val::Unknown(Some(ty)) => Err(self.error(Error::unknown_variable_value(span, ty))),
             Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
             Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
@@ -448,14 +443,6 @@ impl Compiler {
         todo!("cell set type")
     }
 
-    /// Returns the value inside if given a `Constant` value; otherwise returns
-    /// an error stating the value must be a compile-time constant.
-    fn as_const(&self, v: Spanned<CpVal>) -> Result<RtVal> {
-        match v.node {
-            _ => Err(Error::cannot_compile(v.span)),
-        }
-    }
-
     /// Returns the value inside if given an `Integer` value or subtype of one;
     /// otherwise returns a type error.
     pub fn as_integer(&mut self, v: &Spanned<CpVal>) -> Result<llvm::IntValue> {
@@ -522,6 +509,43 @@ impl Compiler {
 
         let b = self.builder();
         Ok(b.build_int_z_extend(bool_result, llvm::int_type(), "zext_bool"))
+    }
+
+    /// Builds instructions to cast a value to a vector.
+    pub fn build_convert_to_vector(
+        &mut self,
+        value: Spanned<Val>,
+        len: usize,
+    ) -> Fallible<llvm::VectorValue> {
+        let cp_val = self.get_cp_val(value)?;
+        self.build_convert_cp_val_to_vector(&cp_val, len)
+    }
+    /// Builds instructions to cast a value to a vector.
+    pub fn build_convert_cp_val_to_vector(
+        &mut self,
+        value: &Spanned<CpVal>,
+        len: usize,
+    ) -> Fallible<llvm::VectorValue> {
+        match value.node {
+            CpVal::Integer(i) => Ok(llvm::VectorType::const_vector(&vec![i; len])),
+            CpVal::Vector(v) => {
+                let v_len = v.get_type().get_size() as LangInt;
+                let shuffle_mask = (0..len)
+                    .map(|i| llvm::const_int(std::cmp::min(i as LangInt, v_len)))
+                    .collect_vec();
+                Ok(self.builder().build_shuffle_vector(
+                    v,
+                    v.same_type_const_zero(),
+                    llvm::VectorType::const_vector(&shuffle_mask),
+                    "resized_vector",
+                ))
+            }
+            _ => Err(self.error(Error::type_error(
+                value.span,
+                "type that can be converted to a vector",
+                &value.node.ty(),
+            ))),
+        }
     }
 }
 
@@ -1344,10 +1368,6 @@ impl Compiler {
         expression
             .compile(self, span)
             .map(|v| Spanned { node: v, span })
-    }
-    /// Builds instructions to evaluate several expressions in order.
-    pub fn build_expr_list(&mut self, exprs: &[ast::Expr<'_>]) -> Fallible<Vec<Spanned<Val>>> {
-        exprs.iter().map(|expr| self.build_expr(*expr)).collect()
     }
 }
 

@@ -1,6 +1,10 @@
+use codemap::Span;
+use std::convert::TryInto;
+
+use crate::errors::{Error, Result};
+
 #[macro_use]
 mod types;
-
 mod array;
 mod cell_lut;
 mod cell_set;
@@ -18,7 +22,7 @@ pub use compile_value::{CpVal, SpannedCompileValueExt};
 pub use int_set::IntegerSet;
 pub use pattern::Pattern;
 pub use runtime_value::{RtVal, SpannedRuntimeValueExt};
-pub use types::{FnSignature, SpannedTypeExt, Type};
+pub use types::Type;
 pub use value::{FallibleTypeOf, Val};
 pub use vec_set::VectorSet;
 
@@ -43,3 +47,14 @@ pub const MAX_VECTOR_LEN: usize = 256;
 
 /// Axis names.
 pub const AXES: &'static str = "xyzwuv";
+
+pub fn is_valid_vector_len(len: usize) -> bool {
+    1 <= len && len <= MAX_VECTOR_LEN
+}
+
+pub fn check_vector_len(span: Span, len: impl TryInto<usize>) -> Result<usize> {
+    len.try_into()
+        .ok()
+        .filter(|&n| is_valid_vector_len(n))
+        .ok_or(Error::invalid_vector_length(span))
+}

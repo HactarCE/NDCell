@@ -6,15 +6,25 @@ mod expressions;
 pub mod functions;
 
 use super::{Ctx, CtxTrait};
-use crate::data::{LangInt, RtVal, Type};
+use crate::data::{self, LangInt, RtVal, Type};
 use crate::errors::Fallible;
 pub use expressions::Expression;
 pub use functions::Function;
 
 /// Returns a built-in function.
 pub fn resolve_function(name: &str) -> Option<Box<dyn Function>> {
+    // `vec1()` through `vec256()`
+    if name.starts_with("vec") {
+        if let Ok(n) = name[3..].parse() {
+            if data::is_valid_vector_len(n) {
+                return Some(Box::new(functions::vectors::VectorConstructWithLen(n)));
+            }
+        }
+    }
+
     Some(match name {
         "bool" => Box::new(functions::bools::ToBool),
+        "vec" => Box::new(functions::vectors::VectorConstruct),
         _ => None?,
     })
 }
@@ -112,7 +122,7 @@ fn resolve_index_method(obj_type: &Type) -> Option<Box<dyn Function>> {
         Type::Cell => None,
         Type::Tag => None,
         Type::String => None,
-        Type::Type => None,
+        Type::Type => Some(Box::new(functions::types::TypeBrackets)),
         Type::Null => None,
         Type::Vector(_) => None,
         Type::Array(_) => None,

@@ -69,14 +69,15 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 match op.node {
                     Add | Sub | Mul | Div | Mod | Pow | Shl | ShrSigned | ShrUnsigned
                     | BitwiseAnd | BitwiseOr | BitwiseXor => Box::new(FuncCall {
-                        f: Option::<functions::math::BinaryMathOp>::from(op.node),
+                        f: Option::<functions::math::BinaryMathOp>::from(op.node)
+                            .map(|f| f.boxed()),
                         f_span: op_span,
                         args: vec![(None, lhs), (None, rhs)],
                     }),
                     LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),
                     LogicalOr => Box::new(LogicalOrExpr { op_span, args }),
                     LogicalXor => Box::new(FuncCall {
-                        f: Some(functions::bools::LogicalXor),
+                        f: Some(functions::bools::LogicalXor.boxed()),
                         f_span: op_span,
                         args: vec![(None, lhs), (None, rhs)],
                     }),
@@ -87,11 +88,11 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
             ast::ExprData::PrefixOp(op, arg) => {
                 use crate::ast::PrefixOp::*;
                 let op_func: Box<dyn Function> = match op.node {
-                    Pos => Box::new(functions::math::UnaryMathOp::Pos),
-                    Neg => Box::new(functions::math::UnaryMathOp::Neg),
-                    BitwiseNot => Box::new(functions::math::UnaryMathOp::BitwiseNot),
-                    LogicalNot => Box::new(functions::bools::LogicalNot),
-                    IntToCell => Box::new(functions::cells::IntToCell),
+                    Pos => functions::math::UnaryMathOp::Pos.boxed(),
+                    Neg => functions::math::UnaryMathOp::Neg.boxed(),
+                    BitwiseNot => functions::math::UnaryMathOp::BitwiseNot.boxed(),
+                    LogicalNot => functions::bools::LogicalNot.boxed(),
+                    IntToCell => functions::cells::IntToCell.boxed(),
                 };
                 Box::new(FuncCall {
                     f: Some(op_func),
@@ -149,16 +150,16 @@ impl Expression for Identity<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
-struct FuncCall<'ast, F> {
+#[derive(Debug)]
+struct FuncCall<'ast> {
     /// Function to call.
-    f: Option<F>,
+    f: Option<Box<dyn Function>>,
     /// Span of the function name.
     f_span: Span,
     /// Arguments to the function, each with an optional keyword.
     args: Vec<ast::FuncArg<ast::Expr<'ast>>>,
 }
-impl<F: Function> Expression for FuncCall<'_, F> {
+impl Expression for FuncCall<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
         let span = self.f_span;
         let args = eval_args_list(runtime, &self.args)?;

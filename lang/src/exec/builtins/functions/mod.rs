@@ -34,6 +34,14 @@ pub trait Function: fmt::Debug + fmt::Display {
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         Err(compiler.error(Error::cannot_compile(call.span)))
     }
+
+    /// Wrap the function in a `Box<dyn Function>`.
+    fn boxed(self) -> Box<dyn Function>
+    where
+        Self: 'static + Sized,
+    {
+        Box::new(self)
+    }
 }
 
 impl Function for Box<dyn Function> {
@@ -46,6 +54,10 @@ impl Function for Box<dyn Function> {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         (**self).compile(compiler, call)
+    }
+
+    fn boxed(self) -> Box<dyn Function> {
+        self
     }
 }
 

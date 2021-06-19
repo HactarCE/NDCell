@@ -38,6 +38,24 @@ fn test_vector_construct() {
     // Test vector constructor based on `NDIM`.
     test_vector_construct_expr(vec![0; 2], "vec()");
     test_vector_construct_expr(vec![9; 2], "vec(9)");
+
+    // Test vector constructor with integers.
+    test_vector_construct_expr(vec![5], "[5]");
+    test_vector_construct_expr(vec![1, 2, 3], "[1, 2, 3]");
+
+    // Test vector constructor with vectors.
+    test_vector_construct_expr((1..=6).collect(), "[[1, 2], 3, [4, 5, 6]]");
+    test_vector_construct_expr((1..=6).collect(), "[[[1, 2], 3, [4, 5], 6]]");
+}
+
+#[test]
+fn test_vector_len_cast() {
+    // Test conversion from an existing vector of the same length.
+    test_vector_construct_expr(vec![1, 2], "vec([1, 2], len=2)");
+    // Test conversion from an existing shorter vector.
+    test_vector_construct_expr(vec![1, 2, 0, 0, 0], "vec([1, 2], len=5)");
+    // Test conversion from an existing longer vector.
+    test_vector_construct_expr(vec![1, 2], "vec([1, 2, 3, 4], len=2)");
 }
 
 fn test_vector_construct_expr(expected: Vec<LangInt>, expr: &str) {
@@ -48,71 +66,6 @@ fn test_vector_construct_expr(expected: Vec<LangInt>, expr: &str) {
         .with_result_expressions(&[(Type::Vector(Some(vec_len)), expr)])
         .assert_test_cases(vec![(inputs, output)]);
 }
-
-// {
-//     // Test with length and value specified.
-//     let mut f = compile_test_fn("@function Vec10 test() { return Vec10(-3) }");
-//     assert_fn_result(&mut f, &mut [], Ok(ConstValue::Vector(vec![-3; 10])));
-
-//     // Test with length specified.
-//     let mut f = compile_test_fn("@function Vector4 test() { return Vec4() }");
-//     assert_fn_result(&mut f, &mut [], Ok(ConstValue::Vector(vec![0; 4])));
-
-//     // Test with value specified.
-//     let mut f = compile_test_fn("@ndim 3 @function Vec test() { return Vec(999) }");
-//     assert_fn_result(&mut f, &mut [], Ok(ConstValue::Vector(vec![999; 3])));
-
-//     // Test with length and value both inferred.
-//     let mut f = compile_test_fn("@ndim 2 @function Vector test() { return Vec() }");
-//     assert_fn_result(&mut f, &mut [], Ok(ConstValue::Vector(vec![0; 2])));
-
-//     // Test conversion from an existing vector of the same length.
-//     let mut f = compile_test_fn("@function Vec4 test() { return Vector4([10, 20, 30, 40]) }");
-//     assert_fn_result(
-//         &mut f,
-//         &mut [],
-//         Ok(ConstValue::Vector(vec![10, 20, 30, 40])),
-//     );
-
-//     // Test conversion from an existing shorter vector.
-//     let mut f = compile_test_fn("@ndim 4 @function Vec test() { return Vector([10, 20]) }");
-//     assert_fn_result(&mut f, &mut [], Ok(ConstValue::Vector(vec![10, 20, 0, 0])));
-
-//     // Test conversion from an existing longer vector.
-//     let mut f = compile_test_fn("@function Vec4 test() { return Vec4([10, 20, 30, 40, 50, 60]) }");
-//     assert_fn_result(
-//         &mut f,
-//         &mut [],
-//         Ok(ConstValue::Vector(vec![10, 20, 30, 40])),
-//     );
-// }
-
-// #[test]
-// fn test_vector_len_cast() {
-//     // Test conversion from an existing vector of the same length.
-//     let mut f = compile_test_fn("@function Vec4 test(Vec4 rhs) { return Vec4(0) + rhs }");
-//     assert_fn_result(
-//         &mut f,
-//         &mut [ConstValue::Vector(vec![10, 20, 30, 40])],
-//         Ok(ConstValue::Vector(vec![10, 20, 30, 40])),
-//     );
-
-//     // Test conversion from an existing shorter vector.
-//     let mut f = compile_test_fn("@function Vec4 test(Vec2 rhs) { return Vec4(0) + rhs }");
-//     assert_fn_result(
-//         &mut f,
-//         &mut [ConstValue::Vector(vec![10, 20])],
-//         Ok(ConstValue::Vector(vec![10, 20, 0, 0])),
-//     );
-
-//     // Test conversion from an existing longer vector.
-//     let mut f = compile_test_fn("@function Vec4 test(Vec6 rhs) { return Vec4(1) * rhs }");
-//     assert_fn_result(
-//         &mut f,
-//         &mut [ConstValue::Vector(vec![10, 20, 30, 40, 50, 60])],
-//         Ok(ConstValue::Vector(vec![10, 20, 30, 40])),
-//     );
-// }
 
 // #[test]
 // fn test_vector_access() {

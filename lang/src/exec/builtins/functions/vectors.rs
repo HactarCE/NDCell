@@ -4,19 +4,60 @@ use codemap::Spanned;
 use std::fmt;
 
 use super::{CallInfo, Function};
-use crate::data::{self, CpVal, RtVal, SpannedRuntimeValueExt, Val};
-use crate::errors::Fallible;
+use crate::data::{self, check_vector_len, CpVal, RtVal, SpannedRuntimeValueExt, Val};
+use crate::errors::{Error, Fallible};
 use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::llvm;
 
-/// Built-in function that constructs a vector.
+/// Built-in function that constructs a vector from components.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct VectorConstruct;
 impl fmt::Display for VectorConstruct {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "vec")
+        write!(f, "vector expression")
     }
 }
 impl Function for VectorConstruct {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        let mut ret = vec![];
+        for arg in call.args {
+            match arg.node {
+                RtVal::Integer(i) => Ok(ret.push(i)),
+                RtVal::Vector(v) => Ok(ret.extend_from_slice(&v)),
+                RtVal::IntegerSet(_) => Err(Error::unimplemented(arg.span)),
+                RtVal::VectorSet(_) => Err(Error::unimplemented(arg.span)),
+                _ => Err(Error::expected(arg.span, "integer or vector")),
+            }
+            .map_err(|e| ctx.error(e))?;
+        }
+        check_vector_len(call.span, ret.len()).map_err(|e| ctx.error(e))?;
+        Ok(RtVal::Vector(ret))
+    }
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
+        let mut ret = vec![];
+        for arg in call.args {
+            let arg = compiler.get_cp_val(arg)?;
+            match arg.node {
+                CpVal::Integer(i) => Ok(ret.push(i)),
+                CpVal::Vector(v) => Ok(ret.extend_from_slice(&compiler.build_split_vector(v))),
+                _ => Err(Error::expected(arg.span, "integer or vector")),
+            }
+            .map_err(|e| compiler.error(e))?;
+        }
+        check_vector_len(call.span, ret.len()).map_err(|e| compiler.error(e))?;
+        Ok(Val::Cp(CpVal::Vector(llvm::VectorType::const_vector(&ret))))
+    }
+}
+
+/// Built-in function that constructs a vector.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct Vec;
+impl fmt::Display for Vec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "vec")
+    }
+}
+impl Function for Vec {
     fn kwarg_keys(&self) -> &[&'static str] {
         &["len"]
     }
@@ -30,7 +71,7 @@ impl Function for VectorConstruct {
                 .map_err(|e| ctx.error(e))?,
             None => ctx.get_ndim(call.span)?,
         };
-        VectorConstructWithLen(len).eval(ctx, call)
+        VecWithLen(len).eval(ctx, call)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         let len = match call.kwarg("len") {
@@ -41,19 +82,19 @@ impl Function for VectorConstruct {
                 .map_err(|e| compiler.error(e))?,
             None => compiler.get_ndim(call.span)?,
         };
-        VectorConstructWithLen(len).compile(compiler, call)
+        VecWithLen(len).compile(compiler, call)
     }
 }
 
 /// Built-in function that constructs a vector with a specific length.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct VectorConstructWithLen(pub usize);
-impl fmt::Display for VectorConstructWithLen {
+pub struct VecWithLen(pub usize);
+impl fmt::Display for VecWithLen {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "vec{}", self.0)
     }
 }
-impl Function for VectorConstructWithLen {
+impl Function for VecWithLen {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let len = self.0;
         match &call.args[..] {

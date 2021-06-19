@@ -17,14 +17,14 @@ pub fn resolve_function(name: &str) -> Option<Box<dyn Function>> {
     if name.starts_with("vec") {
         if let Ok(n) = name[3..].parse() {
             if data::is_valid_vector_len(n) {
-                return Some(Box::new(functions::vectors::VectorConstructWithLen(n)));
+                return Some(functions::vectors::VecWithLen(n).boxed());
             }
         }
     }
 
     Some(match name {
-        "bool" => Box::new(functions::bools::ToBool),
-        "vec" => Box::new(functions::vectors::VectorConstruct),
+        "bool" => functions::bools::ToBool.boxed(),
+        "vec" => functions::vectors::Vec.boxed(),
         _ => None?,
     })
 }

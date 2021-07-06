@@ -12,7 +12,7 @@ use crate::num::ToPrimitive;
 /// `D`-dimensional array of values of type `T`.
 ///
 /// The minimum coordinate of the array is always 0 along all axes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NdArray<T, D: Dim> {
     size: UVec<D>,
     data: Box<[T]>,

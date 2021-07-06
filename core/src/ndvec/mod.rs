@@ -106,13 +106,6 @@ impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
         }
         Some(ret)
     }
-    /// Creates a vector by evaluating `f` on each each component of this one.
-    #[inline]
-    pub fn map_fn(&mut self, mut f: impl FnMut(Axis, &mut N)) {
-        for &ax in D::Dim::axes() {
-            f(ax, &mut self[ax]);
-        }
-    }
     /// Creates a vector using `value` for all components.
     #[inline]
     pub fn repeat(value: N) -> Self {

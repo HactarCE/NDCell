@@ -5,7 +5,7 @@ use RtVal::Integer;
 fn test_bool_constants() {
     TestProgram::new()
         .with_result_expressions(&[(Type::Integer, "FALSE"), (Type::Integer, "TRUE")])
-        .assert_test_cases(vec![(vec![], Ok(vec![Integer(0), Integer(1)]))]);
+        .assert_test_cases(vec![(vec![], Ok(vec![0, 1]))]);
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn test_ndim_constant_with_ndim(ndim: Option<LangInt>) {
     TestProgram::new()
         .with_setup(&setup_str)
         .with_result_expressions(&[(Type::Integer, "NDIM")])
-        .assert_test_cases(vec![(vec![], Ok(vec![Integer(ndim.unwrap_or(2))]))]);
+        .assert_test_cases(vec![(vec![], Ok(vec![ndim.unwrap_or(2)]))]);
 }
 
 #[test]
@@ -41,5 +41,5 @@ fn test_statecount_constant_with_statecount(statecount: Option<LangInt>) {
     TestProgram::new()
         .with_setup(&setup_str)
         .with_result_expressions(&[(Type::Integer, "STATECOUNT")])
-        .assert_test_cases(vec![(vec![], Ok(vec![Integer(statecount.unwrap_or(2))]))]);
+        .assert_test_cases(vec![(vec![], Ok(vec![statecount.unwrap_or(2)]))]);
 }

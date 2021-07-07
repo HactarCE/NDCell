@@ -68,14 +68,11 @@ fn test_integer_math_binops() {
 #[test]
 fn test_integer_bitwise_binops() {
     // Test bitwise AND.
-    let ref_impl = |a, b| Ok(vec![Integer(a & b)]);
-    test_integer_binop("&", ref_impl);
+    test_integer_binop("&", |a, b| Ok(vec![a & b]));
     // Test bitwise OR.
-    let ref_impl = |a, b| Ok(vec![Integer(a | b)]);
-    test_integer_binop("|", ref_impl);
+    test_integer_binop("|", |a, b| Ok(vec![a | b]));
     // Test bitwise XOR.
-    let ref_impl = |a, b| Ok(vec![Integer(a ^ b)]);
-    test_integer_binop("^", ref_impl);
+    test_integer_binop("^", |a, b| Ok(vec![a ^ b]));
 
     // Test left shift.
     let ref_impl = bitshift_op_reference_impl("<<", LangInt::checked_shl);
@@ -93,25 +90,25 @@ fn test_integer_bitwise_binops() {
 fn op_with_overflow_reference_impl<'s>(
     op_str: &'s str,
     checked_fn: fn(LangInt, LangInt) -> Option<LangInt>,
-) -> impl Fn(LangInt, LangInt) -> TestResult<'s> {
+) -> impl Fn(LangInt, LangInt) -> TestResult<'s, LangInt> {
     move |a, b| match checked_fn(a, b) {
-        Some(result) => Ok(vec![Integer(result)]),
+        Some(result) => Ok(vec![result]),
         None => Err(vec![(op_str, "integer overflow")]),
     }
 }
 fn op_with_div_by_zero_or_overflow_reference_impl<'s>(
     op_str: &'s str,
     checked_fn: fn(LangInt, LangInt) -> Option<LangInt>,
-) -> impl Fn(LangInt, LangInt) -> TestResult<'s> {
+) -> impl Fn(LangInt, LangInt) -> TestResult<'s, LangInt> {
     move |a, b| match checked_fn(a, b) {
-        Some(result) => Ok(vec![Integer(result)]),
+        Some(result) => Ok(vec![result]),
         None if b == 0 => Err(vec![(op_str, "division by zero")]),
         None => Err(vec![(op_str, "integer overflow")]),
     }
 }
-fn pow_op_reference_impl(a: LangInt, b: LangInt) -> TestResult<'static> {
+fn pow_op_reference_impl(a: LangInt, b: LangInt) -> TestResult<'static, LangInt> {
     match crate::utils::checked_pow_i64(a, b) {
-        Some(result) => Ok(vec![Integer(result)]),
+        Some(result) => Ok(vec![result]),
         None if b < 0 => Err(vec![("**", "negative exponent")]),
         None => Err(vec![("**", "integer overflow")]),
     }
@@ -119,22 +116,22 @@ fn pow_op_reference_impl(a: LangInt, b: LangInt) -> TestResult<'static> {
 fn bitshift_op_reference_impl<'s>(
     op_str: &'s str,
     f: fn(LangInt, u32) -> Option<LangInt>,
-) -> impl Fn(LangInt, LangInt) -> TestResult<'s> {
+) -> impl Fn(LangInt, LangInt) -> TestResult<'s, LangInt> {
     move |a, b| match b.try_into().ok().and_then(|b| f(a, b)) {
-        Some(result) => Ok(vec![Integer(result)]),
+        Some(result) => Ok(vec![result]),
         None => Err(vec![(op_str, "bitshift amount out of range")]),
     }
 }
 
 fn test_integer_binop<'s>(
     op_str: &'s str,
-    op_reference_impl: impl Fn(LangInt, LangInt) -> TestResult<'s>,
+    op_reference_impl: impl Fn(LangInt, LangInt) -> TestResult<'s, LangInt>,
 ) {
     test_integer_binop_with_values(op_str, op_reference_impl, test_values());
 }
 fn test_integer_binop_with_values<'s>(
     op_str: &'s str,
-    op_reference_impl: impl Fn(LangInt, LangInt) -> TestResult<'s>,
+    op_reference_impl: impl Fn(LangInt, LangInt) -> TestResult<'s, LangInt>,
     values: &'s [LangInt],
 ) {
     TestProgram::new()
@@ -155,7 +152,7 @@ fn test_integer_math_unary_ops() {
         .with_result_expressions(&[(Type::Integer, "+x0")])
         .assert_test_cases(test_values().iter().map(|&i| {
             let input = vec![Integer(i)];
-            let output = Ok(vec![Integer(i)]);
+            let output = Ok(vec![i]);
             (input, output)
         }));
 
@@ -166,7 +163,7 @@ fn test_integer_math_unary_ops() {
         .assert_test_cases(test_values().iter().map(|&i| {
             let input = vec![Integer(i)];
             let output = match i.checked_neg() {
-                Some(result) => Ok(vec![Integer(result)]),
+                Some(result) => Ok(vec![result]),
                 None => Err(vec![("-", "integer overflow")]),
             };
             (input, output)

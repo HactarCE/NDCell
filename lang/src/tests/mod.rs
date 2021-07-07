@@ -34,8 +34,8 @@ use crate::utils;
 use values::*;
 
 type TestError<'s> = (&'s str, &'s str);
-type TestResult<'s> = Result<Vec<RtVal>, Vec<TestError<'s>>>;
-type TestCase<'s> = (Vec<RtVal>, TestResult<'s>);
+type TestResult<'s, OK> = Result<Vec<OK>, Vec<TestError<'s>>>;
+type TestCase<'s, OK = RtVal> = (Vec<RtVal>, TestResult<'s, OK>);
 
 #[derive(Debug, Default, Copy, Clone)]
 struct TestProgram<'a> {
@@ -185,7 +185,10 @@ impl<'a> TestProgram<'a> {
 
     /// Asserts that all test cases produce the specified output, both when
     /// interpreted and when compiled.
-    pub fn assert_test_cases<'s>(self, test_cases: impl IntoIterator<Item = TestCase<'s>>) {
+    pub fn assert_test_cases<'s>(
+        self,
+        test_cases: impl IntoIterator<Item = TestCase<'s, impl Clone + ToString>>,
+    ) {
         let test_cases = test_cases.into_iter().collect_vec();
         self.assert_interpreted_test_cases(test_cases.iter().cloned());
         self.assert_compiled_test_cases(test_cases);
@@ -194,7 +197,7 @@ impl<'a> TestProgram<'a> {
     /// interpreted.
     pub fn assert_interpreted_test_cases<'s>(
         self,
-        test_cases: impl IntoIterator<Item = TestCase<'s>>,
+        test_cases: impl IntoIterator<Item = TestCase<'s, impl Clone + ToString>>,
     ) {
         let (ast, stmt_id, expr_ids) = self.ast_for_interpreter_test();
         let clean_runtime = self.init_new_runtime(&ast);
@@ -218,19 +221,21 @@ impl<'a> TestProgram<'a> {
                             let expr = ast.get_node(expr_id);
                             runtime
                                 .eval_expr(expr)
-                                .map(|v| v.node)
+                                .map(|v| v.node.to_string())
                                 .map_err(|_| runtime.ctx().errors.clone())
                         })
                         .collect()
                 });
             // Check results.
+            let expected_result =
+                expected_result.map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
             assert_results_eq(&ast, task_str, &actual_result, &expected_result);
         }
     }
     /// Asserts that all test cases produce the specified output when compiled.
     pub fn assert_compiled_test_cases<'s>(
         self,
-        test_cases: impl IntoIterator<Item = TestCase<'s>>,
+        test_cases: impl IntoIterator<Item = TestCase<'s, impl Clone + ToString>>,
     ) {
         let ast = self.ast_for_compiler_test();
         let runtime = self.init_new_runtime(&ast);
@@ -257,10 +262,12 @@ impl<'a> TestProgram<'a> {
             // Call function.
             let n = inputs.len();
             let actual_result = match f.call(&mut arg_values) {
-                Ok(()) => Ok(arg_values[n..].to_vec()),
+                Ok(()) => Ok(arg_values[n..].iter().map(|v| v.to_string()).collect_vec()),
                 Err(e) => Err(vec![e]),
             };
             // Check result.
+            let expected_result =
+                expected_result.map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
             assert_results_eq(&ast, task_str, &actual_result, &expected_result);
         }
     }

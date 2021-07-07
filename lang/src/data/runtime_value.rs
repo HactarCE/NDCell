@@ -1,4 +1,5 @@
 use codemap::Spanned;
+use std::fmt;
 use std::sync::Arc;
 
 use super::{Array, CellSet, IntegerSet, LangCell, LangInt, Pattern, Type, VectorSet};
@@ -38,6 +39,27 @@ pub enum RtVal {
     Pattern(Arc<Pattern>),
     /// Regular expression.
     Regex(Arc<Regex>),
+}
+impl fmt::Display for RtVal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RtVal::Integer(i) => write!(f, "{}", i),
+            RtVal::Cell(i) => write!(f, "#{}", i),
+            RtVal::Tag(_) => todo!("display Tag"),
+            RtVal::String(s) => write!(f, "{:?}", s),
+            RtVal::Type(_) => todo!("display Type"),
+            RtVal::Null => write!(f, "Null"),
+
+            RtVal::Vector(v) => write!(f, "{}", crate::utils::display_bracketed_list(v)),
+            RtVal::Array(_) => todo!("display Array"),
+
+            RtVal::IntegerSet(_) => todo!("display IntegerSet"),
+            RtVal::CellSet(_) => todo!("display CellSet"),
+            RtVal::VectorSet(set) => write!(f, "{}", set),
+            RtVal::Pattern(_) => todo!("display Pattern"),
+            RtVal::Regex(_) => todo!("display Regex"),
+        }
+    }
 }
 impl RtVal {
     /// Returns the type of the value.

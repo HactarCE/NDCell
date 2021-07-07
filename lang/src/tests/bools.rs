@@ -14,7 +14,7 @@ fn test_convert_type_to_bool(ty: Type, test_values: impl Iterator<Item = RtVal>)
         .assert_test_cases(test_values.into_iter().map(|v| {
             let v_bool = v.to_bool().unwrap();
             let inputs = vec![v];
-            let outputs = Ok(vec![Integer(v_bool as LangInt)]);
+            let outputs = Ok(vec![v_bool as LangInt]);
             (inputs, outputs)
         }));
 }
@@ -58,8 +58,8 @@ fn test_logical_and() {
         .with_input_types(&[Type::Integer, Type::Integer])
         .with_result_expressions(&[(Type::Integer, "x0 and x1")])
         .assert_test_cases(boolean_test_cases(&[
-            // (&[Integer(0), Integer(0)], false),
-            // (&[Integer(2), Integer(1)], true),
+            (&[Integer(0), Integer(0)], false),
+            (&[Integer(2), Integer(1)], true),
             (&[Integer(0), Integer(6)], false),
             (&[Integer(-5), Integer(0)], false),
         ]));
@@ -112,10 +112,10 @@ fn test_logical_not() {
 
 fn boolean_test_cases<'a>(
     cases: &'a [(&'a [RtVal], bool)],
-) -> impl 'a + IntoIterator<Item = TestCase<'static>> {
+) -> impl 'a + IntoIterator<Item = TestCase<'static, LangInt>> {
     cases.iter().map(|(inputs, output)| {
         let inputs = inputs.to_vec();
-        let output = Ok(vec![Integer(*output as LangInt)]);
+        let output = Ok(vec![*output as LangInt]);
         (inputs, output)
     })
 }

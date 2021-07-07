@@ -24,6 +24,7 @@ mod math;
 // mod types;
 mod values;
 // mod vars;
+mod vector_sets;
 mod vectors;
 
 use crate::ast;

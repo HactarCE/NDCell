@@ -83,7 +83,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                     LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),
                     LogicalOr => Box::new(LogicalOrExpr { op_span, args }),
                     LogicalXor => make_func_call(Some(functions::bools::LogicalXor.boxed())),
-                    Range => todo!("'Range' func"),
+                    Range => make_func_call(Some(functions::range::Range.boxed())),
                     Is => todo!("'Is' func"),
                 }
             }

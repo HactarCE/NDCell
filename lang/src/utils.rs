@@ -68,3 +68,11 @@ fn test_join_with_conjunction() {
     // Oxford comma!
     assert_eq!(join_with_conjunction("and", &strs[..3]), "X, Y, and Z");
 }
+
+/// Returns a nonsense `Span` for use in tests.
+#[cfg(test)]
+pub fn nonsense_span() -> codemap::Span {
+    codemap::CodeMap::new()
+        .add_file("_".to_string(), "".to_string())
+        .span
+}

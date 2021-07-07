@@ -5,7 +5,7 @@ use codemap_diagnostic::{Diagnostic, Level, SpanLabel, SpanStyle};
 use itertools::Itertools;
 use std::fmt;
 
-use crate::data::{Type, MAX_VECTOR_LEN};
+use crate::data::{Type, MAX_VECTOR_LEN, MAX_VECTOR_SET_SIZE};
 use crate::{MAX_NDIM, MAX_STATE_COUNT};
 
 /// `Result` type alias for NDCA compile-time and runtime errors.
@@ -163,6 +163,10 @@ impl Error {
     error_fn!(Error; fn invalid_vector_length(
         "the length of a vector must be an integer from 1 to {}",
         _ => MAX_VECTOR_LEN,
+    ));
+    error_fn!(Error; fn invalid_vector_set_size(
+        "volume of vector set's bounding rectangle must not exceed {}",
+        _ => MAX_VECTOR_SET_SIZE,
     ));
 
     error_fn!(Error; fn must_be_constant("must be a constant"));

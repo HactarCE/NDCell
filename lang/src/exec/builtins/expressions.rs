@@ -66,21 +66,23 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 let lhs = ast.get_node(*lhs);
                 let rhs = ast.get_node(*rhs);
                 let args = [lhs, rhs];
+
+                let make_func_call = |f: Option<Box<dyn Function>>| -> Box<FuncCall<'ast>> {
+                    Box::new(FuncCall {
+                        f,
+                        f_span: op_span,
+                        args: vec![(None, lhs), (None, rhs)],
+                    })
+                };
+
                 match op.node {
                     Add | Sub | Mul | Div | Mod | Pow | Shl | ShrSigned | ShrUnsigned
-                    | BitwiseAnd | BitwiseOr | BitwiseXor => Box::new(FuncCall {
-                        f: Option::<functions::math::BinaryMathOp>::from(op.node)
-                            .map(|f| f.boxed()),
-                        f_span: op_span,
-                        args: vec![(None, lhs), (None, rhs)],
-                    }),
+                    | BitwiseAnd | BitwiseOr | BitwiseXor => make_func_call(
+                        Option::<functions::math::BinaryMathOp>::from(op.node).map(|f| f.boxed()),
+                    ),
                     LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),
                     LogicalOr => Box::new(LogicalOrExpr { op_span, args }),
-                    LogicalXor => Box::new(FuncCall {
-                        f: Some(functions::bools::LogicalXor.boxed()),
-                        f_span: op_span,
-                        args: vec![(None, lhs), (None, rhs)],
-                    }),
+                    LogicalXor => make_func_call(Some(functions::bools::LogicalXor.boxed())),
                     Range => todo!("'Range' func"),
                     Is => todo!("'Is' func"),
                 }

@@ -31,14 +31,14 @@ pub type LangInt = i64;
 /// Unsigned rust type used for NDCA integers.
 pub type LangUint = u64;
 /// Number of bits in an NDCA integer.
-pub const INT_BITS: u32 = 64;
+pub const INT_BITS: u32 = LangInt::BITS;
 /// Number of bytes in an NDCA integer.
 pub const INT_BYTES: usize = INT_BITS as usize / 8;
 
 /// Rust type used for an NDCA cell state.
 pub type LangCell = u8;
 /// Number of bits in an NDCA cell state.
-pub const CELL_STATE_BITS: u32 = 8;
+pub const CELL_STATE_BITS: u32 = LangCell::BITS;
 /// Number of bytes in an NDCA cell state.
 pub const CELL_STATE_BYTES: usize = CELL_STATE_BITS as usize / 8;
 

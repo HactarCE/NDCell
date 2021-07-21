@@ -94,8 +94,7 @@ impl MainWindow {
                 .iter()
                 .map(|duration| duration)
                 .sum();
-            if total_sim_time == Duration::default() {
-                // .is_zero()
+            if total_sim_time.is_zero() {
                 ui.text("");
             } else {
                 let avg_sim_time = total_sim_time / gridview.last_sim_times().len() as u32;

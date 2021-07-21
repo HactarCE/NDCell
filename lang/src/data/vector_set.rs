@@ -24,7 +24,7 @@ impl fmt::Display for VectorSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ndim = self.vec_len();
         match self.bounds() {
-            None => write!(f, "VectorSet{}D.empty", ndim)?,
+            None => write!(f, "VectorSet[{}].empty", ndim)?,
             Some(b) => {
                 write!(
                     f,
@@ -417,7 +417,7 @@ mod tests {
         let a_and_b = a.intersection(span, &b).unwrap();
         assert_eq!(a_and_b, b.intersection(span, &a).unwrap());
         assert!(a_and_b.is_empty());
-        assert_eq!(a_and_b.to_string(), "VectorSet2D.empty");
+        assert_eq!(a_and_b.to_string(), "VectorSet[2].empty");
 
         let a_minus_b = a.subtract(span, &b).unwrap();
         assert!(!a_minus_b.is_empty());

@@ -1,9 +1,9 @@
 use super::*;
-use crate::data::RtVal::{Integer, Vector};
+use crate::data::RtVal::Vector;
 
 #[test]
 fn test_vector_new() {
-    let test_cases = vec![(vec![], Ok(vec![Vector(vec![0; 10])]))];
+    let test_cases = test_cases![() => Ok(Vector(vec![0; 10]))];
 
     TestProgram::new()
         .with_result_expressions(&[(Type::Vector(Some(10)), "vec10()")])
@@ -27,7 +27,7 @@ fn test_vector_construct() {
         let src = format!("v = vec(len={})", len_str);
         TestProgram::new()
             .with_exec(&src)
-            .assert_compile_errors(vec![(len_str, vec_len_msg)]);
+            .assert_compile_errors(test_errors![vec_len_msg @ len_str]);
     }
 
     // Test vector constructor with integer value and explicit length.
@@ -60,11 +60,9 @@ fn test_vector_len_cast() {
 
 fn test_vector_construct_expr(expected: Vec<LangInt>, expr: &str) {
     let vec_len = expected.len();
-    let inputs = vec![];
-    let output = Ok(vec![Vector(expected)]);
     TestProgram::new()
         .with_result_expressions(&[(Type::Vector(Some(vec_len)), expr)])
-        .assert_test_cases(vec![(inputs, output)]);
+        .assert_test_cases(test_cases![() => Ok(Vector(expected))]);
 }
 
 // #[test]

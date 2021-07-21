@@ -92,8 +92,8 @@ fn op_with_overflow_reference_impl<'s>(
     checked_fn: fn(LangInt, LangInt) -> Option<LangInt>,
 ) -> impl Fn(LangInt, LangInt) -> TestResult<'s, LangInt> {
     move |a, b| match checked_fn(a, b) {
-        Some(result) => Ok(vec![result]),
-        None => Err(vec![(op_str, "integer overflow")]),
+        Some(result) => test_ok![result],
+        None => test_err!["integer overflow" @ op_str],
     }
 }
 fn op_with_div_by_zero_or_overflow_reference_impl<'s>(
@@ -101,16 +101,16 @@ fn op_with_div_by_zero_or_overflow_reference_impl<'s>(
     checked_fn: fn(LangInt, LangInt) -> Option<LangInt>,
 ) -> impl Fn(LangInt, LangInt) -> TestResult<'s, LangInt> {
     move |a, b| match checked_fn(a, b) {
-        Some(result) => Ok(vec![result]),
-        None if b == 0 => Err(vec![(op_str, "division by zero")]),
-        None => Err(vec![(op_str, "integer overflow")]),
+        Some(result) => test_ok![result],
+        None if b == 0 => test_err!["division by zero" @ op_str],
+        None => test_err!["integer overflow" @ op_str],
     }
 }
 fn pow_op_reference_impl(a: LangInt, b: LangInt) -> TestResult<'static, LangInt> {
     match crate::utils::checked_pow_i64(a, b) {
-        Some(result) => Ok(vec![result]),
-        None if b < 0 => Err(vec![("**", "negative exponent")]),
-        None => Err(vec![("**", "integer overflow")]),
+        Some(result) => test_ok![result],
+        None if b < 0 => test_err!["negative exponent" @ "**"],
+        None => test_err!["integer overflow" @ "**"],
     }
 }
 fn bitshift_op_reference_impl<'s>(
@@ -118,8 +118,8 @@ fn bitshift_op_reference_impl<'s>(
     f: fn(LangInt, u32) -> Option<LangInt>,
 ) -> impl Fn(LangInt, LangInt) -> TestResult<'s, LangInt> {
     move |a, b| match b.try_into().ok().and_then(|b| f(a, b)) {
-        Some(result) => Ok(vec![result]),
-        None => Err(vec![(op_str, "bitshift amount out of range")]),
+        Some(result) => test_ok![result],
+        None => test_err!["bitshift amount out of range" @ op_str],
     }
 }
 
@@ -137,11 +137,12 @@ fn test_integer_binop_with_values<'s>(
     TestProgram::new()
         .with_input_types(&[Type::Integer, Type::Integer])
         .with_result_expressions(&[(Type::Integer, &format!("x0 {} x1", op_str))])
-        .assert_test_cases(iproduct!(values, values).map(|(&a, &b)| {
-            let inputs = vec![Integer(a), Integer(b)];
-            let output = op_reference_impl(a, b);
-            (inputs, output)
-        }));
+        .assert_test_cases(
+            iproduct!(values, values).map_collect_vec(|(&a, &b)| TestCase {
+                inputs: vec![Integer(a), Integer(b)],
+                expected_result: op_reference_impl(a, b),
+            }),
+        );
 }
 
 #[test]
@@ -150,22 +151,20 @@ fn test_integer_math_unary_ops() {
     TestProgram::new()
         .with_input_types(&[Type::Integer])
         .with_result_expressions(&[(Type::Integer, "+x0")])
-        .assert_test_cases(test_values().iter().map(|&i| {
-            let input = vec![Integer(i)];
-            let output = Ok(vec![i]);
-            (input, output)
+        .assert_test_cases(test_values().map_collect_vec(|&i| TestCase {
+            inputs: vec![Integer(i)],
+            expected_result: test_ok![i],
         }));
 
     // Test unary negation.
     TestProgram::new()
         .with_input_types(&[Type::Integer])
         .with_result_expressions(&[(Type::Integer, "-x0")])
-        .assert_test_cases(test_values().iter().map(|&i| {
-            let input = vec![Integer(i)];
-            let output = match i.checked_neg() {
-                Some(result) => Ok(vec![result]),
-                None => Err(vec![("-", "integer overflow")]),
-            };
-            (input, output)
+        .assert_test_cases(test_values().map_collect_vec(|&i| TestCase {
+            inputs: vec![Integer(i)],
+            expected_result: match i.checked_neg() {
+                Some(result) => test_ok![result],
+                None => test_err!["integer overflow" @ "-"],
+            },
         }));
 }

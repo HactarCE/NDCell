@@ -6,7 +6,7 @@ fn test_ambiguous_octothorpe_syntax_error() {
     let ambiguous_msg = "this is ambiguous; if it is a tag name, remove the space after '#'; if it is a variable name, wrap it in parentheses";
     TestProgram::new()
         .with_exec("a = # x0")
-        .assert_syntax_error(("x0", ambiguous_msg));
+        .assert_syntax_error(test_error!(ambiguous_msg @ "x0"));
 }
 
 #[test]
@@ -39,17 +39,16 @@ fn test_convert_int_to_cell() {
                 @states 5
             ",
         )
-        .assert_init_errors(vec![("#", "not yet reached '@states' directive")]);
+        .assert_init_errors(test_errors!("not yet reached '@states' directive" @ "#"));
 }
 
-fn int_to_cell_test_cases(state_count: LangInt) -> impl Iterator<Item = TestCase<'static>> {
-    (-10..300).map(move |i| {
-        let inputs = vec![Integer(i)];
-        let outputs = if 0 <= i && i < state_count {
-            Ok(vec![Cell(i as u8)])
+fn int_to_cell_test_cases(state_count: LangInt) -> Vec<TestCase<'static>> {
+    (-10..300).map_collect_vec(move |i| TestCase {
+        inputs: vec![Integer(i)],
+        expected_result: if 0 <= i && i < state_count {
+            test_ok![Cell(i as u8)]
         } else {
-            Err(vec![("(x0)", "invalid cell state ID")])
-        };
-        (inputs, outputs)
+            test_err!["invalid cell state ID" @ "(x0)"]
+        },
     })
 }

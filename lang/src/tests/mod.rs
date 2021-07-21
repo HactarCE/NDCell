@@ -5,6 +5,58 @@ use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
 
+/// Constructs a `TestError`.
+macro_rules! test_error {
+    ($msg:tt @ $loc:expr) => {
+        TestError {
+            msg: $msg,
+            loc: $loc,
+        }
+    };
+}
+
+/// Constructs a `Vec<TestError>`
+macro_rules! test_errors {
+    ($($msg:tt @ $loc:expr),+ $(,)?) => {
+        vec![$(test_error!($msg @ $loc)),+]
+    };
+}
+
+/// Constructs a `TestResult::Err`.
+macro_rules! test_err {
+    ($($t:tt)+) => {
+        Err(test_errors!($($t)+))
+    };
+}
+
+/// Constructs a `TestResult::Ok`.
+macro_rules! test_ok {
+    ($($val:expr),* $(,)?) => {
+        Ok(vec!($($val),*))
+    };
+}
+
+macro_rules! _test_result {
+    (Ok($($t:tt)*)) => {
+        test_ok!($($t)*)
+    };
+    (Err($($t:tt)+)) => {
+        test_err!($($t)+)
+    };
+}
+
+/// Constructs a `Vec<TestCase>`.
+macro_rules! test_cases {
+    [$(
+        ($($in:expr),* $(,)?) => $out:tt($($t:tt)*)
+    ),+ $(,)?] => {
+        vec![$(TestCase {
+            inputs: vec![$($in),*],
+            expected_result: _test_result!($out($($t)*)),
+        }),+]
+    }
+}
+
 mod bools;
 // mod branch;
 // mod byterepr;
@@ -34,9 +86,34 @@ use crate::exec::{Compiler, CompilerConfig, CtxTrait, Runtime};
 use crate::utils;
 use values::*;
 
-type TestError<'s> = (&'s str, &'s str);
+/// Input/output pair.
+#[derive(Debug, Clone)]
+struct TestCase<'s, OK = RtVal> {
+    inputs: Vec<RtVal>,
+    expected_result: TestResult<'s, OK>,
+}
+
+/// Output of running some code; either a success with some values, or a failure
+/// with some errors.
 type TestResult<'s, OK> = Result<Vec<OK>, Vec<TestError<'s>>>;
-type TestCase<'s, OK = RtVal> = (Vec<RtVal>, TestResult<'s, OK>);
+
+/// Expected error information for testing.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+struct TestError<'s> {
+    /// User-facing error message.
+    msg: &'s str,
+    /// String of source code where the error occured.
+    loc: &'s str,
+}
+
+/// Monkeypatch iterator trait for convenience.
+trait MapCollectVec: Sized + IntoIterator {
+    /// Shorthand for `.into_iter().map(f).collect_vec()`.
+    fn map_collect_vec<T>(self, f: impl FnMut(Self::Item) -> T) -> Vec<T> {
+        self.into_iter().map(f).collect()
+    }
+}
+impl<T: IntoIterator> MapCollectVec for T {}
 
 #[derive(Debug, Default, Copy, Clone)]
 struct TestProgram<'a> {
@@ -154,7 +231,7 @@ impl<'a> TestProgram<'a> {
     }
 
     /// Asserts that attempting to parse the program produces a syntax error.
-    pub fn assert_syntax_error(self, expected_error: (&str, &str)) {
+    pub fn assert_syntax_error(self, expected_error: TestError<'_>) {
         let source = self.source_for_compiler_test();
         let mut ast = ast::Program::new();
         let file = ast.add_file("testfile.test".to_owned(), source);
@@ -167,7 +244,7 @@ impl<'a> TestProgram<'a> {
     }
     /// Asserts that attempting to interpret the initialization directives of
     /// the program produces a runntime error.
-    pub fn assert_init_errors(self, expected_errors: Vec<(&str, &str)>) {
+    pub fn assert_init_errors(self, expected_errors: Vec<TestError<'_>>) {
         let ast = self.ast_for_compiler_test();
         let mut runtime = Runtime::init_new(&ast);
         let actual_result = runtime.get_errors_list();
@@ -175,7 +252,7 @@ impl<'a> TestProgram<'a> {
         assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
     }
     /// Asserts that attempting to compile the program produces a compile error.
-    pub fn assert_compile_errors(self, expected_errors: Vec<(&str, &str)>) {
+    pub fn assert_compile_errors(self, expected_errors: Vec<TestError<'_>>) {
         let ast = self.ast_for_compiler_test();
         let runtime = self.init_new_runtime(&ast);
         let actual_result = Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default())
@@ -186,28 +263,25 @@ impl<'a> TestProgram<'a> {
 
     /// Asserts that all test cases produce the specified output, both when
     /// interpreted and when compiled.
-    pub fn assert_test_cases<'s>(
-        self,
-        test_cases: impl IntoIterator<Item = TestCase<'s, impl Clone + ToString>>,
-    ) {
-        let test_cases = test_cases.into_iter().collect_vec();
-        self.assert_interpreted_test_cases(test_cases.iter().cloned());
+    pub fn assert_test_cases<'s, OK: Clone + ToString>(self, test_cases: Vec<TestCase<'s, OK>>) {
+        let test_cases = test_cases;
+        self.assert_interpreted_test_cases(test_cases.clone());
         self.assert_compiled_test_cases(test_cases);
     }
     /// Asserts that all test cases produce the specified output when
     /// interpreted.
-    pub fn assert_interpreted_test_cases<'s>(
+    pub fn assert_interpreted_test_cases<'s, OK: Clone + ToString>(
         self,
-        test_cases: impl IntoIterator<Item = TestCase<'s, impl Clone + ToString>>,
+        test_cases: Vec<TestCase<'s, OK>>,
     ) {
         let (ast, stmt_id, expr_ids) = self.ast_for_interpreter_test();
         let clean_runtime = self.init_new_runtime(&ast);
-        for (inputs, expected_result) in test_cases {
+        for case in test_cases {
             let mut runtime = clean_runtime.clone();
 
-            let task_str = &format!("intepreting inputs {:?} on {:#?}", inputs, self);
+            let task_str = &format!("intepreting inputs {:?} on {:#?}", case.inputs, self);
             // Set input variables.
-            for (i, value) in inputs.iter().enumerate() {
+            for (i, value) in case.inputs.iter().enumerate() {
                 let var_name = Arc::new(format!("x{}", i));
                 runtime.vars.insert(var_name, value.clone());
             }
@@ -228,15 +302,16 @@ impl<'a> TestProgram<'a> {
                         .collect()
                 });
             // Check results.
-            let expected_result =
-                expected_result.map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
+            let expected_result = case
+                .expected_result
+                .map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
             assert_results_eq(&ast, task_str, &actual_result, &expected_result);
         }
     }
     /// Asserts that all test cases produce the specified output when compiled.
-    pub fn assert_compiled_test_cases<'s>(
+    pub fn assert_compiled_test_cases<'s, OK: Clone + ToString>(
         self,
-        test_cases: impl IntoIterator<Item = TestCase<'s, impl Clone + ToString>>,
+        test_cases: Vec<TestCase<'s, OK>>,
     ) {
         let ast = self.ast_for_compiler_test();
         let runtime = self.init_new_runtime(&ast);
@@ -245,10 +320,13 @@ impl<'a> TestProgram<'a> {
             Err(e) => panic!("\n{}", format_actual_errors(&ast, &e)),
         };
 
-        for (inputs, expected_result) in test_cases {
-            let task_str = &format!("evaluating inputs {:?} on compiled {:#?}", inputs, self);
+        for case in test_cases {
+            let task_str = &format!(
+                "evaluating inputs {:?} on compiled {:#?}",
+                case.inputs, self,
+            );
             // Set input parameters.
-            let mut arg_values = inputs.to_vec();
+            let mut arg_values = case.inputs.to_vec();
             for (ty, _expr) in self.result_expressions {
                 arg_values.push(match ty {
                     Type::Integer => RtVal::Integer(0),
@@ -261,14 +339,15 @@ impl<'a> TestProgram<'a> {
                 });
             }
             // Call function.
-            let n = inputs.len();
+            let n = case.inputs.len();
             let actual_result = match f.call(&mut arg_values) {
                 Ok(()) => Ok(arg_values[n..].iter().map(|v| v.to_string()).collect_vec()),
                 Err(e) => Err(vec![e]),
             };
             // Check result.
-            let expected_result =
-                expected_result.map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
+            let expected_result = case
+                .expected_result
+                .map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
             assert_results_eq(&ast, task_str, &actual_result, &expected_result);
         }
     }
@@ -301,7 +380,7 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
     ast: &ast::Program,
     task_str: &str,
     actual_result: &Result<T, Vec<Error>>,
-    expected_result: &Result<T, Vec<(&str, &str)>>,
+    expected_result: &Result<T, Vec<TestError<'_>>>,
 ) {
     match (actual_result, expected_result) {
         (_, Err(expected_errors)) if expected_errors.is_empty() => {
@@ -318,10 +397,10 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
         }
 
         (Ok(actual_ok), Err(expected_errors)) => {
-            let (expected_loc, expected_msg) = expected_errors[0];
+            let expected = expected_errors[0];
             panic!(
                 "Expected error at {:?} with message {:?} but got {:?} when {}",
-                expected_loc, expected_msg, actual_ok, task_str,
+                expected.loc, expected.msg, actual_ok, task_str,
             );
         }
 
@@ -334,18 +413,15 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
         }
 
         (Err(actual_errors), Err(expected_errors)) => {
-            for (actual_error, (expected_loc, expected_msg)) in
-                actual_errors.iter().zip(expected_errors.iter())
-            {
+            for (actual_error, expected) in actual_errors.iter().zip(expected_errors.iter()) {
                 let span = actual_error.0.spans[0].span;
                 let file = ast.codemap().look_up_span(span).file;
-                if *expected_loc != file.source_slice(span)
-                    || *expected_msg != actual_error.0.message
+                if expected.loc != file.source_slice(span) || expected.msg != actual_error.0.message
                 {
                     let formatted_actual_errors = format_actual_errors(&ast, actual_errors);
                     panic!(
                         "Expected error at {:?} with message {:?} but got a different error when {}:\n{}",
-                        expected_loc, expected_msg, task_str, formatted_actual_errors,
+                        expected.loc, expected.msg, task_str, formatted_actual_errors,
                     );
                 }
             }

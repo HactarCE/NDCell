@@ -704,44 +704,38 @@ impl Compiler {
         build_contents: impl FnOnce(&mut Self, Loop) -> Fallible<()>,
         build_prelatch: impl FnOnce(&mut Self, Loop) -> Fallible<()>,
     ) -> Fallible<()> {
-        let preheader = self.append_basic_block("preheader");
-        let header = self.append_basic_block("header");
-        let prelatch = self.append_basic_block("prelatch");
-        let latch = self.append_basic_block("latch");
-        let exit = self.append_basic_block("exit");
-
-        // TODO: bröther may I have some `lööp`s
-        let the_loop = Loop {
-            preheader,
-            header,
-            prelatch,
-            latch,
-            exit,
+        // bröther may I have some `lööp`s
+        let lööp = Loop {
+            preheader: self.append_basic_block("preheader"),
+            header: self.append_basic_block("header"),
+            prelatch: self.append_basic_block("prelatch"),
+            latch: self.append_basic_block("latch"),
+            exit: self.append_basic_block("exit"),
         };
-        self.loop_stack.push(the_loop);
+        self.loop_stack.push(lööp);
 
-        self.builder().build_unconditional_branch(preheader);
+        self.builder().build_unconditional_branch(lööp.preheader);
 
         // Build preheader.
-        self.builder().position_at_end(preheader);
-        self.builder().build_unconditional_branch(header);
+        self.builder().position_at_end(lööp.preheader);
+        self.builder().build_unconditional_branch(lööp.header);
 
         // Build header and loop contents.
-        self.builder().position_at_end(header);
-        build_contents(self, the_loop)?;
+        self.builder().position_at_end(lööp.header);
+        build_contents(self, lööp)?;
         // `build_contents()` branches for us.
 
         // Build prelatch.
-        self.builder().position_at_end(prelatch);
-        build_prelatch(self, the_loop)?;
-        self.builder().build_unconditional_branch(latch);
+        self.builder().position_at_end(lööp.prelatch);
+        build_prelatch(self, lööp)?;
+        self.builder().build_unconditional_branch(lööp.latch);
 
         // Build latch.
-        self.builder().position_at_end(latch);
-        self.builder().build_unconditional_branch(header);
+        self.builder().position_at_end(lööp.latch);
+        self.builder().build_unconditional_branch(lööp.header);
 
         // Build exit.
-        self.builder().position_at_end(exit);
+        self.builder().position_at_end(lööp.exit);
         Ok(())
     }
 

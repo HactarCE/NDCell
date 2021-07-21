@@ -54,7 +54,7 @@ Some types are incomplete without an additional value. This value is written ins
 
 - :data:`Array` depends on its shape (:data:`VectorSet`)
 
-  - For example, ``Array[[-1, -1]..[+1, +1]]`` is the type of an :data:`Array` that is 2D and contains the 9 cells in the rectangle from ``[-1, -1]`` to ``[+1, +1]``.
+  - For example, ``Array[[-1, -1]..[1, 1]]`` is the type of an :data:`Array` that is 2D and contains the 9 cells in the rectangle from ``[-1, -1]`` to ``[1, 1]``.
 
 - :data:`Pattern` depends on the number of cells in the array that it matches (:data:`Integer`)
 
@@ -167,21 +167,21 @@ Collection types
 
   A :data:`Vector` literal consists of a list of integer expressions separated by commas surrounded by square brackets. Examples:
 
-  - ``[3, -1, 0]`` (:data:`Vector` of length ``3`` with X component ``3``, Y component ``-1``, Z component ``0``)
-  - ``[6]`` (:data:`Vector` of length ``1`` with X component ``6``)
-  - ``[a, b]`` (:data:`Vector` of length ``2`` with X compoment ``a`` and Y component ``b``, given ``a`` and ``b`` are variables containing integers)
+  - ``[3, -1, 0]`` has length ``3``, X component ``3``, Y component ``-1``, and Z component ``0``
+  - ``[6]`` has length ``1`` and X component ``6``
+  - ``[a, b]`` has length ``2``, X compoment ``a`` and Y component ``b``, given ``a`` and ``b`` are variables containing integers
 
   A :data:`Vector` literal may contain other vectors, which are concatenated to produce the result. Examples:
 
-  - ``[v1, -3, v2]`` (:data:`Vector` constructed by concatenating ``v1``, ``[-3]``, and ``v2``)
+  - Suppose ``v1 = [1, 2]`` and ``v2 = [7]``; then ``[v1, -3, v2]`` is equivalent is ``[1, 2, -3, 7]``
 
   A :data:`Vector` can also be constructed using :func:`vec()` and its variants.
 
-.. data:: Pattern
+.. data:: Array
 
   :status: Partially implemented
 
-  A configuration of cells. Patterns with different shapes are different types.
+  A configuration of cells. Arrays with different shapes are different types.
 
 .. _filter-types:
 
@@ -190,36 +190,54 @@ Set/filter types
 
 .. data:: IntegerSet
 
-  :status: Implementation in progress
+  :status: Not yet implemented
   :operators: :ref:`set-operators`
 
   A finite set of :data:`Integer`.
 
-  An :data:`IntegerSet` literal consists of a comma-separated list of :data:`Integer` or :data:`IntegerSet` surrounded by curly braces. Examples:
+  An :data:`IntegerSet` literal consists of a comma-separated list of :data:`Integer` and :data:`IntegerSet` values surrounded by curly braces. Examples:
 
-  - ``{}`` constructs the empty set, containing no integers
-  - ``{42}`` constructs a set containing only the integer 42
-  - ``{1, 2, 3, 4}`` constructs a set containing the integers 1, 2, 3, and 4
+  - ``{42}`` is a set containing only the integer 42
+  - ``{1, 2, 3, 4}`` is a set containing the integers 1, 2, 3, and 4
   - ``{1, 2, 3, 4,}`` is also allowed (but discouraged unless spanning multiple lines)
+
+  The type of an empty set literal (``{}``) is ambiguous, so the empty :data:`IntegerSet` is written ``IntegerSet.empty``.
 
   An :data:`IntegerSet` can also be constructed using a range literal consisting of two integers separated by ``..``. Examples:
 
   - ``1..5`` is equivalent to ``{1, 2, 3, 4, 5}``
-  - ``-3..+3`` contains all integers from -3 to 3 (inclusive)
-  - ``{-4..-1, 1..99}`` contains all integers from -4 to 99 (inclusive) *except* 0
+  - ``-3..+3`` is a set containing all integers from -3 to 3 (inclusive)
+  - ``{-1, 1..99, 101..120}`` is a set containing all integers from -1 to 120 (inclusive) *except* 0 and 100
 
 .. data:: CellSet
 
-  :status: Partially implemented
+  :status: Not yet implemented
 
   This type's design is still a work in progress.
 
 .. data:: VectorSet
 
-  :status: Implementation in progress
+  :status: Partially implemented
   :operators: :ref:`set-operators`
 
   A finite set of :data:`Vector`, all with the same length.
+
+  A :data:`VectorSet` literal consists of a comma-separated list of :data:`Vector`, :data:`VectorSet`, and :data:`Integer` values surrounded by curly braces. At least one value must be a :data:`Vector` or :data:`VectorSet`; otherwise it is an :data:`IntegerSet` literal. All values are converted to the longest vector in the set. (See :ref:`vector-vector-conversion` and :ref:`integer-vector-conversion`.) Examples:
+
+  - ``{[1, 2], [3, 4]}`` is a set containing the vectors ``[1, 2]`` and ``[3, 4]``
+  - ``{[18], 12, [9, -4, 6]}`` is a set containing
+
+  The type of an empty set literal (``{}``) is ambiguous, so the empty :data:`VectorSet` for a length ``l`` is written ``VectorSet[l].empty``. Examples:
+
+  - ``VectorSet[3].empty`` is the empty set of vectors with length 3.
+  - ``VectorSet[NDIM].empty`` is the empty set of vectors with length :data:`NDIM`.
+
+  A :data:`VectorSet` can also be constructed using a range literal consisting of two vectors separated by ``..``, or a vector and an integer (in any order) separated by ``..``. Examples:
+
+  - ``[1, 2]..[3, 4]`` is a set containing all vectors in the rectangle from ``[1, 2]`` to ``[3, 4]`` (inclusive)
+  - ``{}``
+
+  The volume of the bounding rectangle of a :data:`VectorSet` cannot exceed 65536.
 
 .. data:: Pattern
 

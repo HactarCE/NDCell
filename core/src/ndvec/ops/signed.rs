@@ -15,7 +15,7 @@ impl<D: DimFor<N>, N: NdVecNum + Signed> NdVec<D, N> {
     }
 }
 
-// Implement negation of an NdVec (i.e. negate each coordinate).
+// Implement negation of an NdVec (i.e., negate each coordinate).
 impl<D: DimFor<N>, N: NdVecNum + Neg> Neg for NdVec<D, N>
 where
     for<'a> &'a N: Neg<Output = N>,

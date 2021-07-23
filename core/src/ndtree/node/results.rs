@@ -121,7 +121,7 @@ impl HashLifeResultParamsBuilder {
         // TODO: return Result from this method so that bad step sizes don't
         // panic.
 
-        // The number of trailing zeros (i.e. index of the first `1` bit) gives
+        // The number of trailing zeros (i.e., index of the first `1` bit) gives
         // the greatest power-of-2 multiple.
         let log2_step_size = generations
             .trailing_zeros()

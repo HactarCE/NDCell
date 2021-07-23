@@ -268,7 +268,7 @@ impl<D: Dim> NdTree<D> {
             .enumerate()
             .map(|(child_index, child)| {
                 // Invert the bits of the child index to get the index of the
-                // opposite child, which is the one closest to the center (e.g.
+                // opposite child, which is the one closest to the center (e.g.,
                 // SE child of NE child).
                 let opposite_child_index = child_index ^ child_index_bitmask;
                 // If any grandchild other than the one closest to the center is
@@ -465,10 +465,10 @@ impl<D: Dim> NdTree<D> {
         // cells from that picture at one layer above the current root node.
         // This result will be the new root node.
         //
-        // If we wanted to keep the same center (i.e. `delta` = 0) we would pass
-        // an offset of `root.big_len() / 2` along each axis, because that would
-        // center the `#` in the picture. To move the center any other distance,
-        // we just add the `delta` vector.
+        // If we wanted to keep the same center (i.e., `delta` = 0) we would
+        // pass an offset of `root.big_len() / 2` along each axis, because that
+        // would center the `#` in the picture. To move the center any other
+        // distance, we just add the `delta` vector.
         let new_root = node_pool.get_offset_child(&(delta + &(root.big_len() / 2)), sources);
 
         let new_root = ArcNode::from(new_root);

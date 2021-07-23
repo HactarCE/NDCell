@@ -149,7 +149,7 @@ impl Compiler {
     /// # Safety
     ///
     /// The [`llvm::JitFunction`] returned by this function must be dropped on
-    /// the same thread it was created (i.e. the one that called this function)
+    /// the same thread it was created (i.e., the one that called this function)
     /// _after_ the last reference to the [`CompiledFunction`] returned by this
     /// function is dropped. Prefer [`Compiler::compile()`] instead.
     unsafe fn compile_on_same_thread(
@@ -626,7 +626,7 @@ impl Compiler {
         (new_bb, phi)
     }
     /// Returns whether the current LLVM BasicBlock still needs a terminator
-    /// instruction (i.e. whether it does NOT yet have one).
+    /// instruction (i.e., whether it does NOT yet have one).
     pub fn needs_terminator(&mut self) -> bool {
         self.builder()
             .get_insert_block()
@@ -808,7 +808,7 @@ impl Compiler {
         let arg_type = lhs.as_basic_value_enum().get_type();
 
         // LLVM has intrinsics that perform some math with overflow checks.
-        // First, get the name of the intrinsic we want to use (e.g.
+        // First, get the name of the intrinsic we want to use (e.g.,
         // "llvm.sadd.with.overflow.i64" for signed addition on i64).
         let intrinsic_name = format!(
             "llvm.{}.with.overflow.{}",
@@ -941,7 +941,7 @@ impl Compiler {
 
     /// Builds instructions to check for division by zero and overflow before
     /// integer division. Control flow only proceeds if neither error occurs
-    /// (i.e. it is safe to perform division).
+    /// (i.e., it is safe to perform division).
     fn build_int_div_checks<M: llvm::IntMathValue>(
         &mut self,
         error_span: Span,

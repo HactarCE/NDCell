@@ -39,24 +39,25 @@ impl fmt::Display for Scale {
 }
 
 impl Scale {
-    /// The lower scale limit; i.e. the furthest the user can zoom out.
+    /// The lower scale limit; i.e., the furthest the user can zoom out.
     ///
     /// `f64` has an 11-bit exponent and so cannot represent values above around
     /// 2^1022. For this reason we don't allow zooming out past around 2^1000:1.
     /// This restriction could probably be relaxed if anyone is actually trying
     /// to view patterns as large as 2^1000 cells across.
     const LOWER_LIMIT: f64 = -1000.0;
-    /// The upper scale limit; i.e. the furthest the user can zoom in.
+    /// The upper scale limit; i.e., the furthest the user can zoom in.
     ///
     /// For zooming in, we do not allow zoom scales larger than 1:256, just
     /// because we have to set a limit somewhere.
     const UPPER_LIMIT: f64 = 8.0;
 
-    /// Creates a `Scale` from a scale factor's base-2 logarithm (e.g. `-3.0` = 1:8 scale).
+    /// Creates a `Scale` from a scale factor's base-2 logarithm (e.g., `-3.0` =
+    /// 1:8 scale).
     pub fn from_log2_factor(log2_factor: R64) -> Self {
         Self { log2_factor }
     }
-    /// Creates a `Scale` from a scale factor (e.g. `0.25` = 1:4 scale).
+    /// Creates a `Scale` from a scale factor (e.g., `0.25` = 1:4 scale).
     ///
     /// # Panics
     ///
@@ -85,7 +86,7 @@ impl Scale {
         let log2_target_h: R64 = R64::from_u32(target_size.1).unwrap().log2();
 
         // Divide `cells_size` by `target_size` to get the number of cells per
-        // pixel (i.e. scale factor).
+        // pixel (i.e., scale factor).
         let log2_scale_factor =
             R64::min(log2_target_w - log2_cells_w, log2_target_h - log2_cells_h);
         Self::from_log2_factor(log2_scale_factor)
@@ -104,11 +105,12 @@ impl Scale {
         }
     }
 
-    /// Returns the base-2 logarithm of the scale factor (e.g. -2.0 = 4:1 scale).
+    /// Returns the base-2 logarithm of the scale factor (e.g., -2.0 = 4:1
+    /// scale).
     pub fn log2_factor(self) -> R64 {
         self.log2_factor
     }
-    /// Returns the inverse scale factor (e.g. 4.0 = 4:1 scale).
+    /// Returns the inverse scale factor (e.g., 4.0 = 4:1 scale).
     pub fn inv_factor(self) -> FixedPoint {
         FixedPoint::from(-self.log2_factor()).exp2()
     }

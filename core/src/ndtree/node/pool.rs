@@ -447,7 +447,7 @@ impl<D: Dim> NodePool<D> {
                     .map(|(child_index, child)| {
                         // Invert the bits of the child index to get the index
                         // of the opposite child, which is the one closest to
-                        // the center (e.g. SE child of NE child).
+                        // the center (e.g., SE child of NE child).
                         let opposite_child_index = child_index ^ child_index_bitmask;
                         // If any grandchild other than the one closest to the
                         // center is non-empty, then we can't shrink any more.

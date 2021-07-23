@@ -764,7 +764,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
         self.worker_thread.reset()
     }
     /// Requests a one-off simulation from the worker thread. Returns `true` if
-    /// successful, or false if another running operation prevented it (e.g.
+    /// successful, or false if another running operation prevented it (e.g.,
     /// drawing or continuous simulation).
     fn try_step(&mut self, step_size: BigInt) -> Result<bool> {
         if self.is_drawing() {
@@ -801,7 +801,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
     }
     /// Starts continuous simulation; does nothing if it is already running.
     /// Returns `true` if the simulation is now running, or false if another
-    /// running operation prevented starting it (e.g. drawing or some other
+    /// running operation prevented starting it (e.g., drawing or some other
     /// background task).
     fn start_running(&mut self) -> Result<bool> {
         if self.is_running() {
@@ -844,7 +844,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
             self.start_running()
         }
     }
-    /// Returns whether the simulation is running (i.e. stepping forward every
+    /// Returns whether the simulation is running (i.e., stepping forward every
     /// frame automatically with no user input).
     pub fn is_running(&self) -> bool {
         self.work_type == Some(WorkType::SimContinuous)

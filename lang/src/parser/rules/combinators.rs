@@ -40,9 +40,9 @@ pub struct Surround<R> {
     /// Inner syntax rule.
     inner: R,
 
-    /// Symbol at start (e.g. left paren).
+    /// Symbol at start (e.g., left paren).
     start: Token,
-    /// Symbol at end (e.g. right paren).
+    /// Symbol at end (e.g., right paren).
     end: Token,
 }
 impl<R> Surround<R> {
@@ -100,11 +100,11 @@ pub struct List<R> {
     /// Syntax rule for each element of the list.
     inner: R,
 
-    /// Separator (e.g. comma).
+    /// Separator (e.g., comma).
     sep: Token,
-    /// Symbol at start (e.g. left paren).
+    /// Symbol at start (e.g., left paren).
     start: Token,
-    /// Symbol at end (e.g. right paren).
+    /// Symbol at end (e.g., right paren).
     end: Token,
 
     /// User-friendly name for separator.

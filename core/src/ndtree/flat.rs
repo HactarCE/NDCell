@@ -34,7 +34,7 @@ pub enum FlatNdTreeNode<D: Dim, T> {
 }
 
 impl<D: Dim, T> FlatNdTree<D, T> {
-    /// Returns the number of flat layers; i.e. how many times you have to
+    /// Returns the number of flat layers; i.e., how many times you have to
     /// follow a pointer (including getting the initial node) to reach a leaf.
     /// The minimum is 0.
     pub fn layers(&self) -> usize {

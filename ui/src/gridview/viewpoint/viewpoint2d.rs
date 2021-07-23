@@ -173,7 +173,7 @@ impl Viewpoint<Dim2D> for Viewpoint2D {
             .scale()
             .units_to_cells(target_pixels_size.to_fixedvec());
         // Compute the cell vector pointing from the center of the screen to the
-        // top right corner; i.e. the "half diagonal."
+        // top right corner; i.e., the "half diagonal."
         let half_diag: FixedVec2D = target_cells_size / 2.0;
 
         // Round to render cell boundaries.

@@ -207,7 +207,7 @@ impl<'a> Parser<'a> {
             .unwrap_or_else(|| self.expected(rule))
     }
     /// Applies a syntax rule starting at the cursor, returning `None` if the
-    /// syntax rule definitely doesn't match (i.e. its `might_match()`
+    /// syntax rule definitely doesn't match (i.e., its `might_match()`
     /// implementation returned false).
     pub fn try_parse<R: SyntaxRule>(
         &mut self,

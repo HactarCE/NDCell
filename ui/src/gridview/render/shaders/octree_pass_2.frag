@@ -30,7 +30,7 @@ void main() {
     gl_FragDepth = 1.0; // Assume far plane.
 
     // Sample the four nearest points on the `initial_t_texture` and use the
-    // minimum one (i.e. start closest to the camera).
+    // minimum one (i.e., start closest to the camera).
     vec2 sample_uv = (ndc_xy * 0.5 + 0.5) * vec2(initial_t_tex_dimensions - 1u);
     ivec2 sample_uv_floor = ivec2(floor(sample_uv));
     float t_lower_bound = min(min(

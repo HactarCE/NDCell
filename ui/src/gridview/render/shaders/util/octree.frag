@@ -52,7 +52,7 @@ vec3 entryChild(vec3 t0, vec3 t1) {
     // At what `t` does the ray cross the middle of the root node (considering
     // only one axis at a time)?
     vec3 tm = mix(t0, t1, 0.5);
-    // At what `t` has the ray entered the node along all axes; i.e. it has
+    // At what `t` has the ray entered the node along all axes; i.e., it has
     // actually entered the node?
     float max_t0 = vec3_max(t0);
     // Return 0.5 for each axis where the ray crosses the halfway point before

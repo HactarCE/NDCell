@@ -116,8 +116,8 @@ pub fn const_vector(v: impl IntoIterator<Item = LangInt>) -> VectorValue {
     VectorType::const_vector(&v.into_iter().map(const_int).collect_vec())
 }
 
-/// Returns the name of an LLVM type used in names of intrinsics (e.g. "i32" for
-/// a 32-bit integer, or "v3i64" for a vector of three 64-bit integers).
+/// Returns the name of an LLVM type used in names of intrinsics (e.g., "i32"
+/// for a 32-bit integer, or "v3i64" for a vector of three 64-bit integers).
 pub fn intrinsic_type_name(ty: impl BasicType<'static>) -> String {
     match ty.as_basic_type_enum() {
         BasicTypeEnum::ArrayType(_) => unimplemented!(),

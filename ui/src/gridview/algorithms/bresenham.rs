@@ -8,7 +8,7 @@ use ndcell_core::prelude::*;
 /// generated using an N-dimensional generalized version of Bresenham's
 /// line-drawing algorithm.
 ///
-/// Note that the points may be in reverse order (i.e. from `end` to `start`).
+/// Note that the points may be in reverse order (i.e., from `end` to `start`).
 pub fn line<D: Dim>(mut start: BigVec<D>, mut end: BigVec<D>) -> impl Iterator<Item = BigVec<D>> {
     let mut delta = &end - &start;
 

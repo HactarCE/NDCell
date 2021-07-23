@@ -207,7 +207,7 @@ mod tests {
     use super::*;
 
     /// Check that values can be converted to/from their bytes representation
-    /// with no mangling (i.e. that [`Param::bytes_to_value()`] and
+    /// with no mangling (i.e., that [`Param::bytes_to_value()`] and
     /// [`Param::value_to_bytes()`] are consistent with each other). There is a
     /// separate test in [`crate::tests`] to verify that these agree with LLVM's
     /// representation.

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ $# -eq 0 ]; then
-    echo "Provide a version number as argument; e.g."
+    echo "Provide a version number as argument; e.g.,"
     echo
     echo "$0 1.0.0"
     exit 1

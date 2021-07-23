@@ -6,8 +6,8 @@ use super::*;
 use crate::num::{Integer, R64};
 
 // Implement floored and ceiled euclidean division between an NdVec and a scalar
-// (i.e. divide each coordinate by the scalar). Note that these are not the same
-// as Rust's normal integer division operator.
+// (i.e., divide each coordinate by the scalar). Note that these are not the
+// same as Rust's normal integer division operator.
 //
 // These are the only operations not implemented as traits.
 impl<D: DimFor<N>, N: NdVecNum + Integer> NdVec<D, N> {
@@ -55,9 +55,9 @@ impl<D: DimFor<N>, N: NdVecNum + Integer> NdVec<D, N> {
     }
 }
 
-// Implement division and modulo between an NdVec and a scalar (i.e. divide each
-// coordinate by the scalar). This is only implemented for non-integer NdVecs
-// because integers will usually want `div_floor()` instead.
+// Implement division and modulo between an NdVec and a scalar (i.e., divide
+// each coordinate by the scalar). This is only implemented for non-integer
+// NdVecs because integers will usually want `div_floor()` instead.
 
 impl_multi_ndvec_ops!(impl / for FixedPoint);
 impl_multi_ndvec_ops!(impl % for FixedPoint);

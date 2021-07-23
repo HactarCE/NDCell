@@ -213,7 +213,7 @@ fn parse_rle_size(s: &str) -> RleResult<usize> {
 /// CXRLE header contents.
 #[derive(Debug, Default, Clone)]
 pub struct CxrleHeader {
-    /// Position of bottom-left of pattern (i.e. most negative coordinates).
+    /// Position of bottom-left of pattern (i.e., most negative coordinates).
     ///
     /// This value is using NDCell coordinates, with Y increasing upwards.
     /// Coordinates are negated when writing/reading to/from RLE string.

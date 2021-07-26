@@ -92,6 +92,11 @@ impl From<ast::BinaryOp> for Option<BinaryMathOp> {
     }
 }
 impl BinaryMathOp {
+    /// Returns whether this operation is defined for sets.
+    fn is_set_op(self) -> bool {
+        matches!(self, Self::Or | Self::And | Self::Sub | Self::Xor)
+    }
+
     /// Evaluates this operation for two integers.
     fn eval_on_integers(self, span: Span, lhs: LangInt, rhs: LangInt) -> Result<LangInt> {
         // Perform the operation.
@@ -134,13 +139,51 @@ impl BinaryMathOp {
         lhs: Spanned<RtVal>,
         rhs: Spanned<RtVal>,
     ) -> Fallible<RtVal> {
-        if let (Ok(l), Ok(r)) = (lhs.clone().as_integer(), rhs.clone().as_integer()) {
-            self.eval_on_integers(span, l, r)
-                .map(RtVal::Integer)
-                .map_err(|e| ctx.error(e))
-        } else {
-            Err(ctx.error(Error::invalid_arguments(span, self, &[lhs.ty(), rhs.ty()])))
+        let invalid_args = Error::invalid_arguments(span, self, &[lhs.ty(), rhs.ty()]);
+
+        match (&lhs.node, &rhs.node) {
+            // Math operations.
+            (RtVal::Integer(l), RtVal::Integer(r)) => {
+                self.eval_on_integers(span, *l, *r).map(RtVal::Integer)
+            }
+
+            // Set operations.
+            (RtVal::EmptySet, RtVal::EmptySet) if self.is_set_op() => Ok(RtVal::EmptySet),
+            (RtVal::IntegerSet(l), _) if self.is_set_op() => {
+                let r = rhs.as_integer_set().map_err(|e| ctx.error(e))?;
+                match self {
+                    Self::Or => Err(Error::unimplemented(span)),
+                    Self::And => Err(Error::unimplemented(span)),
+                    Self::Sub => Err(Error::unimplemented(span)),
+                    Self::Xor => Err(Error::unimplemented(span)),
+                    _ => Err(internal_error_value!("invalid set op")),
+                }
+            }
+            (RtVal::CellSet(l), _) => {
+                let r = rhs.as_cell_set().map_err(|e| ctx.error(e))?;
+                match self {
+                    Self::Or => Err(Error::unimplemented(span)),
+                    Self::And => Err(Error::unimplemented(span)),
+                    Self::Sub => Err(Error::unimplemented(span)),
+                    Self::Xor => Err(Error::unimplemented(span)),
+                    _ => Err(internal_error_value!("invalid set op")),
+                }
+            }
+            (RtVal::VectorSet(l), _) => {
+                let r = rhs.as_vector_set(l.vec_len()).map_err(|e| ctx.error(e))?;
+                match self {
+                    Self::Or => l.union(span, &*r),
+                    Self::And => l.intersection(span, &*r),
+                    Self::Sub => l.difference(span, &*r),
+                    Self::Xor => l.symmetric_difference(span, &*r),
+                    _ => Err(internal_error_value!("invalid set op")),
+                }
+                .map(RtVal::from)
+            }
+
+            _ => Err(invalid_args),
         }
+        .map_err(|e| ctx.error(e))
     }
 
     /// Compiles this operation for two LLVM math values.

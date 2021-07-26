@@ -115,6 +115,30 @@ impl RtVal {
             _ => None,
         }
     }
+
+    /// Returns whether this value is a set of any type.
+    pub fn is_set(&self) -> bool {
+        matches!(
+            self,
+            RtVal::EmptySet | RtVal::IntegerSet(_) | RtVal::CellSet(_) | RtVal::VectorSet(_),
+        )
+    }
+}
+
+impl From<IntegerSet> for RtVal {
+    fn from(set: IntegerSet) -> Self {
+        Self::IntegerSet(Arc::new(set))
+    }
+}
+impl From<CellSet> for RtVal {
+    fn from(set: CellSet) -> Self {
+        Self::CellSet(set)
+    }
+}
+impl From<VectorSet> for RtVal {
+    fn from(set: VectorSet) -> Self {
+        Self::VectorSet(Arc::new(set))
+    }
 }
 
 pub trait SpannedRuntimeValueExt {
@@ -151,8 +175,11 @@ pub trait SpannedRuntimeValueExt {
     /// Returns the value inside if this is a `CellSet` variant or subtype of
     /// one; otherwise returns a type error.
     fn as_cell_set(self) -> Result<CellSet>;
-    /// Returns the value inside if this is a `VectorSet` variant of length
-    /// `len` or subtype of one; otherwise returns a type error.
+    /// Returns the value inside if this is a `VectorSet`; otherwise returns a
+    /// type error.
+    ///
+    /// `vec_len` is merely a suggestion, used when casting an `EmptySet`. **The
+    /// returned set may not have the specified `vec_len`.**
     fn as_vector_set(self, vec_len: usize) -> Result<Arc<VectorSet>>;
     /// Returns the value inside if this is a `Pattern` variant or subtype of
     /// one; otherwise returns a type error.

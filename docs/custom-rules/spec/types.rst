@@ -78,6 +78,7 @@ Subtyping
 
 - :data:`Cell` and :data:`Tag` are subtypes of :data:`CellSet`
 - :data:`Array` is a subtype of :data:`Pattern`
+- :data:`EmptySet` is a subtype of :data:`IntegerSet`, :data:`CellSet`, and :data:`VectorSet`
 
 See :ref:`subtype-coercion` for more about subtyping.
 
@@ -125,7 +126,7 @@ Primitive types
 
   A cell state, represented using an 8-bit unsigned integer. This means the minimum value is ``0`` and the maximum value is ``255``, so an automaton cannot have more than 256 states. :data:`Cell` values are always within the range of valid cell states in a cellular automaton. For example, an automaton with 10 states has a maximum cell state ID of ``9``.
 
-  :data:`Cell` is a subtype of :data:`CellSet`. When used in place of a :data:`CellSet`, a :data:`Cell` represents a set containing only the one cell state.
+  :data:`Cell` is a subtype of :data:`CellSet`. When used in place of a :data:`CellSet`, a :data:`Cell` coerces to a set containing only the one cell state. See :ref:`subtype-coercion` for more about subtyping.
 
   A :data:`Cell` literal consists of the ``#`` operator followed by the cell state ID. Examples:
 
@@ -188,6 +189,16 @@ Collection types
 Set/filter types
 ================
 
+.. data:: EmptySet
+
+  :status: Fully implemented
+  :operators: :ref:`set-operators`
+  :supertypes: :data:`IntegerSet`, :data:`CellSet`, :data:`VectorSet`
+
+  The empty set of any type. The empty set literal is ``{}``.
+
+  :data:`EmptySet` is a subtype of :data:`IntegerSet`, :data:`CellSet`, and :data:`VectorSet`. When used in place of a :data:`IntegerSet`, :data:`CellSet`, or :data:`VectorSet`, a :data:`EmptySet` coerces to an empty set of that of that type. See :ref:`subtype-coercion` for more about subtyping.
+
 .. data:: IntegerSet
 
   :status: Not yet implemented
@@ -201,7 +212,7 @@ Set/filter types
   - ``{1, 2, 3, 4}`` is a set containing the integers 1, 2, 3, and 4
   - ``{1, 2, 3, 4,}`` is also allowed (but discouraged unless spanning multiple lines)
 
-  The type of an empty set literal (``{}``) is ambiguous, so the empty :data:`IntegerSet` is written ``IntegerSet.empty``.
+  An empty set literal (``{}``) has type ``EmptySet`` rather than ``IntegerSet``, so the empty :data:`IntegerSet` is written ``IntegerSet.empty``. This is usually unnecessary, though, because ``EmptySet`` coerces to an ``IntegerSet`` when used where one would be expected. (See :ref:`subtype-coercion`.)
 
   An :data:`IntegerSet` can also be constructed using a range literal consisting of two integers separated by ``..``. Examples:
 
@@ -215,6 +226,8 @@ Set/filter types
 
   This type's design is still a work in progress.
 
+  An empty set literal (``{}``) has type ``EmptySet`` rather than ``CellSet``, so the empty :data:`CellSet` is written ``CellSet.empty``. This is usually unnecessary, though, because ``EmptySet`` coerces to an ``CellSet`` when used where one would be expected. (See :ref:`subtype-coercion`.)
+
 .. data:: VectorSet
 
   :status: Partially implemented
@@ -227,7 +240,7 @@ Set/filter types
   - ``{[1, 2], [3, 4]}`` is a set containing the vectors ``[1, 2]`` and ``[3, 4]``
   - ``{[18], 12, [9, -4, 6]}`` is a set containing
 
-  The type of an empty set literal (``{}``) is ambiguous, so the empty :data:`VectorSet` for a length ``l`` is written ``VectorSet[l].empty``. Examples:
+  An empty set literal (``{}``) has type ``EmptySet`` rather than ``VectorSet``, so the empty :data:`VectorSet` for a vector length ``l`` is written ``VectorSet[l].empty``. This is usually unnecessary, though, because ``EmptySet`` coerces to an ``VectorSet`` when used where one would be expected. (See :ref:`subtype-coercion`.) Examples:
 
   - ``VectorSet[3].empty`` is the empty set of vectors with length 3.
   - ``VectorSet[NDIM].empty`` is the empty set of vectors with length :data:`NDIM`.

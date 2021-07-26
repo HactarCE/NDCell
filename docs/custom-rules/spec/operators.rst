@@ -79,7 +79,7 @@ Given two values ``a`` and ``b``:
 - ``a << b`` — `Bitshift left <https://en.wikipedia.org/wiki/Logical_shift>`_
 - ``~a`` — `Bitwise NOT <https://en.wikipedia.org/wiki/Bitwise_operation#NOT>`_
 
-All of these operations can be applied to integers and vectors. Vector operations are applied componentwise.
+All of these operations can be applied to values of type :data:`Integer` and :data:`Vector`. Vector operations are applied componentwise.
 
 If an operation is applied to two vectors of different lengths, one vector is cast to the length of the other before the operation is applied. (See :ref:`vector-vector-conversion`.)
 
@@ -95,14 +95,14 @@ Bitshifting by less than 0 or more than 64 causes an error. (See :ref:`errors`.)
 Set operators
 =============
 
-Given two values ``a`` and ``b``:
+Given two sets ``a`` and ``b`` of the same type:
 
-- ``a & b`` — `Intersection <https://en.wikipedia.org/wiki/Intersection_(set_theory)>`_
 - ``a | b`` — `Union <https://en.wikipedia.org/wiki/Union_(set_theory)>`_
+- ``a & b`` — `Intersection <https://en.wikipedia.org/wiki/Intersection_(set_theory)>`_
+- ``a - b`` — `Set difference <https://en.wikipedia.org/wiki/Complement_(set_theory)#Relative_complement>`_
 - ``a ^ b`` — `Symmetric difference <https://en.wikipedia.org/wiki/Symmetric_difference>`_
-- ``a &~ b`` — `Relative complement of B in A <https://en.wikipedia.org/wiki/Complement_(set_theory)#Relative_complement>`_
 
-All of these operations can be applied to any :ref:`set/filter type <filter-types>` or its subtypes.
+All of these operations can be applied to values of type :data:`EmptySet`, :data:`IntegerSet`, :data:`CellSet`, and :data:`VectorSet`. Both values must have the same type, or one must be a subtype of the other. (See :ref:`subtype-coercion`)
 
 .. _comparison-operators:
 
@@ -118,7 +118,7 @@ Given two values ``a`` and ``b``:
 - ``a <= b`` — Is ``a`` less than or equal to ``b``?
 - ``a >= b`` — Is ``a`` greater than or equal to ``b``?
 
-All of these comparisons can be applied to integers and vectors. ``==`` and ``!=`` can be applied to cell states and patterns. Vector comparisons are applied componentwise.
+All of these comparisons can be applied to values of type :data:`Integer` and :data:`Vector`. ``==`` and ``!=`` can be applied to cell states and patterns. Vector comparisons are applied componentwise.
 
 If a comparison is applied to two vectors of different lengths, the shorter vector is to the length of the longer one before the operation is applied. (See :ref:`vector-vector-conversion`.)
 
@@ -156,7 +156,7 @@ Vector indexing
 
 - ``v[n]``
 
-Indexing a vector ``v`` by an integer ``n`` results in the ``n``-th component of ``v``. The X component has index ``0``, the Y component has index ``1``, etc. Indexing with a value ``n`` that is not between ``0`` and ``v.len - 1`` (inclusive) causes an error. (See :ref:`errors`.)
+Indexing a :data:`Vector` ``v`` by an integer ``n`` results in the ``n``-th component of ``v``. The X component has index ``0``, the Y component has index ``1``, etc. Indexing with a value ``n`` that is not between ``0`` and ``v.len - 1`` (inclusive) causes an error. (See :ref:`errors`.)
 
 .. _is-operator:
 

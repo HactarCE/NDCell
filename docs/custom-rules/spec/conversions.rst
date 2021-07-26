@@ -13,13 +13,16 @@ Some types in NDCell are implicitly converted (coerced) to other types when used
 Subtype coercion
 ================
 
-Some types are `subtypes`__ of other types; this is implemented by coercing the subtype to the supertype when necessary. For example, a :data:`Cell` is implicitly converted to a :data:`CellSet` when used where a :data:`CellSet` is required. Here are the rules for subtype coercion:
+Some types are `subtypes`__ of other types; this is implemented by coercing the subtype to the supertype when necessary. For example, a :data:`Cell` is implicitly converted to a :data:`CellSet` when used anywhere that a :data:`CellSet` is expected. Here are the rules for subtype coercion:
 
 __ https://en.wikipedia.org/wiki/Subtyping
 
 - The :data:`CellSet` coerced from a :data:`Cell` contains only that one cell state
 - The :data:`CellSet` coerced from a :data:`Tag` contains all cell states with a :ref:`truthy <boolean-conversion>` value for that tag
 - The :data:`Pattern` coerced from an :data:`Array` accepts only that one array.
+- The :data:`IntegerSet`, :data:`CellSet`, or :data:`VectorSet` coerced from an :data:`EmptySet` contains no elements.
+
+Readers familiar with C++ might find it useful to think of these coercions as implicit converting constructors.
 
 .. _boolean-conversion:
 

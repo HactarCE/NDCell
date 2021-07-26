@@ -21,6 +21,8 @@ use super::VectorSet;
 /// corresponding variant there if needed.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Type {
+    /// No value.
+    Null,
     /// 64-bit signed integer, also used for boolean values.
     Integer,
     /// Cell state represented by an 8-bit unsigned integer.
@@ -31,8 +33,6 @@ pub enum Type {
     String,
     /// Type value.
     Type,
-    /// No value.
-    Null,
 
     /// Sequence of :data:`Integer` values of a certain length (from 1 to 256).
     Vector(Option<usize>),
@@ -40,6 +40,8 @@ pub enum Type {
     /// and shape.
     Array(Option<Arc<VectorSet>>),
 
+    /// Empty set.
+    EmptySet,
     /// Set of `Integer` values.
     IntegerSet,
     /// Set of `Cell` values.
@@ -60,18 +62,19 @@ impl Default for Type {
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Type::Null => write!(f, "Null"),
             Type::Integer => write!(f, "Integer"),
             Type::Cell => write!(f, "Cell"),
             Type::Tag => write!(f, "Tag"),
             Type::String => write!(f, "String"),
             Type::Type => write!(f, "Type"),
-            Type::Null => write!(f, "Null"),
 
             Type::Vector(None) => write!(f, "Vector"),
             Type::Vector(Some(len)) => write!(f, "Vector[{:?}]", len),
             Type::Array(None) => write!(f, "Array"),
             Type::Array(Some(shape)) => write!(f, "Array[{:?}]", shape),
 
+            Type::EmptySet => write!(f, "EmptySet"),
             Type::IntegerSet => write!(f, "IntegerSet"),
             Type::CellSet => write!(f, "CellSet"),
             Type::VectorSet(None) => write!(f, "VectorSet"),
@@ -85,18 +88,19 @@ impl fmt::Debug for Type {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Type::Null => write!(f, "Null"),
             Type::Integer => write!(f, "Integer"),
             Type::Cell => write!(f, "Cell"),
             Type::Tag => write!(f, "Tag"),
             Type::String => write!(f, "String"),
             Type::Type => write!(f, "Type"),
-            Type::Null => write!(f, "Null"),
 
             Type::Vector(None) => write!(f, "Vector"),
             Type::Vector(Some(len)) => write!(f, "Vector[{}]", len),
             Type::Array(None) => write!(f, "Array"),
             Type::Array(Some(shape)) => write!(f, "Array[{}]", shape),
 
+            Type::EmptySet => write!(f, "EmptySet"),
             Type::IntegerSet => write!(f, "IntegerSet"),
             Type::CellSet => write!(f, "CellSet"),
             Type::VectorSet(None) => write!(f, "VectorSet"),
@@ -115,16 +119,17 @@ impl Type {
     /// `Compiler::build_convert_to_bool()`.
     pub fn can_convert_to_bool(&self) -> bool {
         match self {
+            Type::Null => true,
             Type::Integer => true,
             Type::Cell => true,
             Type::Tag => false,
             Type::String => true,
             Type::Type => true,
-            Type::Null => true,
 
             Type::Vector(_) => true,
             Type::Array(_) => true,
 
+            Type::EmptySet => false,
             Type::IntegerSet => false,
             Type::CellSet => false,
             Type::VectorSet(_) => false,
@@ -136,16 +141,17 @@ impl Type {
     /// type cannot be iterated over.
     pub fn iteration_type(&self) -> Option<Type> {
         match self {
+            Type::Null => None,
             Type::Integer => None,
             Type::Cell => None,
-            Type::Tag => None,
+            Type::Tag => Some(Type::Cell),
             Type::String => Some(Type::String),
             Type::Type => None,
-            Type::Null => None,
 
             Type::Vector(_) => Some(Type::Integer),
             Type::Array(_) => Some(Type::Cell),
 
+            Type::EmptySet => Some(Type::Null),
             Type::IntegerSet => Some(Type::Integer),
             Type::CellSet => Some(Type::Cell),
             Type::VectorSet(len) => Some(Type::Vector(*len)),

@@ -9,6 +9,8 @@ use crate::regex::Regex;
 /// Runtime value or compile-time constant of any type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RtVal {
+    /// No value.
+    Null,
     /// 64-bit signed integer, also used for boolean values.
     Integer(LangInt),
     /// Cell state represented by an 8-bit unsigned integer.
@@ -19,8 +21,6 @@ pub enum RtVal {
     String(Arc<String>),
     /// Type value.
     Type(Type),
-    /// No value.
-    Null,
 
     /// Sequence of :data:`Integer` values of a certain length (from 1 to 256).
     Vector(Vec<LangInt>),
@@ -28,6 +28,8 @@ pub enum RtVal {
     /// and shape.
     Array(Arc<Array>),
 
+    /// Empty set.
+    EmptySet,
     /// Set of `Integer` values.
     IntegerSet(Arc<IntegerSet>),
     /// Set of `Cell` values.
@@ -43,16 +45,17 @@ pub enum RtVal {
 impl fmt::Display for RtVal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            RtVal::Null => write!(f, "Null"),
             RtVal::Integer(i) => write!(f, "{}", i),
             RtVal::Cell(i) => write!(f, "#{}", i),
             RtVal::Tag(_) => todo!("display Tag"),
             RtVal::String(s) => write!(f, "{:?}", s),
             RtVal::Type(_) => todo!("display Type"),
-            RtVal::Null => write!(f, "Null"),
 
             RtVal::Vector(v) => write!(f, "{}", crate::utils::display_bracketed_list(v)),
             RtVal::Array(_) => todo!("display Array"),
 
+            RtVal::EmptySet => write!(f, "{{}}"),
             RtVal::IntegerSet(_) => todo!("display IntegerSet"),
             RtVal::CellSet(_) => todo!("display CellSet"),
             RtVal::VectorSet(set) => write!(f, "{}", set),
@@ -65,16 +68,17 @@ impl RtVal {
     /// Returns the type of the value.
     pub fn ty(&self) -> Type {
         match self {
+            Self::Null => Type::Null,
             Self::Integer(_) => Type::Integer,
             Self::Cell(_) => Type::Cell,
             Self::Tag(_) => Type::Tag,
             Self::String(_) => Type::String,
             Self::Type(_) => Type::Type,
-            Self::Null => Type::Null,
 
             Self::Vector(v) => Type::Vector(Some(v.len())),
             Self::Array(a) => Type::Array(Some(a.shape())),
 
+            Self::EmptySet => Type::EmptySet,
             Self::IntegerSet(_) => Type::IntegerSet,
             Self::CellSet(_) => Type::CellSet,
             Self::VectorSet(set) => Type::VectorSet(Some(set.vec_len())),
@@ -114,6 +118,9 @@ impl RtVal {
 }
 
 pub trait SpannedRuntimeValueExt {
+    /// Returns the value inside if this is a `Null` variant or subtype of one;
+    /// otherwise returns a type error.
+    fn as_null(self) -> Result<()>;
     /// Returns the value inside if this is an `Integer` variant or subtype of
     /// one; otherwise returns a type error.
     fn as_integer(self) -> Result<LangInt>;
@@ -129,24 +136,24 @@ pub trait SpannedRuntimeValueExt {
     /// Returns the value inside if this is a `Type` variant or subtype of one;
     /// otherwise returns a type error.
     fn as_type(self) -> Result<Type>;
-    /// Returns the value inside if this is a `Null` variant or subtype of one;
-    /// otherwise returns a type error.
-    fn as_null(self) -> Result<()>;
     /// Returns the value inside if this is a `Vector` variant or subtype of
     /// one; otherwise returns a type error.
     fn as_vector(self) -> Result<Vec<LangInt>>;
     /// Returns the value inside if this is an `Array` variant or subtype of
     /// one; otherwise returns a type error.
     fn as_array(self) -> Result<Arc<Array>>;
+    /// Returns the value inside if this is an `EmptySet` variant or subtype of
+    /// one; otherwise returns a type error.
+    fn as_empty_set(self) -> Result<()>;
     /// Returns the value inside if this is an `IntegerSet` variant or subtype
     /// of one; otherwise returns a type error.
     fn as_integer_set(self) -> Result<Arc<IntegerSet>>;
     /// Returns the value inside if this is a `CellSet` variant or subtype of
     /// one; otherwise returns a type error.
     fn as_cell_set(self) -> Result<CellSet>;
-    /// Returns the value inside if this is a `VectorSet` variant or subtype of
-    /// one; otherwise returns a type error.
-    fn as_vector_set(self) -> Result<Arc<VectorSet>>;
+    /// Returns the value inside if this is a `VectorSet` variant of length
+    /// `len` or subtype of one; otherwise returns a type error.
+    fn as_vector_set(self, vec_len: usize) -> Result<Arc<VectorSet>>;
     /// Returns the value inside if this is a `Pattern` variant or subtype of
     /// one; otherwise returns a type error.
     fn as_pattern(self) -> Result<Arc<Pattern>>;
@@ -166,6 +173,12 @@ pub trait SpannedRuntimeValueExt {
     fn iterate(self) -> Result<Box<dyn Iterator<Item = Self>>>;
 }
 impl SpannedRuntimeValueExt for Spanned<RtVal> {
+    fn as_null(self) -> Result<()> {
+        match self.node {
+            RtVal::Null => Ok(()),
+            _ => Err(Error::type_error(self.span, Type::Null, &self.ty())),
+        }
+    }
     fn as_integer(self) -> Result<LangInt> {
         match self.node {
             RtVal::Integer(x) => Ok(x),
@@ -196,12 +209,6 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             _ => Err(Error::type_error(self.span, Type::Type, &self.ty())),
         }
     }
-    fn as_null(self) -> Result<()> {
-        match self.node {
-            RtVal::Null => Ok(()),
-            _ => Err(Error::type_error(self.span, Type::Null, &self.ty())),
-        }
-    }
     fn as_vector(self) -> Result<Vec<LangInt>> {
         match self.node {
             RtVal::Vector(x) => Ok(x),
@@ -214,8 +221,15 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             _ => Err(Error::type_error(self.span, Type::Array(None), &self.ty())),
         }
     }
+    fn as_empty_set(self) -> Result<()> {
+        match self.node {
+            RtVal::EmptySet => Ok(()),
+            _ => Err(Error::type_error(self.span, Type::EmptySet, &self.ty())),
+        }
+    }
     fn as_integer_set(self) -> Result<Arc<IntegerSet>> {
         match self.node {
+            RtVal::EmptySet => Ok(Arc::new(IntegerSet::empty())),
             RtVal::IntegerSet(x) => Ok(x),
             _ => Err(Error::type_error(self.span, Type::IntegerSet, &self.ty())),
         }
@@ -224,12 +238,14 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
         match self.node {
             RtVal::Cell(x) => Ok(CellSet::single_cell(x)),
             RtVal::Tag(x) => Err(Error::unimplemented(self.span)), // TODO: only allow in compiled code? should allow everywhere
+            RtVal::EmptySet => Ok(CellSet::empty()),
             RtVal::CellSet(x) => Ok(x),
             _ => Err(Error::type_error(self.span, Type::CellSet, &self.ty())),
         }
     }
-    fn as_vector_set(self) -> Result<Arc<VectorSet>> {
+    fn as_vector_set(self, vec_len: usize) -> Result<Arc<VectorSet>> {
         match self.node {
+            RtVal::EmptySet => Ok(Arc::new(VectorSet::empty(vec_len))),
             RtVal::VectorSet(x) => Ok(x),
             _ => Err(Error::type_error(
                 self.span,

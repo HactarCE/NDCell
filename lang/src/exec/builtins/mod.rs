@@ -52,14 +52,15 @@ pub fn resolve_constant(name: &str, span: Span, ctx: &mut Ctx) -> Option<Fallibl
 }
 fn resolve_type_keyword(name: &str) -> Option<Type> {
     Some(match name {
+        "Null" => Type::Null,
         "Integer" => Type::Integer,
         "Cell" => Type::Cell,
         "Tag" => Type::Tag,
         "String" => Type::String,
         "Type" => Type::Type,
-        "Null" => Type::Null,
         "Vector" => Type::Vector(None),
         "Array" => Type::Array(None),
+        "EmtpySet" => Type::EmptySet,
         "IntegerSet" => Type::IntegerSet,
         "CellSet" => Type::CellSet,
         "VectorSet" => Type::VectorSet(None),
@@ -72,6 +73,9 @@ fn resolve_type_keyword(name: &str) -> Option<Type> {
 /// Returns a built-in method.
 pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Function>> {
     match receiving_type {
+        Type::Null => match name {
+            _ => None,
+        },
         Type::Integer => match name {
             _ => None,
         },
@@ -87,9 +91,6 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
         Type::Type => match name {
             _ => None,
         },
-        Type::Null => match name {
-            _ => None,
-        },
 
         Type::Vector(_) => match name {
             _ => None,
@@ -98,6 +99,9 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
             _ => None,
         },
 
+        Type::EmptySet => match name {
+            _ => None,
+        },
         Type::IntegerSet => match name {
             _ => None,
         },
@@ -118,14 +122,15 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
 
 fn resolve_index_method(obj_type: &Type) -> Option<Box<dyn Function>> {
     match obj_type {
+        Type::Null => None,
         Type::Integer => None,
         Type::Cell => None,
         Type::Tag => None,
         Type::String => None,
         Type::Type => Some(Box::new(functions::types::TypeBrackets)),
-        Type::Null => None,
         Type::Vector(_) => None,
         Type::Array(_) => None,
+        Type::EmptySet => None,
         Type::IntegerSet => None,
         Type::CellSet => None,
         Type::VectorSet(_) => None,

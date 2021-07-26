@@ -3,7 +3,7 @@ use crate::ast;
 use crate::errors::{Error, Result};
 use crate::lexer::{Keyword, Token};
 
-/// Consumes a block of statements, surrounded by curly braces.
+/// Matches a block of statements, surrounded by curly braces.
 #[derive(Debug, Copy, Clone)]
 pub struct StatementBlock;
 impl_display!(for StatementBlock, "block of code surrounded by '{{' and '}}'");
@@ -28,7 +28,7 @@ impl SyntaxRule for StatementBlock {
     }
 }
 
-/// Consumes a statement.
+/// Matches a statement.
 #[derive(Debug, Copy, Clone)]
 pub struct Statement;
 impl_display!(
@@ -121,7 +121,7 @@ impl SyntaxRule for Statement {
     }
 }
 
-/// Consumes a `for` loop.
+/// Matches a `for` loop.
 #[derive(Debug, Copy, Clone)]
 struct ForLoop;
 impl_display!(for ForLoop, "{} loop", Token::Keyword(Keyword::For));
@@ -149,7 +149,7 @@ impl SyntaxRule for ForLoop {
     }
 }
 
-/// Consumes an `if` statement.
+/// Matches an `if` statement.
 #[derive(Debug, Copy, Clone)]
 struct IfStatement;
 impl_display!(for IfStatement, "{} statement", Token::Keyword(Keyword::If));
@@ -170,7 +170,7 @@ impl SyntaxRule for IfStatement {
     }
 }
 
-/// Consumes an `else` block or `else if` statement.
+/// Matches an `else` block or `else if` statement.
 #[derive(Debug, Copy, Clone)]
 struct ElseStatement;
 impl_display!(for ElseStatement, "{} statement", Token::Keyword(Keyword::Else));
@@ -186,7 +186,7 @@ impl SyntaxRule for ElseStatement {
     }
 }
 
-/// Consumes a variable assignment statement.
+/// Matches a variable assignment statement.
 #[derive(Debug, Copy, Clone)]
 struct AssignStatement;
 impl_display!(for AssignStatement, "assignment statement");

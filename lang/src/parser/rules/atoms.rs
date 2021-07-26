@@ -7,7 +7,7 @@ use crate::data::LangInt;
 use crate::errors::{Error, Result};
 use crate::lexer::Token;
 
-/// Consumes an identifier.
+/// Matches an identifier.
 #[derive(Debug, Copy, Clone)]
 pub struct Identifier;
 impl_display!(for Identifier, "identifier, such as a variable or function name");
@@ -35,7 +35,7 @@ impl SyntaxRule for Identifier {
     }
 }
 
-/// Consumes a string literal.
+/// Matches a string literal.
 #[derive(Debug, Copy, Clone)]
 pub struct StringLiteral;
 impl_display!(for StringLiteral, "string literal");
@@ -85,7 +85,7 @@ impl SyntaxRule for StringLiteral {
     }
 }
 
-/// Consumes an integer literal.
+/// Matches an integer literal.
 #[derive(Debug, Copy, Clone)]
 pub struct IntegerLiteral;
 impl_display!(for IntegerLiteral, "integer literal, such as '42'");

@@ -370,6 +370,7 @@ fn parse_suffix_expr(p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<as
             MethodCallSuffix(ret).map(Some),
             FuncCallSuffix(ret).map(Some),
             IndexSuffix(ret).map(Some),
+            // TODO tag suffix
             Epsilon.map(|_| None),
         ],
     )? {
@@ -513,7 +514,7 @@ impl SyntaxRule for IndexSuffix {
     }
 }
 
-/// Consumes an identifier and wraps it in an expression.
+/// Matches an identifier and wraps it in an expression.
 #[derive(Debug, Copy, Clone)]
 pub struct IdentifierExpression;
 impl_display!(for IdentifierExpression, "identifier, such as a variable or function name");
@@ -530,7 +531,7 @@ impl SyntaxRule for IdentifierExpression {
     }
 }
 
-/// Consumes an identifier and wraps it in an expression.
+/// Matches a string literal and wraps it in an expression.
 #[derive(Debug, Copy, Clone)]
 pub struct StringLiteralExpression;
 impl_display!(for StringLiteralExpression, "string literal");
@@ -549,7 +550,7 @@ impl SyntaxRule for StringLiteralExpression {
     }
 }
 
-/// Consumes an identifier and wraps it in an expression.
+/// Matches an integer literal and wraps it in an expression.
 #[derive(Debug, Copy, Clone)]
 pub struct IntegerLiteralExpression;
 impl_display!(for IntegerLiteralExpression, "string literal");
@@ -568,7 +569,8 @@ impl SyntaxRule for IntegerLiteralExpression {
     }
 }
 
-/// Consumes an identifier and wraps it in an expression.
+/// Matches a vector literal delimited by square brackets and wraps it in an
+/// expression.
 #[derive(Debug, Copy, Clone)]
 pub struct VectorLiteralExpression;
 impl_display!(for VectorLiteralExpression, "string literal");
@@ -587,6 +589,7 @@ impl SyntaxRule for VectorLiteralExpression {
     }
 }
 
+/// Matches a pair of parentheses containing an expression.
 #[derive(Debug, Copy, Clone)]
 pub struct ParenExpression;
 impl_display!(for ParenExpression, "{}", Surround::paren(Expression));

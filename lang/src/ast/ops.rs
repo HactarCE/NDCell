@@ -154,7 +154,7 @@ pub enum PrefixOp {
     BitwiseNot,
     LogicalNot,
 
-    IntToCell, // TODO: error if applied directly to identifier
+    IntToCell,
 }
 impl TryFrom<Token> for PrefixOp {
     type Error = ();

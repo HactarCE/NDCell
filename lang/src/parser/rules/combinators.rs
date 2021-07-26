@@ -135,6 +135,18 @@ impl<R> List<R> {
             sep_name: "comma",
         }
     }
+    /// Returns a rule for a comma-separated list surrounded by curly braces.
+    pub fn brace_comma_sep(inner: R) -> Self {
+        Self {
+            inner,
+
+            sep: Token::Comma,
+            start: Token::LBrace,
+            end: Token::RBrace,
+
+            sep_name: "comma",
+        }
+    }
 }
 impl<R: fmt::Display> fmt::Display for List<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

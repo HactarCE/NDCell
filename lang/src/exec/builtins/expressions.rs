@@ -143,6 +143,15 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                     .map(|expr| (None, expr))
                     .collect(),
             }),
+            ast::ExprData::SetConstruct(members) => Box::new(FuncCall {
+                f: Some(functions::sets::SetConstruct.boxed()),
+                f_span: expr.span(),
+                args: ast
+                    .get_node_list(members)
+                    .into_iter()
+                    .map(|expr| (None, expr))
+                    .collect(),
+            }),
         }
     }
 }

@@ -54,4 +54,6 @@ pub enum ExprData {
 
     /// Vector constructor.
     VectorConstruct(Vec<ExprId>),
+    /// Set constructor.
+    SetConstruct(Vec<ExprId>),
 }

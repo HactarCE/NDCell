@@ -2,8 +2,8 @@ use codemap::Spanned;
 use std::sync::Arc;
 
 use super::{
-    Epsilon, Identifier, IntegerLiteral, List, Parser, StringLiteral, Surround, SyntaxRule,
-    TryFromToken, VectorLiteral,
+    Epsilon, Identifier, IntegerLiteral, List, Parser, SetLiteral, StringLiteral, Surround,
+    SyntaxRule, TryFromToken, VectorLiteral,
 };
 use crate::ast;
 use crate::data::RtVal;
@@ -154,9 +154,8 @@ impl SyntaxRule for ExpressionWithPrecedence {
             // There are so many tokens that might match, it's more reliable to
             // just match all of them.
             match t {
-                Token::LParen | Token::LBracket => true,
+                Token::LParen | Token::LBracket | Token::LBrace => true,
 
-                Token::LBrace => false,
                 Token::RParen | Token::RBracket | Token::RBrace => false,
 
                 Token::Backtick => true,
@@ -245,6 +244,7 @@ impl SyntaxRule for ExpressionWithPrecedence {
                     StringLiteralExpression.map(Some),
                     IntegerLiteralExpression.map(Some),
                     VectorLiteralExpression.map(Some),
+                    SetLiteralExpression.map(Some),
                     ParenExpression.map(Some),
                     Epsilon.map(|_| None),
                 ],
@@ -585,6 +585,24 @@ impl SyntaxRule for VectorLiteralExpression {
             Ok(ast::ExprData::VectorConstruct(
                 p.parse(ast, VectorLiteral)?.node,
             ))
+        })
+    }
+}
+
+/// Matches a set literal delimited by curly braces and wraps it in an
+/// expression.
+#[derive(Debug, Copy, Clone)]
+pub struct SetLiteralExpression;
+impl_display!(for SetLiteralExpression, "set literal");
+impl SyntaxRule for SetLiteralExpression {
+    type Output = ast::ExprId;
+
+    fn might_match(&self, p: Parser<'_>) -> bool {
+        SetLiteral.might_match(p)
+    }
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse_and_add_ast_node(ast, |p, ast| {
+            Ok(ast::ExprData::SetConstruct(p.parse(ast, SetLiteral)?.node))
         })
     }
 }

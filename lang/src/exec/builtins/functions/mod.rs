@@ -6,6 +6,7 @@ pub(super) mod bools;
 pub(super) mod cells;
 pub(super) mod math;
 pub(super) mod range;
+pub(super) mod sets;
 pub(super) mod types;
 pub(super) mod vectors;
 

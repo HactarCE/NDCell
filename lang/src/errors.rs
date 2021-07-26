@@ -168,6 +168,14 @@ impl Error {
         "volume of vector set's bounding rectangle must not exceed {}",
         _ => MAX_VECTOR_SET_SIZE,
     ));
+    error_fn!(Error; fn invalid_set_type(
+        "set can only be constructed from values of types Integer, Cell, or Vector with length at most 6; not {}",
+        ty: &Type,
+    ));
+    error_fn!(Error; fn invalid_vector_length_for_set(
+        "set cannot be constructed from values of type Vector[{}]",
+        vec_len: usize,
+    ));
 
     error_fn!(Error; fn must_be_constant("must be a constant"));
     error_fn!(Error; fn cannot_compile("not allowed in compiled code"));

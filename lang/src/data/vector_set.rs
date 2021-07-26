@@ -53,6 +53,15 @@ impl VectorSet {
             mask: None,
         }
     }
+    /// Constructs a vector set containing a single vector.
+    pub fn single_vector(vec_len: usize, vec: IVec6D) -> Result<Self> {
+        Self {
+            vec_len,
+            bounds: Some(IRect6D::single_cell(vec)),
+            mask: None,
+        }
+        .canonicalize()
+    }
     /// Constructs a rectangular vector set.
     pub fn rect(span: Span, vec_len: usize, rect: IRect6D) -> Result<Self> {
         check_vector_set_bounds(span, rect)?;
@@ -298,9 +307,19 @@ impl VectorSet {
 
     /// Returns the set containing all vectors present in `self` but not
     /// `other`.
-    pub fn subtract(&self, span: Span, other: &Self) -> Result<Self> {
+    pub fn difference(&self, span: Span, other: &Self) -> Result<Self> {
         Self::with_mask_from_fn(span, self.vec_len(), self.bounds(), |pos| {
             self.contains(pos) && !other.contains(pos)
+        })
+    }
+
+    /// Returns the set containing all vectors present in `self` or `other`, but
+    /// not both.
+    pub fn symmetric_difference(&self, span: Span, other: &Self) -> Result<Self> {
+        let vec_len = std::cmp::max(self.vec_len(), other.vec_len());
+        let bounds = self.bounds_union(other);
+        Self::with_mask_from_fn(span, vec_len, bounds, |pos| {
+            self.contains(pos) ^ other.contains(pos)
         })
     }
 }
@@ -384,7 +403,7 @@ mod tests {
         let b = {
             let moore = VectorSet::moore(span, 3, 1).unwrap();
             let circ = VectorSet::circular(span, 3, 1).unwrap();
-            moore.subtract(span, &circ).unwrap()
+            moore.difference(span, &circ).unwrap()
         };
         assert_eq!(b.len(), 8); // corner cells of a 3x3x3 cube
 
@@ -419,11 +438,11 @@ mod tests {
         assert!(a_and_b.is_empty());
         assert_eq!(a_and_b.to_string(), "VectorSet[2].empty");
 
-        let a_minus_b = a.subtract(span, &b).unwrap();
+        let a_minus_b = a.difference(span, &b).unwrap();
         assert!(!a_minus_b.is_empty());
         assert_eq!(a_minus_b, a);
 
-        let b_minus_a = b.subtract(span, &a).unwrap();
+        let b_minus_a = b.difference(span, &a).unwrap();
         assert!(!b_minus_a.is_empty());
         assert_eq!(b_minus_a, b);
 
@@ -441,7 +460,7 @@ mod tests {
         assert!(!a_and_c.is_empty());
         assert_eq!(a_and_c.to_string(), "[0, 0]..[0, 0]");
 
-        let a_minus_c = a.subtract(span, &c).unwrap();
+        let a_minus_c = a.difference(span, &c).unwrap();
         assert!(!a_minus_c.is_empty());
         assert_eq!(
             a_minus_c.to_string(),
@@ -453,7 +472,7 @@ mod tests {
             \"",
         );
 
-        let c_minus_a = c.subtract(span, &a).unwrap();
+        let c_minus_a = c.difference(span, &a).unwrap();
         assert!(!c_minus_a.is_empty());
         assert_eq!(c_minus_a, b);
     }

@@ -121,3 +121,17 @@ impl SyntaxRule for VectorLiteral {
         p.parse(ast, List::bracket_comma_sep(Expression))
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct SetLiteral;
+impl_display!(for SetLiteral, "set literal ({})", List::brace_comma_sep(Expression));
+impl SyntaxRule for SetLiteral {
+    type Output = Spanned<Vec<ast::ExprId>>;
+
+    fn might_match(&self, p: Parser<'_>) -> bool {
+        List::brace_comma_sep(Expression).might_match(p)
+    }
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse(ast, List::brace_comma_sep(Expression))
+    }
+}

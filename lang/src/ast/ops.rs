@@ -59,9 +59,9 @@ pub enum BinaryOp {
     ShrSigned,
     ShrUnsigned,
 
-    BitwiseAnd,
-    BitwiseOr,
-    BitwiseXor,
+    And,
+    Or,
+    Xor,
 
     LogicalAnd,
     LogicalOr,
@@ -87,9 +87,9 @@ impl From<AssignOp> for Option<BinaryOp> {
             AssignOp::ShrSigned => Some(BinaryOp::ShrSigned),
             AssignOp::ShrUnsigned => Some(BinaryOp::ShrUnsigned),
 
-            AssignOp::And => Some(BinaryOp::BitwiseAnd),
-            AssignOp::Or => Some(BinaryOp::BitwiseOr),
-            AssignOp::Xor => Some(BinaryOp::BitwiseXor),
+            AssignOp::And => Some(BinaryOp::And),
+            AssignOp::Or => Some(BinaryOp::Or),
+            AssignOp::Xor => Some(BinaryOp::Xor),
         }
     }
 }
@@ -107,9 +107,9 @@ impl TryFrom<Token> for BinaryOp {
             Token::DoubleLessThan => Ok(Self::Shl),
             Token::DoubleGreaterThan => Ok(Self::ShrSigned),
             Token::TripleGreaterThan => Ok(Self::ShrUnsigned),
-            Token::Ampersand => Ok(Self::BitwiseAnd),
-            Token::Pipe => Ok(Self::BitwiseOr),
-            Token::Caret => Ok(Self::BitwiseXor),
+            Token::Ampersand => Ok(Self::And),
+            Token::Pipe => Ok(Self::Or),
+            Token::Caret => Ok(Self::Xor),
 
             Token::DotDot => Ok(Self::Range),
 
@@ -134,9 +134,9 @@ impl BinaryOp {
             BinaryOp::Shl => "'<<'",
             BinaryOp::ShrSigned => "'>>'",
             BinaryOp::ShrUnsigned => "'>>>'",
-            BinaryOp::BitwiseAnd => "'&'",
-            BinaryOp::BitwiseOr => "'|'",
-            BinaryOp::BitwiseXor => "'^'",
+            BinaryOp::And => "'&'",
+            BinaryOp::Or => "'|'",
+            BinaryOp::Xor => "'^'",
             BinaryOp::LogicalAnd => "'and'",
             BinaryOp::LogicalOr => "'or'",
             BinaryOp::LogicalXor => "'xor'",

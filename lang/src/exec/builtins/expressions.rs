@@ -76,8 +76,8 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 };
 
                 match op.node {
-                    Add | Sub | Mul | Div | Mod | Pow | Shl | ShrSigned | ShrUnsigned
-                    | BitwiseAnd | BitwiseOr | BitwiseXor => make_func_call(
+                    Add | Sub | Mul | Div | Mod | Pow | Shl | ShrSigned | ShrUnsigned | And
+                    | Or | Xor => make_func_call(
                         Option::<functions::math::BinaryMathOp>::from(op.node).map(|f| f.boxed()),
                     ),
                     LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),

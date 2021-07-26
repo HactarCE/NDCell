@@ -27,9 +27,9 @@ pub enum BinaryMathOp {
     ShrSigned,
     ShrUnsigned,
 
-    BitwiseAnd,
-    BitwiseOr,
-    BitwiseXor,
+    And,
+    Or,
+    Xor,
 }
 impl fmt::Display for BinaryMathOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -43,9 +43,9 @@ impl fmt::Display for BinaryMathOp {
             Self::Shl => write!(f, "<<"),
             Self::ShrSigned => write!(f, ">>"),
             Self::ShrUnsigned => write!(f, ">>>"),
-            Self::BitwiseAnd => write!(f, "&"),
-            Self::BitwiseOr => write!(f, "|"),
-            Self::BitwiseXor => write!(f, "^"),
+            Self::And => write!(f, "&"),
+            Self::Or => write!(f, "|"),
+            Self::Xor => write!(f, "^"),
         }
     }
 }
@@ -62,9 +62,9 @@ impl From<ast::AssignOp> for Option<BinaryMathOp> {
             ast::AssignOp::Shl => Some(BinaryMathOp::Shl),
             ast::AssignOp::ShrSigned => Some(BinaryMathOp::ShrSigned),
             ast::AssignOp::ShrUnsigned => Some(BinaryMathOp::ShrUnsigned),
-            ast::AssignOp::And => Some(BinaryMathOp::BitwiseAnd),
-            ast::AssignOp::Or => Some(BinaryMathOp::BitwiseOr),
-            ast::AssignOp::Xor => Some(BinaryMathOp::BitwiseXor),
+            ast::AssignOp::And => Some(BinaryMathOp::And),
+            ast::AssignOp::Or => Some(BinaryMathOp::Or),
+            ast::AssignOp::Xor => Some(BinaryMathOp::Xor),
         }
     }
 }
@@ -80,9 +80,9 @@ impl From<ast::BinaryOp> for Option<BinaryMathOp> {
             ast::BinaryOp::Shl => Some(BinaryMathOp::Shl),
             ast::BinaryOp::ShrSigned => Some(BinaryMathOp::ShrSigned),
             ast::BinaryOp::ShrUnsigned => Some(BinaryMathOp::ShrUnsigned),
-            ast::BinaryOp::BitwiseAnd => Some(BinaryMathOp::BitwiseAnd),
-            ast::BinaryOp::BitwiseOr => Some(BinaryMathOp::BitwiseOr),
-            ast::BinaryOp::BitwiseXor => Some(BinaryMathOp::BitwiseXor),
+            ast::BinaryOp::And => Some(BinaryMathOp::And),
+            ast::BinaryOp::Or => Some(BinaryMathOp::Or),
+            ast::BinaryOp::Xor => Some(BinaryMathOp::Xor),
             ast::BinaryOp::LogicalAnd => None,
             ast::BinaryOp::LogicalOr => None,
             ast::BinaryOp::LogicalXor => None,
@@ -111,9 +111,9 @@ impl BinaryMathOp {
                 .and_then(|rhs| (lhs as LangUint).checked_shr(rhs))
                 .map(|i| i as LangInt),
 
-            Self::BitwiseAnd => Some(lhs & rhs),
-            Self::BitwiseOr => Some(lhs | rhs),
-            Self::BitwiseXor => Some(lhs ^ rhs),
+            Self::And => Some(lhs & rhs),
+            Self::Or => Some(lhs | rhs),
+            Self::Xor => Some(lhs ^ rhs),
         }
         // If the operation returned None, assume an integer overflow error.
         .ok_or_else(|| match self {
@@ -162,9 +162,9 @@ impl BinaryMathOp {
             Self::Shl => compiler.build_checked_int_shl(span, lhs, rhs),
             Self::ShrSigned => compiler.build_checked_int_ashr(span, lhs, rhs),
             Self::ShrUnsigned => compiler.build_checked_int_lshr(span, lhs, rhs),
-            Self::BitwiseAnd => Ok(b.build_and(lhs, rhs, "").as_basic_value_enum()),
-            Self::BitwiseOr => Ok(b.build_or(lhs, rhs, "").as_basic_value_enum()),
-            Self::BitwiseXor => Ok(b.build_xor(lhs, rhs, "").as_basic_value_enum()),
+            Self::And => Ok(b.build_and(lhs, rhs, "").as_basic_value_enum()),
+            Self::Or => Ok(b.build_or(lhs, rhs, "").as_basic_value_enum()),
+            Self::Xor => Ok(b.build_xor(lhs, rhs, "").as_basic_value_enum()),
         }
     }
 

@@ -1,6 +1,5 @@
 use itertools::Itertools;
-use ndcell_core::ndvec::IVec6D;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fmt;
 
 /// Implements `std::format::Display` for a type using arguments to `write!()`.

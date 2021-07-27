@@ -4,9 +4,60 @@ use codemap::Spanned;
 use std::fmt;
 
 use super::{CallInfo, Function};
-use crate::data::{CellSet, RtVal, SpannedRuntimeValueExt, VectorSet};
+use crate::data::{CellSet, RtVal, SpannedRuntimeValueExt, Type, VectorSet};
 use crate::errors::{Error, Fallible, Result};
 use crate::exec::{Ctx, CtxTrait};
+
+/// Built-in function that constructs an `EmptySet`.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct EmptySet;
+impl_display!(for EmptySet, "{}.empty", Type::EmptySet);
+impl Function for EmptySet {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(0, ctx, self)?;
+        Ok(RtVal::EmptySet)
+    }
+}
+
+/// Built-in function that constructs an empty `IntegerSet`.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct EmptyIntegerSet;
+impl_display!(for EmptyIntegerSet, "{}.empty", Type::IntegerSet);
+impl Function for EmptyIntegerSet {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(0, ctx, self)?;
+        Err(ctx.error(Error::unimplemented(call.span)))
+    }
+}
+
+/// Built-in function that constructs an empty `CellSet`.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct EmptyCellSet;
+impl_display!(for EmptyCellSet, "{}.empty", Type::CellSet);
+impl Function for EmptyCellSet {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(0, ctx, self)?;
+        Err(ctx.error(Error::unimplemented(call.span)))
+    }
+}
+
+/// Built-in function that constructs an empty `VectorSet`.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct EmptyVectorSet(pub Option<usize>);
+impl fmt::Display for EmptyVectorSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.empty", Type::VectorSet(self.0))
+    }
+}
+impl Function for EmptyVectorSet {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        let vec_len = self.0.unwrap_or(ctx.get_ndim(call.span)?);
+        call.check_args_len(0, ctx, self)?;
+        Ok(VectorSet::empty(call.span, vec_len)
+            .map_err(|e| ctx.error(e))?
+            .into())
+    }
+}
 
 /// Built-in function that constructs a set from components.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]

@@ -3,6 +3,17 @@ use ndcell_core::ndvec::IVec6D;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
+/// Implements `std::format::Display` for a type using arguments to `write!()`.
+macro_rules! impl_display {
+    ( for $typename:ty, $( $fmt_arg:expr ),+ $(,)? ) => {
+        impl std::fmt::Display for $typename {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, $( $fmt_arg ),+ )
+            }
+        }
+    };
+}
+
 /// Prefixes a string with 'a' or 'an' according to its first character.
 pub fn a(s: impl fmt::Display) -> String {
     let s = s.to_string();
@@ -58,25 +69,6 @@ pub fn checked_pow_i64(base: i64, exp: i64) -> Option<i64> {
         (-1, _) => Some(if exp & 1 == 0 { 1 } else { -1 }),
         (_, _) => base.checked_pow(u32::try_from(exp).ok()?),
     }
-}
-
-pub fn vec_to_ivec6d<T: Copy>(v: &[T]) -> Option<IVec6D>
-where
-    T: TryInto<isize>,
-{
-    IVec6D::try_from_fn(|ax| {
-        v.get(ax as usize)
-            .map(|&i| i.try_into().ok())
-            .unwrap_or(Some(0))
-    })
-}
-pub fn ivec6d_to_vec<T: Copy>(vec_len: usize, v: IVec6D) -> Option<Vec<T>>
-where
-    isize: TryInto<T>,
-{
-    (0..vec_len.clamp(1, 6))
-        .map(|i| v.0[i].try_into().ok())
-        .collect()
 }
 
 #[test]

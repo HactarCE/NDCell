@@ -1,11 +1,12 @@
 use codemap::Span;
 use itertools::Itertools;
+use std::convert::TryInto;
 use std::fmt;
 
 use ndcell_core::ndarray::Array6D;
 use ndcell_core::prelude::{Axis, CanContain, Dim, Dim6D, IRect6D, IVec6D};
 
-use super::{LangInt, MAX_VECTOR_SET_EXTENT, MAX_VECTOR_SET_SIZE};
+use super::{LangInt, Type, MAX_VECTOR_SET_EXTENT, MAX_VECTOR_SET_SIZE};
 use crate::errors::{Error, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -355,10 +356,11 @@ impl<'a> IntoIterator for &'a VectorSet {
 
 /// Checks whether a vector set can be constructed with the given vector length
 /// and returns an error if it cannot.
-fn check_vector_set_vec_len(span: Span, vec_len: usize) -> Result<()> {
+pub fn check_vector_set_vec_len(span: Span, vec_len: impl TryInto<usize>) -> Result<usize> {
+    let vec_len = super::check_vector_len(span, vec_len)?;
     match (1..=6).contains(&vec_len) {
-        true => Ok(()),
-        false => Err(Error::invalid_vector_length_for_set(span, vec_len)),
+        true => Ok(vec_len),
+        false => Err(Error::invalid_set_type(span, &Type::Vector(Some(vec_len)))),
     }
 }
 

@@ -5,7 +5,7 @@ use codemap_diagnostic::{Diagnostic, Level, SpanLabel, SpanStyle};
 use itertools::Itertools;
 use std::fmt;
 
-use crate::data::{Type, MAX_VECTOR_LEN, MAX_VECTOR_SET_SIZE};
+use crate::data::{Type, MAX_VECTOR_LEN, MAX_VECTOR_SET_EXTENT, MAX_VECTOR_SET_SIZE};
 use crate::{MAX_NDIM, MAX_STATE_COUNT};
 
 /// `Result` type alias for NDCA compile-time and runtime errors.
@@ -218,7 +218,7 @@ impl Error {
     ));
     error_fn!(Error; fn cannot_call_arbitrary_expression("cannot call arbitrary expression"));
     error_fn!(Error; fn no_such_function("no such function"));
-    error_fn!(Error; fn no_such_method("type {} has no such method or attribute", ty: Type));
+    error_fn!(Error; fn no_such_method("type {} has no such method or attribute", ty: &Type));
 
     error_fn!(Error; fn uninitialized_variable("this variable doesn't exist or hasn't been assigned a value"));
     error_fn!(Error; fn maybe_uninitialized_variable("this variable might not have been assigned a value"));

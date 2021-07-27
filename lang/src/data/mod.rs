@@ -24,7 +24,7 @@ pub use pattern::Pattern;
 pub use runtime_value::{RtVal, SpannedRuntimeValueExt};
 pub use types::Type;
 pub use value::{FallibleTypeOf, Val};
-pub use vector_set::VectorSet;
+pub use vector_set::{check_vector_set_vec_len, VectorSet};
 
 /// Rust type used for NDCA integers.
 pub type LangInt = i64;

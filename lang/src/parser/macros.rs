@@ -25,15 +25,3 @@ macro_rules! parse_one_of {
             ))
     };
 }
-
-/// Implements `std::format::Display` for the given type using the given
-/// arguments to `write!()`.
-macro_rules! impl_display {
-    ( for $typename:ty, $( $fmt_arg:expr ),+ $(,)? ) => {
-        impl std::fmt::Display for $typename {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, $( $fmt_arg ),+ )
-            }
-        }
-    };
-}

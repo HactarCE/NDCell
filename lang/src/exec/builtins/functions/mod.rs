@@ -119,6 +119,8 @@ where
         ctx: &mut impl CtxTrait,
         func_name: impl fmt::Display,
     ) -> Fallible<()> {
+        // TODO: replace calls to this function with more specific ones for
+        // better error messages (e.g. "<function name> expects 2 arguments")
         if self.args.len() == n {
             Ok(())
         } else {

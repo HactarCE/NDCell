@@ -4,7 +4,7 @@ use codemap::Spanned;
 use std::fmt;
 
 use super::{CallInfo, Function};
-use crate::data::{self, check_vector_len, CpVal, RtVal, SpannedRuntimeValueExt, Val};
+use crate::data::{self, CpVal, RtVal, SpannedRuntimeValueExt, Val};
 use crate::errors::{Error, Fallible};
 use crate::exec::{Compiler, Ctx, CtxTrait};
 use crate::llvm;
@@ -30,7 +30,7 @@ impl Function for VectorConstruct {
             }
             .map_err(|e| ctx.error(e))?;
         }
-        check_vector_len(call.span, ret.len()).map_err(|e| ctx.error(e))?;
+        data::check_vector_len(call.span, ret.len()).map_err(|e| ctx.error(e))?;
         Ok(RtVal::Vector(ret))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
@@ -44,7 +44,7 @@ impl Function for VectorConstruct {
             }
             .map_err(|e| compiler.error(e))?;
         }
-        check_vector_len(call.span, ret.len()).map_err(|e| compiler.error(e))?;
+        data::check_vector_len(call.span, ret.len()).map_err(|e| compiler.error(e))?;
         Ok(Val::Cp(CpVal::Vector(llvm::VectorType::const_vector(&ret))))
     }
 }

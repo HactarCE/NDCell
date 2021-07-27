@@ -36,4 +36,25 @@ fn test_vector_set_construct() {
             (Integer(6), Vector(vec![1, 12]))
             => Ok("[1, 6]..[6, 12]"),
         ]);
+
+    TestProgram::new()
+        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet.empty")])
+        .assert_interpreted_test_cases(test_cases![() => Ok("VectorSet[2].empty")]);
+    TestProgram::new()
+        .with_setup("@ndim 4")
+        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet.empty")])
+        .assert_interpreted_test_cases(test_cases![() => Ok("VectorSet[4].empty")]);
+    TestProgram::new()
+        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet[1].empty")])
+        .assert_interpreted_test_cases(test_cases![() => Ok("VectorSet[1].empty")]);
+    TestProgram::new()
+        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet[90].empty")])
+        .assert_interpreted_test_cases::<&str>(
+            test_cases![() => Err("set can only be constructed from values of types Integer, Cell, or Vector with length at most 6; not Vector[90]" @ "90")]
+        );
+    TestProgram::new()
+        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet[900].empty")])
+        .assert_interpreted_test_cases::<&str>(
+            test_cases![() => Err("length of a vector must be an integer from 1 to 256" @ "900")],
+        );
 }

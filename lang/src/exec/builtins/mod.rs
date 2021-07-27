@@ -7,7 +7,7 @@ pub mod functions;
 
 use super::{Ctx, CtxTrait};
 use crate::data::{self, LangInt, RtVal, Type};
-use crate::errors::Fallible;
+use crate::errors::{Error, Fallible, Result};
 pub use expressions::Expression;
 pub use functions::Function;
 
@@ -71,7 +71,7 @@ fn resolve_type_keyword(name: &str) -> Option<Type> {
 }
 
 /// Returns a built-in method.
-pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Function>> {
+pub fn resolve_method(receiving_type: &Type, name: &str, span: Span) -> Result<Box<dyn Function>> {
     match receiving_type {
         Type::Null => match name {
             _ => None,
@@ -88,9 +88,7 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
         Type::String => match name {
             _ => None,
         },
-        Type::Type => match name {
-            _ => None,
-        },
+        Type::Type => None,
 
         Type::Vector(_) => match name {
             _ => None,
@@ -100,15 +98,19 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
         },
 
         Type::EmptySet => match name {
+            "empty" => Some(functions::sets::EmptySet.boxed()),
             _ => None,
         },
         Type::IntegerSet => match name {
+            "empty" => Some(functions::sets::EmptyIntegerSet.boxed()),
             _ => None,
         },
         Type::CellSet => match name {
+            "empty" => Some(functions::sets::EmptyCellSet.boxed()),
             _ => None,
         },
-        Type::VectorSet(_) => match name {
+        Type::VectorSet(vec_len) => match name {
+            "empty" => Some(functions::sets::EmptyVectorSet(*vec_len).boxed()),
             _ => None,
         },
         Type::Pattern(_) => match name {
@@ -118,6 +120,7 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
             _ => None,
         },
     }
+    .ok_or(Error::no_such_method(span, receiving_type))
 }
 
 fn resolve_index_method(obj_type: &Type) -> Option<Box<dyn Function>> {

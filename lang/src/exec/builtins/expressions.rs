@@ -333,35 +333,54 @@ struct MethodCall<'ast> {
 }
 impl Expression for MethodCall<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
+        let attr = self.attr.node;
         let span = self.attr.span;
-        let args = eval_args_list(runtime, &self.args)?;
+        let mut args = eval_args_list(runtime, &self.args)?;
 
         // Resolve the method based on the type of the method receiver, which is
         // the first argument.
-        let receiver = &args
+        let receiver = args
             .first()
             .ok_or_else(|| runtime.error(internal_error_value!("method call has no receiver")))?
-            .1;
-        let receiver_type = receiver.node.ty();
-        let f = super::resolve_method(&receiver_type, &self.attr.node)
-            .ok_or_else(|| runtime.error(Error::no_such_method(span, receiver_type)))?;
+            .1
+            .clone();
+
+        let f = if let RtVal::Type(receiving_type) = &receiver.node {
+            // The method receiver is just the type; remove it from the
+            // arguments list.
+            args.remove(0);
+            super::resolve_method(receiving_type, attr, span)
+        } else {
+            super::resolve_method(&receiver.ty(), attr, span)
+        }
+        .map_err(|e| runtime.error(e))?;
 
         check_kwargs(runtime, &f, &args)?;
         f.eval(runtime.ctx(), CallInfo::new(span, args))
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
+        let attr = self.attr.node;
         let span = self.attr.span;
-        let args = compile_args_list(compiler, &self.args)?;
+        let mut args = compile_args_list(compiler, &self.args)?;
 
         // Resolve the method based on the type of the method receiver, which is
         // the first argument.
-        let receiver = &args
+        let receiver = args
             .first()
             .ok_or_else(|| compiler.error(internal_error_value!("method call has no receiver")))?
-            .1;
-        let receiver_type = compiler.get_val_type(&receiver)?.node;
-        let f = super::resolve_method(&receiver_type, &self.attr.node)
-            .ok_or_else(|| compiler.error(Error::no_such_method(span, receiver_type)))?;
+            .1
+            .clone();
+
+        let f = if let Val::Rt(RtVal::Type(receiving_type)) = &receiver.node {
+            // The method receiver is just the type; remove it from the
+            // arguments list.
+            args.remove(0);
+            super::resolve_method(receiving_type, attr, span)
+        } else {
+            let receiving_type = compiler.get_val_type(&receiver)?;
+            super::resolve_method(&receiving_type, attr, span)
+        }
+        .map_err(|e| compiler.error(e))?;
 
         check_kwargs(compiler, &f, &args)?;
         if let Some(args) = all_rt_vals(&args) {

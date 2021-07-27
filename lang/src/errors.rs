@@ -1,5 +1,8 @@
 //! Error reporting functionality for compilation and runtime.
 
+// TODO: reword error messages to state _what is wrong_ in addition to what is
+// required.
+
 use codemap::Span;
 use codemap_diagnostic::{Diagnostic, Level, SpanLabel, SpanStyle};
 use itertools::Itertools;
@@ -151,17 +154,17 @@ impl Error {
     ));
 
     error_fn!(Error; fn invalid_dimension_count(
-        "the number of dimensions must be an integer from 1 to {}",
+        "number of dimensions must be an integer from 1 to {}",
         _ => MAX_NDIM,
     ));
 
     error_fn!(Error; fn invalid_state_count(
-        "the number of states must be an integer from 1 to {}",
+        "number of states must be an integer from 1 to {}",
         _ => MAX_STATE_COUNT,
     ));
 
     error_fn!(Error; fn invalid_vector_length(
-        "the length of a vector must be an integer from 1 to {}",
+        "length of a vector must be an integer from 1 to {}",
         _ => MAX_VECTOR_LEN,
     ));
 

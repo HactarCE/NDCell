@@ -22,7 +22,7 @@ fn test_vector_construct() {
     // Test limits of `len`.
     test_vector_construct_expr(vec![0; 1], "vec(len=1)");
     test_vector_construct_expr(vec![0; 256], "vec(len=256)");
-    let vec_len_msg = "the length of a vector must be an integer from 1 to 256";
+    let vec_len_msg = "length of a vector must be an integer from 1 to 256";
     for &len_str in &["0", "257", "-1"] {
         let src = format!("v = vec(len={})", len_str);
         TestProgram::new()

@@ -164,17 +164,21 @@ impl Error {
         "the length of a vector must be an integer from 1 to {}",
         _ => MAX_VECTOR_LEN,
     ));
-    error_fn!(Error; fn invalid_vector_set_size(
-        "volume of vector set's bounding rectangle must not exceed {}",
-        _ => MAX_VECTOR_SET_SIZE,
-    ));
+
     error_fn!(Error; fn invalid_set_type(
         "set can only be constructed from values of types Integer, Cell, or Vector with length at most 6; not {}",
         ty: &Type,
     ));
-    error_fn!(Error; fn invalid_vector_length_for_set(
-        "set cannot be constructed from values of type Vector[{}]",
-        vec_len: usize,
+
+    error_fn!(Error; fn invalid_vector_component_for_set(
+        "magnitude of components of a vector in a vector set must not exceed {}",
+        _ => MAX_VECTOR_SET_EXTENT,
+        // TODO: include value in this error message and others (possible
+        // because set must be compile-time constant)
+    ));
+    error_fn!(Error; fn invalid_vector_set_size(
+        "volume of vector set's bounding rectangle must not exceed {}",
+        _ => MAX_VECTOR_SET_SIZE,
     ));
 
     error_fn!(Error; fn must_be_constant("must be a constant"));

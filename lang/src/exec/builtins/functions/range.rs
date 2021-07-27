@@ -1,11 +1,8 @@
 //! Range operator.
 
 use codemap::{Span, Spanned};
-use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
-
-use ndcell_core::prelude::{IRect6D, IVec6D};
 
 use super::{CallInfo, Function};
 use crate::data::{LangInt, RtVal, VectorSet};
@@ -43,10 +40,6 @@ impl Function for Range {
     }
 }
 
-fn ivec6_from_vec_langint(ctx: &mut Ctx, v: &[LangInt], span: Span) -> Fallible<IVec6D> {
-    IVec6D::try_from_fn(|ax| (*v.get(ax as usize).unwrap_or(&0)).try_into().ok())
-        .ok_or_else(|| ctx.error(Error::invalid_vector_set_size(span)))
-}
 fn make_vector_range(
     ctx: &mut Ctx,
     call_span: Span,
@@ -56,9 +49,7 @@ fn make_vector_range(
     b_span: Span,
 ) -> Fallible<RtVal> {
     let vec_len = std::cmp::max(a.len(), b.len());
-    let a = ivec6_from_vec_langint(ctx, a, a_span)?;
-    let b = ivec6_from_vec_langint(ctx, b, b_span)?;
-    VectorSet::rect(call_span, vec_len, IRect6D::span(a, b))
+    VectorSet::rect(call_span, a, a_span, b, b_span)
         .map_err(|e| ctx.error(e))
         .map(|set| RtVal::VectorSet(Arc::new(set)))
 }

@@ -54,11 +54,7 @@ fn set_of(x: Spanned<RtVal>) -> Result<Spanned<RtVal>> {
         // it.
         RtVal::Integer(i) => Err(Error::unimplemented(span))?,
         RtVal::Cell(i) => CellSet::single_cell(*i).into(),
-        RtVal::Vector(v) => {
-            let vec = crate::utils::vec_to_ivec6d(v)
-                .ok_or(Error::invalid_vector_length_for_set(span, v.len()))?;
-            VectorSet::single_vector(v.len(), vec)?.into()
-        }
+        RtVal::Vector(v) => VectorSet::single_vector(span, v, span)?.into(),
 
         // Otherwise, return an error.
         _ => Err(Error::invalid_set_type(span, &x.ty()))?,

@@ -179,7 +179,8 @@ pub trait SpannedRuntimeValueExt {
     /// type error.
     ///
     /// `vec_len` is merely a suggestion, used when casting an `EmptySet`. **The
-    /// returned set may not have the specified `vec_len`.**
+    /// returned set may not have the specified `vec_len`.** Additionally, this
+    /// method may return an internal error if `vec_len` is invalid.
     fn as_vector_set(self, vec_len: usize) -> Result<Arc<VectorSet>>;
     /// Returns the value inside if this is a `Pattern` variant or subtype of
     /// one; otherwise returns a type error.
@@ -272,7 +273,12 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
     }
     fn as_vector_set(self, vec_len: usize) -> Result<Arc<VectorSet>> {
         match self.node {
-            RtVal::EmptySet => Ok(Arc::new(VectorSet::empty(vec_len))),
+            RtVal::EmptySet => match VectorSet::empty(self.span, vec_len) {
+                Ok(set) => Ok(Arc::new(set)),
+                Err(e) => Err(internal_error_value!(
+                    "invalid vector length for vector set"
+                )),
+            },
             RtVal::VectorSet(x) => Ok(x),
             _ => Err(Error::type_error(
                 self.span,

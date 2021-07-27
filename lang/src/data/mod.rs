@@ -46,6 +46,8 @@ pub const CELL_STATE_BYTES: usize = CELL_STATE_BITS as usize / 8;
 pub const MAX_VECTOR_LEN: usize = 256;
 /// Maximum number of cells for a vector set's bounding rectangle.
 pub const MAX_VECTOR_SET_SIZE: usize = 1 << 16;
+/// Maximum component value for a member of a vector set.
+pub const MAX_VECTOR_SET_EXTENT: isize = 1 << 16;
 
 /// Axis names.
 pub const AXES: &'static str = "xyzwuv";

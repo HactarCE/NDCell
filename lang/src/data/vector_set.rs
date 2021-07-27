@@ -5,9 +5,8 @@ use std::fmt;
 use ndcell_core::ndarray::Array6D;
 use ndcell_core::prelude::{Axis, CanContain, Dim, Dim6D, IRect6D, IVec6D};
 
+use super::{LangInt, MAX_VECTOR_SET_EXTENT, MAX_VECTOR_SET_SIZE};
 use crate::errors::{Error, Result};
-
-use super::MAX_VECTOR_SET_SIZE;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VectorSet {
@@ -46,48 +45,47 @@ impl fmt::Display for VectorSet {
 }
 impl VectorSet {
     /// Constructs an empty vector set.
-    pub fn empty(vec_len: usize) -> Self {
+    pub fn empty(span: Span, vec_len: usize) -> Result<Self> {
+        check_vector_set_vec_len(span, vec_len)?;
+
         Self {
             vec_len,
             bounds: None,
             mask: None,
         }
+        .canonicalize()
     }
     /// Constructs a vector set containing a single vector.
-    pub fn single_vector(vec_len: usize, vec: IVec6D) -> Result<Self> {
+    pub fn single_vector(span: Span, vec: &[LangInt], vec_span: Span) -> Result<Self> {
+        let vec_len = vec.len();
+        check_vector_set_vec_len(span, vec_len)?;
+
         Self {
             vec_len,
-            bounds: Some(IRect6D::single_cell(vec)),
+            bounds: Some(IRect6D::single_cell(vec_to_ivec6d(vec_span, vec)?)),
             mask: None,
         }
         .canonicalize()
     }
     /// Constructs a rectangular vector set.
-    pub fn rect(span: Span, vec_len: usize, rect: IRect6D) -> Result<Self> {
-        check_vector_set_bounds(span, rect)?;
-        Self {
-            vec_len,
-            bounds: Some(rect),
-            mask: None,
-        }
-        .canonicalize()
-    }
-    /// Constructs a vector set from a list of vectors.
-    pub fn from_list(span: Span, vec_len: usize, positions: &[IVec6D]) -> Result<Self> {
-        let bounds = bounds_from_list(positions.iter().copied());
-        let mut mask = None;
-        if let Some(b) = bounds {
-            check_vector_set_bounds(span, b)?;
-            let mut m = Array6D::from_fn(b.size().to_uvec(), |_| false);
-            for &pos in positions {
-                m[(pos - b.min()).to_uvec()] = true;
-            }
-            mask = Some(m);
-        }
+    pub fn rect(
+        span: Span,
+        a: &[LangInt],
+        a_span: Span,
+        b: &[LangInt],
+        b_span: Span,
+    ) -> Result<Self> {
+        let vec_len = std::cmp::max(a.len(), b.len());
+        check_vector_set_vec_len(span, vec_len)?;
+
+        let a = vec_to_ivec6d(a_span, a)?;
+        let b = vec_to_ivec6d(b_span, b)?;
+        let bounds = Some(IRect6D::span(a, b));
+        check_vector_set_bounds(span, bounds)?;
         Self {
             vec_len,
             bounds,
-            mask,
+            mask: None,
         }
         .canonicalize()
     }
@@ -99,11 +97,10 @@ impl VectorSet {
         bounds: Option<IRect6D>,
         mask_fn: impl FnMut(IVec6D) -> bool,
     ) -> Result<Self> {
-        let mut mask = None;
-        if let Some(b) = bounds {
-            check_vector_set_bounds(span, b)?;
-            mask = Some(mask_from_fn(b, mask_fn));
-        }
+        check_vector_set_vec_len(span, vec_len)?;
+
+        check_vector_set_bounds(span, bounds)?;
+        let mask = bounds.map(|b| mask_from_fn(b, mask_fn));
         Self {
             vec_len,
             bounds,
@@ -164,70 +161,82 @@ impl VectorSet {
     }
 
     /// Constructs a Moore neighborhood.
-    pub fn moore(span: Span, ndim: usize, radius: isize) -> Result<Self> {
+    pub fn moore(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
+        check_vector_set_vec_len(span, ndim)?;
+
         if radius < 0 {
-            Ok(Self::empty(ndim))
-        } else if radius as usize > MAX_VECTOR_SET_SIZE {
-            Err(Error::invalid_vector_set_size(span))
+            Self::empty(span, ndim)
         } else {
-            let half_diag = IVec6D::from_fn(|ax| if (ax as usize) < ndim { radius } else { 0 });
-            Self::rect(span, ndim, IRect6D::span(-half_diag, half_diag))
+            Self::rect(
+                span,
+                &[-radius; 6][..ndim],
+                radius_span,
+                &[radius; 6][..ndim],
+                radius_span,
+            )
         }
     }
     /// Constructs a von Neumann neighborhood.
-    pub fn vn(span: Span, ndim: usize, radius: isize) -> Result<Self> {
-        Self::moore(span, ndim, radius)?.filter(span, |pos| pos.abs().sum() <= radius)
+    pub fn vn(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
+        Self::moore(span, ndim, radius, radius_span)?
+            .filter(span, |pos| pos.abs().sum() <= radius as isize)
     }
     /// Constructs a circular neighborhood. `x² + y² <= r² + r`
-    pub fn circular(span: Span, ndim: usize, radius: isize) -> Result<Self> {
+    pub fn circular(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
         let rhs = radius
             .checked_mul(radius)
             .and_then(|r_squared| r_squared.checked_add(radius));
-        Self::generic_circular(span, ndim, radius, rhs)
+        Self::generic_circular(span, ndim, radius, radius_span, rhs)
     }
     /// Constructs an L² neighborhood. `x² + y² <= r²`
-    pub fn l2(span: Span, ndim: usize, radius: isize) -> Result<Self> {
+    pub fn l2(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
         let rhs = radius.checked_mul(radius);
-        Self::generic_circular(span, ndim, radius, rhs)
+        Self::generic_circular(span, ndim, radius, radius_span, rhs)
     }
     fn generic_circular(
         span: Span,
         ndim: usize,
-        radius: isize,
-        rhs: Option<isize>,
+        radius: LangInt,
+        radius_span: Span,
+        rhs: Option<LangInt>,
     ) -> Result<Self> {
         match rhs {
-            None => Ok(Self::empty(ndim)),
-            Some(rhs) => Self::moore(span, ndim, radius)?.filter(span, |pos| {
-                pos.0.iter().map(|x| x * x).sum::<isize>() <= rhs
+            None => Self::empty(span, ndim),
+            Some(rhs) => Self::moore(span, ndim, radius, radius_span)?.filter(span, |pos| {
+                pos.0.iter().map(|x| x * x).sum::<isize>() as LangInt <= rhs
             }),
         }
     }
     /// Constructs a checkerboard Moore neighborhood.
-    pub fn checkerboard(span: Span, ndim: usize, radius: isize) -> Result<Self> {
+    pub fn checkerboard(
+        span: Span,
+        ndim: usize,
+        radius: LangInt,
+        radius_span: Span,
+    ) -> Result<Self> {
         let f = |pos: IVec6D| pos.sum() % 2 != 0 || pos.is_zero();
-        Self::moore(span, ndim, radius)?.filter(span, f)
+        Self::moore(span, ndim, radius, radius_span)?.filter(span, f)
     }
     /// Constructs a 2D hash neighborhoood.
-    pub fn hash(span: Span, radius: isize) -> Result<Self> {
+    pub fn hash(span: Span, radius: LangInt, radius_span: Span) -> Result<Self> {
         use Axis::{X, Y};
         let f = |pos: IVec6D| pos[X].abs() == 1 || pos[Y].abs() == 1 || pos.is_zero();
-        Self::moore(span, 2, radius)?.filter(span, f)
+        Self::moore(span, 2, radius, radius_span)?.filter(span, f)
     }
     /// Constructs a cross neighborhood.
-    pub fn cross(span: Span, ndim: usize, radius: isize) -> Result<Self> {
+    pub fn cross(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
         let f = |pos: IVec6D| pos.0.iter().filter(|&&x| x != 0).count() <= 1;
-        Self::moore(span, ndim, radius)?.filter(span, f)
+        Self::moore(span, ndim, radius, radius_span)?.filter(span, f)
     }
     /// Constructs a saltire neighborhood.
-    pub fn saltire(span: Span, ndim: usize, radius: isize) -> Result<Self> {
+    pub fn saltire(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
         let f = |pos: IVec6D| pos.abs().0[..ndim].iter().all_equal();
-        Self::moore(span, ndim, radius)?.filter(span, f)
+        Self::moore(span, ndim, radius, radius_span)?.filter(span, f)
     }
     /// Constructs a star neighborhood.
-    pub fn star(span: Span, ndim: usize, radius: isize) -> Result<Self> {
+    pub fn star(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
         let f = |pos: IVec6D| pos.abs().0.iter().filter(|&&x| x != 0).all_equal();
-        Self::moore(span, ndim, radius)?.filter(span, f)
+        Self::moore(span, ndim, radius, radius_span)?.filter(span, f)
     }
 
     /// Returns an iterator over all the vectors in the set.
@@ -344,27 +353,35 @@ impl<'a> IntoIterator for &'a VectorSet {
     }
 }
 
-/// Returns whether the bounds of the vector set are sufficiently small.
-pub fn is_vector_set_bounds_valid(bounds: IRect6D) -> bool {
-    // There's got to be a more elegant way to write this function.
-    let mut size = 1_usize;
-    for &ax in Dim6D::axes() {
-        match size.checked_mul(bounds.len(ax) as usize) {
-            None => return false,
-            Some(i) if i > MAX_VECTOR_SET_SIZE => return false,
-            Some(i) => size = i,
-        }
+/// Checks whether a vector set can be constructed with the given vector length
+/// and returns an error if it cannot.
+fn check_vector_set_vec_len(span: Span, vec_len: usize) -> Result<()> {
+    match (1..=6).contains(&vec_len) {
+        true => Ok(()),
+        false => Err(Error::invalid_vector_length_for_set(span, vec_len)),
     }
-    true
 }
 
 /// Checks that the bounds of the vector set are sufficiently small and returns
 /// an error if they are not.
-pub fn check_vector_set_bounds(span: Span, bounds: IRect6D) -> Result<()> {
-    match is_vector_set_bounds_valid(bounds) {
-        true => Ok(()),
-        false => Err(Error::invalid_vector_set_size(span)),
+fn check_vector_set_bounds(span: Span, bounds: Option<IRect6D>) -> Result<()> {
+    if let Some(b) = bounds {
+        let min = b.min();
+        let max = b.max();
+
+        // There's got to be a more elegant way to write this function.
+        let mut size = 1_usize;
+        for &ax in Dim6D::axes() {
+            check_vector_component(span, min[ax])?;
+            check_vector_component(span, max[ax])?;
+
+            match size.checked_mul(b.len(ax) as usize) {
+                Some(i) if i <= MAX_VECTOR_SET_SIZE => size = i,
+                _ => return Err(Error::invalid_vector_set_size(span)),
+            }
+        }
     }
+    Ok(())
 }
 
 /// Constructs the mask for a vector set by evaluating a function on each
@@ -377,10 +394,40 @@ fn mask_from_fn(bounds: IRect6D, mask_fn: impl FnMut(IVec6D) -> bool) -> Array6D
 }
 
 /// Returns the minimum bounding rectangle for a list of positions, or `None` if the list is empty.
-fn bounds_from_list(positions: impl Iterator<Item = IVec6D>) -> Option<IRect6D> {
+fn bounds_from_list(positions: impl IntoIterator<Item = IVec6D>) -> Option<IRect6D> {
     positions
+        .into_iter()
         .map(IRect6D::single_cell)
         .reduce(|r1, r2| IRect6D::span_rects(&r1, &r2))
+}
+
+fn vec_to_ivec6d(span: Span, v: &[LangInt]) -> Result<IVec6D> {
+    // Check that all values are within range.
+    for &i in v {
+        check_vector_component(span, i as isize)?;
+    }
+
+    Ok(IVec6D::from_fn(|ax| {
+        v.get(ax as usize).map(|&i| i as isize).unwrap_or(0)
+    }))
+}
+fn ivec6d_to_vec(vec_len: usize, v: IVec6D) -> Vec<LangInt> {
+    (0..vec_len.clamp(1, 6))
+        .map(|i| v.0[i] as LangInt)
+        .collect()
+}
+
+/// Checks that a vector component is sufficiently small and returns an error if
+/// it is not.
+fn check_vector_component(span: Span, i: isize) -> Result<()> {
+    match is_vector_component_valid(i as isize) {
+        true => Ok(()),
+        false => Err(Error::invalid_vector_component_for_set(span)),
+    }
+}
+/// Returns whether a vector component is sufficiently small.
+fn is_vector_component_valid(i: isize) -> bool {
+    (-MAX_VECTOR_SET_EXTENT..MAX_VECTOR_SET_EXTENT).contains(&i)
 }
 
 #[cfg(test)]
@@ -389,20 +436,13 @@ mod tests {
 
     #[test]
     fn test_vector_set_ops() {
-        use ndcell_core::prelude::NdVec;
-
         let span = crate::utils::nonsense_span();
 
-        let a = VectorSet::rect(
-            span,
-            2,
-            IRect6D::span(NdVec([0, -3, 0, 0, 0, 0]), NdVec([4, 0, 0, 0, 0, 0])),
-        )
-        .unwrap();
+        let a = VectorSet::rect(span, &[0, -3], span, &[4], span).unwrap();
 
         let b = {
-            let moore = VectorSet::moore(span, 3, 1).unwrap();
-            let circ = VectorSet::circular(span, 3, 1).unwrap();
+            let moore = VectorSet::moore(span, 3, 1, span).unwrap();
+            let circ = VectorSet::circular(span, 3, 1, span).unwrap();
             moore.difference(span, &circ).unwrap()
         };
         assert_eq!(b.len(), 8); // corner cells of a 3x3x3 cube
@@ -446,7 +486,7 @@ mod tests {
         assert!(!b_minus_a.is_empty());
         assert_eq!(b_minus_a, b);
 
-        let c = VectorSet::moore(span, 2, 0)
+        let c = VectorSet::moore(span, 2, 0, span)
             .unwrap()
             .union(span, &b)
             .unwrap();
@@ -482,12 +522,12 @@ mod tests {
         let span = crate::utils::nonsense_span();
 
         // Test Moore neighborhood.
-        let nbhd = VectorSet::moore(span, 2, 3).unwrap();
+        let nbhd = VectorSet::moore(span, 2, 3, span).unwrap();
         assert_eq!(nbhd.len(), 49);
         assert_eq!(nbhd.to_string(), "[-3, -3]..[3, 3]");
 
         // Test von Neumann neighborhood.
-        let nbhd = VectorSet::vn(span, 2, 3).unwrap();
+        let nbhd = VectorSet::vn(span, 2, 3, span).unwrap();
         assert_eq!(nbhd.len(), 25);
         assert_eq!(
             nbhd.to_string(),
@@ -503,7 +543,7 @@ mod tests {
         );
 
         // Test circular neighborhood.
-        let nbhd = VectorSet::circular(span, 2, 3).unwrap();
+        let nbhd = VectorSet::circular(span, 2, 3, span).unwrap();
         assert_eq!(nbhd.len(), 37);
         assert_eq!(
             nbhd.to_string(),
@@ -519,7 +559,7 @@ mod tests {
         );
 
         // Test L² neighborhood.
-        let nbhd = VectorSet::l2(span, 2, 3).unwrap();
+        let nbhd = VectorSet::l2(span, 2, 3, span).unwrap();
         assert_eq!(nbhd.len(), 29);
         assert_eq!(
             nbhd.to_string(),
@@ -535,7 +575,7 @@ mod tests {
         );
 
         // Test checkerboard neighborhood.
-        let nbhd = VectorSet::checkerboard(span, 2, 3).unwrap();
+        let nbhd = VectorSet::checkerboard(span, 2, 3, span).unwrap();
         assert_eq!(nbhd.len(), 25);
         assert_eq!(
             nbhd.to_string(),
@@ -551,7 +591,7 @@ mod tests {
         );
 
         // Test hash neighborhood.
-        let nbhd = VectorSet::hash(span, 3).unwrap();
+        let nbhd = VectorSet::hash(span, 3, span).unwrap();
         assert_eq!(nbhd.len(), 25);
         assert_eq!(
             nbhd.to_string(),
@@ -567,7 +607,7 @@ mod tests {
         );
 
         // Test cross neighborhood.
-        let nbhd = VectorSet::cross(span, 2, 3).unwrap();
+        let nbhd = VectorSet::cross(span, 2, 3, span).unwrap();
         assert_eq!(nbhd.len(), 13);
         assert_eq!(
             nbhd.to_string(),
@@ -583,7 +623,7 @@ mod tests {
         );
 
         // Test saltire neighborhood.
-        let nbhd = VectorSet::saltire(span, 2, 3).unwrap();
+        let nbhd = VectorSet::saltire(span, 2, 3, span).unwrap();
         assert_eq!(nbhd.len(), 13);
         assert_eq!(
             nbhd.to_string(),
@@ -599,7 +639,7 @@ mod tests {
         );
 
         // Test star neighborhood.
-        let nbhd = VectorSet::star(span, 2, 3).unwrap();
+        let nbhd = VectorSet::star(span, 2, 3, span).unwrap();
         assert_eq!(nbhd.len(), 25);
         assert_eq!(
             nbhd.to_string(),
@@ -620,12 +660,12 @@ mod tests {
         let span = crate::utils::nonsense_span();
 
         // Test Moore neighborhood.
-        let nbhd = VectorSet::moore(span, 3, 2).unwrap();
+        let nbhd = VectorSet::moore(span, 3, 2, span).unwrap();
         assert_eq!(nbhd.len(), 125);
         assert_eq!(nbhd.to_string(), "[-2, -2, -2]..[2, 2, 2]");
 
         // Test von Neumann neighborhood.
-        let nbhd = VectorSet::vn(span, 3, 2).unwrap();
+        let nbhd = VectorSet::vn(span, 3, 2, span).unwrap();
         assert_eq!(nbhd.len(), 25);
         assert_eq!(
             nbhd.to_string(),
@@ -639,7 +679,7 @@ mod tests {
         );
 
         // Test circular neighborhood.
-        let nbhd = VectorSet::circular(span, 3, 2).unwrap();
+        let nbhd = VectorSet::circular(span, 3, 2, span).unwrap();
         assert_eq!(
             nbhd.to_string(),
             "[-2, -2, -2]..[2, 2, 2] & \"\
@@ -652,7 +692,7 @@ mod tests {
         );
 
         // Test L² neighborhood.
-        let nbhd = VectorSet::l2(span, 3, 2).unwrap();
+        let nbhd = VectorSet::l2(span, 3, 2, span).unwrap();
         assert_eq!(
             nbhd.to_string(),
             "[-2, -2, -2]..[2, 2, 2] & \"\
@@ -665,7 +705,7 @@ mod tests {
         );
 
         // Test checkerboard neighborhood.
-        let nbhd = VectorSet::checkerboard(span, 3, 2).unwrap();
+        let nbhd = VectorSet::checkerboard(span, 3, 2, span).unwrap();
         assert_eq!(
             nbhd.to_string(),
             "[-2, -2, -2]..[2, 2, 2] & \"\
@@ -678,7 +718,7 @@ mod tests {
         );
 
         // Test cross neighborhood.
-        let nbhd = VectorSet::cross(span, 3, 2).unwrap();
+        let nbhd = VectorSet::cross(span, 3, 2, span).unwrap();
         assert_eq!(
             nbhd.to_string(),
             "[-2, -2, -2]..[2, 2, 2] & \"\
@@ -691,7 +731,7 @@ mod tests {
         );
 
         // Test saltire neighborhood.
-        let nbhd = VectorSet::saltire(span, 3, 2).unwrap();
+        let nbhd = VectorSet::saltire(span, 3, 2, span).unwrap();
         assert_eq!(
             nbhd.to_string(),
             "[-2, -2, -2]..[2, 2, 2] & \"\
@@ -704,7 +744,7 @@ mod tests {
         );
 
         // Test star neighborhood.
-        let nbhd = VectorSet::star(span, 3, 2).unwrap();
+        let nbhd = VectorSet::star(span, 3, 2, span).unwrap();
         assert_eq!(
             nbhd.to_string(),
             "[-2, -2, -2]..[2, 2, 2] & \"\

@@ -136,7 +136,7 @@ pub trait CtxTrait {
     /// Returns the global initialization and compile-time execution context.
     fn ctx(&mut self) -> &mut Ctx;
 
-    /// Reports an initialization or compiler error.
+    /// Records an initialization or compiler error.
     fn error(&mut self, e: Error) -> AlreadyReported {
         self.ctx().errors.push(e);
         AlreadyReported
@@ -170,5 +170,20 @@ pub trait CtxTrait {
 impl CtxTrait for Ctx {
     fn ctx(&mut self) -> &mut Ctx {
         self
+    }
+}
+
+/// Extension trait for easy error reporting.
+pub trait ErrorReportExt {
+    type Ok;
+
+    /// Records an initialization or compiler error if there is one.
+    fn report_err(self, ctx: &mut impl CtxTrait) -> Fallible<Self::Ok>;
+}
+impl<T> ErrorReportExt for Result<T> {
+    type Ok = T;
+
+    fn report_err(self, ctx: &mut impl CtxTrait) -> Fallible<T> {
+        self.map_err(|e| ctx.error(e))
     }
 }

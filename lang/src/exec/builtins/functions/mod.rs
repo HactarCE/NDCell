@@ -13,7 +13,7 @@ pub(super) mod vectors;
 use crate::ast;
 use crate::data::{FallibleTypeOf, RtVal, Type, Val};
 use crate::errors::{AlreadyReported, Error, Fallible};
-use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt};
 
 /// Function that can be evaluated and/or compiled, taking zero or more
 /// arguments and returning a value.
@@ -95,10 +95,7 @@ where
     fn arg_types(&self, ctx: &mut impl CtxTrait) -> Fallible<Vec<Type>> {
         self.args
             .iter()
-            .map(|arg| {
-                arg.fallible_ty()
-                    .and_then(|ty| ty.map_err(|e| ctx.error(e)))
-            })
+            .map(|arg| arg.fallible_ty().and_then(|ty| ty.report_err(ctx)))
             .collect()
     }
 

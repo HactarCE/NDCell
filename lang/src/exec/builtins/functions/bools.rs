@@ -9,7 +9,7 @@ use std::fmt;
 use super::{CallInfo, Function};
 use crate::data::{CpVal, LangInt, RtVal, SpannedRuntimeValueExt, Val};
 use crate::errors::Fallible;
-use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::exec::{Compiler, Ctx, ErrorReportExt};
 use crate::llvm;
 
 /// Built-in function that converts a value to a boolean.
@@ -24,7 +24,7 @@ impl Function for ToBool {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(1, ctx, self)?;
         Ok(RtVal::Integer(
-            call.args[0].to_bool().map_err(|e| ctx.error(e))? as LangInt,
+            call.args[0].to_bool().report_err(ctx)? as LangInt
         ))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
@@ -46,8 +46,8 @@ impl fmt::Display for LogicalXor {
 impl Function for LogicalXor {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(2, ctx, self)?;
-        let lhs = call.args[0].to_bool().map_err(|e| ctx.error(e));
-        let rhs = call.args[1].to_bool().map_err(|e| ctx.error(e));
+        let lhs = call.args[0].to_bool().report_err(ctx);
+        let rhs = call.args[1].to_bool().report_err(ctx);
         Ok(RtVal::Integer((lhs != rhs) as LangInt))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
@@ -71,7 +71,7 @@ impl fmt::Display for LogicalNot {
 impl Function for LogicalNot {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(1, ctx, self)?;
-        let arg = call.args[0].to_bool().map_err(|e| ctx.error(e))?;
+        let arg = call.args[0].to_bool().report_err(ctx)?;
         Ok(RtVal::Integer(!arg as LangInt))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {

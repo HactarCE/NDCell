@@ -7,7 +7,7 @@ use std::sync::Arc;
 use super::{CallInfo, Function};
 use crate::data::{LangInt, RtVal, VectorSet};
 use crate::errors::{Error, Fallible};
-use crate::exec::{Ctx, CtxTrait};
+use crate::exec::{Ctx, CtxTrait, ErrorReportExt};
 
 /// Built-in function that constructs a range between two arguments.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
@@ -50,6 +50,6 @@ fn make_vector_range(
 ) -> Fallible<RtVal> {
     let vec_len = std::cmp::max(a.len(), b.len());
     VectorSet::rect(call_span, a, a_span, b, b_span)
-        .map_err(|e| ctx.error(e))
+        .report_err(ctx)
         .map(|set| RtVal::VectorSet(Arc::new(set)))
 }

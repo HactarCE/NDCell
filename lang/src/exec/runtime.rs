@@ -6,7 +6,7 @@ use super::builtins::{self, Expression};
 use crate::ast;
 use crate::data::{RtVal, SpannedRuntimeValueExt};
 use crate::errors::{AlreadyReported, Error, Fallible};
-use crate::exec::{Ctx, CtxTrait};
+use crate::exec::{Ctx, CtxTrait, ErrorReportExt};
 
 // TODO: consider making `vars` only `pub(super)` and adding `fn vars(&mut self) -> &mut HashMap<_, _>`
 
@@ -167,11 +167,7 @@ impl Runtime {
                 if_false,
             } => {
                 let condition = ast.get_node(*condition);
-                if self
-                    .eval_expr(condition)?
-                    .to_bool()
-                    .map_err(|e| self.error(e))?
-                {
+                if self.eval_expr(condition)?.to_bool().report_err(self)? {
                     if_true.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
                 } else {
                     if_false.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
@@ -180,11 +176,7 @@ impl Runtime {
 
             ast::StmtData::Assert { condition, msg } => {
                 let condition = ast.get_node(*condition);
-                if self
-                    .eval_expr(condition)?
-                    .to_bool()
-                    .map_err(|e| self.error(e))?
-                {
+                if self.eval_expr(condition)?.to_bool().report_err(self)? {
                     Err(self.error(match msg {
                         Some(msg) => Error::assertion_failed_with_msg(stmt.span(), msg),
                         None => Error::assertion_failed(stmt.span()),
@@ -206,11 +198,7 @@ impl Runtime {
                 block,
             } => {
                 let iter_expr = ast.get_node(*iter_expr_id);
-                for it in self
-                    .eval_expr(iter_expr)?
-                    .iterate()
-                    .map_err(|e| self.error(e))?
-                {
+                for it in self.eval_expr(iter_expr)?.iterate().report_err(self)? {
                     self.vars.insert(Arc::clone(&iter_var), it.node);
                     match self.exec_stmt(ast.get_node(*block))? {
                         Flow::Proceed | Flow::Continue(_) => (),
@@ -242,6 +230,6 @@ impl Runtime {
             .map(|v| Spanned { node: v, span })
     }
     pub fn eval_bool_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<bool> {
-        self.eval_expr(expr)?.to_bool().map_err(|e| self.error(e))
+        self.eval_expr(expr)?.to_bool().report_err(self)
     }
 }

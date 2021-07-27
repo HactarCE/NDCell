@@ -10,7 +10,7 @@ use crate::data::{
     CpVal, LangInt, LangUint, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Val,
 };
 use crate::errors::{Error, Fallible, Result};
-use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt};
 use crate::llvm;
 
 /// Built-in function that performs a fixed two-input integer math operation.
@@ -150,7 +150,7 @@ impl BinaryMathOp {
             // Set operations.
             (RtVal::EmptySet, RtVal::EmptySet) if self.is_set_op() => Ok(RtVal::EmptySet),
             (RtVal::IntegerSet(l), _) if self.is_set_op() => {
-                let r = rhs.as_integer_set().map_err(|e| ctx.error(e))?;
+                let r = rhs.as_integer_set().report_err(ctx)?;
                 match self {
                     Self::Or => Err(Error::unimplemented(span)),
                     Self::And => Err(Error::unimplemented(span)),
@@ -160,7 +160,7 @@ impl BinaryMathOp {
                 }
             }
             (RtVal::CellSet(l), _) => {
-                let r = rhs.as_cell_set().map_err(|e| ctx.error(e))?;
+                let r = rhs.as_cell_set().report_err(ctx)?;
                 match self {
                     Self::Or => Err(Error::unimplemented(span)),
                     Self::And => Err(Error::unimplemented(span)),
@@ -170,7 +170,7 @@ impl BinaryMathOp {
                 }
             }
             (RtVal::VectorSet(l), _) => {
-                let r = rhs.as_vector_set(l.vec_len()).map_err(|e| ctx.error(e))?;
+                let r = rhs.as_vector_set(l.vec_len()).report_err(ctx)?;
                 match self {
                     Self::Or => l.union(span, &*r),
                     Self::And => l.intersection(span, &*r),
@@ -183,7 +183,7 @@ impl BinaryMathOp {
 
             _ => Err(invalid_args),
         }
-        .map_err(|e| ctx.error(e))
+        .report_err(ctx)
     }
 
     /// Compiles this operation for two LLVM math values.
@@ -222,11 +222,11 @@ impl BinaryMathOp {
         let l = compiler
             .get_cp_val(lhs)?
             .as_integer()
-            .map_err(|e| compiler.error(e))?;
+            .report_err(compiler)?;
         let r = compiler
             .get_cp_val(rhs)?
             .as_integer()
-            .map_err(|e| compiler.error(e))?;
+            .report_err(compiler)?;
         Ok(Val::Cp(CpVal::Integer(
             self.compile_for_int_math_values(compiler, span, l, r)?
                 .into_int_value(),
@@ -290,7 +290,7 @@ impl UnaryMathOp {
         if let Ok(x) = arg.clone().as_integer() {
             self.eval_on_integers(span, x)
                 .map(RtVal::Integer)
-                .map_err(|e| ctx.error(e))
+                .report_err(ctx)
         } else {
             Err(ctx.error(Error::invalid_arguments(span, self, &[arg.ty()])))
         }
@@ -323,7 +323,7 @@ impl UnaryMathOp {
         let x = compiler
             .get_cp_val(arg)?
             .as_integer()
-            .map_err(|e| compiler.error(e))?;
+            .report_err(compiler)?;
         Ok(Val::Cp(CpVal::Integer(
             self.compile_for_int_math_values(compiler, span, x)?
                 .into_int_value(),

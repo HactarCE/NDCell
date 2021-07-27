@@ -7,7 +7,7 @@ use std::sync::Arc;
 use super::functions::{self, CallInfo, Function};
 use crate::data::{CpVal, LangInt, RtVal, SpannedRuntimeValueExt, Val};
 use crate::errors::{AlreadyReported, Error, Fallible};
-use crate::exec::{Compiler, CtxTrait, Runtime};
+use crate::exec::{Compiler, CtxTrait, ErrorReportExt, Runtime};
 use crate::{ast, llvm};
 
 /// Expression that can be evaluated and/or compiled, including any relevant
@@ -230,7 +230,7 @@ impl Expression for LogicalOrExpr<'_> {
         match lhs.node {
             Val::Rt(_) => {
                 let l = compiler.get_rt_val(lhs).unwrap();
-                let l_bool = l.to_bool().map_err(|e| compiler.error(e))?;
+                let l_bool = l.to_bool().report_err(compiler)?;
                 match l_bool {
                     // LHS is statically `true`; do not compile RHS.
                     true => Ok(Val::Rt(RtVal::Integer(1))),
@@ -286,7 +286,7 @@ impl Expression for LogicalAndExpr<'_> {
         match lhs.node {
             Val::Rt(_) => {
                 let l = compiler.get_rt_val(lhs).unwrap();
-                let l_bool = l.to_bool().map_err(|e| compiler.error(e))?;
+                let l_bool = l.to_bool().report_err(compiler)?;
                 match l_bool {
                     // LHS is statically `true`; compile RHS, convert to bool,
                     // and return it.
@@ -353,7 +353,7 @@ impl Expression for MethodCall<'_> {
         } else {
             super::resolve_method(&receiver.ty(), attr, span)
         }
-        .map_err(|e| runtime.error(e))?;
+        .report_err(runtime)?;
 
         check_kwargs(runtime, &f, &args)?;
         f.eval(runtime.ctx(), CallInfo::new(span, args))
@@ -380,7 +380,7 @@ impl Expression for MethodCall<'_> {
             let receiving_type = compiler.get_val_type(&receiver)?;
             super::resolve_method(&receiving_type, attr, span)
         }
-        .map_err(|e| compiler.error(e))?;
+        .report_err(compiler)?;
 
         check_kwargs(compiler, &f, &args)?;
         if let Some(args) = all_rt_vals(&args) {
@@ -451,7 +451,8 @@ impl<'ast> CompiledArg<'ast> {
             .0
             .iter()
             .exactly_one()
-            .map_err(|_| compiler.error(Error::custom(span, "expected exactly one index")))?;
+            .map_err(|_| Error::custom(span, "expected exactly one index"))
+            .report_err(compiler)?;
         let index_value = compiler.build_expr(index_expr)?;
         let span = index_expr.span();
         // It should be const-evaluatable
@@ -459,10 +460,11 @@ impl<'ast> CompiledArg<'ast> {
             .get_rt_val(index_value)?
             // ... should be an integer
             .as_integer()
-            .map_err(|e| compiler.error(e))?
+            .report_err(compiler)?
             // ... should fit in `u32`
             .try_into()
-            .map_err(|_| compiler.error(Error::custom(span, "compiled arg index out of range")))?;
+            .map_err(|_| Error::custom(span, "compiled arg index out of range"))
+            .report_err(compiler)?;
         // ... and it should be within range.
         if index < compiler.param_types().len() as u32 {
             Ok(Spanned {

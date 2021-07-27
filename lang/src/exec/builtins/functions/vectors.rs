@@ -6,7 +6,7 @@ use std::fmt;
 use super::{CallInfo, Function};
 use crate::data::{self, CpVal, RtVal, SpannedRuntimeValueExt, Val};
 use crate::errors::{Error, Fallible};
-use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt};
 use crate::llvm;
 
 /// Built-in function that constructs a vector from components.
@@ -28,9 +28,9 @@ impl Function for VectorConstruct {
                 RtVal::VectorSet(_) => Err(Error::unimplemented(arg.span)),
                 _ => Err(Error::expected(arg.span, "integer or vector")),
             }
-            .map_err(|e| ctx.error(e))?;
+            .report_err(ctx)?;
         }
-        data::check_vector_len(call.span, ret.len()).map_err(|e| ctx.error(e))?;
+        data::check_vector_len(call.span, ret.len()).report_err(ctx)?;
         Ok(RtVal::Vector(ret))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
@@ -42,9 +42,9 @@ impl Function for VectorConstruct {
                 CpVal::Vector(v) => Ok(ret.extend_from_slice(&compiler.build_split_vector(v))),
                 _ => Err(Error::expected(arg.span, "integer or vector")),
             }
-            .map_err(|e| compiler.error(e))?;
+            .report_err(compiler)?;
         }
-        data::check_vector_len(call.span, ret.len()).map_err(|e| compiler.error(e))?;
+        data::check_vector_len(call.span, ret.len()).report_err(compiler)?;
         Ok(Val::Cp(CpVal::Vector(llvm::VectorType::const_vector(&ret))))
     }
 }
@@ -68,7 +68,7 @@ impl Function for Vec {
                 .clone()
                 .as_integer()
                 .and_then(|n| data::check_vector_len(x.span, n))
-                .map_err(|e| ctx.error(e))?,
+                .report_err(ctx)?,
             None => ctx.get_ndim(call.span)?,
         };
         VecWithLen(len).eval(ctx, call)
@@ -79,7 +79,7 @@ impl Function for Vec {
                 .get_rt_val(x.clone())?
                 .as_integer()
                 .and_then(|n| data::check_vector_len(x.span, n))
-                .map_err(|e| compiler.error(e))?,
+                .report_err(compiler)?,
             None => compiler.get_ndim(call.span)?,
         };
         VecWithLen(len).compile(compiler, call)
@@ -99,7 +99,7 @@ impl Function for VecWithLen {
         let len = self.0;
         match &call.args[..] {
             [] => Ok(RtVal::Vector(vec![0; len])),
-            [arg] => Ok(RtVal::Vector(arg.to_vector(len).map_err(|e| ctx.error(e))?)),
+            [arg] => Ok(RtVal::Vector(arg.to_vector(len).report_err(ctx)?)),
             _ => Err(call.invalid_args_error(ctx, self)),
         }
     }

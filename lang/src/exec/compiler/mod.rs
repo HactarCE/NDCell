@@ -40,7 +40,7 @@ use crate::data::{
     Array, CellSet, CpVal, FallibleTypeOf, LangInt, RtVal, Type, Val, VectorSet, INT_BITS,
 };
 use crate::errors::{AlreadyReported, Error, Fallible, Result};
-use crate::exec::{Ctx, CtxTrait, Runtime};
+use crate::exec::{Ctx, CtxTrait, ErrorReportExt, Runtime};
 use crate::llvm::{self, traits::*};
 pub use config::CompilerConfig;
 pub use function::CompiledFunction;
@@ -327,7 +327,7 @@ impl Compiler {
                 e,
             )),
         }
-        .map_err(|e| self.error(e))
+        .report_err(self)
     }
 
     /// Returns the struct type used to hold parameters to the LLVM function.
@@ -1244,7 +1244,7 @@ impl Compiler {
 
         // Typecheck.
         let expected_type = Type::from(arg_ty);
-        let got_type = new_arg_value.fallible_ty()?.map_err(|e| self.error(e))?;
+        let got_type = new_arg_value.fallible_ty()?.report_err(self)?;
         if got_type != expected_type {
             return Err(self.error(Error::type_error(
                 new_arg_value.span,

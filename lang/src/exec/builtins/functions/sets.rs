@@ -6,7 +6,7 @@ use std::fmt;
 use super::{CallInfo, Function};
 use crate::data::{CellSet, RtVal, SpannedRuntimeValueExt, Type, VectorSet};
 use crate::errors::{Error, Fallible, Result};
-use crate::exec::{Ctx, CtxTrait};
+use crate::exec::{Ctx, CtxTrait, ErrorReportExt};
 
 /// Built-in function that constructs an `EmptySet`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
@@ -53,9 +53,7 @@ impl Function for EmptyVectorSet {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let vec_len = self.0.unwrap_or(ctx.get_ndim(call.span)?);
         call.check_args_len(0, ctx, self)?;
-        Ok(VectorSet::empty(call.span, vec_len)
-            .map_err(|e| ctx.error(e))?
-            .into())
+        Ok(VectorSet::empty(call.span, vec_len).report_err(ctx)?.into())
     }
 }
 
@@ -82,7 +80,7 @@ impl Function for SetConstruct {
                 }
                 _ => internal_error!("invalid fold type in set constructor"),
             })
-            .map_err(|e| ctx.error(e))
+            .report_err(ctx)
     }
 }
 

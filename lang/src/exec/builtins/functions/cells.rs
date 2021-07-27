@@ -6,7 +6,7 @@ use std::fmt;
 use super::{CallInfo, Function};
 use crate::data::{CpVal, LangInt, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Val};
 use crate::errors::{Error, Fallible};
-use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt};
 use crate::llvm;
 
 /// Built-in function that converts an integer to a cell state.
@@ -41,7 +41,7 @@ impl Function for IntToCell {
         let n = compiler
             .get_cp_val(arg.clone())?
             .as_integer()
-            .map_err(|e| compiler.error(e))?;
+            .report_err(compiler)?;
 
         let cell_state_count = llvm::const_int(compiler.get_states(call.span)? as LangInt);
         let cell_state_id_is_invalid = compiler.builder().build_int_compare(

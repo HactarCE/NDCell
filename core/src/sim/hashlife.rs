@@ -191,7 +191,7 @@ fn advance_inner_node<'pool, D: Dim>(
         //    nodes at layer `L-1` and time `0`.
         let unsimmed_half_size_nodes: NdArray<NodeRef<'pool, D>, D> = NdArray::from_flat_slice(
             UVec::repeat(3_usize),
-            URect::<D>::span(UVec::origin(), UVec::repeat(2_usize))
+            URect::<D>::span(UVec::zero(), UVec::repeat(2_usize))
                 .iter()
                 .map(|pos| {
                     node.pool().join_nodes(
@@ -211,7 +211,7 @@ fn advance_inner_node<'pool, D: Dim>(
 
         // 4. Combine adjacent nodes from step #3 to make a 2^D array of
         //    nodes at layer `L-1` and time `t/2`.
-        let half_simmed_half_size_nodes = URect::<D>::span(UVec::origin(), UVec::repeat(1_usize))
+        let half_simmed_half_size_nodes = URect::<D>::span(UVec::zero(), UVec::repeat(1_usize))
             .iter()
             .map(|pos| {
                 node.pool().join_nodes(

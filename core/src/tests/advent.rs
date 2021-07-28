@@ -71,7 +71,7 @@ fn test_pattern<D: Dim>(plaintext: &str, initial_pop: usize, final_pop: usize) {
     let mut ndtree = NdTree::<D>::new();
 
     // Load pattern
-    let mut pos = BigVec::origin();
+    let mut pos = BigVec::zero();
     for row in plaintext.lines() {
         for ch in row.chars() {
             if ch == '#' {

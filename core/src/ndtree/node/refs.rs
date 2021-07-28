@@ -235,7 +235,7 @@ pub trait NodeRefTrait<'pool>: Copy + private::Sealed {
         ) -> Option<NodeRef<'pool, Self::D>>,
         mut modify_cell: impl FnMut(&BigVec<Self::D>, u8) -> u8,
     ) -> NodeRef<'pool, Self::D> {
-        self.recursive_modify_with_offset(&BigVec::origin(), &mut modify_node, &mut modify_cell)
+        self.recursive_modify_with_offset(&BigVec::zero(), &mut modify_node, &mut modify_cell)
     }
     /// Same as `recursive_modify()`, but `offset` is added to all coordinate
     /// values before being passed to either closure.

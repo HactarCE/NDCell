@@ -49,7 +49,7 @@ impl<T, D: Dim> NdArray<T, D> {
 
     /// Creates an `NdArray` by evaluating a function for each position.
     pub fn from_fn(size: UVec<D>, mut f: impl FnMut(UVec<D>) -> T) -> Self {
-        let rect = URect::with_size(UVec::origin(), size.clone());
+        let rect = URect::with_size(UVec::zero(), size.clone());
         let mut data = Vec::with_capacity(rect.count());
         for pos in rect.iter() {
             data.push(f(pos));
@@ -77,7 +77,7 @@ impl<T, D: Dim> NdArray<T, D> {
     /// Returns the rectangular bounds of the array.
     #[inline]
     pub fn rect(&self) -> URect<D> {
-        URect::with_size(UVec::origin(), self.size.clone())
+        URect::with_size(UVec::zero(), self.size.clone())
     }
 
     /// Returns an iterator over all the elements in the array, enumerated by
@@ -144,7 +144,7 @@ impl<D: Dim> NdArray<u8, D> {
 /// `NdArray` with the given size.
 #[allow(unused)]
 fn unflatten_idx<D: Dim>(size: UVec<D>, mut idx: usize) -> UVec<D> {
-    let mut ret = UVec::origin();
+    let mut ret = UVec::zero();
     assert!(idx < size.product() as usize);
     for &ax in D::axes() {
         ret[ax] = idx.rem_euclid(size[ax]);
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn test_ndarray_flatten_unflatten_idx() {
         let size: UVec4D = NdVec([4, 5, 6, 7]);
-        let rect: URect4D = NdRect::with_size(NdVec::origin(), size);
+        let rect: URect4D = NdRect::with_size(NdVec::zero(), size);
         assert_eq!(rect.size(), size);
         let count = rect.count() as usize;
         let mut last_index = None;

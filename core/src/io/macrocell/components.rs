@@ -118,7 +118,7 @@ impl FromStr for Macrocell {
 
         let mut rule: Option<String> = None;
         let mut gen = BigInt::zero();
-        let mut offset = BigVec6D::origin();
+        let mut offset = BigVec6D::zero();
         let mut nodes = vec![MacrocellNode::Empty];
         let mut comments = String::new();
 

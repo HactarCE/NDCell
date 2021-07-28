@@ -122,7 +122,7 @@ impl CaFormatTrait for Macrocell {
         ndtree: &NdTree<D>,
         rect: Option<BigRect<D>>,
     ) -> Result<Self, Self::Err> {
-        let mut offset = BigVec6D::origin();
+        let mut offset = BigVec6D::zero();
         let center = ndtree.center_pos();
         for &ax in D::axes() {
             offset[ax] = center[ax].clone();

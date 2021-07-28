@@ -9,7 +9,7 @@ where
     NdVec<D, N>: MulAssign<X>,
 {
     fn product<I: Iterator<Item = X>>(iter: I) -> Self {
-        let mut ret = Self::origin();
+        let mut ret = Self::zero();
         for x in iter {
             ret *= x;
         }
@@ -22,7 +22,7 @@ where
     NdVec<D, N>: AddAssign<X>,
 {
     fn sum<I: Iterator<Item = X>>(iter: I) -> Self {
-        let mut ret = Self::origin();
+        let mut ret = Self::zero();
         for x in iter {
             ret += x;
         }

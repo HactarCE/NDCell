@@ -82,7 +82,7 @@ where
         self.start *= operand;
         self.size *= operand;
         assert!(
-            self.size > NdVec::origin(),
+            self.size > NdVec::zero(),
             "NdRect must have positive volume"
         );
     }
@@ -125,7 +125,7 @@ where
         self.start /= operand;
         self.size /= operand;
         assert!(
-            self.size > NdVec::origin(),
+            self.size > NdVec::zero(),
             "NdRect must have positive volume"
         );
     }

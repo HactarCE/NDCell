@@ -37,7 +37,7 @@ impl Rle {
             .as_ref()
             // Convert from 6D to ND.
             .map(|cxrle| BigVec::from_fn(|ax| cxrle.pos[ax].clone()))
-            .unwrap_or(BigVec::origin());
+            .unwrap_or(BigVec::zero());
         // Negate all axes except the X axis.
         for &ax in &D::axes()[1..] {
             first_run_start[ax] *= -1;

@@ -76,7 +76,7 @@ where
     /// This function panics if `size` is zero or negative along any axis.
     #[inline]
     pub fn with_size(start: NdVec<D, N>, size: NdVec<D, N>) -> Self {
-        assert!(size > NdVec::origin(), "NdRect must have positive volume");
+        assert!(size > NdVec::zero(), "NdRect must have positive volume");
         NdRect { start, size }
     }
 
@@ -122,13 +122,13 @@ where
     where
         NdVec<D, N>: Add<X, Output = NdVec<D, N>> + Sub<X, Output = NdVec<D, N>>,
     {
-        Self::centered(NdVec::origin(), radius)
+        Self::centered(NdVec::zero(), radius)
     }
 
     /// Creates a square `NdRect` with the given size and its minimum corner at
     /// the origin.
     pub fn square_from_origin<X: Copy + Into<N>>(size: X) -> Self {
-        Self::with_size(NdVec::origin(), NdVec::repeat(size.into()))
+        Self::with_size(NdVec::zero(), NdVec::repeat(size.into()))
     }
 
     /// Creates an `NdRect` spanning both of the given rectangles (inclusive).

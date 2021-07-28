@@ -152,13 +152,13 @@ impl Layer {
     #[inline]
     pub fn rect<D: Dim>(self) -> Option<URect<D>> {
         self.len()
-            .map(|len| URect::span(UVec::origin(), UVec::repeat(len - 1)))
+            .map(|len| URect::span(UVec::zero(), UVec::repeat(len - 1)))
     }
     /// Returns a rectangle the size of a node at this layer with the lower
     /// corner at the origin as a `BigRect`.
     #[inline]
     pub fn big_rect<D: Dim>(self) -> BigRect<D> {
-        BigRect::span(BigVec::origin(), BigVec::repeat(self.big_len() - 1))
+        BigRect::span(BigVec::zero(), BigVec::repeat(self.big_len() - 1))
     }
 
     /// Returns the cell offset of the child of a node at this layer with the
@@ -328,7 +328,7 @@ mod tests {
         let layer = Layer(3);
         assert_eq!(8, layer.len().unwrap());
         // This is ~2^16 iterations, which shouldn't take too long to enumerate.
-        for pos in IRect3D::centered(IVec3D::origin(), 20).iter() {
+        for pos in IRect3D::centered(IVec3D::zero(), 20).iter() {
             let NdVec([x, y, z]) = pos.div_floor(&4) & 1;
             let expected = (x + 2 * y + 4 * z) as usize;
             let actual = layer.non_leaf_child_index(&pos.to_bigvec());
@@ -342,7 +342,7 @@ mod tests {
         let layer = Layer(3);
         assert_eq!(8, layer.len().unwrap());
         // This is ~2^15 iterations, which shouldn't take too long to enumerate.
-        for pos in URect3D::span(UVec3D::origin(), UVec3D::repeat(30)).iter() {
+        for pos in URect3D::span(UVec3D::zero(), UVec3D::repeat(30)).iter() {
             let NdVec([x, y, z]) = pos & 7;
             let expected = (x + 8 * y + 64 * z) as usize;
             let actual = layer.leaf_cell_index(pos);

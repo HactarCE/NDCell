@@ -84,7 +84,7 @@ impl CaFormatTrait for Rle {
         rect: Option<BigRect<D>>,
     ) -> Result<Self, Self::Err> {
         let mut header = RleHeader {
-            size: NdVec::origin(),
+            size: NdVec::zero(),
             rule: None,
         };
         let mut cxrle_header = None;
@@ -102,7 +102,7 @@ impl CaFormatTrait for Rle {
             };
 
             header.size = NdVec::repeat(1);
-            let mut cxrle_pos = NdVec::origin();
+            let mut cxrle_pos = NdVec::zero();
             for &ax in D::axes() {
                 header.size[ax] = size[ax].to_usize().ok_or(RleError::TooBig)?;
                 cxrle_pos[ax] = pos[ax].clone();

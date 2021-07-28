@@ -365,7 +365,7 @@ impl<D: Dim> NodePool<D> {
         layer: Layer,
         mut generator: impl FnMut(UVec<D>) -> u8,
     ) -> NodeRef<'pool, D> {
-        self._get_from_fn(UVec::origin(), layer, &mut generator)
+        self._get_from_fn(UVec::zero(), layer, &mut generator)
     }
     fn _get_from_fn<'pool>(
         &'pool self,

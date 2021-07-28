@@ -71,7 +71,7 @@ impl<D: DimFor<N>, N: NdVecNum> IndexMut<Axis> for NdVec<D, N> {
 impl<D: DimFor<N>, N: NdVecNum> NdVec<D, N> {
     /// Creates a vector consisting of all zeros.
     #[inline]
-    pub fn origin() -> Self {
+    pub fn zero() -> Self {
         Self::default()
     }
     /// Returns true if the vector is all zeros, or false otherwise.

@@ -31,8 +31,8 @@ impl From<CpVal> for Val {
     }
 }
 impl Val {
-    /// Returns the value inside if this is an `RtVal` variant; otherwise
-    /// returns `None`.
+    /// Returns the value inside if this is an `RtVal`; otherwise returns
+    /// `None`.
     pub fn rt_val(self) -> Option<RtVal> {
         if let Self::Rt(v) = self {
             Some(v)
@@ -40,8 +40,8 @@ impl Val {
             None
         }
     }
-    /// Returns the value inside if this is an `CpVal` variant; otherwise
-    /// returns `None`.
+    /// Returns the value inside if this is an `CpVal`; otherwise returns
+    /// `None`.
     pub fn cp_val(self) -> Option<CpVal> {
         if let Self::Cp(v) = self {
             Some(v)

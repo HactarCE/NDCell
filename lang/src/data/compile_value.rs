@@ -37,20 +37,20 @@ impl CpVal {
 }
 
 pub trait SpannedCompileValueExt {
-    /// Returns the value inside if this is an `Integer` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is an `Integer` or subtype of one;
+    /// otherwise returns a type error.
     fn as_integer(self) -> Result<llvm::IntValue>;
-    /// Returns the value inside if this is a `Cell` variant or subtype of one;
+    /// Returns the value inside if this is a `Cell` or subtype of one;
     /// otherwise returns a type error.
     fn as_cell(self) -> Result<llvm::IntValue>;
-    /// Returns the value inside if this is a `Vector` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is a `Vector` or subtype of one;
+    /// otherwise returns a type error.
     fn as_vector(self) -> Result<llvm::VectorValue>;
-    /// Returns the value inside if this is an `Array` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is an `Array` or subtype of one;
+    /// otherwise returns a type error.
     fn as_array(self) -> Result<()>;
-    /// Returns the value inside if this is a `CellSet` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is a `CellSet` or subtype of one;
+    /// otherwise returns a type error.
     fn as_cell_set(self) -> Result<llvm::VectorValue>;
 }
 impl SpannedCompileValueExt for Spanned<CpVal> {

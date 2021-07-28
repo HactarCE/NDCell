@@ -142,38 +142,38 @@ impl From<VectorSet> for RtVal {
 }
 
 pub trait SpannedRuntimeValueExt {
-    /// Returns the value inside if this is a `Null` variant or subtype of one;
+    /// Returns the value inside if this is a `Null` or subtype of one;
     /// otherwise returns a type error.
     fn as_null(self) -> Result<()>;
-    /// Returns the value inside if this is an `Integer` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is an `Integer` or subtype of one;
+    /// otherwise returns a type error.
     fn as_integer(self) -> Result<LangInt>;
-    /// Returns the value inside if this is a `Cell` variant or subtype of one;
+    /// Returns the value inside if this is a `Cell` or subtype of one;
     /// otherwise returns a type error.
     fn as_cell(self) -> Result<LangCell>;
-    /// Returns the value inside if this is a `Tag` variant or subtype of one;
-    /// otherwise returns a type error.
+    /// Returns the value inside if this is a `Tag` or subtype of one; otherwise
+    /// returns a type error.
     fn as_tag(self) -> Result<Arc<String>>;
-    /// Returns the value inside if this is a `String` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is a `String` or subtype of one;
+    /// otherwise returns a type error.
     fn as_string(self) -> Result<Arc<String>>;
-    /// Returns the value inside if this is a `Type` variant or subtype of one;
+    /// Returns the value inside if this is a `Type` or subtype of one;
     /// otherwise returns a type error.
     fn as_type(self) -> Result<Type>;
-    /// Returns the value inside if this is a `Vector` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is a `Vector` or subtype of one;
+    /// otherwise returns a type error.
     fn as_vector(self) -> Result<Vec<LangInt>>;
-    /// Returns the value inside if this is an `Array` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is an `Array` or subtype of one;
+    /// otherwise returns a type error.
     fn as_array(self) -> Result<Arc<Array>>;
-    /// Returns the value inside if this is an `EmptySet` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is an `EmptySet` or subtype of one;
+    /// otherwise returns a type error.
     fn as_empty_set(self) -> Result<()>;
-    /// Returns the value inside if this is an `IntegerSet` variant or subtype
-    /// of one; otherwise returns a type error.
+    /// Returns the value inside if this is an `IntegerSet` or subtype of one;
+    /// otherwise returns a type error.
     fn as_integer_set(self) -> Result<Arc<IntegerSet>>;
-    /// Returns the value inside if this is a `CellSet` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is a `CellSet` or subtype of one;
+    /// otherwise returns a type error.
     fn as_cell_set(self) -> Result<CellSet>;
     /// Returns the value inside if this is a `VectorSet`; otherwise returns a
     /// type error.
@@ -182,10 +182,10 @@ pub trait SpannedRuntimeValueExt {
     /// returned set may not have the specified `vec_len`.** Additionally, this
     /// method may return an internal error if `vec_len` is invalid.
     fn as_vector_set(self, vec_len: usize) -> Result<Arc<VectorSet>>;
-    /// Returns the value inside if this is a `Pattern` variant or subtype of
-    /// one; otherwise returns a type error.
+    /// Returns the value inside if this is a `Pattern` or subtype of one;
+    /// otherwise returns a type error.
     fn as_pattern(self) -> Result<Arc<Pattern>>;
-    /// Returns the value inside if this is a `Regex` variant or subtype of one;
+    /// Returns the value inside if this is a `Regex` or subtype of one;
     /// otherwise returns a type error.
     fn as_regex(self) -> Result<Arc<Regex>>;
 

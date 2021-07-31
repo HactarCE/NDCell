@@ -4,7 +4,9 @@ use codemap::Spanned;
 use std::fmt;
 
 use super::{CallInfo, Function};
-use crate::data::{CpVal, LangInt, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Val};
+use crate::data::{
+    CpVal, LangCell, LangInt, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Val,
+};
 use crate::errors::{Error, Fallible};
 use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt};
 use crate::llvm;
@@ -25,7 +27,7 @@ impl Function for IntToCell {
         if let Ok(x) = arg.clone().as_integer() {
             let state_count = ctx.get_states(call.span)? as LangInt;
             if 0 <= x && x < state_count {
-                Ok(RtVal::Cell(x as u8))
+                Ok(RtVal::Cell(x as LangCell))
             } else {
                 Err(ctx.error(Error::cell_state_out_of_range(call.args[0].span)))
             }

@@ -46,7 +46,7 @@ fn int_to_cell_test_cases(state_count: LangInt) -> Vec<TestCase<'static>> {
     (-10..300).map_collect_vec(move |i| TestCase {
         inputs: vec![Integer(i)],
         expected_result: if 0 <= i && i < state_count {
-            test_ok![Cell(i as u8)]
+            test_ok![Cell(i as LangCell)]
         } else {
             test_err!["invalid cell state ID" @ "(x0)"]
         },

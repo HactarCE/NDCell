@@ -28,7 +28,7 @@ impl Function for TypeBrackets {
                     .report_err(ctx)?;
                 Ok(RtVal::Type(Type::Vector(Some(len))))
             }
-            Type::Array(_) => Err(ctx.error(Error::unimplemented(call.span))),
+            Type::CellArray(_) => Err(ctx.error(Error::unimplemented(call.span))),
             Type::VectorSet(None) => {
                 call.check_args_len(2, ctx, self)?;
                 let x = call.arg(1, ctx)?;
@@ -39,7 +39,7 @@ impl Function for TypeBrackets {
                     .report_err(ctx)?;
                 Ok(RtVal::Type(Type::VectorSet(Some(vec_len))))
             }
-            Type::Pattern(_) => Err(ctx.error(Error::unimplemented(call.span))),
+            Type::PatternMatcher(_) => Err(ctx.error(Error::unimplemented(call.span))),
 
             _ => Err(ctx.error(Error::custom(obj_span, "type is not dependent"))),
         }

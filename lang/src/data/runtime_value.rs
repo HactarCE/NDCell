@@ -2,7 +2,7 @@ use codemap::Spanned;
 use std::fmt;
 use std::sync::Arc;
 
-use super::{Array, CellSet, IntegerSet, LangCell, LangInt, Pattern, Type, VectorSet};
+use super::{CellArray, CellSet, IntegerSet, LangCell, LangInt, PatternMatcher, Type, VectorSet};
 use crate::errors::{Error, Result};
 use crate::regex::Regex;
 
@@ -22,11 +22,11 @@ pub enum RtVal {
     /// Type value.
     Type(Type),
 
-    /// Sequence of :data:`Integer` values of a certain length (from 1 to 256).
+    /// Sequence of `Integer` values of a certain length (from 1 to 256).
     Vector(Vec<LangInt>),
-    /// Masked N-dimensional array of :data:`Cell` values with a specific size
-    /// and shape.
-    Array(Arc<Array>),
+    /// Masked N-dimensional array of `Cell` values with a specific size and
+    /// shape.
+    CellArray(Arc<CellArray>),
 
     /// Empty set.
     EmptySet,
@@ -36,9 +36,9 @@ pub enum RtVal {
     CellSet(CellSet),
     /// Set of `Vector` values with the same length (from 1 to 256).
     VectorSet(Arc<VectorSet>),
-    /// Predicate that accepts or rejects `Array` values with a specific number
-    /// of cells.
-    Pattern(Arc<Pattern>),
+    /// Predicate that accepts or rejects `CellArray` values with a specific
+    /// number of cells.
+    PatternMatcher(Arc<PatternMatcher>),
     /// Regular expression.
     Regex(Arc<Regex>),
 }
@@ -53,13 +53,13 @@ impl fmt::Display for RtVal {
             RtVal::Type(_) => todo!("display Type"),
 
             RtVal::Vector(v) => write!(f, "{}", crate::utils::display_bracketed_list(v)),
-            RtVal::Array(_) => todo!("display Array"),
+            RtVal::CellArray(_) => todo!("display CellArray"),
 
             RtVal::EmptySet => write!(f, "{{}}"),
             RtVal::IntegerSet(_) => todo!("display IntegerSet"),
             RtVal::CellSet(_) => todo!("display CellSet"),
             RtVal::VectorSet(set) => write!(f, "{}", set),
-            RtVal::Pattern(_) => todo!("display Pattern"),
+            RtVal::PatternMatcher(_) => todo!("display PatternMatcher"),
             RtVal::Regex(_) => todo!("display Regex"),
         }
     }
@@ -76,13 +76,13 @@ impl RtVal {
             Self::Type(_) => Type::Type,
 
             Self::Vector(v) => Type::Vector(Some(v.len())),
-            Self::Array(a) => Type::Array(Some(a.shape())),
+            Self::CellArray(a) => Type::CellArray(Some(Arc::clone(a.shape()))),
 
             Self::EmptySet => Type::EmptySet,
             Self::IntegerSet(_) => Type::IntegerSet,
             Self::CellSet(_) => Type::CellSet,
             Self::VectorSet(set) => Type::VectorSet(Some(set.vec_len())),
-            Self::Pattern(pat) => Type::Pattern(Some(pat.len())),
+            Self::PatternMatcher(pat) => Type::PatternMatcher(Some(pat.len())),
             Self::Regex(_) => Type::Regex,
         }
     }
@@ -96,7 +96,7 @@ impl RtVal {
             RtVal::String(s) => Some(!s.is_empty()),
 
             RtVal::Vector(v) => Some(v.iter().any(|&i| i != 0)),
-            RtVal::Array(a) => Some(a.any_nonzero()),
+            RtVal::CellArray(a) => Some(a.any_nonzero()),
 
             _ => None,
         }
@@ -115,16 +115,13 @@ impl RtVal {
             _ => None,
         }
     }
-
-    /// Returns whether this value is a set of any type.
-    pub fn is_set(&self) -> bool {
-        matches!(
-            self,
-            RtVal::EmptySet | RtVal::IntegerSet(_) | RtVal::CellSet(_) | RtVal::VectorSet(_),
-        )
-    }
 }
 
+impl From<CellArray> for RtVal {
+    fn from(a: CellArray) -> Self {
+        Self::CellArray(Arc::new(a))
+    }
+}
 impl From<IntegerSet> for RtVal {
     fn from(set: IntegerSet) -> Self {
         Self::IntegerSet(Arc::new(set))
@@ -163,9 +160,9 @@ pub trait SpannedRuntimeValueExt {
     /// Returns the value inside if this is a `Vector` or subtype of one;
     /// otherwise returns a type error.
     fn as_vector(self) -> Result<Vec<LangInt>>;
-    /// Returns the value inside if this is an `Array` or subtype of one;
+    /// Returns the value inside if this is an `CellArray` or subtype of one;
     /// otherwise returns a type error.
-    fn as_array(self) -> Result<Arc<Array>>;
+    fn as_cell_array(self) -> Result<Arc<CellArray>>;
     /// Returns the value inside if this is an `EmptySet` or subtype of one;
     /// otherwise returns a type error.
     fn as_empty_set(self) -> Result<()>;
@@ -182,9 +179,9 @@ pub trait SpannedRuntimeValueExt {
     /// returned set may not have the specified `vec_len`.** Additionally, this
     /// method may return an internal error if `vec_len` is invalid.
     fn as_vector_set(self, vec_len: usize) -> Result<Arc<VectorSet>>;
-    /// Returns the value inside if this is a `Pattern` or subtype of one;
-    /// otherwise returns a type error.
-    fn as_pattern(self) -> Result<Arc<Pattern>>;
+    /// Returns the value inside if this is a `PatternMatcher` or subtype of
+    /// one; otherwise returns a type error.
+    fn as_pattern_matcher(self) -> Result<Arc<PatternMatcher>>;
     /// Returns the value inside if this is a `Regex` or subtype of one;
     /// otherwise returns a type error.
     fn as_regex(self) -> Result<Arc<Regex>>;
@@ -195,6 +192,13 @@ pub trait SpannedRuntimeValueExt {
     /// Converts the value to a vector if it can be converted; otherwise returns
     /// a type error.
     fn to_vector(&self, len: usize) -> Result<Vec<LangInt>>;
+    /// Selects a cell from the value.
+    ///
+    /// - If this is a `Cell`, returns the value.
+    /// - If this is a `CellSet` or subtype of one and it is nonempty, returns
+    ///   the lowest cell in the set.
+    /// - Otherwise, returns an error.
+    fn select_cell(&self) -> Result<LangCell>;
 
     /// Returns an iterator for the value if it can be iterated over; otherwise
     /// returns a type error.
@@ -243,10 +247,14 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             _ => Err(Error::type_error(self.span, Type::Vector(None), &self.ty())),
         }
     }
-    fn as_array(self) -> Result<Arc<Array>> {
+    fn as_cell_array(self) -> Result<Arc<CellArray>> {
         match self.node {
-            RtVal::Array(x) => Ok(x),
-            _ => Err(Error::type_error(self.span, Type::Array(None), &self.ty())),
+            RtVal::CellArray(x) => Ok(x),
+            _ => Err(Error::type_error(
+                self.span,
+                Type::CellArray(None),
+                &self.ty(),
+            )),
         }
     }
     fn as_empty_set(self) -> Result<()> {
@@ -287,12 +295,12 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             )),
         }
     }
-    fn as_pattern(self) -> Result<Arc<Pattern>> {
+    fn as_pattern_matcher(self) -> Result<Arc<PatternMatcher>> {
         match self.node {
-            RtVal::Pattern(x) => Ok(x),
+            RtVal::PatternMatcher(x) => Ok(x),
             _ => Err(Error::type_error(
                 self.span,
-                Type::Pattern(None),
+                Type::PatternMatcher(None),
                 &self.ty(),
             )),
         }
@@ -321,6 +329,18 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
                 &self.ty(),
             )
         })
+    }
+    fn select_cell(&self) -> Result<LangCell> {
+        match &self.node {
+            RtVal::Cell(c) => Ok(*c),
+            RtVal::Tag(t) => todo!("select cell from tag"),
+            RtVal::CellSet(set) => todo!("select cell from cell set"),
+            _ => Err(Error::type_error(
+                self.span,
+                "Cell or nonempty CellSet",
+                &self.ty(),
+            )),
+        }
     }
 
     fn iterate(self) -> Result<Box<dyn Iterator<Item = Self>>> {

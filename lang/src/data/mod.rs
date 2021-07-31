@@ -5,22 +5,22 @@ use crate::errors::{Error, Result};
 
 #[macro_use]
 mod types;
-mod array;
+mod cell_array;
 mod cell_lut;
 mod cell_set;
 mod compile_value;
 mod integer_set;
-mod pattern;
+mod pattern_matcher;
 mod runtime_value;
 mod value;
 mod vector_set;
 
-pub use array::Array;
+pub use cell_array::CellArray;
 pub use cell_lut::CellLut;
 pub use cell_set::CellSet;
 pub use compile_value::{CpVal, SpannedCompileValueExt};
 pub use integer_set::IntegerSet;
-pub use pattern::Pattern;
+pub use pattern_matcher::PatternMatcher;
 pub use runtime_value::{RtVal, SpannedRuntimeValueExt};
 pub use types::Type;
 pub use value::{FallibleTypeOf, Val};

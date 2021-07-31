@@ -37,7 +37,7 @@ mod param;
 use super::builtins::{self, Expression};
 use crate::ast;
 use crate::data::{
-    Array, CellSet, CpVal, FallibleTypeOf, LangInt, RtVal, Type, Val, VectorSet, INT_BITS,
+    CellArray, CellSet, CpVal, FallibleTypeOf, LangInt, RtVal, Type, Val, VectorSet, INT_BITS,
 };
 use crate::errors::{AlreadyReported, Error, Fallible, Result};
 use crate::exec::{Ctx, CtxTrait, ErrorReportExt, Runtime};
@@ -192,7 +192,7 @@ impl Compiler {
                     Type::Cell => Ok(ParamType::Cell),
                     Type::Tag => todo!("tag param"),
                     Type::Vector(Some(len)) => Ok(ParamType::Vector(len)),
-                    Type::Array(_) => todo!("array param"),
+                    Type::CellArray(_) => todo!("cell array param"),
                     Type::CellSet => todo!("cell set param"),
                     _ => Err(runtime.error(Error::cannot_compile(span))),
                 }
@@ -392,7 +392,7 @@ impl Compiler {
                 RtVal::Vector(v) => Ok(CpVal::Vector(llvm::VectorType::const_vector(
                     &v.iter().map(|&i| llvm::const_int(i)).collect_vec(),
                 ))),
-                RtVal::Array(a) => Ok(CpVal::Array()), // TODO
+                RtVal::CellArray(a) => Ok(CpVal::CellArray()), // TODO
                 RtVal::CellSet(s) => Ok(CpVal::CellSet(self.build_const_cell_set(&s))),
                 _ => Err(self.error(Error::cannot_compile(span))),
             },
@@ -412,15 +412,15 @@ impl Compiler {
             Type::Cell => Some(llvm::cell_type().into()),
             Type::Tag => Some(llvm::tag_type().into()),
             Type::Vector(len) => Some(llvm::vector_type((*len)?).into()),
-            Type::Array(shape) => Some(self.array_type(shape.as_ref()?).into()),
+            Type::CellArray(shape) => Some(self.cell_array_type(shape.as_ref()?).into()),
             Type::CellSet => Some(self.cell_set_type().into()),
             _ => None,
         }
     }
 
     /// Returns the LLVM type used for cell arrays.
-    pub fn array_type(&self, shape: &VectorSet) -> llvm::BasicTypeEnum {
-        todo!("array type")
+    pub fn cell_array_type(&self, shape: &VectorSet) -> llvm::BasicTypeEnum {
+        todo!("cell array type")
     }
     /// Returns the LLVM type used for cell sets.
     pub fn cell_set_type(&self) -> llvm::VectorType {
@@ -433,7 +433,7 @@ impl Compiler {
         todo!("build const tag")
     }
     /// Builds instructions to construct a cell array with a constant value.
-    pub fn build_const_array(&mut self, a: &Array) -> () {
+    pub fn build_const_cell_array(&mut self, a: &CellArray) -> () {
         let b = self.builder();
         todo!("array type")
     }
@@ -467,12 +467,12 @@ impl Compiler {
             _ => Err(Error::type_error(v.span, Type::Vector(None), &v.ty())),
         }
     }
-    /// Returns the value inside if given an `Array` value or subtype of one;
-    /// otherwise returns a type error.
-    pub fn as_array(&mut self, v: &Spanned<CpVal>) -> Result<()> {
+    /// Returns the value inside if given an `CellArray` value or subtype of
+    /// one; otherwise returns a type error.
+    pub fn as_cell_array(&mut self, v: &Spanned<CpVal>) -> Result<()> {
         match &v.node {
-            CpVal::Array() => Ok(()),
-            _ => Err(Error::type_error(v.span, Type::Array(None), &v.ty())),
+            CpVal::CellArray() => Ok(()),
+            _ => Err(Error::type_error(v.span, Type::CellArray(None), &v.ty())),
         }
     }
     /// Returns the value inside if given a `CellSet` value or subtype of one;

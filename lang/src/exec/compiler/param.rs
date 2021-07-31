@@ -18,7 +18,7 @@ pub enum ParamType {
     Cell,
     // Tag,
     Vector(usize),
-    // Array,
+    // CellArray,
     // CellSet(usize),
 }
 impl From<ParamType> for Type {
@@ -90,8 +90,8 @@ impl Param {
 
         Ok(())
 
-        //     RtVal::Array(a) => {
-        //         todo!("convert array to bytes");
+        //     RtVal::CellArray(a) => {
+        //         todo!("convert cell array to bytes");
         //         /*
         //         let offsets = self.offsets.as_ref().unwrap();
         //         let start_ptr = a.cells.as_ptr();

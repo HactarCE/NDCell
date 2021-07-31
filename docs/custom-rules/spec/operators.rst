@@ -18,10 +18,10 @@ __ https://en.wikipedia.org/wiki/Argument_of_a_function
 
 - Integers will implicitly convert to vectors of any length. See [Integer to vector conversion](#integer-to-vector-conversion).
 - Cells will implicitly convert to cell filters. See [Cell to cell filter conversion](#cell-to-cell-filter-conversion).
-- Vectors, cells, and patterns will implicitly convert to booleans. (Note that integers are already booleans.)
+- Vectors, cells, and cell arrays will implicitly convert to booleans. (Note that integers are already booleans.)
   - A vector is truthy if any component is nonzero.
   - A cell is truthy if it is not ``#0``.
-  - A pattern is truthy if any cell is nonzero.
+  - A cell array is truthy if any cell is nonzero.
 
 .. _arithmetic-operators:
 

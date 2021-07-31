@@ -4,11 +4,12 @@
 //!
 //! - Add new variant to `Type`
 //! - Update `impl TypeChecker for Type` if necessary
-//! - Add new variant to `ConstValue`
-//! - Add new variant to `LlvmValue`
+//! - Add new variant to `RtVal`
+//! - Add new variant to `CpVal`
 //! - Add new token to `Token` enum
 //! - Update `TryFrom<Token>` impl for `TypeClass`
-//! - Add new method in `generate_type_unwrap_methods!`
+//! - Add new method in `SpannedRuntimeValueExt`
+//! - Add new method in `SpannedCompileValueExt`
 
 use std::fmt;
 use std::sync::Arc;
@@ -34,11 +35,11 @@ pub enum Type {
     /// Type value.
     Type,
 
-    /// Sequence of :data:`Integer` values of a certain length (from 1 to 256).
+    /// Sequence of `Integer` values of a certain length (from 1 to 256).
     Vector(Option<usize>),
-    /// Masked N-dimensional array of :data:`Cell` values with a specific size
-    /// and shape.
-    Array(Option<Arc<VectorSet>>),
+    /// Masked N-dimensional array of `Cell` values with a specific size and
+    /// shape.
+    CellArray(Option<Arc<VectorSet>>),
 
     /// Empty set.
     EmptySet,
@@ -48,9 +49,9 @@ pub enum Type {
     CellSet,
     /// Set of `Vector` values with the same length (from 1 to 256).
     VectorSet(Option<usize>),
-    /// Predicate that accepts or rejects `Array` values with a specific number
-    /// of cells.
-    Pattern(Option<usize>),
+    /// Predicate that accepts or rejects `CellArray` values with a specific
+    /// number of cells.
+    PatternMatcher(Option<usize>),
     /// Regular expression.
     Regex,
 }
@@ -71,16 +72,16 @@ impl fmt::Debug for Type {
 
             Type::Vector(None) => write!(f, "Vector"),
             Type::Vector(Some(len)) => write!(f, "Vector[{:?}]", len),
-            Type::Array(None) => write!(f, "Array"),
-            Type::Array(Some(shape)) => write!(f, "Array[{:?}]", shape),
+            Type::CellArray(None) => write!(f, "CellArray"),
+            Type::CellArray(Some(shape)) => write!(f, "CellArray[{:?}]", shape),
 
             Type::EmptySet => write!(f, "EmptySet"),
             Type::IntegerSet => write!(f, "IntegerSet"),
             Type::CellSet => write!(f, "CellSet"),
             Type::VectorSet(None) => write!(f, "VectorSet"),
             Type::VectorSet(Some(len)) => write!(f, "VectorSet[{:?}]", len),
-            Type::Pattern(None) => write!(f, "Pattern"),
-            Type::Pattern(Some(shape)) => write!(f, "Pattern[{:?}]", shape),
+            Type::PatternMatcher(None) => write!(f, "PatternMatcher"),
+            Type::PatternMatcher(Some(shape)) => write!(f, "PatternMatcher[{:?}]", shape),
             Type::Regex => write!(f, "Regex"),
         }
     }
@@ -97,16 +98,16 @@ impl fmt::Display for Type {
 
             Type::Vector(None) => write!(f, "Vector"),
             Type::Vector(Some(len)) => write!(f, "Vector[{}]", len),
-            Type::Array(None) => write!(f, "Array"),
-            Type::Array(Some(shape)) => write!(f, "Array[{}]", shape),
+            Type::CellArray(None) => write!(f, "CellArray"),
+            Type::CellArray(Some(shape)) => write!(f, "CellArray[{}]", shape),
 
             Type::EmptySet => write!(f, "EmptySet"),
             Type::IntegerSet => write!(f, "IntegerSet"),
             Type::CellSet => write!(f, "CellSet"),
             Type::VectorSet(None) => write!(f, "VectorSet"),
             Type::VectorSet(Some(len)) => write!(f, "VectorSet[{}]", len),
-            Type::Pattern(None) => write!(f, "Pattern"),
-            Type::Pattern(Some(shape)) => write!(f, "Pattern[{}]", shape),
+            Type::PatternMatcher(None) => write!(f, "PatternMatcher"),
+            Type::PatternMatcher(Some(shape)) => write!(f, "PatternMatcher[{}]", shape),
             Type::Regex => write!(f, "Regex"),
         }
     }
@@ -127,13 +128,13 @@ impl Type {
             Type::Type => true,
 
             Type::Vector(_) => true,
-            Type::Array(_) => true,
+            Type::CellArray(_) => true,
 
             Type::EmptySet => false,
             Type::IntegerSet => false,
             Type::CellSet => false,
             Type::VectorSet(_) => false,
-            Type::Pattern(_) => false,
+            Type::PatternMatcher(_) => false,
             Type::Regex => false,
         }
     }
@@ -149,13 +150,13 @@ impl Type {
             Type::Type => None,
 
             Type::Vector(_) => Some(Type::Integer),
-            Type::Array(_) => Some(Type::Cell),
+            Type::CellArray(_) => Some(Type::Cell),
 
             Type::EmptySet => Some(Type::Null),
             Type::IntegerSet => Some(Type::Integer),
             Type::CellSet => Some(Type::Cell),
             Type::VectorSet(len) => Some(Type::Vector(*len)),
-            Type::Pattern(_) => None,
+            Type::PatternMatcher(_) => None,
             Type::Regex => None,
         }
     }

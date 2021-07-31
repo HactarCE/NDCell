@@ -59,12 +59,12 @@ fn resolve_type_keyword(name: &str) -> Option<Type> {
         "String" => Type::String,
         "Type" => Type::Type,
         "Vector" => Type::Vector(None),
-        "Array" => Type::Array(None),
+        "CellArray" => Type::CellArray(None),
         "EmtpySet" => Type::EmptySet,
         "IntegerSet" => Type::IntegerSet,
         "CellSet" => Type::CellSet,
         "VectorSet" => Type::VectorSet(None),
-        "Pattern" => Type::Pattern(None),
+        "PatternMatcher" => Type::PatternMatcher(None),
         "Regex" => Type::Regex,
         _ => None?,
     })
@@ -93,7 +93,7 @@ pub fn resolve_method(receiving_type: &Type, name: &str, span: Span) -> Result<B
         Type::Vector(_) => match name {
             _ => None,
         },
-        Type::Array(_) => match name {
+        Type::CellArray(_) => match name {
             _ => None,
         },
 
@@ -113,7 +113,7 @@ pub fn resolve_method(receiving_type: &Type, name: &str, span: Span) -> Result<B
             "empty" => Some(functions::sets::EmptyVectorSet(*vec_len).boxed()),
             _ => None,
         },
-        Type::Pattern(_) => match name {
+        Type::PatternMatcher(_) => match name {
             _ => None,
         },
         Type::Regex => match name {
@@ -132,12 +132,12 @@ fn resolve_index_method(obj_type: &Type) -> Option<Box<dyn Function>> {
         Type::String => None,
         Type::Type => Some(Box::new(functions::types::TypeBrackets)),
         Type::Vector(_) => None,
-        Type::Array(_) => None,
+        Type::CellArray(_) => None,
         Type::EmptySet => None,
         Type::IntegerSet => None,
         Type::CellSet => None,
         Type::VectorSet(_) => None,
-        Type::Pattern(_) => None,
+        Type::PatternMatcher(_) => None,
         Type::Regex => None,
     }
 }

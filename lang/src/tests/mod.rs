@@ -334,7 +334,7 @@ impl<'a> TestProgram<'a> {
                     Type::Cell => RtVal::Cell(0),
                     Type::Tag => todo!("tag default value"),
                     Type::Vector(Some(len)) => RtVal::Vector(vec![0; *len]),
-                    Type::Array(_) => todo!("array default value"),
+                    Type::CellArray(_) => todo!("cell array default value"),
                     Type::CellSet => todo!("cell set default value"),
                     _ => panic!("no default for this type"),
                 });

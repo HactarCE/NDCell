@@ -5,7 +5,7 @@ Rationale
 Why make a new programming language?
 ====================================
 
-Most existing cellular automaton simulation programs that support custom rules either require them defined in existing programming languages like C or Java, which tend to be verbose, or as a list of transitions, which is limiting and hard to read. A custom programming language provides the power of math, logic, and variables with utilities unique to cellular automata, like first-class support for spatial symmetry and masked N-dimensional arrays.
+Most existing cellular automaton simulation programs that support custom rules either require them defined in existing programming languages like C or Java, which tend to be verbose, or as a list of transitions, which is limiting and hard to read. A custom programming language provides the power of math, logic, and variables with utilities unique to cellular automata, like first-class support for spatial symmetry and masked N-dimensional cell arrays.
 
 The original drafts for NDCell used `Lua`__ for defining custom rules, but I decided to create a custom programming language for several reasons:
 

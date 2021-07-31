@@ -24,14 +24,14 @@ Overview
 - Collection types:
 
   - :data:`Vector` --- sequence of :data:`Integer` values
-  - :data:`Array` --- masked N-dimensional array of :data:`Cell` values
+  - :data:`CellArray` --- masked N-dimensional array of :data:`Cell` values
 
 - Predicate types:
 
   - :data:`IntegerSet` --- set of :data:`Integer` values
   - :data:`CellSet` --- set of :data:`Cell` values
   - :data:`VectorSet` --- set of :data:`Vector` values with the same length
-  - :data:`Pattern` --- predicate that accepts or rejects :data:`Array` values of a certain size and shape
+  - :data:`PatternMatcher` --- predicate that accepts or rejects :data:`CellArray` values of a certain size and shape
   - :data:`Regex` --- `regular expression`__
 
 __ https://en.wikipedia.org/wiki/Unicode
@@ -52,13 +52,13 @@ Some types are incomplete without an additional value. This value is written ins
 
   - For example, ``VectorSet[4]`` is type of a :data:`VectorSet` that contains vectors of length 4
 
-- :data:`Array` depends on its shape (:data:`VectorSet`)
+- :data:`CellArray` depends on its shape (:data:`VectorSet`)
 
-  - For example, ``Array[[-1, -1]..[1, 1]]`` is the type of an :data:`Array` that is 2D and contains the 9 cells in the rectangle from ``[-1, -1]`` to ``[1, 1]``.
+  - For example, ``CellArray[[-1, -1]..[1, 1]]`` is the type of a :data:`CellArray` that is 2D and contains the 9 cells in the rectangle from ``[-1, -1]`` to ``[1, 1]``.
 
-- :data:`Pattern` depends on the number of cells in the array that it matches (:data:`Integer`)
+- :data:`PatternMatcher` depends on the number of cells in the cell array that it matches (:data:`Integer`)
 
-  - For example, ``Pattern[9]`` is the type of a :data:`Pattern` that matches arrays with 9 cells, arranged in any shape
+  - For example, ``PatternMatcher[9]`` is the type of a :data:`PatternMatcher` that matches cell arrays with 9 cells, arranged in any shape
 
 __ https://en.wikipedia.org/wiki/Dependent_type
 
@@ -67,9 +67,9 @@ __ https://en.wikipedia.org/wiki/Dependent_type
 Variability
 -----------
 
-In compiled code, such as the transition function, only :data:`Integer`, :data:`Cell`, :data:`Tag`, :data:`Vector`, :data:`Array`, and :data:`CellSet` values may vary. All other values must be constant in compiled code.
+In compiled code, such as the transition function, only :data:`Integer`, :data:`Cell`, :data:`Tag`, :data:`Vector`, :data:`CellArray`, and :data:`CellSet` values may vary. All other values must be constant in compiled code.
 
-The length of a :data:`Vector` value must be constant in compiled code. The size and shape of an :data:`Array` value also must be constant in compiled code.
+The length of a :data:`Vector` value must be constant in compiled code. The size and shape of a :data:`CellArray` value also must be constant in compiled code.
 
 None of these restrictions apply during initialization, such as in ``@init`` blocks.
 
@@ -77,7 +77,7 @@ Subtyping
 ---------
 
 - :data:`Cell` and :data:`Tag` are subtypes of :data:`CellSet`
-- :data:`Array` is a subtype of :data:`Pattern`
+- :data:`CellArray` is a subtype of :data:`PatternMatcher`
 - :data:`EmptySet` is a subtype of :data:`IntegerSet`, :data:`CellSet`, and :data:`VectorSet`
 
 See :ref:`subtype-coercion` for more about subtyping.
@@ -178,11 +178,11 @@ Collection types
 
   A :data:`Vector` can also be constructed using :func:`vec()` and its variants.
 
-.. data:: Array
+.. data:: CellArray
 
   :status: Partially implemented
 
-  A configuration of cells. Arrays with different shapes are different types.
+  A masked N-dimensional array of :data:`Cell` values. Cell arrays with different shapes are different types.
 
 .. _filter-types:
 
@@ -252,7 +252,7 @@ Set/filter types
 
   The volume of the bounding rectangle of a :data:`VectorSet` cannot exceed 65536.
 
-.. data:: Pattern
+.. data:: PatternMatcher
 
   :status: Not yet implemented
 

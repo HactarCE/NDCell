@@ -51,10 +51,10 @@ These variables are automatically available in every program.
 
   Alias for :data:`neighborhood`.
 
-  :type: :data:`Pattern`
+  :type: :data:`CellArray`
 
 .. data:: neighborhood
 
   The pattern of cells surrounding the current cell. This variable is immutable.
 
-  :type: :data:`Pattern`
+  :type: :data:`CellArray`

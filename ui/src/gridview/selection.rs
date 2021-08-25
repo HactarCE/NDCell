@@ -192,7 +192,7 @@ pub fn absolute_selection_resize_axes<D: Dim>(
         &(drag_start_pos - initial_selection.max()),
     );
 
-    if edge_distances < NdVec::origin() {
+    if edge_distances < NdVec::zero() {
         // If all edge distances are negative, the cursor is inside the
         // selection. In this case, resize along whichever is most positive.
         AxisSet::single(edge_distances.max_axis())

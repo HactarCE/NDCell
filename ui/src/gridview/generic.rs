@@ -374,7 +374,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
 
     /// Executes a `GoToOrigin` command.
     fn go_to_origin(&mut self) {
-        self.target_viewpoint().set_center(NdVec::origin());
+        self.target_viewpoint().set_center(NdVec::zero());
     }
     /// Executes a `FitView` command.
     fn fit_view(&mut self) {

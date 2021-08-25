@@ -36,7 +36,7 @@ impl Default for Viewpoint2D {
             target_dimensions: (MIN_TARGET_SIZE, MIN_TARGET_SIZE),
             dpi: 1.0,
 
-            center: FixedVec::origin(),
+            center: FixedVec::zero(),
             scale: Scale::default(),
         }
     }

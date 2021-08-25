@@ -5,10 +5,13 @@ use inkwell::types::StructType;
 use itertools::Itertools;
 use std::convert::TryInto;
 use std::ops::Range;
+use std::sync::Arc;
 
 use ndcell_core::num::Integer;
 
-use crate::data::{CellSet, LangCell, LangInt, LangUint, RtVal, Type, CELL_STATE_BYTES, INT_BYTES};
+use crate::data::{
+    CellSet, LangCell, LangInt, LangUint, RtVal, Type, VectorSet, CELL_STATE_BYTES, INT_BYTES,
+};
 use crate::errors::{Error, Result};
 use crate::llvm;
 
@@ -18,7 +21,7 @@ pub enum ParamType {
     Cell,
     // Tag,
     Vector(usize),
-    // CellArray,
+    CellArray(Arc<VectorSet>),
     // CellSet(usize),
 }
 impl From<ParamType> for Type {
@@ -27,6 +30,7 @@ impl From<ParamType> for Type {
             ParamType::Integer => Type::Integer,
             ParamType::Cell => Type::Cell,
             ParamType::Vector(len) => Type::Vector(Some(len)),
+            ParamType::CellArray(shape) => Type::CellArray(Some(shape)),
         }
     }
 }
@@ -58,12 +62,16 @@ impl Param {
     ///
     /// # Safety
     ///
-    /// The raw bytes may contain a reference to the original value, so the
-    /// value must be kept alive at least as long as the bytes are referenced.
+    /// The raw bytes may contain a pointer to the original value and the
+    /// contents may be mutated through that pointer, so a mutable reference to
+    /// the value must be valid for at least as long as the bytes are
+    /// referenced.
     ///
     /// To be read correctly by JIT-compiled code, `bytes` must be 8-byte
     /// aligned.
     pub fn value_to_bytes(&self, bytes: &mut [u8], value: &RtVal) -> Result<()> {
+        // TODO: when #![feature(array_chunks)] stabalizes, use that here
+        // instead of `fill_u8_slice`.
         match (&self.ty, value) {
             (ParamType::Integer, RtVal::Integer(i)) => {
                 i.to_ne_bytes().iter().copied().fill_u8_slice(bytes);
@@ -79,6 +87,13 @@ impl Param {
                 }
             }
 
+            (ParamType::CellArray(shape), RtVal::CellArray(a)) if shape == a.shape() => {
+                // Only store the cell array; strides are determined by the
+                // shape.
+                let p = a.cells_array().as_flat_slice().as_ptr() as usize;
+                p.to_ne_bytes().iter().copied().fill_u8_slice(bytes);
+            }
+
             (expected, got) => {
                 internal_error!(
                     "wrong parameter type; expected {:?} but got {:?}",
@@ -89,30 +104,6 @@ impl Param {
         }
 
         Ok(())
-
-        //     RtVal::CellArray(a) => {
-        //         todo!("convert cell array to bytes");
-        //         /*
-        //         let offsets = self.offsets.as_ref().unwrap();
-        //         let start_ptr = a.cells.as_ptr();
-        //         let origin_offset = a.shape.flatten_idx_unchecked(&vec![0; a.ndim()]);
-        //         let origin_ptr = start_ptr.wrapping_offset(origin_offset);
-        //         let strides = a.shape.strides();
-        //         let mut first_two_elements = std::iter::empty()
-        //             .pad_using(offsets[0], |_| 0_u8)
-        //             .chain((origin_ptr as usize).to_ne_bytes().to_vec())
-        //             .pad_using(offsets[1], |_| 0_u8)
-        //             .chain(strides.iter().flat_map(|i| i.to_ne_bytes().to_vec()));
-        //         if let Some(lut) = a.lut {
-        //             first_two_elements
-        //                 .pad_using(offsets[2], |_| 0_u8)
-        //                 .chain(std::iter::once(lut))
-        //                 .fill_u64_slice(&mut self.bytes);
-        //         } else {
-        //             first_two_elements.fill_u64_slice(&mut self.bytes);
-        //         }
-        //         */
-        //     }
 
         //     RtVal::CellSet(f) => {
         //         todo!("convert cell set to bytes");
@@ -150,22 +141,27 @@ impl Param {
     /// Note that this method does not read cell arrays (because doing so might
     /// dereference a freed pointer, which is UB), however it will still return
     /// `Ok(())`.
-    pub fn bytes_to_value(&self, bytes: &[u8]) -> Result<RtVal> {
+    pub fn bytes_to_value(&self, bytes: &[u8], value: &mut RtVal) {
         match self.ty {
-            ParamType::Integer => Ok(RtVal::Integer({
+            ParamType::Integer => {
                 let bytes: &[u8; INT_BYTES] = bytes[..INT_BYTES].try_into().unwrap();
-                LangInt::from_ne_bytes(*bytes)
-            })),
+                *value = RtVal::Integer(LangInt::from_ne_bytes(*bytes));
+            }
 
-            ParamType::Cell => Ok(RtVal::Cell(bytes[0])),
+            ParamType::Cell => {
+                *value = RtVal::Cell(bytes[0]);
+            }
 
-            ParamType::Vector(len) => Ok(RtVal::Vector(
-                bytes
-                    .chunks(INT_BYTES)
-                    .take(len)
-                    .map(|b| LangInt::from_ne_bytes(b.try_into().unwrap()))
-                    .collect(),
-            )),
+            ParamType::Vector(len) => {
+                *value = RtVal::Vector(
+                    bytes
+                        .chunks(INT_BYTES)
+                        .take(len)
+                        .map(|b| LangInt::from_ne_bytes(b.try_into().unwrap()))
+                        .collect(),
+                );
+            }
+
             /*
             ParamType::CellSet => Ok({
                 let llvm_ty = super::types::cell_state_filter(*state_count);
@@ -184,7 +180,10 @@ impl Param {
                     .collect();
                 RtVal::CellSet(CellSet::from_bits(*state_count, bits))
             }),
+
             */
+            // LLVM JIT function already wrote using the pointer
+            ParamType::CellArray(_) => (),
         }
     }
 }
@@ -263,7 +262,8 @@ mod tests {
         let mut bytes = vec![0_u8; p.size];
         for old_value in test_values {
             p.value_to_bytes(&mut bytes, &old_value).unwrap();
-            let new_value = p.bytes_to_value(&bytes).unwrap();
+            let mut new_value = RtVal::Null;
+            p.bytes_to_value(&bytes, &mut new_value);
             assert_eq!(old_value, new_value);
         }
     }

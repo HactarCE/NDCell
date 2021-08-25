@@ -37,7 +37,7 @@ mod param;
 use super::builtins::{self, Expression};
 use crate::ast;
 use crate::data::{
-    CellArray, CellSet, CpVal, FallibleTypeOf, LangInt, RtVal, Type, Val, VectorSet, INT_BITS,
+    CellSet, CpVal, FallibleTypeOf, LangInt, LlvmCellArray, RtVal, Type, Val, INT_BITS,
 };
 use crate::errors::{AlreadyReported, Error, Fallible, Result};
 use crate::exec::{Ctx, CtxTrait, ErrorReportExt, Runtime};
@@ -192,7 +192,9 @@ impl Compiler {
                     Type::Cell => Ok(ParamType::Cell),
                     Type::Tag => todo!("tag param"),
                     Type::Vector(Some(len)) => Ok(ParamType::Vector(len)),
-                    Type::CellArray(_) => todo!("cell array param"),
+                    Type::CellArray(Some(shape)) if !shape.is_empty() => {
+                        Ok(ParamType::CellArray(shape))
+                    }
                     Type::CellSet => todo!("cell set param"),
                     _ => Err(runtime.error(Error::cannot_compile(span))),
                 }
@@ -238,10 +240,7 @@ impl Compiler {
         let llvm_param_types = this
             .param_types
             .iter()
-            .map(|param_type| {
-                this.llvm_type(&param_type.node.clone().into())
-                    .expect("param type has no LLVM representation")
-            })
+            .map(|param_type| this.llvm_param_type(param_type))
             .collect_vec();
         let params_struct_type = llvm::ctx().struct_type(&llvm_param_types, false);
         let params_struct_ptr_type = params_struct_type
@@ -392,7 +391,10 @@ impl Compiler {
                 RtVal::Vector(v) => Ok(CpVal::Vector(llvm::VectorType::const_vector(
                     &v.iter().map(|&i| llvm::const_int(i)).collect_vec(),
                 ))),
-                RtVal::CellArray(a) => Ok(CpVal::CellArray()), // TODO
+                RtVal::CellArray(a) => Ok(CpVal::CellArray(LlvmCellArray::new_const(
+                    &mut self.module,
+                    &a,
+                ))),
                 RtVal::CellSet(s) => Ok(CpVal::CellSet(self.build_const_cell_set(&s))),
                 _ => Err(self.error(Error::cannot_compile(span))),
             },
@@ -405,37 +407,25 @@ impl Compiler {
         .map(|node| Spanned { node, span })
     }
 
-    /// Returns the LLVM type used for an NDCA type.
-    pub fn llvm_type(&self, ty: &Type) -> Option<llvm::BasicTypeEnum> {
+    /// Returns the LLVM type used for a JIT function parameter.
+    pub fn llvm_param_type(&self, ty: &ParamType) -> llvm::BasicTypeEnum {
         match ty {
-            Type::Integer => Some(llvm::int_type().into()),
-            Type::Cell => Some(llvm::cell_type().into()),
-            Type::Tag => Some(llvm::tag_type().into()),
-            Type::Vector(len) => Some(llvm::vector_type((*len)?).into()),
-            Type::CellArray(shape) => Some(self.cell_array_type(shape.as_ref()?).into()),
-            Type::CellSet => Some(self.cell_set_type().into()),
-            _ => None,
+            ParamType::Integer => llvm::int_type().as_basic_type_enum(),
+            ParamType::Cell => llvm::cell_type().as_basic_type_enum(),
+            ParamType::Vector(len) => llvm::vector_type(*len).as_basic_type_enum(),
+            ParamType::CellArray(_) => llvm::cell_array_type().as_basic_type_enum(),
         }
     }
 
-    /// Returns the LLVM type used for cell arrays.
-    pub fn cell_array_type(&self, shape: &VectorSet) -> llvm::BasicTypeEnum {
-        todo!("cell array type")
-    }
     /// Returns the LLVM type used for cell sets.
     pub fn cell_set_type(&self) -> llvm::VectorType {
         todo!("cell set type, depends on max cell state ID")
     }
 
-    /// Builds instructions to construct a vector with a constant value.
+    /// Builds instructions to construct a tag with a constant value.
     pub fn build_const_tag(&mut self, t: &str) -> llvm::VectorValue {
         let b = self.builder();
         todo!("build const tag")
-    }
-    /// Builds instructions to construct a cell array with a constant value.
-    pub fn build_const_cell_array(&mut self, a: &CellArray) -> () {
-        let b = self.builder();
-        todo!("array type")
     }
     /// Builds instructions to construct a cell set with a constant value.
     pub fn build_const_cell_set(&mut self, s: &CellSet) -> llvm::VectorValue {
@@ -469,9 +459,9 @@ impl Compiler {
     }
     /// Returns the value inside if given an `CellArray` value or subtype of
     /// one; otherwise returns a type error.
-    pub fn as_cell_array(&mut self, v: &Spanned<CpVal>) -> Result<()> {
+    pub fn as_cell_array(&mut self, v: &Spanned<CpVal>) -> Result<LlvmCellArray> {
         match &v.node {
-            CpVal::CellArray() => Ok(()),
+            CpVal::CellArray(a) => Ok(a.clone()),
             _ => Err(Error::type_error(v.span, Type::CellArray(None), &v.ty())),
         }
     }
@@ -503,7 +493,7 @@ impl Compiler {
                 self.build_any_cmp(NE, i, i.same_type_const_zero())?
             }
             CpVal::Vector(v) => self.build_any_cmp(NE, v, v.same_type_const_zero())?,
-            CpVal::Array() => todo!("convert array to bool"),
+            CpVal::CellArray(_) => todo!("convert cell array to bool"),
             CpVal::CellSet(_) => todo!("convert cell set to bool"),
         };
 
@@ -547,12 +537,7 @@ impl Compiler {
             ))),
         }
     }
-}
 
-/*
- * LOW-LEVEL UTILITIES
- */
-impl Compiler {
     /// Builds instructions to split a vector of integers into its components.
     pub fn build_split_vector(&mut self, vector_value: llvm::VectorValue) -> Vec<llvm::IntValue> {
         (0..vector_value.get_type().get_size())
@@ -562,6 +547,115 @@ impl Compiler {
                     .into_int_value()
             })
             .collect()
+    }
+
+    /// Builds instructions to offset a cell array by a fixed delta vector.
+    pub fn build_offset_cell_array(
+        &mut self,
+        error_span: Span,
+        array: LlvmCellArray,
+        delta: &[LangInt],
+    ) -> Fallible<LlvmCellArray> {
+        if let Some(cells) = array.cells() {
+            let new_shape = Arc::new(array.shape().offset(error_span, delta).report_err(self)?);
+            let new_bounds = new_shape.bounds().unwrap();
+
+            let negative_delta = llvm::const_vector(delta.iter().map(|&i| -i));
+            let new_array_ptr = self.build_ndarray_gep_unchecked(
+                error_span,
+                cells,
+                negative_delta,
+                &format!("origin_with_offset_{:?}", delta),
+            )?;
+            let new_cells = llvm::NdArrayValue::new_with_origin_ptr(
+                new_bounds,
+                new_array_ptr,
+                cells.strides(),
+                cells.is_mutable(),
+            );
+
+            Ok(LlvmCellArray::new(&mut self.module, new_shape, new_cells))
+        } else {
+            Ok(array) // empty
+        }
+    }
+
+    /// Builds a GEP into a cell array, including a check that the position is
+    /// within bounds and within the mask.
+    pub fn build_cell_array_gep(
+        &mut self,
+        error_span: Span,
+        array: &LlvmCellArray,
+        pos: llvm::VectorValue,
+    ) -> Fallible<llvm::PointerValue> {
+        if let Some(mask) = array.mask() {
+            let mask_cell_ptr = self.build_ndarray_gep(error_span, mask, pos, "mask_cell_ptr")?;
+            let is_pos_in_mask = self
+                .builder()
+                .build_load(mask_cell_ptr, "is_pos_in_mask")
+                .into_int_value();
+            let error_index =
+                self.add_runtime_error(Error::position_excluded_by_array_mask(error_span));
+            self.build_return_err_unless(is_pos_in_mask, error_index)?;
+        }
+
+        if let Some(cells) = array.cells() {
+            self.build_ndarray_gep(error_span, cells, pos, "cell_ptr")
+        } else {
+            // Don't generate a compile-time error here because it's possible
+            // that this code will never execute.
+
+            // When the cell array has no cells, all positions are out of
+            // bounds!
+            let error_index = self.add_runtime_error(Error::position_out_of_bounds(error_span));
+            self.build_return_err(error_index);
+            // This code won't execute, so just return a null pointer.
+            Ok(llvm::cell_type()
+                .ptr_type(llvm::AddressSpace::Generic)
+                .const_null())
+        }
+    }
+
+    /// Builds a GEP into an N-dimensional array including a check that the
+    /// position is within bounds.
+    pub fn build_ndarray_gep(
+        &mut self,
+        error_span: Span,
+        ndarray: llvm::NdArrayValue,
+        pos: llvm::VectorValue,
+        name: &str,
+    ) -> Fallible<llvm::PointerValue> {
+        use llvm::IntPredicate::{SGT, SLT};
+
+        let is_past_lower_bound =
+            self.build_any_cmp(SLT, pos, llvm::const_vector(ndarray.min_vec()))?;
+        let is_past_upper_bound =
+            self.build_any_cmp(SGT, pos, llvm::const_vector(ndarray.max_vec()))?;
+
+        let is_out_of_bounds = self.builder().build_or(
+            is_past_lower_bound,
+            is_past_upper_bound,
+            "is_pos_out_of_ndarray_bounds",
+        );
+
+        let error_index = self.add_runtime_error(Error::position_out_of_bounds(error_span));
+        self.build_return_err_if(is_out_of_bounds, error_index)?;
+
+        self.build_ndarray_gep_unchecked(error_span, ndarray, pos, name)
+    }
+    /// Builds a GEP into an N-dimensional array WITHOUT checking whether the
+    /// position is out of bounds.
+    pub fn build_ndarray_gep_unchecked(
+        &mut self,
+        error_span: Span,
+        ndarray: llvm::NdArrayValue,
+        pos: llvm::VectorValue,
+        name: &str,
+    ) -> Fallible<llvm::PointerValue> {
+        let tmp = self.build_checked_int_arithmetic(error_span, "smul", ndarray.strides(), pos)?;
+        let ptr_offset = self.build_reduce("sadd", tmp)?;
+        let b = self.builder();
+        Ok(unsafe { b.build_gep(ndarray.array_ptr(), &[ptr_offset], name) })
     }
 }
 
@@ -777,7 +871,7 @@ impl Compiler {
         let llvm_return_value = llvm::error_index_type().const_int(error_index as u64, false);
         self.builder().build_return(Some(&llvm_return_value));
     }
-
+    /// Builds instructions to return an error if some condition is true.
     pub fn build_return_err_if(
         &mut self,
         condition_value: llvm::IntValue,
@@ -787,6 +881,18 @@ impl Compiler {
             condition_value,
             |c| Ok(c.build_return_err(error_index)),
             |_| Ok(()),
+        )
+    }
+    /// Builds instructions to return an error if some condition is false.
+    pub fn build_return_err_unless(
+        &mut self,
+        condition_value: llvm::IntValue,
+        error_index: usize,
+    ) -> Fallible<()> {
+        self.build_conditional(
+            condition_value,
+            |_| Ok(()),
+            |c| Ok(c.build_return_err(error_index)),
         )
     }
 }
@@ -801,7 +907,7 @@ impl Compiler {
     pub fn build_checked_int_arithmetic<M: llvm::IntMathValue>(
         &mut self,
         error_span: Span,
-        name: &str,
+        op: &str,
         lhs: M,
         rhs: M,
     ) -> Fallible<llvm::BasicValueEnum> {
@@ -812,7 +918,7 @@ impl Compiler {
         // "llvm.sadd.with.overflow.i64" for signed addition on i64).
         let intrinsic_name = format!(
             "llvm.{}.with.overflow.{}",
-            name,
+            op,
             llvm::intrinsic_type_name(arg_type),
         );
         // That intrinsic will return a struct containing the result and a
@@ -857,9 +963,8 @@ impl Compiler {
             .unwrap();
         let is_overflow = self.build_reduce("or", is_overflow_vec)?;
 
-        let error_index = self.add_runtime_error(Error::integer_overflow(error_span));
-
         // Return an error if there was overflow.
+        let error_index = self.add_runtime_error(Error::integer_overflow(error_span));
         self.build_return_err_if(is_overflow, error_index)?;
 
         Ok(result_value)
@@ -1232,6 +1337,20 @@ impl Compiler {
             ParamType::Integer => CpVal::Integer(arg_value.into_int_value()),
             ParamType::Cell => CpVal::Cell(arg_value.into_int_value()),
             ParamType::Vector(_) => CpVal::Vector(arg_value.into_vector_value()),
+            ParamType::CellArray(shape) => {
+                let bounds = shape
+                    .bounds()
+                    .ok_or_else(|| internal_error_value!("empty cell array argument"))
+                    .report_err(self)?;
+                let cells_ptr = arg_value.into_pointer_value();
+                let strides = crate::utils::ndarray_strides(shape.vec_len(), bounds);
+
+                let mutable = true;
+                let cells =
+                    llvm::NdArrayValue::new_with_base_ptr(bounds, cells_ptr, &strides, mutable);
+
+                CpVal::CellArray(LlvmCellArray::new(&mut self.module, shape, cells))
+            }
         })
     }
     /// Builds instructions to set a JIT function argument value.
@@ -1253,8 +1372,19 @@ impl Compiler {
             )));
         }
 
-        let new_arg_llvm_value = self.get_cp_val(new_arg_value)?.llvm_value();
-        self.builder().build_store(arg_ptr, new_arg_llvm_value);
+        let new_arg_llvm_value = self.get_cp_val(new_arg_value)?;
+        let b = self.builder();
+        match new_arg_llvm_value.node {
+            CpVal::Integer(v) => b.build_store(arg_ptr, v),
+            CpVal::Cell(v) => b.build_store(arg_ptr, v),
+            CpVal::Vector(v) => b.build_store(arg_ptr, v),
+            CpVal::CellArray(_) => {
+                // Special case; no overwriting cell arrays (because we can't
+                // trust that `new_arg_value` will live long enough).
+                return Err(self.error(internal_error_value!("cannot store cell array arg")));
+            }
+            CpVal::CellSet(v) => b.build_store(arg_ptr, v),
+        };
         Ok(())
     }
 

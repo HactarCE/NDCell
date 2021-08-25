@@ -1,9 +1,9 @@
 use codemap::Spanned;
 use std::sync::Arc;
 
-use super::Type;
+use super::{LlvmCellArray, Type};
 use crate::errors::{Error, Result};
-use crate::llvm::{self, traits::*};
+use crate::llvm;
 
 /// Compile-time variable value of any type.
 #[derive(Debug, Clone)]
@@ -11,7 +11,7 @@ pub enum CpVal {
     Integer(llvm::IntValue),
     Cell(llvm::IntValue),
     Vector(llvm::VectorValue),
-    CellArray(LLVMCellArray),
+    CellArray(LlvmCellArray),
     CellSet(llvm::VectorValue),
 }
 impl CpVal {
@@ -23,16 +23,6 @@ impl CpVal {
             CpVal::Vector(v) => Type::Vector(Some(v.get_type().get_size() as usize)),
             CpVal::CellArray(a) => Type::CellArray(Some(Arc::clone(a.shape()))),
             CpVal::CellSet(_) => Type::CellSet,
-        }
-    }
-
-    pub fn llvm_value(&self) -> llvm::BasicValueEnum {
-        match self {
-            CpVal::Integer(v) => v.as_basic_value_enum(),
-            CpVal::Cell(v) => v.as_basic_value_enum(),
-            CpVal::Vector(v) => v.as_basic_value_enum(),
-            CpVal::CellArray() => todo!("cell array type"),
-            CpVal::CellSet(v) => v.as_basic_value_enum(),
         }
     }
 }
@@ -49,7 +39,7 @@ pub trait SpannedCompileValueExt {
     fn as_vector(self) -> Result<llvm::VectorValue>;
     /// Returns the value inside if this is an `CellArray` or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell_array(self) -> Result<()>;
+    fn as_cell_array(self) -> Result<LlvmCellArray>;
     /// Returns the value inside if this is a `CellSet` or subtype of one;
     /// otherwise returns a type error.
     fn as_cell_set(self) -> Result<llvm::VectorValue>;
@@ -73,9 +63,9 @@ impl SpannedCompileValueExt for Spanned<CpVal> {
             _ => Err(Error::type_error(self.span, Type::Vector(None), &self.ty())),
         }
     }
-    fn as_cell_array(self) -> Result<()> {
+    fn as_cell_array(self) -> Result<LlvmCellArray> {
         match self.node {
-            CpVal::CellArray() => todo!("cell array type"),
+            CpVal::CellArray(a) => Ok(a),
             _ => Err(Error::type_error(
                 self.span,
                 Type::CellArray(None),

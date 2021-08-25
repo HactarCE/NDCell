@@ -2,6 +2,7 @@ use codemap::{Span, Spanned};
 use std::fmt;
 use std::sync::Arc;
 
+pub(super) mod arrays;
 pub(super) mod bools;
 pub(super) mod cells;
 pub(super) mod math;

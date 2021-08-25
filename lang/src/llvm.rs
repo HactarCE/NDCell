@@ -6,6 +6,8 @@ pub use inkwell::{AddressSpace, IntPredicate};
 use itertools::Itertools;
 use thread_local::ThreadLocal;
 
+use ndcell_core::prelude::IRect6D;
+
 pub mod traits {
     pub use inkwell::execution_engine::UnsafeFunctionPointer;
     pub use inkwell::types::BasicType;
@@ -26,6 +28,7 @@ pub type JitFunction = inkwell::execution_engine::JitFunction<'static, JitFnPtr>
 pub type Module = inkwell::module::Module<'static>;
 pub type Builder = inkwell::builder::Builder<'static>;
 
+pub type ArrayValue = inkwell::values::ArrayValue<'static>;
 pub type BasicValueEnum = inkwell::values::BasicValueEnum<'static>;
 pub type FunctionValue = inkwell::values::FunctionValue<'static>;
 pub type IntValue = inkwell::values::IntValue<'static>;
@@ -34,6 +37,7 @@ pub type PointerValue = inkwell::values::PointerValue<'static>;
 pub type StructValue = inkwell::values::StructValue<'static>;
 pub type VectorValue = inkwell::values::VectorValue<'static>;
 
+pub type ArrayType = inkwell::types::ArrayType<'static>;
 pub type BasicTypeEnum = inkwell::types::BasicTypeEnum<'static>;
 pub type FunctionType = inkwell::types::FunctionType<'static>;
 pub type IntType = inkwell::types::IntType<'static>;
@@ -94,6 +98,10 @@ pub fn tag_type() -> IntType {
 /// Returns the LLVM type used for vectors of a specific length.
 pub fn vector_type(len: usize) -> VectorType {
     int_type().vec_type(len as u32)
+}
+/// Returns the LLVM type used for cell arrays.
+pub fn cell_array_type() -> PointerType {
+    cell_type().ptr_type(AddressSpace::Generic)
 }
 
 /// Returns a constant boolean (`i1`) LLVM value.
@@ -196,5 +204,123 @@ impl IntMathValue for VectorValue {
         let v = elem_ty.const_all_ones();
         let len = self.get_type().get_size() as usize;
         VectorType::const_vector(&vec![v; len])
+    }
+}
+
+/// LLVM representation of an N-dimensional array.
+#[derive(Debug, Copy, Clone)]
+pub struct NdArrayValue {
+    bounds: IRect6D,
+    array_ptr: PointerValue,
+    strides: VectorValue,
+    mutable: bool,
+}
+impl NdArrayValue {
+    /// Constructs a new N-dimensional array from a pointer to the origin in the
+    /// array.
+    pub fn new_with_origin_ptr(
+        bounds: IRect6D,
+        array_ptr: PointerValue,
+        strides: VectorValue,
+        mutable: bool,
+    ) -> Self {
+        Self {
+            bounds,
+            array_ptr,
+            strides,
+            mutable,
+        }
+    }
+    /// Constructs a new N-dimensional array from a pointer to the base of the
+    /// array.
+    pub fn new_with_base_ptr(
+        bounds: IRect6D,
+        array_base_ptr: PointerValue,
+        strides: &[LangInt],
+        mutable: bool,
+    ) -> Self {
+        // Get a pointer to the origin in the array. Note that this GEP may be
+        // out of bounds if the cell array does not contain the origin (but it
+        // should always be reasonably nearby).
+        let base_idx = strides
+            .iter()
+            .zip(&bounds.min().0)
+            .map(|(&stride, &i)| stride * i as LangInt)
+            .sum::<LangInt>();
+        let array_ptr = unsafe { array_base_ptr.const_gep(&[const_int(-base_idx)]) };
+
+        let strides = const_vector(strides.iter().copied());
+
+        Self::new_with_origin_ptr(bounds, array_ptr, strides, mutable)
+    }
+    /// Constructs a new N-dimensional array with static contents.
+    pub fn new_const(
+        module: &mut Module,
+        ndim: usize,
+        bounds: IRect6D,
+        ty: IntType,
+        values: &[IntValue],
+        name: &str,
+    ) -> Self {
+        // Create array.
+        let array_value = ty.const_array(values);
+        // Store the array as a global constant.
+        let array_global = module.add_global(
+            array_value.get_type(),
+            Some(AddressSpace::Const),
+            &format!("{}_array", name),
+        );
+        array_global.set_initializer(&array_value);
+        // Mark this global as a constant; we don't ever intend to modify it.
+        array_global.set_constant(true);
+        // The address of the constant doesn't matter; please do merge it with
+        // other identical values!
+        array_global.set_unnamed_addr(true);
+
+        // Get a pointer to the array.
+        let array_base_ptr = array_global
+            .as_pointer_value()
+            .const_cast(ty.ptr_type(AddressSpace::Const));
+
+        let strides = crate::utils::ndarray_strides(ndim, bounds);
+
+        let mutable = false;
+        Self::new_with_base_ptr(bounds, array_base_ptr, &strides, mutable)
+    }
+
+    /// Returns the number of dimensions.
+    pub fn ndim(&self) -> usize {
+        self.strides.get_type().get_size() as usize
+    }
+    /// Returns the bounding box of the array.
+    pub fn bounds(&self) -> IRect6D {
+        self.bounds
+    }
+    /// Returns a pointer to the array values.
+    pub fn array_ptr(&self) -> PointerValue {
+        self.array_ptr
+    }
+    /// Returns the strides of the array.
+    pub fn strides(&self) -> VectorValue {
+        self.strides
+    }
+    /// Returns whether the array is mutable.
+    pub fn is_mutable(&self) -> bool {
+        self.mutable
+    }
+
+    /// Returns the minimum coordinate of the array.
+    pub fn min_vec(&self) -> Vec<LangInt> {
+        self.bounds().min().0[..self.ndim()]
+            .iter()
+            .map(|&i| i as LangInt)
+            .collect()
+    }
+    /// Returns the maximum coordinate of the array.
+    pub fn max_vec(&self) -> Vec<LangInt> {
+        self.bounds().max().0[..self.ndim()]
+            .iter()
+            .map(|&i| i as LangInt)
+            .collect()
     }
 }

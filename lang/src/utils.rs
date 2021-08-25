@@ -2,6 +2,8 @@ use itertools::Itertools;
 use std::convert::TryFrom;
 use std::fmt;
 
+use ndcell_core::prelude::IRect6D;
+
 /// Implements `std::format::Display` for a type using arguments to `write!()`.
 macro_rules! impl_display {
     ( for $typename:ty, $( $fmt_arg:expr ),+ $(,)? ) => {
@@ -68,6 +70,20 @@ pub fn checked_pow_i64(base: i64, exp: i64) -> Option<i64> {
         (-1, _) => Some(if exp & 1 == 0 { 1 } else { -1 }),
         (_, _) => base.checked_pow(u32::try_from(exp).ok()?),
     }
+}
+
+pub fn ndarray_strides(ndim: usize, bounds: IRect6D) -> Vec<i64> {
+    // TODO: document this function & move it into ndcell_core
+
+    // The strides array is the cumulative product of the size vector of the
+    // bounding rectangle.
+    bounds.size().0[..ndim]
+        .iter()
+        .scan(1, |prod, &i| {
+            *prod *= i;
+            Some((*prod / i) as i64)
+        })
+        .collect()
 }
 
 #[test]

@@ -4,21 +4,21 @@ use std::sync::Arc;
 use super::VectorSet;
 
 #[derive(Debug, Clone)]
-pub struct Pattern {
+pub struct PatternMatcher {
     len: usize,
 }
-impl PartialEq for Pattern {
+impl PartialEq for PatternMatcher {
     fn eq(&self, other: &Self) -> bool {
         true
     }
 }
-impl Eq for Pattern {}
-impl Hash for Pattern {
+impl Eq for PatternMatcher {}
+impl Hash for PatternMatcher {
     fn hash<H: Hasher>(&self, _: &mut H) {
         todo!()
     }
 }
-impl Pattern {
+impl PatternMatcher {
     pub fn len(&self) -> usize {
         self.len
     }

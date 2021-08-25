@@ -15,7 +15,7 @@ mod runtime_value;
 mod value;
 mod vector_set;
 
-pub use cell_array::CellArray;
+pub use cell_array::{CellArray, LlvmCellArray};
 pub use cell_lut::CellLut;
 pub use cell_set::CellSet;
 pub use compile_value::{CpVal, SpannedCompileValueExt};

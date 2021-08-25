@@ -59,6 +59,7 @@ macro_rules! test_cases {
 
 mod bools;
 // mod branch;
+mod cell_arrays;
 // mod byterepr;
 // mod cmp;
 mod constants;
@@ -71,10 +72,7 @@ mod empty_set;
 // mod is;
 // mod loops;
 mod math;
-// mod patterns;
 // mod ranges;
-// mod rects;
-// mod types;
 mod values;
 // mod vars;
 mod vector_sets;
@@ -291,16 +289,27 @@ impl<'a> TestProgram<'a> {
                 .exec_stmt(ast.get_node(stmt_id))
                 .map_err(|_| runtime.ctx().errors.clone())
                 .and_then(|_| {
-                    expr_ids
-                        .iter()
-                        .map(|&expr_id| {
-                            let expr = ast.get_node(expr_id);
+                    let mut ret = vec![];
+
+                    // Return result expressions.
+                    for &expr_id in &expr_ids {
+                        ret.push(
                             runtime
-                                .eval_expr(expr)
+                                .eval_expr(ast.get_node(expr_id))
                                 .map(|v| v.node.to_string())
-                                .map_err(|_| runtime.ctx().errors.clone())
-                        })
-                        .collect()
+                                .map_err(|_| runtime.ctx().errors.clone())?,
+                        );
+                    }
+
+                    // Also return mutated cell arrays.
+                    for i in 0..case.inputs.len() {
+                        let var_name = Arc::new(format!("x{}", i));
+                        if let Some(RtVal::CellArray(a)) = runtime.vars.remove(&var_name) {
+                            ret.push(a.to_string());
+                        }
+                    }
+
+                    Ok(ret)
                 });
             // Check results.
             let expected_result = case

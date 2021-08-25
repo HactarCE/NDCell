@@ -4,7 +4,7 @@ use std::convert::TryInto;
 use std::fmt;
 
 use ndcell_core::ndarray::Array6D;
-use ndcell_core::prelude::{Axis, CanContain, Dim, Dim6D, IRect6D, IVec6D};
+use ndcell_core::prelude::{Axis, CanContain, Dim, Dim6D, IRect6D, IVec6D, UVec6D};
 
 use super::{LangInt, Type, MAX_VECTOR_SET_EXTENT, MAX_VECTOR_SET_SIZE};
 use crate::errors::{Error, Result};
@@ -254,10 +254,29 @@ impl VectorSet {
     pub fn bounds(&self) -> Option<IRect6D> {
         self.bounds
     }
+    /// Returns the dimensions of the minimum rectangular bounding box of the
+    /// vector set.
+    pub fn bounds_size(&self) -> UVec6D {
+        self.bounds
+            .map(|b| b.size().to_uvec())
+            .unwrap_or(UVec6D::zero())
+    }
+    /// Returns the number of integer positions in the minimum rectangular
+    /// bounding box of the vector set.
+    pub fn bounds_len(&self) -> usize {
+        self.bounds_size().product() as usize
+    }
     /// Returns the mask with size matching the size of `bounds`, or `None` if
     /// the set is empty or the whole rectangle.
     pub fn mask(&self) -> &Option<Array6D<bool>> {
         &self.mask
+    }
+    /// Returns an iterator over the booleans in the mask, or `None` if the set
+    /// is empty or the whole rectangle.
+    pub fn mask_iter<'a>(&'a self) -> Option<impl 'a + Iterator<Item = bool>> {
+        self.mask()
+            .as_ref()
+            .map(|m| m.as_flat_slice().iter().copied())
     }
     /// Returns whether the set is empty.
     pub fn is_empty(&self) -> bool {
@@ -331,6 +350,21 @@ impl VectorSet {
         Self::with_mask_from_fn(span, vec_len, bounds, |pos| {
             self.contains(pos) ^ other.contains(pos)
         })
+    }
+
+    /// Offsets every vector in the set by a fixed delta vector.
+    pub fn offset(&self, span: Span, delta: &[LangInt]) -> Result<Self> {
+        if !delta.iter().all(|&d| {
+            (-(MAX_VECTOR_SET_EXTENT * 2)..(MAX_VECTOR_SET_EXTENT * 2)).contains(&(d as isize))
+        }) {
+            return Err(Error::invalid_vector_component_for_set(span));
+        }
+
+        let mut ret = self.clone();
+        if let Some(b) = &mut ret.bounds {
+            *b += vec_to_ivec6d_unchecked(delta);
+        }
+        Ok(ret)
     }
 }
 
@@ -406,12 +440,13 @@ fn bounds_from_list(positions: impl IntoIterator<Item = IVec6D>) -> Option<IRect
 fn vec_to_ivec6d(span: Span, v: &[LangInt]) -> Result<IVec6D> {
     // Check that all values are within range.
     for &i in v {
-        check_vector_component(span, i as isize)?;
+        check_vector_component(span, i)?;
     }
 
-    Ok(IVec6D::from_fn(|ax| {
-        v.get(ax as usize).map(|&i| i as isize).unwrap_or(0)
-    }))
+    Ok(vec_to_ivec6d_unchecked(v))
+}
+fn vec_to_ivec6d_unchecked(v: &[LangInt]) -> IVec6D {
+    IVec6D::from_fn(|ax| *v.get(ax as usize).unwrap_or(&0) as isize)
 }
 fn ivec6d_to_vec(vec_len: usize, v: IVec6D) -> Vec<LangInt> {
     (0..vec_len.clamp(1, 6))
@@ -421,15 +456,18 @@ fn ivec6d_to_vec(vec_len: usize, v: IVec6D) -> Vec<LangInt> {
 
 /// Checks that a vector component is sufficiently small and returns an error if
 /// it is not.
-fn check_vector_component(span: Span, i: isize) -> Result<()> {
-    match is_vector_component_valid(i as isize) {
+fn check_vector_component(span: Span, i: impl TryInto<isize>) -> Result<()> {
+    match is_vector_component_valid(i) {
         true => Ok(()),
         false => Err(Error::invalid_vector_component_for_set(span)),
     }
 }
 /// Returns whether a vector component is sufficiently small.
-fn is_vector_component_valid(i: isize) -> bool {
-    (-MAX_VECTOR_SET_EXTENT..MAX_VECTOR_SET_EXTENT).contains(&i)
+fn is_vector_component_valid(i: impl TryInto<isize>) -> bool {
+    match i.try_into() {
+        Ok(i) => (-MAX_VECTOR_SET_EXTENT..MAX_VECTOR_SET_EXTENT).contains(&i),
+        Err(_) => false,
+    }
 }
 
 #[cfg(test)]

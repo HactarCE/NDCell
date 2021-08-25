@@ -9,6 +9,9 @@ use crate::data::RtVal;
 use crate::errors::{Error, Result};
 use crate::llvm;
 
+// TODO: add flag to `CompiledFunction` to optimize argument writing/reading for
+// the case of a single cell array.
+
 /// Compiled user function with allocated space for arguments, return value, and
 /// optionally debug values to it.
 ///
@@ -111,8 +114,7 @@ impl CompiledFunction {
         drop(args_pointer);
 
         // Update argument values.
-        read_args_from_bytes(&self.arg_bytes, &self.params, arg_values)
-            .map_err(|_| internal_error_value!("Error reading arguments from compiled function"))?;
+        read_args_from_bytes(&self.arg_bytes, &self.params, arg_values);
 
         if ret == u32::MAX {
             // No error occurred.
@@ -143,6 +145,9 @@ fn write_args_to_bytes<'a>(
     params: &[Param],
     values: &'a mut [RtVal],
 ) -> Result<&'a mut [u64]> {
+    // This function aliases a `&mut` and `*mut` to the same memory; once Rust
+    // has a formal aliasing model, this may be UB.
+
     // Reslice as 8-byte-aligned `&mut [u8]`.
     let ptr = bytes_u64.as_ptr() as *mut u8;
     let len = bytes_u64.len() * std::mem::size_of::<u64>();
@@ -155,13 +160,15 @@ fn write_args_to_bytes<'a>(
 
     // Set argument values.
     for (param, value) in params.iter().zip(values) {
+        // SAFETY: The slice is 8-byte aligned and `value` is a valid mutable
+        // reference with a lifetime valid for as long as `bytes_u64`.
         param.value_to_bytes(&mut bytes[param.slice_range()], value)?;
     }
 
     Ok(bytes_u64)
 }
 
-fn read_args_from_bytes(bytes_u64: &[u64], params: &[Param], values: &mut [RtVal]) -> Result<()> {
+fn read_args_from_bytes(bytes_u64: &[u64], params: &[Param], values: &mut [RtVal]) {
     // Reslice as 8-byte-aligned `&[u8]`.
     let ptr = bytes_u64.as_ptr() as *const u8;
     let len = bytes_u64.len() * std::mem::size_of::<u64>();
@@ -169,8 +176,6 @@ fn read_args_from_bytes(bytes_u64: &[u64], params: &[Param], values: &mut [RtVal
 
     // Set argument values.
     for (param, value) in params.iter().zip(values) {
-        *value = param.bytes_to_value(&bytes[param.slice_range()])?;
+        param.bytes_to_value(&bytes[param.slice_range()], value);
     }
-
-    Ok(())
 }

@@ -48,7 +48,6 @@ fn make_vector_range(
     b: &[LangInt],
     b_span: Span,
 ) -> Fallible<RtVal> {
-    let vec_len = std::cmp::max(a.len(), b.len());
     VectorSet::rect(call_span, a, a_span, b, b_span)
         .report_err(ctx)
         .map(|set| RtVal::VectorSet(Arc::new(set)))

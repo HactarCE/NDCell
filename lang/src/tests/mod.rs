@@ -60,8 +60,7 @@ macro_rules! test_cases {
 mod bools;
 // mod branch;
 mod cell_arrays;
-// mod byterepr;
-// mod cmp;
+mod cmp;
 mod constants;
 mod convert;
 // mod debug;

@@ -17,8 +17,11 @@ Some types are `subtypes`__ of other types; this is implemented by coercing the 
 
 __ https://en.wikipedia.org/wiki/Subtyping
 
-- The :data:`CellSet` coerced from a :data:`Cell` contains only that one cell state
-- The :data:`CellSet` coerced from a :data:`Tag` contains all cell states with a :ref:`truthy <boolean-conversion>` value for that tag
+- The :data:`Vector` coerced from an :data:`Integer` contains that integer as every component in the vector. Examples:
+  - The ``Vector[3]`` coerced from ``-1`` is ``[-1, -1, -1]``
+- The :data:`CellSet` coerced from a :data:`Cell` contains only that one cell state. Examples:
+  - The ``CellSet`` coerced from ``#6`` is ``{#6}``
+- The :data:`CellSet` coerced from a :data:`Tag` contains all cell states with a :ref:`truthy <boolean-conversion>` value for that tag.
 - The :data:`PatternMatcher` coerced from an :data:`CellArray` accepts only that one cell array.
 - The :data:`IntegerSet`, :data:`CellSet`, or :data:`VectorSet` coerced from an :data:`EmptySet` contains no elements.
 

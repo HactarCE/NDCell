@@ -76,6 +76,7 @@ None of these restrictions apply during initialization, such as in ``@init`` blo
 Subtyping
 ---------
 
+- :data:`Integer` is a subtype of :data:`Vector`
 - :data:`Cell` and :data:`Tag` are subtypes of :data:`CellSet`
 - :data:`CellArray` is a subtype of :data:`PatternMatcher`
 - :data:`EmptySet` is a subtype of :data:`IntegerSet`, :data:`CellSet`, and :data:`VectorSet`
@@ -92,12 +93,15 @@ Primitive types
   :status: Not yet implemented
   :methods: :ref:`integer-methods`
   :operators: :ref:`arithmetic-operators`, :ref:`bitwise-operators`, :ref:`comparison-operators`
+  :supertype: :data:`Vector`
 
   An integer, represented using a 64-bit signed `two's complement`__ integer. This means the minimum value is ``-9223372036854775808`` and the maximum value is ``9223372036854775807``.
 
   __ https://en.wikipedia.org/wiki/Two%27s_complement
 
   Boolean values are represented using integers. (See :ref:`boolean-conversion`.)
+
+  :data:`Integer` is a subtype of :data:`Vector`. When used in place of a :data:`Vector`, an :data:`Integer` coerces to a vector containing that integer as every component. See :ref:`subtype-coercion` for more about subtyping.
 
   An integer literal consists of a sequence of digits, optionally prefixed by a unary ``+`` or ``-`` operator. Underscores may be present after the first digit, and do not affect the value. Examples:
 

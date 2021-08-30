@@ -96,7 +96,7 @@ impl Ctx {
 
     /// Sets the number of dimensions based on the result of an `@ndim`
     /// expression.
-    pub fn set_ndim(&mut self, directive_span: Span, ndim: Spanned<RtVal>) -> Result<()> {
+    pub fn set_ndim(&mut self, directive_span: Span, ndim: &Spanned<RtVal>) -> Result<()> {
         if self.ndim.is_some() {
             return Err(Error::duplicate_directive(directive_span, "@ndim"));
         }
@@ -113,7 +113,7 @@ impl Ctx {
     }
     /// Sets the number of states based on the result of an `@states`
     /// expression.
-    pub fn set_states(&mut self, directive_span: Span, states: Spanned<RtVal>) -> Result<()> {
+    pub fn set_states(&mut self, directive_span: Span, states: &Spanned<RtVal>) -> Result<()> {
         if self.states.is_some() {
             return Err(Error::duplicate_directive(directive_span, "@states"));
         }

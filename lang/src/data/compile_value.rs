@@ -30,42 +30,42 @@ impl CpVal {
 pub trait SpannedCompileValueExt {
     /// Returns the value inside if this is an `Integer` or subtype of one;
     /// otherwise returns a type error.
-    fn as_integer(self) -> Result<llvm::IntValue>;
+    fn as_integer(&self) -> Result<llvm::IntValue>;
     /// Returns the value inside if this is a `Cell` or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell(self) -> Result<llvm::IntValue>;
+    fn as_cell(&self) -> Result<llvm::IntValue>;
     /// Returns the value inside if this is a `Vector` or subtype of one;
     /// otherwise returns a type error.
-    fn as_vector(self) -> Result<llvm::VectorValue>;
+    fn as_vector(&self) -> Result<llvm::VectorValue>;
     /// Returns the value inside if this is an `CellArray` or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell_array(self) -> Result<LlvmCellArray>;
+    fn as_cell_array(&self) -> Result<LlvmCellArray>;
     /// Returns the value inside if this is a `CellSet` or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell_set(self) -> Result<llvm::VectorValue>;
+    fn as_cell_set(&self) -> Result<llvm::VectorValue>;
 }
 impl SpannedCompileValueExt for Spanned<CpVal> {
-    fn as_integer(self) -> Result<llvm::IntValue> {
+    fn as_integer(&self) -> Result<llvm::IntValue> {
         match self.node {
             CpVal::Integer(x) => Ok(x),
             _ => Err(Error::type_error(self.span, Type::Integer, &self.ty())),
         }
     }
-    fn as_cell(self) -> Result<llvm::IntValue> {
+    fn as_cell(&self) -> Result<llvm::IntValue> {
         match self.node {
             CpVal::Cell(x) => Ok(x),
             _ => Err(Error::type_error(self.span, Type::Cell, &self.ty())),
         }
     }
-    fn as_vector(self) -> Result<llvm::VectorValue> {
+    fn as_vector(&self) -> Result<llvm::VectorValue> {
         match self.node {
             CpVal::Vector(x) => Ok(x),
             _ => Err(Error::type_error(self.span, Type::Vector(None), &self.ty())),
         }
     }
-    fn as_cell_array(self) -> Result<LlvmCellArray> {
-        match self.node {
-            CpVal::CellArray(a) => Ok(a),
+    fn as_cell_array(&self) -> Result<LlvmCellArray> {
+        match &self.node {
+            CpVal::CellArray(a) => Ok(a.clone()),
             _ => Err(Error::type_error(
                 self.span,
                 Type::CellArray(None),
@@ -73,7 +73,7 @@ impl SpannedCompileValueExt for Spanned<CpVal> {
             )),
         }
     }
-    fn as_cell_set(self) -> Result<llvm::VectorValue> {
+    fn as_cell_set(&self) -> Result<llvm::VectorValue> {
         match self.node {
             CpVal::CellSet(x) => Ok(x),
             _ => Err(Error::type_error(self.span, Type::CellSet, &self.ty())),

@@ -22,7 +22,6 @@ impl Function for TypeBrackets {
                 call.check_args_len(2, ctx, self)?;
                 let x = call.arg(1, ctx)?;
                 let len = x
-                    .clone()
                     .as_integer() // TODO: make as_integer_vector_len()
                     .and_then(|n| data::check_vector_len(x.span, n))
                     .report_err(ctx)?;
@@ -33,7 +32,6 @@ impl Function for TypeBrackets {
                 call.check_args_len(2, ctx, self)?;
                 let x = call.arg(1, ctx)?;
                 let vec_len = x
-                    .clone()
                     .as_integer()
                     .and_then(|n| data::check_vector_set_vec_len(x.span, n))
                     .report_err(ctx)?;

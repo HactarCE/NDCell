@@ -111,7 +111,7 @@ impl Runtime {
                         Ok(x) => x,
                         Err(AlreadyReported) => break,
                     };
-                    if let Err(e) = this.ctx.set_ndim(directive.span(), ndim_expr_result) {
+                    if let Err(e) = this.ctx.set_ndim(directive.span(), &ndim_expr_result) {
                         this.error(e);
                         break;
                     }
@@ -122,7 +122,7 @@ impl Runtime {
                         Ok(x) => x,
                         Err(AlreadyReported) => break,
                     };
-                    if let Err(e) = this.ctx.set_states(directive.span(), states_expr_result) {
+                    if let Err(e) = this.ctx.set_states(directive.span(), &states_expr_result) {
                         this.error(e);
                         break;
                     }

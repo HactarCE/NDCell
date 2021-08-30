@@ -35,7 +35,7 @@ impl Function for VectorConstruct {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         let mut ret = vec![];
-        for arg in call.args {
+        for arg in &call.args {
             let arg = compiler.get_cp_val(arg)?;
             match arg.node {
                 CpVal::Integer(i) => Ok(ret.push(i)),
@@ -65,7 +65,6 @@ impl Function for Vec {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let len = match call.kwarg("len") {
             Some(x) => x
-                .clone()
                 .as_integer()
                 .and_then(|n| data::check_vector_len(x.span, n))
                 .report_err(ctx)?,
@@ -76,7 +75,7 @@ impl Function for Vec {
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         let len = match call.kwarg("len") {
             Some(x) => compiler
-                .get_rt_val(x.clone())?
+                .get_rt_val(x)?
                 .as_integer()
                 .and_then(|n| data::check_vector_len(x.span, n))
                 .report_err(compiler)?,
@@ -108,7 +107,7 @@ impl Function for VecWithLen {
         match &call.args[..] {
             [] => Ok(Val::Rt(RtVal::Vector(vec![0; len]))),
             [arg] => Ok(Val::Cp(CpVal::Vector(
-                compiler.build_convert_to_vector(arg.clone(), len)?,
+                compiler.build_convert_to_vector(arg, len)?,
             ))),
             _ => Err(call.invalid_args_error(compiler, self)),
         }

@@ -457,7 +457,7 @@ impl<'ast> CompiledArg<'ast> {
         let span = index_expr.span();
         // It should be const-evaluatable
         let index = compiler
-            .get_rt_val(index_value)?
+            .get_rt_val(&index_value)?
             // ... should be an integer
             .as_integer()
             .report_err(compiler)?
@@ -504,7 +504,7 @@ impl Expression for CompiledArg<'_> {
         let index = self.arg_index(compiler, span)?;
         let old_value_fn = |c: &mut Compiler| c.build_load_arg(index).map(Val::Cp);
         let new_arg_value = compile_assign_op(compiler, old_value_fn, span, op, new_value)?;
-        compiler.build_store_arg(index, new_arg_value)
+        compiler.build_store_arg(index, &new_arg_value)
     }
 }
 
@@ -581,7 +581,7 @@ fn eval_assign_op(
         };
         let span = old_value.span.merge(new_value.span);
         new_value = Spanned {
-            node: op_func.eval_on_values(runtime.ctx(), op.span, old_value, new_value)?,
+            node: op_func.eval_on_values(runtime.ctx(), op.span, &old_value, &new_value)?,
             span,
         };
     }
@@ -601,7 +601,7 @@ fn compile_assign_op(
         };
         let span = old_value.span.merge(new_value.span);
         new_value = Spanned {
-            node: op_func.compile_for_values(compiler, op.span, old_value, new_value)?,
+            node: op_func.compile_for_values(compiler, op.span, &old_value, &new_value)?,
             span,
         };
     }

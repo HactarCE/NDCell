@@ -136,8 +136,8 @@ impl BinaryMathOp {
         self,
         ctx: &mut Ctx,
         span: Span,
-        lhs: Spanned<RtVal>,
-        rhs: Spanned<RtVal>,
+        lhs: &Spanned<RtVal>,
+        rhs: &Spanned<RtVal>,
     ) -> Fallible<RtVal> {
         let invalid_args = Error::invalid_arguments(span, self, &[lhs.ty(), rhs.ty()]);
 
@@ -216,8 +216,8 @@ impl BinaryMathOp {
         self,
         compiler: &mut Compiler,
         span: Span,
-        lhs: Spanned<Val>,
-        rhs: Spanned<Val>,
+        lhs: &Spanned<Val>,
+        rhs: &Spanned<Val>,
     ) -> Fallible<Val> {
         let l = compiler
             .get_cp_val(lhs)?
@@ -236,8 +236,9 @@ impl BinaryMathOp {
 impl Function for BinaryMathOp {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(2, ctx, self)?;
-        let lhs = call.args[0].clone();
-        let rhs = call.args[1].clone();
+        let lhs = &call.args[0];
+        let rhs = &call.args[1];
+
         self.eval_on_values(ctx, call.span, lhs, rhs)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {

@@ -141,50 +141,50 @@ impl From<VectorSet> for RtVal {
 pub trait SpannedRuntimeValueExt {
     /// Returns the value inside if this is a `Null` or subtype of one;
     /// otherwise returns a type error.
-    fn as_null(self) -> Result<()>;
+    fn as_null(&self) -> Result<()>;
     /// Returns the value inside if this is an `Integer` or subtype of one;
     /// otherwise returns a type error.
-    fn as_integer(self) -> Result<LangInt>;
+    fn as_integer(&self) -> Result<LangInt>;
     /// Returns the value inside if this is a `Cell` or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell(self) -> Result<LangCell>;
+    fn as_cell(&self) -> Result<LangCell>;
     /// Returns the value inside if this is a `Tag` or subtype of one; otherwise
     /// returns a type error.
-    fn as_tag(self) -> Result<Arc<String>>;
+    fn as_tag(&self) -> Result<Arc<String>>;
     /// Returns the value inside if this is a `String` or subtype of one;
     /// otherwise returns a type error.
-    fn as_string(self) -> Result<Arc<String>>;
+    fn as_string(&self) -> Result<Arc<String>>;
     /// Returns the value inside if this is a `Type` or subtype of one;
     /// otherwise returns a type error.
-    fn as_type(self) -> Result<Type>;
+    fn as_type(&self) -> Result<Type>;
     /// Returns the value inside if this is a `Vector` or subtype of one;
     /// otherwise returns a type error.
-    fn as_vector(self) -> Result<Vec<LangInt>>;
+    fn as_vector(&self) -> Result<Vec<LangInt>>;
     /// Returns the value inside if this is an `CellArray` or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell_array(self) -> Result<CellArray>;
+    fn as_cell_array(&self) -> Result<CellArray>;
     /// Returns the value inside if this is an `EmptySet` or subtype of one;
     /// otherwise returns a type error.
-    fn as_empty_set(self) -> Result<()>;
+    fn as_empty_set(&self) -> Result<()>;
     /// Returns the value inside if this is an `IntegerSet` or subtype of one;
     /// otherwise returns a type error.
-    fn as_integer_set(self) -> Result<Arc<IntegerSet>>;
+    fn as_integer_set(&self) -> Result<Arc<IntegerSet>>;
     /// Returns the value inside if this is a `CellSet` or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell_set(self) -> Result<CellSet>;
+    fn as_cell_set(&self) -> Result<CellSet>;
     /// Returns the value inside if this is a `VectorSet`; otherwise returns a
     /// type error.
     ///
     /// `vec_len` is merely a suggestion, used when casting an `EmptySet`. **The
     /// returned set may not have the specified `vec_len`.** Additionally, this
     /// method may return an internal error if `vec_len` is invalid.
-    fn as_vector_set(self, vec_len: usize) -> Result<Arc<VectorSet>>;
+    fn as_vector_set(&self, vec_len: usize) -> Result<Arc<VectorSet>>;
     /// Returns the value inside if this is a `PatternMatcher` or subtype of
     /// one; otherwise returns a type error.
-    fn as_pattern_matcher(self) -> Result<Arc<PatternMatcher>>;
+    fn as_pattern_matcher(&self) -> Result<Arc<PatternMatcher>>;
     /// Returns the value inside if this is a `Regex` or subtype of one;
     /// otherwise returns a type error.
-    fn as_regex(self) -> Result<Arc<Regex>>;
+    fn as_regex(&self) -> Result<Arc<Regex>>;
 
     /// Converts the value to a boolean if it can be converted; otherwise
     /// returns a type error.
@@ -202,54 +202,54 @@ pub trait SpannedRuntimeValueExt {
 
     /// Returns an iterator for the value if it can be iterated over; otherwise
     /// returns a type error.
-    fn iterate(self) -> Result<Box<dyn Iterator<Item = Self>>>;
+    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = Self>>>;
 }
 impl SpannedRuntimeValueExt for Spanned<RtVal> {
-    fn as_null(self) -> Result<()> {
-        match self.node {
+    fn as_null(&self) -> Result<()> {
+        match &self.node {
             RtVal::Null => Ok(()),
             _ => Err(Error::type_error(self.span, Type::Null, &self.ty())),
         }
     }
-    fn as_integer(self) -> Result<LangInt> {
-        match self.node {
-            RtVal::Integer(x) => Ok(x),
+    fn as_integer(&self) -> Result<LangInt> {
+        match &self.node {
+            RtVal::Integer(x) => Ok(*x),
             _ => Err(Error::type_error(self.span, Type::Integer, &self.ty())),
         }
     }
-    fn as_cell(self) -> Result<LangCell> {
-        match self.node {
-            RtVal::Cell(x) => Ok(x),
+    fn as_cell(&self) -> Result<LangCell> {
+        match &self.node {
+            RtVal::Cell(x) => Ok(*x),
             _ => Err(Error::type_error(self.span, Type::Cell, &self.ty())),
         }
     }
-    fn as_tag(self) -> Result<Arc<String>> {
-        match self.node {
-            RtVal::Tag(x) => Ok(x),
+    fn as_tag(&self) -> Result<Arc<String>> {
+        match &self.node {
+            RtVal::Tag(x) => Ok(Arc::clone(x)),
             _ => Err(Error::type_error(self.span, Type::Tag, &self.ty())),
         }
     }
-    fn as_string(self) -> Result<Arc<String>> {
-        match self.node {
-            RtVal::String(x) => Ok(x),
+    fn as_string(&self) -> Result<Arc<String>> {
+        match &self.node {
+            RtVal::String(x) => Ok(Arc::clone(x)),
             _ => Err(Error::type_error(self.span, Type::String, &self.ty())),
         }
     }
-    fn as_type(self) -> Result<Type> {
-        match self.node {
-            RtVal::Type(x) => Ok(x),
+    fn as_type(&self) -> Result<Type> {
+        match &self.node {
+            RtVal::Type(x) => Ok(x.clone()),
             _ => Err(Error::type_error(self.span, Type::Type, &self.ty())),
         }
     }
-    fn as_vector(self) -> Result<Vec<LangInt>> {
-        match self.node {
-            RtVal::Vector(x) => Ok(x),
+    fn as_vector(&self) -> Result<Vec<LangInt>> {
+        match &self.node {
+            RtVal::Vector(x) => Ok(x.clone()),
             _ => Err(Error::type_error(self.span, Type::Vector(None), &self.ty())),
         }
     }
-    fn as_cell_array(self) -> Result<CellArray> {
-        match self.node {
-            RtVal::CellArray(x) => Ok(x),
+    fn as_cell_array(&self) -> Result<CellArray> {
+        match &self.node {
+            RtVal::CellArray(x) => Ok(x.clone()),
             _ => Err(Error::type_error(
                 self.span,
                 Type::CellArray(None),
@@ -257,37 +257,37 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             )),
         }
     }
-    fn as_empty_set(self) -> Result<()> {
-        match self.node {
+    fn as_empty_set(&self) -> Result<()> {
+        match &self.node {
             RtVal::EmptySet => Ok(()),
             _ => Err(Error::type_error(self.span, Type::EmptySet, &self.ty())),
         }
     }
-    fn as_integer_set(self) -> Result<Arc<IntegerSet>> {
-        match self.node {
+    fn as_integer_set(&self) -> Result<Arc<IntegerSet>> {
+        match &self.node {
             RtVal::EmptySet => Ok(Arc::new(IntegerSet::empty())),
-            RtVal::IntegerSet(x) => Ok(x),
+            RtVal::IntegerSet(x) => Ok(Arc::clone(x)),
             _ => Err(Error::type_error(self.span, Type::IntegerSet, &self.ty())),
         }
     }
-    fn as_cell_set(self) -> Result<CellSet> {
-        match self.node {
-            RtVal::Cell(x) => Ok(CellSet::single_cell(x)),
+    fn as_cell_set(&self) -> Result<CellSet> {
+        match &self.node {
+            RtVal::Cell(x) => Ok(CellSet::single_cell(*x)),
             RtVal::Tag(x) => Err(Error::unimplemented(self.span)), // TODO: only allow in compiled code? should allow everywhere
             RtVal::EmptySet => Ok(CellSet::empty()),
-            RtVal::CellSet(x) => Ok(x),
+            RtVal::CellSet(x) => Ok(*x),
             _ => Err(Error::type_error(self.span, Type::CellSet, &self.ty())),
         }
     }
-    fn as_vector_set(self, vec_len: usize) -> Result<Arc<VectorSet>> {
-        match self.node {
+    fn as_vector_set(&self, vec_len: usize) -> Result<Arc<VectorSet>> {
+        match &self.node {
             RtVal::EmptySet => match VectorSet::empty(self.span, vec_len) {
                 Ok(set) => Ok(Arc::new(set)),
                 Err(e) => Err(internal_error_value!(
                     "invalid vector length for vector set"
                 )),
             },
-            RtVal::VectorSet(x) => Ok(x),
+            RtVal::VectorSet(x) => Ok(Arc::clone(x)),
             _ => Err(Error::type_error(
                 self.span,
                 Type::VectorSet(None),
@@ -295,9 +295,9 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             )),
         }
     }
-    fn as_pattern_matcher(self) -> Result<Arc<PatternMatcher>> {
-        match self.node {
-            RtVal::PatternMatcher(x) => Ok(x),
+    fn as_pattern_matcher(&self) -> Result<Arc<PatternMatcher>> {
+        match &self.node {
+            RtVal::PatternMatcher(x) => Ok(Arc::clone(x)),
             _ => Err(Error::type_error(
                 self.span,
                 Type::PatternMatcher(None),
@@ -305,9 +305,9 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             )),
         }
     }
-    fn as_regex(self) -> Result<Arc<Regex>> {
-        match self.node {
-            RtVal::Regex(x) => Ok(x),
+    fn as_regex(&self) -> Result<Arc<Regex>> {
+        match &self.node {
+            RtVal::Regex(x) => Ok(Arc::clone(x)),
             _ => Err(Error::type_error(self.span, Type::Regex, &self.ty())),
         }
     }
@@ -343,7 +343,7 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
         }
     }
 
-    fn iterate(self) -> Result<Box<dyn Iterator<Item = Self>>> {
+    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = Self>>> {
         Err(Error::unimplemented(None))
     }
 }

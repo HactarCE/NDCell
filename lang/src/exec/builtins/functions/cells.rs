@@ -24,7 +24,7 @@ impl Function for IntToCell {
         call.check_args_len(1, ctx, self)?;
         let arg = call.args[0].clone();
 
-        if let Ok(x) = arg.clone().as_integer() {
+        if let Ok(x) = arg.as_integer() {
             let state_count = ctx.get_states(call.span)? as LangInt;
             if 0 <= x && x < state_count {
                 Ok(RtVal::Cell(x as LangCell))
@@ -39,9 +39,9 @@ impl Function for IntToCell {
         use llvm::IntPredicate::UGE;
 
         call.check_args_len(1, compiler, self)?;
-        let arg = call.args[0].clone();
+        let arg = &call.args[0];
         let n = compiler
-            .get_cp_val(arg.clone())?
+            .get_cp_val(arg)?
             .as_integer()
             .report_err(compiler)?;
 

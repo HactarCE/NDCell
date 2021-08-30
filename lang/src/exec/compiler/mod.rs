@@ -369,25 +369,25 @@ impl Compiler {
             Err(e) => Err(self.error(e)),
         }
     }
-    pub(crate) fn get_rt_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<RtVal>> {
+    pub(crate) fn get_rt_val(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<RtVal>> {
         let span = v.span;
-        match v.node {
-            Val::Rt(v) => Ok(v),
+        match &v.node {
+            Val::Rt(v) => Ok(v.clone()),
             Val::Cp(_) => Err(self.error(Error::must_be_constant(span))),
             Val::Unknown(Some(ty)) => Err(self.error(Error::unknown_variable_value(span, ty))),
             Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
             Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
-            Val::Err(e) => Err(e),
+            Val::Err(AlreadyReported) => Err(AlreadyReported),
         }
         .map(|node| Spanned { node, span })
     }
     // TODO: probably remove this
-    pub(crate) fn get_cp_val(&mut self, v: Spanned<Val>) -> Fallible<Spanned<CpVal>> {
+    pub(crate) fn get_cp_val(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<CpVal>> {
         let span = v.span;
-        match v.node {
+        match &v.node {
             Val::Rt(v) => match v {
-                RtVal::Integer(i) => Ok(CpVal::Integer(llvm::const_int(i))),
-                RtVal::Cell(i) => Ok(CpVal::Cell(llvm::const_cell(i))),
+                RtVal::Integer(i) => Ok(CpVal::Integer(llvm::const_int(*i))),
+                RtVal::Cell(i) => Ok(CpVal::Cell(llvm::const_cell(*i))),
                 RtVal::Vector(v) => Ok(CpVal::Vector(llvm::VectorType::const_vector(
                     &v.iter().map(|&i| llvm::const_int(i)).collect_vec(),
                 ))),
@@ -395,14 +395,14 @@ impl Compiler {
                     &mut self.module,
                     &a,
                 ))),
-                RtVal::CellSet(s) => Ok(CpVal::CellSet(self.build_const_cell_set(&s))),
+                RtVal::CellSet(s) => Ok(CpVal::CellSet(self.build_const_cell_set(s))),
                 _ => Err(self.error(Error::cannot_compile(span))),
             },
-            Val::Cp(v) => Ok(v),
+            Val::Cp(v) => Ok(v.clone()),
             Val::Unknown(Some(ty)) => Err(self.error(Error::unknown_variable_value(span, ty))),
             Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
             Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
-            Val::Err(e) => Err(e),
+            Val::Err(AlreadyReported) => Err(AlreadyReported),
         }
         .map(|node| Spanned { node, span })
     }
@@ -476,7 +476,7 @@ impl Compiler {
 
     /// Builds instructions to cast a value to a boolean and zero-extend that
     /// boolean to the width of an integer.
-    pub fn build_convert_to_bool(&mut self, value: Spanned<Val>) -> Fallible<llvm::IntValue> {
+    pub fn build_convert_to_bool(&mut self, value: &Spanned<Val>) -> Fallible<llvm::IntValue> {
         let cp_val = self.get_cp_val(value)?;
         self.build_convert_cp_val_to_bool(&cp_val)
     }
@@ -504,7 +504,7 @@ impl Compiler {
     /// Builds instructions to cast a value to a vector.
     pub fn build_convert_to_vector(
         &mut self,
-        value: Spanned<Val>,
+        value: &Spanned<Val>,
         len: usize,
     ) -> Fallible<llvm::VectorValue> {
         let cp_val = self.get_cp_val(value)?;
@@ -1357,7 +1357,7 @@ impl Compiler {
     pub fn build_store_arg(
         &mut self,
         idx: Spanned<u32>,
-        new_arg_value: Spanned<Val>,
+        new_arg_value: &Spanned<Val>,
     ) -> Fallible<()> {
         let (arg_ty, arg_ptr) = self.build_get_arg_ptr(idx)?;
 

@@ -23,14 +23,14 @@ impl fmt::Display for ToBool {
 impl Function for ToBool {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(1, ctx, self)?;
-        Ok(RtVal::Integer(
-            call.args[0].to_bool().report_err(ctx)? as LangInt
-        ))
+        let arg = &call.args[0];
+        Ok(RtVal::Integer(arg.to_bool().report_err(ctx)? as LangInt))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         call.check_args_len(1, compiler, self)?;
+        let arg = &call.args[0];
         Ok(Val::Cp(CpVal::Integer(
-            compiler.build_convert_to_bool(call.args[0].clone())?,
+            compiler.build_convert_to_bool(arg)?,
         )))
     }
 }
@@ -52,8 +52,8 @@ impl Function for LogicalXor {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         call.check_args_len(2, compiler, self)?;
-        let lhs = compiler.build_convert_to_bool(call.args[0].clone())?;
-        let rhs = compiler.build_convert_to_bool(call.args[1].clone())?;
+        let lhs = compiler.build_convert_to_bool(&call.args[0])?;
+        let rhs = compiler.build_convert_to_bool(&call.args[1])?;
         Ok(Val::Cp(CpVal::Integer(
             compiler.builder().build_xor(lhs, rhs, "xor"),
         )))
@@ -76,7 +76,7 @@ impl Function for LogicalNot {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         call.check_args_len(1, compiler, self)?;
-        let arg = compiler.build_convert_to_bool(call.args[0].clone())?;
+        let arg = compiler.build_convert_to_bool(&call.args[0])?;
         Ok(Val::Cp(CpVal::Integer(compiler.builder().build_xor(
             arg,
             llvm::const_int(1),

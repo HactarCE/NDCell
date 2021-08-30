@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::fmt;
 
 use crate::lexer::{Keyword, Token};
 
@@ -189,6 +190,18 @@ pub enum CompareOp {
     /// Greater than or equal `>=`.
     Gte,
 }
+impl fmt::Display for CompareOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompareOp::Eql => write!(f, "=="),
+            CompareOp::Neq => write!(f, "!="),
+            CompareOp::Lt => write!(f, "<"),
+            CompareOp::Gt => write!(f, ">"),
+            CompareOp::Lte => write!(f, "<="),
+            CompareOp::Gte => write!(f, ">="),
+        }
+    }
+}
 impl TryFrom<Token> for CompareOp {
     type Error = ();
 
@@ -201,6 +214,21 @@ impl TryFrom<Token> for CompareOp {
             Token::Lte => Ok(Self::Lte),
             Token::Gte => Ok(Self::Gte),
             _ => Err(()),
+        }
+    }
+}
+impl CompareOp {
+    pub fn eval<L, R>(self, lhs: L, rhs: R) -> bool
+    where
+        L: PartialOrd<R>,
+    {
+        match self {
+            Self::Eql => lhs == rhs,
+            Self::Neq => lhs != rhs,
+            Self::Lt => lhs < rhs,
+            Self::Gt => lhs > rhs,
+            Self::Lte => lhs <= rhs,
+            Self::Gte => lhs >= rhs,
         }
     }
 }

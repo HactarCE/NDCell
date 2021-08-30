@@ -31,6 +31,11 @@ impl From<CpVal> for Val {
     }
 }
 impl Val {
+    /// Returns whether this is an `RtVal`.
+    pub fn is_rt_val(&self) -> bool {
+        matches!(self, Self::Rt(_))
+    }
+
     /// Returns the value inside if this is an `RtVal`; otherwise returns
     /// `None`.
     pub fn rt_val(self) -> Option<RtVal> {

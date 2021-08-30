@@ -86,6 +86,22 @@ pub fn ndarray_strides(ndim: usize, bounds: IRect6D) -> Vec<i64> {
         .collect()
 }
 
+/// Applies `map` to the inside of two `Option`s, then merges the result using
+/// `merge` if both are `Some`.
+pub fn map_and_merge_options<T, U>(
+    a: Option<T>,
+    b: Option<T>,
+    mut map: impl FnMut(T) -> U,
+    merge: impl FnOnce(U, U) -> U,
+) -> Option<U> {
+    let a = a.map(&mut map);
+    let b = b.map(&mut map);
+    match (a, b) {
+        (Some(x), Some(y)) => Some(merge(x, y)),
+        (x, y) => x.or(y),
+    }
+}
+
 #[test]
 fn test_join_with_conjunction() {
     let strs = &["X", "Y", "Z"];

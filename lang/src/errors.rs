@@ -189,14 +189,14 @@ impl Error {
     error_fn!(Error; fn cannot_const_eval("cannot evaluate because evaluation depends on simulation contents"));
 
     error_fn!(Error; fn type_error(
-        "mismatched types: expected {} but got {}",
+        "type error: expected {} but got {}",
         expected: impl fmt::Display,
         got: &Type,
     ));
     error_fn!(Error; fn cmp_type_error(
-        "mismatched types: cannot compare {0} to {2} using '{1}'{3}",
+        "type error: cannot compare {1} to {2} using '{0}'{3}",
+        cmp: impl fmt::Display,
         lhs: &Type,
-        cmp: &str,
         rhs: &Type,
         _ => if *lhs == Type::Cell && *rhs == Type::Cell {
             "; convert them to integers first using the '#id' tag"

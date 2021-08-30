@@ -5,6 +5,7 @@ use std::sync::Arc;
 pub(super) mod arrays;
 pub(super) mod bools;
 pub(super) mod cells;
+pub(super) mod cmp;
 pub(super) mod math;
 pub(super) mod range;
 pub(super) mod sets;

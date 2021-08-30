@@ -37,7 +37,8 @@ mod param;
 use super::builtins::{self, Expression};
 use crate::ast;
 use crate::data::{
-    CellSet, CpVal, FallibleTypeOf, LangInt, LlvmCellArray, RtVal, Type, Val, INT_BITS,
+    CellSet, CpVal, FallibleTypeOf, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, Type,
+    Val, INT_BITS,
 };
 use crate::errors::{AlreadyReported, Error, Fallible, Result};
 use crate::exec::{Ctx, CtxTrait, ErrorReportExt, Runtime};
@@ -536,6 +537,26 @@ impl Compiler {
                 &value.node.ty(),
             ))),
         }
+    }
+
+    /// Coerce two values to vectors of the same length.
+    pub fn build_coerce_vectors_together(
+        &mut self,
+        v1: &Spanned<CpVal>,
+        v2: &Spanned<CpVal>,
+        vec_len_merge: impl FnMut(usize, usize) -> usize,
+    ) -> Option<(llvm::VectorValue, llvm::VectorValue)> {
+        let len = crate::utils::map_and_merge_options(
+            v1.as_vector().ok(),
+            v2.as_vector().ok(),
+            |v| v.get_type().get_size() as usize,
+            vec_len_merge,
+        )?;
+        // Resize the vectors to the same length.
+        Some((
+            self.build_convert_cp_val_to_vector(v1, len).ok()?,
+            self.build_convert_cp_val_to_vector(v2, len).ok()?,
+        ))
     }
 
     /// Builds instructions to split a vector of integers into its components.
@@ -1294,6 +1315,17 @@ impl Compiler {
     ) -> Fallible<llvm::IntValue> {
         let cmp_result = self.builder().build_int_compare(predicate, lhs, rhs, "");
         self.build_reduce("or", cmp_result.as_basic_value_enum())
+    }
+    /// Build an integer/vector comparison that return true if all element-wise
+    /// comparisons are true.
+    pub fn build_all_cmp<M: llvm::IntMathValue>(
+        &mut self,
+        predicate: llvm::IntPredicate,
+        lhs: M,
+        rhs: M,
+    ) -> Fallible<llvm::IntValue> {
+        let cmp_result = self.builder().build_int_compare(predicate, lhs, rhs, "");
+        self.build_reduce("and", cmp_result.as_basic_value_enum())
     }
 }
 

@@ -262,7 +262,6 @@ impl<'a> TestProgram<'a> {
     /// Asserts that all test cases produce the specified output, both when
     /// interpreted and when compiled.
     pub fn assert_test_cases<'s, OK: Clone + ToString>(self, test_cases: Vec<TestCase<'s, OK>>) {
-        let test_cases = test_cases;
         self.assert_interpreted_test_cases(test_cases.clone());
         self.assert_compiled_test_cases(test_cases);
     }

@@ -1,4 +1,4 @@
-use codemap::Span;
+use codemap::{Span, Spanned};
 use std::convert::TryInto;
 
 use crate::errors::{Error, Result};
@@ -63,4 +63,20 @@ pub fn check_vector_len(span: Span, len: impl TryInto<usize>) -> Result<usize> {
         .ok()
         .filter(|&n| is_valid_vector_len(n))
         .ok_or(Error::invalid_vector_length(span))
+}
+
+/// Coerce two values to vectors of the same length.
+pub fn coerce_vectors_together(
+    v1: &Spanned<RtVal>,
+    v2: &Spanned<RtVal>,
+    vec_len_merge: impl FnMut(usize, usize) -> usize,
+) -> Option<(Vec<LangInt>, Vec<LangInt>)> {
+    let len = crate::utils::map_and_merge_options(
+        v1.as_vector().ok(),
+        v2.as_vector().ok(),
+        |v| v.len(),
+        vec_len_merge,
+    )?;
+    // Resize the vectors to the same length.
+    Some((v1.to_vector(len).ok()?, v2.to_vector(len).ok()?))
 }

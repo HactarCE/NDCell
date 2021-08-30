@@ -102,8 +102,9 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                     args: vec![(None, ast.get_node(*arg))],
                 })
             }
-            ast::ExprData::CmpChain(_, _) => {
-                todo!("cmp chain expr")
+            ast::ExprData::CmpChain(args, ops) => {
+                let args = args.iter().map(|&id| ast.get_node(id)).collect();
+                Box::new(CmpChain { args, ops })
             }
 
             ast::ExprData::FuncCall { func, args } => Box::new(FuncCall {
@@ -229,7 +230,7 @@ impl Expression for LogicalOrExpr<'_> {
 
         match lhs.node {
             Val::Rt(_) => {
-                let l = compiler.get_rt_val(lhs).unwrap();
+                let l = compiler.get_rt_val(&lhs).unwrap();
                 let l_bool = l.to_bool().report_err(compiler)?;
                 match l_bool {
                     // LHS is statically `true`; do not compile RHS.
@@ -239,13 +240,13 @@ impl Expression for LogicalOrExpr<'_> {
                     false => {
                         let rhs = compiler.build_expr(self.args[1])?;
                         Ok(Val::Cp(CpVal::Integer(
-                            compiler.build_convert_to_bool(rhs)?,
+                            compiler.build_convert_to_bool(&rhs)?,
                         )))
                     }
                 }
             }
             Val::Cp(_) => {
-                let l_bool = compiler.build_convert_to_bool(lhs)?;
+                let l_bool = compiler.build_convert_to_bool(&lhs)?;
                 let bool_result = compiler.build_conditional(
                     l_bool,
                     // LHS is dynamically `true`; do not evaluate RHS.
@@ -254,7 +255,7 @@ impl Expression for LogicalOrExpr<'_> {
                     // and return it.
                     |c| {
                         let rhs = c.build_expr(self.args[1])?;
-                        c.build_convert_to_bool(rhs)
+                        c.build_convert_to_bool(&rhs)
                     },
                 )?;
                 Ok(Val::Cp(CpVal::Integer(bool_result)))
@@ -285,7 +286,7 @@ impl Expression for LogicalAndExpr<'_> {
 
         match lhs.node {
             Val::Rt(_) => {
-                let l = compiler.get_rt_val(lhs).unwrap();
+                let l = compiler.get_rt_val(&lhs).unwrap();
                 let l_bool = l.to_bool().report_err(compiler)?;
                 match l_bool {
                     // LHS is statically `true`; compile RHS, convert to bool,
@@ -293,7 +294,7 @@ impl Expression for LogicalAndExpr<'_> {
                     true => {
                         let rhs = compiler.build_expr(self.args[1])?;
                         Ok(Val::Cp(CpVal::Integer(
-                            compiler.build_convert_to_bool(rhs)?,
+                            compiler.build_convert_to_bool(&rhs)?,
                         )))
                     }
                     // LHS is statically `false`; do not compile RHS.
@@ -301,14 +302,14 @@ impl Expression for LogicalAndExpr<'_> {
                 }
             }
             Val::Cp(_) => {
-                let l_bool = compiler.build_convert_to_bool(lhs)?;
+                let l_bool = compiler.build_convert_to_bool(&lhs)?;
                 let bool_result = compiler.build_conditional(
                     l_bool,
                     // LHS is dynamically `true`; compile RHS, convert to bool,
                     // and return it.
                     |c| {
                         let rhs = c.build_expr(self.args[1])?;
-                        c.build_convert_to_bool(rhs)
+                        c.build_convert_to_bool(&rhs)
                     },
                     // RHS is dynamically `false`; do not evaluate RHS.
                     |_| Ok(llvm::const_int(0)),
@@ -318,6 +319,122 @@ impl Expression for LogicalAndExpr<'_> {
             Val::Unknown(_) => Err(compiler.error(Error::ambiguous_variable_type(lhs.span))),
             Val::MaybeUninit => Err(compiler.error(Error::maybe_uninitialized_variable(lhs.span))),
             Val::Err(AlreadyReported) => Err(AlreadyReported),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CmpChain<'ast> {
+    args: Vec<ast::Expr<'ast>>,
+    ops: &'ast [Spanned<ast::CompareOp>],
+}
+impl Expression for CmpChain<'_> {
+    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
+        if self.args.len() != self.ops.len() + 1 {
+            return Err(runtime.error(internal_error_value!("CmpChain ops/args length mismatch")));
+        }
+        let mut lhs = runtime.eval_expr(self.args[0])?;
+        let other_args = &self.args[1..];
+        for (&op, &rhs_id) in self.ops.iter().zip(other_args) {
+            let rhs = runtime.eval_expr(rhs_id)?;
+
+            let cmp_result = functions::cmp::eval(runtime.ctx(), op.node, &lhs, &rhs)?;
+
+            if !cmp_result {
+                // This comparison evaluated to `false`, so the whole expression
+                // evaluates to `false`.
+                return Ok(RtVal::Integer(0));
+            }
+
+            lhs = rhs;
+        }
+        // All comparisons evaluated to `true`, so the whole expression
+        // evaluates to `true`.
+        return Ok(RtVal::Integer(1));
+    }
+    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
+        if self.args.len() != self.ops.len() + 1 {
+            return Err(compiler.error(internal_error_value!("CmpChain ops/args length mismatch")));
+        }
+
+        let mut false_bb = None;
+        let mut build_cmp_return_false = |c: &mut Compiler| {
+            let f_bb = *false_bb.get_or_insert_with(|| c.append_basic_block("cmp_false"));
+            c.builder().build_unconditional_branch(f_bb);
+            Ok(())
+        };
+
+        let mut lhs = compiler.build_expr(self.args[0])?;
+        let other_args = &self.args[1..];
+        for (&op, &rhs_id) in self.ops.iter().zip(other_args) {
+            let rhs = compiler.build_expr(rhs_id)?;
+
+            if lhs.is_rt_val() && rhs.is_rt_val() {
+                // Both values are known at compile time, so compute the result
+                // statically right here.
+                let l = lhs.clone().map_node(|v| v.rt_val().unwrap());
+                let r = rhs.clone().map_node(|v| v.rt_val().unwrap());
+                let cmp_result = functions::cmp::eval(compiler.ctx(), op.node, &l, &r)?;
+
+                match cmp_result {
+                    true => (), // Proceed to the next comparison.
+                    false => {
+                        // Return false immediately.
+                        build_cmp_return_false(compiler)?;
+                        // Do not compile any other comparisons.
+                        break;
+                    }
+                }
+            } else {
+                // Values are not known at compile time, so compute the result
+                // at runtime.
+                let l = compiler.get_cp_val(&lhs)?;
+                let r = compiler.get_cp_val(&rhs)?;
+                let cmp_result = functions::cmp::compile(compiler, op.node, &l, &r)?;
+
+                compiler.build_conditional(
+                    cmp_result,
+                    |_| Ok(()),                  // Proceed to the next comparison.
+                    &mut build_cmp_return_false, // Return false immediately.
+                )?;
+            }
+
+            lhs = rhs;
+        }
+
+        if let Some(false_bb) = false_bb {
+            if compiler.needs_terminator() {
+                let (end_bb, phi) =
+                    compiler.append_basic_block_with_phi("cmp_end", llvm::int_type(), "cmp_result");
+
+                // If we execute the current basic block, then all comparisons
+                // returned true.
+                let true_bb = compiler.current_block();
+                let b = compiler.builder();
+                b.build_unconditional_branch(end_bb);
+
+                // If we execute `false_bb`, then some comparison returned false.
+                b.position_at_end(false_bb);
+                b.build_unconditional_branch(end_bb);
+
+                b.position_at_end(end_bb);
+                phi.add_incoming(&[
+                    (&llvm::const_int(1), true_bb),
+                    (&llvm::const_int(0), false_bb),
+                ]);
+
+                Ok(Val::Cp(CpVal::Integer(
+                    phi.as_basic_value().into_int_value(),
+                )))
+            } else {
+                // The current basic block unconditionally jumps to `false_bb`,
+                // so the last comparison definitely returned false.
+                compiler.builder().position_at_end(false_bb);
+                Ok(Val::Rt(RtVal::Integer(0)))
+            }
+        } else {
+            // All comparisons returned true, so just return true.
+            Ok(Val::Rt(RtVal::Integer(1)))
         }
     }
 }

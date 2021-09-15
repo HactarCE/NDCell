@@ -47,7 +47,8 @@ impl<T, D: Dim> NdArray<T, D> {
         Self { size, data }
     }
 
-    /// Creates an `NdArray` by evaluating a function for each position.
+    /// Creates an `NdArray` by evaluating a function for each position, in
+    /// order.
     pub fn from_fn(size: UVec<D>, mut f: impl FnMut(UVec<D>) -> T) -> Self {
         let rect = URect::with_size(UVec::zero(), size.clone());
         let mut data = Vec::with_capacity(rect.count());

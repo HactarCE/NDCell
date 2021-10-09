@@ -21,6 +21,7 @@ use std::fmt;
 #[macro_use]
 mod macros;
 pub mod rules;
+pub mod strings;
 
 use crate::ast;
 use crate::errors::{Error, Result};

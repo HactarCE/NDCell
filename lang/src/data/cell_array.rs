@@ -4,8 +4,8 @@ use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
 
-use ndcell_core::prelude::IVec6D;
-use ndcell_core::{ndarray::Array6D, ndvec::UVec6D};
+use ndcell_core::ndarray::Array6D;
+use ndcell_core::ndvec::{IVec6D, UVec6D};
 
 use super::{LangCell, LangInt, VectorSet};
 use crate::errors::{Error, Result};

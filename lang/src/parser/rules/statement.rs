@@ -197,15 +197,23 @@ impl SyntaxRule for AssignStatement {
         Expression.might_match(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        let old_p = *p;
         p.parse_and_add_ast_node(ast, |p, ast| {
             Ok(ast::StmtData::Assign {
                 lhs: p.parse(ast, Expression)?,
-                op: p.parse(
-                    ast,
-                    TryFromToken::<ast::AssignOp>::with_display(
-                        "assignment symbol, such as '=' or '+='",
-                    ),
-                )?,
+                op: p
+                    .try_parse(
+                        ast,
+                        TryFromToken::<ast::AssignOp>::with_display(
+                            "assignment symbol, such as '=' or '+='",
+                        ),
+                    )
+                    .unwrap_or_else(|| {
+                        // There's no assignment symbol, so the user probably
+                        // just wrote an expression on a line. We should tell
+                        // them we expect a statement.
+                        old_p.expected(Statement)
+                    })?,
                 rhs: p.parse(ast, Expression)?,
             })
         })

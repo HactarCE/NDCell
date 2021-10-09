@@ -18,11 +18,6 @@ use crate::llvm;
 /// Built-in function that constructs a vector from components.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct VectorLiteral;
-impl fmt::Display for VectorLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "vector expression")
-    }
-}
 impl Function for VectorLiteral {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let mut ret = vec![];
@@ -58,11 +53,6 @@ impl Function for VectorLiteral {
 /// Built-in function that constructs a vector.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct VecConstructor;
-impl fmt::Display for VecConstructor {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "vec")
-    }
-}
 impl Function for VecConstructor {
     fn kwarg_keys(&self) -> &[&'static str] {
         &["len"]
@@ -94,11 +84,6 @@ impl Function for VecConstructor {
 /// Built-in function that constructs a vector with a specific length.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct VecWithLen(pub usize);
-impl fmt::Display for VecWithLen {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "vec{}", self.0)
-    }
-}
 impl Function for VecWithLen {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let len = self.0;
@@ -138,19 +123,6 @@ fn compile_vec_construct(
 /// Built-in function that indexes a vector.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct IndexVector(pub Option<Axis>);
-impl fmt::Display for IndexVector {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Some(Axis::X) => write!(f, "{}.x", Type::Vector(None)),
-            Some(Axis::Y) => write!(f, "{}.y", Type::Vector(None)),
-            Some(Axis::Z) => write!(f, "{}.z", Type::Vector(None)),
-            Some(Axis::W) => write!(f, "{}.w", Type::Vector(None)),
-            Some(Axis::U) => write!(f, "{}.u", Type::Vector(None)),
-            Some(Axis::V) => write!(f, "{}.v", Type::Vector(None)),
-            None => write!(f, "vector indexing"),
-        }
-    }
-}
 impl IndexVector {
     fn eval_args(
         &self,
@@ -305,7 +277,6 @@ impl Function for IndexVector {
 /// Built-in function that returns the length of a vector.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct VectorLen;
-impl_display!(for VectorLen, "Vector.len");
 impl Function for VectorLen {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(1, ctx)?;

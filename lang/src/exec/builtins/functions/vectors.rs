@@ -1,23 +1,27 @@
 //! Functions and methods that construct or operate on vectors.
 
-use codemap::Spanned;
+use codemap::{Span, Spanned};
 use std::fmt;
 
+use ndcell_core::axis::Axis;
+
 use super::{CallInfo, Function};
-use crate::data::{self, CpVal, RtVal, SpannedRuntimeValueExt, Val};
+use crate::data::{
+    self, CpVal, LangInt, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Type, Val,
+};
 use crate::errors::{Error, Fallible};
 use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt};
 use crate::llvm;
 
 /// Built-in function that constructs a vector from components.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-pub struct VectorConstruct;
-impl fmt::Display for VectorConstruct {
+pub struct VectorLiteral;
+impl fmt::Display for VectorLiteral {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "vector expression")
     }
 }
-impl Function for VectorConstruct {
+impl Function for VectorLiteral {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let mut ret = vec![];
         for arg in call.args {
@@ -51,13 +55,13 @@ impl Function for VectorConstruct {
 
 /// Built-in function that constructs a vector.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-pub struct Vec;
-impl fmt::Display for Vec {
+pub struct VecConstructor;
+impl fmt::Display for VecConstructor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "vec")
     }
 }
-impl Function for Vec {
+impl Function for VecConstructor {
     fn kwarg_keys(&self) -> &[&'static str] {
         &["len"]
     }
@@ -70,7 +74,7 @@ impl Function for Vec {
                 .report_err(ctx)?,
             None => ctx.get_ndim(call.span)?,
         };
-        VecWithLen(len).eval(ctx, call)
+        eval_vec_construct(self, ctx, call, len)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         let len = match call.kwarg("len") {
@@ -81,7 +85,7 @@ impl Function for Vec {
                 .report_err(compiler)?,
             None => compiler.get_ndim(call.span)?,
         };
-        VecWithLen(len).compile(compiler, call)
+        compile_vec_construct(self, compiler, call, len)
     }
 }
 
@@ -96,20 +100,37 @@ impl fmt::Display for VecWithLen {
 impl Function for VecWithLen {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let len = self.0;
-        match &call.args[..] {
-            [] => Ok(RtVal::Vector(vec![0; len])),
-            [arg] => Ok(RtVal::Vector(arg.to_vector(len).report_err(ctx)?)),
-            _ => Err(call.invalid_args_error(ctx, self)),
-        }
+        eval_vec_construct(self, ctx, call, len)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         let len = self.0;
-        match &call.args[..] {
-            [] => Ok(Val::Rt(RtVal::Vector(vec![0; len]))),
-            [arg] => Ok(Val::Cp(CpVal::Vector(
-                compiler.build_convert_to_vector(arg, len)?,
-            ))),
-            _ => Err(call.invalid_args_error(compiler, self)),
-        }
+        compile_vec_construct(self, compiler, call, len)
+    }
+}
+
+fn eval_vec_construct(
+    f: &impl Function,
+    ctx: &mut Ctx,
+    call: CallInfo<Spanned<RtVal>>,
+    len: usize,
+) -> Fallible<RtVal> {
+    match &call.args[..] {
+        [] => Ok(RtVal::Vector(vec![0; len])),
+        [arg] => Ok(RtVal::Vector(arg.to_vector(len).report_err(ctx)?)),
+        _ => Err(call.invalid_args_error(ctx, f)),
+    }
+}
+fn compile_vec_construct(
+    f: &impl Function,
+    compiler: &mut Compiler,
+    call: CallInfo<Spanned<Val>>,
+    len: usize,
+) -> Fallible<Val> {
+    match &call.args[..] {
+        [] => Ok(Val::Rt(RtVal::Vector(vec![0; len]))),
+        [arg] => Ok(Val::Cp(CpVal::Vector(
+            compiler.build_convert_to_vector(arg, len)?,
+        ))),
+        _ => Err(call.invalid_args_error(compiler, f)),
     }
 }

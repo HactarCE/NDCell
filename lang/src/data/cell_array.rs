@@ -8,25 +8,77 @@ use ndcell_core::prelude::IVec6D;
 use ndcell_core::{ndarray::Array6D, ndvec::UVec6D};
 
 use super::{LangCell, LangInt, VectorSet};
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::llvm;
 
 /// Masked N-dimensional cell array.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CellArray {
     shape: Arc<VectorSet>,
-    cells: Array6D<LangCell>,
+    cells: Arc<Array6D<LangCell>>,
 }
 impl fmt::Display for CellArray {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!("display CellArrary")
+        write!(f, "({}).fill(", self.shape)?;
+
+        // Write a comma-separated list of cell values.
+        let mut cells_iter = self.cells_iter();
+        if let Some(c) = cells_iter.next() {
+            write!(f, "#{}", c)?;
+            // If all cells are equal, stop after the first cell.
+            if !self.cells_iter().all_equal() {
+                for c in cells_iter {
+                    write!(f, ", #{}", c)?;
+                }
+            }
+        }
+
+        write!(f, ")")?;
+        Ok(())
     }
 }
 impl CellArray {
     /// Constructs a new cell array with all cells having the same value.
     pub fn from_cell(shape: Arc<VectorSet>, cell: LangCell) -> Self {
-        let cells = Array6D::from_flat_slice(shape.bounds_size(), vec![cell; shape.bounds_len()]);
+        let cells = Arc::new(Array6D::from_flat_slice(
+            shape.bounds_size(),
+            vec![cell; shape.bounds_len()],
+        ));
         Self { shape, cells }
+    }
+    /// Constructs a new cell array from a list of cells within the mask.
+    /// Returns a user-friendly error if the number of cells does not match the
+    /// shape.
+    pub fn from_cells(
+        span: Span,
+        shape: Arc<VectorSet>,
+        masked_cells: &[LangCell],
+    ) -> Result<Self> {
+        // Check that the number of cells is correct.
+        if masked_cells.len() != shape.len() {
+            return Err(Error::wrong_cell_count(span, shape.len()));
+        }
+
+        let mut masked_cells = masked_cells.iter().copied();
+        let cells_array_data = match shape.mask_iter() {
+            Some(mask_iter) => mask_iter
+                .map(|in_| {
+                    if in_ {
+                        // This `0_u8` should never be used.
+                        masked_cells.next().unwrap_or(0_u8)
+                    } else {
+                        0_u8
+                    }
+                })
+                .collect_vec(),
+            None => masked_cells.collect_vec(),
+        };
+
+        let cells = Arc::new(Array6D::from_flat_slice(
+            shape.bounds_size(),
+            cells_array_data,
+        ));
+        Ok(Self { shape, cells })
     }
 
     /// Returns the shape of the cell array.
@@ -36,6 +88,10 @@ impl CellArray {
     /// Returns the raw array of cell values.
     pub fn cells_array(&self) -> &Array6D<LangCell> {
         &self.cells
+    }
+    /// Returns a mutable reference to the raw array of cell values.
+    pub fn cells_array_mut(&mut self) -> &mut Array6D<LangCell> {
+        Arc::make_mut(&mut self.cells)
     }
     /// Returns the number of dimensions.
     pub fn ndim(&self) -> usize {
@@ -52,7 +108,7 @@ impl CellArray {
     /// if the position is outside the mask.
     pub fn get_cell_mut(&mut self, pos: &[LangInt]) -> Option<&mut LangCell> {
         let uvec = self.cell_array_uvec(vec_to_ivec6d(pos)?)?;
-        Some(&mut self.cells[uvec])
+        Some(&mut self.cells_array_mut()[uvec])
     }
 
     fn cell_array_uvec(&self, pos: IVec6D) -> Option<UVec6D> {
@@ -64,13 +120,19 @@ impl CellArray {
         (pos - self.shape().bounds().unwrap().min()).to_uvec()
     }
 
+    /// Returns an iterator over the masked cells in this array, or None if the
+    /// array is empty.
+    pub fn cells_iter<'a>(&'a self) -> impl 'a + Iterator<Item = LangCell> {
+        let mut mask_iter = self.shape().mask_iter();
+        let cells_iter = self.cells.as_flat_slice().iter().copied();
+        cells_iter.filter(move |_| match &mut mask_iter {
+            Some(m) => m.next().unwrap_or(false),
+            None => true,
+        })
+    }
     /// Returns whether the cell array contains at least one nonzero cell.
     pub fn any_nonzero(&self) -> bool {
-        let mut cells_iter = self.cells.as_flat_slice().iter();
-        match self.shape().mask_iter() {
-            Some(m) => m.zip(cells_iter).any(|(in_, &c)| in_ && c != 0_u8),
-            None => cells_iter.any(|&c| c != 0_u8),
-        }
+        self.cells_iter().any(|c| c != 0_u8)
     }
 }
 

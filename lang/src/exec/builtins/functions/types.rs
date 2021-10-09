@@ -27,7 +27,13 @@ impl Function for TypeBrackets {
                     .report_err(ctx)?;
                 Ok(RtVal::Type(Type::Vector(Some(len))))
             }
-            Type::CellArray(_) => Err(ctx.error(Error::unimplemented(call.span))),
+            Type::CellArray(None) => {
+                call.check_args_len(2, ctx, self)?;
+                let x = call.arg(1, ctx)?;
+                let ndim = ctx.get_ndim(x.span)?;
+                let shape = x.as_vector_set(ndim).report_err(ctx)?;
+                Ok(RtVal::Type(Type::CellArray(Some(shape))))
+            }
             Type::VectorSet(None) => {
                 call.check_args_len(2, ctx, self)?;
                 let x = call.arg(1, ctx)?;

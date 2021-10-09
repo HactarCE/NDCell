@@ -134,7 +134,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
             }
 
             ast::ExprData::VectorConstruct(components) => Box::new(FuncCall {
-                f: Some(functions::vectors::VectorConstruct.boxed()),
+                f: Some(functions::vectors::VectorLiteral.boxed()),
                 f_span: expr.span(),
                 args: ast
                     .get_node_list(components)

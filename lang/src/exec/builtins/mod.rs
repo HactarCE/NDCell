@@ -1,6 +1,7 @@
 //! Built-in values and functions; the "standard library" of NDCA.
 
 use codemap::Span;
+use regex::Regex;
 
 mod expressions;
 pub mod functions;
@@ -13,18 +14,48 @@ pub use functions::Function;
 
 /// Returns a built-in function.
 pub fn resolve_function(name: &str) -> Option<Box<dyn Function>> {
+    lazy_static! {
+        static ref VEC_FN_REGEX: Regex = Regex::new("^vec([1-9][0-9]*)$").unwrap();
+        static ref VECSET_FN_REGEX: Regex = Regex::new("^vec([1-6])set$").unwrap();
+    }
+
     // `vec1()` through `vec256()`
-    if name.starts_with("vec") {
-        if let Ok(n) = name[3..].parse() {
-            if data::is_valid_vector_len(n) {
-                return Some(functions::vectors::VecWithLen(n).boxed());
-            }
-        }
+    if let Some(len) = VEC_FN_REGEX
+        .captures(name)
+        .and_then(|cap| cap.get(1)?.as_str().parse().ok())
+        .filter(|&n| data::is_valid_vector_len(n))
+    {
+        return Some(functions::vectors::VecWithLen(len).boxed());
+    }
+
+    // `vec1set()` through `vec6set()`
+    if let Some(len) = VECSET_FN_REGEX
+        .captures(name)
+        .and_then(|cap| cap.get(1)?.as_str().parse().ok())
+    {
+        return Some(functions::sets::VecSetWithLen(len).boxed());
     }
 
     Some(match name {
         "bool" => functions::bools::ToBool.boxed(),
-        "vec" => functions::vectors::Vec.boxed(),
+        "vec" => functions::vectors::VecConstructor.boxed(),
+        "vecset" => functions::sets::VecSetConstructor.boxed(),
+        "intset" => functions::sets::EmptyIntegerSet.boxed(),
+        "cellset" => functions::sets::EmptyIntegerSet.boxed(),
+
+        // Shapes
+        "square" => functions::sets::VectorSetShape::Square.boxed(),
+        "diamond" => functions::sets::VectorSetShape::Diamond.boxed(),
+        "moore" => functions::sets::VectorSetShape::Moore.boxed(),
+        "vn" => functions::sets::VectorSetShape::Vn.boxed(),
+        "circular" => functions::sets::VectorSetShape::Circular.boxed(),
+        "l2" => functions::sets::VectorSetShape::L2.boxed(),
+        "checkerboard" => functions::sets::VectorSetShape::Checkerboard.boxed(),
+        "hash" => functions::sets::VectorSetShape::Hash.boxed(),
+        "cross" => functions::sets::VectorSetShape::Cross.boxed(),
+        "saltire" => functions::sets::VectorSetShape::Saltire.boxed(),
+        "star" => functions::sets::VectorSetShape::Star.boxed(),
+
         _ => None?,
     })
 }
@@ -93,24 +124,25 @@ pub fn resolve_method(receiving_type: &Type, name: &str, span: Span) -> Result<B
         Type::Vector(_) => match name {
             _ => None,
         },
-        Type::CellArray(_) => match name {
+        Type::CellArray(shape) => match name {
+            "reshape" => match shape {
+                Some(set) => todo!(),
+                None => todo!(),
+            },
             _ => None,
         },
 
         Type::EmptySet => match name {
-            "empty" => Some(functions::sets::EmptySet.boxed()),
             _ => None,
         },
         Type::IntegerSet => match name {
-            "empty" => Some(functions::sets::EmptyIntegerSet.boxed()),
             _ => None,
         },
         Type::CellSet => match name {
-            "empty" => Some(functions::sets::EmptyCellSet.boxed()),
             _ => None,
         },
         Type::VectorSet(vec_len) => match name {
-            "empty" => Some(functions::sets::EmptyVectorSet(*vec_len).boxed()),
+            "fill" => Some(functions::arrays::FillVectorSet.boxed()),
             _ => None,
         },
         Type::PatternMatcher(_) => match name {

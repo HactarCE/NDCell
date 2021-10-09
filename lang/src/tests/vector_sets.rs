@@ -38,23 +38,35 @@ fn test_vector_set_construct() {
         ]);
 
     TestProgram::new()
-        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet.empty")])
-        .assert_interpreted_test_cases(test_cases![() => Ok("VectorSet[2].empty")]);
+        .with_result_expressions(&[(Type::VectorSet(None), "vecset()")])
+        .assert_interpreted_test_cases(test_cases![() => Ok("vec2set()")]);
     TestProgram::new()
         .with_setup("@ndim 4")
-        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet.empty")])
-        .assert_interpreted_test_cases(test_cases![() => Ok("VectorSet[4].empty")]);
+        .with_result_expressions(&[(Type::VectorSet(None), "vecset()")])
+        .assert_interpreted_test_cases(test_cases![() => Ok("vec4set()")]);
     TestProgram::new()
-        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet[1].empty")])
-        .assert_interpreted_test_cases(test_cases![() => Ok("VectorSet[1].empty")]);
+        .with_setup("@ndim 4")
+        .with_result_expressions(&[(Type::VectorSet(None), "vecset(len=6)")])
+        .assert_interpreted_test_cases(test_cases![() => Ok("vec6set()")]);
     TestProgram::new()
-        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet[90].empty")])
-        .assert_interpreted_test_cases::<&str>(
-            test_cases![() => Err("set can only be constructed from values of types Integer, Cell, or Vector with length at most 6; not Vector[90]" @ "90")]
-        );
+        .with_result_expressions(&[(Type::VectorSet(None), "vec1set()")])
+        .assert_interpreted_test_cases(test_cases![() => Ok("vec1set()")]);
     TestProgram::new()
-        .with_result_expressions(&[(Type::VectorSet(None), "VectorSet[900].empty")])
-        .assert_interpreted_test_cases::<&str>(
-            test_cases![() => Err("length of a vector must be an integer from 1 to 256" @ "900")],
-        );
+        .with_result_expressions(&[(Type::VectorSet(None), "vecset(len=1)")])
+        .assert_interpreted_test_cases(test_cases![() => Ok("vec1set()")]);
+    TestProgram::new()
+        .with_result_expressions(&[(Type::VectorSet(None), "vec7set()")])
+        .assert_interpreted_test_cases::<&str>(test_cases![
+            () => Err("no such function" @ "vec7set"),
+        ]);
+    TestProgram::new()
+        .with_result_expressions(&[(Type::VectorSet(None), "vecset(len=7)")])
+        .assert_interpreted_test_cases::<&str>(test_cases![
+            () => Err("set can only be constructed from values of types Integer, Cell, or Vector with length at most 6; not Vector[7]" @ "7"),
+        ]);
+    TestProgram::new()
+        .with_result_expressions(&[(Type::VectorSet(None), "vecset(len=900)")])
+        .assert_interpreted_test_cases::<&str>(test_cases![
+            () => Err("length of a vector must be an integer from 1 to 256" @ "900"),
+        ]);
 }

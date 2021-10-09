@@ -1,17 +1,20 @@
 //! Functions and methods that construct or operate on sets.
 
-use codemap::Spanned;
+use codemap::{Span, Spanned};
 use std::fmt;
+use std::sync::Arc;
 
 use super::{CallInfo, Function};
-use crate::data::{CellSet, RtVal, SpannedRuntimeValueExt, Type, VectorSet};
+use crate::data::{
+    self, CellArray, CellSet, LangInt, RtVal, SpannedRuntimeValueExt, Type, VectorSet,
+};
 use crate::errors::{Error, Fallible, Result};
 use crate::exec::{Ctx, CtxTrait, ErrorReportExt};
 
 /// Built-in function that constructs an `EmptySet`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct EmptySet;
-impl_display!(for EmptySet, "{}.empty", Type::EmptySet);
+impl_display!(for EmptySet, "{{}}");
 impl Function for EmptySet {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(0, ctx, self)?;
@@ -22,7 +25,7 @@ impl Function for EmptySet {
 /// Built-in function that constructs an empty `IntegerSet`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct EmptyIntegerSet;
-impl_display!(for EmptyIntegerSet, "{}.empty", Type::IntegerSet);
+impl_display!(for EmptyIntegerSet, "intset");
 impl Function for EmptyIntegerSet {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(0, ctx, self)?;
@@ -33,7 +36,7 @@ impl Function for EmptyIntegerSet {
 /// Built-in function that constructs an empty `CellSet`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct EmptyCellSet;
-impl_display!(for EmptyCellSet, "{}.empty", Type::CellSet);
+impl_display!(for EmptyCellSet, "cellset");
 impl Function for EmptyCellSet {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         call.check_args_len(0, ctx, self)?;
@@ -41,30 +44,78 @@ impl Function for EmptyCellSet {
     }
 }
 
-/// Built-in function that constructs an empty `VectorSet`.
+/// Built-in function that constructs a vector set.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-pub struct EmptyVectorSet(pub Option<usize>);
-impl fmt::Display for EmptyVectorSet {
+pub struct VecSetConstructor;
+impl fmt::Display for VecSetConstructor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.empty", Type::VectorSet(self.0))
+        write!(f, "vecset")
     }
 }
-impl Function for EmptyVectorSet {
+impl Function for VecSetConstructor {
+    fn kwarg_keys(&self) -> &[&'static str] {
+        &["len"]
+    }
+
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        let vec_len = self.0.unwrap_or(ctx.get_ndim(call.span)?);
-        call.check_args_len(0, ctx, self)?;
-        Ok(VectorSet::empty(call.span, vec_len).report_err(ctx)?.into())
+        let len;
+        let len_span;
+        match call.kwarg("len") {
+            Some(x) => {
+                len = x
+                    .as_integer()
+                    .and_then(|n| data::check_vector_len(x.span, n))
+                    .report_err(ctx)?;
+                len_span = x.span;
+            }
+            None => {
+                len = ctx.get_ndim(call.span)?;
+                len_span = call.span;
+            }
+        }
+
+        eval_vec_set_construct(self, ctx, call, len_span, len)
+    }
+}
+
+/// Built-in function that constructs a vector set with a specific vector
+/// length.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct VecSetWithLen(pub usize);
+impl fmt::Display for VecSetWithLen {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "vec{}set", self.0)
+    }
+}
+impl Function for VecSetWithLen {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        let span = call.span;
+        eval_vec_set_construct(self, ctx, call, span, self.0)
+    }
+}
+
+fn eval_vec_set_construct(
+    f: &impl Function,
+    ctx: &mut Ctx,
+    call: CallInfo<Spanned<RtVal>>,
+    len_span: Span,
+    len: usize,
+) -> Fallible<RtVal> {
+    match &call.args[..] {
+        [] => Ok(RtVal::VectorSet(Arc::new(
+            VectorSet::empty(len_span, len).report_err(ctx)?,
+        ))),
+        [arg] => Ok(RtVal::VectorSet(
+            arg.to_vector_set(len_span, len).report_err(ctx)?,
+        )),
+        _ => Err(call.invalid_args_error(ctx, f))?,
     }
 }
 
 /// Built-in function that constructs a set from components.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct SetConstruct;
-impl fmt::Display for SetConstruct {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "set expression")
-    }
-}
+impl_display!(for SetConstruct, "set expression");
 impl Function for SetConstruct {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let span = call.span;
@@ -108,5 +159,61 @@ fn set_of(x: Spanned<RtVal>) -> Result<Spanned<RtVal>> {
         // Otherwise, return an error.
         _ => Err(Error::invalid_set_type(span, &x.ty()))?,
     };
-    Ok(Spanned { span, node: ret })
+    Ok(Spanned { node: ret, span })
+}
+
+/// Built-in function that generates a pre-defined shape.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum VectorSetShape {
+    Square,
+    Diamond,
+    Moore,
+    Vn,
+    Circular,
+    L2,
+    Checkerboard,
+    Hash,
+    Cross,
+    Saltire,
+    Star,
+}
+impl fmt::Display for VectorSetShape {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VectorSetShape::Square => write!(f, "square"),
+            VectorSetShape::Diamond => write!(f, "diamond"),
+            VectorSetShape::Moore => write!(f, "moore"),
+            VectorSetShape::Vn => write!(f, "vn"),
+            VectorSetShape::Circular => write!(f, "circular"),
+            VectorSetShape::L2 => write!(f, "l2"),
+            VectorSetShape::Checkerboard => write!(f, "checkerboard"),
+            VectorSetShape::Hash => write!(f, "hash"),
+            VectorSetShape::Cross => write!(f, "cross"),
+            VectorSetShape::Saltire => write!(f, "saltire"),
+            VectorSetShape::Star => write!(f, "star"),
+        }
+    }
+}
+impl Function for VectorSetShape {
+    fn kwarg_keys(&self) -> &[&'static str] {
+        &["r", "d"]
+    }
+
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+        call.check_args_len(0, ctx, self)?;
+
+        let (radius, radius_span) = match call.kwarg("r") {
+            Some(arg) => (arg.as_integer().report_err(ctx)?, arg.span),
+            None => (1, call.span),
+        };
+
+        let ndim = match call.kwarg("d") {
+            Some(arg) => arg.as_integer().report_err(ctx)?,
+            None => ctx.get_ndim(call.span)? as LangInt,
+        };
+
+        Ok(VectorSet::moore(call.span, ndim, radius, radius_span)
+            .report_err(ctx)?
+            .into())
+    }
 }

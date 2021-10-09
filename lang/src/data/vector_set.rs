@@ -2,6 +2,7 @@ use codemap::Span;
 use itertools::Itertools;
 use std::convert::TryInto;
 use std::fmt;
+use std::sync::Arc;
 
 use ndcell_core::ndarray::Array6D;
 use ndcell_core::prelude::{Axis, CanContain, Dim, Dim6D, IRect6D, IVec6D, UVec6D};
@@ -24,7 +25,7 @@ impl fmt::Display for VectorSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ndim = self.vec_len();
         match self.bounds() {
-            None => write!(f, "VectorSet[{}].empty", ndim)?,
+            None => write!(f, "vec{}set()", ndim)?,
             Some(b) => {
                 write!(
                     f,
@@ -46,8 +47,8 @@ impl fmt::Display for VectorSet {
 }
 impl VectorSet {
     /// Constructs an empty vector set.
-    pub fn empty(span: Span, vec_len: usize) -> Result<Self> {
-        check_vector_set_vec_len(span, vec_len)?;
+    pub fn empty(span: Span, vec_len: impl TryInto<usize>) -> Result<Self> {
+        let vec_len = check_vector_set_vec_len(span, vec_len)?;
 
         Self {
             vec_len,
@@ -161,9 +162,31 @@ impl VectorSet {
         })
     }
 
+    /// Converts the vector set to one with a different vector length.
+    pub fn convert_to_vec_len(self: &Arc<Self>, span: Span, vec_len: usize) -> Result<Arc<Self>> {
+        if vec_len == self.vec_len() {
+            return Ok(Arc::clone(self));
+        }
+        check_vector_set_vec_len(span, vec_len)?;
+        // TODO: make (better-optimized) function to generate vector set from a
+        // list and also use it for set literal
+        self.into_iter()
+            .map(|v| v.0[..vec_len].iter().map(|&i| i as LangInt).collect_vec())
+            .map(|v| Self::single_vector(span, &v, span))
+            .fold(VectorSet::empty(span, vec_len), |s1, s2| {
+                s1?.union(span, &s2?)
+            })
+            .map(Arc::new)
+    }
+
     /// Constructs a Moore neighborhood.
-    pub fn moore(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
-        check_vector_set_vec_len(span, ndim)?;
+    pub fn moore(
+        span: Span,
+        ndim: impl TryInto<usize>,
+        radius: LangInt,
+        radius_span: Span,
+    ) -> Result<Self> {
+        let ndim = check_vector_set_vec_len(span, ndim)?;
 
         if radius < 0 {
             Self::empty(span, ndim)
@@ -178,25 +201,40 @@ impl VectorSet {
         }
     }
     /// Constructs a von Neumann neighborhood.
-    pub fn vn(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
+    pub fn vn(
+        span: Span,
+        ndim: impl TryInto<usize>,
+        radius: LangInt,
+        radius_span: Span,
+    ) -> Result<Self> {
         Self::moore(span, ndim, radius, radius_span)?
             .filter(span, |pos| pos.abs().sum() <= radius as isize)
     }
     /// Constructs a circular neighborhood. `x² + y² <= r² + r`
-    pub fn circular(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
+    pub fn circular(
+        span: Span,
+        ndim: impl TryInto<usize>,
+        radius: LangInt,
+        radius_span: Span,
+    ) -> Result<Self> {
         let rhs = radius
             .checked_mul(radius)
             .and_then(|r_squared| r_squared.checked_add(radius));
         Self::generic_circular(span, ndim, radius, radius_span, rhs)
     }
     /// Constructs an L² neighborhood. `x² + y² <= r²`
-    pub fn l2(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
+    pub fn l2(
+        span: Span,
+        ndim: impl TryInto<usize>,
+        radius: LangInt,
+        radius_span: Span,
+    ) -> Result<Self> {
         let rhs = radius.checked_mul(radius);
         Self::generic_circular(span, ndim, radius, radius_span, rhs)
     }
     fn generic_circular(
         span: Span,
-        ndim: usize,
+        ndim: impl TryInto<usize>,
         radius: LangInt,
         radius_span: Span,
         rhs: Option<LangInt>,
@@ -211,7 +249,7 @@ impl VectorSet {
     /// Constructs a checkerboard Moore neighborhood.
     pub fn checkerboard(
         span: Span,
-        ndim: usize,
+        ndim: impl TryInto<usize>,
         radius: LangInt,
         radius_span: Span,
     ) -> Result<Self> {
@@ -225,17 +263,33 @@ impl VectorSet {
         Self::moore(span, 2, radius, radius_span)?.filter(span, f)
     }
     /// Constructs a cross neighborhood.
-    pub fn cross(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
+    pub fn cross(
+        span: Span,
+        ndim: impl TryInto<usize>,
+        radius: LangInt,
+        radius_span: Span,
+    ) -> Result<Self> {
         let f = |pos: IVec6D| pos.0.iter().filter(|&&x| x != 0).count() <= 1;
         Self::moore(span, ndim, radius, radius_span)?.filter(span, f)
     }
     /// Constructs a saltire neighborhood.
-    pub fn saltire(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
+    pub fn saltire(
+        span: Span,
+        ndim: impl TryInto<usize>,
+        radius: LangInt,
+        radius_span: Span,
+    ) -> Result<Self> {
+        let ndim = check_vector_set_vec_len(span, ndim)?;
         let f = |pos: IVec6D| pos.abs().0[..ndim].iter().all_equal();
         Self::moore(span, ndim, radius, radius_span)?.filter(span, f)
     }
     /// Constructs a star neighborhood.
-    pub fn star(span: Span, ndim: usize, radius: LangInt, radius_span: Span) -> Result<Self> {
+    pub fn star(
+        span: Span,
+        ndim: impl TryInto<usize>,
+        radius: LangInt,
+        radius_span: Span,
+    ) -> Result<Self> {
         let f = |pos: IVec6D| pos.abs().0.iter().filter(|&&x| x != 0).all_equal();
         Self::moore(span, ndim, radius, radius_span)?.filter(span, f)
     }
@@ -476,7 +530,7 @@ mod tests {
 
     #[test]
     fn test_vector_set_ops() {
-        let span = crate::utils::nonsense_span();
+        let span = crate::utils::dummy_span();
 
         let a = VectorSet::rect(span, &[0, -3], span, &[4], span).unwrap();
 
@@ -516,7 +570,7 @@ mod tests {
         let a_and_b = a.intersection(span, &b).unwrap();
         assert_eq!(a_and_b, b.intersection(span, &a).unwrap());
         assert!(a_and_b.is_empty());
-        assert_eq!(a_and_b.to_string(), "VectorSet[2].empty");
+        assert_eq!(a_and_b.to_string(), "vec2set()");
 
         let a_minus_b = a.difference(span, &b).unwrap();
         assert!(!a_minus_b.is_empty());
@@ -559,7 +613,7 @@ mod tests {
 
     #[test]
     fn test_vector_set_neighborhood_shapes_2d() {
-        let span = crate::utils::nonsense_span();
+        let span = crate::utils::dummy_span();
 
         // Test Moore neighborhood.
         let nbhd = VectorSet::moore(span, 2, 3, span).unwrap();
@@ -697,7 +751,7 @@ mod tests {
 
     #[test]
     fn test_vector_set_neighborhood_shapes_3d() {
-        let span = crate::utils::nonsense_span();
+        let span = crate::utils::dummy_span();
 
         // Test Moore neighborhood.
         let nbhd = VectorSet::moore(span, 3, 2, span).unwrap();

@@ -1,4 +1,4 @@
-use codemap::Spanned;
+use codemap::{Span, Spanned};
 use std::fmt;
 use std::sync::Arc;
 
@@ -189,9 +189,14 @@ pub trait SpannedRuntimeValueExt {
     /// Converts the value to a boolean if it can be converted; otherwise
     /// returns a type error.
     fn to_bool(&self) -> Result<bool>;
-    /// Converts the value to a vector if it can be converted; otherwise returns
-    /// a type error.
+    /// Converts the value to a vector of the specified length if it can be
+    /// converted; otherwise returns a type error.
     fn to_vector(&self, len: usize) -> Result<Vec<LangInt>>;
+    /// Converts the value to a vector set with the specified vector length if
+    /// it can be converted; otherwise returns a type error.
+    ///
+    /// `span` is the span of `vec_len`.
+    fn to_vector_set(&self, span: Span, vec_len: usize) -> Result<Arc<VectorSet>>;
     /// Selects a cell from the value.
     ///
     /// - If this is a `Cell`, returns the value.
@@ -284,7 +289,7 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             RtVal::EmptySet => match VectorSet::empty(self.span, vec_len) {
                 Ok(set) => Ok(Arc::new(set)),
                 Err(e) => Err(internal_error_value!(
-                    "invalid vector length for vector set"
+                    "invalid vector length for vector set",
                 )),
             },
             RtVal::VectorSet(x) => Ok(Arc::clone(x)),
@@ -329,6 +334,10 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
                 &self.ty(),
             )
         })
+    }
+    fn to_vector_set(&self, span: Span, vec_len: usize) -> Result<Arc<VectorSet>> {
+        self.as_vector_set(vec_len)?
+            .convert_to_vec_len(span, vec_len)
     }
     fn select_cell(&self) -> Result<LangCell> {
         match &self.node {

@@ -5,15 +5,10 @@ use codemap::Spanned;
 use crate::ast;
 use crate::data::{self, CpVal, LangInt, RtVal};
 use crate::errors::{Error, Result};
-use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::exec::Compiler;
 use crate::llvm;
 
-pub fn eval(
-    ctx: &mut Ctx,
-    op: ast::CompareOp,
-    lhs: &Spanned<RtVal>,
-    rhs: &Spanned<RtVal>,
-) -> Result<bool> {
+pub fn eval(op: ast::CompareOp, lhs: &Spanned<RtVal>, rhs: &Spanned<RtVal>) -> Result<bool> {
     let span = lhs.span.merge(rhs.span);
 
     let lhs_ty = lhs.ty();

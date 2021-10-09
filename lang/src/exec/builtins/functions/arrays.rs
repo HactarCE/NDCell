@@ -1,32 +1,12 @@
 //! Functions and methods that construct or operate on arrays.
 
 use codemap::Spanned;
-use std::sync::Arc;
-use std::{fmt, panic};
 
 use super::{CallInfo, Function};
-use crate::data::{CellArray, LangCell, RtVal, SpannedRuntimeValueExt, Type, Val, VectorSet};
+use crate::data::{CellArray, LangCell, RtVal, SpannedRuntimeValueExt};
 use crate::errors::{Error, Result};
-use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::exec::{Ctx, CtxTrait};
 use crate::parser;
-
-/// Built-in function that constructs an `CellArray`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct New(pub Arc<VectorSet>);
-impl Function for New {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
-        match call.args.len() {
-            0 => Ok(CellArray::from_cell(Arc::clone(&self.0), 0_u8).into()),
-
-            1 => {
-                let cell_state = call.arg(1)?.select_cell()?;
-                Ok(CellArray::from_cell(Arc::clone(&self.0), cell_state).into())
-            }
-
-            _ => Err(call.invalid_args_error()),
-        }
-    }
-}
 
 /// Built-in method that constructs a `CellArray`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]

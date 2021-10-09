@@ -10,7 +10,7 @@ pub mod functions;
 
 use super::{Ctx, CtxTrait};
 use crate::data::{self, LangInt, RtVal, Type};
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 pub use expressions::Expression;
 pub use functions::Function;
 

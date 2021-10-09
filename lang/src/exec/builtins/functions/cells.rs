@@ -1,7 +1,6 @@
 //! Functions and methods that construct or operate on cell states.
 
 use codemap::Spanned;
-use std::fmt;
 
 use super::{CallInfo, Function};
 use crate::data::{

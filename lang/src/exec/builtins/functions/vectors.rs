@@ -1,14 +1,13 @@
 //! Functions and methods that construct or operate on vectors.
 
-use codemap::{Span, Spanned};
-use std::fmt;
+use codemap::Spanned;
 
 use ndcell_core::axis::Axis;
 
 use super::{CallInfo, Function};
 use crate::ast;
 use crate::data::{
-    self, CpVal, LangInt, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Type, Val,
+    self, CpVal, LangInt, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Val,
 };
 use crate::errors::{Error, Result};
 use crate::exec::builtins::Expression;
@@ -63,7 +62,7 @@ impl Function for VecConstructor {
                 .and_then(|n| data::check_vector_len(x.span, n))?,
             None => ctx.get_ndim(call.span)?,
         };
-        eval_vec_construct(ctx, call, len)
+        eval_vec_construct(call, len)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         let len = match call.kwarg("len") {
@@ -81,9 +80,9 @@ impl Function for VecConstructor {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct VecWithLen(pub usize);
 impl Function for VecWithLen {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         let len = self.0;
-        eval_vec_construct(ctx, call, len)
+        eval_vec_construct(call, len)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         let len = self.0;
@@ -91,7 +90,7 @@ impl Function for VecWithLen {
     }
 }
 
-fn eval_vec_construct(ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>, len: usize) -> Result<RtVal> {
+fn eval_vec_construct(call: CallInfo<Spanned<RtVal>>, len: usize) -> Result<RtVal> {
     match &call.args[..] {
         [] => Ok(RtVal::Vector(vec![0; len])),
         [arg] => Ok(RtVal::Vector(arg.to_vector(len)?)),
@@ -118,7 +117,7 @@ pub struct IndexVector(pub Option<Axis>);
 impl IndexVector {
     fn eval_args(
         &self,
-        ctx: &mut Ctx,
+        _ctx: &mut Ctx,
         call: &CallInfo<Spanned<RtVal>>,
     ) -> Result<(Vec<LangInt>, usize)> {
         let i;
@@ -264,7 +263,7 @@ impl Function for IndexVector {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct VectorLen;
 impl Function for VectorLen {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(1)?;
         let arg = call.arg(0)?;
         let len = arg.as_vector()?.len() as LangInt;

@@ -107,7 +107,7 @@ fn test_vector_access() {
     let p = TestProgram::new().with_exec("v = [1, 10, 100]   v[-1] = 0");
     assert_out_of_bounds(p, "0", "-1");
 
-    let p = TestProgram::new()
+    TestProgram::new()
         .with_input_types(&[Type::Integer])
         .with_result_expressions(&[(Type::Integer, "[1, 10, 100][x0]")])
         .assert_test_cases(test_cases![
@@ -122,7 +122,7 @@ fn test_vector_access() {
 
 #[test]
 fn test_vector_len() {
-    let p = TestProgram::new()
+    TestProgram::new()
         .with_result_expressions(&[
             (Type::Integer, "[1, 10, 100].len"),
             (Type::Integer, "[4, 3].len"),

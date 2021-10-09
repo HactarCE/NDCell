@@ -15,7 +15,7 @@ pub(super) mod vectors;
 use crate::ast;
 use crate::data::{RtVal, TryGetType, Type, Val};
 use crate::errors::{Error, Result};
-use crate::exec::{Compiler, Ctx, CtxTrait, Runtime};
+use crate::exec::{Compiler, Ctx, Runtime};
 
 /// Function that can be evaluated and/or compiled, taking zero or more
 /// arguments and returning a value.
@@ -35,7 +35,7 @@ pub trait Function: fmt::Debug {
     ///
     /// The default implementation unconditionally returns an error stating that
     /// this expression cannot be compiled.
-    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
+    fn compile(&self, _compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         Err(Error::cannot_compile(call.span))
     }
 
@@ -45,10 +45,10 @@ pub trait Function: fmt::Debug {
     /// this expression cannot be assigned to.
     fn eval_assign(
         &self,
-        runtime: &mut Runtime,
+        _runtime: &mut Runtime,
         call: CallInfo<Spanned<RtVal>>,
-        first_arg: ast::Expr<'_>,
-        new_value: Spanned<RtVal>,
+        _first_arg: ast::Expr<'_>,
+        _new_value: Spanned<RtVal>,
     ) -> Result<()> {
         Err(Error::cannot_assign_to(call.span))
     }
@@ -58,10 +58,10 @@ pub trait Function: fmt::Debug {
     /// this expression cannot be assigned to.
     fn compile_assign(
         &self,
-        compiler: &mut Compiler,
+        _compiler: &mut Compiler,
         call: CallInfo<Spanned<Val>>,
-        first_arg: ast::Expr<'_>,
-        new_value: Spanned<Val>,
+        _first_arg: ast::Expr<'_>,
+        _new_value: Spanned<Val>,
     ) -> Result<()> {
         Err(Error::cannot_compile_assign_to(call.span))
     }

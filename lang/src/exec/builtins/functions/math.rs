@@ -11,7 +11,7 @@ use crate::data::{
     Val,
 };
 use crate::errors::{Error, Result};
-use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::exec::{Compiler, Ctx};
 use crate::llvm;
 
 /// Built-in function that performs a fixed two-input integer math operation.
@@ -151,7 +151,6 @@ impl BinaryMathOp {
     /// `span` is the span of the operator, not the entire expression.
     pub fn eval_on_values(
         self,
-        ctx: &mut Ctx,
         span: Span,
         lhs: &Spanned<RtVal>,
         rhs: &Spanned<RtVal>,
@@ -252,12 +251,12 @@ impl BinaryMathOp {
     }
 }
 impl Function for BinaryMathOp {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(2)?;
         let lhs = &call.args[0];
         let rhs = &call.args[1];
 
-        self.eval_on_values(ctx, call.span, lhs, rhs)
+        self.eval_on_values(call.span, lhs, rhs)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         call.check_args_len(2)?;
@@ -328,7 +327,7 @@ impl UnaryMathOp {
     }
 
     /// Evaluates this operation for a values.
-    pub fn eval_on_value(self, ctx: &mut Ctx, span: Span, arg: &Spanned<RtVal>) -> Result<RtVal> {
+    pub fn eval_on_value(self, _ctx: &mut Ctx, span: Span, arg: &Spanned<RtVal>) -> Result<RtVal> {
         if let Ok(x) = arg.as_integer() {
             self.eval_on_integers(span, x).map(RtVal::Integer)
         } else {

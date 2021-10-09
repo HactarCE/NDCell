@@ -4,7 +4,6 @@
 //! custom expression types.
 
 use codemap::Spanned;
-use std::fmt;
 
 use super::{CallInfo, Function};
 use crate::data::{CpVal, LangInt, RtVal, SpannedRuntimeValueExt, Val};
@@ -16,7 +15,7 @@ use crate::llvm;
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct ToBool;
 impl Function for ToBool {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(1)?;
         let arg = &call.args[0];
         Ok(RtVal::Integer(arg.to_bool()? as LangInt))
@@ -34,7 +33,7 @@ impl Function for ToBool {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct LogicalXor;
 impl Function for LogicalXor {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(2)?;
         let lhs = call.args[0].to_bool()?;
         let rhs = call.args[1].to_bool()?;
@@ -54,7 +53,7 @@ impl Function for LogicalXor {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct LogicalNot;
 impl Function for LogicalNot {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(1)?;
         let arg = call.args[0].to_bool()?;
         Ok(RtVal::Integer(!arg as LangInt))

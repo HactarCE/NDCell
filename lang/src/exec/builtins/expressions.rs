@@ -5,7 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::functions::{self, CallInfo, Function};
-use crate::data::{CpVal, LangInt, RtVal, SpannedRuntimeValueExt, TryGetType, Type, Val};
+use crate::data::{CpVal, LangInt, RtVal, SpannedRuntimeValueExt, Type, Val};
 use crate::errors::{Error, Result};
 use crate::exec::{Compiler, CtxTrait, Runtime};
 use crate::{ast, llvm};
@@ -29,7 +29,7 @@ pub trait Expression: fmt::Debug {
     /// `span` is the span of the expression being assigned to.
     fn eval_assign(
         &self,
-        runtime: &mut Runtime,
+        _runtime: &mut Runtime,
         span: Span,
         _op: Option<Spanned<ast::AssignOp>>,
         _new_value: Spanned<RtVal>,
@@ -41,7 +41,7 @@ pub trait Expression: fmt::Debug {
     /// `span` is the span of the expression being assigned to.
     fn compile_assign(
         &self,
-        compiler: &mut Compiler,
+        _compiler: &mut Compiler,
         span: Span,
         _op: Option<Spanned<ast::AssignOp>>,
         _new_value: Spanned<Val>,
@@ -183,12 +183,10 @@ struct FuncCall<'ast> {
 }
 impl Expression for FuncCall<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Result<RtVal> {
-        let name = Arc::clone(&self.name);
-        let span = self.name.span;
         let args = eval_args_list(runtime, &self.args)?;
 
         match &self.f {
-            None => Err(Error::no_such_function(span)),
+            None => Err(Error::no_such_function(self.name.span)),
             Some(f) => {
                 let call = CallInfo::new(self.name.clone(), args);
                 call.check_kwargs(f)?;
@@ -197,12 +195,10 @@ impl Expression for FuncCall<'_> {
         }
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Result<Val> {
-        let name = Arc::clone(&self.name);
-        let span = self.name.span;
         let args = compile_args_list(compiler, &self.args)?;
 
         match &self.f {
-            None => Err(Error::no_such_function(span)),
+            None => Err(Error::no_such_function(self.name.span)),
             Some(f) => {
                 if let Some(args) = all_rt_vals(&args) {
                     // All arguments are compile-time constants, so compile-time
@@ -347,7 +343,7 @@ impl Expression for CmpChain<'_> {
         for (&op, &rhs_id) in self.ops.iter().zip(other_args) {
             let rhs = runtime.eval_expr(rhs_id)?;
 
-            let cmp_result = functions::cmp::eval(runtime.ctx(), op.node, &lhs, &rhs)?;
+            let cmp_result = functions::cmp::eval(op.node, &lhs, &rhs)?;
 
             if !cmp_result {
                 // This comparison evaluated to `false`, so the whole expression
@@ -383,7 +379,7 @@ impl Expression for CmpChain<'_> {
                 // statically right here.
                 let l = lhs.clone().map_node(|v| v.rt_val().unwrap());
                 let r = rhs.clone().map_node(|v| v.rt_val().unwrap());
-                let cmp_result = functions::cmp::eval(compiler.ctx(), op.node, &l, &r)?;
+                let cmp_result = functions::cmp::eval(op.node, &l, &r)?;
 
                 match cmp_result {
                     true => (), // Proceed to the next comparison.
@@ -642,7 +638,7 @@ impl<'ast> CompiledArg<'ast> {
     }
 }
 impl Expression for CompiledArg<'_> {
-    fn eval(&self, runtime: &mut Runtime, span: Span) -> Result<RtVal> {
+    fn eval(&self, _runtime: &mut Runtime, span: Span) -> Result<RtVal> {
         Err(Error::cannot_const_eval(span))
     }
     fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val> {
@@ -652,7 +648,7 @@ impl Expression for CompiledArg<'_> {
 
     fn eval_assign(
         &self,
-        runtime: &mut Runtime,
+        _runtime: &mut Runtime,
         span: Span,
         _op: Option<Spanned<ast::AssignOp>>,
         _new_value: Spanned<RtVal>,
@@ -751,7 +747,7 @@ fn eval_assign_op(
                 span: old_value_span,
             };
             let op_func = functions::math::BinaryMathOp::from(op.node);
-            let node = op_func.eval_on_values(runtime.ctx(), op.span, &old_value, &new_value)?;
+            let node = op_func.eval_on_values(op.span, &old_value, &new_value)?;
             let span = old_value.span.merge(new_value.span);
             Ok(Spanned { node, span })
         }

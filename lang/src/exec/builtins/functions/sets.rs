@@ -1,13 +1,10 @@
 //! Functions and methods that construct or operate on sets.
 
 use codemap::{Span, Spanned};
-use std::fmt;
 use std::sync::Arc;
 
 use super::{CallInfo, Function};
-use crate::data::{
-    self, CellArray, CellSet, LangInt, RtVal, SpannedRuntimeValueExt, Type, VectorSet,
-};
+use crate::data::{self, CellSet, LangInt, RtVal, SpannedRuntimeValueExt, VectorSet};
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait};
 
@@ -15,7 +12,7 @@ use crate::exec::{Ctx, CtxTrait};
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct EmptySet;
 impl Function for EmptySet {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(0)?;
         Ok(RtVal::EmptySet)
     }
@@ -65,7 +62,7 @@ impl Function for VecSetConstructor {
             }
         }
 
-        eval_vec_set_construct(ctx, call, len_span, len)
+        eval_vec_set_construct(call, len_span, len)
     }
 }
 
@@ -74,14 +71,13 @@ impl Function for VecSetConstructor {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct VecSetWithLen(pub usize);
 impl Function for VecSetWithLen {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         let span = call.span;
-        eval_vec_set_construct(ctx, call, span, self.0)
+        eval_vec_set_construct(call, span, self.0)
     }
 }
 
 fn eval_vec_set_construct(
-    ctx: &mut Ctx,
     call: CallInfo<Spanned<RtVal>>,
     len_span: Span,
     len: usize,

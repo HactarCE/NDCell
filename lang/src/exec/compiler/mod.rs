@@ -37,7 +37,7 @@ mod param;
 use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
-    CellSet, CpVal, FallibleTypeOf, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, Type,
+    CellSet, CpVal, TryGetType, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, Type,
     Val, INT_BITS,
 };
 use crate::errors::{AlreadyReported, Error, Fallible, Result};
@@ -365,7 +365,7 @@ impl Compiler {
 impl Compiler {
     pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<Type>> {
         let span = v.span;
-        match v.fallible_ty()? {
+        match v.try_get_type()? {
             Ok(ty) => Ok(Spanned { node: ty, span }),
             Err(e) => Err(self.error(e)),
         }
@@ -1395,7 +1395,7 @@ impl Compiler {
 
         // Typecheck.
         let expected_type = Type::from(arg_ty);
-        let got_type = new_arg_value.fallible_ty()?.report_err(self)?;
+        let got_type = new_arg_value.try_get_type()?.report_err(self)?;
         if got_type != expected_type {
             return Err(self.error(Error::type_error(
                 new_arg_value.span,

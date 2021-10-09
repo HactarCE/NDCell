@@ -5,7 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::functions::{self, CallInfo, Function};
-use crate::data::{CpVal, FallibleTypeOf, LangInt, RtVal, SpannedRuntimeValueExt, Type, Val};
+use crate::data::{CpVal, TryGetType, LangInt, RtVal, SpannedRuntimeValueExt, Type, Val};
 use crate::errors::{AlreadyReported, Error, Fallible, Result};
 use crate::exec::{Compiler, CtxTrait, ErrorReportExt, Runtime};
 use crate::{ast, llvm};

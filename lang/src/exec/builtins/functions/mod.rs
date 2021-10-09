@@ -13,7 +13,7 @@ pub(super) mod types;
 pub(super) mod vectors;
 
 use crate::ast;
-use crate::data::{FallibleTypeOf, RtVal, Type, Val};
+use crate::data::{RtVal, TryGetType, Type, Val};
 use crate::errors::{AlreadyReported, Error, Fallible};
 use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt, Runtime};
 
@@ -150,12 +150,12 @@ impl<A: Clone> CallInfo<A> {
 }
 impl<V> CallInfo<Spanned<V>>
 where
-    Spanned<V>: FallibleTypeOf,
+    Spanned<V>: TryGetType,
 {
     fn arg_types(&self, ctx: &mut impl CtxTrait) -> Fallible<Vec<Type>> {
         self.args
             .iter()
-            .map(|arg| arg.fallible_ty().and_then(|ty| ty.report_err(ctx)))
+            .map(|arg| arg.try_get_type().and_then(|ty| ty.report_err(ctx)))
             .collect()
     }
 

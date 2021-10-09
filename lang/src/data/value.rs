@@ -57,12 +57,12 @@ impl Val {
 }
 
 /// NDCA value that may have a defined type.
-pub trait FallibleTypeOf {
+pub trait TryGetType {
     /// Returns the type of the value, if it definitely has one.
-    fn fallible_ty(&self) -> Fallible<Result<Type>>;
+    fn try_get_type(&self) -> Fallible<Result<Type>>;
 }
-impl FallibleTypeOf for Spanned<Val> {
-    fn fallible_ty(&self) -> Fallible<Result<Type>> {
+impl TryGetType for Spanned<Val> {
+    fn try_get_type(&self) -> Fallible<Result<Type>> {
         match &self.node {
             Val::Rt(v) => Ok(Ok(v.ty())),
             Val::Cp(v) => Ok(Ok(v.ty())),
@@ -73,18 +73,18 @@ impl FallibleTypeOf for Spanned<Val> {
         }
     }
 }
-impl FallibleTypeOf for RtVal {
-    fn fallible_ty(&self) -> Fallible<Result<Type>> {
+impl TryGetType for RtVal {
+    fn try_get_type(&self) -> Fallible<Result<Type>> {
         Ok(Ok(self.ty()))
     }
 }
-impl FallibleTypeOf for CpVal {
-    fn fallible_ty(&self) -> Fallible<Result<Type>> {
+impl TryGetType for CpVal {
+    fn try_get_type(&self) -> Fallible<Result<Type>> {
         Ok(Ok(self.ty()))
     }
 }
-impl<T: FallibleTypeOf> FallibleTypeOf for Spanned<T> {
-    fn fallible_ty(&self) -> Fallible<Result<Type>> {
-        self.node.fallible_ty()
+impl<T: TryGetType> TryGetType for Spanned<T> {
+    fn try_get_type(&self) -> Fallible<Result<Type>> {
+        self.node.try_get_type()
     }
 }

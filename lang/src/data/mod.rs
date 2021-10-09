@@ -23,7 +23,7 @@ pub use integer_set::IntegerSet;
 pub use pattern_matcher::PatternMatcher;
 pub use runtime_value::{RtVal, SpannedRuntimeValueExt};
 pub use types::Type;
-pub use value::{FallibleTypeOf, Val};
+pub use value::{TryGetType, Val};
 pub use vector_set::{check_vector_set_vec_len, VectorSet};
 
 /// Rust type used for NDCA integers.

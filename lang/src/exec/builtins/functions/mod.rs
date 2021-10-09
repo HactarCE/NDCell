@@ -15,7 +15,7 @@ pub(super) mod vectors;
 use crate::ast;
 use crate::data::{FallibleTypeOf, RtVal, Type, Val};
 use crate::errors::{AlreadyReported, Error, Fallible};
-use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt};
+use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt, Runtime};
 
 /// Function that can be evaluated and/or compiled, taking zero or more
 /// arguments and returning a value.
@@ -39,6 +39,33 @@ pub trait Function: fmt::Debug + fmt::Display {
         Err(compiler.error(Error::cannot_compile(call.span)))
     }
 
+    /// Assigns to the expression.
+    ///
+    /// The default implementation unconditionally returns an error stating that
+    /// this expression cannot be assigned to.
+    fn eval_assign(
+        &self,
+        runtime: &mut Runtime,
+        call: CallInfo<Spanned<RtVal>>,
+        first_arg: ast::Expr<'_>,
+        new_value: Spanned<RtVal>,
+    ) -> Fallible<()> {
+        Err(runtime.error(Error::cannot_assign_to(call.span)))
+    }
+    /// Compiles code to assign to the expression.
+    ///
+    /// The default implementation unconditionally returns an error stating that
+    /// this expression cannot be assigned to.
+    fn compile_assign(
+        &self,
+        compiler: &mut Compiler,
+        call: CallInfo<Spanned<Val>>,
+        first_arg: ast::Expr<'_>,
+        new_value: Spanned<Val>,
+    ) -> Fallible<()> {
+        Err(compiler.error(Error::cannot_compile_assign_to(call.span)))
+    }
+
     /// Wrap the function in a `Box<dyn Function>`.
     fn boxed(self) -> Box<dyn Function>
     where
@@ -58,6 +85,25 @@ impl Function for Box<dyn Function> {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         (**self).compile(compiler, call)
+    }
+
+    fn eval_assign(
+        &self,
+        runtime: &mut Runtime,
+        call: CallInfo<Spanned<RtVal>>,
+        first_arg: ast::Expr<'_>,
+        new_value: Spanned<RtVal>,
+    ) -> Fallible<()> {
+        (**self).eval_assign(runtime, call, first_arg, new_value)
+    }
+    fn compile_assign(
+        &self,
+        compiler: &mut Compiler,
+        call: CallInfo<Spanned<Val>>,
+        first_arg: ast::Expr<'_>,
+        new_value: Spanned<Val>,
+    ) -> Fallible<()> {
+        (**self).compile_assign(compiler, call, first_arg, new_value)
     }
 
     fn boxed(self) -> Box<dyn Function> {

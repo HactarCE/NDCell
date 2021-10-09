@@ -3,6 +3,8 @@
 use codemap::Span;
 use regex::Regex;
 
+use ndcell_core::axis::Axis;
+
 mod expressions;
 pub mod functions;
 
@@ -102,7 +104,7 @@ fn resolve_type_keyword(name: &str) -> Option<Type> {
 }
 
 /// Returns a built-in method.
-pub fn resolve_method(receiving_type: &Type, name: &str, span: Span) -> Result<Box<dyn Function>> {
+pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Function>> {
     match receiving_type {
         Type::Null => match name {
             _ => None,
@@ -122,6 +124,13 @@ pub fn resolve_method(receiving_type: &Type, name: &str, span: Span) -> Result<B
         Type::Type => None,
 
         Type::Vector(_) => match name {
+            "x" => Some(functions::vectors::IndexVector(Some(Axis::X)).boxed()),
+            "y" => Some(functions::vectors::IndexVector(Some(Axis::Y)).boxed()),
+            "z" => Some(functions::vectors::IndexVector(Some(Axis::Z)).boxed()),
+            "w" => Some(functions::vectors::IndexVector(Some(Axis::W)).boxed()),
+            "u" => Some(functions::vectors::IndexVector(Some(Axis::U)).boxed()),
+            "v" => Some(functions::vectors::IndexVector(Some(Axis::V)).boxed()),
+            "len" => Some(functions::vectors::VectorLen.boxed()),
             _ => None,
         },
         Type::CellArray(shape) => match name {
@@ -152,7 +161,6 @@ pub fn resolve_method(receiving_type: &Type, name: &str, span: Span) -> Result<B
             _ => None,
         },
     }
-    .ok_or(Error::no_such_method(span, receiving_type))
 }
 
 fn resolve_index_method(obj_type: &Type) -> Option<Box<dyn Function>> {
@@ -163,8 +171,8 @@ fn resolve_index_method(obj_type: &Type) -> Option<Box<dyn Function>> {
         Type::Tag => None,
         Type::String => None,
         Type::Type => Some(Box::new(functions::types::TypeBrackets)),
-        Type::Vector(_) => None,
-        Type::CellArray(_) => None,
+        Type::Vector(_) => Some(Box::new(functions::vectors::IndexVector(None))),
+        Type::CellArray(_) => todo!("cell array indexing function"),
         Type::EmptySet => None,
         Type::IntegerSet => None,
         Type::CellSet => None,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::data::RtVal::Vector;
+use crate::data::RtVal::{Integer, Vector};
 
 #[test]
 fn test_vector_new() {
@@ -65,74 +65,72 @@ fn test_vector_construct_expr(expected: Vec<LangInt>, expr: &str) {
         .assert_test_cases(test_cases![() => Ok(Vector(expected))]);
 }
 
-// #[test]
-// fn test_vector_access() {
-//     // Test in-bounds access.
-//     let mut f = compile_test_fn(
-//         "@function Int test() {
-//             v = [1, 10, 100]
-//             return v.y - v.x
-//         }",
-//     );
-//     let expected = Ok(ConstValue::Int(9));
-//     assert_fn_result(&mut f, &mut [], expected);
+#[test]
+fn test_vector_access() {
+    let test_program = TestProgram::new().with_exec("v = [1, 10, 100]");
 
-//     // Test out of bounds access (positive).
-//     let mut f = compile_test_fn(
-//         "@function Int test() {
-//             v = [1, 10, 100]
-//             return v.w + v[9999]
-//         }",
-//     );
-//     let expected = Ok(ConstValue::Int(0));
-//     assert_fn_result(&mut f, &mut [], expected);
+    // Test in-bounds access.
+    test_program
+        .with_result_expressions(&[
+            (Type::Integer, "v.x"),
+            (Type::Integer, "v.y"),
+            (Type::Integer, "v.z"),
+            (Type::Integer, "v[0]"),
+            (Type::Integer, "v[1]"),
+            (Type::Integer, "v[2]"),
+        ])
+        .assert_test_cases(test_cases![() => Ok(1, 10, 100, 1, 10, 100)]);
 
-//     // Test out of bounds access (negative).
-//     let mut f = compile_test_fn(
-//         "@function Int test() {
-//             v = [1, 10, 100]
-//             return v[-1]
-//         }",
-//     );
-//     let expected = Err(("v[-1]", "Index out of bounds"));
-//     assert_fn_result(&mut f, &mut [], expected);
+    fn assert_out_of_bounds(p: TestProgram, expr: &str, loc: &str) {
+        let msg = "index out of bounds";
+        let exprs = [(Type::Integer, expr)];
+        let p = p.with_result_expressions(&exprs);
+        p.assert_interpreted_test_cases::<&str>(test_cases![() => Err(msg @ loc)]);
+        p.assert_compile_errors(test_errors![msg @ loc]);
+    }
 
-//     // Test in-bounds modification.
-//     let mut f = compile_test_fn(
-//         "@function Vec3 test() {
-//             v = [1, 10, 100]
-//             v.x -= 4
-//             v[2] = 88
-//             return v
-//         }",
-//     );
-//     let expected = Ok(ConstValue::Vector(vec![-3, 10, 88]));
-//     assert_fn_result(&mut f, &mut [], expected);
+    // Test out of bounds access (positive).
+    assert_out_of_bounds(test_program, "v.w", "w");
+    assert_out_of_bounds(test_program, "v[4]", "4");
+    assert_out_of_bounds(test_program, "v[9999]", "9999");
+    assert_out_of_bounds(test_program, "v[-1]", "-1");
 
-//     // Test out of bounds modification.
-//     let mut f = compile_test_fn(
-//         "@function Int test() {
-//             v = [1, 10, 100]
-//             v.w = 0
-//         }",
-//     );
-//     let expected = Err(("v.w", "Index out of bounds"));
-//     assert_fn_result(&mut f, &mut [], expected);
+    // Test in-bounds modification.
+    TestProgram::new()
+        .with_exec("v = [1, 10, 100]   v.x -= 4   v[2] = 88")
+        .with_result_expressions(&[(Type::Vector(Some(3)), "v")])
+        .assert_test_cases(test_cases![() => Ok("[-3, 10, 88]")]);
 
-//     // Test length.
-//     let mut f = compile_test_fn(
-//         "@function Void test() {
-//             v3 = [1, 10, 100]
-//             assert v3.len == 3
-//             v2 = [4, 3]
-//             assert v2.len == 2
-//             v10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-//             assert v10.len == 10
-//         }",
-//     );
-//     let expected = Ok(ConstValue::Void);
-//     assert_fn_result(&mut f, &mut [], expected);
-// }
+    // Test out of bounds modification.
+    let p = TestProgram::new().with_exec("v = [1, 10, 100]   v.w = 0");
+    assert_out_of_bounds(p, "0", "w");
+    let p = TestProgram::new().with_exec("v = [1, 10, 100]   v[-1] = 0");
+    assert_out_of_bounds(p, "0", "-1");
+
+    let p = TestProgram::new()
+        .with_input_types(&[Type::Integer])
+        .with_result_expressions(&[(Type::Integer, "[1, 10, 100][x0]")])
+        .assert_test_cases(test_cases![
+            (Integer(0)) => Ok("1"),
+            (Integer(1)) => Ok("10"),
+            (Integer(2)) => Ok("100"),
+            (Integer(3)) => Err("index out of bounds" @ "x0"),
+            (Integer(99)) => Err("index out of bounds" @ "x0"),
+            (Integer(-1)) => Err("index out of bounds" @ "x0"),
+        ]);
+}
+
+#[test]
+fn test_vector_len() {
+    let p = TestProgram::new()
+        .with_result_expressions(&[
+            (Type::Integer, "[1, 10, 100].len"),
+            (Type::Integer, "[4, 3].len"),
+            (Type::Integer, "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].len"),
+            (Type::Integer, "vec(len=256).len"),
+        ])
+        .assert_test_cases(test_cases![() => Ok("3", "2", "10", "256")]);
+}
 
 // #[test]
 // fn test_vector_cmp() {

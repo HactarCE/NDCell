@@ -217,7 +217,7 @@ impl Error {
 
     error_fn!(Error; fn cannot_index_type(
         "cannot index into value of type {}", // TODO: this is a terrible error message
-        ty: Type,
+        ty: &Type,
     ));
     error_fn!(Error; fn cannot_call_arbitrary_expression("cannot call arbitrary expression"));
     error_fn!(Error; fn no_such_function("no such function"));
@@ -229,6 +229,7 @@ impl Error {
     error_fn!(Error; fn unknown_variable_value("value of type {} must be compile-time constant", ty: &Type));
 
     error_fn!(Error; fn cannot_assign_to("cannot assign to this expression"));
+    error_fn!(Error; fn cannot_compile_assign_to("cannot assign to this expression in compiled code"));
 
     error_fn!(Error; fn break_not_in_loop("cannot 'break' when not in a loop"));
     error_fn!(Error; fn continue_not_in_loop("cannot 'continue' when not in a loop"));

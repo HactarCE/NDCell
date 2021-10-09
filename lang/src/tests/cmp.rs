@@ -53,7 +53,7 @@ fn test_comparison<T: 'static + Copy + TestValues>(
         .assert_interpreted_test_cases(test_cases.clone());
     match cmp_reference_impl {
         Ok(_) => prgm.assert_compiled_test_cases(test_cases.clone()),
-        Err(msg) => prgm.assert_compile_errors(test_errors!(msg @ expr_str)),
+        Err(msg) => prgm.assert_compile_errors(test_errors![msg @ expr_str]),
     }
 }
 

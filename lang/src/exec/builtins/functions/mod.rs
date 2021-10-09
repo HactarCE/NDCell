@@ -65,6 +65,13 @@ impl Function for Box<dyn Function> {
     }
 }
 
+// TODO: use these aliases everywhere
+
+/// Data associated with a runtime function call.
+pub type RuntimeCallInfo = CallInfo<Spanned<RtVal>>;
+/// Data associated with a compile-time function call.
+pub type CompiledCallInfo = CallInfo<Spanned<Val>>;
+
 /// Data associated with a function call.
 #[derive(Debug, Clone)]
 pub struct CallInfo<A> {

@@ -89,7 +89,7 @@ impl<R: Copy + SyntaxRule> SyntaxRule for Surround<R> {
 
         let span2 = p.span();
         let span = span1.merge(span2);
-        Ok(Spanned { span, node: ret })
+        Ok(Spanned { node: ret, span })
     }
 }
 

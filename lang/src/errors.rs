@@ -216,7 +216,7 @@ impl Error {
     error_fn!(Error; fn not_reached_directive("not yet reached '{}' directive", directive_name: &str));
 
     error_fn!(Error; fn cannot_index_type(
-        "cannot index into value of type {}",
+        "cannot index into value of type {}", // TODO: this is a terrible error message
         ty: Type,
     ));
     error_fn!(Error; fn cannot_call_arbitrary_expression("cannot call arbitrary expression"));
@@ -249,6 +249,9 @@ impl Error {
     error_fn!(Error; fn position_out_of_bounds("position out of bounds"));
     error_fn!(Error; fn position_excluded_by_array_mask("position excluded by array mask"));
     error_fn!(Error; fn cell_state_out_of_range("invalid cell state ID"));
+
+    error_fn!(Error; fn invalid_cell_symbol("invalid cell symbol: {:?}", s: &str));
+    error_fn!(Error; fn wrong_cell_count("wrong cell cound; expected {} cells", n: usize));
 
     error_fn!(Error; fn user_error("error"));
     error_fn!(Error; fn assertion_failed("assertion failed"));

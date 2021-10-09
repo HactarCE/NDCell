@@ -69,7 +69,7 @@ impl Param {
     ///
     /// To be read correctly by JIT-compiled code, `bytes` must be 8-byte
     /// aligned.
-    pub fn value_to_bytes(&self, bytes: &mut [u8], value: &RtVal) -> Result<()> {
+    pub fn value_to_bytes(&self, bytes: &mut [u8], value: &mut RtVal) -> Result<()> {
         // TODO: when #![feature(array_chunks)] stabalizes, use that here
         // instead of `fill_u8_slice`.
         match (&self.ty, value) {
@@ -90,7 +90,7 @@ impl Param {
             (ParamType::CellArray(shape), RtVal::CellArray(a)) if shape == a.shape() => {
                 // Only store the cell array; strides are determined by the
                 // shape.
-                let p = a.cells_array().as_flat_slice().as_ptr() as usize;
+                let p = a.cells_array_mut().as_flat_slice().as_ptr() as usize;
                 p.to_ne_bytes().iter().copied().fill_u8_slice(bytes);
             }
 
@@ -260,8 +260,8 @@ mod tests {
 
     fn test_llvm_convert_param_single(p: Param, test_values: impl IntoIterator<Item = RtVal>) {
         let mut bytes = vec![0_u8; p.size];
-        for old_value in test_values {
-            p.value_to_bytes(&mut bytes, &old_value).unwrap();
+        for mut old_value in test_values {
+            p.value_to_bytes(&mut bytes, &mut old_value).unwrap();
             let mut new_value = RtVal::Null;
             p.bytes_to_value(&bytes, &mut new_value);
             assert_eq!(old_value, new_value);

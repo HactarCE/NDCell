@@ -168,7 +168,7 @@ impl Compiler {
                 )]
             })?;
 
-        // Make sure we have a `@compile` directive.
+        // Make sure we have an `@compile` directive.
         let ast = compile_directive.ast;
         let (param_type_exprs, function_body) = match compile_directive.data() {
             ast::DirectiveData::Compile { param_types, body } => (param_types, body),

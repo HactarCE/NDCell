@@ -17,7 +17,7 @@ macro_rules! test_error {
 
 /// Constructs a `Vec<TestError>`
 macro_rules! test_errors {
-    ($($msg:tt @ $loc:expr),+ $(,)?) => {
+    [$($msg:tt @ $loc:expr),+ $(,)?] => {
         vec![$(test_error!($msg @ $loc)),+]
     };
 }

@@ -25,8 +25,8 @@ impl<R: fmt::Display, F> fmt::Display for TokenMapper<R, F> {
 impl<B, R: SyntaxRule, F: Fn(R::Output) -> B> SyntaxRule for TokenMapper<R, F> {
     type Output = B;
 
-    fn might_match(&self, p: Parser<'_>) -> bool {
-        self.inner.might_match(p)
+    fn matches_prefix(&self, p: Parser<'_>) -> bool {
+        self.inner.matches_prefix(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         self.inner.consume_match(p, ast).map(&self.f)
@@ -77,8 +77,8 @@ impl<R: fmt::Display> fmt::Display for Surround<R> {
 impl<R: Copy + SyntaxRule> SyntaxRule for Surround<R> {
     type Output = Spanned<R::Output>;
 
-    fn might_match(&self, p: Parser<'_>) -> bool {
-        self.start.might_match(p)
+    fn matches_prefix(&self, p: Parser<'_>) -> bool {
+        self.start.matches_prefix(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let span1 = p.peek_next_span();
@@ -160,8 +160,8 @@ impl<R: fmt::Display> fmt::Display for List<R> {
 impl<R: Copy + SyntaxRule> SyntaxRule for List<R> {
     type Output = Spanned<Vec<R::Output>>;
 
-    fn might_match(&self, p: Parser<'_>) -> bool {
-        self.start.might_match(p)
+    fn matches_prefix(&self, p: Parser<'_>) -> bool {
+        self.start.matches_prefix(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let span1 = p.peek_next_span();
@@ -208,7 +208,7 @@ impl<T> fmt::Display for TryFromToken<T> {
 impl<T: TryFrom<Token>> SyntaxRule for TryFromToken<T> {
     type Output = Spanned<T>;
 
-    fn might_match(&self, mut p: Parser<'_>) -> bool {
+    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
         p.next().and_then(|t| T::try_from(t).ok()).is_some()
     }
     fn consume_match(
@@ -233,7 +233,7 @@ impl_display!(for Epsilon, "nothing");
 impl SyntaxRule for Epsilon {
     type Output = ();
 
-    fn might_match(&self, _p: Parser<'_>) -> bool {
+    fn matches_prefix(&self, _p: Parser<'_>) -> bool {
         true
     }
     fn consume_match(
@@ -250,7 +250,7 @@ impl_display!(for EndOfFile, "end of file");
 impl SyntaxRule for EndOfFile {
     type Output = ();
 
-    fn might_match(&self, mut p: Parser<'_>) -> bool {
+    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
         p.next().is_none()
     }
     fn consume_match(

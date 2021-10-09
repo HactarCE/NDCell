@@ -215,7 +215,7 @@ impl<'a> Parser<'a> {
         ast: &'_ mut ast::Program,
         rule: R,
     ) -> Option<Result<R::Output>> {
-        rule.might_match(*self).then(|| {
+        rule.prefix_matches(*self).then(|| {
             let old_state = *self; // Save state.
             let ret = rule.consume_match(self, ast);
             if ret.is_err() {

@@ -24,7 +24,7 @@ pub trait SyntaxRule: fmt::Display {
     /// Returns whether if it appears that the user is trying to form this
     /// construct (generally returns true if the first token matches). If
     /// `consume_match()` returns `Ok`, this function MUST return true.
-    fn might_match(&self, p: Parser<'_>) -> bool;
+    fn matches_prefix(&self, p: Parser<'_>) -> bool;
     /// Consumes the tokens that are part of this syntax structure, returning
     /// the AST node produced. Does NOT restore the `Parser` if matching fails.
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output>;
@@ -46,8 +46,8 @@ impl<O> std::fmt::Debug for Box<dyn SyntaxRule<Output = O>> {
 impl<O, T: SyntaxRule<Output = O> + ?Sized> SyntaxRule for Box<T> {
     type Output = O;
 
-    fn might_match(&self, p: Parser<'_>) -> bool {
-        self.as_ref().might_match(p)
+    fn matches_prefix(&self, p: Parser<'_>) -> bool {
+        self.as_ref().matches_prefix(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         self.as_ref().consume_match(p, ast)
@@ -58,7 +58,7 @@ impl<O, T: SyntaxRule<Output = O> + ?Sized> SyntaxRule for Box<T> {
 impl SyntaxRule for Token {
     type Output = ();
 
-    fn might_match(&self, mut p: Parser<'_>) -> bool {
+    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(*self)
     }
     fn consume_match(
@@ -76,8 +76,8 @@ impl SyntaxRule for Token {
 impl<T: SyntaxRule> SyntaxRule for &T {
     type Output = T::Output;
 
-    fn might_match(&self, p: Parser<'_>) -> bool {
-        (*self).might_match(p)
+    fn matches_prefix(&self, p: Parser<'_>) -> bool {
+        (*self).matches_prefix(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         (*self).consume_match(p, ast)

@@ -10,7 +10,7 @@ impl_display!(for Directive, "directive, such as '@ndim 2'");
 impl SyntaxRule for Directive {
     type Output = ast::DirectiveId;
 
-    fn might_match(&self, mut p: Parser<'_>) -> bool {
+    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::Ident) && p.string().starts_with('@')
     }
 
@@ -138,8 +138,8 @@ impl_display!(for TypeExpression, "type, such as 'Integer' or 'Vector[3]'",);
 impl SyntaxRule for TypeExpression {
     type Output = ast::ExprId;
 
-    fn might_match(&self, p: Parser<'_>) -> bool {
-        Expression.might_match(p)
+    fn matches_prefix(&self, p: Parser<'_>) -> bool {
+        Expression.matches_prefix(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         Expression.consume_match(p, ast)

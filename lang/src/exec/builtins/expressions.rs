@@ -590,13 +590,14 @@ impl Method {
         }
     }
     pub fn display_name(&self, obj_type: &Type) -> Spanned<Arc<String>> {
+        let type_name = obj_type.unparametrized_name();
         let s = match self {
             Method::MethodCall { name } => {
-                format!("{}.{}", obj_type, name.node)
+                format!("{}.{}", type_name, name.node)
             }
             Method::Index { .. } => match obj_type {
                 Type::Type => "type specification".to_string(), // TODO: better name for this
-                _ => format!("{} indexing", obj_type),
+                _ => format!("{} indexing", type_name),
             },
         };
         Spanned {

@@ -113,6 +113,28 @@ impl fmt::Display for Type {
     }
 }
 impl Type {
+    /// Returns the name of the unparametrized type.
+    pub fn unparametrized_name(&self) -> &str {
+        match self {
+            Type::Null => "Null",
+            Type::Integer => "Integer",
+            Type::Cell => "Cell",
+            Type::Tag => "Tag",
+            Type::String => "String",
+            Type::Type => "Type",
+
+            Type::Vector(_) => "Vector",
+            Type::CellArray(_) => "CellArray",
+
+            Type::EmptySet => "EmptySet",
+            Type::IntegerSet => "IntegerSet",
+            Type::CellSet => "CellSet",
+            Type::VectorSet(_) => "VectorSet",
+            Type::PatternMatcher(_) => "PatternMatcher",
+            Type::Regex => "Regex",
+        }
+    }
+
     /// Returns true if this type can be converted to a boolean, or false
     /// otherwise.
     ///

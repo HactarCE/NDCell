@@ -6,24 +6,24 @@ use std::{fmt, panic};
 
 use super::{CallInfo, Function};
 use crate::data::{CellArray, LangCell, RtVal, SpannedRuntimeValueExt, Type, Val, VectorSet};
-use crate::errors::{Error, Fallible, Result};
-use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt};
+use crate::errors::{Error, Result};
+use crate::exec::{Compiler, Ctx, CtxTrait};
 use crate::parser;
 
 /// Built-in function that constructs an `CellArray`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct New(pub Arc<VectorSet>);
 impl Function for New {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         match call.args.len() {
             0 => Ok(CellArray::from_cell(Arc::clone(&self.0), 0_u8).into()),
 
             1 => {
-                let cell_state = call.arg(1, ctx)?.select_cell().report_err(ctx)?;
+                let cell_state = call.arg(1)?.select_cell()?;
                 Ok(CellArray::from_cell(Arc::clone(&self.0), cell_state).into())
             }
 
-            _ => Err(call.invalid_args_error(ctx)),
+            _ => Err(call.invalid_args_error()),
         }
     }
 }
@@ -32,46 +32,42 @@ impl Function for New {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct FillVectorSet;
 impl Function for FillVectorSet {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         let arg_count = call.args.len();
 
         if arg_count < 1 {
-            return Err(call.invalid_args_error(ctx));
+            return Err(call.invalid_args_error());
         }
 
         let ndim = ctx.get_ndim(call.span)?;
-        let shape = call.args[0].as_vector_set(ndim).report_err(ctx)?;
+        let shape = call.args[0].as_vector_set(ndim)?;
 
         let cell_array = if arg_count - 1 == shape.len() {
             let contents: Vec<LangCell> = call.args[1..]
                 .iter()
                 .map(|arg| arg.select_cell())
-                .collect::<Result<_>>()
-                .report_err(ctx)?;
-            CellArray::from_cells(call.span, shape, &contents).report_err(ctx)?
+                .collect::<Result<_>>()?;
+            CellArray::from_cells(call.span, shape, &contents)?
         } else if arg_count - 1 == 1 {
             let contents = &call.args[1];
             if let Ok(contents_str) = contents.as_string() {
                 let contents =
                     parser::strings::parse_cell_array_string(ctx, contents.span, &contents_str)?;
-                CellArray::from_cells(call.args[1].span, shape, &contents).report_err(ctx)?
+                CellArray::from_cells(call.args[1].span, shape, &contents)?
             } else if let Ok(cell) = contents.select_cell() {
                 CellArray::from_cell(shape, cell)
             } else {
-                return Err(ctx.error(Error::type_error(
+                return Err(Error::type_error(
                     contents.span,
                     "TODO cell array contents",
                     &contents.ty(),
-                )));
+                ));
             }
         } else {
-            return Err(call.invalid_args_error(ctx));
+            return Err(call.invalid_args_error());
         };
 
         Ok(RtVal::CellArray(cell_array))
-    }
-    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
-        Err(compiler.error(Error::cannot_compile(call.span)))
     }
 }
 

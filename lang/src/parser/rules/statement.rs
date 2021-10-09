@@ -10,7 +10,7 @@ impl_display!(for StatementBlock, "block of code surrounded by '{{' and '}}'");
 impl SyntaxRule for StatementBlock {
     type Output = ast::StmtId;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::LBrace)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
@@ -39,9 +39,9 @@ impl_display!(
 impl SyntaxRule for Statement {
     type Output = ast::StmtId;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
-        StatementBlock.matches_prefix(p)
-            || AssignStatement.matches_prefix(p)
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
+        StatementBlock.prefix_matches(p)
+            || AssignStatement.prefix_matches(p)
             || matches!(p.next(), Some(Token::Keyword(kw)) if kw.starts_statement())
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
@@ -128,7 +128,7 @@ impl_display!(for ForLoop, "{} loop", Token::Keyword(Keyword::For));
 impl SyntaxRule for ForLoop {
     type Output = ast::StmtId;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::Keyword(Keyword::For))
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
@@ -156,7 +156,7 @@ impl_display!(for IfStatement, "{} statement", Token::Keyword(Keyword::If));
 impl SyntaxRule for IfStatement {
     type Output = ast::StmtId;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::Keyword(Keyword::If))
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
@@ -177,7 +177,7 @@ impl_display!(for ElseStatement, "{} statement", Token::Keyword(Keyword::Else));
 impl SyntaxRule for ElseStatement {
     type Output = ast::StmtId;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::Keyword(Keyword::Else))
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
@@ -193,8 +193,8 @@ impl_display!(for AssignStatement, "assignment statement");
 impl SyntaxRule for AssignStatement {
     type Output = ast::StmtId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        Expression.matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        Expression.prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let old_p = *p;

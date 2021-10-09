@@ -3,7 +3,7 @@ use codemap::Spanned;
 use super::CpVal;
 use super::RtVal;
 use super::Type;
-use crate::errors::{AlreadyReported, Error, Fallible, Result};
+use crate::errors::{Error, Result};
 
 /// Value that may be constant and/or compiled variable.
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ pub enum Val {
     MaybeUninit,
     /// Depends on some expression that encountered an error that has already
     /// been reported.
-    Err(AlreadyReported),
+    Error,
 }
 impl From<RtVal> for Val {
     fn from(v: RtVal) -> Self {
@@ -59,32 +59,32 @@ impl Val {
 /// NDCA value that may have a defined type.
 pub trait TryGetType {
     /// Returns the type of the value, if it definitely has one.
-    fn try_get_type(&self) -> Fallible<Result<Type>>;
+    fn try_get_type(&self) -> Result<Type>;
 }
 impl TryGetType for Spanned<Val> {
-    fn try_get_type(&self) -> Fallible<Result<Type>> {
+    fn try_get_type(&self) -> Result<Type> {
         match &self.node {
-            Val::Rt(v) => Ok(Ok(v.ty())),
-            Val::Cp(v) => Ok(Ok(v.ty())),
-            Val::Unknown(Some(ty)) => Ok(Ok(ty.clone())),
-            Val::Unknown(None) => Ok(Err(Error::ambiguous_variable_type(self.span))),
-            Val::MaybeUninit => Ok(Err(Error::maybe_uninitialized_variable(self.span))),
-            Val::Err(AlreadyReported) => Err(AlreadyReported),
+            Val::Rt(v) => Ok(v.ty()),
+            Val::Cp(v) => Ok(v.ty()),
+            Val::Unknown(Some(ty)) => Ok(ty.clone()),
+            Val::Unknown(None) => Err(Error::ambiguous_variable_type(self.span)),
+            Val::MaybeUninit => Err(Error::maybe_uninitialized_variable(self.span)),
+            Val::Error => Err(Error::AlreadyReported),
         }
     }
 }
 impl TryGetType for RtVal {
-    fn try_get_type(&self) -> Fallible<Result<Type>> {
-        Ok(Ok(self.ty()))
+    fn try_get_type(&self) -> Result<Type> {
+        Ok(self.ty())
     }
 }
 impl TryGetType for CpVal {
-    fn try_get_type(&self) -> Fallible<Result<Type>> {
-        Ok(Ok(self.ty()))
+    fn try_get_type(&self) -> Result<Type> {
+        Ok(self.ty())
     }
 }
 impl<T: TryGetType> TryGetType for Spanned<T> {
-    fn try_get_type(&self) -> Fallible<Result<Type>> {
+    fn try_get_type(&self) -> Result<Type> {
         self.node.try_get_type()
     }
 }

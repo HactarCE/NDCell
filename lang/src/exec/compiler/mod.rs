@@ -37,11 +37,11 @@ mod param;
 use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
-    CellSet, CpVal, TryGetType, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, Type,
-    Val, INT_BITS,
+    CellSet, CpVal, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, TryGetType, Type, Val,
+    INT_BITS,
 };
-use crate::errors::{AlreadyReported, Error, Fallible, Result};
-use crate::exec::{Ctx, CtxTrait, ErrorReportExt, Runtime};
+use crate::errors::{Error, Result};
+use crate::exec::{Ctx, CtxTrait, Runtime};
 use crate::llvm::{self, traits::*};
 pub use config::CompilerConfig;
 pub use function::CompiledFunction;
@@ -164,7 +164,7 @@ impl Compiler {
             .map_err(|e| {
                 vec![internal_error_value!(
                     "Error creating JIT execution engine: {:?}",
-                    e
+                    e,
                 )]
             })?;
 
@@ -173,7 +173,7 @@ impl Compiler {
         let (param_type_exprs, function_body) = match compile_directive.data() {
             ast::DirectiveData::Compile { param_types, body } => (param_types, body),
             _ => {
-                runtime.error(internal_error_value!(
+                runtime.report_error(internal_error_value!(
                     "cannot compile non-@compile directive"
                 ));
                 return Err(runtime.ctx.errors);
@@ -197,16 +197,19 @@ impl Compiler {
                         Ok(ParamType::CellArray(shape))
                     }
                     Type::CellSet => todo!("cell set param"),
-                    _ => Err(runtime.error(Error::cannot_compile(span))),
+                    _ => Err(Error::cannot_compile(span)),
                 }
                 .map(|ok| Spanned { node: ok, span }),
 
-                Ok(other) => Err(runtime.error(Error::expected(other.span, Type::Type))),
+                Ok(other) => Err(Error::expected(other.span, Type::Type)),
 
                 Err(e) => Err(e),
             })
-            .collect::<Fallible<Vec<Spanned<ParamType>>>>()
-            .map_err(|_| runtime.ctx.errors.clone())?;
+            .collect::<Result<Vec<Spanned<ParamType>>>>()
+            .map_err(|e| {
+                runtime.report_error(e);
+                runtime.ctx.errors.clone()
+            })?;
 
         if !runtime.ctx.errors.is_empty() {
             return Err(runtime.ctx.errors);
@@ -256,8 +259,17 @@ impl Compiler {
         this.llvm_fn = Some(this.module.add_function(fn_name, fn_type, fn_linkage));
 
         match this.build_jit_function(ast.get_node(*function_body)) {
-            Ok(ret) => Ok(ret),
-            Err(AlreadyReported) => Err(this.ctx.errors),
+            Ok(ret) => {
+                if this.ctx.errors.is_empty() {
+                    Ok(ret)
+                } else {
+                    Err(this.ctx.errors)
+                }
+            }
+            Err(e) => {
+                this.report_error(e);
+                Err(this.ctx.errors)
+            }
         }
     }
     /// JIT-compiles a new function that can be called from Rust code.
@@ -267,7 +279,7 @@ impl Compiler {
     fn build_jit_function(
         &mut self,
         function_body: ast::Stmt<'_>,
-    ) -> Fallible<(llvm::JitFunction, CompiledFunction)> {
+    ) -> Result<(llvm::JitFunction, CompiledFunction)> {
         // Build the LLVM IR for the function.
         let entry_bb = self.append_basic_block("entry");
         self.builder().position_at_end(entry_bb);
@@ -278,7 +290,7 @@ impl Compiler {
 
         // Don't compile the JIT function if there are any errors.
         if !self.ctx.errors.is_empty() {
-            return Err(AlreadyReported);
+            return Err(Error::AlreadyReported);
         }
 
         // Here we take responsibility for the inherent unsafety of compiling
@@ -308,26 +320,25 @@ impl Compiler {
 
     /// Finishes JIT compiling a function and returns a function pointer to
     /// executable assembly.
-    unsafe fn finish_jit_function(&mut self) -> Fallible<llvm::JitFunction> {
+    unsafe fn finish_jit_function(&mut self) -> Result<llvm::JitFunction> {
         // Check that there are no errors in the LLVM code.
         if !self.llvm_fn().verify(true) {
             eprint!(
                 "Error encountered during function compilation; dumping LLVM function to stderr"
             );
             self.llvm_fn().print_to_stderr();
-            return Err(self.error(internal_error_value!("LLVM function is invalid")));
+            internal_error!("LLVM function is invalid");
         }
 
         match self.llvm_fn().get_name().to_str() {
             Ok(fn_name) => self.execution_engine.get_function(fn_name).map_err(|e| {
                 internal_error_value!("Failed to find JIT-compiled function {:?}: {}", fn_name, e)
             }),
-            Err(e) => Err(internal_error_value!(
+            Err(e) => internal_error!(
                 "Invalid UTF-8 in LLVM function name (seriously, wtf?): {}",
                 e,
-            )),
+            ),
         }
-        .report_err(self)
     }
 
     /// Returns the struct type used to hold parameters to the LLVM function.
@@ -354,6 +365,10 @@ impl Compiler {
 
     /// Adds a possible runtime error and returns the error index.
     pub fn add_runtime_error(&mut self, e: Error) -> usize {
+        debug_assert!(
+            !matches!(e, Error::AlreadyReported),
+            "runtime error can't be already reported",
+        );
         self.runtime_errors.push(e);
         self.runtime_errors.len() - 1
     }
@@ -363,27 +378,25 @@ impl Compiler {
  * TYPES AND VALUES
  */
 impl Compiler {
-    pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<Type>> {
+    pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Result<Spanned<Type>> {
+        let node = v.try_get_type()?;
         let span = v.span;
-        match v.try_get_type()? {
-            Ok(ty) => Ok(Spanned { node: ty, span }),
-            Err(e) => Err(self.error(e)),
-        }
+        Ok(Spanned { node, span })
     }
-    pub(crate) fn get_rt_val(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<RtVal>> {
+    pub(crate) fn get_rt_val(&mut self, v: &Spanned<Val>) -> Result<Spanned<RtVal>> {
         let span = v.span;
         match &v.node {
             Val::Rt(v) => Ok(v.clone()),
-            Val::Cp(_) => Err(self.error(Error::must_be_constant(span))),
-            Val::Unknown(Some(ty)) => Err(self.error(Error::unknown_variable_value(span, ty))),
-            Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
-            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
-            Val::Err(AlreadyReported) => Err(AlreadyReported),
+            Val::Cp(_) => Err(Error::must_be_constant(span)),
+            Val::Unknown(Some(ty)) => Err(Error::unknown_variable_value(span, ty)),
+            Val::Unknown(None) => Err(Error::ambiguous_variable_type(span)),
+            Val::MaybeUninit => Err(Error::maybe_uninitialized_variable(span)),
+            Val::Error => Err(Error::AlreadyReported),
         }
         .map(|node| Spanned { node, span })
     }
     // TODO: probably remove this
-    pub(crate) fn get_cp_val(&mut self, v: &Spanned<Val>) -> Fallible<Spanned<CpVal>> {
+    pub(crate) fn get_cp_val(&mut self, v: &Spanned<Val>) -> Result<Spanned<CpVal>> {
         let span = v.span;
         match &v.node {
             Val::Rt(v) => match v {
@@ -397,13 +410,13 @@ impl Compiler {
                     &a,
                 ))),
                 RtVal::CellSet(s) => Ok(CpVal::CellSet(self.build_const_cell_set(s))),
-                _ => Err(self.error(Error::cannot_compile(span))),
+                _ => Err(Error::cannot_compile(span)),
             },
             Val::Cp(v) => Ok(v.clone()),
-            Val::Unknown(Some(ty)) => Err(self.error(Error::unknown_variable_value(span, ty))),
-            Val::Unknown(None) => Err(self.error(Error::ambiguous_variable_type(span))),
-            Val::MaybeUninit => Err(self.error(Error::maybe_uninitialized_variable(span))),
-            Val::Err(AlreadyReported) => Err(AlreadyReported),
+            Val::Unknown(Some(ty)) => Err(Error::unknown_variable_value(span, ty)),
+            Val::Unknown(None) => Err(Error::ambiguous_variable_type(span)),
+            Val::MaybeUninit => Err(Error::maybe_uninitialized_variable(span)),
+            Val::Error => Err(Error::AlreadyReported),
         }
         .map(|node| Spanned { node, span })
     }
@@ -477,7 +490,7 @@ impl Compiler {
 
     /// Builds instructions to cast a value to a boolean and zero-extend that
     /// boolean to the width of an integer.
-    pub fn build_convert_to_bool(&mut self, value: &Spanned<Val>) -> Fallible<llvm::IntValue> {
+    pub fn build_convert_to_bool(&mut self, value: &Spanned<Val>) -> Result<llvm::IntValue> {
         let cp_val = self.get_cp_val(value)?;
         self.build_convert_cp_val_to_bool(&cp_val)
     }
@@ -486,7 +499,7 @@ impl Compiler {
     pub fn build_convert_cp_val_to_bool(
         &mut self,
         value: &Spanned<CpVal>,
-    ) -> Fallible<llvm::IntValue> {
+    ) -> Result<llvm::IntValue> {
         use llvm::IntPredicate::NE;
 
         let bool_result = match value.node {
@@ -507,7 +520,7 @@ impl Compiler {
         &mut self,
         value: &Spanned<Val>,
         len: usize,
-    ) -> Fallible<llvm::VectorValue> {
+    ) -> Result<llvm::VectorValue> {
         let cp_val = self.get_cp_val(value)?;
         self.build_convert_cp_val_to_vector(&cp_val, len)
     }
@@ -516,7 +529,7 @@ impl Compiler {
         &mut self,
         value: &Spanned<CpVal>,
         len: usize,
-    ) -> Fallible<llvm::VectorValue> {
+    ) -> Result<llvm::VectorValue> {
         match value.node {
             CpVal::Integer(i) => Ok(llvm::VectorType::const_vector(&vec![i; len])),
             CpVal::Vector(v) => {
@@ -531,11 +544,11 @@ impl Compiler {
                     "resized_vector",
                 ))
             }
-            _ => Err(self.error(Error::type_error(
+            _ => Err(Error::type_error(
                 value.span,
                 "type that can be converted to a vector",
                 &value.node.ty(),
-            ))),
+            )),
         }
     }
 
@@ -576,9 +589,9 @@ impl Compiler {
         error_span: Span,
         array: LlvmCellArray,
         delta: &[LangInt],
-    ) -> Fallible<LlvmCellArray> {
+    ) -> Result<LlvmCellArray> {
         if let Some(cells) = array.cells() {
-            let new_shape = Arc::new(array.shape().offset(error_span, delta).report_err(self)?);
+            let new_shape = Arc::new(array.shape().offset(error_span, delta)?);
             let new_bounds = new_shape.bounds().unwrap();
 
             let negative_delta = llvm::const_vector(delta.iter().map(|&i| -i));
@@ -608,7 +621,7 @@ impl Compiler {
         error_span: Span,
         array: &LlvmCellArray,
         pos: llvm::VectorValue,
-    ) -> Fallible<llvm::PointerValue> {
+    ) -> Result<llvm::PointerValue> {
         if let Some(mask) = array.mask() {
             let mask_cell_ptr = self.build_ndarray_gep(error_span, mask, pos, "mask_cell_ptr")?;
             let is_pos_in_mask = self
@@ -645,7 +658,7 @@ impl Compiler {
         ndarray: llvm::NdArrayValue,
         pos: llvm::VectorValue,
         name: &str,
-    ) -> Fallible<llvm::PointerValue> {
+    ) -> Result<llvm::PointerValue> {
         use llvm::IntPredicate::{SGT, SLT};
 
         let is_past_lower_bound =
@@ -672,7 +685,7 @@ impl Compiler {
         ndarray: llvm::NdArrayValue,
         pos: llvm::VectorValue,
         name: &str,
-    ) -> Fallible<llvm::PointerValue> {
+    ) -> Result<llvm::PointerValue> {
         let tmp = self.build_checked_int_arithmetic(error_span, "smul", ndarray.strides(), pos)?;
         let ptr_offset = self.build_reduce("sadd", tmp)?;
         let b = self.builder();
@@ -759,9 +772,9 @@ impl Compiler {
     pub fn build_conditional<V: PhiMergeable>(
         &mut self,
         condition_value: llvm::IntValue,
-        build_if_true: impl FnOnce(&mut Self) -> Fallible<V>,
-        build_if_false: impl FnOnce(&mut Self) -> Fallible<V>,
-    ) -> Fallible<V> {
+        build_if_true: impl FnOnce(&mut Self) -> Result<V>,
+        build_if_false: impl FnOnce(&mut Self) -> Result<V>,
+    ) -> Result<V> {
         // Build the destination blocks.
         let if_true_bb = self.append_basic_block("ifTrue");
         let if_false_bb = self.append_basic_block("ifFalse");
@@ -816,9 +829,9 @@ impl Compiler {
     /// and must NOT end with a jump.
     pub fn build_loop(
         &mut self,
-        build_contents: impl FnOnce(&mut Self, Loop) -> Fallible<()>,
-        build_prelatch: impl FnOnce(&mut Self, Loop) -> Fallible<()>,
-    ) -> Fallible<()> {
+        build_contents: impl FnOnce(&mut Self, Loop) -> Result<()>,
+        build_prelatch: impl FnOnce(&mut Self, Loop) -> Result<()>,
+    ) -> Result<()> {
         // bröther may I have some `lööp`s
         let lööp = Loop {
             preheader: self.append_basic_block("preheader"),
@@ -868,15 +881,13 @@ impl Compiler {
         &mut self,
         name: &str,
         fn_type: llvm::FunctionType,
-    ) -> Fallible<llvm::FunctionValue> {
+    ) -> Result<llvm::FunctionValue> {
         match self.module.get_function(name) {
             Some(fn_value) => {
                 if fn_value.get_type() == fn_type {
                     Ok(fn_value)
                 } else {
-                    Err(self.error(internal_error_value!(
-                        "Requested multiple LLVM intrinsics with same name but different type signatures",
-                    )))
+                    internal_error!("Requested multiple LLVM intrinsics with same name but different type signatures")
                 }
             }
             None => Ok(self.module.add_function(name, fn_type, None)),
@@ -897,7 +908,7 @@ impl Compiler {
         &mut self,
         condition_value: llvm::IntValue,
         error_index: usize,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         self.build_conditional(
             condition_value,
             |c| Ok(c.build_return_err(error_index)),
@@ -909,7 +920,7 @@ impl Compiler {
         &mut self,
         condition_value: llvm::IntValue,
         error_index: usize,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         self.build_conditional(
             condition_value,
             |_| Ok(()),
@@ -931,7 +942,7 @@ impl Compiler {
         op: &str,
         lhs: M,
         rhs: M,
-    ) -> Fallible<llvm::BasicValueEnum> {
+    ) -> Result<llvm::BasicValueEnum> {
         let arg_type = lhs.as_basic_value_enum().get_type();
 
         // LLVM has intrinsics that perform some math with overflow checks.
@@ -999,7 +1010,7 @@ impl Compiler {
         error_span: Span,
         lhs: M,
         rhs: M,
-    ) -> Fallible<llvm::BasicValueEnum> {
+    ) -> Result<llvm::BasicValueEnum> {
         use llvm::IntPredicate::{SGT, SLT};
 
         let zero = lhs.same_type_const_zero();
@@ -1037,7 +1048,7 @@ impl Compiler {
         error_span: Span,
         lhs: M,
         rhs: M,
-    ) -> Fallible<llvm::BasicValueEnum> {
+    ) -> Result<llvm::BasicValueEnum> {
         use llvm::IntPredicate::SLT;
 
         let zero = lhs.same_type_const_zero();
@@ -1073,7 +1084,7 @@ impl Compiler {
         error_span: Span,
         lhs: M,
         rhs: M,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         use llvm::IntPredicate::EQ;
 
         let zero = lhs.same_type_const_zero();
@@ -1105,7 +1116,7 @@ impl Compiler {
         error_span: Span,
         base: M,
         exp: M,
-    ) -> Fallible<llvm::BasicValueEnum> {
+    ) -> Result<llvm::BasicValueEnum> {
         match (base.as_basic_value_enum(), exp.as_basic_value_enum()) {
             (llvm::BasicValueEnum::IntValue(base), llvm::BasicValueEnum::IntValue(exp)) => {
                 let ret = self._build_checked_int_pow(error_span, base, exp)?;
@@ -1118,7 +1129,7 @@ impl Compiler {
                     .into_iter()
                     .zip(exps)
                     .map(|(base, exp)| self._build_checked_int_pow(error_span, base, exp))
-                    .collect::<Fallible<Vec<_>>>()?;
+                    .collect::<Result<Vec<_>>>()?;
                 let ret = llvm::VectorType::const_vector(&results);
                 Ok(ret.as_basic_value_enum())
             }
@@ -1131,7 +1142,7 @@ impl Compiler {
         error_span: Span,
         base: llvm::IntValue,
         exp: llvm::IntValue,
-    ) -> Fallible<llvm::IntValue> {
+    ) -> Result<llvm::IntValue> {
         use llvm::IntPredicate::{EQ, SGT, SLT};
 
         // Check for negative exponent.
@@ -1214,7 +1225,7 @@ impl Compiler {
         error_span: Span,
         lhs: M,
         rhs: M,
-    ) -> Fallible<llvm::BasicValueEnum> {
+    ) -> Result<llvm::BasicValueEnum> {
         self._build_shift_check_rhs(error_span, rhs)?;
         Ok(self
             .builder()
@@ -1227,7 +1238,7 @@ impl Compiler {
         error_span: Span,
         lhs: M,
         rhs: M,
-    ) -> Fallible<llvm::BasicValueEnum> {
+    ) -> Result<llvm::BasicValueEnum> {
         self._build_shift_check_rhs(error_span, rhs)?;
         let sign_extend = true;
         Ok(self
@@ -1241,7 +1252,7 @@ impl Compiler {
         error_span: Span,
         lhs: M,
         rhs: M,
-    ) -> Fallible<llvm::BasicValueEnum> {
+    ) -> Result<llvm::BasicValueEnum> {
         self._build_shift_check_rhs(error_span, rhs)?;
         let sign_extend = false;
         Ok(self
@@ -1254,7 +1265,7 @@ impl Compiler {
         &mut self,
         error_span: Span,
         rhs: M,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         use llvm::IntPredicate::UGE;
 
         // Treat `rhs` as unsigned; it must be in the range from 0 (inclusive)
@@ -1273,7 +1284,7 @@ impl Compiler {
         &mut self,
         op: &str,
         value: llvm::BasicValueEnum,
-    ) -> Fallible<llvm::IntValue> {
+    ) -> Result<llvm::IntValue> {
         match value {
             llvm::BasicValueEnum::ArrayValue(_) => unimplemented!("cannot reduce ArrayValue"),
             llvm::BasicValueEnum::FloatValue(_) => unimplemented!("cannot reduce FloatValue"),
@@ -1312,7 +1323,7 @@ impl Compiler {
         predicate: llvm::IntPredicate,
         lhs: M,
         rhs: M,
-    ) -> Fallible<llvm::IntValue> {
+    ) -> Result<llvm::IntValue> {
         let cmp_result = self.builder().build_int_compare(predicate, lhs, rhs, "");
         self.build_reduce("or", cmp_result.as_basic_value_enum())
     }
@@ -1323,7 +1334,7 @@ impl Compiler {
         predicate: llvm::IntPredicate,
         lhs: M,
         rhs: M,
-    ) -> Fallible<llvm::IntValue> {
+    ) -> Result<llvm::IntValue> {
         let cmp_result = self.builder().build_int_compare(predicate, lhs, rhs, "");
         self.build_reduce("and", cmp_result.as_basic_value_enum())
     }
@@ -1334,10 +1345,7 @@ impl Compiler {
  */
 impl Compiler {
     /// Builds instructions to get a pointer to a JIT function argument.
-    fn build_get_arg_ptr(
-        &mut self,
-        idx: Spanned<u32>,
-    ) -> Fallible<(ParamType, llvm::PointerValue)> {
+    fn build_get_arg_ptr(&mut self, idx: Spanned<u32>) -> Result<(ParamType, llvm::PointerValue)> {
         let ty = self
             .param_types()
             .get(idx.node as usize)
@@ -1355,11 +1363,11 @@ impl Compiler {
         );
 
         ty.zip(arg_ptr.ok())
-            .ok_or_else(|| self.error(Error::custom(idx.span, "compiled arg index out of range")))
+            .ok_or_else(|| Error::custom(idx.span, "compiled arg index out of range"))
     }
 
     /// Builds instructions to fetch a JIT function argument value.
-    pub fn build_load_arg(&mut self, idx: Spanned<u32>) -> Fallible<CpVal> {
+    pub fn build_load_arg(&mut self, idx: Spanned<u32>) -> Result<CpVal> {
         let (arg_ty, arg_ptr) = self.build_get_arg_ptr(idx)?;
 
         let arg_value = self
@@ -1372,8 +1380,7 @@ impl Compiler {
             ParamType::CellArray(shape) => {
                 let bounds = shape
                     .bounds()
-                    .ok_or_else(|| internal_error_value!("empty cell array argument"))
-                    .report_err(self)?;
+                    .ok_or_else(|| internal_error_value!("empty cell array argument"))?;
                 let cells_ptr = arg_value.into_pointer_value();
                 let strides = crate::utils::ndarray_strides(shape.vec_len(), bounds);
 
@@ -1390,18 +1397,18 @@ impl Compiler {
         &mut self,
         idx: Spanned<u32>,
         new_arg_value: &Spanned<Val>,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         let (arg_ty, arg_ptr) = self.build_get_arg_ptr(idx)?;
 
         // Typecheck.
         let expected_type = Type::from(arg_ty);
-        let got_type = new_arg_value.try_get_type()?.report_err(self)?;
+        let got_type = new_arg_value.try_get_type()?;
         if got_type != expected_type {
-            return Err(self.error(Error::type_error(
+            return Err(Error::type_error(
                 new_arg_value.span,
                 expected_type,
                 &got_type,
-            )));
+            ));
         }
 
         let new_arg_llvm_value = self.get_cp_val(new_arg_value)?;
@@ -1413,7 +1420,7 @@ impl Compiler {
             CpVal::CellArray(_) => {
                 // Special case; no overwriting cell arrays (because we can't
                 // trust that `new_arg_value` will live long enough).
-                return Err(self.error(internal_error_value!("cannot store cell array arg")));
+                internal_error!("cannot store cell array arg");
             }
             CpVal::CellSet(v) => b.build_store(arg_ptr, v),
         };
@@ -1421,21 +1428,23 @@ impl Compiler {
     }
 
     /// Builds instructions to execute a statement.
-    pub fn build_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<()> {
+    pub fn build_stmt(&mut self, stmt: ast::Stmt<'_>) -> Result<()> {
         let ast = stmt.ast;
         match stmt.data() {
             ast::StmtData::Block(stmt_ids) => {
                 for &stmt_id in stmt_ids {
                     // If there is an error while building a statement, keep
                     // going to see if there are more errors to report.
-                    let _ = self.build_stmt(ast.get_node(stmt_id));
+                    if let Err(e) = self.build_stmt(ast.get_node(stmt_id)) {
+                        self.report_error(e);
+                    }
                 }
             }
 
             ast::StmtData::Assign { lhs, op, rhs } => {
                 let lhs = ast.get_node(*lhs);
                 let rhs = ast.get_node(*rhs);
-                let new_value = self.build_expr(rhs)?;
+                let new_value = self.build_expr(rhs);
 
                 // Convert `Spanned<Option<AssignOp>>` to `Option<Spanned<AssignOp>>`.
                 let span = op.span;
@@ -1522,12 +1531,14 @@ impl Compiler {
     }
 
     /// Builds instructions to evaluate an expression.
-    pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<Val>> {
+    pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Spanned<Val> {
         let span = expr.span();
         let expression = Box::<dyn Expression>::from(expr);
-        let node = expression.compile(self, span).unwrap_or_else(Val::Err);
-        // TODO: don't need to return Fallible<_>
-        Ok(Spanned { node, span })
+        let node = expression.compile(self, span).unwrap_or_else(|e| {
+            self.report_error(e);
+            Val::Error
+        });
+        Spanned { node, span }
     }
 }
 

@@ -14,7 +14,7 @@ impl_display!(for Identifier, "identifier, such as a variable or function name")
 impl SyntaxRule for Identifier {
     type Output = Spanned<Arc<String>>;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
         matches!(p.next(), Some(Token::Ident) | Some(Token::Keyword(_)))
     }
     fn consume_match(
@@ -42,7 +42,7 @@ impl_display!(for StringLiteral, "string literal");
 impl SyntaxRule for StringLiteral {
     type Output = Spanned<Arc<String>>;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::StringLiteral)
     }
     fn consume_match(
@@ -92,7 +92,7 @@ impl_display!(for IntegerLiteral, "integer literal, such as '42'");
 impl SyntaxRule for IntegerLiteral {
     type Output = LangInt;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::IntegerLiteral)
     }
     fn consume_match(
@@ -114,8 +114,8 @@ impl_display!(for VectorLiteral, "vector literal ({})", List::bracket_comma_sep(
 impl SyntaxRule for VectorLiteral {
     type Output = Spanned<Vec<ast::ExprId>>;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        List::bracket_comma_sep(Expression).matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        List::bracket_comma_sep(Expression).prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse(ast, List::bracket_comma_sep(Expression))
@@ -128,8 +128,8 @@ impl_display!(for SetLiteral, "set literal ({})", List::brace_comma_sep(Expressi
 impl SyntaxRule for SetLiteral {
     type Output = Spanned<Vec<ast::ExprId>>;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        List::brace_comma_sep(Expression).matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        List::brace_comma_sep(Expression).prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse(ast, List::brace_comma_sep(Expression))

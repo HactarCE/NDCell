@@ -288,9 +288,7 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
         match &self.node {
             RtVal::EmptySet => match VectorSet::empty(self.span, vec_len) {
                 Ok(set) => Ok(Arc::new(set)),
-                Err(e) => Err(internal_error_value!(
-                    "invalid vector length for vector set",
-                )),
+                Err(e) => internal_error!("invalid vector length for vector set"),
             },
             RtVal::VectorSet(x) => Ok(Arc::clone(x)),
             _ => Err(Error::type_error(

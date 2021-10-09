@@ -134,8 +134,8 @@ impl_display!(for Expression, "expression");
 impl SyntaxRule for Expression {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        ExpressionWithPrecedence::default().matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        ExpressionWithPrecedence::default().prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse(ast, ExpressionWithPrecedence::default())
@@ -149,7 +149,7 @@ impl_display!(for ExpressionWithPrecedence, "expression");
 impl SyntaxRule for ExpressionWithPrecedence {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
         if let Some(t) = p.next() {
             // There are so many tokens that might match, it's more reliable to
             // just match all of them.
@@ -388,7 +388,7 @@ fn parse_cmp_chain_expr(p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result
 
     let op_syntax_rule =
         TryFromToken::<ast::CompareOp>::with_display("comparison operator, such as '<' or '=='");
-    if op_syntax_rule.matches_prefix(*p) {
+    if op_syntax_rule.prefix_matches(*p) {
         // If there is a comparison operator, parse a comparison chain.
         let mut exprs = vec![ret];
         let mut ops = vec![];
@@ -413,7 +413,7 @@ impl_display!(for MethodCallSuffix, "method/attribute access");
 impl SyntaxRule for MethodCallSuffix {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, mut p: Parser<'_>) -> bool {
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
         p.next() == Some(Token::Period)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
@@ -443,8 +443,8 @@ impl_display!(for FuncCallSuffix, "function call");
 impl SyntaxRule for FuncCallSuffix {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        List::paren_comma_sep(Expression).matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        List::paren_comma_sep(Expression).prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let func_name_expr = ast.get_node(self.0);
@@ -474,8 +474,8 @@ impl_display!(for FuncArg, "expression, optionally preceded by an identifier and
 impl SyntaxRule for FuncArg {
     type Output = (Option<Spanned<Arc<String>>>, ast::ExprId);
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        Identifier.matches_prefix(p) || Expression.matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        Identifier.prefix_matches(p) || Expression.prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let old_state = *p;
@@ -498,8 +498,8 @@ impl_display!(for IndexSuffix, "indexing expression using square brackets");
 impl SyntaxRule for IndexSuffix {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        List::bracket_comma_sep(Expression).matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        List::bracket_comma_sep(Expression).prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let obj = self.0;
@@ -519,8 +519,8 @@ impl_display!(for IdentifierExpression, "identifier, such as a variable or funct
 impl SyntaxRule for IdentifierExpression {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        Identifier.matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        Identifier.prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
@@ -536,8 +536,8 @@ impl_display!(for StringLiteralExpression, "string literal");
 impl SyntaxRule for StringLiteralExpression {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        StringLiteral.matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        StringLiteral.prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
@@ -555,8 +555,8 @@ impl_display!(for IntegerLiteralExpression, "string literal");
 impl SyntaxRule for IntegerLiteralExpression {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        IntegerLiteral.matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        IntegerLiteral.prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
@@ -575,8 +575,8 @@ impl_display!(for VectorLiteralExpression, "string literal");
 impl SyntaxRule for VectorLiteralExpression {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        VectorLiteral.matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        VectorLiteral.prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
@@ -595,8 +595,8 @@ impl_display!(for SetLiteralExpression, "set literal");
 impl SyntaxRule for SetLiteralExpression {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        SetLiteral.matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        SetLiteral.prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
@@ -612,8 +612,8 @@ impl_display!(for ParenExpression, "{}", Surround::paren(Expression));
 impl SyntaxRule for ParenExpression {
     type Output = ast::ExprId;
 
-    fn matches_prefix(&self, p: Parser<'_>) -> bool {
-        Surround::paren(Expression).matches_prefix(p)
+    fn prefix_matches(&self, p: Parser<'_>) -> bool {
+        Surround::paren(Expression).prefix_matches(p)
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {

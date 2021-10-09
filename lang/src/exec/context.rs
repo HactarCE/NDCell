@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::ast;
 use crate::data::{LangInt, RtVal, SpannedRuntimeValueExt};
-use crate::errors::{AlreadyReported, Error, Fallible, Result};
+use crate::errors::{Error, Result};
 
 /// Global initialization and compile-time execution context.
 ///
@@ -137,9 +137,11 @@ pub trait CtxTrait {
     fn ctx(&mut self) -> &mut Ctx;
 
     /// Records an initialization or compiler error.
-    fn error(&mut self, e: Error) -> AlreadyReported {
-        self.ctx().errors.push(e);
-        AlreadyReported
+    fn report_error(&mut self, e: Error) {
+        match &e {
+            Error::New(_) => self.ctx().errors.push(e),
+            Error::AlreadyReported => (),
+        }
     }
     /// Returns the list of errors that have been reported, or `Ok(())` if there
     /// are none.
@@ -153,37 +155,22 @@ pub trait CtxTrait {
 
     /// Returns the number of dimensions, or an error at `error_span` if yet
     /// initialized.
-    fn get_ndim(&mut self, error_span: Span) -> Fallible<usize> {
+    fn get_ndim(&mut self, error_span: Span) -> Result<usize> {
         self.ctx()
             .ndim
-            .ok_or_else(|| self.error(Error::not_reached_directive(error_span, "@ndim")))
+            .ok_or_else(|| Error::not_reached_directive(error_span, "@ndim"))
     }
     /// Returns the number of states, or an error at `error_span` if not yet
     /// initialized.
-    fn get_states(&mut self, error_span: Span) -> Fallible<usize> {
+    fn get_states(&mut self, error_span: Span) -> Result<usize> {
         self.ctx()
             .states
-            .ok_or_else(|| self.error(Error::not_reached_directive(error_span, "@states")))
+            .ok_or_else(|| Error::not_reached_directive(error_span, "@states"))
     }
 }
 
 impl CtxTrait for Ctx {
     fn ctx(&mut self) -> &mut Ctx {
         self
-    }
-}
-
-/// Extension trait for easy error reporting.
-pub trait ErrorReportExt {
-    type Ok;
-
-    /// Records an initialization or compiler error if there is one.
-    fn report_err(self, ctx: &mut impl CtxTrait) -> Fallible<Self::Ok>;
-}
-impl<T> ErrorReportExt for Result<T> {
-    type Ok = T;
-
-    fn report_err(self, ctx: &mut impl CtxTrait) -> Fallible<T> {
-        self.map_err(|e| ctx.error(e))
     }
 }

@@ -8,15 +8,15 @@ use super::{CallInfo, Function};
 use crate::data::{
     self, CellArray, CellSet, LangInt, RtVal, SpannedRuntimeValueExt, Type, VectorSet,
 };
-use crate::errors::{Error, Fallible, Result};
-use crate::exec::{Ctx, CtxTrait, ErrorReportExt};
+use crate::errors::{Error, Result};
+use crate::exec::{Ctx, CtxTrait};
 
 /// Built-in function that constructs an `EmptySet`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct EmptySet;
 impl Function for EmptySet {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(0, ctx)?;
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+        call.check_args_len(0)?;
         Ok(RtVal::EmptySet)
     }
 }
@@ -25,9 +25,9 @@ impl Function for EmptySet {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct EmptyIntegerSet;
 impl Function for EmptyIntegerSet {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(0, ctx)?;
-        Err(ctx.error(Error::unimplemented(call.span)))
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+        call.check_args_len(0)?;
+        Err(Error::unimplemented(call.span))
     }
 }
 
@@ -35,9 +35,9 @@ impl Function for EmptyIntegerSet {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct EmptyCellSet;
 impl Function for EmptyCellSet {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(0, ctx)?;
-        Err(ctx.error(Error::unimplemented(call.span)))
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+        call.check_args_len(0)?;
+        Err(Error::unimplemented(call.span))
     }
 }
 
@@ -49,15 +49,14 @@ impl Function for VecSetConstructor {
         &["len"]
     }
 
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         let len;
         let len_span;
         match call.kwarg("len") {
             Some(x) => {
                 len = x
                     .as_integer()
-                    .and_then(|n| data::check_vector_len(x.span, n))
-                    .report_err(ctx)?;
+                    .and_then(|n| data::check_vector_len(x.span, n))?;
                 len_span = x.span;
             }
             None => {
@@ -75,7 +74,7 @@ impl Function for VecSetConstructor {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct VecSetWithLen(pub usize);
 impl Function for VecSetWithLen {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         let span = call.span;
         eval_vec_set_construct(ctx, call, span, self.0)
     }
@@ -86,15 +85,11 @@ fn eval_vec_set_construct(
     call: CallInfo<Spanned<RtVal>>,
     len_span: Span,
     len: usize,
-) -> Fallible<RtVal> {
+) -> Result<RtVal> {
     match &call.args[..] {
-        [] => Ok(RtVal::VectorSet(Arc::new(
-            VectorSet::empty(len_span, len).report_err(ctx)?,
-        ))),
-        [arg] => Ok(RtVal::VectorSet(
-            arg.to_vector_set(len_span, len).report_err(ctx)?,
-        )),
-        _ => Err(call.invalid_args_error(ctx))?,
+        [] => Ok(RtVal::VectorSet(Arc::new(VectorSet::empty(len_span, len)?))),
+        [arg] => Ok(RtVal::VectorSet(arg.to_vector_set(len_span, len)?)),
+        _ => Err(call.invalid_args_error())?,
     }
 }
 
@@ -102,7 +97,7 @@ fn eval_vec_set_construct(
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct SetLiteral;
 impl Function for SetLiteral {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         let span = call.span;
         call.args
             .into_iter()
@@ -116,7 +111,6 @@ impl Function for SetLiteral {
                 }
                 _ => internal_error!("invalid fold type in set constructor"),
             })
-            .report_err(ctx)
     }
 }
 
@@ -167,21 +161,19 @@ impl Function for VectorSetShape {
         &["r", "d"]
     }
 
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(0, ctx)?;
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+        call.check_args_len(0)?;
 
         let (radius, radius_span) = match call.kwarg("r") {
-            Some(arg) => (arg.as_integer().report_err(ctx)?, arg.span),
+            Some(arg) => (arg.as_integer()?, arg.span),
             None => (1, call.span),
         };
 
         let ndim = match call.kwarg("d") {
-            Some(arg) => arg.as_integer().report_err(ctx)?,
+            Some(arg) => arg.as_integer()?,
             None => ctx.get_ndim(call.span)? as LangInt,
         };
 
-        Ok(VectorSet::moore(call.span, ndim, radius, radius_span)
-            .report_err(ctx)?
-            .into())
+        Ok(VectorSet::moore(call.span, ndim, radius, radius_span)?.into())
     }
 }

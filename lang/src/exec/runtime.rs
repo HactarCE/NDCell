@@ -5,8 +5,8 @@ use std::sync::Arc;
 use super::builtins::Expression;
 use crate::ast;
 use crate::data::{RtVal, SpannedRuntimeValueExt};
-use crate::errors::{AlreadyReported, Error, Fallible};
-use crate::exec::{Ctx, CtxTrait, ErrorReportExt};
+use crate::errors::{Error, Result};
+use crate::exec::{Ctx, CtxTrait};
 
 // TODO: consider making `vars` only `pub(super)` and adding `fn vars(&mut self) -> &mut HashMap<_, _>`
 
@@ -66,78 +66,61 @@ impl Runtime {
         };
 
         for directive in directives {
-            match directive.data() {
+            let result = match directive.data() {
                 ast::DirectiveData::Compile { .. } => match this.ctx.compile_directive {
                     Some(_) => {
                         // Lie to the user; tell them this directive name is
                         // invalid, because they shouldn't be using it!
-                        this.error(Error::invalid_directive_name(directive.span()));
+                        Err(Error::invalid_directive_name(directive.span()))
                     }
                     None => {
                         this.ctx.compile_directive = Some(directive.id);
+                        Ok(())
                     }
                 },
 
-                ast::DirectiveData::Init(block) => match this.exec_stmt(ast.get_node(*block)) {
-                    Ok(Flow::Proceed) => (),
+                ast::DirectiveData::Init(block) => {
+                    this.exec_stmt(ast.get_node(*block))
+                        .and_then(|flow| match flow {
+                            Flow::Proceed => Ok(()),
 
-                    Ok(Flow::Break(span)) => {
-                        this.error(Error::break_not_in_loop(span));
-                        break;
-                    }
-                    Ok(Flow::Continue(span)) => {
-                        this.error(Error::continue_not_in_loop(span));
-                        break;
-                    }
+                            Flow::Break(span) => Err(Error::break_not_in_loop(span)),
+                            Flow::Continue(span) => Err(Error::continue_not_in_loop(span)),
 
-                    Ok(Flow::Return(span, _)) => {
-                        this.error(Error::return_not_in_fn(span));
-                        break;
-                    }
-                    Ok(Flow::Remain(span)) => {
-                        this.error(Error::remain_not_in_fn(span));
-                        break;
-                    }
-                    Ok(Flow::Become(span, _)) => {
-                        this.error(Error::become_not_in_fn(span));
-                        break;
-                    }
-
-                    Err(AlreadyReported) => break,
-                },
-
-                ast::DirectiveData::Ndim(expr) => {
-                    let ndim_expr_result = match this.eval_expr(ast.get_node(*expr)) {
-                        Ok(x) => x,
-                        Err(AlreadyReported) => break,
-                    };
-                    if let Err(e) = this.ctx.set_ndim(directive.span(), &ndim_expr_result) {
-                        this.error(e);
-                        break;
-                    }
+                            Flow::Return(span, _) => Err(Error::return_not_in_fn(span)),
+                            Flow::Remain(span) => Err(Error::remain_not_in_fn(span)),
+                            Flow::Become(span, _) => Err(Error::become_not_in_fn(span)),
+                        })
                 }
 
-                ast::DirectiveData::States(expr) => {
-                    let states_expr_result = match this.eval_expr(ast.get_node(*expr)) {
-                        Ok(x) => x,
-                        Err(AlreadyReported) => break,
-                    };
-                    if let Err(e) = this.ctx.set_states(directive.span(), &states_expr_result) {
-                        this.error(e);
-                        break;
-                    }
-                }
+                ast::DirectiveData::Ndim(expr) => this
+                    .eval_expr(ast.get_node(*expr))
+                    .and_then(|ndim_value| this.ctx.set_ndim(directive.span(), &ndim_value)),
+
+                ast::DirectiveData::States(expr) => this
+                    .eval_expr(ast.get_node(*expr))
+                    .and_then(|states_value| this.ctx.set_states(directive.span(), &states_value)),
+            };
+
+            // Abort if there is an error.
+            if let Err(e) = result {
+                this.report_error(e);
+                break;
             }
         }
+
+        // Report an error for missing values only if there are no other errors
+        // already.
         if this.ctx.errors.is_empty() {
             if let Err(e) = this.ctx.error_if_missing_values() {
-                this.error(e);
+                this.report_error(e);
             }
         }
+
         this
     }
 
-    pub fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> Fallible<Flow> {
+    pub fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> Result<Flow> {
         let ast = stmt.ast;
         match stmt.data() {
             ast::StmtData::Block(stmt_ids) => {
@@ -171,7 +154,7 @@ impl Runtime {
                 if_false,
             } => {
                 let condition = ast.get_node(*condition);
-                if self.eval_expr(condition)?.to_bool().report_err(self)? {
+                if self.eval_expr(condition)?.to_bool()? {
                     if_true.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
                 } else {
                     if_false.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
@@ -180,19 +163,19 @@ impl Runtime {
 
             ast::StmtData::Assert { condition, msg } => {
                 let condition = ast.get_node(*condition);
-                if self.eval_expr(condition)?.to_bool().report_err(self)? {
-                    Err(self.error(match msg {
+                if self.eval_expr(condition)?.to_bool()? {
+                    Err(match msg {
                         Some(msg) => Error::assertion_failed_with_msg(stmt.span(), msg),
                         None => Error::assertion_failed(stmt.span()),
-                    }))
+                    })
                 } else {
                     Ok(Flow::Proceed)
                 }
             }
-            ast::StmtData::Error { msg } => Err(self.error(match msg {
+            ast::StmtData::Error { msg } => Err(match msg {
                 Some(msg) => Error::user_error_with_msg(stmt.span(), msg),
                 None => Error::user_error(stmt.span()),
-            })),
+            }),
 
             ast::StmtData::Break => Ok(Flow::Break(stmt.span())),
             ast::StmtData::Continue => Ok(Flow::Continue(stmt.span())),
@@ -202,7 +185,7 @@ impl Runtime {
                 block,
             } => {
                 let iter_expr = ast.get_node(*iter_expr_id);
-                for it in self.eval_expr(iter_expr)?.iterate().report_err(self)? {
+                for it in self.eval_expr(iter_expr)?.iterate()? {
                     self.vars.insert(Arc::clone(&iter_var), it.node);
                     match self.exec_stmt(ast.get_node(*block))? {
                         Flow::Proceed | Flow::Continue(_) => (),
@@ -226,14 +209,14 @@ impl Runtime {
         }
     }
 
-    pub fn eval_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<RtVal>> {
+    pub fn eval_expr(&mut self, expr: ast::Expr<'_>) -> Result<Spanned<RtVal>> {
         let span = expr.span();
         let expression = Box::<dyn Expression>::from(expr);
         expression
             .eval(self, span)
             .map(|v| Spanned { node: v, span })
     }
-    pub fn eval_bool_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<bool> {
-        self.eval_expr(expr)?.to_bool().report_err(self)
+    pub fn eval_bool_expr(&mut self, expr: ast::Expr<'_>) -> Result<bool> {
+        self.eval_expr(expr)?.to_bool()
     }
 }

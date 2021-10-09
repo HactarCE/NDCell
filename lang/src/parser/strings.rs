@@ -3,22 +3,21 @@
 use codemap::Span;
 
 use crate::data::LangCell;
-use crate::errors::{Error, Fallible, Result};
-use crate::exec::{CtxTrait, ErrorReportExt};
+use crate::errors::{Error, Result};
+use crate::exec::CtxTrait;
 
 /// Parses the contents of a cell array string.
 pub fn parse_cell_array_string(
     ctx: &mut impl CtxTrait,
     span: Span,
     s: &str,
-) -> Fallible<Vec<LangCell>> {
+) -> Result<Vec<LangCell>> {
     let state_count = ctx.get_states(span)?;
 
     s.chars()
         .filter(|ch| !ch.is_whitespace())
         .map(|ch| cell_from_token(span, &ch.to_string(), state_count))
         .collect::<Result<_>>()
-        .report_err(ctx)
 }
 
 fn cell_from_token(span: Span, s: &str, state_count: usize) -> Result<LangCell> {

@@ -4,7 +4,8 @@
 // required.
 
 use codemap::Span;
-use codemap_diagnostic::{Diagnostic, Level, SpanLabel, SpanStyle};
+pub use codemap_diagnostic::Diagnostic;
+use codemap_diagnostic::{Level, SpanLabel, SpanStyle};
 use itertools::Itertools;
 use std::fmt;
 
@@ -13,15 +14,6 @@ use crate::{MAX_NDIM, MAX_STATE_COUNT};
 
 /// `Result` type alias for NDCA compile-time and runtime errors.
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// `Result` type alias for NDCA compile-time and runtime errors that have
-/// already been reported (added to an errors list).
-pub type Fallible<T> = std::result::Result<T, AlreadyReported>;
-
-/// Unit struct indicating that an error has already been recorded in a list of
-/// errors and so its contents are no longer relevant.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-pub struct AlreadyReported;
 
 /// Extension trait for converting a value to an `Option<Span>`.
 pub trait SpanConvertExt {
@@ -56,7 +48,7 @@ macro_rules! error_fn {
         paste! {
             #[doc = "Returns an error with the template `" $fmt_str "`."]
             pub(crate) fn $fn_name(span: impl SpanConvertExt $(, $arg_name: $arg_type)*) -> Error {
-                Error(Diagnostic {
+                Error::New(Diagnostic {
                     level: Level::$level,
                     message: format!(
                         $fmt_str $(,
@@ -88,18 +80,74 @@ macro_rules! error_fn {
     };
 }
 
+/// Handles internal errors in the NDCA compiler. Panics in debug mode, but
+/// returns a nice error message in release mode so that the program doesn't
+/// immediately crash.
+///
+/// Prefer internal_error!(); be careful not to call this and then throw away
+/// the error it returns, because in debug mode it will still panic.
+macro_rules! internal_error_value {
+    // Automatically format arguments.
+    ( $( $args:expr ),+ $(,)? ) => {{
+        #[allow(unused)]
+        let ret: crate::errors::Error;
+
+        if cfg!(debug_assertions) {
+            // Panic in a debug build (for stack trace).
+            panic!($( $args ),+)
+
+        } else {
+            // Give a nice error message for the user in a release build.
+            let msg: String = format!($( $args ),+).into();
+            crate::errors::Error::internal(None, msg)
+        }
+    }};
+}
+
+/// Handles internal errors in the NDCA compiler. Panics in debug mode, but
+/// returns a nice error message in release mode (so that the program doesn't
+/// immediately crash on the user).
+///
+/// Note that this macro actually returns the error from the caller; it does not
+/// just provide the value.
+macro_rules! internal_error {
+    ( $( $args:expr ),+ $(,)? ) => {
+        return Err(internal_error_value!($( $args ),+))
+    };
+}
+
 /// Error or warning in user code.
 #[derive(Debug, Clone)]
-pub struct Error(pub Diagnostic);
+pub enum Error {
+    /// Error that has not yet been added to the error list.
+    New(Diagnostic),
+    /// Error that has already been added to the error list.
+    AlreadyReported,
+}
 impl Error {
     /// Adds a spanned note to the error message.
     pub fn with_note(mut self, span: Span, msg: impl fmt::Display) -> Self {
-        self.0.spans.push(SpanLabel {
-            span,
-            label: Some(msg.to_string()),
-            style: SpanStyle::Secondary,
-        });
+        if let Self::New(diag) = &mut self {
+            diag.spans.push(SpanLabel {
+                span,
+                label: Some(msg.to_string()),
+                style: SpanStyle::Secondary,
+            });
+        }
         self
+    }
+    /// Extracts the diagnostic from the error message or returns an internal
+    /// error if there isn't one.
+    pub fn unwrap_diagnostic(self) -> Diagnostic {
+        match self {
+            Error::New(e) => e,
+            Error::AlreadyReported => {
+                match internal_error_value!("expected diagnostic, but error already reported") {
+                    Error::New(e) => e,
+                    Error::AlreadyReported => unreachable!(),
+                }
+            }
+        }
     }
 
     // Syntax/parsing errors
@@ -258,40 +306,4 @@ impl Error {
     error_fn!(Error; fn assertion_failed("assertion failed"));
     error_fn!(Error; fn user_error_with_msg("{}", msg: &str));
     error_fn!(Error; fn assertion_failed_with_msg("{}", msg: &str));
-}
-
-/// Handles internal errors in the NDCA compiler. Panics in debug mode, but
-/// returns a nice error message in release mode so that the program doesn't
-/// immediately crash.
-///
-/// Prefer internal_error!(); be careful not to call this and then throw away
-/// the error it returns, because in debug mode it will still panic.
-macro_rules! internal_error_value {
-    // Automatically format arguments.
-    ( $( $args:expr ),+ $(,)? ) => {{
-        #[allow(unused)]
-        let ret: crate::errors::Error;
-
-        if cfg!(debug_assertions) {
-            // Panic in a debug build (for stack trace).
-            panic!($( $args ),+)
-
-        } else {
-            // Give a nice error message for the user in a release build.
-            let msg: String = format!($( $args ),+).into();
-            crate::errors::Error::internal(None, msg)
-        }
-    }};
-}
-
-/// Handles internal errors in the NDCA compiler. Panics in debug mode, but
-/// returns a nice error message in release mode (so that the program doesn't
-/// immediately crash on the user).
-///
-/// Note that this macro actually returns the error from the caller; it does not
-/// just provide the value.
-macro_rules! internal_error {
-    ( $( $args:expr ),+ $(,)? ) => {
-        return Err(internal_error_value!($( $args ),+))
-    };
 }

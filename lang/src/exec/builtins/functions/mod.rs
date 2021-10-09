@@ -14,8 +14,8 @@ pub(super) mod vectors;
 
 use crate::ast;
 use crate::data::{RtVal, TryGetType, Type, Val};
-use crate::errors::{AlreadyReported, Error, Fallible};
-use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt, Runtime};
+use crate::errors::{Error, Result};
+use crate::exec::{Compiler, Ctx, CtxTrait, Runtime};
 
 /// Function that can be evaluated and/or compiled, taking zero or more
 /// arguments and returning a value.
@@ -29,14 +29,14 @@ pub trait Function: fmt::Debug {
     }
 
     /// Executes the expression and returns the resulting value.
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal>;
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal>;
     /// Compiles code to evaluate the expression and returns the resulting
     /// value.
     ///
     /// The default implementation unconditionally returns an error stating that
     /// this expression cannot be compiled.
-    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
-        Err(compiler.error(Error::cannot_compile(call.span)))
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
+        Err(Error::cannot_compile(call.span))
     }
 
     /// Assigns to the expression.
@@ -49,8 +49,8 @@ pub trait Function: fmt::Debug {
         call: CallInfo<Spanned<RtVal>>,
         first_arg: ast::Expr<'_>,
         new_value: Spanned<RtVal>,
-    ) -> Fallible<()> {
-        Err(runtime.error(Error::cannot_assign_to(call.span)))
+    ) -> Result<()> {
+        Err(Error::cannot_assign_to(call.span))
     }
     /// Compiles code to assign to the expression.
     ///
@@ -62,8 +62,8 @@ pub trait Function: fmt::Debug {
         call: CallInfo<Spanned<Val>>,
         first_arg: ast::Expr<'_>,
         new_value: Spanned<Val>,
-    ) -> Fallible<()> {
-        Err(compiler.error(Error::cannot_compile_assign_to(call.span)))
+    ) -> Result<()> {
+        Err(Error::cannot_compile_assign_to(call.span))
     }
 
     /// Wrap the function in a `Box<dyn Function>`.
@@ -80,10 +80,10 @@ impl Function for Box<dyn Function> {
         (**self).kwarg_keys()
     }
 
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         (**self).eval(ctx, call)
     }
-    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         (**self).compile(compiler, call)
     }
 
@@ -93,7 +93,7 @@ impl Function for Box<dyn Function> {
         call: CallInfo<Spanned<RtVal>>,
         first_arg: ast::Expr<'_>,
         new_value: Spanned<RtVal>,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         (**self).eval_assign(runtime, call, first_arg, new_value)
     }
     fn compile_assign(
@@ -102,7 +102,7 @@ impl Function for Box<dyn Function> {
         call: CallInfo<Spanned<Val>>,
         first_arg: ast::Expr<'_>,
         new_value: Spanned<Val>,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         (**self).compile_assign(compiler, call, first_arg, new_value)
     }
 
@@ -152,49 +152,46 @@ impl<V> CallInfo<Spanned<V>>
 where
     Spanned<V>: TryGetType,
 {
-    fn arg_types(&self, ctx: &mut impl CtxTrait) -> Fallible<Vec<Type>> {
-        self.args
-            .iter()
-            .map(|arg| arg.try_get_type().and_then(|ty| ty.report_err(ctx)))
-            .collect()
+    fn arg_types(&self) -> Result<Vec<Type>> {
+        self.args.iter().map(|arg| arg.try_get_type()).collect()
     }
 
-    fn invalid_args_error(&self, ctx: &mut impl CtxTrait) -> AlreadyReported {
-        match self.arg_types(ctx) {
-            Err(AlreadyReported) => AlreadyReported,
-            Ok(arg_types) => ctx.error(Error::invalid_arguments(self.span, &self.name, &arg_types)),
+    fn invalid_args_error(&self) -> Error {
+        match self.arg_types() {
+            Ok(arg_types) => Error::invalid_arguments(self.span, &self.name, &arg_types),
+            Err(e) => e,
         }
     }
 
-    pub fn check_args_len(&self, n: usize, ctx: &mut impl CtxTrait) -> Fallible<()> {
+    pub fn check_args_len(&self, n: usize) -> Result<()> {
         // TODO: replace calls to this function with more specific ones for
         // better error messages (e.g. "<function name> expects 2 arguments")
         if self.args.len() == n {
             Ok(())
         } else {
-            Err(self.invalid_args_error(ctx))
+            Err(self.invalid_args_error())
         }
     }
-    pub fn check_kwargs(&self, func: &impl Function, ctx: &mut impl CtxTrait) -> Fallible<()> {
+    pub fn check_kwargs(&self, func: &impl Function) -> Result<()> {
         let allowed_kwarg_keys = func.kwarg_keys();
         let mut kwargs_present = vec![false; allowed_kwarg_keys.len()];
         for (key, expr) in &self.kwargs {
             if let Some(i) = allowed_kwarg_keys.iter().position(|&k| k == &***key) {
                 if kwargs_present[i] {
-                    return Err(ctx.error(Error::duplicate_keyword_argument(expr.span)));
+                    return Err(Error::duplicate_keyword_argument(expr.span));
                 }
                 kwargs_present[i] = true;
             } else {
-                return Err(ctx.error(Error::invalid_keyword_argument(expr.span, &self.name)));
+                return Err(Error::invalid_keyword_argument(expr.span, &self.name));
             }
         }
         Ok(())
     }
 
-    pub fn arg(&self, i: usize, ctx: &mut impl CtxTrait) -> Fallible<&Spanned<V>> {
+    pub fn arg(&self, i: usize) -> Result<&Spanned<V>> {
         self.args
             .get(i)
-            .ok_or_else(|| ctx.error(internal_error_value!("arg out of range")))
+            .ok_or_else(|| internal_error_value!("arg out of range"))
     }
     pub fn kwarg(&self, key: &str) -> Option<&Spanned<V>> {
         self.kwargs

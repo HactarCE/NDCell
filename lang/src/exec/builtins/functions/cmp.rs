@@ -4,7 +4,7 @@ use codemap::Spanned;
 
 use crate::ast;
 use crate::data::{self, CpVal, LangInt, RtVal};
-use crate::errors::{Error, Fallible};
+use crate::errors::{Error, Result};
 use crate::exec::{Compiler, Ctx, CtxTrait};
 use crate::llvm;
 
@@ -13,7 +13,7 @@ pub fn eval(
     op: ast::CompareOp,
     lhs: &Spanned<RtVal>,
     rhs: &Spanned<RtVal>,
-) -> Fallible<bool> {
+) -> Result<bool> {
     let span = lhs.span.merge(rhs.span);
 
     let lhs_ty = lhs.ty();
@@ -34,7 +34,7 @@ pub fn eval(
         (RtVal::Cell(l), RtVal::Cell(r)) if eql_or_neq => Ok(op.eval(l, r)),
 
         // TODO: compare more types
-        _ => return Err(ctx.error(Error::cmp_type_error(span, op, &lhs_ty, &rhs_ty))),
+        _ => return Err(Error::cmp_type_error(span, op, &lhs_ty, &rhs_ty)),
     }
 }
 
@@ -43,7 +43,7 @@ pub fn compile(
     op: ast::CompareOp,
     lhs: &Spanned<CpVal>,
     rhs: &Spanned<CpVal>,
-) -> Fallible<llvm::IntValue> {
+) -> Result<llvm::IntValue> {
     let span = lhs.span.merge(rhs.span);
 
     let lhs_ty = lhs.ty();
@@ -66,7 +66,7 @@ pub fn compile(
         }
 
         // TODO: compare more types
-        _ => Err(compiler.error(Error::cmp_type_error(span, op, &lhs_ty, &rhs_ty))),
+        _ => Err(Error::cmp_type_error(span, op, &lhs_ty, &rhs_ty)),
     }
 }
 
@@ -87,7 +87,7 @@ fn compile_for_int_math_values<M: llvm::IntMathValue>(
     op: ast::CompareOp,
     lhs: M,
     rhs: M,
-) -> Fallible<llvm::IntValue> {
+) -> Result<llvm::IntValue> {
     // Assume `lhs` and `rhs` have the same length.
 
     let predicate = llvm_predicate(op);

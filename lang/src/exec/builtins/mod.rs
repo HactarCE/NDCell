@@ -10,7 +10,7 @@ pub mod functions;
 
 use super::{Ctx, CtxTrait};
 use crate::data::{self, LangInt, RtVal, Type};
-use crate::errors::{Error, Fallible, Result};
+use crate::errors::{Error, Result};
 pub use expressions::Expression;
 pub use functions::Function;
 
@@ -63,7 +63,7 @@ pub fn resolve_function(name: &str) -> Option<Box<dyn Function>> {
 }
 
 /// Returns a built-in constant.
-pub fn resolve_constant(name: &str, span: Span, ctx: &mut Ctx) -> Option<Fallible<RtVal>> {
+pub fn resolve_constant(name: &str, span: Span, ctx: &mut Ctx) -> Option<Result<RtVal>> {
     if let Some(ty) = resolve_type_keyword(name) {
         Some(Ok(RtVal::Type(ty)))
     } else {

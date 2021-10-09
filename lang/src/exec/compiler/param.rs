@@ -12,7 +12,7 @@ use ndcell_core::num::Integer;
 use crate::data::{
     CellSet, LangCell, LangInt, LangUint, RtVal, Type, VectorSet, CELL_STATE_BYTES, INT_BYTES,
 };
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::llvm;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,11 +95,11 @@ impl Param {
             }
 
             (expected, got) => {
-                internal_error!(
+                return Err(internal_error_value!(
                     "wrong parameter type; expected {:?} but got {:?}",
                     expected,
                     got,
-                );
+                ));
             }
         }
 

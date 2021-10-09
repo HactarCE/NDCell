@@ -404,7 +404,12 @@ fn format_actual_errors(ast: &ast::Program, errors: &[Error]) -> String {
     let mut v = vec![];
     {
         let mut emitter = codemap_diagnostic::Emitter::vec(&mut v, Some(ast.codemap()));
-        emitter.emit(&errors.iter().map(|e| e.0.clone()).collect_vec());
+        emitter.emit(
+            &errors
+                .iter()
+                .map(|e| e.clone().unwrap_diagnostic())
+                .collect_vec(),
+        );
     }
     String::from_utf8(v)
         .unwrap_or_else(|e| format!("diagnostic message contains invalid UTF-8: {}", e))
@@ -448,10 +453,10 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
 
         (Err(actual_errors), Err(expected_errors)) => {
             for (actual_error, expected) in actual_errors.iter().zip(expected_errors.iter()) {
-                let span = actual_error.0.spans[0].span;
+                let diagnostic = actual_error.clone().unwrap_diagnostic();
+                let span = diagnostic.spans[0].span;
                 let file = ast.codemap().look_up_span(span).file;
-                if expected.loc != file.source_slice(span) || expected.msg != actual_error.0.message
-                {
+                if expected.loc != file.source_slice(span) || expected.msg != diagnostic.message {
                     let formatted_actual_errors = format_actual_errors(&ast, actual_errors);
                     panic!(
                         "Expected error at {:?} with message {:?} but got a different error when {}:\n{}",

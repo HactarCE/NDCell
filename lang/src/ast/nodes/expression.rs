@@ -36,19 +36,20 @@ pub enum ExprData {
     MethodCall {
         /// Name of attribute or method.
         attr: Spanned<Arc<String>>,
-        /// Arguments to the method call, each with an optional keyword (first
-        /// must be method receiver).
+        /// Method receiver.
+        obj: ExprId,
+        /// Arguments to the method call, each with an optional keyword.
         ///
-        /// The span covers the pair of parentheses containing all but the first
-        /// argument.
+        /// The span covers the pair of parentheses containing all arguments.
         args: Spanned<Vec<FuncArg<ExprId>>>,
     },
     /// Index operation.
     IndexOp {
-        /// Index arguments (first must be object being indexed).
+        /// Object being indexed.
+        obj: ExprId,
+        /// Index arguments.
         ///
-        /// The span covers the pair of brackets containing all but the first
-        /// argument.
+        /// The span covers the pair of brackets containing the arguments.
         args: Spanned<Vec<ExprId>>,
     },
 

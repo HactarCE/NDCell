@@ -5,7 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::functions::{self, CallInfo, Function};
-use crate::data::{CpVal, LangInt, RtVal, SpannedRuntimeValueExt, Val};
+use crate::data::{CpVal, FallibleTypeOf, LangInt, RtVal, SpannedRuntimeValueExt, Val};
 use crate::errors::{AlreadyReported, Error, Fallible};
 use crate::exec::{Compiler, CtxTrait, ErrorReportExt, Runtime};
 use crate::{ast, llvm};
@@ -112,28 +112,26 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 f_span: func.span,
                 args: get_arg_nodes(ast, args),
             }),
-            ast::ExprData::MethodCall { attr, args } => Box::new(MethodCall {
-                attr: Spanned {
-                    // `.map_node()` doesn't work here; I tried.
-                    node: &attr.node,
-                    span: attr.span,
-                },
+            ast::ExprData::MethodCall { attr, obj, args } => Box::new(MethodCall {
+                attr: attr.clone(),
+                obj: ast.get_node(*obj),
                 args: get_arg_nodes(ast, &args.node),
             }),
-            ast::ExprData::IndexOp { args } => match ast.get_node(args[0]).data() {
-                ast::ExprData::Identifier(s) if s.as_str() == "__compiled_arg__" => {
-                    // `[1..]` omits the `__compiled_arg__` expression.
-                    Box::new(CompiledArg(ast.get_node_list(&args[1..])))
+            ast::ExprData::IndexOp { obj, args } => {
+                let bracket_span = args.span;
+                let obj = ast.get_node(*obj);
+                let args = ast.get_node_list(args);
+                match obj.data() {
+                    ast::ExprData::Identifier(s) if s.as_str() == "__compiled_arg__" => {
+                        Box::new(CompiledArg(args))
+                    }
+                    _ => Box::new(Index {
+                        bracket_span,
+                        obj,
+                        args,
+                    }),
                 }
-                _ => Box::new(Index {
-                    bracket_span: ast.get_node(args[0]).span(),
-                    args: ast
-                        .get_node_list(args)
-                        .into_iter()
-                        .map(|expr| (None, expr))
-                        .collect(),
-                }),
-            },
+            }
 
             ast::ExprData::VectorConstruct(components) => Box::new(FuncCall {
                 f: Some(functions::vectors::VectorConstruct.boxed()),
@@ -442,71 +440,45 @@ impl Expression for CmpChain<'_> {
 #[derive(Debug, Clone)]
 struct MethodCall<'ast> {
     /// Name of method to call.
-    attr: Spanned<&'ast str>,
-    /// Arguments to the method, including the receiver, each with an optional
-    /// keyword. **Calling `eval()` or `compile()` panics if this list is
-    /// empty.**
+    attr: Spanned<Arc<String>>,
+    /// Method receiver.
+    obj: ast::Expr<'ast>,
+    /// Arguments to the method, each with an optional keyword.
     args: Vec<ast::FuncArg<ast::Expr<'ast>>>,
 }
 impl Expression for MethodCall<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let attr = self.attr.node;
-        let span = self.attr.span;
+        let obj = runtime.eval_expr(self.obj)?;
         let mut args = eval_args_list(runtime, &self.args)?;
 
-        // Resolve the method based on the type of the method receiver, which is
-        // the first argument.
-        let receiver = args
-            .first()
-            .ok_or_else(|| runtime.error(internal_error_value!("method call has no receiver")))?
-            .1
-            .clone();
+        // Resolve the method based on the type of the method receiver.
+        let f = super::resolve_method(&obj.ty(), &self.attr, self.attr.span).report_err(runtime)?;
 
-        let f = if let RtVal::Type(receiving_type) = &receiver.node {
-            // The method receiver is just the type; remove it from the
-            // arguments list.
-            args.remove(0);
-            super::resolve_method(receiving_type, attr, span)
-        } else {
-            super::resolve_method(&receiver.ty(), attr, span)
-        }
-        .report_err(runtime)?;
+        // Add the method receiver as the first argument.
+        args.insert(0, (None, obj));
 
         check_kwargs(runtime, &f, &args)?;
-        f.eval(runtime.ctx(), CallInfo::new(span, args))
+        f.eval(runtime.ctx(), CallInfo::new(self.attr.span, args))
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let attr = self.attr.node;
-        let span = self.attr.span;
+        let obj = compiler.build_expr(self.obj)?;
         let mut args = compile_args_list(compiler, &self.args)?;
 
-        // Resolve the method based on the type of the method receiver, which is
-        // the first argument.
-        let receiver = args
-            .first()
-            .ok_or_else(|| compiler.error(internal_error_value!("method call has no receiver")))?
-            .1
-            .clone();
+        // Resolve the method based on the type of the method receiver.
+        let obj_ty = compiler.get_val_type(&obj)?;
+        let f = super::resolve_method(&obj_ty, &self.attr, self.attr.span).report_err(compiler)?;
 
-        let f = if let Val::Rt(RtVal::Type(receiving_type)) = &receiver.node {
-            // The method receiver is just the type; remove it from the
-            // arguments list.
-            args.remove(0);
-            super::resolve_method(receiving_type, attr, span)
-        } else {
-            let receiving_type = compiler.get_val_type(&receiver)?;
-            super::resolve_method(&receiving_type, attr, span)
-        }
-        .report_err(compiler)?;
+        // Add the method receiver as the first argument.
+        args.insert(0, (None, obj));
 
         check_kwargs(compiler, &f, &args)?;
         if let Some(args) = all_rt_vals(&args) {
             // All arguments are compile-time constants, so compile-time
             // evaluate the method call.
-            f.eval(compiler.ctx(), CallInfo::new(span, args))
+            f.eval(compiler.ctx(), CallInfo::new(self.attr.span, args))
                 .map(Val::Rt)
         } else {
-            f.compile(compiler, CallInfo::new(span, args))
+            f.compile(compiler, CallInfo::new(self.attr.span, args))
         }
     }
 }
@@ -515,47 +487,83 @@ impl Expression for MethodCall<'_> {
 struct Index<'ast> {
     /// Span of the brackets containing the index arguments.
     bracket_span: Span,
-    /// Indexing arguments, including the object being indexed. **Calling
-    /// `eval()` or `compile()` panics if this list is empty.**
-    args: Vec<ast::FuncArg<ast::Expr<'ast>>>,
+    /// Object being indexed.
+    obj: ast::Expr<'ast>,
+    /// Indexing arguments.
+    args: Vec<ast::Expr<'ast>>,
+}
+impl Index<'_> {
+    fn get_eval_func(
+        &self,
+        runtime: &mut Runtime,
+    ) -> Fallible<(Box<dyn Function>, Vec<ast::FuncArg<Spanned<RtVal>>>)> {
+        let obj = runtime.eval_expr(self.obj)?;
+        let obj_ty = obj.node.ty();
+        let f = super::resolve_index_method(&obj_ty)
+            .ok_or_else(|| runtime.error(Error::cannot_index_type(obj.span, obj_ty)))?;
+
+        let mut args = self
+            .args
+            .iter()
+            .map(|&arg| Ok((None, runtime.eval_expr(arg)?)))
+            .collect::<Fallible<Vec<_>>>()?;
+        args.insert(0, (None, obj));
+
+        Ok((f, args))
+    }
+    fn get_compile_func(
+        &self,
+        compiler: &mut Compiler,
+    ) -> Fallible<(Box<dyn Function>, Vec<ast::FuncArg<Spanned<Val>>>)> {
+        let obj = compiler.build_expr(self.obj)?;
+        let obj_ty = compiler.get_val_type(&obj)?.node;
+        let f = super::resolve_index_method(&obj_ty)
+            .ok_or_else(|| compiler.error(Error::cannot_index_type(obj.span, obj_ty)))?;
+
+        let mut args = self
+            .args
+            .iter()
+            .map(|&arg| Ok((None, compiler.build_expr(arg)?)))
+            .collect::<Fallible<Vec<_>>>()?;
+        args.insert(0, (None, obj));
+
+        Ok((f, args))
+    }
 }
 impl Expression for Index<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let span = self.bracket_span;
-        let args = eval_args_list(runtime, &self.args)?;
-
-        let obj = &args
-            .first()
-            .ok_or_else(|| runtime.error(internal_error_value!("index expr has no receiver")))?
-            .1;
-        let obj_ty = obj.node.ty();
-        let f = super::resolve_index_method(&obj_ty)
-            .ok_or_else(|| runtime.error(Error::cannot_index_type(span, obj_ty)))?;
-
-        check_kwargs(runtime, &f, &args)?;
-        f.eval(runtime.ctx(), CallInfo::new(span, args))
+        let (f, args) = self.get_eval_func(runtime)?;
+        f.eval(runtime.ctx(), CallInfo::new(self.bracket_span, args))
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let span = self.bracket_span;
-        let args = compile_args_list(compiler, &self.args)?;
-
-        let obj = &args
-            .first()
-            .ok_or_else(|| compiler.error(internal_error_value!("index expr has no receiver")))?
-            .1;
-        let obj_ty = compiler.get_val_type(obj)?.node;
-        let f = super::resolve_index_method(&obj_ty)
-            .ok_or_else(|| compiler.error(Error::cannot_index_type(span, obj_ty)))?;
-
-        check_kwargs(compiler, &f, &args)?;
+        let (f, args) = self.get_compile_func(compiler)?;
         if let Some(args) = all_rt_vals(&args) {
             // All arguments are compile-time constants, so compile-time
             // evaluate the index operation.
-            f.eval(compiler.ctx(), CallInfo::new(span, args))
+            f.eval(compiler.ctx(), CallInfo::new(self.bracket_span, args))
                 .map(Val::Rt)
         } else {
-            f.compile(compiler, CallInfo::new(span, args))
+            f.compile(compiler, CallInfo::new(self.bracket_span, args))
         }
+    }
+
+    fn eval_assign(
+        &self,
+        runtime: &mut Runtime,
+        span: Span,
+        op: Spanned<ast::AssignOp>,
+        new_value: Spanned<RtVal>,
+    ) -> Fallible<()> {
+        todo!("eval assign index expr")
+    }
+    fn compile_assign(
+        &self,
+        compiler: &mut Compiler,
+        span: Span,
+        _op: Spanned<ast::AssignOp>,
+        _new_value: Spanned<Val>,
+    ) -> Fallible<()> {
+        todo!("compile assign index expr")
     }
 }
 

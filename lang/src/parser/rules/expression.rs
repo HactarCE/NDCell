@@ -421,17 +421,16 @@ impl SyntaxRule for MethodCallSuffix {
         let attr = p.parse(ast, Identifier)?;
 
         let obj = self.0;
-        let mut args = p
+        let args = p
             .try_parse(ast, List::paren_comma_sep(FuncArg))
             .unwrap_or(Ok(Spanned {
                 span: attr.span,
                 node: vec![],
             }))?;
-        args.node.insert(0, (None, obj)); // Add method reciever as first argument.
 
         let obj_expr_span = ast.get_node(obj).span();
         let total_span = obj_expr_span.merge(args.span);
-        let expr_data = ast::ExprData::MethodCall { attr, args };
+        let expr_data = ast::ExprData::MethodCall { attr, obj, args };
         Ok(ast.add_node(total_span, expr_data))
     }
 }
@@ -504,12 +503,11 @@ impl SyntaxRule for IndexSuffix {
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let obj = self.0;
-        let mut args = p.parse(ast, List::bracket_comma_sep(Expression))?;
-        args.node.insert(0, obj); // Add object being indexed as first argument.
+        let args = p.parse(ast, List::bracket_comma_sep(Expression))?;
 
         let obj_expr_span = ast.get_node(obj).span();
         let total_span = obj_expr_span.merge(args.span);
-        let expr_data = ast::ExprData::IndexOp { args };
+        let expr_data = ast::ExprData::IndexOp { obj, args };
         Ok(ast.add_node(total_span, expr_data))
     }
 }

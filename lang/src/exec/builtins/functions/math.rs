@@ -50,22 +50,21 @@ impl fmt::Display for BinaryMathOp {
         }
     }
 }
-impl From<ast::AssignOp> for Option<BinaryMathOp> {
+impl From<ast::AssignOp> for BinaryMathOp {
     fn from(op: ast::AssignOp) -> Self {
         match op {
-            ast::AssignOp::NoOp => None,
-            ast::AssignOp::Add => Some(BinaryMathOp::Add),
-            ast::AssignOp::Sub => Some(BinaryMathOp::Sub),
-            ast::AssignOp::Mul => Some(BinaryMathOp::Mul),
-            ast::AssignOp::Div => Some(BinaryMathOp::Div),
-            ast::AssignOp::Mod => Some(BinaryMathOp::Mod),
-            ast::AssignOp::Pow => Some(BinaryMathOp::Pow),
-            ast::AssignOp::Shl => Some(BinaryMathOp::Shl),
-            ast::AssignOp::ShrSigned => Some(BinaryMathOp::ShrSigned),
-            ast::AssignOp::ShrUnsigned => Some(BinaryMathOp::ShrUnsigned),
-            ast::AssignOp::And => Some(BinaryMathOp::And),
-            ast::AssignOp::Or => Some(BinaryMathOp::Or),
-            ast::AssignOp::Xor => Some(BinaryMathOp::Xor),
+            ast::AssignOp::Add => BinaryMathOp::Add,
+            ast::AssignOp::Sub => BinaryMathOp::Sub,
+            ast::AssignOp::Mul => BinaryMathOp::Mul,
+            ast::AssignOp::Div => BinaryMathOp::Div,
+            ast::AssignOp::Mod => BinaryMathOp::Mod,
+            ast::AssignOp::Pow => BinaryMathOp::Pow,
+            ast::AssignOp::Shl => BinaryMathOp::Shl,
+            ast::AssignOp::ShrSigned => BinaryMathOp::ShrSigned,
+            ast::AssignOp::ShrUnsigned => BinaryMathOp::ShrUnsigned,
+            ast::AssignOp::And => BinaryMathOp::And,
+            ast::AssignOp::Or => BinaryMathOp::Or,
+            ast::AssignOp::Xor => BinaryMathOp::Xor,
         }
     }
 }

@@ -34,7 +34,7 @@ mod function;
 mod loops;
 mod param;
 
-use super::builtins::{self, Expression};
+use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
     CellSet, CpVal, FallibleTypeOf, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, Type,
@@ -1437,8 +1437,12 @@ impl Compiler {
                 let rhs = ast.get_node(*rhs);
                 let new_value = self.build_expr(rhs)?;
 
-                let lhs_expression = Box::<dyn builtins::Expression>::from(lhs);
-                lhs_expression.compile_assign(self, lhs.span(), *op, new_value)?;
+                // Convert `Spanned<Option<AssignOp>>` to `Option<Spanned<AssignOp>>`.
+                let span = op.span;
+                let op = op.node.map(|node| Spanned { node, span });
+
+                let lhs_expression = Box::<dyn Expression>::from(lhs);
+                lhs_expression.compile_assign(self, lhs.span(), op, new_value)?;
             }
 
             ast::StmtData::IfElse {

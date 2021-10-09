@@ -11,7 +11,7 @@ pub enum StmtData {
     // Assignment
     Assign {
         lhs: ExprId, // TODO: only certain exprs are allowed. NO PARENS OR BRACKETS AT TOP LEVEL
-        op: Spanned<AssignOp>,
+        op: Spanned<Option<AssignOp>>,
         rhs: ExprId,
     },
 

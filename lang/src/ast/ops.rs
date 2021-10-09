@@ -5,8 +5,6 @@ use crate::lexer::{Keyword, Token};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AssignOp {
-    NoOp,
-
     Add,
     Sub,
     Mul,
@@ -22,25 +20,25 @@ pub enum AssignOp {
     Or,
     Xor,
 }
-impl TryFrom<Token> for AssignOp {
+impl TryFrom<Token> for Option<AssignOp> {
     type Error = ();
 
     fn try_from(token: Token) -> std::result::Result<Self, Self::Error> {
         match token {
-            Token::Assign => Ok(Self::NoOp),
+            Token::Assign => Ok(None),
 
-            Token::AssignPlus => Ok(Self::Add),
-            Token::AssignMinus => Ok(Self::Sub),
-            Token::AssignAsterisk => Ok(Self::Mul),
-            Token::AssignSlash => Ok(Self::Div),
-            Token::AssignPercent => Ok(Self::Mod),
-            Token::AssignDoubleAsterisk => Ok(Self::Pow),
-            Token::AssignDoubleLessThan => Ok(Self::Shl),
-            Token::AssignDoubleGreaterThan => Ok(Self::ShrSigned),
-            Token::AssignTripleGreaterThan => Ok(Self::ShrUnsigned),
-            Token::AssignAmpersand => Ok(Self::And),
-            Token::AssignPipe => Ok(Self::Or),
-            Token::AssignCaret => Ok(Self::Xor),
+            Token::AssignPlus => Ok(Some(AssignOp::Add)),
+            Token::AssignMinus => Ok(Some(AssignOp::Sub)),
+            Token::AssignAsterisk => Ok(Some(AssignOp::Mul)),
+            Token::AssignSlash => Ok(Some(AssignOp::Div)),
+            Token::AssignPercent => Ok(Some(AssignOp::Mod)),
+            Token::AssignDoubleAsterisk => Ok(Some(AssignOp::Pow)),
+            Token::AssignDoubleLessThan => Ok(Some(AssignOp::Shl)),
+            Token::AssignDoubleGreaterThan => Ok(Some(AssignOp::ShrSigned)),
+            Token::AssignTripleGreaterThan => Ok(Some(AssignOp::ShrUnsigned)),
+            Token::AssignAmpersand => Ok(Some(AssignOp::And)),
+            Token::AssignPipe => Ok(Some(AssignOp::Or)),
+            Token::AssignCaret => Ok(Some(AssignOp::Xor)),
 
             _ => Err(()),
         }
@@ -72,25 +70,23 @@ pub enum BinaryOp {
 
     Is,
 }
-impl From<AssignOp> for Option<BinaryOp> {
+impl From<AssignOp> for BinaryOp {
     fn from(op: AssignOp) -> Self {
         match op {
-            AssignOp::NoOp => None,
+            AssignOp::Add => BinaryOp::Add,
+            AssignOp::Sub => BinaryOp::Sub,
+            AssignOp::Mul => BinaryOp::Mul,
+            AssignOp::Div => BinaryOp::Div,
+            AssignOp::Mod => BinaryOp::Mod,
+            AssignOp::Pow => BinaryOp::Pow,
 
-            AssignOp::Add => Some(BinaryOp::Add),
-            AssignOp::Sub => Some(BinaryOp::Sub),
-            AssignOp::Mul => Some(BinaryOp::Mul),
-            AssignOp::Div => Some(BinaryOp::Div),
-            AssignOp::Mod => Some(BinaryOp::Mod),
-            AssignOp::Pow => Some(BinaryOp::Pow),
+            AssignOp::Shl => BinaryOp::Shl,
+            AssignOp::ShrSigned => BinaryOp::ShrSigned,
+            AssignOp::ShrUnsigned => BinaryOp::ShrUnsigned,
 
-            AssignOp::Shl => Some(BinaryOp::Shl),
-            AssignOp::ShrSigned => Some(BinaryOp::ShrSigned),
-            AssignOp::ShrUnsigned => Some(BinaryOp::ShrUnsigned),
-
-            AssignOp::And => Some(BinaryOp::And),
-            AssignOp::Or => Some(BinaryOp::Or),
-            AssignOp::Xor => Some(BinaryOp::Xor),
+            AssignOp::And => BinaryOp::And,
+            AssignOp::Or => BinaryOp::Or,
+            AssignOp::Xor => BinaryOp::Xor,
         }
     }
 }

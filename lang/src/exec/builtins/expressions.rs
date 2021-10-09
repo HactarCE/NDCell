@@ -31,7 +31,7 @@ pub trait Expression: fmt::Debug {
         &self,
         runtime: &mut Runtime,
         span: Span,
-        _op: Spanned<ast::AssignOp>,
+        _op: Option<Spanned<ast::AssignOp>>,
         _new_value: Spanned<RtVal>,
     ) -> Fallible<()> {
         Err(runtime.error(Error::cannot_assign_to(span)))
@@ -43,7 +43,7 @@ pub trait Expression: fmt::Debug {
         &self,
         compiler: &mut Compiler,
         span: Span,
-        _op: Spanned<ast::AssignOp>,
+        _op: Option<Spanned<ast::AssignOp>>,
         _new_value: Spanned<Val>,
     ) -> Fallible<()> {
         Err(compiler.error(Error::cannot_assign_to(span)))
@@ -551,7 +551,7 @@ impl Expression for Index<'_> {
         &self,
         runtime: &mut Runtime,
         span: Span,
-        op: Spanned<ast::AssignOp>,
+        op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<RtVal>,
     ) -> Fallible<()> {
         todo!("eval assign index expr")
@@ -560,8 +560,8 @@ impl Expression for Index<'_> {
         &self,
         compiler: &mut Compiler,
         span: Span,
-        _op: Spanned<ast::AssignOp>,
-        _new_value: Spanned<Val>,
+        op: Option<Spanned<ast::AssignOp>>,
+        new_value: Spanned<Val>,
     ) -> Fallible<()> {
         todo!("compile assign index expr")
     }
@@ -614,7 +614,7 @@ impl Expression for CompiledArg<'_> {
         &self,
         runtime: &mut Runtime,
         span: Span,
-        _op: Spanned<ast::AssignOp>,
+        _op: Option<Spanned<ast::AssignOp>>,
         _new_value: Spanned<RtVal>,
     ) -> Fallible<()> {
         Err(runtime.error(Error::cannot_const_eval(span)))
@@ -623,7 +623,7 @@ impl Expression for CompiledArg<'_> {
         &self,
         compiler: &mut Compiler,
         span: Span,
-        op: Spanned<ast::AssignOp>,
+        op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<Val>,
     ) -> Fallible<()> {
         let index = self.arg_index(compiler, span)?;
@@ -659,7 +659,7 @@ impl Expression for Identifier<'_> {
         &self,
         runtime: &mut Runtime,
         span: Span,
-        op: Spanned<ast::AssignOp>,
+        op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<RtVal>,
     ) -> Fallible<()> {
         let new_value =
@@ -671,11 +671,12 @@ impl Expression for Identifier<'_> {
         &self,
         compiler: &mut Compiler,
         span: Span,
-        op: Spanned<ast::AssignOp>,
+        op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<Val>,
     ) -> Fallible<()> {
-        let new_value =
-            compile_assign_op(compiler, |c| self.compile(c, span), span, op, new_value)?.node;
+        let new_value = compile_assign_op(compiler, |c| self.compile(c, span), span, op, new_value)
+            .map(|v| v.node)
+            .unwrap_or_else(Val::Err);
         compiler.vars.insert(Arc::clone(self.0), new_value);
         Ok(())
     }
@@ -696,41 +697,43 @@ fn eval_assign_op(
     runtime: &mut Runtime,
     old_value_fn: impl FnOnce(&mut Runtime) -> Fallible<RtVal>,
     old_value_span: Span,
-    op: Spanned<ast::AssignOp>,
-    mut new_value: Spanned<RtVal>,
+    op: Option<Spanned<ast::AssignOp>>,
+    new_value: Spanned<RtVal>,
 ) -> Fallible<Spanned<RtVal>> {
-    if let Some(op_func) = Option::<functions::math::BinaryMathOp>::from(op.node) {
-        let old_value = Spanned {
-            node: old_value_fn(runtime)?,
-            span: old_value_span,
-        };
-        let span = old_value.span.merge(new_value.span);
-        new_value = Spanned {
-            node: op_func.eval_on_values(runtime.ctx(), op.span, &old_value, &new_value)?,
-            span,
-        };
+    match op {
+        None => Ok(new_value),
+        Some(op) => {
+            let old_value = Spanned {
+                node: old_value_fn(runtime)?,
+                span: old_value_span,
+            };
+            let op_func = functions::math::BinaryMathOp::from(op.node);
+            let node = op_func.eval_on_values(runtime.ctx(), op.span, &old_value, &new_value)?;
+            let span = old_value.span.merge(new_value.span);
+            Ok(Spanned { node, span })
+        }
     }
-    Ok(new_value)
 }
 fn compile_assign_op(
     compiler: &mut Compiler,
     old_value_fn: impl FnOnce(&mut Compiler) -> Fallible<Val>,
     old_value_span: Span,
-    op: Spanned<ast::AssignOp>,
-    mut new_value: Spanned<Val>,
+    op: Option<Spanned<ast::AssignOp>>,
+    new_value: Spanned<Val>,
 ) -> Fallible<Spanned<Val>> {
-    if let Some(op_func) = Option::<functions::math::BinaryMathOp>::from(op.node) {
-        let old_value = Spanned {
-            node: old_value_fn(compiler)?,
-            span: old_value_span,
-        };
-        let span = old_value.span.merge(new_value.span);
-        new_value = Spanned {
-            node: op_func.compile_for_values(compiler, op.span, &old_value, &new_value)?,
-            span,
-        };
+    match op {
+        None => Ok(new_value),
+        Some(op) => {
+            let old_value = Spanned {
+                node: old_value_fn(compiler)?,
+                span: old_value_span,
+            };
+            let op_func = functions::math::BinaryMathOp::from(op.node);
+            let node = op_func.compile_for_values(compiler, op.span, &old_value, &new_value)?;
+            let span = old_value.span.merge(new_value.span);
+            Ok(Spanned { node, span })
+        }
     }
-    Ok(new_value)
 }
 
 /// Returns a list of `RtVal`s if all the values are compile-time constants, or

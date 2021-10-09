@@ -204,7 +204,7 @@ impl SyntaxRule for AssignStatement {
                 op: p
                     .try_parse(
                         ast,
-                        TryFromToken::<ast::AssignOp>::with_display(
+                        TryFromToken::<Option<ast::AssignOp>>::with_display(
                             "assignment symbol, such as '=' or '+='",
                         ),
                     )

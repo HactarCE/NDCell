@@ -2,7 +2,7 @@ use codemap::{Span, Spanned};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::builtins::{self, Expression};
+use super::builtins::Expression;
 use crate::ast;
 use crate::data::{RtVal, SpannedRuntimeValueExt};
 use crate::errors::{AlreadyReported, Error, Fallible};
@@ -155,8 +155,12 @@ impl Runtime {
                 let rhs = ast.get_node(*rhs);
                 let new_value = self.eval_expr(rhs)?;
 
-                let lhs_expression = Box::<dyn builtins::Expression>::from(lhs);
-                lhs_expression.eval_assign(self, lhs.span(), *op, new_value)?;
+                // Convert `Spanned<Option<AssignOp>>` to `Option<Spanned<AssignOp>>`.
+                let span = op.span;
+                let op = op.node.map(|node| Spanned { node, span });
+
+                let lhs_expression = Box::<dyn Expression>::from(lhs);
+                lhs_expression.eval_assign(self, lhs.span(), op, new_value)?;
 
                 Ok(Flow::Proceed)
             }

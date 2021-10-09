@@ -5,6 +5,8 @@ use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
 
+use ndcell_core::prelude::*;
+
 /// Constructs a `TestError`.
 macro_rules! test_error {
     ($msg:tt @ $loc:expr) => {
@@ -78,7 +80,7 @@ mod vector_sets;
 mod vectors;
 
 use crate::ast;
-use crate::data::{LangCell, LangInt, LangUint, RtVal, Type};
+use crate::data::{CellArray, LangCell, LangInt, LangUint, RtVal, Type};
 use crate::errors::Error;
 use crate::exec::{Compiler, CompilerConfig, CtxTrait, Runtime};
 use crate::utils;
@@ -199,8 +201,16 @@ impl<'a> TestProgram<'a> {
         for i in 0..n {
             source.push_str(&format!("x{} = __compiled_arg__[{}]\n", i, i));
         }
-        for (i, (_ty, expr)) in self.result_expressions.iter().enumerate() {
-            source.push_str(&format!("__compiled_arg__[{}] = {}\n", n + i, expr));
+        for (i, (ty, expr)) in self.result_expressions.iter().enumerate() {
+            if matches!(ty, Type::CellArray(_)) {
+                // Cell arrays use reference semantics, so do not assign to the
+                // argument.
+                source.push_str(&format!("_ = {}\n", expr));
+                continue;
+            } else {
+                // All other types use value semantics.
+                source.push_str(&format!("__compiled_arg__[{}] = {}\n", n + i, expr));
+            }
         }
         source.push_str("}\n");
 
@@ -341,7 +351,9 @@ impl<'a> TestProgram<'a> {
                     Type::Cell => RtVal::Cell(0),
                     Type::Tag => todo!("tag default value"),
                     Type::Vector(Some(len)) => RtVal::Vector(vec![0; *len]),
-                    Type::CellArray(_) => todo!("cell array default value"),
+                    Type::CellArray(Some(shape)) => {
+                        RtVal::CellArray(CellArray::from_cell(Arc::clone(shape), 0_u8))
+                    }
                     Type::CellSet => todo!("cell set default value"),
                     _ => panic!("no default for this type"),
                 });
@@ -349,7 +361,21 @@ impl<'a> TestProgram<'a> {
             // Call function.
             let n = case.inputs.len();
             let actual_result = match f.call(&mut arg_values) {
-                Ok(()) => Ok(arg_values[n..].iter().map(|v| v.to_string()).collect_vec()),
+                Ok(()) => Ok({
+                    let mut ret = vec![];
+
+                    // Return result expressions.
+                    ret.extend(arg_values[n..].iter().map(|v| v.to_string()));
+
+                    // Also return mutated cell arrays.
+                    for arg in arg_values {
+                        if let RtVal::CellArray(a) = arg {
+                            ret.push(a.to_string());
+                        }
+                    }
+
+                    ret
+                }),
                 Err(e) => Err(vec![e]),
             };
             // Check result.

@@ -1521,9 +1521,9 @@ impl Compiler {
     pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Fallible<Spanned<Val>> {
         let span = expr.span();
         let expression = Box::<dyn Expression>::from(expr);
-        expression
-            .compile(self, span)
-            .map(|v| Spanned { node: v, span })
+        let node = expression.compile(self, span).unwrap_or_else(Val::Err);
+        // TODO: don't need to return Fallible<_>
+        Ok(Spanned { node, span })
     }
 }
 

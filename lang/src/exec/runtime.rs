@@ -103,7 +103,7 @@ impl Runtime {
                         break;
                     }
 
-                    Err(AlreadyReported) => (),
+                    Err(AlreadyReported) => break,
                 },
 
                 ast::DirectiveData::Ndim(expr) => {

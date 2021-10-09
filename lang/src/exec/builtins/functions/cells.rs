@@ -14,14 +14,9 @@ use crate::llvm;
 /// Built-in function that converts an integer to a cell state.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct IntToCell;
-impl fmt::Display for IntToCell {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#")
-    }
-}
 impl Function for IntToCell {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(1, ctx, self)?;
+        call.check_args_len(1, ctx)?;
         let arg = call.args[0].clone();
 
         if let Ok(x) = arg.as_integer() {
@@ -32,13 +27,13 @@ impl Function for IntToCell {
                 Err(ctx.error(Error::cell_state_out_of_range(call.args[0].span)))
             }
         } else {
-            Err(call.invalid_args_error(ctx, self))
+            Err(call.invalid_args_error(ctx))
         }
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         use llvm::IntPredicate::UGE;
 
-        call.check_args_len(1, compiler, self)?;
+        call.check_args_len(1, compiler)?;
         let arg = &call.args[0];
         let n = compiler
             .get_cp_val(arg)?

@@ -70,7 +70,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 let make_func_call = |f: Option<Box<dyn Function>>| -> Box<FuncCall<'ast>> {
                     Box::new(FuncCall {
                         f,
-                        f_span: op_span,
+                        name: op.map_node(|op| Arc::new(op.to_string())),
                         args: vec![(None, lhs), (None, rhs)],
                     })
                 };
@@ -98,7 +98,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 };
                 Box::new(FuncCall {
                     f: Some(op_func),
-                    f_span: op.span,
+                    name: op.map_node(|op| Arc::new(op.to_string())),
                     args: vec![(None, ast.get_node(*arg))],
                 })
             }
@@ -109,7 +109,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
 
             ast::ExprData::FuncCall { func, args } => Box::new(FuncCall {
                 f: super::resolve_function(&func.node),
-                f_span: func.span,
+                name: func.clone(),
                 args: get_arg_nodes(ast, args),
             }),
             ast::ExprData::MethodCall { attr, obj, args } => Box::new(MethodCall {
@@ -135,7 +135,10 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
 
             ast::ExprData::VectorConstruct(components) => Box::new(FuncCall {
                 f: Some(functions::vectors::VectorLiteral.boxed()),
-                f_span: expr.span(),
+                name: Spanned {
+                    node: Arc::new("vector literal".to_owned()),
+                    span: expr.span(),
+                },
                 args: ast
                     .get_node_list(components)
                     .into_iter()
@@ -143,8 +146,11 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                     .collect(),
             }),
             ast::ExprData::SetConstruct(members) => Box::new(FuncCall {
-                f: Some(functions::sets::SetConstruct.boxed()),
-                f_span: expr.span(),
+                f: Some(functions::sets::SetLiteral.boxed()),
+                name: Spanned {
+                    node: Arc::new("set literal".to_owned()),
+                    span: expr.span(),
+                },
                 args: ast
                     .get_node_list(members)
                     .into_iter()
@@ -170,39 +176,44 @@ impl Expression for Identity<'_> {
 struct FuncCall<'ast> {
     /// Function to call.
     f: Option<Box<dyn Function>>,
-    /// Span of the function name.
-    f_span: Span,
+    /// Function name.
+    name: Spanned<Arc<String>>,
     /// Arguments to the function, each with an optional keyword.
     args: Vec<ast::FuncArg<ast::Expr<'ast>>>,
 }
 impl Expression for FuncCall<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let span = self.f_span;
+        let name = Arc::clone(&self.name);
+        let span = self.name.span;
         let args = eval_args_list(runtime, &self.args)?;
 
         match &self.f {
             None => Err(runtime.error(Error::no_such_function(span))),
             Some(f) => {
-                check_kwargs(runtime, f, &args)?;
-                f.eval(runtime.ctx(), CallInfo::new(span, args))
+                let call = CallInfo::new(self.name.clone(), args);
+                call.check_kwargs(f, runtime)?;
+                f.eval(runtime.ctx(), call)
             }
         }
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let span = self.f_span;
+        let name = Arc::clone(&self.name);
+        let span = self.name.span;
         let args = compile_args_list(compiler, &self.args)?;
 
         match &self.f {
             None => Err(compiler.error(Error::no_such_function(span))),
             Some(f) => {
-                check_kwargs(compiler, f, &args)?;
                 if let Some(args) = all_rt_vals(&args) {
                     // All arguments are compile-time constants, so compile-time
                     // evaluate the function call.
-                    f.eval(compiler.ctx(), CallInfo::new(span, args))
-                        .map(Val::Rt)
+                    let call = CallInfo::new(self.name.clone(), args);
+                    call.check_kwargs(f, compiler)?;
+                    f.eval(compiler.ctx(), call).map(Val::Rt)
                 } else {
-                    f.compile(compiler, CallInfo::new(span, args))
+                    let call = CallInfo::new(self.name.clone(), args);
+                    call.check_kwargs(f, compiler)?;
+                    f.compile(compiler, call)
                 }
             }
         }
@@ -450,32 +461,38 @@ impl MethodCall<'_> {
     fn eval_args_and_get_method(
         &self,
         runtime: &mut Runtime,
-    ) -> Fallible<(Box<dyn Function>, Vec<ast::FuncArg<Spanned<RtVal>>>)> {
+    ) -> Fallible<(
+        Box<dyn Function>,
+        Spanned<Arc<String>>,
+        Vec<ast::FuncArg<Spanned<RtVal>>>,
+    )> {
         let obj = runtime.eval_expr(self.obj)?;
         let mut args = eval_args_list(runtime, &self.args)?;
 
         // Resolve the method based on the type of the method receiver.
-        let f = self
-            .method
-            .resolve(&obj.ty(), obj.span)
-            .report_err(runtime)?;
+        let obj_ty = obj.ty();
+        let name = self.method.display_name(&obj_ty);
+        let f = self.method.resolve(&obj_ty, obj.span).report_err(runtime)?;
 
         // Add the method receiver as the first argument.
         args.insert(0, (None, obj));
 
-        check_kwargs(runtime, &f, &args)?;
-
-        Ok((f, args))
+        Ok((f, name, args))
     }
     fn compile_args_and_get_method(
         &self,
         compiler: &mut Compiler,
-    ) -> Fallible<(Box<dyn Function>, Vec<ast::FuncArg<Spanned<Val>>>)> {
+    ) -> Fallible<(
+        Box<dyn Function>,
+        Spanned<Arc<String>>,
+        Vec<ast::FuncArg<Spanned<Val>>>,
+    )> {
         let obj = compiler.build_expr(self.obj)?;
         let mut args = compile_args_list(compiler, &self.args)?;
 
         // Resolve the method based on the type of the method receiver.
         let obj_ty = compiler.get_val_type(&obj)?;
+        let name = self.method.display_name(&obj_ty);
         let f = self
             .method
             .resolve(&obj_ty, obj.span)
@@ -484,25 +501,26 @@ impl MethodCall<'_> {
         // Add the method receiver as the first argument.
         args.insert(0, (None, obj));
 
-        check_kwargs(compiler, &f, &args)?;
-
-        Ok((f, args))
+        Ok((f, name, args))
     }
 }
 impl Expression for MethodCall<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Fallible<RtVal> {
-        let (f, args) = self.eval_args_and_get_method(runtime)?;
-        f.eval(runtime.ctx(), CallInfo::new(self.method.span(), args))
+        let (f, name, args) = self.eval_args_and_get_method(runtime)?;
+        f.eval(runtime.ctx(), CallInfo::new(name, args))
     }
     fn compile(&self, compiler: &mut Compiler, _span: Span) -> Fallible<Val> {
-        let (f, args) = self.compile_args_and_get_method(compiler)?;
+        let (f, name, args) = self.compile_args_and_get_method(compiler)?;
         if let Some(args) = all_rt_vals(&args) {
             // All arguments are compile-time constants, so compile-time
             // evaluate the method call.
-            f.eval(compiler.ctx(), CallInfo::new(self.method.span(), args))
-                .map(Val::Rt)
+            let call = CallInfo::new(name, args);
+            call.check_kwargs(&f, compiler)?;
+            f.eval(compiler.ctx(), call).map(Val::Rt)
         } else {
-            f.compile(compiler, CallInfo::new(self.method.span(), args))
+            let call = CallInfo::new(name, args);
+            call.check_kwargs(&f, compiler)?;
+            f.compile(compiler, call)
         }
     }
 
@@ -513,8 +531,8 @@ impl Expression for MethodCall<'_> {
         op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<RtVal>,
     ) -> Fallible<()> {
-        let (f, args) = self.eval_args_and_get_method(runtime)?;
-        let call_info = CallInfo::new(self.method.span(), args);
+        let (f, name, args) = self.eval_args_and_get_method(runtime)?;
+        let call_info = CallInfo::new(name, args);
 
         let new_value = eval_assign_op(
             runtime,
@@ -533,8 +551,9 @@ impl Expression for MethodCall<'_> {
         op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<Val>,
     ) -> Fallible<()> {
-        let (f, args) = self.compile_args_and_get_method(compiler)?;
-        let call_info = CallInfo::new(self.method.span(), args.clone());
+        let (f, name, args) = self.compile_args_and_get_method(compiler)?;
+        let call = CallInfo::new(name.clone(), args.clone());
+        call.check_kwargs(&f, compiler)?;
 
         let new_value = compile_assign_op(
             compiler,
@@ -542,10 +561,10 @@ impl Expression for MethodCall<'_> {
                 if let Some(args) = all_rt_vals(&args) {
                     // All arguments are compile-time constants, so compile-time
                     // evaluate the method call.
-                    f.eval(c.ctx(), CallInfo::new(self.method.span(), args))
-                        .map(Val::Rt)
+                    let call = CallInfo::new(name, args);
+                    f.eval(c.ctx(), call).map(Val::Rt)
                 } else {
-                    f.compile(c, call_info.clone())
+                    f.compile(c, call.clone())
                 }
             },
             span,
@@ -553,7 +572,7 @@ impl Expression for MethodCall<'_> {
             new_value,
         )?;
 
-        f.compile_assign(compiler, call_info, self.obj, new_value)
+        f.compile_assign(compiler, call, self.obj, new_value)
     }
 }
 
@@ -577,12 +596,19 @@ impl Method {
             Method::Index { bracket_span } => *bracket_span,
         }
     }
-    pub fn display_name(&self, obj_type: &Type) -> String {
-        match self {
+    pub fn display_name(&self, obj_type: &Type) -> Spanned<Arc<String>> {
+        let s = match self {
             Method::MethodCall { name } => {
                 format!("{}.{}", obj_type, name.node)
             }
-            Method::Index { .. } => format!("{} indexing", obj_type),
+            Method::Index { .. } => match obj_type {
+                Type::Type => "type specification".to_string(), // TODO: better name for this
+                _ => format!("{} indexing", obj_type),
+            },
+        };
+        Spanned {
+            node: Arc::new(s),
+            span: self.span(),
         }
     }
 }
@@ -798,26 +824,4 @@ fn compile_args_list(
         .cloned()
         .map(|(k, v)| Ok((k, compiler.build_expr(v)?)))
         .collect()
-}
-
-fn check_kwargs<C: CtxTrait, V>(
-    ctx: &mut C,
-    func: &impl Function,
-    args: &[ast::FuncArg<Spanned<V>>],
-) -> Fallible<()> {
-    let allowed_kwarg_keys = func.kwarg_keys();
-    let mut kwargs_present = vec![false; allowed_kwarg_keys.len()];
-    for (key, expr) in args {
-        if let Some(key) = key {
-            if let Some(i) = allowed_kwarg_keys.iter().position(|&k| k == &***key) {
-                if kwargs_present[i] {
-                    return Err(ctx.error(Error::duplicate_keyword_argument(expr.span)));
-                }
-                kwargs_present[i] = true;
-            } else {
-                return Err(ctx.error(Error::invalid_keyword_argument(expr.span, func)));
-            }
-        }
-    }
-    Ok(())
 }

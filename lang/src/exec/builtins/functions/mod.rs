@@ -22,7 +22,7 @@ use crate::exec::{Compiler, Ctx, CtxTrait, ErrorReportExt, Runtime};
 ///
 /// Most of the interpreter and compiler code is in implementations of this
 /// trait.
-pub trait Function: fmt::Debug + fmt::Display {
+pub trait Function: fmt::Debug {
     /// Returns a list of allowed keys for keyword arguments.
     fn kwarg_keys(&self) -> &[&'static str] {
         &[]
@@ -121,7 +121,9 @@ pub type CompiledCallInfo = CallInfo<Spanned<Val>>;
 /// Data associated with a function call.
 #[derive(Debug, Clone)]
 pub struct CallInfo<A> {
-    /// Span of the function name in the original source code.
+    /// Function name.
+    pub name: Arc<String>,
+    /// Span of the function name or symbol in the original source code.
     pub span: Span,
     /// Arguments passed to the function.
     pub args: Vec<A>,
@@ -129,18 +131,21 @@ pub struct CallInfo<A> {
     kwargs: Vec<(Arc<String>, A)>,
 }
 impl<A: Clone> CallInfo<A> {
-    pub fn new(span: Span, args_and_kwargs: Vec<ast::FuncArg<A>>) -> Self {
-        let args = args_and_kwargs
-            .iter()
-            .filter(|(k, _)| k.is_none())
-            .map(|(_, v)| v)
-            .cloned()
-            .collect();
-        let kwargs = args_and_kwargs
-            .iter()
-            .filter_map(|(k, v)| Some((k.clone()?.node, v.clone())))
-            .collect();
-        Self { span, args, kwargs }
+    pub fn new(name: Spanned<Arc<String>>, args_and_kwargs: Vec<ast::FuncArg<A>>) -> Self {
+        Self {
+            name: name.node,
+            span: name.span,
+            args: args_and_kwargs
+                .iter()
+                .filter(|(k, _)| k.is_none())
+                .map(|(_, v)| v)
+                .cloned()
+                .collect(),
+            kwargs: args_and_kwargs
+                .iter()
+                .filter_map(|(k, v)| Some((k.clone()?.node, v.clone())))
+                .collect(),
+        }
     }
 }
 impl<V> CallInfo<Spanned<V>>
@@ -154,30 +159,36 @@ where
             .collect()
     }
 
-    fn invalid_args_error(
-        &self,
-        ctx: &mut impl CtxTrait,
-        func_name: impl fmt::Display,
-    ) -> AlreadyReported {
+    fn invalid_args_error(&self, ctx: &mut impl CtxTrait) -> AlreadyReported {
         match self.arg_types(ctx) {
             Err(AlreadyReported) => AlreadyReported,
-            Ok(arg_types) => ctx.error(Error::invalid_arguments(self.span, func_name, &arg_types)),
+            Ok(arg_types) => ctx.error(Error::invalid_arguments(self.span, &self.name, &arg_types)),
         }
     }
 
-    pub fn check_args_len(
-        &self,
-        n: usize,
-        ctx: &mut impl CtxTrait,
-        func_name: impl fmt::Display,
-    ) -> Fallible<()> {
+    pub fn check_args_len(&self, n: usize, ctx: &mut impl CtxTrait) -> Fallible<()> {
         // TODO: replace calls to this function with more specific ones for
         // better error messages (e.g. "<function name> expects 2 arguments")
         if self.args.len() == n {
             Ok(())
         } else {
-            Err(self.invalid_args_error(ctx, func_name))
+            Err(self.invalid_args_error(ctx))
         }
+    }
+    pub fn check_kwargs(&self, func: &impl Function, ctx: &mut impl CtxTrait) -> Fallible<()> {
+        let allowed_kwarg_keys = func.kwarg_keys();
+        let mut kwargs_present = vec![false; allowed_kwarg_keys.len()];
+        for (key, expr) in &self.kwargs {
+            if let Some(i) = allowed_kwarg_keys.iter().position(|&k| k == &***key) {
+                if kwargs_present[i] {
+                    return Err(ctx.error(Error::duplicate_keyword_argument(expr.span)));
+                }
+                kwargs_present[i] = true;
+            } else {
+                return Err(ctx.error(Error::invalid_keyword_argument(expr.span, &self.name)));
+            }
+        }
+        Ok(())
     }
 
     pub fn arg(&self, i: usize, ctx: &mut impl CtxTrait) -> Fallible<&Spanned<V>> {

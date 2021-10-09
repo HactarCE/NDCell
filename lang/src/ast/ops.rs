@@ -70,6 +70,34 @@ pub enum BinaryOp {
 
     Is,
 }
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Add => write!(f, "+"),
+            Self::Sub => write!(f, "-"),
+            Self::Mul => write!(f, "*"),
+            Self::Div => write!(f, "/"),
+            Self::Mod => write!(f, "%"),
+            Self::Pow => write!(f, "**"),
+
+            Self::Shl => write!(f, "<<"),
+            Self::ShrSigned => write!(f, ">>"),
+            Self::ShrUnsigned => write!(f, ">>>"),
+
+            Self::And => write!(f, "&"),
+            Self::Or => write!(f, "|"),
+            Self::Xor => write!(f, "^"),
+
+            Self::LogicalAnd => write!(f, "and"),
+            Self::LogicalOr => write!(f, "or"),
+            Self::LogicalXor => write!(f, "xor"),
+
+            Self::Range => write!(f, ".."),
+
+            Self::Is => write!(f, "is"),
+        }
+    }
+}
 impl From<AssignOp> for BinaryOp {
     fn from(op: AssignOp) -> Self {
         match op {
@@ -152,6 +180,19 @@ pub enum PrefixOp {
     LogicalNot,
 
     IntToCell,
+}
+impl fmt::Display for PrefixOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PrefixOp::Pos => write!(f, "+"),
+            PrefixOp::Neg => write!(f, "-"),
+
+            PrefixOp::BitwiseNot => write!(f, "~"),
+            PrefixOp::LogicalNot => write!(f, "not"),
+
+            PrefixOp::IntToCell => write!(f, "#"),
+        }
+    }
 }
 impl TryFrom<Token> for PrefixOp {
     type Error = ();

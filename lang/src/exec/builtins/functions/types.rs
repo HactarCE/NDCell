@@ -8,18 +8,13 @@ use crate::exec::{Ctx, CtxTrait, ErrorReportExt};
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct TypeBrackets;
-impl fmt::Display for TypeBrackets {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "type indexing") // TODO: this is a terrible name and should not ever appear in user-facing error messages
-    }
-}
 impl Function for TypeBrackets {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let obj = call.arg(0, ctx)?.clone();
         let obj_span = obj.span;
         match obj.as_type().report_err(ctx)? {
             Type::Vector(None) => {
-                call.check_args_len(2, ctx, self)?;
+                call.check_args_len(2, ctx)?;
                 let x = call.arg(1, ctx)?;
                 let len = x
                     .as_integer() // TODO: make as_integer_vector_len()
@@ -28,14 +23,14 @@ impl Function for TypeBrackets {
                 Ok(RtVal::Type(Type::Vector(Some(len))))
             }
             Type::CellArray(None) => {
-                call.check_args_len(2, ctx, self)?;
+                call.check_args_len(2, ctx)?;
                 let x = call.arg(1, ctx)?;
                 let ndim = ctx.get_ndim(x.span)?;
                 let shape = x.as_vector_set(ndim).report_err(ctx)?;
                 Ok(RtVal::Type(Type::CellArray(Some(shape))))
             }
             Type::VectorSet(None) => {
-                call.check_args_len(2, ctx, self)?;
+                call.check_args_len(2, ctx)?;
                 let x = call.arg(1, ctx)?;
                 let vec_len = x
                     .as_integer()

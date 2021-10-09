@@ -76,7 +76,7 @@ impl Function for VecConstructor {
                 .report_err(ctx)?,
             None => ctx.get_ndim(call.span)?,
         };
-        eval_vec_construct(self, ctx, call, len)
+        eval_vec_construct(ctx, call, len)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         let len = match call.kwarg("len") {
@@ -87,7 +87,7 @@ impl Function for VecConstructor {
                 .report_err(compiler)?,
             None => compiler.get_ndim(call.span)?,
         };
-        compile_vec_construct(self, compiler, call, len)
+        compile_vec_construct(compiler, call, len)
     }
 }
 
@@ -102,16 +102,15 @@ impl fmt::Display for VecWithLen {
 impl Function for VecWithLen {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let len = self.0;
-        eval_vec_construct(self, ctx, call, len)
+        eval_vec_construct(ctx, call, len)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
         let len = self.0;
-        compile_vec_construct(self, compiler, call, len)
+        compile_vec_construct(compiler, call, len)
     }
 }
 
 fn eval_vec_construct(
-    f: &impl Function,
     ctx: &mut Ctx,
     call: CallInfo<Spanned<RtVal>>,
     len: usize,
@@ -119,11 +118,10 @@ fn eval_vec_construct(
     match &call.args[..] {
         [] => Ok(RtVal::Vector(vec![0; len])),
         [arg] => Ok(RtVal::Vector(arg.to_vector(len).report_err(ctx)?)),
-        _ => Err(call.invalid_args_error(ctx, f)),
+        _ => Err(call.invalid_args_error(ctx)),
     }
 }
 fn compile_vec_construct(
-    f: &impl Function,
     compiler: &mut Compiler,
     call: CallInfo<Spanned<Val>>,
     len: usize,
@@ -133,7 +131,7 @@ fn compile_vec_construct(
         [arg] => Ok(Val::Cp(CpVal::Vector(
             compiler.build_convert_to_vector(arg, len)?,
         ))),
-        _ => Err(call.invalid_args_error(compiler, f)),
+        _ => Err(call.invalid_args_error(compiler)),
     }
 }
 
@@ -163,12 +161,12 @@ impl IndexVector {
         let span;
         match self.0 {
             Some(axis) => {
-                call.check_args_len(1, ctx, self)?;
+                call.check_args_len(1, ctx)?;
                 i = axis as LangInt;
                 span = call.span;
             }
             None => {
-                call.check_args_len(2, ctx, self)?;
+                call.check_args_len(2, ctx)?;
                 let arg = call.arg(1, ctx)?;
                 i = arg.as_integer().report_err(ctx)?;
                 span = arg.span;
@@ -194,12 +192,12 @@ impl IndexVector {
         let span;
         match self.0 {
             Some(axis) => {
-                call.check_args_len(1, compiler, self)?;
+                call.check_args_len(1, compiler)?;
                 i = llvm::const_int(axis as LangInt);
                 span = call.span;
             }
             None => {
-                call.check_args_len(2, compiler, self)?;
+                call.check_args_len(2, compiler)?;
                 let arg = call.arg(1, compiler)?;
                 i = compiler
                     .get_cp_val(arg)?
@@ -310,13 +308,13 @@ pub struct VectorLen;
 impl_display!(for VectorLen, "Vector.len");
 impl Function for VectorLen {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(1, ctx, self)?;
+        call.check_args_len(1, ctx)?;
         let arg = call.arg(0, ctx)?;
         let len = arg.as_vector().report_err(ctx)?.len() as LangInt;
         Ok(RtVal::Integer(len))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
-        call.check_args_len(1, compiler, self)?;
+        call.check_args_len(1, compiler)?;
         let arg = call.arg(0, compiler)?;
         let len = compiler
             .get_cp_val(arg)?

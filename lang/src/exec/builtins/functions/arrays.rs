@@ -13,11 +13,6 @@ use crate::parser;
 /// Built-in function that constructs an `CellArray`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct New(pub Arc<VectorSet>);
-impl fmt::Display for New {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.new", Type::CellArray(Some(Arc::clone(&self.0))))
-    }
-}
 impl Function for New {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         match call.args.len() {
@@ -28,7 +23,7 @@ impl Function for New {
                 Ok(CellArray::from_cell(Arc::clone(&self.0), cell_state).into())
             }
 
-            _ => Err(call.invalid_args_error(ctx, self)),
+            _ => Err(call.invalid_args_error(ctx)),
         }
     }
 }
@@ -36,17 +31,12 @@ impl Function for New {
 /// Built-in method that constructs a `CellArray`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct FillVectorSet;
-impl fmt::Display for FillVectorSet {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.fill", Type::VectorSet(None))
-    }
-}
 impl Function for FillVectorSet {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
         let arg_count = call.args.len();
 
         if arg_count < 1 {
-            return Err(call.invalid_args_error(ctx, self));
+            return Err(call.invalid_args_error(ctx));
         }
 
         let ndim = ctx.get_ndim(call.span)?;
@@ -75,7 +65,7 @@ impl Function for FillVectorSet {
                 )));
             }
         } else {
-            return Err(call.invalid_args_error(ctx, self));
+            return Err(call.invalid_args_error(ctx));
         };
 
         Ok(RtVal::CellArray(cell_array))
@@ -88,8 +78,4 @@ impl Function for FillVectorSet {
 /// Built-in method that returns the shape of a `CellArray`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct Shape;
-impl fmt::Display for Shape {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.shape", Type::VectorSet(None))
-    }
-}
+// TODO: implement this

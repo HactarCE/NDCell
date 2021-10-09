@@ -12,14 +12,9 @@ use crate::exec::{Ctx, CtxTrait, ErrorReportExt};
 /// Built-in function that constructs a range between two arguments.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct Range;
-impl fmt::Display for Range {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "..")
-    }
-}
 impl Function for Range {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(2, ctx, self)?;
+        call.check_args_len(2, ctx)?;
         let arg_a = &call.args[0];
         let arg_b = &call.args[1];
         match [&arg_a.node, &arg_b.node] {
@@ -32,10 +27,10 @@ impl Function for Range {
             [RtVal::Vector(a), b] | [b, RtVal::Vector(a)] => {
                 let b = b
                     .to_vector(a.len())
-                    .ok_or_else(|| call.invalid_args_error(ctx, self))?;
+                    .ok_or_else(|| call.invalid_args_error(ctx))?;
                 make_vector_range(ctx, call.span, a, arg_a.span, &b, arg_b.span)
             }
-            _ => Err(call.invalid_args_error(ctx, self)),
+            _ => Err(call.invalid_args_error(ctx)),
         }
     }
 }

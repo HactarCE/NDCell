@@ -261,14 +261,14 @@ impl BinaryMathOp {
 }
 impl Function for BinaryMathOp {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(2, ctx, self)?;
+        call.check_args_len(2, ctx)?;
         let lhs = &call.args[0];
         let rhs = &call.args[1];
 
         self.eval_on_values(ctx, call.span, lhs, rhs)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
-        call.check_args_len(2, compiler, self)?;
+        call.check_args_len(2, compiler)?;
         let lhs = &call.args[0];
         let rhs = &call.args[1];
 
@@ -293,7 +293,7 @@ impl Function for BinaryMathOp {
                 Ok(Val::Cp(CpVal::Integer(result.into_int_value())))
             }
 
-            _ => Err(call.invalid_args_error(compiler, self)),
+            _ => Err(call.invalid_args_error(compiler)),
         }
     }
 }
@@ -310,7 +310,7 @@ impl fmt::Display for UnaryMathOp {
         match self {
             UnaryMathOp::Pos => write!(f, "+"),
             UnaryMathOp::Neg => write!(f, "-"),
-            UnaryMathOp::BitwiseNot => write!(f, "!"),
+            UnaryMathOp::BitwiseNot => write!(f, "~"),
         }
     }
 }
@@ -355,11 +355,10 @@ impl UnaryMathOp {
     ) -> Fallible<llvm::BasicValueEnum> {
         let b = compiler.builder();
         let zero = arg.same_type_const_zero();
-        let ones = arg.same_type_const_all_ones();
         match self {
             Self::Pos => Ok(arg.as_basic_value_enum()),
             Self::Neg => compiler.build_checked_int_arithmetic(span, "ssub", zero, arg),
-            Self::BitwiseNot => Ok(b.build_xor(arg, ones, "bitwise_not").as_basic_value_enum()),
+            Self::BitwiseNot => Ok(b.build_not(arg, "bitwise_not").as_basic_value_enum()),
         }
     }
 
@@ -382,12 +381,12 @@ impl UnaryMathOp {
 }
 impl Function for UnaryMathOp {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Fallible<RtVal> {
-        call.check_args_len(1, ctx, self)?;
+        call.check_args_len(1, ctx)?;
         let arg = &call.args[0];
         self.eval_on_value(ctx, call.span, arg)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Fallible<Val> {
-        call.check_args_len(1, compiler, self)?;
+        call.check_args_len(1, compiler)?;
         let arg = &call.args[0];
         self.compile_for_value(compiler, call.span, arg)
     }

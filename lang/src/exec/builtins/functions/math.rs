@@ -253,15 +253,15 @@ impl BinaryMathOp {
 impl Function for BinaryMathOp {
     fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(2)?;
-        let lhs = &call.args[0];
-        let rhs = &call.args[1];
+        let lhs = call.arg(0)?;
+        let rhs = call.arg(1)?;
 
         self.eval_on_values(call.span, lhs, rhs)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         call.check_args_len(2)?;
-        let lhs = &call.args[0];
-        let rhs = &call.args[1];
+        let lhs = call.arg(0)?;
+        let rhs = call.arg(1)?;
 
         let lhs = compiler.get_cp_val(lhs)?;
         let rhs = compiler.get_cp_val(rhs)?;
@@ -368,12 +368,12 @@ impl UnaryMathOp {
 impl Function for UnaryMathOp {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(1)?;
-        let arg = &call.args[0];
+        let arg = call.arg(0)?;
         self.eval_on_value(ctx, call.span, arg)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         call.check_args_len(1)?;
-        let arg = &call.args[0];
+        let arg = call.arg(0)?;
         self.compile_for_value(compiler, call.span, arg)
     }
 }

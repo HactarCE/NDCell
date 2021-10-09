@@ -14,8 +14,8 @@ pub struct Range;
 impl Function for Range {
     fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(2)?;
-        let arg_a = &call.args[0];
-        let arg_b = &call.args[1];
+        let arg_a = call.arg(0)?;
+        let arg_b = call.arg(1)?;
         match [&arg_a.node, &arg_b.node] {
             [RtVal::Integer(a), RtVal::Integer(b)] => Err(Error::unimplemented(call.span)),
             [RtVal::Vector(a), RtVal::Vector(b)] => {

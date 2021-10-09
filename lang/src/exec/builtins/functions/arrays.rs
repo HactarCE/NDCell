@@ -20,7 +20,7 @@ impl Function for FillVectorSet {
         }
 
         let ndim = ctx.get_ndim(call.span)?;
-        let shape = call.args[0].as_vector_set(ndim)?;
+        let shape = call.arg(0)?.as_vector_set(ndim)?;
 
         let cell_array = if arg_count - 1 == shape.len() {
             let contents: Vec<LangCell> = call.args[1..]
@@ -29,11 +29,11 @@ impl Function for FillVectorSet {
                 .collect::<Result<_>>()?;
             CellArray::from_cells(call.span, shape, &contents)?
         } else if arg_count - 1 == 1 {
-            let contents = &call.args[1];
+            let contents = call.arg(1)?;
             if let Ok(contents_str) = contents.as_string() {
                 let contents =
                     parser::strings::parse_cell_array_string(ctx, contents.span, &contents_str)?;
-                CellArray::from_cells(call.args[1].span, shape, &contents)?
+                CellArray::from_cells(call.arg(1)?.span, shape, &contents)?
             } else if let Ok(cell) = contents.select_cell() {
                 CellArray::from_cell(shape, cell)
             } else {

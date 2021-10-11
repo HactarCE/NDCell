@@ -402,9 +402,7 @@ impl Compiler {
             Val::Rt(v) => match v {
                 RtVal::Integer(i) => Ok(CpVal::Integer(llvm::const_int(*i))),
                 RtVal::Cell(i) => Ok(CpVal::Cell(llvm::const_cell(*i))),
-                RtVal::Vector(v) => Ok(CpVal::Vector(llvm::VectorType::const_vector(
-                    &v.iter().map(|&i| llvm::const_int(i)).collect_vec(),
-                ))),
+                RtVal::Vector(v) => Ok(CpVal::Vector(llvm::const_vector(v.iter().copied()))),
                 RtVal::CellArray(a) => Ok(CpVal::CellArray(LlvmCellArray::new_const(
                     &mut self.module,
                     &a,
@@ -531,25 +529,32 @@ impl Compiler {
         len: usize,
     ) -> Result<llvm::VectorValue> {
         match value.node {
-            CpVal::Integer(i) => Ok(llvm::VectorType::const_vector(&vec![i; len])),
-            CpVal::Vector(v) => {
-                let v_len = v.get_type().get_size() as LangInt;
-                let shuffle_mask = (0..len)
-                    .map(|i| llvm::const_int(std::cmp::min(i as LangInt, v_len)))
-                    .collect_vec();
-                Ok(self.builder().build_shuffle_vector(
-                    v,
-                    v.same_type_const_zero(),
-                    llvm::VectorType::const_vector(&shuffle_mask),
-                    "resized_vector",
-                ))
-            }
+            CpVal::Integer(i) => Ok(self.build_construct_vector(&vec![i; len])),
+            CpVal::Vector(v) => Ok(self.build_convert_vector_length(v, len)),
             _ => Err(Error::type_error(
                 value.span,
                 "type that can be converted to a vector",
                 &value.node.ty(),
             )),
         }
+    }
+    /// Builds instructions to cast a vector to a different length.
+    pub fn build_convert_vector_length(
+        &mut self,
+        v: llvm::VectorValue,
+        len: usize,
+    ) -> llvm::VectorValue {
+        let v_len = v.get_type().get_size() as LangInt;
+        if v_len == len as LangInt {
+            return v;
+        }
+        let shuffle_mask = (0..len as LangInt).map(|i| std::cmp::min(i, v_len));
+        self.builder().build_shuffle_vector(
+            v,
+            v.same_type_const_zero(),
+            llvm::const_vector(shuffle_mask),
+            "resized_vector",
+        )
     }
 
     /// Coerce two values to vectors of the same length.
@@ -572,6 +577,19 @@ impl Compiler {
         ))
     }
 
+    /// Builds instructions to construct a vector from integer components.
+    pub fn build_construct_vector(&mut self, components: &[llvm::IntValue]) -> llvm::VectorValue {
+        let mut ret = llvm::vector_type(components.len()).get_undef();
+        for (i, &component) in components.iter().enumerate() {
+            ret = self.builder().build_insert_element(
+                ret,
+                component,
+                llvm::const_int(i as LangInt),
+                &format!("vec_build_{}", i),
+            );
+        }
+        ret
+    }
     /// Builds instructions to split a vector of integers into its components.
     pub fn build_split_vector(&mut self, vector_value: llvm::VectorValue) -> Vec<llvm::IntValue> {
         (0..vector_value.get_type().get_size())
@@ -1130,7 +1148,7 @@ impl Compiler {
                     .zip(exps)
                     .map(|(base, exp)| self._build_checked_int_pow(error_span, base, exp))
                     .collect::<Result<Vec<_>>>()?;
-                let ret = llvm::VectorType::const_vector(&results);
+                let ret = self.build_construct_vector(&results);
                 Ok(ret.as_basic_value_enum())
             }
             _ => unimplemented!(),
@@ -1382,11 +1400,12 @@ impl Compiler {
                     .bounds()
                     .ok_or_else(|| internal_error_value!("empty cell array argument"))?;
                 let cells_ptr = arg_value.into_pointer_value();
-                let strides = crate::utils::ndarray_strides(shape.vec_len(), bounds);
+                let strides =
+                    llvm::const_vector(crate::utils::ndarray_strides(shape.vec_len(), bounds));
 
                 let mutable = true;
                 let cells =
-                    llvm::NdArrayValue::new_with_base_ptr(bounds, cells_ptr, &strides, mutable);
+                    llvm::NdArrayValue::new_with_origin_ptr(bounds, cells_ptr, strides, mutable);
 
                 CpVal::CellArray(LlvmCellArray::new(&mut self.module, shape, cells))
             }

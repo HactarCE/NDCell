@@ -18,15 +18,20 @@ fn test_vector_construct() {
     // Test vector constructor with explicit length.
     test_vector_construct_expr(vec![0; 10], "vec10()");
     test_vector_construct_expr(vec![0; 10], "vec(len=10)");
+    TestProgram::new()
+        .with_input_types(&[Type::Integer])
+        .with_exec("_ = vec(len=x0)")
+        .assert_compile_errors(test_errors!["must be a constant" @ "x0"]);
 
     // Test limits of `len`.
     test_vector_construct_expr(vec![0; 1], "vec(len=1)");
     test_vector_construct_expr(vec![0; 256], "vec(len=256)");
     let vec_len_msg = "length of a vector must be an integer from 1 to 256";
     for &len_str in &["0", "257", "-1"] {
-        let src = format!("v = vec(len={})", len_str);
+        let src = format!("_ = vec(len={})", len_str);
         TestProgram::new()
             .with_exec(&src)
+            .assert_interpreted_test_cases::<&str>(test_cases![() => Err(vec_len_msg @ len_str)])
             .assert_compile_errors(test_errors![vec_len_msg @ len_str]);
     }
 
@@ -34,18 +39,41 @@ fn test_vector_construct() {
     test_vector_construct_expr(vec![-3; 10], "vec10(-3)");
     test_vector_construct_expr(vec![-3; 10], "vec(len=10, -3)");
     test_vector_construct_expr(vec![-3; 10], "vec(-3, len=10)");
+    test_var_vector_construct_expr(vec![-3; 10], "vec(x0, len=10)", vec![Integer(-3)]);
 
     // Test vector constructor based on `NDIM`.
     test_vector_construct_expr(vec![0; 2], "vec()");
     test_vector_construct_expr(vec![9; 2], "vec(9)");
+    test_var_vector_construct_expr(vec![9; 2], "vec(x0)", vec![Integer(9)]);
 
     // Test vector constructor with integers.
     test_vector_construct_expr(vec![5], "[5]");
     test_vector_construct_expr(vec![1, 2, 3], "[1, 2, 3]");
+    test_var_vector_construct_expr(vec![5], "[x0]", vec![Integer(5)]);
+    test_var_vector_construct_expr(
+        vec![1, 2, 3],
+        "[x0, x1, x2]",
+        vec![Integer(1), Integer(2), Integer(3)],
+    );
 
     // Test vector constructor with vectors.
     test_vector_construct_expr((1..=6).collect(), "[[1, 2], 3, [4, 5, 6]]");
     test_vector_construct_expr((1..=6).collect(), "[[[1, 2], 3, [4, 5], 6]]");
+    test_var_vector_construct_expr(
+        (1..=6).collect(),
+        "[x0, x1, x2]",
+        vec![Vector(vec![1, 2]), Integer(3), Vector(vec![4, 5, 6])],
+    );
+    test_var_vector_construct_expr(
+        (1..=6).collect(),
+        "[[x0, x1], x2, [x3, x4, x5]]",
+        (1..=6).map(Integer).collect(),
+    );
+    test_var_vector_construct_expr(
+        (1..=6).collect(),
+        "[[[x0, x1], x2, [x3, x4, x5]]]",
+        (1..=6).map(Integer).collect(),
+    );
 }
 
 #[test]
@@ -63,6 +91,16 @@ fn test_vector_construct_expr(expected: Vec<LangInt>, expr: &str) {
     TestProgram::new()
         .with_result_expressions(&[(Type::Vector(Some(vec_len)), expr)])
         .assert_test_cases(test_cases![() => Ok(Vector(expected))]);
+}
+fn test_var_vector_construct_expr(expected: Vec<LangInt>, expr: &str, inputs: Vec<RtVal>) {
+    let vec_len = expected.len();
+    TestProgram::new()
+        .with_input_types(&inputs.iter().map(|v| v.ty()).collect_vec())
+        .with_result_expressions(&[(Type::Vector(Some(vec_len)), expr)])
+        .assert_test_cases(vec![TestCase {
+            inputs,
+            expected_result: test_ok!(Vector(expected)),
+        }]);
 }
 
 #[test]

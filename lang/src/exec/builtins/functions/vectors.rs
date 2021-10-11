@@ -1,6 +1,6 @@
 //! Functions and methods that construct or operate on vectors.
 
-use codemap::Spanned;
+use codemap::{Span, Spanned};
 
 use ndcell_core::axis::Axis;
 
@@ -19,32 +19,43 @@ use crate::llvm;
 pub struct VectorLiteral;
 impl Function for VectorLiteral {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
-        let mut ret = vec![];
-        for arg in call.args {
-            match arg.node {
-                RtVal::Integer(i) => Ok(ret.push(i)),
-                RtVal::Vector(v) => Ok(ret.extend_from_slice(&v)),
-                RtVal::IntegerSet(_) => Err(Error::unimplemented(arg.span)),
-                RtVal::VectorSet(_) => Err(Error::unimplemented(arg.span)),
-                _ => Err(Error::expected(arg.span, "integer or vector")),
-            }?;
-        }
-        data::check_vector_len(call.span, ret.len())?;
+        let ret = eval_vector_literal(call.span, &call.args)?;
         Ok(RtVal::Vector(ret))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
-        let mut ret = vec![];
-        for arg in &call.args {
-            let arg = compiler.get_cp_val(arg)?;
-            match arg.node {
-                CpVal::Integer(i) => Ok(ret.push(i)),
-                CpVal::Vector(v) => Ok(ret.extend_from_slice(&compiler.build_split_vector(v))),
-                _ => Err(Error::expected(arg.span, "integer or vector")),
-            }?;
-        }
-        data::check_vector_len(call.span, ret.len())?;
-        Ok(Val::Cp(CpVal::Vector(llvm::VectorType::const_vector(&ret))))
+        let ret = compile_vector_literal(compiler, call.span, &call.args)?;
+        Ok(Val::Cp(CpVal::Vector(ret)))
     }
+}
+
+pub(super) fn eval_vector_literal(span: Span, args: &[Spanned<RtVal>]) -> Result<Vec<LangInt>> {
+    let mut ret = vec![];
+    for arg in args {
+        match &arg.node {
+            RtVal::Integer(i) => Ok(ret.push(*i)),
+            RtVal::Vector(v) => Ok(ret.extend_from_slice(v)),
+            _ => Err(Error::expected(arg.span, "integer or vector")),
+        }?;
+    }
+    data::check_vector_len(span, ret.len())?;
+    Ok(ret)
+}
+pub(super) fn compile_vector_literal(
+    compiler: &mut Compiler,
+    span: Span,
+    args: &[Spanned<Val>],
+) -> Result<llvm::VectorValue> {
+    let mut components = vec![];
+    for arg in args {
+        let arg = compiler.get_cp_val(arg)?;
+        match &arg.node {
+            CpVal::Integer(i) => Ok(components.push(*i)),
+            CpVal::Vector(v) => Ok(components.extend_from_slice(&compiler.build_split_vector(*v))),
+            _ => Err(Error::expected(arg.span, "integer or vector")),
+        }?;
+    }
+    data::check_vector_len(span, components.len())?;
+    Ok(compiler.build_construct_vector(&components))
 }
 
 /// Built-in function that constructs a vector.
@@ -166,26 +177,24 @@ impl IndexVector {
 
         let arg = call.arg(0)?;
         let v = compiler.get_cp_val(arg)?.as_vector()?;
-
-        // Error if the index is out of bounds.
         let vec_len = v.get_type().get_size() as LangInt;
+
+        // Warn at compile-time if the index is out of bounds.
         if let Some(i) = i.get_zero_extended_constant() {
-            // We know the index at compile-time, so report the error at
-            // compile-time or don't bother checking at all.
             if !(i < vec_len as u64) {
-                return Err(Error::index_out_of_bounds(span));
+                compiler.report_error(Error::index_out_of_bounds(span).to_warning());
             }
-        } else {
-            // Check at runtime.
-            let index_out_of_bounds = compiler.builder().build_int_compare(
-                llvm::IntPredicate::UGE,
-                i,
-                llvm::const_int(vec_len),
-                "index_out_of_bounds",
-            );
-            let error_index = compiler.add_runtime_error(Error::index_out_of_bounds(span));
-            compiler.build_return_err_if(index_out_of_bounds, error_index)?;
         }
+
+        // Error at runtime if the index is out of bounds.
+        let index_out_of_bounds = compiler.builder().build_int_compare(
+            llvm::IntPredicate::UGE,
+            i,
+            llvm::const_int(vec_len),
+            "index_out_of_bounds",
+        );
+        let error_index = compiler.add_runtime_error(Error::index_out_of_bounds(span));
+        compiler.build_return_err_if(index_out_of_bounds, error_index)?;
 
         Ok((v, i))
     }
@@ -217,7 +226,7 @@ impl Function for IndexVector {
         v[i as usize] = new_value.as_integer()?;
         let new_value = Spanned {
             node: RtVal::Vector(v),
-            span: call.span,
+            span: first_arg.span(),
         };
 
         // Assign the new vector value.
@@ -241,7 +250,7 @@ impl Function for IndexVector {
                 .build_insert_element(v, new_component, i, "assign_vector_component");
         let new_value = Spanned {
             node: Val::Cp(CpVal::Vector(v)),
-            span: call.span,
+            span: first_arg.span(),
         };
 
         // Assign the new vector value.

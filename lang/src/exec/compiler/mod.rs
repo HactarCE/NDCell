@@ -323,8 +323,8 @@ impl Compiler {
     unsafe fn finish_jit_function(&mut self) -> Result<llvm::JitFunction> {
         // Check that there are no errors in the LLVM code.
         if !self.llvm_fn().verify(true) {
-            eprint!(
-                "Error encountered during function compilation; dumping LLVM function to stderr"
+            eprintln!(
+                "Error encountered during function compilation; dumping LLVM function to stderr:",
             );
             self.llvm_fn().print_to_stderr();
             internal_error!("LLVM function is invalid");

@@ -1,7 +1,7 @@
 use crate::data::{CellArray, VectorSet};
 
 use super::*;
-use RtVal::{Cell, Integer, Vector};
+use RtVal::{Integer, Vector};
 
 #[test]
 fn test_cell_array_construction() {

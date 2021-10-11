@@ -38,7 +38,7 @@ use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
     CellSet, CpVal, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, TryGetType, Type, Val,
-    VectorSet, INT_BITS,
+    INT_BITS,
 };
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait, Runtime};

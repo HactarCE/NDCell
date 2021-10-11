@@ -6,6 +6,18 @@ use crate::data::LangCell;
 use crate::errors::{Error, Result};
 use crate::exec::CtxTrait;
 
+/// Parses the contents of a mask string.
+pub fn parse_mask_string(span: Span, s: &str) -> Result<Vec<bool>> {
+    s.chars()
+        .filter(|ch| !ch.is_whitespace())
+        .map(|ch| match ch {
+            '.' => Ok(false),
+            '#' => Ok(true),
+            _ => Err(Error::invalid_mask_symbol(span, ch)),
+        })
+        .collect()
+}
+
 /// Parses the contents of a cell array string.
 pub fn parse_cell_array_string(
     ctx: &mut impl CtxTrait,

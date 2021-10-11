@@ -1,5 +1,6 @@
 //! Math functions.
 
+use crate::parser;
 use codemap::{Span, Spanned};
 use std::convert::TryInto;
 use std::fmt;
@@ -192,6 +193,15 @@ impl BinaryMathOp {
                     Self::Xor => Err(Error::unimplemented(span)),
                     _ => internal_error!("invalid set op"),
                 }
+            }
+            (RtVal::VectorSet(l), RtVal::String(s)) if self == Self::And => {
+                let mask = parser::strings::parse_mask_string(rhs.span, s)?;
+                if mask.len() != l.len() {
+                    return Err(Error::wrong_cell_count(rhs.span, l.len(), mask.len()));
+                }
+                let mut mask_iter = mask.into_iter();
+                l.filter(span, |_| mask_iter.next().unwrap())
+                    .map(RtVal::from)
             }
             (RtVal::VectorSet(l), _) => {
                 let r = rhs.as_vector_set(l.vec_len())?;

@@ -1391,6 +1391,13 @@ impl Compiler {
             .ok_or_else(|| Error::custom(idx.span, "compiled arg index out of range"))
     }
 
+    /// Assigns a value to a variable.
+    pub fn assign_var(&mut self, name: &Arc<String>, value: Val) {
+        if &**name != crate::THROWAWAY_VARIABLE {
+            self.vars.insert(Arc::clone(&name), value);
+        }
+    }
+
     /// Builds instructions to fetch a JIT function argument value.
     pub fn build_load_arg(&mut self, idx: Spanned<u32>) -> Result<CpVal> {
         let (arg_ty, arg_ptr) = self.build_get_arg_ptr(idx)?;

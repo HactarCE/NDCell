@@ -701,7 +701,7 @@ impl Expression for Identifier<'_> {
     ) -> Result<()> {
         let new_value =
             eval_assign_op(runtime, |rt| self.eval(rt, span), span, op, new_value)?.node;
-        runtime.vars.insert(Arc::clone(self.0), new_value);
+        runtime.assign_var(self.0, new_value);
         Ok(())
     }
     fn compile_assign(
@@ -717,7 +717,7 @@ impl Expression for Identifier<'_> {
                 compiler.report_error(e);
                 Val::Error
             });
-        compiler.vars.insert(Arc::clone(self.0), new_value);
+        compiler.assign_var(self.0, new_value);
         Ok(())
     }
 }

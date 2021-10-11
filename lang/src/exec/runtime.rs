@@ -56,6 +56,7 @@ impl Default for Flow {
 }
 
 impl Runtime {
+    /// Constructs a new runtime.
     pub fn init_new(ast: &ast::Program) -> Self {
         let directives = ast.get_node_list(ast.directives());
 
@@ -120,6 +121,14 @@ impl Runtime {
         this
     }
 
+    /// Assigns a value to a variable.
+    pub fn assign_var(&mut self, name: &Arc<String>, value: RtVal) {
+        if &**name != crate::THROWAWAY_VARIABLE {
+            self.vars.insert(Arc::clone(&name), value);
+        }
+    }
+
+    /// Executes a statement.
     pub fn exec_stmt(&mut self, stmt: ast::Stmt<'_>) -> Result<Flow> {
         let ast = stmt.ast;
         match stmt.data() {
@@ -186,7 +195,7 @@ impl Runtime {
             } => {
                 let iter_expr = ast.get_node(*iter_expr_id);
                 for it in self.eval_expr(iter_expr)?.iterate()? {
-                    self.vars.insert(Arc::clone(&iter_var), it.node);
+                    self.assign_var(iter_var, it.node);
                     match self.exec_stmt(ast.get_node(*block))? {
                         Flow::Proceed | Flow::Continue(_) => (),
                         Flow::Break(_) => break,
@@ -209,6 +218,7 @@ impl Runtime {
         }
     }
 
+    /// Evaluates an expression.
     pub fn eval_expr(&mut self, expr: ast::Expr<'_>) -> Result<Spanned<RtVal>> {
         let span = expr.span();
         let expression = Box::<dyn Expression>::from(expr);
@@ -216,6 +226,7 @@ impl Runtime {
             .eval(self, span)
             .map(|v| Spanned { node: v, span })
     }
+    /// Evaluates an expression and converts the result to a boolean.
     pub fn eval_bool_expr(&mut self, expr: ast::Expr<'_>) -> Result<bool> {
         self.eval_expr(expr)?.to_bool()
     }

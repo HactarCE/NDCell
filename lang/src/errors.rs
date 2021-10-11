@@ -300,7 +300,7 @@ impl Error {
     error_fn!(Error; fn cell_state_out_of_range("invalid cell state ID"));
 
     error_fn!(Error; fn invalid_cell_symbol("invalid cell symbol: {:?}", s: &str));
-    error_fn!(Error; fn wrong_cell_count("wrong cell cound; expected {} cells", n: usize));
+    error_fn!(Error; fn wrong_cell_count("wrong cell cound; expected {} cells but got {}", expected: usize, got: usize));
 
     error_fn!(Error; fn user_error("error"));
     error_fn!(Error; fn assertion_failed("assertion failed"));

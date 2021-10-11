@@ -56,7 +56,11 @@ impl CellArray {
     ) -> Result<Self> {
         // Check that the number of cells is correct.
         if masked_cells.len() != shape.len() {
-            return Err(Error::wrong_cell_count(span, shape.len()));
+            return Err(Error::wrong_cell_count(
+                span,
+                shape.len(),
+                masked_cells.len(),
+            ));
         }
 
         let mut masked_cells = masked_cells.iter().copied();

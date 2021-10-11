@@ -196,11 +196,11 @@ impl<'a> TestProgram<'a> {
 
         source.push_str(" {\n");
         let n = self.input_types.len();
-        source.push_str(self.exec);
-        source.push('\n');
         for i in 0..n {
             source.push_str(&format!("x{} = __compiled_arg__[{}]\n", i, i));
         }
+        source.push_str(self.exec);
+        source.push('\n');
         for (i, (ty, expr)) in self.result_expressions.iter().enumerate() {
             if matches!(ty, Type::CellArray(_)) {
                 // Cell arrays use reference semantics, so do not assign to the
@@ -239,7 +239,7 @@ impl<'a> TestProgram<'a> {
     }
 
     /// Asserts that attempting to parse the program produces a syntax error.
-    pub fn assert_syntax_error(self, expected_error: TestError<'_>) {
+    pub fn assert_syntax_error(self, expected_error: TestError<'_>) -> Self {
         let source = self.source_for_compiler_test();
         let mut ast = ast::Program::new();
         let file = ast.add_file("testfile.test".to_owned(), source);
@@ -249,38 +249,44 @@ impl<'a> TestProgram<'a> {
         };
         let task_str = format!("parsing {:#?}", self);
         assert_results_eq(&ast, &task_str, &actual_result, &Err(vec![expected_error]));
+        self
     }
     /// Asserts that attempting to interpret the initialization directives of
     /// the program produces a runntime error.
-    pub fn assert_init_errors(self, expected_errors: Vec<TestError<'_>>) {
+    pub fn assert_init_errors(self, expected_errors: Vec<TestError<'_>>) -> Self {
         let ast = self.ast_for_compiler_test();
         let mut runtime = Runtime::init_new(&ast);
         let actual_result = runtime.get_errors_list();
         let task_str = format!("running initialization for {:#?}", self);
         assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
+        self
     }
     /// Asserts that attempting to compile the program produces a compile error.
-    pub fn assert_compile_errors(self, expected_errors: Vec<TestError<'_>>) {
+    pub fn assert_compile_errors(self, expected_errors: Vec<TestError<'_>>) -> Self {
         let ast = self.ast_for_compiler_test();
         let runtime = self.init_new_runtime(&ast);
         let actual_result = Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default())
             .map(|_| "compiled successfully");
         let task_str = format!("compiling {:#?}", self);
         assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
+        self
     }
 
     /// Asserts that all test cases produce the specified output, both when
     /// interpreted and when compiled.
-    pub fn assert_test_cases<'s, OK: Clone + ToString>(self, test_cases: Vec<TestCase<'s, OK>>) {
-        self.assert_interpreted_test_cases(test_cases.clone());
-        self.assert_compiled_test_cases(test_cases);
+    pub fn assert_test_cases<'s, OK: Clone + ToString>(
+        self,
+        test_cases: Vec<TestCase<'s, OK>>,
+    ) -> Self {
+        self.assert_interpreted_test_cases(test_cases.clone())
+            .assert_compiled_test_cases(test_cases)
     }
     /// Asserts that all test cases produce the specified output when
     /// interpreted.
     pub fn assert_interpreted_test_cases<'s, OK: Clone + ToString>(
         self,
         test_cases: Vec<TestCase<'s, OK>>,
-    ) {
+    ) -> Self {
         let (ast, stmt_id, expr_ids) = self.ast_for_interpreter_test();
         let clean_runtime = self.init_new_runtime(&ast);
         for case in test_cases {
@@ -295,7 +301,10 @@ impl<'a> TestProgram<'a> {
             // Execute statement and result expressions.
             let actual_result: Result<Vec<_>, _> = runtime
                 .exec_stmt(ast.get_node(stmt_id))
-                .map_err(|_| runtime.ctx().errors.clone())
+                .map_err(|e| {
+                    runtime.report_error(e);
+                    runtime.ctx().errors.clone()
+                })
                 .and_then(|_| {
                     let mut ret = vec![];
 
@@ -305,7 +314,10 @@ impl<'a> TestProgram<'a> {
                             runtime
                                 .eval_expr(ast.get_node(expr_id))
                                 .map(|v| v.node.to_string())
-                                .map_err(|_| runtime.ctx().errors.clone())?,
+                                .map_err(|e| {
+                                    runtime.report_error(e);
+                                    runtime.ctx().errors.clone()
+                                })?,
                         );
                     }
 
@@ -325,12 +337,13 @@ impl<'a> TestProgram<'a> {
                 .map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
             assert_results_eq(&ast, task_str, &actual_result, &expected_result);
         }
+        self
     }
     /// Asserts that all test cases produce the specified output when compiled.
     pub fn assert_compiled_test_cases<'s, OK: Clone + ToString>(
         self,
         test_cases: Vec<TestCase<'s, OK>>,
-    ) {
+    ) -> Self {
         let ast = self.ast_for_compiler_test();
         let runtime = self.init_new_runtime(&ast);
         let mut f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
@@ -384,6 +397,7 @@ impl<'a> TestProgram<'a> {
                 .map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
             assert_results_eq(&ast, task_str, &actual_result, &expected_result);
         }
+        self
     }
 }
 

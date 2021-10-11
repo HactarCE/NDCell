@@ -105,7 +105,7 @@ fn test_logical_not() {
             (&[Integer(1)], false),
             (&[Integer(6)], false),
             (&[Integer(-5)], false),
-        ]))
+        ]));
 }
 
 fn boolean_test_cases<'a>(cases: &'a [(&'a [RtVal], bool)]) -> Vec<TestCase<'static, LangInt>> {

@@ -54,7 +54,7 @@ fn test_comparison<T: 'static + Copy + TestValues>(
     match cmp_reference_impl {
         Ok(_) => prgm.assert_compiled_test_cases(test_cases.clone()),
         Err(msg) => prgm.assert_compile_errors(test_errors![msg @ expr_str]),
-    }
+    };
 }
 
 fn test_multi_comparison(
@@ -71,5 +71,5 @@ fn test_multi_comparison(
                     expected_result: Ok(vec![cmp_reference_impl(a, b, c) as LangInt]),
                 },
             ),
-        )
+        );
 }

@@ -64,7 +64,7 @@ impl VectorSet {
 
         Self {
             vec_len,
-            bounds: Some(IRect6D::single_cell(vec_to_ivec6d(vec_span, vec)?)),
+            bounds: Some(IRect6D::single_cell(try_vec_to_ivec6d(vec_span, vec)?)),
             mask: None,
         }
         .canonicalize()
@@ -80,8 +80,8 @@ impl VectorSet {
         let vec_len = std::cmp::max(a.len(), b.len());
         check_vector_set_vec_len(span, vec_len)?;
 
-        let a = vec_to_ivec6d(a_span, a)?;
-        let b = vec_to_ivec6d(b_span, b)?;
+        let a = try_vec_to_ivec6d(a_span, a)?;
+        let b = try_vec_to_ivec6d(b_span, b)?;
         let bounds = Some(IRect6D::span(a, b));
         check_vector_set_bounds(span, bounds)?;
         Self {
@@ -359,6 +359,14 @@ impl VectorSet {
             }
         }
     }
+    /// Returns whether the set contains a vector.
+    pub fn contains_vector(&self, pos: &[LangInt]) -> bool {
+        if let Some(pos) = vec_to_ivec6d(pos) {
+            self.contains(pos)
+        } else {
+            false
+        }
+    }
 
     /// Returns the set containing all vectors present in both `self` and
     /// `other`.
@@ -491,13 +499,21 @@ fn bounds_from_list(positions: impl IntoIterator<Item = IVec6D>) -> Option<IRect
         .reduce(|r1, r2| IRect6D::span_rects(&r1, &r2))
 }
 
-fn vec_to_ivec6d(span: Span, v: &[LangInt]) -> Result<IVec6D> {
+fn try_vec_to_ivec6d(span: Span, v: &[LangInt]) -> Result<IVec6D> {
     // Check that all values are within range.
     for &i in v {
         check_vector_component(span, i)?;
     }
 
     Ok(vec_to_ivec6d_unchecked(v))
+}
+fn vec_to_ivec6d(v: &[LangInt]) -> Option<IVec6D> {
+    // Check that all values are within range.
+    if v.iter().all(|&i| is_vector_component_valid(i)) {
+        Some(vec_to_ivec6d_unchecked(v))
+    } else {
+        None
+    }
 }
 fn vec_to_ivec6d_unchecked(v: &[LangInt]) -> IVec6D {
     IVec6D::from_fn(|ax| *v.get(ax as usize).unwrap_or(&0) as isize)

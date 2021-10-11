@@ -133,11 +133,8 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
             "len" => Some(functions::vectors::VectorLen.boxed()),
             _ => None,
         },
-        Type::CellArray(shape) => match name {
-            "reshape" => match shape {
-                Some(set) => todo!(),
-                None => todo!(),
-            },
+        Type::CellArray(_) => match name {
+            "shape" => Some(functions::arrays::Shape.boxed()),
             _ => None,
         },
 
@@ -172,7 +169,7 @@ fn resolve_index_method(obj_type: &Type) -> Option<Box<dyn Function>> {
         Type::String => None,
         Type::Type => Some(Box::new(functions::types::TypeBrackets)),
         Type::Vector(_) => Some(Box::new(functions::vectors::IndexVector(None))),
-        Type::CellArray(_) => todo!("cell array indexing function"),
+        Type::CellArray(_) => Some(Box::new(functions::arrays::IndexCellArray)),
         Type::EmptySet => None,
         Type::IntegerSet => None,
         Type::CellSet => None,

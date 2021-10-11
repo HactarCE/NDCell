@@ -38,7 +38,7 @@ use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
     CellSet, CpVal, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, TryGetType, Type, Val,
-    INT_BITS,
+    VectorSet, INT_BITS,
 };
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait, Runtime};
@@ -544,15 +544,15 @@ impl Compiler {
         v: llvm::VectorValue,
         len: usize,
     ) -> llvm::VectorValue {
-        let v_len = v.get_type().get_size() as LangInt;
-        if v_len == len as LangInt {
+        let v_len = v.get_type().get_size() as usize;
+        if v_len == len {
             return v;
         }
-        let shuffle_mask = (0..len as LangInt).map(|i| std::cmp::min(i, v_len));
+        let shuffle_mask = (0..len).map(|i| std::cmp::min(i, v_len));
         self.builder().build_shuffle_vector(
             v,
             v.same_type_const_zero(),
-            llvm::const_vector(shuffle_mask),
+            llvm::const_shuffle_vector(shuffle_mask),
             "resized_vector",
         )
     }
@@ -679,10 +679,16 @@ impl Compiler {
     ) -> Result<llvm::PointerValue> {
         use llvm::IntPredicate::{SGT, SLT};
 
-        let is_past_lower_bound =
-            self.build_any_cmp(SLT, pos, llvm::const_vector(ndarray.min_vec()))?;
-        let is_past_upper_bound =
-            self.build_any_cmp(SGT, pos, llvm::const_vector(ndarray.max_vec()))?;
+        // Pad all vectors to a common length.
+        let len = std::cmp::max(pos.get_type().get_size() as usize, ndarray.ndim());
+        let pos = self.build_convert_vector_length(pos, len);
+        let lower_bound =
+            self.build_convert_vector_length(llvm::const_vector(ndarray.min_vec()), len);
+        let upper_bound =
+            self.build_convert_vector_length(llvm::const_vector(ndarray.max_vec()), len);
+
+        let is_past_lower_bound = self.build_any_cmp(SLT, pos, lower_bound)?;
+        let is_past_upper_bound = self.build_any_cmp(SGT, pos, upper_bound)?;
 
         let is_out_of_bounds = self.builder().build_or(
             is_past_lower_bound,
@@ -704,8 +710,9 @@ impl Compiler {
         pos: llvm::VectorValue,
         name: &str,
     ) -> Result<llvm::PointerValue> {
+        let pos = self.build_convert_vector_length(pos, ndarray.ndim());
         let tmp = self.build_checked_int_arithmetic(error_span, "smul", ndarray.strides(), pos)?;
-        let ptr_offset = self.build_reduce("sadd", tmp)?;
+        let ptr_offset = self.build_reduce("add", tmp)?;
         let b = self.builder();
         Ok(unsafe { b.build_gep(ndarray.array_ptr(), &[ptr_offset], name) })
     }

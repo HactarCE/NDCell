@@ -114,6 +114,27 @@ impl CellArray {
         let uvec = self.cell_array_uvec(vec_to_ivec6d(pos)?)?;
         Some(&mut self.cells_array_mut()[uvec])
     }
+    /// Returns a pointer to the origin in this array, which may be outside the
+    /// allocation, or a null pointer if the array is empty.
+    pub fn get_origin_ptr(&mut self) -> *mut LangCell {
+        if let Some(bounds) = self.shape().bounds() {
+            let pos = -bounds.min();
+            let size = bounds.size();
+
+            // TODO: extract strides calculation into something generic in ndcell_core
+            let mut offset = 0;
+            let mut stride = 1;
+            for &ax in ndcell_core::axis::AXES {
+                offset += pos[ax] * stride;
+                stride *= size[ax];
+            }
+
+            let base_ptr = self.cells_array_mut().as_flat_slice_mut().as_mut_ptr();
+            base_ptr.wrapping_offset(offset)
+        } else {
+            std::ptr::null_mut()
+        }
+    }
 
     fn cell_array_uvec(&self, pos: IVec6D) -> Option<UVec6D> {
         self.shape()

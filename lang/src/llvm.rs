@@ -124,6 +124,14 @@ pub fn const_vector(v: impl IntoIterator<Item = LangInt>) -> VectorValue {
     VectorType::const_vector(&v.into_iter().map(const_int).collect_vec())
 }
 
+pub fn const_shuffle_vector(v: impl IntoIterator<Item = usize>) -> VectorValue {
+    VectorType::const_vector(
+        &v.into_iter()
+            .map(|i| ctx().i32_type().const_int(i as u64, false))
+            .collect_vec(),
+    )
+}
+
 /// Returns the name of an LLVM type used in names of intrinsics (e.g., "i32"
 /// for a 32-bit integer, or "v3i64" for a vector of three 64-bit integers).
 pub fn intrinsic_type_name(ty: impl BasicType<'static>) -> String {
@@ -207,6 +215,23 @@ impl IntMathValue for VectorValue {
     }
 }
 
+/// Obtains a constant `VectorValue`'s sign-extended value.
+pub fn vector_value_as_constant(v: VectorValue) -> Option<Vec<LangInt>> {
+    if v.is_constant_vector() {
+        let len = v.get_type().get_size();
+        (0..len)
+            .map(|i| {
+                v.get_element_as_constant(i)
+                    .into_int_value()
+                    .get_sign_extended_constant()
+                    .map(|x| x as LangInt)
+            })
+            .collect()
+    } else {
+        None
+    }
+}
+
 /// LLVM representation of an N-dimensional array.
 #[derive(Debug, Copy, Clone)]
 pub struct NdArrayValue {
@@ -233,7 +258,7 @@ impl NdArrayValue {
     }
     /// Constructs a new N-dimensional array from a pointer to the base of the
     /// array.
-    pub fn new_with_base_ptr(
+    fn new_with_base_ptr(
         bounds: IRect6D,
         array_base_ptr: PointerValue,
         strides: &[LangInt],

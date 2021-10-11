@@ -1,7 +1,7 @@
 use crate::data::{CellArray, VectorSet};
 
 use super::*;
-use RtVal::{Cell, Integer};
+use RtVal::{Cell, Integer, Vector};
 
 #[test]
 fn test_cell_array_construction() {
@@ -32,50 +32,58 @@ fn test_cell_array_construction() {
         .assert_interpreted_test_cases(test_cases![
             () => Ok("([-1, -1]..[1, 1]).fill(#1, #2, #3, #4, #0, #0, #1, #7, #9)"),
         ]);
-
-    // TestProgram::new()
-    //     .with_setup("@states 10")
-    //     .with_result_expressions(&exprs)
-    //     .assert_compiled_test_cases(test_cases![
-    //         () => Ok(RtVal::CellArray(r2_moore_zeros)),
-    //     ]);
-
-    // TODO syntax for defining a cell array literal?
-    // TODO syntax for defining cell array with a particular shape as parameter?
-    // TODO syntax for indexing a cell array?
-    // TODO assign to index of a cell array?
 }
 
 #[test]
 fn test_cell_array_mutation() {
     let span = crate::utils::dummy_span();
     let mut mask_iter = "###...###.........###....##".chars().map(|ch| ch == '#');
+    let rectangle = VectorSet::moore(span, 3, 1, span).unwrap();
     let shape = Arc::new(
-        VectorSet::moore(span, 3, 1, span)
-            .unwrap()
+        rectangle
             .filter(span, |_| mask_iter.next().unwrap())
             .unwrap(),
     );
-    let zeros = CellArray::from_cell(Arc::clone(&shape), 0_u8);
+    let zeros = CellArray::from_cell(Arc::clone(&shape), 3_u8);
     let ty = Type::CellArray(Some(Arc::clone(&shape)));
 
     assert_eq!(shape.len(), 11);
 
-    let input_types = [ty.clone()];
+    let input_types = [ty.clone(), Type::Vector(Some(2)), Type::Integer];
     let test_prgm_template = TestProgram::new().with_input_types(&input_types);
 
-    let mut expected = zeros.clone();
-    *expected.get_cell_mut(&[-1, -1, -1]).unwrap() = 1_u8;
+    let gen_expected = |pos: &[LangInt]| {
+        let mut expected = zeros.clone();
+        *expected.get_cell_mut(&[-1, -1, -1]).unwrap() = 1_u8;
+        expected
+    };
+
     test_prgm_template
-        .with_exec("x0[-1] = #1")
-        .assert_test_cases(test_cases![
-            (RtVal::CellArray(zeros)) => Ok(expected.to_string()),
-        ]);
+        .with_exec("x0[x1, x2] = #1")
+        .assert_compiled_test_cases(
+            iproduct!(-2..=2, -2..=2, -2..=2)
+                .map(|(x, y, z)| {
+                    let inputs = vec![
+                        RtVal::CellArray(zeros.clone()),
+                        Vector(vec![x, y]),
+                        Integer(z),
+                    ];
 
-    // TestProgram::new().with_exec(
-    //     "
-    //         p = __compiled_arg__[0]
+                    let mut expected = zeros.clone();
+                    let expected_result = if let Some(c) = expected.get_cell_mut(&[x, y, z]) {
+                        *c = 1_u8;
+                        Ok(vec![expected])
+                    } else if rectangle.contains_vector(&[x, y, z]) {
+                        test_err!("position excluded by array mask" @ "[x1, x2]")
+                    } else {
+                        test_err!("position out of bounds" @ "[x1, x2]")
+                    };
 
-    //     ",
-    // );
+                    TestCase {
+                        inputs,
+                        expected_result,
+                    }
+                })
+                .collect_vec(),
+        );
 }

@@ -108,7 +108,7 @@ impl CellArray {
         let uvec = self.cell_array_uvec(vec_to_ivec6d(pos)?)?;
         Some(self.cells[uvec])
     }
-    /// Returns a mutable reference to the cell statee at a position, or `None`
+    /// Returns a mutable reference to the cell state at a position, or `None`
     /// if the position is outside the mask.
     pub fn get_cell_mut(&mut self, pos: &[LangInt]) -> Option<&mut LangCell> {
         let uvec = self.cell_array_uvec(vec_to_ivec6d(pos)?)?;

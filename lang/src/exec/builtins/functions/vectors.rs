@@ -115,11 +115,7 @@ fn compile_vec_construct(
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct IndexVector(pub Option<Axis>);
 impl IndexVector {
-    fn eval_args(
-        &self,
-        _ctx: &mut Ctx,
-        call: &CallInfo<Spanned<RtVal>>,
-    ) -> Result<(Vec<LangInt>, usize)> {
+    fn eval_args(&self, call: &CallInfo<Spanned<RtVal>>) -> Result<(Vec<LangInt>, usize)> {
         let i;
         let span;
         match self.0 {
@@ -195,8 +191,8 @@ impl IndexVector {
     }
 }
 impl Function for IndexVector {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
-        let (v, i) = self.eval_args(ctx, &call)?;
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+        let (v, i) = self.eval_args(&call)?;
         Ok(RtVal::Integer(v[i]))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
@@ -215,7 +211,7 @@ impl Function for IndexVector {
         first_arg: ast::Expr<'_>,
         new_value: Spanned<RtVal>,
     ) -> Result<()> {
-        let (mut v, i) = self.eval_args(runtime.ctx(), &call)?;
+        let (mut v, i) = self.eval_args(&call)?;
 
         // Assign the new component.
         v[i as usize] = new_value.as_integer()?;

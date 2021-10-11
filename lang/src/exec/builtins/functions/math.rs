@@ -327,7 +327,7 @@ impl UnaryMathOp {
     }
 
     /// Evaluates this operation for a values.
-    pub fn eval_on_value(self, _ctx: &mut Ctx, span: Span, arg: &Spanned<RtVal>) -> Result<RtVal> {
+    pub fn eval_on_value(self, span: Span, arg: &Spanned<RtVal>) -> Result<RtVal> {
         if let Ok(x) = arg.as_integer() {
             self.eval_on_integers(span, x).map(RtVal::Integer)
         } else {
@@ -366,10 +366,10 @@ impl UnaryMathOp {
     }
 }
 impl Function for UnaryMathOp {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(1)?;
         let arg = call.arg(0)?;
-        self.eval_on_value(ctx, call.span, arg)
+        self.eval_on_value(call.span, arg)
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         call.check_args_len(1)?;

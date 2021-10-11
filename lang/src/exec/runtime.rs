@@ -164,12 +164,12 @@ impl Runtime {
             ast::StmtData::Assert { condition, msg } => {
                 let condition = ast.get_node(*condition);
                 if self.eval_expr(condition)?.to_bool()? {
+                    Ok(Flow::Proceed)
+                } else {
                     Err(match msg {
                         Some(msg) => Error::assertion_failed_with_msg(stmt.span(), msg),
                         None => Error::assertion_failed(stmt.span()),
                     })
-                } else {
-                    Ok(Flow::Proceed)
                 }
             }
             ast::StmtData::Error { msg } => Err(match msg {

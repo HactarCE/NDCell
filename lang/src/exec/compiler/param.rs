@@ -126,7 +126,7 @@ impl Param {
         //                     u64::from_ne_bytes([b0, b1, b2, b3, 0, 0, 0, 0])
         //                 }
         //                 8 => bits,
-        //                 _ => panic!("Unknown cell state filter element type"),
+        //                 _ => panic!("unknown cell state filter element type"),
         //             };
         //         }
         //         */
@@ -174,7 +174,7 @@ impl Param {
                         2 => u16::from_ne_bytes(chunk.try_into().unwrap()) as LangUint,
                         4 => u32::from_ne_bytes(chunk.try_into().unwrap()) as LangUint,
                         8 => u64::from_ne_bytes(chunk.try_into().unwrap()) as LangUint,
-                        _ => panic!("Unknown cell state filter element type"),
+                        _ => panic!("unknown cell state filter element type"),
                     })
                     .take(CellSet::vec_len_for_state_count(*state_count))
                     .collect();

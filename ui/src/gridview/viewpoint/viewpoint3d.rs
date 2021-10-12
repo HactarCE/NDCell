@@ -317,7 +317,7 @@ fn fvec3d_from_basis3(axis: Axis, rot: impl Rotation3<Scalar = f32>) -> FVec3D {
         X => cgmath::Vector3::unit_x(),
         Y => cgmath::Vector3::unit_y(),
         Z => cgmath::Vector3::unit_z(),
-        _ => panic!("Invalid 3D axis"),
+        _ => panic!("invalid 3D axis"),
     };
     let v = rot.invert().rotate_vector(unit_vec);
     NdVec([r64(v.x as f64), r64(v.y as f64), r64(v.z as f64)])

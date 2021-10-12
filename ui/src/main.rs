@@ -124,7 +124,7 @@ fn make_default_gridview(ndim: usize) -> gridview::GridView {
             Default::default()
         })
         .into(),
-        _ => panic!("Invalid number of dimensions passed to make_default_gridview()"),
+        _ => panic!("invalid number of dimensions passed to make_default_gridview()"),
     }
 }
 

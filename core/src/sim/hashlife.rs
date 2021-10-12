@@ -17,7 +17,7 @@ use crate::num::{BigInt, Signed, Zero};
 /// Advances the given ND-tree by the given number of generations.
 pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
     if gens.is_negative() {
-        panic!("Cannot simulate negative timestep");
+        panic!("cannot simulate negative timestep");
     }
     if gens.is_zero() {
         // No need to simulate anything!

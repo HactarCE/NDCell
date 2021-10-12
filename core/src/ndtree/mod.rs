@@ -610,7 +610,7 @@ impl<D: Dim> NdTree<D> {
                     },
                 ),
             ),
-            _ => panic!("Layer mismatch"),
+            _ => panic!("layer mismatch"),
         }
     }
 }

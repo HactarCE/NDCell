@@ -165,7 +165,7 @@ fn add_macrocell_node<'pool, D: Dim>(
     }
 
     let children = match new_node.layer() {
-        Layer(0) => panic!("Cannot create Macrocell from 1x1 node"),
+        Layer(0) => panic!("cannot create macrocell from 1x1 node"),
         Layer(1) => {
             let cells = new_node.as_leaf().unwrap().cells();
             macrocell_index_iter::<D>()

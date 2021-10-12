@@ -65,7 +65,7 @@ impl OpPrecedence {
             Self::Range => Self::Prefix,
             Self::Prefix => Self::Suffix,
             Self::Suffix => Self::Atom,
-            Self::Atom => panic!("Tried to get operator precedence level beyond {:?}", self),
+            Self::Atom => panic!("tried to get operator precedence level beyond {:?}", self),
         }
     }
 

@@ -45,7 +45,7 @@ impl Face {
             X => PosX,
             Y => PosY,
             Z => PosZ,
-            _ => panic!("Invalid 3D axis: {:?}", axis),
+            _ => panic!("invalid 3D axis: {:?}", axis),
         }
     }
     /// Returns a face with a negative normal along an axis.
@@ -55,7 +55,7 @@ impl Face {
             X => NegX,
             Y => NegY,
             Z => NegZ,
-            _ => panic!("Invalid 3D axis: {:?}", axis),
+            _ => panic!("invalid 3D axis: {:?}", axis),
         }
     }
     /// Returns the opposite face.

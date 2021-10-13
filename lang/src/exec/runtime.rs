@@ -164,7 +164,7 @@ impl Runtime {
                 if_false,
             } => {
                 let condition = ast.get_node(*condition);
-                if self.eval_expr(condition)?.to_bool()? {
+                if self.eval_bool_expr(condition)? {
                     if_true.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
                 } else {
                     if_false.map_or(Ok(Flow::Proceed), |id| self.exec_stmt(ast.get_node(id)))
@@ -173,7 +173,7 @@ impl Runtime {
 
             ast::StmtData::Assert { condition, msg } => {
                 let condition = ast.get_node(*condition);
-                if self.eval_expr(condition)?.to_bool()? {
+                if self.eval_bool_expr(condition)? {
                     Ok(Flow::Proceed)
                 } else {
                     Err(match msg {

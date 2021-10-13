@@ -1627,6 +1627,12 @@ impl Compiler {
         });
         Spanned { node, span }
     }
+    /// Builds instructions to evaluate an expression and convert the result to
+    /// a boolean.
+    pub fn build_bool_expr(&mut self, expr: ast::Expr<'_>) -> Result<llvm::IntValue> {
+        let value = self.build_expr(expr);
+        self.build_convert_to_bool(&value)
+    }
 }
 
 /*

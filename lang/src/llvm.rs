@@ -236,47 +236,41 @@ pub fn vector_value_as_constant(v: VectorValue) -> Option<Vec<LangInt>> {
 #[derive(Debug, Copy, Clone)]
 pub struct NdArrayValue {
     bounds: IRect6D,
-    array_ptr: PointerValue,
+    origin_ptr: PointerValue,
     strides: VectorValue,
     mutable: bool,
 }
 impl NdArrayValue {
     /// Constructs a new N-dimensional array from a pointer to the origin in the
     /// array.
-    pub fn new_with_origin_ptr(
+    pub fn from_origin_ptr(
         bounds: IRect6D,
-        array_ptr: PointerValue,
+        origin_ptr: PointerValue,
         strides: VectorValue,
         mutable: bool,
     ) -> Self {
         Self {
             bounds,
-            array_ptr,
+            origin_ptr,
             strides,
             mutable,
         }
     }
     /// Constructs a new N-dimensional array from a pointer to the base of the
-    /// array.
-    fn new_with_base_ptr(
+    /// array. The pointer must be known at compile-time.
+    pub fn from_const_base_ptr(
         bounds: IRect6D,
-        array_base_ptr: PointerValue,
+        base_ptr: PointerValue,
         strides: &[LangInt],
         mutable: bool,
     ) -> Self {
         // Get a pointer to the origin in the array. Note that this GEP may be
         // out of bounds if the cell array does not contain the origin (but it
         // should always be reasonably nearby).
-        let base_idx = strides
-            .iter()
-            .zip(&bounds.min().0)
-            .map(|(&stride, &i)| stride * i as LangInt)
-            .sum::<LangInt>();
-        let array_ptr = unsafe { array_base_ptr.const_gep(&[const_int(-base_idx)]) };
-
+        let base_idx = crate::utils::ndarray_base_idx(bounds, strides);
+        let origin_ptr = unsafe { base_ptr.const_gep(&[const_int(-base_idx)]) };
         let strides = const_vector(strides.iter().copied());
-
-        Self::new_with_origin_ptr(bounds, array_ptr, strides, mutable)
+        Self::from_origin_ptr(bounds, origin_ptr, strides, mutable)
     }
     /// Constructs a new N-dimensional array with static contents.
     pub fn new_const(
@@ -310,7 +304,7 @@ impl NdArrayValue {
         let strides = crate::utils::ndarray_strides(ndim, bounds);
 
         let mutable = false;
-        Self::new_with_base_ptr(bounds, array_base_ptr, &strides, mutable)
+        Self::from_const_base_ptr(bounds, array_base_ptr, &strides, mutable)
     }
 
     /// Returns the number of dimensions.
@@ -322,8 +316,8 @@ impl NdArrayValue {
         self.bounds
     }
     /// Returns a pointer to the array values.
-    pub fn array_ptr(&self) -> PointerValue {
-        self.array_ptr
+    pub fn origin_ptr(&self) -> PointerValue {
+        self.origin_ptr
     }
     /// Returns the strides of the array.
     pub fn strides(&self) -> VectorValue {

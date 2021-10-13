@@ -29,6 +29,8 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::{mpsc, Arc};
 
+use ndcell_core::ndrect::IRect6D;
+
 mod config;
 mod function;
 mod loops;
@@ -448,6 +450,56 @@ impl Compiler {
         let b = self.builder();
         todo!("cell set type")
     }
+    /// Builds instructions to construct a multidimensional array from a base
+    /// pointer.
+    pub fn build_construct_ndarray_from_base_ptr(
+        &mut self,
+        bounds: IRect6D,
+        array_base_ptr: llvm::PointerValue,
+        strides: &[LangInt],
+        mutable: bool,
+    ) -> llvm::NdArrayValue {
+        // Get a pointer to the origin in the array. Note that this GEP may be
+        // out of bounds if the cell array does not contain the origin (but it
+        // should always be reasonably nearby).
+        let base_idx = crate::utils::ndarray_base_idx(bounds, strides);
+        let array_origin_ptr = unsafe {
+            self.builder().build_gep(
+                array_base_ptr,
+                &[llvm::const_int(-base_idx)],
+                "array_origin_ptr",
+            )
+        };
+        let strides = llvm::const_vector(strides.iter().copied());
+        llvm::NdArrayValue::from_origin_ptr(bounds, array_origin_ptr, strides, mutable)
+    }
+    /// Builds instructions to allocate a multidimensional array on the stack.
+    pub fn build_alloca_ndarray(
+        &mut self,
+        ndim: usize,
+        bounds: IRect6D,
+        ty: llvm::IntType,
+    ) -> llvm::NdArrayValue {
+        let buffer_len = bounds.count();
+        let array_base_ptr = self.builder().build_array_alloca(
+            llvm::cell_type(),
+            llvm::const_int(buffer_len as LangInt),
+            "cell_array_buffer",
+        );
+
+        let strides = crate::utils::ndarray_strides(ndim, bounds);
+
+        let mutable = true;
+        self.build_construct_ndarray_from_base_ptr(bounds, array_base_ptr, &strides, mutable)
+    }
+    /// Builds instructions to allocate a mutable cell array on the stack.
+    pub fn build_alloca_cell_array(&mut self, shape: Arc<VectorSet>) -> LlvmCellArray {
+        let ndim = shape.vec_len();
+        let cells = shape
+            .bounds()
+            .map(|bounds| self.build_alloca_ndarray(ndim, bounds, llvm::cell_type()));
+        LlvmCellArray::new(&mut self.module, shape, cells)
+    }
 
     /// Returns the value inside if given an `Integer` value or subtype of one;
     /// otherwise returns a type error.
@@ -623,12 +675,12 @@ impl Compiler {
                 negative_delta,
                 &format!("origin_with_offset_{:?}", delta),
             )?;
-            let new_cells = llvm::NdArrayValue::new_with_origin_ptr(
+            let new_cells = Some(llvm::NdArrayValue::from_origin_ptr(
                 new_bounds,
                 new_array_ptr,
                 cells.strides(),
                 cells.is_mutable(),
-            );
+            ));
 
             Ok(LlvmCellArray::new(&mut self.module, new_shape, new_cells))
         } else {
@@ -718,7 +770,7 @@ impl Compiler {
         let tmp = self.build_checked_int_arithmetic(error_span, "smul", ndarray.strides(), pos)?;
         let ptr_offset = self.build_reduce("add", tmp)?;
         let b = self.builder();
-        Ok(unsafe { b.build_gep(ndarray.array_ptr(), &[ptr_offset], name) })
+        Ok(unsafe { b.build_gep(ndarray.origin_ptr(), &[ptr_offset], name) })
     }
 }
 
@@ -1414,18 +1466,14 @@ impl Compiler {
             ParamType::Cell => CpVal::Cell(arg_value.into_int_value()),
             ParamType::Vector(_) => CpVal::Vector(arg_value.into_vector_value()),
             ParamType::CellArray(shape) => {
-                let bounds = shape
-                    .bounds()
-                    .ok_or_else(|| internal_error_value!("empty cell array argument"))?;
-                let cells_ptr = arg_value.into_pointer_value();
-                let strides =
-                    llvm::const_vector(crate::utils::ndarray_strides(shape.vec_len(), bounds));
-
+                let cells_origin_ptr = arg_value.into_pointer_value();
                 let mutable = true;
-                let cells =
-                    llvm::NdArrayValue::new_with_origin_ptr(bounds, cells_ptr, strides, mutable);
-
-                CpVal::CellArray(LlvmCellArray::new(&mut self.module, shape, cells))
+                CpVal::CellArray(LlvmCellArray::from_cells_origin_ptr(
+                    &mut self.module,
+                    shape,
+                    cells_origin_ptr,
+                    mutable,
+                ))
             }
         })
     }

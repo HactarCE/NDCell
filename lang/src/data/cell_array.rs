@@ -190,9 +190,11 @@ impl LlvmCellArray {
     pub fn new(
         module: &mut llvm::Module,
         shape: Arc<VectorSet>,
-        cells: llvm::NdArrayValue,
+        cells: Option<llvm::NdArrayValue>,
     ) -> Self {
-        let cells = Some(cells);
+        if cells.is_none() {
+            assert!(shape.is_empty())
+        }
         let mask = shape.mask().as_ref().map(|m| {
             llvm::NdArrayValue::new_const(
                 module,
@@ -209,32 +211,41 @@ impl LlvmCellArray {
         });
         Self { shape, cells, mask }
     }
-    /// Constructs a new cell array with static contents.
+    /// Constructs a new cell array from a pointer to the origin in the cell
+    /// array.
+    pub fn from_cells_origin_ptr(
+        module: &mut llvm::Module,
+        shape: Arc<VectorSet>,
+        cells_origin_ptr: llvm::PointerValue,
+        mutable: bool,
+    ) -> Self {
+        let cells = shape.bounds().map(|bounds| {
+            let strides =
+                llvm::const_vector(crate::utils::ndarray_strides(shape.vec_len(), bounds));
+            llvm::NdArrayValue::from_origin_ptr(bounds, cells_origin_ptr, strides, mutable)
+        });
+        Self::new(module, shape, cells)
+    }
+    /// Builds instructions to construct an immutable cell array with a constant value.
     pub fn new_const(module: &mut llvm::Module, a: &CellArray) -> Self {
         let shape = Arc::clone(a.shape());
-        if let Some(bounds) = shape.bounds() {
+        let cells = shape.bounds().map(|bounds| {
             let cell_values = &a
                 .cells_array()
                 .as_flat_slice()
                 .iter()
                 .map(|&i| llvm::const_cell(i))
                 .collect_vec();
-            let cells = llvm::NdArrayValue::new_const(
+            llvm::NdArrayValue::new_const(
                 module,
                 a.ndim(),
                 bounds,
                 llvm::cell_type(),
                 cell_values,
                 "const_cell_array",
-            );
-            Self::new(module, shape, cells)
-        } else {
-            Self {
-                shape,
-                cells: None,
-                mask: None,
-            }
-        }
+            )
+        });
+        Self::new(module, shape, cells)
     }
 
     /// Returns the shape of the cell array.
@@ -266,11 +277,7 @@ impl LlvmCellArray {
         span: Span,
         new_mask: &VectorSet,
     ) -> Result<Self> {
-        if let Some(cells) = self.cells() {
-            let shape = Arc::new(self.shape.union(span, new_mask)?);
-            Ok(Self::new(module, shape, cells))
-        } else {
-            Ok(self.clone()) // empty
-        }
+        let new_shape = Arc::new(self.shape.union(span, new_mask)?);
+        Ok(Self::new(module, new_shape, self.cells))
     }
 }

@@ -85,6 +85,13 @@ pub fn ndarray_strides(ndim: usize, bounds: IRect6D) -> Vec<i64> {
         })
         .collect()
 }
+pub fn ndarray_base_idx(bounds: IRect6D, strides: &[i64]) -> i64 {
+    strides
+        .iter()
+        .zip(&bounds.min().0)
+        .map(|(&stride, &i)| stride * i as i64)
+        .sum()
+}
 
 /// Applies `map` to the inside of two `Option`s, then merges the result using
 /// `merge` if both are `Some`.

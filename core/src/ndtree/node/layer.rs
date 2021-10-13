@@ -68,21 +68,30 @@ impl Layer {
     }
 
     /// Returns the highest layer at which leaf nodes are allowed.
-    pub fn base<D: Dim>() -> Self {
+    ///
+    /// # Panics
+    ///
+    /// This function panics if given an invalid dimension count.
+    pub fn base_for_dim(ndim: usize) -> Self {
         // Let's set a limit of 64 bytes to represent the cells in each leaf
         // node, so that jemalloc can fit each one in a single cache line. Since
         // each cell takes up a single byte, this results in the following
         // maximum leaf node size for each dimensionality:
-        match_ndim!(match D {
+        match ndim {
             1 => Layer(6), // 64          = 64 bytes
             2 => Layer(3), // 8x8         = 64 bytes
             3 => Layer(2), // 4x4x4       = 64 bytes
             4 => Layer(1), // 2x2x2x2     = 16 bytes
             5 => Layer(1), // 2x2x2x2x2   = 32 bytes
             6 => Layer(1), // 2x2x2x2x2x2 = 64 bytes
-        })
+            _ => panic!("invalid dimension count"),
+        }
         // Some informal performance testing on CGOL simulation suggests that
         // layer 3 is indeed ideal for 2-state 2D CA.
+    }
+    /// Returns the highest layer at which leaf nodes are allowed.
+    pub fn base<D: Dim>() -> Self {
+        Self::base_for_dim(D::NDIM)
     }
     /// Returns `true` if a node at this layer would be a leaf node.
     pub fn is_leaf<D: Dim>(self) -> bool {

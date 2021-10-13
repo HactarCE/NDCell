@@ -97,3 +97,19 @@ fn test_condition_uninit() {
             );
     }
 }
+
+#[test]
+fn test_compile_time_condition() {
+    for prgm in [
+        "if     1 { ret = 10 }",
+        "if     1 { ret = 10 } else {          }",
+        "if     0 {          } else { ret = 10 }",
+        "unless 0 { ret = 10 }",
+        "if     0 {          } else if 1 { ret = 10 }",
+    ] {
+        TestProgram::new()
+            .with_exec(prgm)
+            .with_result_expressions(&[(Type::Integer, "ret")])
+            .assert_test_cases(test_cases![() => Ok("10")]);
+    }
+}

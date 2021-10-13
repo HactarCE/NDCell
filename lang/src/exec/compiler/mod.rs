@@ -1631,11 +1631,25 @@ impl Compiler {
             } => {
                 let condition = ast.get_node(*condition);
                 let condition_value = self.build_bool_expr(condition)?;
-                self.build_conditional(
-                    condition_value,
-                    |c| if_true.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
-                    |c| if_false.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
-                )?;
+                if let Some(const_bool) = condition_value.get_zero_extended_constant() {
+                    // The condition value is compile-time constant, so only
+                    // compile the branch that will execute.
+                    if const_bool != 0 {
+                        if let Some(id) = if_true {
+                            self.build_stmt(ast.get_node(*id))?;
+                        }
+                    } else {
+                        if let Some(id) = if_false {
+                            self.build_stmt(ast.get_node(*id))?;
+                        }
+                    }
+                } else {
+                    self.build_conditional(
+                        condition_value,
+                        |c| if_true.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
+                        |c| if_false.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
+                    )?;
+                }
             }
 
             ast::StmtData::Assert { condition, msg } => {

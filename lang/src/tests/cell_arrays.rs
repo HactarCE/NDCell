@@ -22,9 +22,10 @@ fn test_cell_array_construction() {
     TestProgram::new()
         .with_setup("@states 7")
         .with_result_expressions(&exprs)
-        .assert_compile_errors(test_errors![
-            "invalid cell symbol: \"7\"" @ "'1 2 3 4 . 0 # 7 9'",
-        ]);
+        .assert_compile_or_interpreted_errors(
+            vec![],
+            test_errors!["invalid cell symbol: \"7\"" @ "'1 2 3 4 . 0 # 7 9'"],
+        );
 
     TestProgram::new()
         .with_setup("@states 10")

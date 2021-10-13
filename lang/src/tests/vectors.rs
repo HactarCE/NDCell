@@ -31,8 +31,7 @@ fn test_vector_construct() {
         let src = format!("_ = vec(len={})", len_str);
         TestProgram::new()
             .with_exec(&src)
-            .assert_interpreted_test_cases::<&str>(test_cases![() => Err(vec_len_msg @ len_str)])
-            .assert_compile_errors(test_errors![vec_len_msg @ len_str]);
+            .assert_compile_or_interpreted_errors(vec![], test_errors![vec_len_msg @ len_str]);
     }
 
     // Test vector constructor with integer value and explicit length.
@@ -122,9 +121,8 @@ fn test_vector_access() {
     fn assert_out_of_bounds(p: TestProgram, expr: &str, loc: &str) {
         let msg = "index out of bounds";
         let exprs = [(Type::Integer, expr)];
-        let p = p.with_result_expressions(&exprs);
-        p.assert_interpreted_test_cases::<&str>(test_cases![() => Err(msg @ loc)]);
-        p.assert_compile_errors(test_errors![msg @ loc]);
+        p.with_result_expressions(&exprs)
+            .assert_compile_or_interpreted_errors(vec![], test_errors![msg @ loc]);
     }
 
     // Test out of bounds access (positive).

@@ -253,7 +253,23 @@ impl<'a> TestProgram<'a> {
         self
     }
     /// Asserts that attempting to interpret the initialization directives of
-    /// the program produces a runntime error.
+    /// the program produces a runtime error and attempting to compile the
+    /// program produces a compile error.
+    pub fn assert_compile_or_interpreted_errors(
+        self,
+        inputs: Vec<RtVal>,
+        expected_errors: Vec<TestError<'_>>,
+    ) -> Self {
+        let expected_result = Err(expected_errors.clone());
+        let test_case = TestCase {
+            inputs,
+            expected_result,
+        };
+        self.assert_interpreted_test_cases::<&str>(vec![test_case])
+            .assert_compile_errors(expected_errors)
+    }
+    /// Asserts that attempting to interpret the initialization directives of
+    /// the program produces a runtime error.
     pub fn assert_init_errors(self, expected_errors: Vec<TestError<'_>>) -> Self {
         let ast = self.ast_for_compiler_test();
         let mut runtime = Runtime::init_new(&ast);

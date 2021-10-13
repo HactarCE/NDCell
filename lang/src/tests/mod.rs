@@ -159,7 +159,7 @@ impl<'a> TestProgram<'a> {
 
         let mut ast = ast::Program::new();
 
-        parse_or_panic(parser::parse_file, &mut ast, "setup.test", self.setup);
+        parse_or_panic(parser::parse_directives, &mut ast, "setup.test", self.setup);
 
         let stmt_src = format!("{{\n{}\n}}", self.exec);
         let stmt_id = parse_or_panic(parser::parse_statement, &mut ast, "exec.test", &stmt_src);
@@ -222,7 +222,7 @@ impl<'a> TestProgram<'a> {
 
         let mut ast = ast::Program::new();
         parse_or_panic(
-            parser::parse_file,
+            parser::parse_directives,
             &mut ast,
             "compiled.test",
             &self.source_for_compiler_test(),
@@ -241,10 +241,10 @@ impl<'a> TestProgram<'a> {
 
     /// Asserts that attempting to parse the program produces a syntax error.
     pub fn assert_syntax_error(self, expected_error: TestError<'_>) -> Self {
+        let name = "testfile.test".to_owned();
         let source = self.source_for_compiler_test();
         let mut ast = ast::Program::new();
-        let file = ast.add_file("testfile.test".to_owned(), source);
-        let actual_result = match crate::parser::parse_file(&mut ast, &file) {
+        let actual_result = match crate::parser::parse_file(&mut ast, name, source) {
             Ok(_) => Ok("parsed successfully"),
             Err(error) => Err(vec![error]),
         };

@@ -28,14 +28,22 @@ use crate::errors::{Error, Result};
 use crate::lexer::{self, Token};
 use rules::SyntaxRule;
 
-pub fn parse_file(ast: &mut ast::Program, file: &File) -> Result<()> {
+pub fn parse_file(ast: &mut ast::Program, name: String, source: String) -> Result<()> {
+    let file = ast.add_file(name, source);
+    parse_directives(ast, &file)?;
+    Ok(())
+}
+
+pub fn parse_directives(ast: &mut ast::Program, file: &File) -> Result<Vec<ast::DirectiveId>> {
+    let mut directives = vec![];
     let tokens = lexer::tokenize(file).filter(|t| !t.is_skip()).collect_vec();
     let mut p = Parser::new(file, &tokens)?;
     while p.peek_next().is_some() {
         let directive = p.parse(ast, rules::Directive)?;
         ast.add_directive(directive);
+        directives.push(directive);
     }
-    Ok(())
+    Ok(directives)
 }
 
 pub fn parse_statement(ast: &mut ast::Program, file: &File) -> Result<ast::StmtId> {

@@ -54,6 +54,17 @@ impl Val {
             None
         }
     }
+
+    /// Returns the type of the value, if it definitely has one.
+    pub fn ty(&self) -> Option<Type> {
+        match self {
+            Val::Rt(v) => Some(v.ty()),
+            Val::Cp(v) => Some(v.ty()),
+            Val::Unknown(ty) => ty.clone(),
+            Val::MaybeUninit => None,
+            Val::Error => None,
+        }
+    }
 }
 
 /// NDCA value that may have a defined type.

@@ -662,7 +662,7 @@ impl Expression for CompiledArg<'_> {
 struct Identifier<'ast>(&'ast Arc<String>);
 impl Expression for Identifier<'_> {
     fn eval(&self, runtime: &mut Runtime, span: Span) -> Result<RtVal> {
-        if let Some(variable) = runtime.vars.get(self.0) {
+        if let Some(variable) = runtime.vars().get(self.0) {
             Ok(variable.clone())
         } else if let Some(constant) = super::resolve_constant(self.0, span, runtime.ctx()) {
             constant
@@ -671,7 +671,7 @@ impl Expression for Identifier<'_> {
         }
     }
     fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val> {
-        if let Some(variable) = compiler.vars.get(self.0) {
+        if let Some(variable) = compiler.vars().get(self.0) {
             Ok(variable.clone())
         } else if let Some(constant) = super::resolve_constant(self.0, span, compiler.ctx()) {
             constant.map(Val::Rt)
@@ -689,7 +689,7 @@ impl Expression for Identifier<'_> {
     ) -> Result<()> {
         let new_value =
             eval_assign_op(runtime, |rt| self.eval(rt, span), span, op, new_value)?.node;
-        runtime.assign_var(self.0, new_value);
+        runtime.assign_var(self.0, Some(new_value));
         Ok(())
     }
     fn compile_assign(
@@ -705,7 +705,7 @@ impl Expression for Identifier<'_> {
                 compiler.report_error(e);
                 Val::Error
             });
-        compiler.assign_var(self.0, new_value);
+        compiler.assign_var(self.0, Some(new_value));
         Ok(())
     }
 }

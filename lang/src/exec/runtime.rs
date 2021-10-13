@@ -8,8 +8,6 @@ use crate::data::{RtVal, SpannedRuntimeValueExt};
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait};
 
-// TODO: consider making `vars` only `pub(super)` and adding `fn vars(&mut self) -> &mut HashMap<_, _>`
-
 /// NDCA runtime state.
 #[derive(Debug, Clone)]
 pub struct Runtime {
@@ -122,11 +120,19 @@ impl Runtime {
         this
     }
 
-    /// Assigns a value to a variable.
-    pub fn assign_var(&mut self, name: &Arc<String>, value: RtVal) {
+    /// Assigns a value to a variable or removes it.
+    pub fn assign_var(&mut self, name: &Arc<String>, value: Option<RtVal>) {
         if &**name != crate::THROWAWAY_VARIABLE {
-            self.vars.insert(Arc::clone(&name), value);
+            if let Some(value) = value {
+                self.vars.insert(Arc::clone(name), value)
+            } else {
+                self.vars.remove(name)
+            };
         }
+    }
+    /// Returns all variable values.
+    pub fn vars(&self) -> &HashMap<Arc<String>, RtVal> {
+        &self.vars
     }
 
     /// Executes a statement.
@@ -196,7 +202,7 @@ impl Runtime {
             } => {
                 let iter_expr = ast.get_node(*iter_expr_id);
                 for it in self.eval_expr(iter_expr)?.iterate()? {
-                    self.assign_var(iter_var, it.node);
+                    self.assign_var(iter_var, Some(it.node));
                     match self.exec_stmt(ast.get_node(*block))? {
                         Flow::Proceed | Flow::Continue(_) => (),
                         Flow::Break(_) => break,

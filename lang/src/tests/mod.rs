@@ -60,10 +60,10 @@ macro_rules! test_cases {
 }
 
 mod bools;
-// mod branch;
 mod cell_arrays;
 mod cmp;
 mod constants;
+mod control_flow;
 mod convert;
 // mod debug;
 mod const_eval;
@@ -313,7 +313,7 @@ impl<'a> TestProgram<'a> {
             // Set input variables.
             for (i, value) in case.inputs.iter().enumerate() {
                 let var_name = Arc::new(format!("x{}", i));
-                runtime.assign_var(&var_name, value.clone());
+                runtime.assign_var(&var_name, Some(value.clone()));
             }
             // Execute statement and result expressions.
             let actual_result: Result<Vec<_>, _> = runtime

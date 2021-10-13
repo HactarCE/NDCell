@@ -1,7 +1,6 @@
 //! JIT-compiled function wrapper.
 
 use parking_lot::{Condvar, Mutex};
-use std::fmt;
 use std::sync::Arc;
 
 use super::param::Param;
@@ -31,22 +30,12 @@ pub struct CompiledFunction {
     params: Arc<Vec<Param>>,
     /// Raw bytes representing arguments passed to JIT function.
     arg_bytes: Vec<u64>,
-    // /// Pointers to argument values, which are passed to the JIT function.
-    // arg_ptrs: Vec<usize>,
-    // /// Arguments.
-    // args: Vec<Argument>,
-    // /// Return value.
-    // ret: ValueConverter,
 
-    // /// Rule metadata.
-    // rule_meta: Arc<RuleMeta>,
+    /// LLVM source code
+    llvm_source: Arc<String>,
+
     /// List of possible runtime errors.
     error_points: Arc<Vec<Error>>,
-}
-impl fmt::Display for CompiledFunction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NDCellCustomRule")
-    }
 }
 impl Clone for CompiledFunction {
     fn clone(&self) -> Self {
@@ -57,17 +46,13 @@ impl Clone for CompiledFunction {
             counter: Arc::clone(&self.counter),
             condvar: Arc::clone(&self.condvar),
 
+            jit_fn_ptr: self.jit_fn_ptr.clone(),
             params: Arc::clone(&self.params),
             arg_bytes: vec![0_u64; self.arg_bytes.len()],
 
-            jit_fn_ptr: self.jit_fn_ptr.clone(),
-            error_points: Arc::clone(&self.error_points),
-            // arg_ptrs: self.arg_ptrs.clone(),
-            // args: self.args.clone(),
-            // ret: self.ret.clone(),
+            llvm_source: Arc::clone(&self.llvm_source),
 
-            // rule_meta: self.rule_meta.clone(),
-            // error_points: self.error_points.clone(),
+            error_points: Arc::clone(&self.error_points),
         }
     }
 }
@@ -87,6 +72,7 @@ impl CompiledFunction {
     pub(super) fn new(
         jit_fn_ptr: llvm::JitFnPtr,
         params: Vec<Param>,
+        llvm_source: String,
         error_points: Vec<Error>,
     ) -> Self {
         let arg_bytes_len_u8 = params.last().map(|p| p.offset + p.size).unwrap_or(0);
@@ -96,10 +82,12 @@ impl CompiledFunction {
             counter: Arc::new(Mutex::new(1)),
             condvar: Arc::new(Condvar::new()),
 
+            jit_fn_ptr,
             params: Arc::new(params),
             arg_bytes: vec![0_u64; arg_bytes_len_u64],
 
-            jit_fn_ptr,
+            llvm_source: Arc::new(llvm_source),
+
             error_points: Arc::new(error_points),
         }
     }

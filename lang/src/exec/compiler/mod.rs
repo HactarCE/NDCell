@@ -40,7 +40,7 @@ use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
     CellSet, CpVal, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, TryGetType, Type, Val,
-    INT_BITS,
+    VectorSet, INT_BITS,
 };
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait, Runtime};
@@ -66,6 +66,7 @@ pub struct Compiler {
     /// LLVM instruction builder.
     builder: llvm::Builder,
 
+    /// Context.
     ctx: Ctx,
     /// Variable values.
     pub vars: HashMap<Arc<String>, Val>,
@@ -303,6 +304,7 @@ impl Compiler {
         // JITted code and turning it into a raw function pointer.
         let jit_fn = unsafe { self.finish_jit_function() }?;
         let jit_fn_ptr = unsafe { jit_fn.raw_fn_ptr() };
+        let llvm_source = self.llvm_fn().print_to_string().to_string();
 
         // Prepare the parameter info.
         let params_struct_type = self.params_struct_type();
@@ -320,7 +322,7 @@ impl Compiler {
         // Construct the `CompiledFunction`.
         Ok((
             jit_fn,
-            CompiledFunction::new(jit_fn_ptr, params, self.runtime_errors.clone()),
+            CompiledFunction::new(jit_fn_ptr, params, llvm_source, self.runtime_errors.clone()),
         ))
     }
 

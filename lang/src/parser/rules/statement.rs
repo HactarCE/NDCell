@@ -76,7 +76,10 @@ impl SyntaxRule for Statement {
                         }),
 
                         // Branching
-                        Keyword::If => p.parse(ast, IfStatement),
+                        Keyword::If => {
+                            p.prev();
+                            p.parse(ast, IfStatement)
+                        }
                         Keyword::Else => Err(Error::else_without_if(p.span())),
                         Keyword::Unless => p.parse_and_add_ast_node(ast, |p, ast| {
                             Ok(ast::StmtData::IfElse {
@@ -160,6 +163,7 @@ impl SyntaxRule for IfStatement {
         p.next() == Some(Token::Keyword(Keyword::If))
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse(ast, Token::Keyword(Keyword::If))?;
         p.parse_and_add_ast_node(ast, |p, ast| {
             Ok(ast::StmtData::IfElse {
                 condition: p.parse(ast, Expression)?,

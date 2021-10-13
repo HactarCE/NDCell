@@ -7,7 +7,7 @@ use super::{CallInfo, Function};
 use crate::ast;
 use crate::data::{
     CellArray, CpVal, LangCell, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt,
-    SpannedRuntimeValueExt, Val,
+    SpannedRuntimeValueExt, Val, VectorSet,
 };
 use crate::errors::{Error, Result};
 use crate::exec::builtins::Expression;
@@ -74,7 +74,7 @@ impl Function for Shape {
     }
 }
 
-/// Built-in method that returns the shape of a `CellArray`.
+/// Built-in method that indexes a `CellArray`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct IndexCellArray;
 impl IndexCellArray {
@@ -155,5 +155,29 @@ impl Function for IndexCellArray {
         let cell = compiler.get_cp_val(&new_value)?.as_cell()?;
         compiler.builder().build_store(cell_ptr, cell);
         Ok(())
+    }
+}
+
+/// Built-in method that returns a new mutable `CellArray` buffer.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct NewBuffer;
+impl Function for NewBuffer {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+        call.check_args_len(1)?;
+
+        let ndim = ctx.get_ndim(call.span)?;
+        let shape = call.arg(0)?.as_vector_set(ndim)?;
+
+        Ok(RtVal::CellArray(CellArray::from_cell(shape, 0_u8)))
+    }
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
+        call.check_args_len(1)?;
+
+        let ndim = compiler.get_ndim(call.span)?;
+        let shape = compiler.get_rt_val(call.arg(0)?)?.as_vector_set(ndim)?;
+
+        Ok(Val::Cp(CpVal::CellArray(
+            compiler.build_alloca_cell_array(shape),
+        )))
     }
 }

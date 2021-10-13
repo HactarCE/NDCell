@@ -17,7 +17,7 @@ pub use layer::{Layer, LayerTooSmall};
 pub use pool::{ArcNode, NodePool, SharedNodePool, SimCacheGuard};
 use raw::RawNode;
 pub use refs::{LeafNodeRef, NodeRef, NodeRefEnum, NodeRefTrait, NodeRefWithGuard, NonLeafNodeRef};
-pub use results::HashLifeResultParams;
+pub use results::{HashLifeResultParams, HashLifeResultParamsBuilder};
 use set::ShardedBoxedSet;
 
 #[cfg(test)]

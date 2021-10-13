@@ -179,6 +179,16 @@ impl VectorSet {
             .map(Arc::new)
     }
 
+    /// Constructs a Moore neighborhood but does not check arguments for
+    /// validity.
+    pub fn moore_unchecked(ndim: usize, radius: usize) -> Self {
+        Self {
+            vec_len: ndim,
+            bounds: Some(IRect6D::moore(radius as isize)),
+            mask: None,
+        }
+    }
+
     /// Constructs a Moore neighborhood.
     pub fn moore(
         span: Span,

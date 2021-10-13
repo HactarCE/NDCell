@@ -1,4 +1,5 @@
 use codemap::{Span, Spanned};
+use codemap_diagnostic::Level;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -16,8 +17,8 @@ use crate::errors::{Error, Result};
 /// errors during initialization and compilation.
 #[derive(Debug, Clone)]
 pub struct Ctx {
-    /// List of all initialization and compiler errors. If this list is
-    /// non-empty, the JIT function cannot be produced.
+    /// List of all initialization and compiler errors and warnings. If this
+    /// list contains an error, the JIT function cannot be produced.
     pub errors: Vec<Error>,
 
     pub global_constants: HashMap<Arc<String>, RtVal>,
@@ -35,7 +36,8 @@ pub struct Ctx {
     /// has not been reached yet; if there is no `@ndim` directive at all, this
     /// will be filled with a default value before initialization.
     pub ndim: Option<usize>,
-
+    /// Neighborhood radius. (TODO: shape instead)
+    pub radius: Option<usize>,
     /// Number of states.
     ///
     /// This is `None` during initialization if an `@states` directive exists
@@ -46,22 +48,23 @@ pub struct Ctx {
 impl Ctx {
     /// Constructs a new directive, with values missing where they will be
     /// initialized in the future.
-    pub fn new(directives: &[ast::Directive<'_>]) -> Self {
+    pub fn new(ast: &ast::Program) -> Self {
         // Infer ndim if there is no `@ndim` directive.
-        let explicit_ndim = directives
-            .iter()
-            .any(|d| matches!(d.data(), ast::DirectiveData::Ndim(_)));
-        let ndim = if explicit_ndim {
+        let ndim = if ast.has_directive(|d| matches!(d, ast::DirectiveData::Ndim(_))) {
+            None
+        } else {
+            Some(crate::DEFAULT_NDIM)
+        };
+
+        // Infer radius if there is no `@radius` directive.
+        let radius = if ast.has_directive(|d| matches!(d, ast::DirectiveData::Radius(_))) {
             None
         } else {
             Some(crate::DEFAULT_NDIM)
         };
 
         // Infer states if there is no `@states` directive.
-        let explicit_states = directives
-            .iter()
-            .any(|d| matches!(d.data(), ast::DirectiveData::States(_)));
-        let states = if explicit_states {
+        let states = if ast.has_directive(|d| matches!(d, ast::DirectiveData::States(_))) {
             None
         } else {
             Some(crate::DEFAULT_STATE_COUNT)
@@ -69,9 +72,13 @@ impl Ctx {
 
         Self {
             errors: vec![],
+
             global_constants: HashMap::new(),
+
             compile_directive: None,
+
             ndim,
+            radius,
             states,
         }
     }
@@ -88,6 +95,7 @@ impl Ctx {
                 global_constants: _,
                 compile_directive: _, // ok if no `@compile` directive
                 ndim: Some(_),
+                radius: Some(_),
                 states: Some(_),
             } => Ok(()),
             _ => internal_error!("context contains missing values: {:#?}", self),
@@ -103,11 +111,27 @@ impl Ctx {
 
         let span = ndim.span;
         let n = ndim.as_integer()?;
-        if n < 1 && n > crate::MAX_NDIM as LangInt {
+        if !(1 <= n && n <= crate::MAX_NDIM as LangInt) {
             return Err(Error::invalid_dimension_count(span));
         }
 
         self.ndim = Some(n as usize);
+
+        Ok(())
+    }
+    /// Sets the radius based on the result of an `@radius` expression.
+    pub fn set_radius(&mut self, directive_span: Span, radius: &Spanned<RtVal>) -> Result<()> {
+        if self.radius.is_some() {
+            return Err(Error::duplicate_directive(directive_span, "@radius"));
+        }
+
+        let span = radius.span;
+        let r = radius.as_integer()?;
+        if !(0 <= r && r <= crate::MAX_RADIUS as LangInt) {
+            return Err(Error::invalid_radius(radius.span));
+        }
+
+        self.radius = Some(r as usize);
 
         Ok(())
     }
@@ -143,9 +167,17 @@ pub trait CtxTrait {
             Error::AlreadyReported => (),
         }
     }
-    /// Returns the list of errors that have been reported, or `Ok(())` if there
-    /// are none.
-    fn get_errors_list(&mut self) -> std::result::Result<(), Vec<Error>> {
+    /// Returns whether there are any errors that would prevent compilation.
+    fn has_errors(&mut self) -> bool {
+        self.ctx()
+            .errors
+            .iter()
+            .any(|e| e.as_diagnostic().unwrap().level == Level::Error)
+    }
+    /// Returns `Ok(())` if there are no errors or warnings, or `Err()` if there
+    /// are some.
+    #[cfg(test)]
+    fn get_errors_and_warnings_result(&mut self) -> std::result::Result<(), Vec<Error>> {
         if self.ctx().errors.is_empty() {
             Ok(())
         } else {
@@ -158,14 +190,20 @@ pub trait CtxTrait {
     fn get_ndim(&mut self, error_span: Span) -> Result<usize> {
         self.ctx()
             .ndim
-            .ok_or_else(|| Error::not_reached_directive(error_span, "@ndim"))
+            .ok_or_else(|| Error::not_reached_directive(error_span, "'@ndim'"))
+    }
+    /// Returns the radius, or an error at `error_span` if yet initialized.
+    fn get_radius(&mut self, error_span: Span) -> Result<usize> {
+        self.ctx()
+            .radius
+            .ok_or_else(|| Error::not_reached_directive(error_span, "'@radius' or '@nbhd'"))
     }
     /// Returns the number of states, or an error at `error_span` if not yet
     /// initialized.
     fn get_states(&mut self, error_span: Span) -> Result<usize> {
         self.ctx()
             .states
-            .ok_or_else(|| Error::not_reached_directive(error_span, "@states"))
+            .ok_or_else(|| Error::not_reached_directive(error_span, "'@states'"))
     }
 }
 

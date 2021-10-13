@@ -58,15 +58,12 @@ impl Default for Flow {
 impl Runtime {
     /// Constructs a new runtime.
     pub fn init_new(ast: &ast::Program) -> Self {
-        let directives = ast.get_node_list(ast.directives());
-
         let mut this = Self {
-            // Fill in defaults for missing directives.
-            ctx: Ctx::new(&directives),
+            ctx: Ctx::new(&ast),
             vars: HashMap::new(),
         };
 
-        for directive in directives {
+        for directive in ast.directives() {
             let result = match directive.data() {
                 ast::DirectiveData::Compile { .. } => match this.ctx.compile_directive {
                     Some(_) => {
@@ -97,6 +94,10 @@ impl Runtime {
                 ast::DirectiveData::Ndim(expr) => this
                     .eval_expr(ast.get_node(*expr))
                     .and_then(|ndim_value| this.ctx.set_ndim(directive.span(), &ndim_value)),
+
+                ast::DirectiveData::Radius(expr) => this
+                    .eval_expr(ast.get_node(*expr))
+                    .and_then(|radius_value| this.ctx.set_radius(directive.span(), &radius_value)),
 
                 ast::DirectiveData::States(expr) => this
                     .eval_expr(ast.get_node(*expr))

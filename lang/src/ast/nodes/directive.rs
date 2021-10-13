@@ -14,6 +14,7 @@ pub enum DirectiveData {
     Init(StmtId),
     // Rule(Spanned<Arc<String>>),
     Ndim(ExprId),
+    Radius(ExprId),
     States(ExprId),
     // Function(FuncId),
     // Transition(StmtId),

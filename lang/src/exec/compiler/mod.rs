@@ -93,9 +93,13 @@ impl Compiler {
     /// initialization section.
     pub fn compile(
         ast: Arc<ast::Program>,
-        runtime: Runtime,
+        mut runtime: Runtime,
         config: CompilerConfig,
     ) -> std::result::Result<CompiledFunction, Vec<Error>> {
+        if runtime.has_errors() {
+            return Err(runtime.ctx.errors);
+        }
+
         // See module documentation for justification of this thread spawning
         // and channel nonsense.
         let (tx, rx) = mpsc::channel::<std::result::Result<CompiledFunction, Vec<Error>>>();
@@ -211,7 +215,7 @@ impl Compiler {
                 runtime.ctx.errors.clone()
             })?;
 
-        if !runtime.ctx.errors.is_empty() {
+        if runtime.has_errors() {
             return Err(runtime.ctx.errors);
         }
 

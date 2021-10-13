@@ -81,7 +81,7 @@ mod vectors;
 
 use crate::ast;
 use crate::data::{CellArray, LangCell, LangInt, LangUint, RtVal, Type};
-use crate::errors::Error;
+use crate::errors::{self, Error};
 use crate::exec::{Compiler, CompilerConfig, CtxTrait, Runtime};
 use crate::utils;
 use values::*;
@@ -234,7 +234,8 @@ impl<'a> TestProgram<'a> {
     fn init_new_runtime(self, ast: &ast::Program) -> Runtime {
         let mut runtime = Runtime::init_new(&ast);
         let task_str = format!("initializing {:#?}", self);
-        assert_results_eq(&ast, &task_str, &runtime.get_errors_list(), &Ok(()));
+        let result = runtime.get_errors_and_warnings_result();
+        assert_results_eq(&ast, &task_str, &result, &Ok(()));
         runtime
     }
 
@@ -256,7 +257,7 @@ impl<'a> TestProgram<'a> {
     pub fn assert_init_errors(self, expected_errors: Vec<TestError<'_>>) -> Self {
         let ast = self.ast_for_compiler_test();
         let mut runtime = Runtime::init_new(&ast);
-        let actual_result = runtime.get_errors_list();
+        let actual_result = runtime.get_errors_and_warnings_result();
         let task_str = format!("running initialization for {:#?}", self);
         assert_results_eq(&ast, &task_str, &actual_result, &Err(expected_errors));
         self
@@ -348,7 +349,7 @@ impl<'a> TestProgram<'a> {
         let runtime = self.init_new_runtime(&ast);
         let mut f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
             Ok(ok) => ok,
-            Err(e) => panic!("\n{}", format_actual_errors(&ast, &e)),
+            Err(e) => panic!("\n{}", errors::format_errors(&ast.codemap(), &e)),
         };
 
         for case in test_cases {
@@ -410,23 +411,11 @@ fn parse_or_panic<T>(
     let file = ast.add_file(file_name.to_owned(), file_contents.to_owned());
     match f(ast, &file) {
         Ok(x) => x,
-        Err(e) => panic!("NDCA syntax error:\n{}", format_actual_errors(&ast, &[e])),
+        Err(e) => panic!(
+            "NDCA syntax error:\n{}",
+            errors::format_errors(ast.codemap(), &[e])
+        ),
     }
-}
-
-fn format_actual_errors(ast: &ast::Program, errors: &[Error]) -> String {
-    let mut v = vec![];
-    {
-        let mut emitter = codemap_diagnostic::Emitter::vec(&mut v, Some(ast.codemap()));
-        emitter.emit(
-            &errors
-                .iter()
-                .map(|e| e.clone().unwrap_diagnostic())
-                .collect_vec(),
-        );
-    }
-    String::from_utf8(v)
-        .unwrap_or_else(|e| format!("diagnostic message contains invalid UTF-8: {}", e))
 }
 
 fn assert_results_eq<T: fmt::Debug + PartialEq>(
@@ -458,7 +447,7 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
         }
 
         (Err(actual_errors), Ok(expected_ok)) => {
-            let formatted_actual_errors = format_actual_errors(&ast, actual_errors);
+            let formatted_actual_errors = errors::format_errors(ast.codemap(), actual_errors);
             panic!(
                 "Expected {:?} but got error when {}:\n{}",
                 expected_ok, task_str, formatted_actual_errors,
@@ -467,11 +456,12 @@ fn assert_results_eq<T: fmt::Debug + PartialEq>(
 
         (Err(actual_errors), Err(expected_errors)) => {
             for (actual_error, expected) in actual_errors.iter().zip(expected_errors.iter()) {
-                let diagnostic = actual_error.clone().unwrap_diagnostic();
+                let diagnostic = actual_error.as_diagnostic().unwrap();
                 let span = diagnostic.spans[0].span;
                 let file = ast.codemap().look_up_span(span).file;
                 if expected.loc != file.source_slice(span) || expected.msg != diagnostic.message {
-                    let formatted_actual_errors = format_actual_errors(&ast, actual_errors);
+                    let formatted_actual_errors =
+                        errors::format_errors(ast.codemap(), actual_errors);
                     panic!(
                         "Expected error at {:?} with message {:?} but got a different error when {}:\n{}",
                         expected.loc, expected.msg, task_str, formatted_actual_errors,

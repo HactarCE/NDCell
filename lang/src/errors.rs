@@ -3,17 +3,37 @@
 // TODO: reword error messages to state _what is wrong_ in addition to what is
 // required.
 
-use codemap::Span;
+use codemap::{CodeMap, Span};
 pub use codemap_diagnostic::Diagnostic;
 use codemap_diagnostic::{Level, SpanLabel, SpanStyle};
 use itertools::Itertools;
 use std::fmt;
 
 use crate::data::{Type, MAX_VECTOR_LEN, MAX_VECTOR_SET_EXTENT, MAX_VECTOR_SET_SIZE};
-use crate::{MAX_NDIM, MAX_STATE_COUNT};
+use crate::{MAX_NDIM, MAX_RADIUS, MAX_STATE_COUNT};
 
 /// `Result` type alias for NDCA compile-time and runtime errors.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Formats errors nicely in a string.
+pub fn format_errors(codemap: &CodeMap, errors: &[Error]) -> String {
+    let mut v = vec![];
+    {
+        let mut emitter = codemap_diagnostic::Emitter::vec(&mut v, Some(codemap));
+        emitter.emit(
+            &errors
+                .iter()
+                .map(|e| e.clone().to_diagnostic())
+                .collect_vec(),
+        );
+    }
+    String::from_utf8(v)
+        .unwrap_or_else(|e| format!("diagnostic message contains invalid UTF-8: {}", e))
+}
+/// Formats an error nicely in a string.
+pub fn format_error(codemap: &CodeMap, error: &Error) -> String {
+    format_errors(codemap, std::slice::from_ref(error))
+}
 
 /// Extension trait for converting a value to an `Option<Span>`.
 pub trait SpanConvertExt {
@@ -138,13 +158,13 @@ impl Error {
     }
     /// Converts this error to a warning.
     pub fn to_warning(self) -> Error {
-        let mut diag = self.unwrap_diagnostic();
+        let mut diag = self.to_diagnostic();
         diag.level = Level::Warning;
         Self::New(diag)
     }
     /// Extracts the diagnostic from the error message or returns an internal
     /// error if there isn't one.
-    pub fn unwrap_diagnostic(self) -> Diagnostic {
+    pub fn to_diagnostic(self) -> Diagnostic {
         match self {
             Error::New(e) => e,
             Error::AlreadyReported => {
@@ -153,6 +173,14 @@ impl Error {
                     Error::AlreadyReported => unreachable!(),
                 }
             }
+        }
+    }
+    /// Returns a reference to the diagnostic form the error message or returns
+    /// `None` if there isn't one.
+    pub fn as_diagnostic(&self) -> Option<&Diagnostic> {
+        match self {
+            Error::New(d) => Some(d),
+            Error::AlreadyReported => None,
         }
     }
 
@@ -212,6 +240,11 @@ impl Error {
         _ => MAX_NDIM,
     ));
 
+    error_fn!(Error; fn invalid_radius(
+        "radius must be an integer from 0 to {}",
+        _ => MAX_RADIUS,
+    ));
+
     error_fn!(Error; fn invalid_state_count(
         "number of states must be an integer from 1 to {}",
         _ => MAX_STATE_COUNT,
@@ -267,7 +300,7 @@ impl Error {
     error_fn!(Error; fn duplicate_keyword_argument("duplicate keyword argument"));
     error_fn!(Error; fn invalid_keyword_argument("invalid keyword argument for '{}'", func: impl fmt::Display));
 
-    error_fn!(Error; fn not_reached_directive("not yet reached '{}' directive", directive_name: &str));
+    error_fn!(Error; fn not_reached_directive("not yet reached {} directive", directive_name: &str));
 
     error_fn!(Error; fn cannot_index_type(
         "cannot index into value of type {}", // TODO: this is a terrible error message

@@ -9,16 +9,10 @@ fn test_cell_array_construction() {
     let r2_moore = Arc::new(VectorSet::moore(span, 2, 1, span).unwrap());
     let r2_moore_zeros = CellArray::from_cell(Arc::clone(&r2_moore), 0_u8);
     let exprs = [(
-        Type::CellArray(Some(r2_moore)),
+        Type::CellArrayMut(Some(r2_moore.clone())),
         "moore().fill('1 2 3 4 . 0 # 7 9')",
     )];
 
-    TestProgram::new()
-        .with_setup("@states 7")
-        .with_result_expressions(&exprs)
-        .assert_interpreted_test_cases::<&str>(test_cases![
-            () => Err("invalid cell symbol: \"7\"" @ "'1 2 3 4 . 0 # 7 9'"),
-        ]);
     TestProgram::new()
         .with_setup("@states 7")
         .with_result_expressions(&exprs)
@@ -46,7 +40,7 @@ fn test_cell_array_mutation() {
             .unwrap(),
     );
     let zeros = CellArray::from_cell(Arc::clone(&shape), 3_u8);
-    let ty = Type::CellArray(Some(Arc::clone(&shape)));
+    let ty = Type::CellArrayMut(Some(Arc::clone(&shape)));
 
     assert_eq!(shape.len(), 11);
 
@@ -65,7 +59,7 @@ fn test_cell_array_mutation() {
             iproduct!(-2..=2, -2..=2, -2..=2)
                 .map(|(x, y, z)| {
                     let inputs = vec![
-                        RtVal::CellArray(zeros.clone()),
+                        RtVal::CellArray(Arc::new(zeros.clone())),
                         Vector(vec![x, y]),
                         Integer(z),
                     ];
@@ -86,5 +80,15 @@ fn test_cell_array_mutation() {
                     }
                 })
                 .collect_vec(),
+        );
+
+    TestProgram::new()
+        .with_input_types(&[Type::CellArrayMut(Some(shape))])
+        .with_exec("a = x0.as_immut    a[0] = #1")
+        .assert_compile_or_interpreted_errors(
+            vec![RtVal::CellArray(Arc::new(zeros))],
+            test_errors![
+                "cannot assign to this expression" @ "a[0]",
+            ],
         );
 }

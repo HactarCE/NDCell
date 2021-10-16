@@ -27,6 +27,13 @@ impl Function for TypeBrackets {
                 let shape = x.as_vector_set(ndim)?;
                 Ok(RtVal::Type(Type::CellArray(Some(shape))))
             }
+            Type::CellArrayMut(None) => {
+                call.check_args_len(2)?;
+                let x = call.arg(1)?;
+                let ndim = ctx.get_ndim(x.span)?;
+                let shape = x.as_vector_set(ndim)?;
+                Ok(RtVal::Type(Type::CellArrayMut(Some(shape))))
+            }
             Type::VectorSet(None) => {
                 call.check_args_len(2)?;
                 let x = call.arg(1)?;

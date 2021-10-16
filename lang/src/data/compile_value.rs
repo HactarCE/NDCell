@@ -12,6 +12,7 @@ pub enum CpVal {
     Cell(llvm::IntValue),
     Vector(llvm::VectorValue),
     CellArray(LlvmCellArray),
+    CellArrayMut(LlvmCellArray),
     CellSet(llvm::VectorValue),
 }
 impl CpVal {
@@ -22,6 +23,7 @@ impl CpVal {
             CpVal::Cell(_) => Type::Cell,
             CpVal::Vector(v) => Type::Vector(Some(v.get_type().get_size() as usize)),
             CpVal::CellArray(a) => Type::CellArray(Some(Arc::clone(a.shape()))),
+            CpVal::CellArrayMut(a) => Type::CellArrayMut(Some(Arc::clone(a.shape()))),
             CpVal::CellSet(_) => Type::CellSet,
         }
     }
@@ -37,9 +39,12 @@ pub trait SpannedCompileValueExt {
     /// Returns the value inside if this is a `Vector` or subtype of one;
     /// otherwise returns a type error.
     fn as_vector(&self) -> Result<llvm::VectorValue>;
-    /// Returns the value inside if this is an `CellArray` or subtype of one;
+    /// Returns the value inside if this is a `CellArray` or subtype of one;
     /// otherwise returns a type error.
     fn as_cell_array(&self) -> Result<LlvmCellArray>;
+    /// Returns the value inside if this is a `CellArrayMut` or a subtype of
+    /// one; otherwise returns a type error.
+    fn as_cell_array_mut(&self) -> Result<LlvmCellArray>;
     /// Returns the value inside if this is a `CellSet` or subtype of one;
     /// otherwise returns a type error.
     fn as_cell_set(&self) -> Result<llvm::VectorValue>;
@@ -65,10 +70,20 @@ impl SpannedCompileValueExt for Spanned<CpVal> {
     }
     fn as_cell_array(&self) -> Result<LlvmCellArray> {
         match &self.node {
-            CpVal::CellArray(a) => Ok(a.clone()),
+            CpVal::CellArray(a) | CpVal::CellArrayMut(a) => Ok(a.clone()),
             _ => Err(Error::type_error(
                 self.span,
                 Type::CellArray(None),
+                &self.ty(),
+            )),
+        }
+    }
+    fn as_cell_array_mut(&self) -> Result<LlvmCellArray> {
+        match &self.node {
+            CpVal::CellArrayMut(a) => Ok(a.clone()),
+            _ => Err(Error::type_error(
+                self.span,
+                Type::CellArrayMut(None),
                 &self.ty(),
             )),
         }

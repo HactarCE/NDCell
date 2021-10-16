@@ -93,6 +93,7 @@ fn resolve_type_keyword(name: &str) -> Option<Type> {
         "Type" => Type::Type,
         "Vector" => Type::Vector(None),
         "CellArray" => Type::CellArray(None),
+        "CellArrayMut" => Type::CellArrayMut(None),
         "EmtpySet" => Type::EmptySet,
         "IntegerSet" => Type::IntegerSet,
         "CellSet" => Type::CellSet,
@@ -133,8 +134,10 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
             "len" => Some(functions::vectors::VectorLen.boxed()),
             _ => None,
         },
-        Type::CellArray(_) => match name {
+        Type::CellArray(_) | Type::CellArrayMut(_) => match name {
             "shape" => Some(functions::arrays::Shape.boxed()),
+            "as_immut" => Some(functions::arrays::AsImmut.boxed()),
+            // "as_mut" => Some(functions::arrays::AsMut.boxed()),
             _ => None,
         },
 
@@ -171,6 +174,7 @@ fn resolve_index_method(obj_type: &Type) -> Option<Box<dyn Function>> {
         Type::Type => Some(Box::new(functions::types::TypeBrackets)),
         Type::Vector(_) => Some(Box::new(functions::vectors::IndexVector(None))),
         Type::CellArray(_) => Some(Box::new(functions::arrays::IndexCellArray)),
+        Type::CellArrayMut(_) => Some(Box::new(functions::arrays::IndexCellArray)),
         Type::EmptySet => None,
         Type::IntegerSet => None,
         Type::CellSet => None,

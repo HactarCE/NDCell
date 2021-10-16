@@ -2,6 +2,7 @@ use codemap::Span;
 use itertools::Itertools;
 use std::convert::TryInto;
 use std::fmt;
+use std::hash::Hash;
 use std::sync::Arc;
 
 use ndcell_core::ndarray::Array6D;
@@ -15,7 +16,7 @@ use crate::llvm;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CellArray {
     shape: Arc<VectorSet>,
-    cells: Arc<Array6D<LangCell>>,
+    cells: Array6D<LangCell>,
 }
 impl fmt::Display for CellArray {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -40,10 +41,7 @@ impl fmt::Display for CellArray {
 impl CellArray {
     /// Constructs a new cell array with all cells having the same value.
     pub fn from_cell(shape: Arc<VectorSet>, cell: LangCell) -> Self {
-        let cells = Arc::new(Array6D::from_flat_slice(
-            shape.bounds_size(),
-            vec![cell; shape.bounds_len()],
-        ));
+        let cells = Array6D::from_flat_slice(shape.bounds_size(), vec![cell; shape.bounds_len()]);
         Self { shape, cells }
     }
     /// Constructs a new cell array from a list of cells within the mask.
@@ -78,10 +76,7 @@ impl CellArray {
             None => masked_cells.collect_vec(),
         };
 
-        let cells = Arc::new(Array6D::from_flat_slice(
-            shape.bounds_size(),
-            cells_array_data,
-        ));
+        let cells = Array6D::from_flat_slice(shape.bounds_size(), cells_array_data);
         Ok(Self { shape, cells })
     }
 
@@ -93,9 +88,9 @@ impl CellArray {
     pub fn cells_array(&self) -> &Array6D<LangCell> {
         &self.cells
     }
-    /// Returns a mutable reference to the raw array of cell values.
+    /// Returns a reference to the raw array of cell values.
     pub fn cells_array_mut(&mut self) -> &mut Array6D<LangCell> {
-        Arc::make_mut(&mut self.cells)
+        &mut self.cells
     }
     /// Returns the number of dimensions.
     pub fn ndim(&self) -> usize {
@@ -108,8 +103,8 @@ impl CellArray {
         let uvec = self.cell_array_uvec(vec_to_ivec6d(pos)?)?;
         Some(self.cells[uvec])
     }
-    /// Returns a mutable reference to the cell state at a position, or `None`
-    /// if the position is outside the mask.
+    /// Returns a reference to the cell state at a position, or `None` if the
+    /// position is outside the mask.
     pub fn get_cell_mut(&mut self, pos: &[LangInt]) -> Option<&mut LangCell> {
         let uvec = self.cell_array_uvec(vec_to_ivec6d(pos)?)?;
         Some(&mut self.cells_array_mut()[uvec])
@@ -121,7 +116,8 @@ impl CellArray {
             let pos = -bounds.min();
             let size = bounds.size();
 
-            // TODO: extract strides calculation into something generic in ndcell_core
+            // TODO: extract strides calculation into something generic in
+            // ndcell_core
             let mut offset = 0;
             let mut stride = 1;
             for &ax in ndcell_core::axis::AXES {
@@ -217,16 +213,15 @@ impl LlvmCellArray {
         module: &mut llvm::Module,
         shape: Arc<VectorSet>,
         cells_origin_ptr: llvm::PointerValue,
-        mutable: bool,
     ) -> Self {
         let cells = shape.bounds().map(|bounds| {
             let strides =
                 llvm::const_vector(crate::utils::ndarray_strides(shape.vec_len(), bounds));
-            llvm::NdArrayValue::from_origin_ptr(bounds, cells_origin_ptr, strides, mutable)
+            llvm::NdArrayValue::from_origin_ptr(bounds, cells_origin_ptr, strides)
         });
         Self::new(module, shape, cells)
     }
-    /// Builds instructions to construct an immutable cell array with a constant value.
+    /// Builds instructions to construct a cell array with a constant value.
     pub fn new_const(module: &mut llvm::Module, a: &CellArray) -> Self {
         let shape = Arc::clone(a.shape());
         let cells = shape.bounds().map(|bounds| {

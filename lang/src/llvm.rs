@@ -238,7 +238,6 @@ pub struct NdArrayValue {
     bounds: IRect6D,
     origin_ptr: PointerValue,
     strides: VectorValue,
-    mutable: bool,
 }
 impl NdArrayValue {
     /// Constructs a new N-dimensional array from a pointer to the origin in the
@@ -247,13 +246,11 @@ impl NdArrayValue {
         bounds: IRect6D,
         origin_ptr: PointerValue,
         strides: VectorValue,
-        mutable: bool,
     ) -> Self {
         Self {
             bounds,
             origin_ptr,
             strides,
-            mutable,
         }
     }
     /// Constructs a new N-dimensional array from a pointer to the base of the
@@ -262,7 +259,6 @@ impl NdArrayValue {
         bounds: IRect6D,
         base_ptr: PointerValue,
         strides: &[LangInt],
-        mutable: bool,
     ) -> Self {
         // Get a pointer to the origin in the array. Note that this GEP may be
         // out of bounds if the cell array does not contain the origin (but it
@@ -270,7 +266,7 @@ impl NdArrayValue {
         let base_idx = crate::utils::ndarray_base_idx(bounds, strides);
         let origin_ptr = unsafe { base_ptr.const_gep(&[const_int(-base_idx)]) };
         let strides = const_vector(strides.iter().copied());
-        Self::from_origin_ptr(bounds, origin_ptr, strides, mutable)
+        Self::from_origin_ptr(bounds, origin_ptr, strides)
     }
     /// Constructs a new N-dimensional array with static contents.
     pub fn new_const(
@@ -303,8 +299,7 @@ impl NdArrayValue {
 
         let strides = crate::utils::ndarray_strides(ndim, bounds);
 
-        let mutable = false;
-        Self::from_const_base_ptr(bounds, array_base_ptr, &strides, mutable)
+        Self::from_const_base_ptr(bounds, array_base_ptr, &strides)
     }
 
     /// Returns the number of dimensions.
@@ -322,10 +317,6 @@ impl NdArrayValue {
     /// Returns the strides of the array.
     pub fn strides(&self) -> VectorValue {
         self.strides
-    }
-    /// Returns whether the array is mutable.
-    pub fn is_mutable(&self) -> bool {
-        self.mutable
     }
 
     /// Returns the minimum coordinate of the array.

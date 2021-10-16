@@ -3,10 +3,8 @@
 //! When adding a new type, these modifications are necessary:
 //!
 //! - Add new variant to `Type`
-//! - Update `impl TypeChecker for Type` if necessary
 //! - Add new variant to `RtVal`
 //! - Add new variant to `CpVal`
-//! - Add new token to `Token` enum
 //! - Update `TryFrom<Token>` impl for `TypeClass`
 //! - Add new method in `SpannedRuntimeValueExt`
 //! - Add new method in `SpannedCompileValueExt`
@@ -37,9 +35,12 @@ pub enum Type {
 
     /// Sequence of `Integer` values of a certain length (from 1 to 256).
     Vector(Option<usize>),
-    /// Masked N-dimensional array of `Cell` values with a specific size and
-    /// shape.
+    /// Masked immutable N-dimensional array of `Cell` values with a specific
+    /// size and shape.
     CellArray(Option<Arc<VectorSet>>),
+    /// Masked mutable N-dimensional array of `Cell` values with a specific size
+    /// and shape.
+    CellArrayMut(Option<Arc<VectorSet>>),
 
     /// Empty set.
     EmptySet,
@@ -74,6 +75,8 @@ impl fmt::Debug for Type {
             Type::Vector(Some(len)) => write!(f, "Vector[{:?}]", len),
             Type::CellArray(None) => write!(f, "CellArray"),
             Type::CellArray(Some(shape)) => write!(f, "CellArray[{:?}]", shape),
+            Type::CellArrayMut(None) => write!(f, "CellArrayMut"),
+            Type::CellArrayMut(Some(shape)) => write!(f, "CellArrayMut[{:?}]", shape),
 
             Type::EmptySet => write!(f, "EmptySet"),
             Type::IntegerSet => write!(f, "IntegerSet"),
@@ -100,6 +103,8 @@ impl fmt::Display for Type {
             Type::Vector(Some(len)) => write!(f, "Vector[{}]", len),
             Type::CellArray(None) => write!(f, "CellArray"),
             Type::CellArray(Some(shape)) => write!(f, "CellArray[{}]", shape),
+            Type::CellArrayMut(None) => write!(f, "CellArrayMut"),
+            Type::CellArrayMut(Some(shape)) => write!(f, "CellArrayMut[{}]", shape),
 
             Type::EmptySet => write!(f, "EmptySet"),
             Type::IntegerSet => write!(f, "IntegerSet"),
@@ -125,6 +130,7 @@ impl Type {
 
             Type::Vector(_) => "Vector",
             Type::CellArray(_) => "CellArray",
+            Type::CellArrayMut(_) => "CellArrayMut",
 
             Type::EmptySet => "EmptySet",
             Type::IntegerSet => "IntegerSet",
@@ -150,7 +156,7 @@ impl Type {
             Type::Type => true,
 
             Type::Vector(_) => true,
-            Type::CellArray(_) => true,
+            Type::CellArray(_) | Type::CellArrayMut(_) => true,
 
             Type::EmptySet => false,
             Type::IntegerSet => false,
@@ -172,7 +178,7 @@ impl Type {
             Type::Type => None,
 
             Type::Vector(_) => Some(Type::Integer),
-            Type::CellArray(_) => Some(Type::Cell),
+            Type::CellArray(_) | Type::CellArrayMut(_) => Some(Type::Cell),
 
             Type::EmptySet => Some(Type::Null),
             Type::IntegerSet => Some(Type::Integer),

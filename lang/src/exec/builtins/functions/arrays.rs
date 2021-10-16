@@ -7,7 +7,7 @@ use super::{CallInfo, Function};
 use crate::ast;
 use crate::data::{
     CellArray, CpVal, LangCell, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt,
-    SpannedRuntimeValueExt, Val, VectorSet,
+    SpannedRuntimeValueExt, Type, Val, VectorSet,
 };
 use crate::errors::{Error, Result};
 use crate::exec::builtins::Expression;
@@ -54,7 +54,10 @@ impl Function for FillVectorSet {
             return Err(call.invalid_args_error());
         };
 
-        Ok(RtVal::CellArray(cell_array))
+        Ok(RtVal::CellArray(Arc::new(cell_array.into())))
+    }
+    fn compile(&self, _compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
+        Err(Error::unimplemented(call.span))
     }
 }
 
@@ -74,11 +77,49 @@ impl Function for Shape {
     }
 }
 
+/// Built-in method that returns an immutable reference to a `CellArray` or
+/// `CellArrayMut`.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub struct AsImmut;
+impl Function for AsImmut {
+    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+        call.check_args_len(1)?;
+        call.arg(0)?.as_cell_array().map(RtVal::CellArray)
+    }
+    fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
+        call.check_args_len(1)?;
+        Ok(Val::Cp(CpVal::CellArray(
+            compiler.get_cp_val(call.arg(0)?)?.as_cell_array()?,
+        )))
+    }
+}
+
+// /// Built-in method that returns a mutable reference to a `CellArray` or
+// /// `CellArrayMut`.
+// #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+// pub struct AsMut;
+// impl Function for AsMut {
+//     fn can_const_eval(&self) -> bool {
+//         false
+//     }
+
+//     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+//         internal_error!("cannot construct mutable cell array in interpreted code");
+//     }
+//     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
+//         call.check_args_len(1)?;
+//         call.check_args_len(1)?;
+//         Ok(Val::Cp(CpVal::CellArrayMut(
+//             compiler.get_cp_val(call.arg(0)?)?.as_cell_array()?,
+//         )))
+//     }
+// }
+
 /// Built-in method that indexes a `CellArray`.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct IndexCellArray;
 impl IndexCellArray {
-    fn eval_args(&self, call: &CallInfo<Spanned<RtVal>>) -> Result<(CellArray, Vec<LangInt>)> {
+    fn eval_args(&self, call: &CallInfo<Spanned<RtVal>>) -> Result<(Arc<CellArray>, Vec<LangInt>)> {
         let array = call.arg(0)?.as_cell_array()?;
         let pos = super::vectors::eval_vector_literal(call.span, &call.args[1..])?;
         Ok((array, pos))
@@ -111,12 +152,11 @@ impl Function for IndexCellArray {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         let (array, pos) = self.compile_args(compiler, &call)?;
-        // let cell_ptr = compiler.build_cell_array_gep(call.span, &array, pos)?;
-        // let cell = compiler
-        //     .builder()
-        //     .build_load(cell_ptr, "cell_from_array")
-        //     .into_int_value();
-        let cell = llvm::const_cell(5);
+        let cell_ptr = compiler.build_cell_array_gep(call.span, &array, pos)?;
+        let cell = compiler
+            .builder()
+            .build_load(cell_ptr, "cell_from_array")
+            .into_int_value();
         Ok(Val::Cp(CpVal::Cell(cell)))
     }
 
@@ -127,21 +167,7 @@ impl Function for IndexCellArray {
         first_arg: ast::Expr<'_>,
         new_value: Spanned<RtVal>,
     ) -> Result<()> {
-        let (mut array, pos) = self.eval_args(&call)?;
-
-        // Assign the new cell.
-        let cell = new_value.as_cell()?;
-        *array
-            .get_cell_mut(&pos)
-            .ok_or_else(|| Error::position_out_of_bounds(call.span))? = cell;
-        let new_value = Spanned {
-            node: RtVal::CellArray(array),
-            span: first_arg.span(),
-        };
-
-        // Assign the new vector value.
-        let op = None;
-        Box::<dyn Expression>::from(first_arg).eval_assign(runtime, first_arg.span(), op, new_value)
+        Err(Error::cannot_assign_to(call.span))
     }
     fn compile_assign(
         &self,
@@ -151,6 +177,9 @@ impl Function for IndexCellArray {
         new_value: Spanned<Val>,
     ) -> Result<()> {
         let (array, pos) = self.compile_args(compiler, &call)?;
+        if !matches!(call.arg(0)?.ty(), Some(Type::CellArrayMut(_))) {
+            return Err(Error::cannot_assign_to(call.span));
+        }
         let cell_ptr = compiler.build_cell_array_gep(call.span, &array, pos)?;
         let cell = compiler.get_cp_val(&new_value)?.as_cell()?;
         compiler.builder().build_store(cell_ptr, cell);
@@ -163,12 +192,7 @@ impl Function for IndexCellArray {
 pub struct NewBuffer;
 impl Function for NewBuffer {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
-        call.check_args_len(1)?;
-
-        let ndim = ctx.get_ndim(call.span)?;
-        let shape = call.arg(0)?.as_vector_set(ndim)?;
-
-        Ok(RtVal::CellArray(CellArray::from_cell(shape, 0_u8)))
+        internal_error!("cannot construct mutable cell array in interpreted code");
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         call.check_args_len(1)?;
@@ -176,7 +200,7 @@ impl Function for NewBuffer {
         let ndim = compiler.get_ndim(call.span)?;
         let shape = compiler.get_rt_val(call.arg(0)?)?.as_vector_set(ndim)?;
 
-        Ok(Val::Cp(CpVal::CellArray(
+        Ok(Val::Cp(CpVal::CellArrayMut(
             compiler.build_alloca_cell_array(shape),
         )))
     }

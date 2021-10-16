@@ -24,9 +24,9 @@ pub enum RtVal {
 
     /// Sequence of `Integer` values of a certain length (from 1 to 256).
     Vector(Vec<LangInt>),
-    /// Masked N-dimensional array of `Cell` values with a specific size and
-    /// shape.
-    CellArray(CellArray),
+    /// Masked immutable N-dimensional array of `Cell` values with a specific
+    /// size and shape.
+    CellArray(Arc<CellArray>),
 
     /// Empty set.
     EmptySet,
@@ -119,7 +119,7 @@ impl RtVal {
 
 impl From<CellArray> for RtVal {
     fn from(a: CellArray) -> Self {
-        Self::CellArray(a)
+        Self::CellArray(Arc::new(a))
     }
 }
 impl From<IntegerSet> for RtVal {
@@ -162,7 +162,7 @@ pub trait SpannedRuntimeValueExt {
     fn as_vector(&self) -> Result<Vec<LangInt>>;
     /// Returns the value inside if this is an `CellArray` or subtype of one;
     /// otherwise returns a type error.
-    fn as_cell_array(&self) -> Result<CellArray>;
+    fn as_cell_array(&self) -> Result<Arc<CellArray>>;
     /// Returns the value inside if this is an `EmptySet` or subtype of one;
     /// otherwise returns a type error.
     fn as_empty_set(&self) -> Result<()>;
@@ -252,9 +252,9 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
             _ => Err(Error::type_error(self.span, Type::Vector(None), &self.ty())),
         }
     }
-    fn as_cell_array(&self) -> Result<CellArray> {
+    fn as_cell_array(&self) -> Result<Arc<CellArray>> {
         match &self.node {
-            RtVal::CellArray(x) => Ok(x.clone()),
+            RtVal::CellArray(x) => Ok(Arc::clone(x)),
             _ => Err(Error::type_error(
                 self.span,
                 Type::CellArray(None),

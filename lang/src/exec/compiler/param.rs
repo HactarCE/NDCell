@@ -90,16 +90,16 @@ impl Param {
             (ParamType::CellArray(shape), RtVal::CellArray(a)) if shape == a.shape() => {
                 // Only store the cell array; strides are determined by the
                 // shape.
-                let p = a.get_origin_ptr() as usize;
+                let p = Arc::make_mut(a).get_origin_ptr() as usize;
                 p.to_ne_bytes().iter().copied().fill_u8_slice(bytes);
             }
 
             (expected, got) => {
-                return Err(internal_error_value!(
+                internal_error!(
                     "wrong parameter type; expected {:?} but got {:?}",
                     expected,
                     got,
-                ));
+                );
             }
         }
 

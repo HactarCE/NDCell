@@ -381,9 +381,9 @@ impl<'a> TestProgram<'a> {
                     Type::Cell => RtVal::Cell(0),
                     Type::Tag => todo!("tag default value"),
                     Type::Vector(Some(len)) => RtVal::Vector(vec![0; *len]),
-                    Type::CellArray(Some(shape)) => {
-                        RtVal::CellArray(CellArray::from_cell(Arc::clone(shape), 0_u8))
-                    }
+                    Type::CellArray(Some(shape)) => RtVal::CellArray(Arc::new(
+                        CellArray::from_cell(Arc::clone(shape), 0_u8).into(),
+                    )),
                     Type::CellSet => todo!("cell set default value"),
                     _ => panic!("no default for this type"),
                 });

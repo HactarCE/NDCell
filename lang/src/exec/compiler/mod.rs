@@ -201,7 +201,7 @@ impl Compiler {
                     Type::Cell => Ok(ParamType::Cell),
                     Type::Tag => todo!("tag param"),
                     Type::Vector(Some(len)) => Ok(ParamType::Vector(len)),
-                    Type::CellArray(Some(shape)) if !shape.is_empty() => {
+                    Type::CellArrayMut(Some(shape)) if !shape.is_empty() => {
                         Ok(ParamType::CellArray(shape))
                     }
                     Type::CellSet => todo!("cell set param"),
@@ -481,7 +481,7 @@ impl Compiler {
             )
         };
         let strides = llvm::const_vector(strides.iter().copied());
-        llvm::NdArrayValue::from_origin_ptr(bounds, array_origin_ptr, strides, mutable)
+        llvm::NdArrayValue::from_origin_ptr(bounds, array_origin_ptr, strides)
     }
     /// Builds instructions to allocate a multidimensional array on the stack.
     pub fn build_alloca_ndarray(
@@ -539,8 +539,16 @@ impl Compiler {
     /// one; otherwise returns a type error.
     pub fn as_cell_array(&mut self, v: &Spanned<CpVal>) -> Result<LlvmCellArray> {
         match &v.node {
-            CpVal::CellArray(a) => Ok(a.clone()),
+            CpVal::CellArray(a) | CpVal::CellArrayMut(a) => Ok(a.clone()),
             _ => Err(Error::type_error(v.span, Type::CellArray(None), &v.ty())),
+        }
+    }
+    /// Returns the value inside if given an `CellArrayMut` value or subtype of
+    /// one; otherwise returns a type error.
+    pub fn as_cell_array_mut(&mut self, v: &Spanned<CpVal>) -> Result<LlvmCellArray> {
+        match &v.node {
+            CpVal::CellArrayMut(a) => Ok(a.clone()),
+            _ => Err(Error::type_error(v.span, Type::CellArrayMut(None), &v.ty())),
         }
     }
     /// Returns the value inside if given a `CellSet` value or subtype of one;
@@ -571,7 +579,7 @@ impl Compiler {
                 self.build_any_cmp(NE, i, i.same_type_const_zero())?
             }
             CpVal::Vector(v) => self.build_any_cmp(NE, v, v.same_type_const_zero())?,
-            CpVal::CellArray(_) => todo!("convert cell array to bool"),
+            CpVal::CellArray(_) | CpVal::CellArrayMut(_) => todo!("convert cell array to bool"),
             CpVal::CellSet(_) => todo!("convert cell set to bool"),
         };
 
@@ -689,7 +697,6 @@ impl Compiler {
                 new_bounds,
                 new_array_ptr,
                 cells.strides(),
-                cells.is_mutable(),
             ));
 
             Ok(LlvmCellArray::new(&mut self.module, new_shape, new_cells))
@@ -1552,12 +1559,10 @@ impl Compiler {
             ParamType::Vector(_) => CpVal::Vector(arg_value.into_vector_value()),
             ParamType::CellArray(shape) => {
                 let cells_origin_ptr = arg_value.into_pointer_value();
-                let mutable = true;
-                CpVal::CellArray(LlvmCellArray::from_cells_origin_ptr(
+                CpVal::CellArrayMut(LlvmCellArray::from_cells_origin_ptr(
                     &mut self.module,
                     shape,
                     cells_origin_ptr,
-                    mutable,
                 ))
             }
         })
@@ -1587,7 +1592,7 @@ impl Compiler {
             CpVal::Integer(v) => b.build_store(arg_ptr, v),
             CpVal::Cell(v) => b.build_store(arg_ptr, v),
             CpVal::Vector(v) => b.build_store(arg_ptr, v),
-            CpVal::CellArray(_) => {
+            CpVal::CellArray(_) | CpVal::CellArrayMut(_) => {
                 // Special case; no overwriting cell arrays (because we can't
                 // trust that `new_arg_value` will live long enough).
                 internal_error!("cannot store cell array arg");
@@ -3420,8 +3425,7 @@ impl PhiMergeable for NdArrayValue {
         );
         let strides =
             PhiMergeable::merge(self.strides(), other.strides(), self_bb, other_bb, compiler);
-        let mutable = self.is_mutable() && other.is_mutable();
-        Self::from_origin_ptr(self.bounds(), origin_ptr, strides, mutable)
+        Self::from_origin_ptr(self.bounds(), origin_ptr, strides)
     }
 }
 impl PhiMergeable for LlvmCellArray {

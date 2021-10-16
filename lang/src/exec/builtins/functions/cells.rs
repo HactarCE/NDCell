@@ -19,7 +19,7 @@ impl Function for IntToCell {
         let arg = call.arg(0)?.clone();
 
         if let Ok(x) = arg.as_integer() {
-            let state_count = ctx.get_states(call.span)? as LangInt;
+            let state_count = ctx.get_states(call.expr_span)? as LangInt;
             if 0 <= x && x < state_count {
                 Ok(RtVal::Cell(x as LangCell))
             } else {
@@ -36,7 +36,7 @@ impl Function for IntToCell {
         let arg = call.arg(0)?;
         let n = compiler.get_cp_val(arg)?.as_integer()?;
 
-        let cell_state_count = llvm::const_int(compiler.get_states(call.span)? as LangInt);
+        let cell_state_count = llvm::const_int(compiler.get_states(call.expr_span)? as LangInt);
         let cell_state_id_is_invalid = compiler.builder().build_int_compare(
             UGE,
             n,

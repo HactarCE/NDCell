@@ -19,11 +19,11 @@ use crate::llvm;
 pub struct VectorLiteral;
 impl Function for VectorLiteral {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
-        let ret = eval_vector_literal(call.span, &call.args)?;
+        let ret = eval_vector_literal(call.expr_span, &call.args)?;
         Ok(RtVal::Vector(ret))
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
-        let ret = compile_vector_literal(compiler, call.span, &call.args)?;
+        let ret = compile_vector_literal(compiler, call.expr_span, &call.args)?;
         Ok(Val::Cp(CpVal::Vector(ret)))
     }
 }
@@ -71,7 +71,7 @@ impl Function for VecConstructor {
             Some(x) => x
                 .as_integer()
                 .and_then(|n| data::check_vector_len(x.span, n))?,
-            None => ctx.get_ndim(call.span)?,
+            None => ctx.get_ndim(call.expr_span)?,
         };
         eval_vec_construct(call, len)
     }
@@ -81,7 +81,7 @@ impl Function for VecConstructor {
                 .get_rt_val(x)?
                 .as_integer()
                 .and_then(|n| data::check_vector_len(x.span, n))?,
-            None => compiler.get_ndim(call.span)?,
+            None => compiler.get_ndim(call.expr_span)?,
         };
         compile_vec_construct(compiler, call, len)
     }

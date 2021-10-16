@@ -24,7 +24,7 @@ pub struct EmptyIntegerSet;
 impl Function for EmptyIntegerSet {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(0)?;
-        Err(Error::unimplemented(call.span))
+        Err(Error::unimplemented(call.expr_span))
     }
 }
 
@@ -34,7 +34,7 @@ pub struct EmptyCellSet;
 impl Function for EmptyCellSet {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(0)?;
-        Err(Error::unimplemented(call.span))
+        Err(Error::unimplemented(call.expr_span))
     }
 }
 
@@ -57,7 +57,7 @@ impl Function for VecSetConstructor {
                 len_span = x.span;
             }
             None => {
-                len = ctx.get_ndim(call.span)?;
+                len = ctx.get_ndim(call.expr_span)?;
                 len_span = call.span;
             }
         }
@@ -95,12 +95,13 @@ pub struct SetLiteral;
 impl Function for SetLiteral {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         let span = call.span;
+        let expr_span = call.expr_span;
         call.args
             .into_iter()
             .try_fold(RtVal::EmptySet, |v1, v2| match (v1, set_of(v2)?) {
                 (RtVal::EmptySet, s2) => Ok(s2.node),
-                (RtVal::IntegerSet(s1), s2) => Err(Error::unimplemented(span)),
-                (RtVal::CellSet(s1), s2) => Err(Error::unimplemented(span)),
+                (RtVal::IntegerSet(s1), s2) => Err(Error::unimplemented(expr_span)),
+                (RtVal::CellSet(s1), s2) => Err(Error::unimplemented(expr_span)),
                 (RtVal::VectorSet(s1), s2) => {
                     let s2 = s2.as_vector_set(s1.vec_len())?;
                     Ok(s1.union(span, &s2)?.into())
@@ -167,9 +168,9 @@ impl Function for VectorSetShape {
 
         let ndim = match call.kwarg("d") {
             Some(arg) => arg.as_integer()?,
-            None => ctx.get_ndim(call.span)? as LangInt,
+            None => ctx.get_ndim(call.expr_span)? as LangInt,
         };
 
-        Ok(VectorSet::moore(call.span, ndim, radius, radius_span)?.into())
+        Ok(VectorSet::moore(call.expr_span, ndim, radius, radius_span)?.into())
     }
 }

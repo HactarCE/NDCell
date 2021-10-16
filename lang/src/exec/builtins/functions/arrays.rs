@@ -26,7 +26,7 @@ impl Function for FillVectorSet {
             return Err(call.invalid_args_error());
         }
 
-        let ndim = ctx.get_ndim(call.span)?;
+        let ndim = ctx.get_ndim(call.expr_span)?;
         let shape = call.arg(0)?.as_vector_set(ndim)?;
 
         let cell_array = if arg_count - 1 == shape.len() {
@@ -34,7 +34,7 @@ impl Function for FillVectorSet {
                 .iter()
                 .map(|arg| arg.select_cell())
                 .collect::<Result<_>>()?;
-            CellArray::from_cells(call.span, shape, &contents)?
+            CellArray::from_cells(call.expr_span, shape, &contents)?
         } else if arg_count - 1 == 1 {
             let contents = call.arg(1)?;
             if let Ok(contents_str) = contents.as_string() {
@@ -167,7 +167,7 @@ impl Function for IndexCellArray {
         first_arg: ast::Expr<'_>,
         new_value: Spanned<RtVal>,
     ) -> Result<()> {
-        Err(Error::cannot_assign_to(call.span))
+        Err(Error::cannot_assign_to(call.expr_span))
     }
     fn compile_assign(
         &self,
@@ -178,7 +178,7 @@ impl Function for IndexCellArray {
     ) -> Result<()> {
         let (array, pos) = self.compile_args(compiler, &call)?;
         if !matches!(call.arg(0)?.ty(), Some(Type::CellArrayMut(_))) {
-            return Err(Error::cannot_assign_to(call.span));
+            return Err(Error::cannot_assign_to(call.expr_span));
         }
         let cell_ptr = compiler.build_cell_array_gep(call.span, &array, pos)?;
         let cell = compiler.get_cp_val(&new_value)?.as_cell()?;
@@ -197,7 +197,7 @@ impl Function for NewBuffer {
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         call.check_args_len(1)?;
 
-        let ndim = compiler.get_ndim(call.span)?;
+        let ndim = compiler.get_ndim(call.expr_span)?;
         let shape = compiler.get_rt_val(call.arg(0)?)?.as_vector_set(ndim)?;
 
         Ok(Val::Cp(CpVal::CellArrayMut(

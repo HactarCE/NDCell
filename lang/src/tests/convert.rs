@@ -39,7 +39,7 @@ fn test_convert_int_to_cell() {
                 @states 5
             ",
         )
-        .assert_init_errors(test_errors!["not yet reached '@states' directive" @ "#"]);
+        .assert_init_errors(test_errors!["not yet reached '@states' directive" @ "#(2)"]);
 }
 
 fn int_to_cell_test_cases(state_count: LangInt) -> Vec<TestCase<'static>> {

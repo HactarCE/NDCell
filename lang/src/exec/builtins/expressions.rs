@@ -182,19 +182,19 @@ struct FuncCall<'ast> {
     args: Vec<ast::FuncArg<ast::Expr<'ast>>>,
 }
 impl Expression for FuncCall<'_> {
-    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Result<RtVal> {
+    fn eval(&self, runtime: &mut Runtime, span: Span) -> Result<RtVal> {
         let args = eval_args_list(runtime, &self.args)?;
 
         match &self.f {
             None => Err(Error::no_such_function(self.name.span)),
             Some(f) => {
-                let call = CallInfo::new(self.name.clone(), args);
+                let call = CallInfo::new(self.name.clone(), span, args);
                 call.check_kwargs(f)?;
                 f.eval(runtime.ctx(), call)
             }
         }
     }
-    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Result<Val> {
+    fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val> {
         let args = compile_args_list(compiler, &self.args)?;
 
         match &self.f {
@@ -203,11 +203,11 @@ impl Expression for FuncCall<'_> {
                 if let Some(args) = all_rt_vals(&args) {
                     // All arguments are compile-time constants, so compile-time
                     // evaluate the function call.
-                    let call = CallInfo::new(self.name.clone(), args);
+                    let call = CallInfo::new(self.name.clone(), span, args);
                     call.check_kwargs(f)?;
                     f.eval(compiler.ctx(), call).map(Val::Rt)
                 } else {
-                    let call = CallInfo::new(self.name.clone(), args);
+                    let call = CallInfo::new(self.name.clone(), span, args);
                     call.check_kwargs(f)?;
                     f.compile(compiler, call)
                 }
@@ -324,7 +324,7 @@ struct CmpChain<'ast> {
 impl Expression for CmpChain<'_> {
     fn eval(&self, runtime: &mut Runtime, _span: Span) -> Result<RtVal> {
         if self.args.len() != self.ops.len() + 1 {
-            return Err(internal_error_value!("CmpChain ops/args length mismatch"));
+            internal_error!("CmpChain ops/args length mismatch");
         }
         let mut lhs = runtime.eval_expr(self.args[0])?;
         let other_args = &self.args[1..];
@@ -486,20 +486,20 @@ impl MethodCall<'_> {
     }
 }
 impl Expression for MethodCall<'_> {
-    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Result<RtVal> {
+    fn eval(&self, runtime: &mut Runtime, span: Span) -> Result<RtVal> {
         let (f, name, args) = self.eval_args_and_get_method(runtime)?;
-        f.eval(runtime.ctx(), CallInfo::new(name, args))
+        f.eval(runtime.ctx(), CallInfo::new(name, span, args))
     }
-    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Result<Val> {
+    fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val> {
         let (f, name, args) = self.compile_args_and_get_method(compiler)?;
         if let Some(args) = all_rt_vals(&args) {
             // All arguments are compile-time constants, so compile-time
             // evaluate the method call.
-            let call = CallInfo::new(name, args);
+            let call = CallInfo::new(name, span, args);
             call.check_kwargs(&f)?;
             f.eval(compiler.ctx(), call).map(Val::Rt)
         } else {
-            let call = CallInfo::new(name, args);
+            let call = CallInfo::new(name, span, args);
             call.check_kwargs(&f)?;
             f.compile(compiler, call)
         }
@@ -513,7 +513,7 @@ impl Expression for MethodCall<'_> {
         new_value: Spanned<RtVal>,
     ) -> Result<()> {
         let (f, name, args) = self.eval_args_and_get_method(runtime)?;
-        let call_info = CallInfo::new(name, args);
+        let call_info = CallInfo::new(name, span, args);
 
         let new_value = eval_assign_op(
             runtime,
@@ -533,7 +533,7 @@ impl Expression for MethodCall<'_> {
         new_value: Spanned<Val>,
     ) -> Result<()> {
         let (f, name, args) = self.compile_args_and_get_method(compiler)?;
-        let call = CallInfo::new(name.clone(), args.clone());
+        let call = CallInfo::new(name.clone(), span, args.clone());
         call.check_kwargs(&f)?;
 
         let new_value = compile_assign_op(
@@ -542,7 +542,7 @@ impl Expression for MethodCall<'_> {
                 if let Some(args) = all_rt_vals(&args) {
                     // All arguments are compile-time constants, so compile-time
                     // evaluate the method call.
-                    let call = CallInfo::new(name, args);
+                    let call = CallInfo::new(name, span, args);
                     f.eval(c.ctx(), call).map(Val::Rt)
                 } else {
                     f.compile(c, call.clone())

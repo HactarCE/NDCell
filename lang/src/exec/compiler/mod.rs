@@ -867,7 +867,7 @@ impl Compiler {
     /// If the given closures return a basic value, then this method will return
     /// the value of a phi node that takes the result of whichever of the two
     /// closures executes.
-    pub fn build_conditional<V: PhiMergeable>(
+    pub fn build_conditional<V: PhiMergeable<PhiResult = V>>(
         &mut self,
         condition_value: llvm::IntValue,
         build_if_true: impl FnOnce(&mut Self) -> Result<V>,
@@ -1525,7 +1525,6 @@ impl Compiler {
     }
     /// Returns all variable values.
     pub fn get_var(&mut self, name: &Arc<String>, span: Span) -> Option<&Val> {
-        self.first_var_uses.entry(Arc::clone(&name)).or_insert(span);
         self.vars.get(name)
     }
     /// Clears the map of overwritten variable values and returns the old map.
@@ -3338,30 +3337,35 @@ pub struct Variable {
 }
 */
 
-/// Trait for merging values using a PHI node.
+/// Trait for merging values using a phi node.
 pub trait PhiMergeable: Sized {
-    /// Builds a PHI node that merges two values. **When merging anything other
-    /// than `CpVal` or `Val`, the values must have the same type.**
+    type PhiResult;
+
+    /// Builds a phi node that merges two values.
     fn merge(
         self,
         other: Self,
         self_bb: llvm::BasicBlock,
         other_bb: llvm::BasicBlock,
         compiler: &mut Compiler,
-    ) -> Self;
+    ) -> Self::PhiResult;
 }
 impl PhiMergeable for () {
+    type PhiResult = Self;
+
     fn merge(
         self,
         _other: (),
         _self_bb: llvm::BasicBlock,
         _other_bb: llvm::BasicBlock,
         _compiler: &mut Compiler,
-    ) -> () {
+    ) -> Self {
         ()
     }
 }
 impl PhiMergeable for llvm::BasicValueEnum {
+    type PhiResult = Self;
+
     fn merge(
         self,
         other: Self,
@@ -3380,6 +3384,8 @@ macro_rules! impl_phi_mergeable_for_basic_value_types {
     ( $($method:ident() -> $type:ty),+ $(,)? ) => {
         $(
             impl PhiMergeable for $type {
+                type PhiResult = Self;
+
                 fn merge(
                     self,
                     other: Self,
@@ -3405,18 +3411,18 @@ impl_phi_mergeable_for_basic_value_types!(
     into_pointer_value() -> llvm::PointerValue,
 );
 impl PhiMergeable for NdArrayValue {
+    type PhiResult = Option<Self>;
+
     fn merge(
         self,
         other: Self,
         self_bb: llvm::BasicBlock,
         other_bb: llvm::BasicBlock,
         compiler: &mut Compiler,
-    ) -> Self {
-        assert_eq!(
-            self.bounds(),
-            other.bounds(),
-            "cannot use phi node to merge ndarrays with different bounds",
-        );
+    ) -> Option<Self> {
+        if self.bounds() != other.bounds() {
+            return None;
+        }
         let origin_ptr = PhiMergeable::merge(
             self.origin_ptr(),
             other.origin_ptr(),
@@ -3426,69 +3432,80 @@ impl PhiMergeable for NdArrayValue {
         );
         let strides =
             PhiMergeable::merge(self.strides(), other.strides(), self_bb, other_bb, compiler);
-        Self::from_origin_ptr(self.bounds(), origin_ptr, strides)
+        Some(Self::from_origin_ptr(self.bounds(), origin_ptr, strides))
     }
 }
 impl PhiMergeable for LlvmCellArray {
+    type PhiResult = Option<Self>;
+
     fn merge(
         self,
         other: Self,
         self_bb: llvm::BasicBlock,
         other_bb: llvm::BasicBlock,
         compiler: &mut Compiler,
-    ) -> Self {
-        assert_eq!(
-            self.shape(),
-            other.shape(),
-            "cannot use phi node to merge cell arrays with different shapes",
-        );
-        if let (Some(a), Some(b)) = (self.cells(), other.cells()) {
+    ) -> Option<Self> {
+        if self.shape() != other.shape() {
+            None
+        } else if let (Some(a), Some(b)) = (self.cells(), other.cells()) {
             let shape = Arc::clone(self.shape());
-            let new_cells = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
-            Self::new(&mut compiler.module, shape, Some(new_cells))
+            let new_cells = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
+            Some(Self::new(&mut compiler.module, shape, Some(new_cells)))
         } else {
-            self // empty
+            Some(self) // empty
         }
     }
 }
-impl PhiMergeable for Option<CpVal> {
+impl PhiMergeable for CpVal {
+    type PhiResult = Option<Self>;
+
     fn merge(
         self,
         other: Self,
         self_bb: llvm::BasicBlock,
         other_bb: llvm::BasicBlock,
         compiler: &mut Compiler,
-    ) -> Self {
-        let a = self?;
-        let b = other?;
-        if a.ty() != b.ty() {
+    ) -> Option<Self> {
+        if self.ty() != other.ty() {
             return None;
         }
-        match (a, b) {
-            (CpVal::Integer(a), CpVal::Integer(b)) => Some(CpVal::Integer(PhiMergeable::merge(
-                a, b, self_bb, other_bb, compiler,
-            ))),
-            (CpVal::Cell(a), CpVal::Cell(b)) => Some(CpVal::Cell(PhiMergeable::merge(
-                a, b, self_bb, other_bb, compiler,
-            ))),
-            (CpVal::Vector(a), CpVal::Vector(b)) => Some(CpVal::Vector(PhiMergeable::merge(
-                a, b, self_bb, other_bb, compiler,
-            ))),
-            (CpVal::CellArray(a), CpVal::CellArray(b)) => Some(CpVal::CellArray(
-                PhiMergeable::merge(a, b, self_bb, other_bb, compiler),
-            )),
-            (CpVal::CellSet(a), CpVal::CellSet(b)) => Some(CpVal::CellSet(PhiMergeable::merge(
-                a, b, self_bb, other_bb, compiler,
-            ))),
+        match (self, other) {
+            (CpVal::Integer(a), CpVal::Integer(b)) => {
+                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
+                Some(CpVal::Integer(x))
+            }
+            (CpVal::Cell(a), CpVal::Cell(b)) => {
+                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
+                Some(CpVal::Cell(x))
+            }
+            (CpVal::Vector(a), CpVal::Vector(b)) => {
+                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
+                Some(CpVal::Vector(x))
+            }
+            (CpVal::CellArray(a), CpVal::CellArray(b)) => {
+                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
+                Some(CpVal::CellArray(x))
+            }
+            (CpVal::CellArrayMut(a), CpVal::CellArrayMut(b)) => {
+                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
+                Some(CpVal::CellArrayMut(x))
+            }
+            (CpVal::CellSet(a), CpVal::CellSet(b)) => {
+                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
+                Some(CpVal::CellSet(x))
+            }
             (CpVal::Integer(_), _)
             | (CpVal::Cell(_), _)
             | (CpVal::Vector(_), _)
             | (CpVal::CellArray(_), _)
+            | (CpVal::CellArrayMut(_), _)
             | (CpVal::CellSet(_), _) => None,
         }
     }
 }
 impl PhiMergeable for Val {
+    type PhiResult = Self;
+
     fn merge(
         self,
         other: Self,
@@ -3511,16 +3528,23 @@ impl PhiMergeable for Val {
 
             (Val::Rt(a), Val::Rt(b)) if a == b => return self,
             (Val::Rt(a), Val::Rt(b)) => {
-                (compiler.rt_val_to_cp_val(&a), compiler.rt_val_to_cp_val(&b))
+                match (compiler.rt_val_to_cp_val(&a), compiler.rt_val_to_cp_val(&b)) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => return Val::Unknown((a.ty() == b.ty()).then(|| a.ty())),
+                }
             }
             (Val::Rt(a), Val::Cp(b)) | (Val::Cp(b), Val::Rt(a)) => {
-                (compiler.rt_val_to_cp_val(&a), Some(b.clone()))
+                match compiler.rt_val_to_cp_val(&a) {
+                    Some(a) => (a, b.clone()),
+                    None => return Val::Unknown(None),
+                }
             }
-            (Val::Cp(a), Val::Cp(b)) => (Some(a.clone()), Some(b.clone())),
+            (Val::Cp(a), Val::Cp(b)) => (a.clone(), b.clone()),
         };
 
-        PhiMergeable::merge(a, b, self_bb, other_bb, compiler)
-            .map(Val::Cp)
-            .unwrap_or(Val::Unknown(None))
+        match PhiMergeable::merge(a, b, self_bb, other_bb, compiler) {
+            Some(cp_val) => Val::Cp(cp_val),
+            None => Val::Unknown(None),
+        }
     }
 }

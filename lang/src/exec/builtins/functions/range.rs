@@ -19,13 +19,13 @@ impl Function for Range {
         match [&arg_a.node, &arg_b.node] {
             [RtVal::Integer(a), RtVal::Integer(b)] => Err(Error::unimplemented(call.span)),
             [RtVal::Vector(a), RtVal::Vector(b)] => {
-                make_vector_range(call.span, a, arg_a.span, b, arg_b.span)
+                make_vector_range(call.expr_span, a, arg_a.span, b, arg_b.span)
             }
             [RtVal::Vector(a), b] | [b, RtVal::Vector(a)] => {
                 let b = b
                     .to_vector(a.len())
                     .ok_or_else(|| call.invalid_args_error())?;
-                make_vector_range(call.span, a, arg_a.span, &b, arg_b.span)
+                make_vector_range(call.expr_span, a, arg_a.span, &b, arg_b.span)
             }
             _ => Err(call.invalid_args_error()),
         }

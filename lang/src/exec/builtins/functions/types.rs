@@ -42,7 +42,7 @@ impl Function for TypeBrackets {
                     .and_then(|n| data::check_vector_set_vec_len(x.span, n))?;
                 Ok(RtVal::Type(Type::VectorSet(Some(vec_len))))
             }
-            Type::PatternMatcher(_) => Err(Error::unimplemented(call.span)),
+            Type::PatternMatcher(_) => Err(Error::unimplemented(call.expr_span)),
 
             _ => Err(Error::custom(obj_span, "type is not dependent")),
         }

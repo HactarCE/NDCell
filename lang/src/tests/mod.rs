@@ -62,8 +62,8 @@ macro_rules! test_cases {
 mod bools;
 mod cell_arrays;
 mod cmp;
+mod conditions;
 mod constants;
-mod control_flow;
 mod convert;
 // mod debug;
 mod const_eval;

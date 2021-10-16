@@ -36,7 +36,7 @@ pub trait Function: fmt::Debug {
     /// The default implementation unconditionally returns an error stating that
     /// this expression cannot be compiled.
     fn compile(&self, _compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
-        Err(Error::cannot_compile(call.span))
+        Err(Error::cannot_compile(call.expr_span))
     }
 
     /// Assigns to the expression.
@@ -50,7 +50,7 @@ pub trait Function: fmt::Debug {
         _first_arg: ast::Expr<'_>,
         _new_value: Spanned<RtVal>,
     ) -> Result<()> {
-        Err(Error::cannot_assign_to(call.span))
+        Err(Error::cannot_assign_to(call.expr_span))
     }
     /// Compiles code to assign to the expression.
     ///
@@ -63,7 +63,7 @@ pub trait Function: fmt::Debug {
         _first_arg: ast::Expr<'_>,
         _new_value: Spanned<Val>,
     ) -> Result<()> {
-        Err(Error::cannot_compile_assign_to(call.span))
+        Err(Error::cannot_compile_assign_to(call.expr_span))
     }
 
     /// Wrap the function in a `Box<dyn Function>`.
@@ -123,18 +123,25 @@ pub type CompiledCallInfo = CallInfo<Spanned<Val>>;
 pub struct CallInfo<A> {
     /// Function name.
     pub name: Arc<String>,
-    /// Span of the function name or symbol in the original source code.
+    /// Span of the function name or symbol.
     pub span: Span,
+    /// Span of the entire expression.
+    pub expr_span: Span,
     /// Arguments passed to the function.
     pub args: Vec<A>,
     /// Keyword arguments passed to the function.
     kwargs: Vec<(Arc<String>, A)>,
 }
 impl<A: Clone> CallInfo<A> {
-    pub fn new(name: Spanned<Arc<String>>, args_and_kwargs: Vec<ast::FuncArg<A>>) -> Self {
+    pub fn new(
+        name: Spanned<Arc<String>>,
+        expr_span: Span,
+        args_and_kwargs: Vec<ast::FuncArg<A>>,
+    ) -> Self {
         Self {
             name: name.node,
             span: name.span,
+            expr_span,
             args: args_and_kwargs
                 .iter()
                 .filter(|(k, _)| k.is_none())
@@ -158,7 +165,7 @@ where
 
     fn invalid_args_error(&self) -> Error {
         match self.arg_types() {
-            Ok(arg_types) => Error::invalid_arguments(self.span, &self.name, &arg_types),
+            Ok(arg_types) => Error::invalid_arguments(self.expr_span, &self.name, &arg_types),
             Err(e) => e,
         }
     }

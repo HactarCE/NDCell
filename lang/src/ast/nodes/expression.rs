@@ -34,10 +34,10 @@ pub enum ExprData {
     },
     /// Attribute access or method call.
     MethodCall {
-        /// Name of attribute or method.
-        attr: Spanned<Arc<String>>,
         /// Method receiver.
         obj: ExprId,
+        /// Name of attribute or method.
+        attr: Spanned<Arc<String>>,
         /// Arguments to the method call, each with an optional keyword.
         ///
         /// The span covers the pair of parentheses containing all arguments.

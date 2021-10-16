@@ -113,8 +113,8 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
                 args: get_arg_nodes(ast, args),
             }),
             ast::ExprData::MethodCall { attr, obj, args } => Box::new(MethodCall {
-                method: Method::MethodCall { name: attr.clone() },
                 obj: ast.get_node(*obj),
+                method: Method::MethodCall { name: attr.clone() },
                 args: get_arg_nodes(ast, &args.node),
             }),
             ast::ExprData::IndexOp { obj, args } => {

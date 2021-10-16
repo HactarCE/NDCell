@@ -430,7 +430,7 @@ impl SyntaxRule for MethodCallSuffix {
 
         let obj_expr_span = ast.get_node(obj).span();
         let total_span = obj_expr_span.merge(args.span);
-        let expr_data = ast::ExprData::MethodCall { attr, obj, args };
+        let expr_data = ast::ExprData::MethodCall { obj, attr, args };
         Ok(ast.add_node(total_span, expr_data))
     }
 }

@@ -671,7 +671,7 @@ impl Expression for Identifier<'_> {
         }
     }
     fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val> {
-        if let Some(variable) = compiler.vars().get(self.0) {
+        if let Some(variable) = compiler.get_var(self.0, span) {
             Ok(variable.clone())
         } else if let Some(constant) = super::resolve_constant(self.0, span, compiler.ctx()) {
             constant.map(Val::Rt)

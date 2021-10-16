@@ -934,7 +934,7 @@ impl Compiler {
                     .chain(vars_from_if_false.keys())
                     .collect::<HashSet<_>>();
                 for name in names {
-                    let old_var_val = self.vars().get(name);
+                    let old_var_val = self.vars.get(name);
                     let var_val_if_true = vars_from_if_true
                         .get(name)
                         .cloned()
@@ -1524,8 +1524,9 @@ impl Compiler {
         }
     }
     /// Returns all variable values.
-    pub fn vars(&self) -> &HashMap<Arc<String>, Val> {
-        &self.vars
+    pub fn get_var(&mut self, name: &Arc<String>, span: Span) -> Option<&Val> {
+        self.first_var_uses.entry(Arc::clone(&name)).or_insert(span);
+        self.vars.get(name)
     }
     /// Clears the map of overwritten variable values and returns the old map.
     fn clear_overwritten_vars(&mut self) -> HashMap<Arc<String>, Option<Val>> {

@@ -44,3 +44,50 @@ pub enum StmtData {
     Remain,
     Return(Option<ExprId>),
 }
+impl Stmt<'_> {
+    /// Finds all variables assigned in this statement and its children.
+    pub fn find_all_assigned_vars(self, names: &mut HashMap<Arc<String>, Span>) {
+        match self.data() {
+            StmtData::Block(ids) => {
+                for id in ids {
+                    self.ast.get_node(*id).find_all_assigned_vars(names);
+                }
+            }
+
+            StmtData::Assign { lhs, .. } => {
+                if let Some(var) = self.ast.get_node(*lhs).find_assigned_var() {
+                    names.entry(var.node).or_insert(var.span);
+                }
+            }
+
+            StmtData::IfElse {
+                if_true, if_false, ..
+            } => {
+                if let Some(id) = *if_true {
+                    self.ast.get_node(id).find_all_assigned_vars(names);
+                }
+                if let Some(id) = *if_false {
+                    self.ast.get_node(id).find_all_assigned_vars(names);
+                }
+            }
+
+            StmtData::Assert { .. } => (),
+            StmtData::Error { .. } => (),
+
+            StmtData::Break => (),
+            StmtData::Continue => (),
+            StmtData::ForLoop {
+                iter_var, block, ..
+            } => {
+                names
+                    .entry(Arc::clone(&iter_var.node))
+                    .or_insert(iter_var.span);
+                self.ast.get_node(*block).find_all_assigned_vars(names);
+            }
+
+            StmtData::Become(_) => (),
+            StmtData::Remain => (),
+            StmtData::Return(_) => (),
+        }
+    }
+}

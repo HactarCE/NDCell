@@ -58,3 +58,30 @@ pub enum ExprData {
     /// Set constructor.
     SetConstruct(Vec<ExprId>),
 }
+impl Expr<'_> {
+    /// Returns the variable assigned in the expression when used on the left
+    /// side of an assignment statement.
+    pub fn find_assigned_var(self) -> Option<Spanned<Arc<String>>> {
+        match self.data() {
+            ExprData::Paren(id) => self.ast.get_node(*id).find_assigned_var(),
+
+            ExprData::Identifier(name) => Some(Spanned {
+                node: Arc::clone(name),
+                span: self.span(),
+            }),
+
+            ExprData::Constant(_) => None,
+
+            ExprData::BinaryOp(_, _, _) => None,
+            ExprData::PrefixOp(_, _) => None,
+            ExprData::CmpChain(_, _) => None,
+
+            ExprData::FuncCall { func, .. } => Some(func.clone()),
+            ExprData::MethodCall { obj, .. } => self.ast.get_node(*obj).find_assigned_var(),
+            ExprData::IndexOp { obj, .. } => self.ast.get_node(*obj).find_assigned_var(),
+
+            ExprData::VectorConstruct(_) => None,
+            ExprData::SetConstruct(_) => None,
+        }
+    }
+}

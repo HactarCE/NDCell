@@ -434,7 +434,7 @@ impl Expression for CmpChain<'_> {
 
 #[derive(Debug)]
 struct MethodCall<'ast> {
-    /// Closure that resolves a method based on the type of the receiver.
+    /// Method name.
     method: Method,
     /// Method receiver.
     obj: ast::Expr<'ast>,
@@ -509,50 +509,22 @@ impl Expression for MethodCall<'_> {
         &self,
         runtime: &mut Runtime,
         span: Span,
-        op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<RtVal>,
     ) -> Result<()> {
         let (f, name, args) = self.eval_args_and_get_method(runtime)?;
-        let call_info = CallInfo::new(name, span, args);
-
-        let new_value = eval_assign_op(
-            runtime,
-            |rt| f.eval(rt.ctx(), call_info.clone()),
-            span,
-            op,
-            new_value,
-        )?;
-
-        f.eval_assign(runtime, call_info, self.obj, new_value)
+        let call = CallInfo::new(name, span, args);
+        call.check_kwargs(&f)?;
+        f.eval_assign(runtime, call, self.obj, new_value)
     }
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
         span: Span,
-        op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<Val>,
     ) -> Result<()> {
         let (f, name, args) = self.compile_args_and_get_method(compiler)?;
         let call = CallInfo::new(name.clone(), span, args.clone());
         call.check_kwargs(&f)?;
-
-        let new_value = compile_assign_op(
-            compiler,
-            |c| {
-                if let Some(args) = all_rt_vals(&args) {
-                    // All arguments are compile-time constants, so compile-time
-                    // evaluate the method call.
-                    let call = CallInfo::new(name, span, args);
-                    f.eval(c.ctx(), call).map(Val::Rt)
-                } else {
-                    f.compile(c, call.clone())
-                }
-            },
-            span,
-            op,
-            new_value,
-        )?;
-
         f.compile_assign(compiler, call, self.obj, new_value)
     }
 }
@@ -639,7 +611,6 @@ impl Expression for CompiledArg<'_> {
         &self,
         _runtime: &mut Runtime,
         span: Span,
-        _op: Option<Spanned<ast::AssignOp>>,
         _new_value: Spanned<RtVal>,
     ) -> Result<()> {
         Err(Error::cannot_const_eval(span))
@@ -648,13 +619,11 @@ impl Expression for CompiledArg<'_> {
         &self,
         compiler: &mut Compiler,
         span: Span,
-        op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<Val>,
     ) -> Result<()> {
         let index = self.arg_index(compiler, span)?;
         let old_value_fn = |c: &mut Compiler| c.build_load_arg(index).map(Val::Cp);
-        let new_arg_value = compile_assign_op(compiler, old_value_fn, span, op, new_value)?;
-        compiler.build_store_arg(index, &new_arg_value)
+        compiler.build_store_arg(index, &new_value)
     }
 }
 
@@ -684,28 +653,18 @@ impl Expression for Identifier<'_> {
         &self,
         runtime: &mut Runtime,
         span: Span,
-        op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<RtVal>,
     ) -> Result<()> {
-        let new_value =
-            eval_assign_op(runtime, |rt| self.eval(rt, span), span, op, new_value)?.node;
-        runtime.assign_var(self.0, Some(new_value));
+        runtime.assign_var(self.0, new_value.node, span);
         Ok(())
     }
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
         span: Span,
-        op: Option<Spanned<ast::AssignOp>>,
         new_value: Spanned<Val>,
     ) -> Result<()> {
-        let new_value = compile_assign_op(compiler, |c| self.compile(c, span), span, op, new_value)
-            .map(|v| v.node)
-            .unwrap_or_else(|e| {
-                compiler.report_error(e);
-                Val::Error
-            });
-        compiler.assign_var(self.0, Some(new_value));
+        compiler.assign_var(self.0, new_value.node, span);
         Ok(())
     }
 }
@@ -718,49 +677,6 @@ impl Expression for Constant<'_> {
     }
     fn compile(&self, _compiler: &mut Compiler, _span: Span) -> Result<Val> {
         Ok(Val::Rt(self.0.clone()))
-    }
-}
-
-fn eval_assign_op(
-    runtime: &mut Runtime,
-    old_value_fn: impl FnOnce(&mut Runtime) -> Result<RtVal>,
-    old_value_span: Span,
-    op: Option<Spanned<ast::AssignOp>>,
-    new_value: Spanned<RtVal>,
-) -> Result<Spanned<RtVal>> {
-    match op {
-        None => Ok(new_value),
-        Some(op) => {
-            let old_value = Spanned {
-                node: old_value_fn(runtime)?,
-                span: old_value_span,
-            };
-            let op_func = functions::math::BinaryMathOp::from(op.node);
-            let node = op_func.eval_on_values(op.span, &old_value, &new_value)?;
-            let span = old_value.span.merge(new_value.span);
-            Ok(Spanned { node, span })
-        }
-    }
-}
-fn compile_assign_op(
-    compiler: &mut Compiler,
-    old_value_fn: impl FnOnce(&mut Compiler) -> Result<Val>,
-    old_value_span: Span,
-    op: Option<Spanned<ast::AssignOp>>,
-    new_value: Spanned<Val>,
-) -> Result<Spanned<Val>> {
-    match op {
-        None => Ok(new_value),
-        Some(op) => {
-            let old_value = Spanned {
-                node: old_value_fn(compiler)?,
-                span: old_value_span,
-            };
-            let op_func = functions::math::BinaryMathOp::from(op.node);
-            let node = op_func.compile_for_values(compiler, op.span, &old_value, &new_value)?;
-            let span = old_value.span.merge(new_value.span);
-            Ok(Spanned { node, span })
-        }
     }
 }
 

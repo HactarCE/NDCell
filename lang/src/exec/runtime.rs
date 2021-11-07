@@ -149,18 +149,13 @@ impl Runtime {
                 Ok(Flow::Proceed)
             }
 
-            ast::StmtData::Assign { lhs, op, rhs } => {
+            ast::StmtData::Assign { lhs, rhs } => {
                 let lhs = ast.get_node(*lhs);
                 let rhs = ast.get_node(*rhs);
+                let span = lhs.span().merge(rhs.span());
                 let new_value = self.eval_expr(rhs)?;
-
-                // Convert `Spanned<Option<AssignOp>>` to `Option<Spanned<AssignOp>>`.
-                let span = op.span;
-                let op = op.node.map(|node| Spanned { node, span });
-
                 let lhs_expression = Box::<dyn Expression>::from(lhs);
-                lhs_expression.eval_assign(self, lhs.span(), op, new_value)?;
-
+                lhs_expression.eval_assign(self, lhs.span(), new_value)?;
                 Ok(Flow::Proceed)
             }
 

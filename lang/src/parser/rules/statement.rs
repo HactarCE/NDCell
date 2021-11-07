@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use super::{Expression, Identifier, Parser, StringLiteral, SyntaxRule, TryFromToken};
 use crate::ast;
 use crate::errors::{Error, Result};
@@ -203,23 +205,35 @@ impl SyntaxRule for AssignStatement {
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         let old_p = *p;
         p.parse_and_add_ast_node(ast, |p, ast| {
-            Ok(ast::StmtData::Assign {
-                lhs: p.parse(ast, Expression)?,
-                op: p
-                    .try_parse(
-                        ast,
-                        TryFromToken::<Option<ast::AssignOp>>::with_display(
-                            "assignment symbol, such as '=' or '+='",
-                        ),
-                    )
-                    .unwrap_or_else(|| {
-                        // There's no assignment symbol, so the user probably
-                        // just wrote an expression on a line. We should tell
-                        // them we expect a statement.
-                        old_p.expected(Statement)
-                    })?,
-                rhs: p.parse(ast, Expression)?,
-            })
+            let lhs = p.parse(ast, Expression)?;
+
+            let op = p
+                .try_parse(
+                    ast,
+                    TryFromToken::<Option<ast::AssignOp>>::with_display(
+                        "assignment symbol, such as '=' or '+='",
+                    ),
+                )
+                .unwrap_or_else(|| {
+                    // There's no assignment symbol, so the user probably
+                    // just wrote an expression on a line. We should tell
+                    // them that we expect a statement.
+                    old_p.expected(Statement)
+                })?;
+
+            let mut rhs = p.parse(ast, Expression)?;
+
+            // Desugar assignment operator.
+            if let Some(op) = op {
+                let lhs_span = ast.get_node(lhs).span();
+                let rhs_span = ast.get_node(rhs).span();
+                rhs = ast.add_node(
+                    lhs_span.merge(rhs_span),
+                    ast::ExprData::BinaryOp(lhs, op, rhs),
+                );
+            }
+
+            Ok(ast::StmtData::Assign { lhs, rhs })
         })
     }
 }

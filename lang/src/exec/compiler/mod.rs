@@ -25,6 +25,8 @@
 //! [`llvm::ExecutionEngine`]) will last as long as the [`CompiledFunction`].
 
 use codemap::{Span, Spanned};
+use inkwell::module;
+use inkwell::values::AnyValue;
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::sync::{mpsc, Arc};
@@ -36,10 +38,12 @@ mod function;
 mod loops;
 mod param;
 
+use self::loops::VariablePhi;
+
 use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
-    CellSet, CpVal, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, TryGetType, Type, Val,
+    CellSet, CpVal, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, Type, Val, Variable,
     VectorSet, INT_BITS,
 };
 use crate::errors::{Error, Result};
@@ -67,10 +71,13 @@ pub struct Compiler {
     /// Context.
     ctx: Ctx,
     /// Variable values.
-    vars: HashMap<Arc<String>, Val>,
-    /// Overwritten variable values (used for reconcicling variables after
-    /// conditionals and loops).
-    overwritten_vars: HashMap<Arc<String>, Option<Val>>,
+    vars: HashMap<Arc<String>, Variable>,
+    /// Stack of overwritten variable values (used for reconciling variables
+    /// after conditionals and loops).
+    ///
+    /// There is one stack entry for every conditional statement or loop that we
+    /// are currently inside of.
+    overwritten_vars_stack: Vec<HashMap<Arc<String>, Option<Variable>>>,
     /// Stack of loops containing the statement currently being built. The
     /// innermost loop is at the top of the stack (end of the list).
     loop_stack: Vec<Loop>,
@@ -79,6 +86,8 @@ pub struct Compiler {
     param_types: Vec<Spanned<ParamType>>,
     /// List of possible runtime errors.
     runtime_errors: Vec<Error>,
+
+    cached_cell_array_masks: HashMap<Arc<VectorSet>, llvm::NdArrayValue>,
 }
 
 impl CtxTrait for Compiler {
@@ -228,7 +237,7 @@ impl Compiler {
         let vars = runtime
             .vars
             .into_iter()
-            .map(|(k, v)| (k, Val::Rt(v)))
+            .map(|(k, v)| (k, v.map(Val::Rt)))
             .collect();
 
         let mut this = Self {
@@ -241,11 +250,13 @@ impl Compiler {
 
             ctx: runtime.ctx,
             vars,
-            overwritten_vars: HashMap::new(),
+            overwritten_vars_stack: vec![],
             loop_stack: vec![],
 
             param_types,
             runtime_errors: vec![],
+
+            cached_cell_array_masks: HashMap::new(),
         };
 
         // The LLVM function will take a single argument, a pointer to a struct
@@ -441,13 +452,25 @@ impl Compiler {
             ParamType::Integer => llvm::int_type().as_basic_type_enum(),
             ParamType::Cell => llvm::cell_type().as_basic_type_enum(),
             ParamType::Vector(len) => llvm::vector_type(*len).as_basic_type_enum(),
-            ParamType::CellArray(_) => llvm::cell_array_type().as_basic_type_enum(),
+            ParamType::CellArray(shape) => llvm::ndarray_type(shape.vec_len()).as_basic_type_enum(),
         }
     }
 
     /// Returns the LLVM type used for cell sets.
     pub fn cell_set_type(&self) -> llvm::VectorType {
         todo!("cell set type, depends on max cell state ID")
+    }
+
+    pub fn basic_type(&self, ty: Type) -> Option<llvm::BasicTypeEnum> {
+        Some(match ty {
+            Type::Integer => llvm::int_type().into(),
+            Type::Cell => llvm::cell_type().into(),
+            Type::Tag => llvm::tag_type().into(),
+            Type::Vector(len) => llvm::vector_type(len),
+            Type::CellArray(a) | Type::CellArrayMut(a) => llvm::ndarray_type(a.ndim()),
+            Type::CellSet => self.cell_set_type(),
+            _ => return None,
+        })
     }
 
     /// Builds instructions to construct a tag with a constant value.
@@ -459,56 +482,6 @@ impl Compiler {
     pub fn build_const_cell_set(&mut self, s: &CellSet) -> llvm::VectorValue {
         let b = self.builder();
         todo!("cell set type")
-    }
-    /// Builds instructions to construct a multidimensional array from a base
-    /// pointer.
-    pub fn build_construct_ndarray_from_base_ptr(
-        &mut self,
-        bounds: IRect6D,
-        array_base_ptr: llvm::PointerValue,
-        strides: &[LangInt],
-        mutable: bool,
-    ) -> llvm::NdArrayValue {
-        // Get a pointer to the origin in the array. Note that this GEP may be
-        // out of bounds if the cell array does not contain the origin (but it
-        // should always be reasonably nearby).
-        let base_idx = crate::utils::ndarray_base_idx(bounds, strides);
-        let array_origin_ptr = unsafe {
-            self.builder().build_gep(
-                array_base_ptr,
-                &[llvm::const_int(-base_idx)],
-                "array_origin_ptr",
-            )
-        };
-        let strides = llvm::const_vector(strides.iter().copied());
-        llvm::NdArrayValue::from_origin_ptr(bounds, array_origin_ptr, strides)
-    }
-    /// Builds instructions to allocate a multidimensional array on the stack.
-    pub fn build_alloca_ndarray(
-        &mut self,
-        ndim: usize,
-        bounds: IRect6D,
-        ty: llvm::IntType,
-    ) -> llvm::NdArrayValue {
-        let buffer_len = bounds.count();
-        let array_base_ptr = self.builder().build_array_alloca(
-            llvm::cell_type(),
-            llvm::const_int(buffer_len as LangInt),
-            "cell_array_buffer",
-        );
-
-        let strides = crate::utils::ndarray_strides(ndim, bounds);
-
-        let mutable = true;
-        self.build_construct_ndarray_from_base_ptr(bounds, array_base_ptr, &strides, mutable)
-    }
-    /// Builds instructions to allocate a mutable cell array on the stack.
-    pub fn build_alloca_cell_array(&mut self, shape: Arc<VectorSet>) -> LlvmCellArray {
-        let ndim = shape.vec_len();
-        let cells = shape
-            .bounds()
-            .map(|bounds| self.build_alloca_ndarray(ndim, bounds, llvm::cell_type()));
-        LlvmCellArray::new(&mut self.module, shape, cells)
     }
 
     /// Returns the value inside if given an `Integer` value or subtype of one;
@@ -675,28 +648,114 @@ impl Compiler {
             .collect()
     }
 
+    /// Builds instructions to construct an N-dimensional array from a pointer
+    /// to the **base** of the array.
+    pub fn build_construct_ndarray_from_base_ptr(
+        &mut self,
+        bounds: IRect6D,
+        base_ptr: llvm::PointerValue,
+        strides: llvm::VectorValue,
+        name: &str,
+    ) -> Result<llvm::NdArrayValue> {
+        let ndim = strides.get_type().get_size() as usize;
+        let array_from_base = self.build_construct_ndarray_from_origin_ptr(
+            bounds,
+            base_ptr,
+            strides,
+            "cell_array_from_base",
+        );
+
+        let negative_base = llvm::const_vector((0..ndim).map(|i| -bounds.min().0[i] as LangInt));
+        let origin_ptr = self.build_ndarray_gep_unchecked(
+            array_from_base,
+            negative_base,
+            "cell_array_origin_ptr",
+        )?;
+        Ok(self.build_construct_ndarray_from_origin_ptr(
+            bounds,
+            origin_ptr,
+            strides,
+            "cell_array_from_origin",
+        ))
+    }
+
+    /// Builds instructions to construct an N-dimensional array from a pointer
+    /// to the origin in the array and strides.
+    pub fn build_construct_ndarray_from_origin_ptr(
+        &mut self,
+        bounds: IRect6D,
+        origin_ptr: llvm::PointerValue,
+        strides: llvm::VectorValue,
+        name: &str,
+    ) -> llvm::NdArrayValue {
+        let b = self.builder();
+        let ndim = strides.get_type().get_size() as usize;
+        let mut array_ptr = llvm::ndarray_type(ndim).get_undef();
+        array_ptr = b.build_insert_value(array_ptr, origin_ptr, 0, "");
+        array_ptr = b.build_insert_value(array_ptr, strides, 1, name);
+        llvm::NdArrayValue { bounds, array_ptr }
+    }
+    /// Builds instructions to split an N-dimensional array into its origin
+    /// pointer and strides.
+    pub fn build_split_ndarray(
+        &mut self,
+        array: &LlvmCellArray,
+    ) -> (llvm::PointerValue, llvm::VectorValue) {
+        let b = self.builder();
+        let origin_ptr = b.build_extract_value(array, 0, "origin_ptr");
+        let strides = b.build_extract_value(array, 1, "strides");
+        (origin_ptr, strides)
+    }
+
+    /// Builds instructions to allocate a multidimensional array on the stack.
+    pub fn build_alloca_ndarray(
+        &mut self,
+        ndim: usize,
+        bounds: IRect6D,
+        ty: llvm::IntType,
+        name: &str,
+    ) -> llvm::NdArrayValue {
+        let buffer_len = bounds.count();
+        let array_base_ptr = self.builder().build_array_alloca(
+            llvm::cell_type(),
+            llvm::const_int(buffer_len as LangInt),
+            "cell_array_buffer",
+        );
+        let strides = llvm::const_vector(&crate::utils::ndarray_strides(ndim, bounds));
+        self.build_construct_ndarray_from_base_ptr(bounds, array_base_ptr, &strides, name)
+    }
+    /// Builds instructions to allocate a mutable cell array on the stack.
+    pub fn build_alloca_cell_array(&mut self, shape: Arc<VectorSet>, name: &str) -> LlvmCellArray {
+        let ndim = shape.vec_len();
+        let cells = shape
+            .bounds()
+            .map(|bounds| self.build_alloca_ndarray(ndim, bounds, llvm::cell_type(), name));
+        LlvmCellArray::new(&mut self.module, shape, cells)
+    }
+
     /// Builds instructions to offset a cell array by a fixed delta vector.
     pub fn build_offset_cell_array(
         &mut self,
         error_span: Span,
         array: LlvmCellArray,
         delta: &[LangInt],
+        name: &str,
     ) -> Result<LlvmCellArray> {
         if let Some(cells) = array.cells() {
             let new_shape = Arc::new(array.shape().offset(error_span, delta)?);
             let new_bounds = new_shape.bounds().unwrap();
 
             let negative_delta = llvm::const_vector(delta.iter().map(|&i| -i));
-            let new_array_ptr = self.build_ndarray_gep_unchecked(
-                error_span,
+            let new_origin_ptr = self.build_ndarray_gep_unchecked(
                 cells,
                 negative_delta,
-                &format!("origin_with_offset_{:?}", delta),
+                &format!("cell_array_origin_with_offset_{:?}", delta),
             )?;
-            let new_cells = Some(llvm::NdArrayValue::from_origin_ptr(
+            let new_cells = Some(self.build_construct_ndarray_from_origin_ptr(
                 new_bounds,
-                new_array_ptr,
+                new_origin_ptr,
                 cells.strides(),
+                name,
             ));
 
             Ok(LlvmCellArray::new(&mut self.module, new_shape, new_cells))
@@ -772,22 +831,53 @@ impl Compiler {
         let error_index = self.add_runtime_error(Error::position_out_of_bounds(error_span));
         self.build_return_err_if(is_out_of_bounds, error_index)?;
 
-        self.build_ndarray_gep_unchecked(error_span, ndarray, pos, name)
+        self.build_ndarray_gep_unchecked(ndarray, pos, name)
     }
     /// Builds a GEP into an N-dimensional array WITHOUT checking whether the
     /// position is out of bounds.
     pub fn build_ndarray_gep_unchecked(
         &mut self,
-        error_span: Span,
         ndarray: llvm::NdArrayValue,
         pos: llvm::VectorValue,
         name: &str,
     ) -> Result<llvm::PointerValue> {
         let pos = self.build_convert_vector_length(pos, ndarray.ndim());
-        let tmp = self.build_checked_int_arithmetic(error_span, "smul", ndarray.strides(), pos)?;
+        let tmp = self
+            .builder()
+            .build_int_nsw_mul(ndarray.strides(), pos, name);
         let ptr_offset = self.build_reduce("add", tmp)?;
         let b = self.builder();
         Ok(unsafe { b.build_gep(ndarray.origin_ptr(), &[ptr_offset], name) })
+    }
+
+    /// Returns a constant array with the specified contents.
+    fn get_cell_array_mask_constant(
+        &mut self,
+        shape: Arc<VectorSet>,
+    ) -> Option<llvm::NdArrayValue> {
+        self.cached_cell_array_masks
+            .entry(shape)
+            .or_insert_with_key(|shape| {
+                shape
+                    .bounds()
+                    .zip(shape.mask())
+                    .as_ref()
+                    .map(|(bounds, mask)| {
+                        llvm::NdArrayValue::new_const(
+                            &mut self.module,
+                            shape.vec_len(),
+                            bounds,
+                            llvm::bool_type(),
+                            &mask
+                                .as_flat_slice()
+                                .iter()
+                                .copied()
+                                .map(llvm::const_bool)
+                                .collect_vec(),
+                            "cell_array_mask",
+                        )
+                    })
+            })
     }
 }
 
@@ -864,15 +954,17 @@ impl Compiler {
     /// Builds a conditional expression, using an IntValue of any width. Any
     /// nonzero value is truthy, and zero is falsey.
     ///
-    /// If the given closures return a basic value, then this method will return
-    /// the value of a phi node that takes the result of whichever of the two
-    /// closures executes.
-    pub fn build_conditional<V: PhiMergeable<PhiResult = V>>(
+    /// This method will return the value of a phi node that merges the values
+    /// resulting from the closures.
+    pub fn build_conditional<V>(
         &mut self,
         condition_value: llvm::IntValue,
         build_if_true: impl FnOnce(&mut Self) -> Result<V>,
         build_if_false: impl FnOnce(&mut Self) -> Result<V>,
-    ) -> Result<V> {
+    ) -> Result<V>
+    where
+        Self: BuildPhi<V>,
+    {
         // Save `overwritten_vars`.
         let old_overwritten_vars = self.clear_overwritten_vars();
 
@@ -929,29 +1021,44 @@ impl Compiler {
             }
             _ => {
                 // Merge variable values.
-                let names = vars_from_if_true
-                    .keys()
-                    .chain(vars_from_if_false.keys())
-                    .collect::<HashSet<_>>();
+                let mut names = HashSet::new();
+                names.extend(vars_from_if_true.keys());
+                names.extend(vars_from_if_false.keys());
+
                 for name in names {
-                    let old_var_val = self.vars.get(name);
-                    let var_val_if_true = vars_from_if_true
-                        .get(name)
-                        .cloned()
-                        .unwrap_or(old_var_val.cloned())
-                        .unwrap_or(Val::MaybeUninit);
-                    let var_val_if_false = vars_from_if_false
-                        .get(name)
-                        .cloned()
-                        .unwrap_or(old_var_val.cloned())
-                        .unwrap_or(Val::MaybeUninit);
-                    let merged_var_value = PhiMergeable::merge(
-                        var_val_if_true,
-                        var_val_if_false,
-                        if_true_end_bb,
-                        if_false_end_bb,
-                        self,
-                    );
+                    let old_var_val = self.vars.get(name).unwrap_or(&Val::MaybeUninit);
+                    let var_val_if_true = vars_from_if_true.get(name).unwrap_or(old_var_val);
+                    let var_val_if_false = vars_from_if_false.get(name).unwrap_or(old_var_val);
+                    let merged_var_value = match (var_val_if_true, var_val_if_false) {
+                        (v @ Variable::Error, _) | (_, v @ Variable::Error) => v,
+                        (v @ Variable::MaybeUninit, _) | (_, v @ Variable::MaybeUninit) => v,
+                        (v @ Variable::UnknownType, _) | (_, v @ Variable::UnknownType) => v,
+                        (Variable::Val(v1), Variable::Val(v2)) => {
+                            if v1 == v2 {
+                                v1
+                            } else if v1.ty() == v2.ty() {
+                                let ty = v1.ty();
+                                if let (Ok(v1), Ok(v2)) = (self.get_cp_val(v1), self.get_cp_val(v2))
+                                {
+                                    let bv1 = v1.to_basic_value();
+                                    let bv2 = v2.to_basic_value();
+                                    let phi = self.builder().build_phi(bv1.get_type(), name);
+                                    phi.add_incoming(&[
+                                        (&bv1, if_true_end_bb),
+                                        (&bv2, if_false_end_bb),
+                                    ]);
+                                    Variable::Val(Val::Cp(CpVal::from_basic_value(
+                                        ty,
+                                        phi.as_basic_value(),
+                                    )))
+                                } else {
+                                    Variable::Val(Val::Unknown(ty))
+                                }
+                            } else {
+                                Variable::UnknownType
+                            }
+                        }
+                    };
                     self.assign_var(name, Some(merged_var_value));
                 }
                 // Merge values provided by the closures.
@@ -969,10 +1076,11 @@ impl Compiler {
     /// Builds a loop.
     ///
     /// `build_contents()` starts at the header and must end with a branch to
-    /// either the prelatch or exit. `build_prelatch()` starts at the prelatch
-    /// and must NOT end with a jump.
+    /// either the prelatch or exit (via `continue` or `break` respectively).
+    /// `build_prelatch()` starts at the prelatch and must NOT end with a jump.
     pub fn build_loop(
         &mut self,
+        vars_assigned: HashMap<Arc<String>, Span>,
         build_contents: impl FnOnce(&mut Self, Loop) -> Result<()>,
         build_prelatch: impl FnOnce(&mut Self, Loop) -> Result<()>,
     ) -> Result<()> {
@@ -983,6 +1091,8 @@ impl Compiler {
             prelatch: self.append_basic_block("prelatch"),
             latch: self.append_basic_block("latch"),
             exit: self.append_basic_block("exit"),
+
+            var_phis: HashMap::new(),
         };
         self.loop_stack.push(lööp);
 
@@ -994,8 +1104,36 @@ impl Compiler {
 
         // Build header and loop contents.
         self.builder().position_at_end(lööp.header);
+        // Inside the header, build a phi node for any existing variable
+        // modified by the loop.
+        let placeholder_values: HashMap<Arc<String>, CpVal> = vars_assigned
+            .iter()
+            .filter_map(|(name, span)| match self.get_var(&name, span) {
+                None => None,
+                Some(pre_loop_value) => {
+                    let ty = pre_loop_value.ty();
+                    let placeholder_loop_value = self.build_undef_val_of_type(&ty);
+
+                    if let Some(placeholder) = &placeholder_loop_value {
+                        let merged_value = PhiMergeable::merge(
+                            pre_loop_value,
+                            Val::Cp(placeholder.clone()),
+                            lööp.preheader,
+                            lööp.latch,
+                            self,
+                        );
+                        self.assign_var(&name, Some(merged_value));
+                    } else {
+                        self.assign_var(&name, Some(Val::MaybeUninit));
+                    }
+
+                    Some((name, placeholder_loop_value?))
+                }
+            })
+            .collect();
         build_contents(self, lööp)?;
-        // `build_contents()` branches for us.
+        // `build_contents()` adds a branch to the prelatch or exit.
+        let old_overwritten_vars = self.clear_overwritten_vars();
 
         // Build prelatch.
         self.builder().position_at_end(lööp.prelatch);
@@ -1005,6 +1143,14 @@ impl Compiler {
         // Build latch.
         self.builder().position_at_end(lööp.latch);
         self.builder().build_unconditional_branch(lööp.header);
+
+        for (name, placeholder) in placeholder_values {
+            // if placeholder
+            // self.first_var_uses
+            placeholder.replace_all_uses_with(self.get_var(name, span))
+        }
+        self.restore_overwritten_vars();
+        self.overwritten_vars = old_overwritten_vars;
 
         // Build exit.
         self.builder().position_at_end(lööp.exit);
@@ -1309,6 +1455,7 @@ impl Compiler {
             |_| Ok(one),
             |c| {
                 c.build_loop(
+                    HashMap::new(),
                     |c, l| {
                         let b = c.builder();
                         let base_phi = b.build_phi(llvm::int_type(), "base");
@@ -1511,31 +1658,44 @@ impl Compiler {
     }
 
     /// Assigns a value to a variable or removes it.
-    pub fn assign_var(&mut self, name: &Arc<String>, value: Option<Val>) {
+    pub fn assign_var(&mut self, name: &Arc<String>, value: Val, statement_span: Span) {
         if &**name != crate::THROWAWAY_VARIABLE {
-            let old_val = if let Some(value) = value {
-                self.vars.insert(Arc::clone(name), value)
-            } else {
-                self.vars.remove(name)
-            };
-            self.overwritten_vars
-                .entry(Arc::clone(&name))
-                .or_insert(old_val);
+            let old_val = self.vars.insert(
+                Arc::clone(name),
+                Varible {
+                    value,
+                    spans: vec![(Some(statement_span), value.ty())],
+                },
+            );
+            if let Some(overwritten_vars) = self.overwritten_vars_stack.last_mut() {
+                overwritten_vars.entry(Arc::clone(&name)).or_insert(old_val);
+            }
         }
     }
-    /// Returns all variable values.
-    pub fn get_var(&mut self, name: &Arc<String>, span: Span) -> Option<&Val> {
-        self.vars.get(name)
+    /// Returns a variable value.
+    pub fn get_var(&mut self, name: &Arc<String>, span: Span) -> Option<&Variable<Val>> {
+        let ret = self.vars.get(name)?;
+        if let Some(ty) = ret.val.ty() {
+            for l in self.loop_stack.iter_mut().rev() {
+                if !l.first_var_uses.contains_key(name) {
+                    l.first_var_uses.insert(Arc::clone(name), (span,));
+                }
+            }
+        }
+        Some(ret)
     }
-    /// Clears the map of overwritten variable values and returns the old map.
-    fn clear_overwritten_vars(&mut self) -> HashMap<Arc<String>, Option<Val>> {
-        std::mem::replace(&mut self.overwritten_vars, HashMap::new())
+    /// Pushes a new blank entry to the overwritten variable stack.
+    fn push_overwritten_vars(&mut self) {
+        self.overwritten_vars_stack.push(HashMap::new());
     }
-    /// Restores overwritten variables and returns the map of variable values
-    /// that were just removed by the restoration process.
-    fn restore_overwritten_vars(&mut self) -> HashMap<Arc<String>, Option<Val>> {
-        self.clear_overwritten_vars()
-            .drain()
+    /// Pops an entry off the overwritten variable stack.
+    fn pop_and_restore_overwritten_vars(
+        &mut self,
+    ) -> Result<HashMap<Arc<String>, Option<Variable<Val>>>> {
+        self.overwritten_vars_stack
+            .pop()
+            .ok_or_else(|| internal_error_value!("overwritten vars stack empty"))?
+            .into_iter()
             .map(|(name, value)| {
                 let old_value = match value {
                     Some(v) => self.vars.insert(Arc::clone(&name), v),
@@ -1616,17 +1776,13 @@ impl Compiler {
                 }
             }
 
-            ast::StmtData::Assign { lhs, op, rhs } => {
+            ast::StmtData::Assign { lhs, rhs } => {
                 let lhs = ast.get_node(*lhs);
                 let rhs = ast.get_node(*rhs);
+                let span = lhs.span().merge(rhs.span());
                 let new_value = self.build_expr(rhs);
-
-                // Convert `Spanned<Option<AssignOp>>` to `Option<Spanned<AssignOp>>`.
-                let span = op.span;
-                let op = op.node.map(|node| Spanned { node, span });
-
                 let lhs_expression = Box::<dyn Expression>::from(lhs);
-                lhs_expression.compile_assign(self, lhs.span(), op, new_value)?;
+                lhs_expression.compile_assign(self, span, op, new_value)?;
             }
 
             ast::StmtData::IfElse {
@@ -1737,214 +1893,338 @@ impl Compiler {
     }
 }
 
-/// Trait for merging values using a phi node.
-pub trait PhiMergeable: Sized {
-    type PhiResult;
+pub trait BuildPhi<V> {
+    type Type;
+    type PhiValue;
 
-    /// Builds a phi node that merges two values.
-    fn merge(
-        self,
-        other: Self,
-        self_bb: llvm::BasicBlock,
-        other_bb: llvm::BasicBlock,
-        compiler: &mut Compiler,
-    ) -> Self::PhiResult;
+    /// Builds a phi node.
+    fn build_phi(
+        &mut self,
+        ty: Self::Type,
+        bb: llvm::BasicBlock,
+        name: &str,
+    ) -> Result<Self::PhiValue>;
+    /// Adds an incoming edge to a phi node.
+    fn add_incoming_to_phi(
+        &mut self,
+        value: V,
+        bb: llvm::BasicBlock,
+        phi: &mut Self::PhiValue,
+    ) -> Result<()>;
+    /// Returns the phi value.
+    fn value_from_phi(phi: &Self::PhiValue) -> Result<V>;
+
+    // /// Builds a phi node, adds incoming edges, and returns the resulting value.
+    // fn build_phi_with_incoming(
+    //     &mut self,
+    //     ty: Self::Type,
+    //     incomings: &[(V, llvm::BasicBlock)],
+    //     name: &str,
+    // ) -> Result<V> {
+    //     match incomings {
+    //         [] => internal_error!("phi node with no incoming edges"),
+    //         [(v, _bb)] => Ok(v),
+    //         [first, rest @ ..] => {
+    //             let (v, bb) = first;
+    //             let mut phi = self.build_phi(v, bb, name)?;
+    //             for (v, bb) in rest {
+    //                 self.add_incoming_to_phi(v, bb, &mut phi);
+    //             }
+    //             self.value_from_phi(phi)
+    //         }
+    //     }
+    // }
 }
-impl PhiMergeable for () {
-    type PhiResult = Self;
+impl BuildPhi<()> for Compiler {
+    type Type = ();
+    type PhiValue = ();
 
-    fn merge(
-        self,
-        _other: (),
-        _self_bb: llvm::BasicBlock,
-        _other_bb: llvm::BasicBlock,
-        _compiler: &mut Compiler,
-    ) -> Self {
-        ()
+    fn build_phi(&mut self, ty: (), bb: llvm::BasicBlock, name: &str) -> Result<Self::PhiValue> {
+        Ok(())
+    }
+    fn add_incoming_to_phi(
+        &mut self,
+        value: (),
+        bb: llvm::BasicBlock,
+        phi: &mut Self::PhiValue,
+    ) -> Result<()> {
+        Ok(())
+    }
+    fn value_from_phi(phi: &Self::PhiValue) -> Result<()> {
+        Ok(())
     }
 }
-impl PhiMergeable for llvm::BasicValueEnum {
-    type PhiResult = Self;
-
-    fn merge(
-        self,
-        other: Self,
-        self_bb: llvm::BasicBlock,
-        other_bb: llvm::BasicBlock,
-        compiler: &mut Compiler,
-    ) -> Self {
-        let phi = compiler
-            .builder()
-            .build_phi(self.get_type(), "mergeValuesEndIf");
-        phi.add_incoming(&[(&self, self_bb), (&other, other_bb)]);
-        phi.as_basic_value()
-    }
-}
-macro_rules! impl_phi_mergeable_for_basic_value_types {
-    ( $($method:ident() -> $type:ty),+ $(,)? ) => {
+macro_rules! impl_build_phi_for_basic_value_types {
+    ( $($method:ident() -> $type_name:ty),+ $(,)? ) => {
         $(
-            impl PhiMergeable for $type {
-                type PhiResult = Self;
+            impl BuildPhi<$type_name> for Compiler {
+                type PhiValue = llvm::PhiValue;
 
-                fn merge(
-                    self,
-                    other: Self,
-                    self_bb: llvm::BasicBlock,
-                    other_bb: llvm::BasicBlock,
-                    compiler: &mut Compiler,
-                ) -> Self {
-                    PhiMergeable::merge(
-                        self.as_basic_value_enum(),
-                        other.as_basic_value_enum(),
-                        self_bb,
-                        other_bb,
-                        compiler,
-                    ).$method()
+                fn build_phi(
+                    &mut self,
+                    value: $type_name,
+                    bb: llvm::BasicBlock,
+                    name: &str,
+                ) -> Result<llvm::PhiValue> {
+                    let phi = self.builder().build_phi(value.get_type(), name);
+                    self.add_incoming_to_phi(value, bb, phi)?;
+                    Ok(phi)
+                }
+                fn add_incoming_to_phi(
+                    &mut self,
+                    value: $type_name,
+                    bb: llvm::BasicBlock,
+                    phi: &mut llvm::PhiValue,
+                ) -> Result<()> {
+                    phi.add_incoming(&[value.as_basic_value_enum(), bb]);
+                    Ok(())
+                }
+                fn value_from_phi(phi: &llvm::PhiValue, _span: Span) -> Result<$type_name> {
+                    Ok(phi.$method())
                 }
             }
         )+
     };
 }
-impl_phi_mergeable_for_basic_value_types!(
+impl_build_phi_for_basic_value_types!(
     into_int_value() -> llvm::IntValue,
     into_vector_value() -> llvm::VectorValue,
     into_pointer_value() -> llvm::PointerValue,
 );
-impl PhiMergeable for NdArrayValue {
-    type PhiResult = Option<Self>;
+impl Compiler {
+    fn build_phi_for_variable(
+        &mut self,
+        name: Spanned<Arc<String>>,
+        ty: Type,
+        bb: llvm::BasicBlock,
+        name: &str,
+    ) -> Result<(llvm::PhiValue, Variable<CpVal>)> {
+        let phi = self.builder().build_phi(ty.basic, bv.get_type(), name);
+        phi.add_incoming(&[(bv, bb)]);
 
-    fn merge(
-        self,
-        other: Self,
-        self_bb: llvm::BasicBlock,
-        other_bb: llvm::BasicBlock,
-        compiler: &mut Compiler,
-    ) -> Option<Self> {
-        if self.bounds() != other.bounds() {
-            return None;
-        }
-        let origin_ptr = PhiMergeable::merge(
-            self.origin_ptr(),
-            other.origin_ptr(),
-            self_bb,
-            other_bb,
-            compiler,
-        );
-        let strides =
-            PhiMergeable::merge(self.strides(), other.strides(), self_bb, other_bb, compiler);
-        Some(Self::from_origin_ptr(self.bounds(), origin_ptr, strides))
-    }
-}
-impl PhiMergeable for LlvmCellArray {
-    type PhiResult = Option<Self>;
-
-    fn merge(
-        self,
-        other: Self,
-        self_bb: llvm::BasicBlock,
-        other_bb: llvm::BasicBlock,
-        compiler: &mut Compiler,
-    ) -> Option<Self> {
-        if self.shape() != other.shape() {
-            None
-        } else if let (Some(a), Some(b)) = (self.cells(), other.cells()) {
-            let shape = Arc::clone(self.shape());
-            let new_cells = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
-            Some(Self::new(&mut compiler.module, shape, Some(new_cells)))
-        } else {
-            Some(self) // empty
-        }
-    }
-}
-impl PhiMergeable for CpVal {
-    type PhiResult = Option<Self>;
-
-    fn merge(
-        self,
-        other: Self,
-        self_bb: llvm::BasicBlock,
-        other_bb: llvm::BasicBlock,
-        compiler: &mut Compiler,
-    ) -> Option<Self> {
-        if self.ty() != other.ty() {
-            return None;
-        }
-        match (self, other) {
-            (CpVal::Integer(a), CpVal::Integer(b)) => {
-                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
-                Some(CpVal::Integer(x))
-            }
-            (CpVal::Cell(a), CpVal::Cell(b)) => {
-                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
-                Some(CpVal::Cell(x))
-            }
-            (CpVal::Vector(a), CpVal::Vector(b)) => {
-                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
-                Some(CpVal::Vector(x))
-            }
-            (CpVal::CellArray(a), CpVal::CellArray(b)) => {
-                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
-                Some(CpVal::CellArray(x))
-            }
-            (CpVal::CellArrayMut(a), CpVal::CellArrayMut(b)) => {
-                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
-                Some(CpVal::CellArrayMut(x))
-            }
-            (CpVal::CellSet(a), CpVal::CellSet(b)) => {
-                let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
-                Some(CpVal::CellSet(x))
-            }
-            (CpVal::Integer(_), _)
-            | (CpVal::Cell(_), _)
-            | (CpVal::Vector(_), _)
-            | (CpVal::CellArray(_), _)
-            | (CpVal::CellArrayMut(_), _)
-            | (CpVal::CellSet(_), _) => None,
-        }
-    }
-}
-impl PhiMergeable for Val {
-    type PhiResult = Self;
-
-    fn merge(
-        self,
-        other: Self,
-        self_bb: llvm::BasicBlock,
-        other_bb: llvm::BasicBlock,
-        compiler: &mut Compiler,
-    ) -> Self {
-        let (a, b) = match (&self, &other) {
-            (Val::Error, _) | (_, Val::Error) => return Val::Error,
-            (Val::MaybeUninit, _) | (_, Val::MaybeUninit) => return Val::MaybeUninit,
-            (Val::Unknown(_), _) | (_, Val::Unknown(_)) => {
-                let self_ty = self.ty();
-                let other_ty = other.ty();
-                if self_ty == other_ty {
-                    return Val::Unknown(self_ty);
-                } else {
-                    return Val::Unknown(None);
-                }
-            }
-
-            (Val::Rt(a), Val::Rt(b)) if a == b => return self,
-            (Val::Rt(a), Val::Rt(b)) => {
-                match (compiler.rt_val_to_cp_val(&a), compiler.rt_val_to_cp_val(&b)) {
-                    (Some(a), Some(b)) => (a, b),
-                    _ => return Val::Unknown((a.ty() == b.ty()).then(|| a.ty())),
-                }
-            }
-            (Val::Rt(a), Val::Cp(b)) | (Val::Cp(b), Val::Rt(a)) => {
-                match compiler.rt_val_to_cp_val(&a) {
-                    Some(a) => (a, b.clone()),
-                    None => return Val::Unknown(None),
-                }
-            }
-            (Val::Cp(a), Val::Cp(b)) => (a.clone(), b.clone()),
+        let var = Variable {
+            val: CpVal::from_basic_value(&ty, phi.as_basic_value())?,
+            spans: vec![ty, value.span],
         };
 
-        match PhiMergeable::merge(a, b, self_bb, other_bb, compiler) {
-            Some(cp_val) => Val::Cp(cp_val),
-            None => Val::Unknown(None),
+        Ok((phi, var))
+    }
+    fn add_incoming_to_phi(
+        &mut self,
+        value: Spanned<CpVal>,
+        bb: llvm::BasicBlock,
+        (phi, var): &mut (llvm::PhiValue, Variable<CpVal>),
+    ) -> Result<()> {
+        if value.ty() == *ty {
+            Ok(phi.add_incoming(&[(value.to_basic_value(), bb)]))
+        } else {
+            todo!("phi error")
         }
     }
+    fn value_from_phi(
+        (_phi, var): &(llvm::PhiValue, Variable<CpVal>),
+        span: Span,
+    ) -> Result<Spanned<CpVal>> {
+        CpVal::from_basic_value(ty, phi)
+    }
 }
+
+// impl PhiMergeable for () {
+//     fn build_phi(
+//         &self,
+//         _compiler: &mut Compiler,
+//         _bb: llvm::BasicBlock,
+//         _name: &str,
+//     ) -> Result<llvm::PhiValue> {
+//         Ok(())
+//     }
+
+//     fn add_incoming(
+//         self,
+//         _compiler: &mut Compiler,
+//         _valuee: Self,
+//         _bb: llvm::BasicBlock,
+//     ) -> Result<()> {
+//         Ok(())
+//     }
+// }
+// impl PhiMergeable for llvm::BasicValueEnum {
+//     type PhiResult = Self;
+
+//     fn merge(
+//         self,
+//         other: Self,
+//         bb: llvm::BasicBlock,
+//         bb: llvm::BasicBlock,
+//         compiler: &mut Compiler,
+//     ) -> Self {
+//         let phi = compiler
+//             .builder()
+//             .build_phi(self.get_type(), "mergeValuesEndIf");
+//         phi.add_incoming(&[(&self, self_bb), (&other, other_bb)]);
+//         phi.as_basic_value()
+//     }
+
+//     fn build_phi(
+//         &self,
+//         compiler: &mut Compiler,
+//         bb: llvm::BasicBlock,
+//         name: &str,
+//     ) -> Result<llvm::PhiValue> {
+//         let phi = compiler
+//             .builder()
+//             .build_phi(self.get_type(), name)
+//             .as_basic_value();
+//         let value = std::mem::replace(self, phi);
+//         self.add_incoming(compiler, value, bb);
+//         phi.as_basic_value().add_incoming(self, bb, compiler)
+//     }
+
+//     fn add_incoming(
+//         self,
+//         compiler: &mut Compiler,
+//         value: Self,
+//         bb: llvm::BasicBlock,
+//     ) -> Result<()> {
+//         self.as_any_value_enum().into_phi_value()
+//     }
+// }
+
+// impl PhiMergeable for NdArrayValue {
+//     type PhiResult = Option<Self>;
+
+//     fn merge(
+//         self,
+//         other: Self,
+//         self_bb: llvm::BasicBlock,
+//         other_bb: llvm::BasicBlock,
+//         compiler: &mut Compiler,
+//     ) -> Option<Self> {
+//         if self.bounds() != other.bounds() {
+//             return None;
+//         }
+//         let origin_ptr = PhiMergeable::merge(
+//             self.origin_ptr(),
+//             other.origin_ptr(),
+//             self_bb,
+//             other_bb,
+//             compiler,
+//         );
+//         let strides =
+//             PhiMergeable::merge(self.strides(), other.strides(), self_bb, other_bb, compiler);
+//         Some(Self::from_origin_ptr(self.bounds(), origin_ptr, strides))
+//     }
+// }
+// impl PhiMergeable for LlvmCellArray {
+//     type PhiResult = Option<Self>;
+
+//     fn merge(
+//         self,
+//         other: Self,
+//         self_bb: llvm::BasicBlock,
+//         other_bb: llvm::BasicBlock,
+//         compiler: &mut Compiler,
+//     ) -> Option<Self> {
+//         if self.shape() != other.shape() {
+//             None
+//         } else if let (Some(a), Some(b)) = (self.cells(), other.cells()) {
+//             let shape = Arc::clone(self.shape());
+//             let new_cells = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
+//             Some(Self::new(&mut compiler.module, shape, Some(new_cells)))
+//         } else {
+//             Some(self) // empty
+//         }
+//     }
+// }
+// impl PhiMergeable for CpVal {
+//     type PhiResult = Option<Self>;
+
+//     fn merge(
+//         self,
+//         other: Self,
+//         self_bb: llvm::BasicBlock,
+//         other_bb: llvm::BasicBlock,
+//         compiler: &mut Compiler,
+//     ) -> Option<Self> {
+//         if self.ty() != other.ty() {
+//             return None;
+//         }
+//         match (self, other) {
+//             (CpVal::Integer(a), CpVal::Integer(b)) => {
+//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
+//                 Some(CpVal::Integer(x))
+//             }
+//             (CpVal::Cell(a), CpVal::Cell(b)) => {
+//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
+//                 Some(CpVal::Cell(x))
+//             }
+//             (CpVal::Vector(a), CpVal::Vector(b)) => {
+//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
+//                 Some(CpVal::Vector(x))
+//             }
+//             (CpVal::CellArray(a), CpVal::CellArray(b)) => {
+//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
+//                 Some(CpVal::CellArray(x))
+//             }
+//             (CpVal::CellArrayMut(a), CpVal::CellArrayMut(b)) => {
+//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
+//                 Some(CpVal::CellArrayMut(x))
+//             }
+//             (CpVal::CellSet(a), CpVal::CellSet(b)) => {
+//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
+//                 Some(CpVal::CellSet(x))
+//             }
+//             (CpVal::Integer(_), _)
+//             | (CpVal::Cell(_), _)
+//             | (CpVal::Vector(_), _)
+//             | (CpVal::CellArray(_), _)
+//             | (CpVal::CellArrayMut(_), _)
+//             | (CpVal::CellSet(_), _) => None,
+//         }
+//     }
+// }
+// impl PhiMergeable for Val {
+//     type PhiResult = Self;
+
+//     fn merge(
+//         self,
+//         other: Self,
+//         self_bb: llvm::BasicBlock,
+//         other_bb: llvm::BasicBlock,
+//         compiler: &mut Compiler,
+//     ) -> Self {
+//         let (a, b) = match (&self, &other) {
+//             (Val::Error, _) | (_, Val::Error) => return Val::Error,
+//             (Val::MaybeUninit, _) | (_, Val::MaybeUninit) => return Val::MaybeUninit,
+//             (Val::Unknown(_), _) | (_, Val::Unknown(_)) => {
+//                 let self_ty = self.ty();
+//                 let other_ty = other.ty();
+//                 if self_ty == other_ty {
+//                     return Val::Unknown(self_ty);
+//                 } else {
+//                     return Val::Unknown(None);
+//                 }
+//             }
+
+//             (Val::Rt(a), Val::Rt(b)) if a == b => return self,
+//             (Val::Rt(a), Val::Rt(b)) => {
+//                 match (compiler.rt_val_to_cp_val(&a), compiler.rt_val_to_cp_val(&b)) {
+//                     (Some(a), Some(b)) => (a, b),
+//                     _ => return Val::Unknown((a.ty() == b.ty()).then(|| a.ty())),
+//                 }
+//             }
+//             (Val::Rt(a), Val::Cp(b)) | (Val::Cp(b), Val::Rt(a)) => {
+//                 match compiler.rt_val_to_cp_val(&a) {
+//                     Some(a) => (a, b.clone()),
+//                     None => return Val::Unknown(None),
+//                 }
+//             }
+//             (Val::Cp(a), Val::Cp(b)) => (a.clone(), b.clone()),
+//         };
+
+//         match PhiMergeable::merge(a, b, self_bb, other_bb, compiler) {
+//             Some(cp_val) => Val::Cp(cp_val),
+//             None => Val::Unknown(None),
+//         }
+//     }
+// }

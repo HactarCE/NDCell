@@ -1,7 +1,7 @@
 use codemap::Spanned;
 use std::sync::Arc;
 
-use super::{LlvmCellArray, Type};
+use super::{GetType, LlvmCellArray, Type, VectorSet};
 use crate::errors::{Error, Result};
 use crate::llvm;
 
@@ -15,9 +15,8 @@ pub enum CpVal {
     CellArrayMut(LlvmCellArray),
     CellSet(llvm::VectorValue),
 }
-impl CpVal {
-    /// Returns the type of the value.
-    pub fn ty(&self) -> Type {
+impl GetType for CpVal {
+    fn ty(&self) -> Type {
         match self {
             CpVal::Integer(_) => Type::Integer,
             CpVal::Cell(_) => Type::Cell,

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::builtins::Expression;
 use crate::ast;
-use crate::data::{RtVal, SpannedRuntimeValueExt};
+use crate::data::{GetType, RtVal, SpannedRuntimeValueExt};
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait};
 

@@ -80,7 +80,7 @@ mod vector_sets;
 mod vectors;
 
 use crate::ast;
-use crate::data::{CellArray, LangCell, LangInt, LangUint, RtVal, Type};
+use crate::data::{CellArray, GetType, LangCell, LangInt, LangUint, RtVal, Type};
 use crate::errors::{self, Error};
 use crate::exec::{Compiler, CompilerConfig, CtxTrait, Runtime};
 use crate::utils;

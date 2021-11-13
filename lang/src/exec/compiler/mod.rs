@@ -43,8 +43,8 @@ use self::loops::VariablePhi;
 use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
-    CellSet, CpVal, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt, Type, Val, Variable,
-    VectorSet, INT_BITS,
+    CellArray, CellSet, CpVal, GetType, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt,
+    Type, Val, Var, VectorSet, INT_BITS,
 };
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait, Runtime};

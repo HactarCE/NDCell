@@ -8,8 +8,8 @@ use std::fmt;
 use super::{CallInfo, Function};
 use crate::ast;
 use crate::data::{
-    self, CpVal, LangInt, LangUint, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Type,
-    Val,
+    self, CpVal, GetType, LangInt, LangUint, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt,
+    Type, Val,
 };
 use crate::errors::{Error, Result};
 use crate::exec::{Compiler, Ctx};

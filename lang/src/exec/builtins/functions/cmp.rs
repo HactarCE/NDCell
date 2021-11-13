@@ -3,7 +3,7 @@
 use codemap::Spanned;
 
 use crate::ast;
-use crate::data::{self, CpVal, LangInt, RtVal};
+use crate::data::{self, CpVal, GetType, LangInt, RtVal};
 use crate::errors::{Error, Result};
 use crate::exec::Compiler;
 use crate::llvm;

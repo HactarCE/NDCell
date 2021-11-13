@@ -6,8 +6,7 @@ use std::sync::Arc;
 use super::{CallInfo, Function};
 use crate::ast;
 use crate::data::{
-    CellArray, CpVal, LangCell, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt,
-    SpannedRuntimeValueExt, Type, Val, VectorSet,
+    CellArray, CpVal, GetType, LangCell, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt,
 };
 use crate::errors::{Error, Result};
 use crate::exec::builtins::Expression;

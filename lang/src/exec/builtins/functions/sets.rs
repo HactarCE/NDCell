@@ -4,7 +4,7 @@ use codemap::{Span, Spanned};
 use std::sync::Arc;
 
 use super::{CallInfo, Function};
-use crate::data::{self, CellSet, LangInt, RtVal, SpannedRuntimeValueExt, VectorSet};
+use crate::data::{self, CellSet, GetType, LangInt, RtVal, SpannedRuntimeValueExt, VectorSet};
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait};
 

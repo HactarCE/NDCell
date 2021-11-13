@@ -9,6 +9,7 @@
 //! - Add new method in `SpannedRuntimeValueExt`
 //! - Add new method in `SpannedCompileValueExt`
 
+use codemap::Spanned;
 use std::fmt;
 use std::sync::Arc;
 
@@ -187,5 +188,16 @@ impl Type {
             Type::PatternMatcher(_) => None,
             Type::Regex => None,
         }
+    }
+}
+
+/// Value with a well-defined type.
+pub trait GetType {
+    /// Returns the type of a value.
+    fn ty(&self) -> Type;
+}
+impl<T: GetType> GetType for Spanned<T> {
+    fn ty(&self) -> Type {
+        self.node.ty()
     }
 }

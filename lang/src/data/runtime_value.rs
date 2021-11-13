@@ -2,7 +2,9 @@ use codemap::{Span, Spanned};
 use std::fmt;
 use std::sync::Arc;
 
-use super::{CellArray, CellSet, IntegerSet, LangCell, LangInt, PatternMatcher, Type, VectorSet};
+use super::{
+    CellArray, CellSet, GetType, IntegerSet, LangCell, LangInt, PatternMatcher, Type, VectorSet,
+};
 use crate::errors::{Error, Result};
 use crate::regex::Regex;
 
@@ -64,9 +66,8 @@ impl fmt::Display for RtVal {
         }
     }
 }
-impl RtVal {
-    /// Returns the type of the value.
-    pub fn ty(&self) -> Type {
+impl GetType for RtVal {
+    fn ty(&self) -> Type {
         match self {
             Self::Null => Type::Null,
             Self::Integer(_) => Type::Integer,
@@ -86,7 +87,8 @@ impl RtVal {
             Self::Regex(_) => Type::Regex,
         }
     }
-
+}
+impl RtVal {
     /// Converts the value to a boolean if it can be converted; otherwise
     /// returns `None`.
     pub fn to_bool(&self) -> Option<bool> {

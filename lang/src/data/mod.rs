@@ -22,8 +22,7 @@ pub use compile_value::{CpVal, SpannedCompileValueExt};
 pub use integer_set::IntegerSet;
 pub use pattern_matcher::PatternMatcher;
 pub use runtime_value::{RtVal, SpannedRuntimeValueExt};
-pub use types::Type;
-pub use value::{TryGetType, Val};
+pub use types::{GetType, Type};
 pub use vector_set::{check_vector_set_vec_len, VectorSet};
 
 /// Rust type used for NDCA integers.

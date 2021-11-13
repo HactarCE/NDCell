@@ -16,7 +16,7 @@ pub mod traits {
     pub use super::IntMathValue;
 }
 
-use crate::data::{LangCell, LangInt, CELL_STATE_BITS, INT_BITS};
+use crate::data::{LangCell, LangInt, Type, CELL_STATE_BITS, INT_BITS};
 pub use traits::*;
 
 /// Raw JIT-compiled function pointer.
@@ -99,9 +99,19 @@ pub fn tag_type() -> IntType {
 pub fn vector_type(len: usize) -> VectorType {
     int_type().vec_type(len as u32)
 }
-/// Returns the LLVM type used for cell arrays.
-pub fn cell_array_type() -> PointerType {
-    cell_type().ptr_type(AddressSpace::Generic)
+/// Returns the LLVM type used for an N-dimensional array of cells.
+pub fn cell_ndarray_type(ndim: usize) -> StructType {
+    ndarray_type(ndim, cell_type())
+}
+/// Returns the LLVM type used for N-dimensional arrays.
+pub fn ndarray_type(ndim: usize, element_type: IntType) -> StructType {
+    ctx().struct_type(
+        &[
+            element_type.ptr_type(AddressSpace::Generic).into(),
+            vector_type(ndim).into(),
+        ],
+        false,
+    )
 }
 
 /// Returns a constant boolean (`i1`) LLVM value.
@@ -235,102 +245,41 @@ pub fn vector_value_as_constant(v: VectorValue) -> Option<Vec<LangInt>> {
 /// LLVM representation of an N-dimensional array.
 #[derive(Debug, Copy, Clone)]
 pub struct NdArrayValue {
-    bounds: IRect6D,
-    origin_ptr: PointerValue,
-    strides: VectorValue,
+    /// Array bounds.
+    pub bounds: IRect6D,
+    /// Struct containing origin pointer and strides vector.
+    pub struct_value: StructValue,
 }
 impl NdArrayValue {
-    /// Constructs a new N-dimensional array from a pointer to the origin in the
-    /// array.
-    pub fn from_origin_ptr(
-        bounds: IRect6D,
-        origin_ptr: PointerValue,
-        strides: VectorValue,
-    ) -> Self {
-        Self {
-            bounds,
-            origin_ptr,
-            strides,
-        }
-    }
-    /// Constructs a new N-dimensional array from a pointer to the base of the
-    /// array. The pointer must be known at compile-time.
-    pub fn from_const_base_ptr(
-        bounds: IRect6D,
-        base_ptr: PointerValue,
-        strides: &[LangInt],
-    ) -> Self {
-        // Get a pointer to the origin in the array. Note that this GEP may be
-        // out of bounds if the cell array does not contain the origin (but it
-        // should always be reasonably nearby).
-        let base_idx = crate::utils::ndarray_base_idx(bounds, strides);
-        let origin_ptr = unsafe { base_ptr.const_gep(&[const_int(-base_idx)]) };
-        let strides = const_vector(strides.iter().copied());
-        Self::from_origin_ptr(bounds, origin_ptr, strides)
-    }
-    /// Constructs a new N-dimensional array with static contents.
-    pub fn new_const(
-        module: &mut Module,
-        ndim: usize,
-        bounds: IRect6D,
-        ty: IntType,
-        values: &[IntValue],
-        name: &str,
-    ) -> Self {
-        // Create array.
-        let array_value = ty.const_array(values);
-        // Store the array as a global constant.
-        let array_global = module.add_global(
-            array_value.get_type(),
-            Some(AddressSpace::Const),
-            &format!("{}_array", name),
-        );
-        array_global.set_initializer(&array_value);
-        // Mark this global as a constant; we don't ever intend to modify it.
-        array_global.set_constant(true);
-        // The address of the constant doesn't matter; please do merge it with
-        // other identical values!
-        array_global.set_unnamed_addr(true);
-
-        // Get a pointer to the array.
-        let array_base_ptr = array_global
-            .as_pointer_value()
-            .const_cast(ty.ptr_type(AddressSpace::Const));
-
-        let strides = crate::utils::ndarray_strides(ndim, bounds);
-
-        Self::from_const_base_ptr(bounds, array_base_ptr, &strides)
-    }
-
     /// Returns the number of dimensions.
     pub fn ndim(&self) -> usize {
-        self.strides.get_type().get_size() as usize
-    }
-    /// Returns the bounding box of the array.
-    pub fn bounds(&self) -> IRect6D {
-        self.bounds
-    }
-    /// Returns a pointer to the array values.
-    pub fn origin_ptr(&self) -> PointerValue {
-        self.origin_ptr
-    }
-    /// Returns the strides of the array.
-    pub fn strides(&self) -> VectorValue {
-        self.strides
+        self.struct_value.get_type().get_field_types()[1]
+            .into_vector_type()
+            .get_size() as usize
     }
 
     /// Returns the minimum coordinate of the array.
     pub fn min_vec(&self) -> Vec<LangInt> {
-        self.bounds().min().0[..self.ndim()]
+        self.bounds.min().0[..self.ndim()]
             .iter()
             .map(|&i| i as LangInt)
+            .take(self.ndim())
             .collect()
     }
     /// Returns the maximum coordinate of the array.
     pub fn max_vec(&self) -> Vec<LangInt> {
-        self.bounds().max().0[..self.ndim()]
+        self.bounds.max().0[..self.ndim()]
             .iter()
             .map(|&i| i as LangInt)
+            .take(self.ndim())
             .collect()
+    }
+
+    /// Returns an N-dimensional array with undefined contents.
+    pub fn get_undef(ndim: usize, bounds: IRect6D, elemeent_type: IntType) -> Self {
+        Self {
+            bounds,
+            struct_value: ndarray_type(ndim, elemeent_type).get_undef(),
+        }
     }
 }

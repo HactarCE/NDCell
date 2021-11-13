@@ -312,7 +312,8 @@ impl Error {
 
     error_fn!(Error; fn uninitialized_variable("this variable doesn't exist or hasn't been assigned a value"));
     error_fn!(Error; fn maybe_uninitialized_variable("this variable might not have been assigned a value"));
-    error_fn!(Error; fn ambiguous_variable_type("this variable's type is ambiguous"));
+    error_fn!(Error; fn ambiguous_variable_type("this variable's type cannot be determined"));
+    error_fn!(Error; fn ambiguous_variable_type_with_initial("this variable's type cannot be determined; initially contains a value of type {}", ty: &Type));
     error_fn!(Error; fn unknown_variable_value("value of type {} must be compile-time constant", ty: &Type));
 
     error_fn!(Error; fn cannot_assign_to("cannot assign to this expression"));

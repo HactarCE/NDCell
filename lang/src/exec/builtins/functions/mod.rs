@@ -13,7 +13,7 @@ pub(super) mod types;
 pub(super) mod vectors;
 
 use crate::ast;
-use crate::data::{RtVal, TryGetType, Type, Val};
+use crate::data::{GetType, RtVal, Type, Val};
 use crate::errors::{Error, Result};
 use crate::exec::{Compiler, Ctx, Runtime};
 
@@ -61,7 +61,7 @@ pub trait Function: fmt::Debug {
         _compiler: &mut Compiler,
         call: CallInfo<Spanned<Val>>,
         _first_arg: ast::Expr<'_>,
-        _new_value: Spanned<Val>,
+        _new_value: Result<Spanned<Val>>,
     ) -> Result<()> {
         Err(Error::cannot_compile_assign_to(call.expr_span))
     }
@@ -101,7 +101,7 @@ impl Function for Box<dyn Function> {
         compiler: &mut Compiler,
         call: CallInfo<Spanned<Val>>,
         first_arg: ast::Expr<'_>,
-        new_value: Spanned<Val>,
+        new_value: Result<Spanned<Val>>,
     ) -> Result<()> {
         (**self).compile_assign(compiler, call, first_arg, new_value)
     }
@@ -127,6 +127,8 @@ pub struct CallInfo<A> {
     pub span: Span,
     /// Span of the entire expression.
     pub expr_span: Span,
+    /// Span of the entire statement, if the expression is being assigned to.
+    pub stmt_span: Option<Span>,
     /// Arguments passed to the function.
     pub args: Vec<A>,
     /// Keyword arguments passed to the function.
@@ -138,10 +140,27 @@ impl<A: Clone> CallInfo<A> {
         expr_span: Span,
         args_and_kwargs: Vec<ast::FuncArg<A>>,
     ) -> Self {
+        Self::_new(name, expr_span, None, args_and_kwargs)
+    }
+    pub fn with_stmt_span(
+        name: Spanned<Arc<String>>,
+        expr_span: Span,
+        stmt_span: Span,
+        args_and_kwargs: Vec<ast::FuncArg<A>>,
+    ) -> Self {
+        Self::_new(name, expr_span, Some(stmt_span), args_and_kwargs)
+    }
+    fn _new(
+        name: Spanned<Arc<String>>,
+        expr_span: Span,
+        stmt_span: Option<Span>,
+        args_and_kwargs: Vec<ast::FuncArg<A>>,
+    ) -> Self {
         Self {
             name: name.node,
             span: name.span,
             expr_span,
+            stmt_span,
             args: args_and_kwargs
                 .iter()
                 .filter(|(k, _)| k.is_none())
@@ -157,17 +176,14 @@ impl<A: Clone> CallInfo<A> {
 }
 impl<V> CallInfo<Spanned<V>>
 where
-    Spanned<V>: TryGetType,
+    Spanned<V>: GetType,
 {
-    fn arg_types(&self) -> Result<Vec<Type>> {
-        self.args.iter().map(|arg| arg.try_get_type()).collect()
+    fn arg_types(&self) -> Vec<Type> {
+        self.args.iter().map(|arg| arg.ty()).collect()
     }
 
     fn invalid_args_error(&self) -> Error {
-        match self.arg_types() {
-            Ok(arg_types) => Error::invalid_arguments(self.expr_span, &self.name, &arg_types),
-            Err(e) => e,
-        }
+        Error::invalid_arguments(self.expr_span, &self.name, &self.arg_types())
     }
 
     pub fn check_args_len(&self, n: usize) -> Result<()> {

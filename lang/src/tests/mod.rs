@@ -313,7 +313,7 @@ impl<'a> TestProgram<'a> {
             // Set input variables.
             for (i, value) in case.inputs.iter().enumerate() {
                 let var_name = Arc::new(format!("x{}", i));
-                runtime.assign_var(&var_name, Some(value.clone()));
+                runtime.assign_var(&var_name, value.clone());
             }
             // Execute statement and result expressions.
             let actual_result: Result<Vec<_>, _> = runtime
@@ -365,7 +365,11 @@ impl<'a> TestProgram<'a> {
         let runtime = self.init_new_runtime(&ast);
         let mut f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
             Ok(ok) => ok,
-            Err(e) => panic!("\n{}", errors::format_errors(&ast.codemap(), &e)),
+            Err(e) => {
+                let task_str = &format!("compiling {:#?}", self);
+                assert_results_eq(&ast, task_str, &Err(e), &Ok(()));
+                unreachable!();
+            }
         };
 
         for case in test_cases {

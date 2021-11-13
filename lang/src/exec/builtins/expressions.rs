@@ -5,7 +5,9 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::functions::{self, CallInfo, Function};
-use crate::data::{CpVal, GetType, LangInt, RtVal, SpannedRuntimeValueExt, Type, Val};
+use crate::data::{
+    CpVal, GetType, LangInt, RtVal, SpannedRuntimeValueExt, SpannedVal, SpannedValExt, Type, Val,
+};
 use crate::errors::{Error, Result};
 use crate::exec::{Compiler, CtxTrait, Runtime};
 use crate::{ast, llvm};
@@ -15,38 +17,30 @@ use crate::{ast, llvm};
 pub trait Expression: fmt::Debug {
     /// Evaluates the expression, including any necessary sub-expressions, and
     /// returns the resulting value.
-    ///
-    /// `span` is the span of the whole expression.
-    fn eval(&self, runtime: &mut Runtime, span: Span) -> Result<RtVal>;
+    fn eval(&self, runtime: &mut Runtime, expr_span: Span) -> Result<RtVal>;
     /// Compiles code to evaluate the expression, including any necessary
     /// sub-expressions, and returns the resulting value.
-    ///
-    /// `span` is the span of the whole expression.
-    fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val>;
+    fn compile(&self, compiler: &mut Compiler, expr_span: Span) -> Result<Val>;
 
     /// Assigns a new value to the expression.
-    ///
-    /// `span` is the span of the expression being assigned to.
     fn eval_assign(
         &self,
         _runtime: &mut Runtime,
-        span: Span,
-        _op: Option<Spanned<ast::AssignOp>>,
+        expr_span: Span,
+        _stmt_span: Span,
         _new_value: Spanned<RtVal>,
     ) -> Result<()> {
-        Err(Error::cannot_assign_to(span))
+        Err(Error::cannot_assign_to(expr_span))
     }
     /// Compiles code to assign a new value to the expression.
-    ///
-    /// `span` is the span of the expression being assigned to.
     fn compile_assign(
         &self,
         _compiler: &mut Compiler,
-        span: Span,
-        _op: Option<Spanned<ast::AssignOp>>,
-        _new_value: Spanned<Val>,
+        expr_span: Span,
+        _stmt_span: Span,
+        _new_value: Result<Spanned<Val>>,
     ) -> Result<()> {
-        Err(Error::cannot_assign_to(span))
+        Err(Error::cannot_assign_to(expr_span))
     }
 }
 
@@ -164,11 +158,11 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
 #[derive(Debug, Clone)]
 pub struct Identity<'ast>(ast::Expr<'ast>);
 impl Expression for Identity<'_> {
-    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Result<RtVal> {
+    fn eval(&self, runtime: &mut Runtime, _expr_span: Span) -> Result<RtVal> {
         Ok(runtime.eval_expr(self.0)?.node)
     }
-    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Result<Val> {
-        Ok(compiler.build_expr(self.0).node)
+    fn compile(&self, compiler: &mut Compiler, _expr_span: Span) -> Result<Val> {
+        Ok(compiler.build_expr(self.0)?.node)
     }
 }
 
@@ -182,19 +176,19 @@ struct FuncCall<'ast> {
     args: Vec<ast::FuncArg<ast::Expr<'ast>>>,
 }
 impl Expression for FuncCall<'_> {
-    fn eval(&self, runtime: &mut Runtime, span: Span) -> Result<RtVal> {
+    fn eval(&self, runtime: &mut Runtime, expr_span: Span) -> Result<RtVal> {
         let args = eval_args_list(runtime, &self.args)?;
 
         match &self.f {
             None => Err(Error::no_such_function(self.name.span)),
             Some(f) => {
-                let call = CallInfo::new(self.name.clone(), span, args);
+                let call = CallInfo::new(self.name.clone(), expr_span, args);
                 call.check_kwargs(f)?;
                 f.eval(runtime.ctx(), call)
             }
         }
     }
-    fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val> {
+    fn compile(&self, compiler: &mut Compiler, expr_span: Span) -> Result<Val> {
         let args = compile_args_list(compiler, &self.args)?;
 
         match &self.f {
@@ -203,11 +197,11 @@ impl Expression for FuncCall<'_> {
                 if let Some(args) = all_rt_vals(&args) {
                     // All arguments are compile-time constants, so compile-time
                     // evaluate the function call.
-                    let call = CallInfo::new(self.name.clone(), span, args);
+                    let call = CallInfo::new(self.name.clone(), expr_span, args);
                     call.check_kwargs(f)?;
                     f.eval(compiler.ctx(), call).map(Val::Rt)
                 } else {
-                    let call = CallInfo::new(self.name.clone(), span, args);
+                    let call = CallInfo::new(self.name.clone(), expr_span, args);
                     call.check_kwargs(f)?;
                     f.compile(compiler, call)
                 }
@@ -224,18 +218,17 @@ struct LogicalOrExpr<'ast> {
     args: [ast::Expr<'ast>; 2],
 }
 impl Expression for LogicalOrExpr<'_> {
-    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Result<RtVal> {
+    fn eval(&self, runtime: &mut Runtime, _expr_span: Span) -> Result<RtVal> {
         Ok(RtVal::Integer(
             (runtime.eval_bool_expr(self.args[0])? || runtime.eval_bool_expr(self.args[1])?)
                 as LangInt,
         ))
     }
-    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Result<Val> {
-        let lhs = compiler.build_expr(self.args[0]);
+    fn compile(&self, compiler: &mut Compiler, _expr_span: Span) -> Result<Val> {
+        let lhs = compiler.build_expr(self.args[0])?;
 
-        match lhs.node {
-            Val::Rt(_) => {
-                let l = compiler.get_rt_val(&lhs).unwrap();
+        match lhs.clone().into() {
+            SpannedVal::Rt(l) => {
                 let l_bool = l.to_bool()?;
                 match l_bool {
                     // LHS is statically `true`; do not compile RHS.
@@ -247,7 +240,7 @@ impl Expression for LogicalOrExpr<'_> {
                     ))),
                 }
             }
-            Val::Cp(_) => {
+            SpannedVal::Cp(_) => {
                 let l_bool = compiler.build_convert_to_bool(&lhs)?;
                 let bool_result = compiler.build_conditional(
                     l_bool,
@@ -259,9 +252,6 @@ impl Expression for LogicalOrExpr<'_> {
                 )?;
                 Ok(Val::Cp(CpVal::Integer(bool_result)))
             }
-            Val::Unknown(_) => Err(Error::ambiguous_variable_type(lhs.span)),
-            Val::MaybeUninit => Err(Error::maybe_uninitialized_variable(lhs.span)),
-            Val::Error => Err(Error::AlreadyReported),
         }
     }
 }
@@ -274,44 +264,37 @@ struct LogicalAndExpr<'ast> {
     args: [ast::Expr<'ast>; 2],
 }
 impl Expression for LogicalAndExpr<'_> {
-    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Result<RtVal> {
+    fn eval(&self, runtime: &mut Runtime, _expr_span: Span) -> Result<RtVal> {
         Ok(RtVal::Integer(
             (runtime.eval_bool_expr(self.args[0])? && runtime.eval_bool_expr(self.args[1])?)
                 as LangInt,
         ))
     }
-    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Result<Val> {
-        let lhs = compiler.build_expr(self.args[0]);
+    fn compile(&self, compiler: &mut Compiler, _expr_span: Span) -> Result<Val> {
+        let lhs = compiler.build_expr(self.args[0])?;
 
-        match lhs.node {
-            Val::Rt(_) => {
-                let l = compiler.get_rt_val(&lhs).unwrap();
-                let l_bool = l.to_bool()?;
-                match l_bool {
-                    // LHS is statically `true`; compile RHS, convert to bool,
-                    // and return it.
-                    true => Ok(Val::Cp(CpVal::Integer(
-                        compiler.build_bool_expr(self.args[1])?,
-                    ))),
-                    // LHS is statically `false`; do not compile RHS.
-                    false => Ok(Val::Rt(RtVal::Integer(0))),
-                }
+        if let Ok(l) = lhs.try_rt_val() {
+            let l_bool = l.to_bool()?;
+            match l_bool {
+                // LHS is statically `true`; compile RHS, convert to bool,
+                // and return it.
+                true => Ok(Val::Cp(CpVal::Integer(
+                    compiler.build_bool_expr(self.args[1])?,
+                ))),
+                // LHS is statically `false`; do not compile RHS.
+                false => Ok(Val::Rt(RtVal::Integer(0))),
             }
-            Val::Cp(_) => {
-                let l_bool = compiler.build_convert_to_bool(&lhs)?;
-                let bool_result = compiler.build_conditional(
-                    l_bool,
-                    // LHS is dynamically `true`; compile RHS, convert to bool,
-                    // and return it.
-                    |c| c.build_bool_expr(self.args[1]),
-                    // RHS is dynamically `false`; do not evaluate RHS.
-                    |_| Ok(llvm::const_int(0)),
-                )?;
-                Ok(Val::Cp(CpVal::Integer(bool_result)))
-            }
-            Val::Unknown(_) => Err(Error::ambiguous_variable_type(lhs.span)),
-            Val::MaybeUninit => Err(Error::maybe_uninitialized_variable(lhs.span)),
-            Val::Error => Err(Error::AlreadyReported),
+        } else {
+            let l_bool = compiler.build_convert_to_bool(&lhs)?;
+            let bool_result = compiler.build_conditional(
+                l_bool,
+                // LHS is dynamically `true`; compile RHS, convert to bool,
+                // and return it.
+                |c| c.build_bool_expr(self.args[1]),
+                // RHS is dynamically `false`; do not evaluate RHS.
+                |_| Ok(llvm::const_int(0)),
+            )?;
+            Ok(Val::Cp(CpVal::Integer(bool_result)))
         }
     }
 }
@@ -322,7 +305,7 @@ struct CmpChain<'ast> {
     ops: &'ast [Spanned<ast::CompareOp>],
 }
 impl Expression for CmpChain<'_> {
-    fn eval(&self, runtime: &mut Runtime, _span: Span) -> Result<RtVal> {
+    fn eval(&self, runtime: &mut Runtime, _expr_span: Span) -> Result<RtVal> {
         if self.args.len() != self.ops.len() + 1 {
             internal_error!("CmpChain ops/args length mismatch");
         }
@@ -345,7 +328,7 @@ impl Expression for CmpChain<'_> {
         // evaluates to `true`.
         return Ok(RtVal::Integer(1));
     }
-    fn compile(&self, compiler: &mut Compiler, _span: Span) -> Result<Val> {
+    fn compile(&self, compiler: &mut Compiler, _expr_span: Span) -> Result<Val> {
         if self.args.len() != self.ops.len() + 1 {
             internal_error!("CmpChain ops/args length mismatch");
         }
@@ -357,20 +340,18 @@ impl Expression for CmpChain<'_> {
             Ok(())
         };
 
-        let mut lhs = compiler.build_expr(self.args[0]);
+        let mut lhs = compiler.build_expr(self.args[0])?;
         let other_args = &self.args[1..];
         for (&op, &rhs_id) in self.ops.iter().zip(other_args) {
-            let rhs = compiler.build_expr(rhs_id);
+            let rhs = compiler.build_expr(rhs_id)?;
 
-            if lhs.is_rt_val() && rhs.is_rt_val() {
+            if let (Ok(l), Ok(r)) = (lhs.try_rt_val(), rhs.try_rt_val()) {
                 // Both values are known at compile time, so compute the result
                 // statically right here.
-                let l = lhs.clone().map_node(|v| v.rt_val().unwrap());
-                let r = rhs.clone().map_node(|v| v.rt_val().unwrap());
-                let cmp_result = functions::cmp::eval(op.node, &l, &r)?;
-
-                match cmp_result {
-                    true => (), // Proceed to the next comparison.
+                match functions::cmp::eval(op.node, &l, &r)? {
+                    true => {
+                        // Proceed to the next comparison.
+                    }
                     false => {
                         // Return false immediately.
                         build_cmp_return_false(compiler)?;
@@ -471,11 +452,11 @@ impl MethodCall<'_> {
         Spanned<Arc<String>>,
         Vec<ast::FuncArg<Spanned<Val>>>,
     )> {
-        let obj = compiler.build_expr(self.obj);
+        let obj = compiler.build_expr(self.obj)?;
         let mut args = compile_args_list(compiler, &self.args)?;
 
         // Resolve the method based on the type of the method receiver.
-        let obj_ty = compiler.get_val_type(&obj)?;
+        let obj_ty = obj.ty();
         let name = self.method.display_name(&obj_ty);
         let f = self.method.resolve(&obj_ty, obj.span)?;
 
@@ -486,20 +467,20 @@ impl MethodCall<'_> {
     }
 }
 impl Expression for MethodCall<'_> {
-    fn eval(&self, runtime: &mut Runtime, span: Span) -> Result<RtVal> {
+    fn eval(&self, runtime: &mut Runtime, expr_span: Span) -> Result<RtVal> {
         let (f, name, args) = self.eval_args_and_get_method(runtime)?;
-        f.eval(runtime.ctx(), CallInfo::new(name, span, args))
+        f.eval(runtime.ctx(), CallInfo::new(name, expr_span, args))
     }
-    fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val> {
+    fn compile(&self, compiler: &mut Compiler, expr_span: Span) -> Result<Val> {
         let (f, name, args) = self.compile_args_and_get_method(compiler)?;
         if let Some(args) = all_rt_vals(&args) {
             // All arguments are compile-time constants, so compile-time
             // evaluate the method call.
-            let call = CallInfo::new(name, span, args);
+            let call = CallInfo::new(name, expr_span, args);
             call.check_kwargs(&f)?;
             f.eval(compiler.ctx(), call).map(Val::Rt)
         } else {
-            let call = CallInfo::new(name, span, args);
+            let call = CallInfo::new(name, expr_span, args);
             call.check_kwargs(&f)?;
             f.compile(compiler, call)
         }
@@ -508,22 +489,24 @@ impl Expression for MethodCall<'_> {
     fn eval_assign(
         &self,
         runtime: &mut Runtime,
-        span: Span,
+        expr_span: Span,
+        stmt_span: Span,
         new_value: Spanned<RtVal>,
     ) -> Result<()> {
         let (f, name, args) = self.eval_args_and_get_method(runtime)?;
-        let call = CallInfo::new(name, span, args);
+        let call = CallInfo::with_stmt_span(name, expr_span, stmt_span, args);
         call.check_kwargs(&f)?;
         f.eval_assign(runtime, call, self.obj, new_value)
     }
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
-        span: Span,
-        new_value: Spanned<Val>,
+        expr_span: Span,
+        stmt_span: Span,
+        new_value: Result<Spanned<Val>>,
     ) -> Result<()> {
         let (f, name, args) = self.compile_args_and_get_method(compiler)?;
-        let call = CallInfo::new(name.clone(), span, args.clone());
+        let call = CallInfo::with_stmt_span(name.clone(), expr_span, stmt_span, args.clone());
         call.check_kwargs(&f)?;
         f.compile_assign(compiler, call, self.obj, new_value)
     }
@@ -577,14 +560,14 @@ impl<'ast> CompiledArg<'ast> {
             .iter()
             .exactly_one()
             .map_err(|_| Error::custom(span, "expected exactly one index"))?;
-        let index_value = compiler.build_expr(index_expr);
+        let index_value = compiler.build_expr(index_expr)?;
         let span = index_expr.span();
-        // It should be const-evaluatable
-        let index = compiler
-            .get_rt_val(&index_value)?
-            // ... should be an integer
+        let index = index_value
+            // It should be const-evaluatable
+            .try_rt_val()?
+            // ... it should be an integer
             .as_integer()?
-            // ... should fit in `u32`
+            // ... it should fit in `u32`
             .try_into()
             .map_err(|_| Error::custom(span, "compiled arg index out of range"))?;
         // ... and it should be within range.
@@ -599,72 +582,75 @@ impl<'ast> CompiledArg<'ast> {
     }
 }
 impl Expression for CompiledArg<'_> {
-    fn eval(&self, _runtime: &mut Runtime, span: Span) -> Result<RtVal> {
-        Err(Error::cannot_const_eval(span))
+    fn eval(&self, _runtime: &mut Runtime, expr_span: Span) -> Result<RtVal> {
+        Err(Error::cannot_const_eval(expr_span))
     }
-    fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val> {
-        let index = self.arg_index(compiler, span)?;
+    fn compile(&self, compiler: &mut Compiler, expr_span: Span) -> Result<Val> {
+        let index = self.arg_index(compiler, expr_span)?;
         compiler.build_load_arg(index).map(Val::Cp)
     }
 
     fn eval_assign(
         &self,
         _runtime: &mut Runtime,
-        span: Span,
+        expr_span: Span,
+        _stmt_span: Span,
         _new_value: Spanned<RtVal>,
     ) -> Result<()> {
-        Err(Error::cannot_const_eval(span))
+        Err(Error::cannot_const_eval(expr_span))
     }
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
-        span: Span,
-        new_value: Spanned<Val>,
+        expr_span: Span,
+        _stmt_span: Span,
+        new_value: Result<Spanned<Val>>,
     ) -> Result<()> {
-        let index = self.arg_index(compiler, span)?;
+        let index = self.arg_index(compiler, expr_span)?;
         let old_value_fn = |c: &mut Compiler| c.build_load_arg(index).map(Val::Cp);
-        compiler.build_store_arg(index, &new_value)
+        compiler.build_store_arg(index, &new_value?)
     }
 }
 
 #[derive(Debug, Clone)]
 struct Identifier<'ast>(&'ast Arc<String>);
 impl Expression for Identifier<'_> {
-    fn eval(&self, runtime: &mut Runtime, span: Span) -> Result<RtVal> {
-        if let Some(variable) = runtime.vars().get(self.0) {
-            Ok(variable.clone())
-        } else if let Some(constant) = super::resolve_constant(self.0, span, runtime.ctx()) {
+    fn eval(&self, runtime: &mut Runtime, expr_span: Span) -> Result<RtVal> {
+        if let Some(val) = runtime.vars().get(self.0) {
+            Ok(val.clone())
+        } else if let Some(constant) = super::resolve_constant(self.0, expr_span, runtime.ctx()) {
             constant
         } else {
-            Err(Error::uninitialized_variable(span))
+            Err(Error::uninitialized_variable(expr_span))
         }
     }
-    fn compile(&self, compiler: &mut Compiler, span: Span) -> Result<Val> {
-        if let Some(variable) = compiler.get_var(self.0, span) {
-            Ok(variable.clone())
-        } else if let Some(constant) = super::resolve_constant(self.0, span, compiler.ctx()) {
-            constant.map(Val::Rt)
-        } else {
-            Err(Error::uninitialized_variable(span))
+    fn compile(&self, compiler: &mut Compiler, expr_span: Span) -> Result<Val> {
+        if let Some(constant) = super::resolve_constant(self.0, expr_span, compiler.ctx()) {
+            if !compiler.has_var(self.0) {
+                return constant.map(Val::Rt);
+            }
         }
+        compiler.get_var(self.0, expr_span).get_value(expr_span)
     }
 
     fn eval_assign(
         &self,
         runtime: &mut Runtime,
-        span: Span,
+        expr_span: Span,
+        _stmt_span: Span,
         new_value: Spanned<RtVal>,
     ) -> Result<()> {
-        runtime.assign_var(self.0, new_value.node, span);
+        runtime.assign_var(self.0, new_value.node);
         Ok(())
     }
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
-        span: Span,
-        new_value: Spanned<Val>,
+        expr_span: Span,
+        stmt_span: Span,
+        new_value: Result<Spanned<Val>>,
     ) -> Result<()> {
-        compiler.assign_var(self.0, new_value.node, span);
+        compiler.assign_var(self.0, new_value.map(|v| v.node), stmt_span);
         Ok(())
     }
 }
@@ -672,10 +658,10 @@ impl Expression for Identifier<'_> {
 #[derive(Debug, Clone)]
 struct Constant<'a>(&'a RtVal);
 impl Expression for Constant<'_> {
-    fn eval(&self, _runtime: &mut Runtime, _span: Span) -> Result<RtVal> {
+    fn eval(&self, _runtime: &mut Runtime, _expr_span: Span) -> Result<RtVal> {
         Ok(self.0.clone())
     }
-    fn compile(&self, _compiler: &mut Compiler, _span: Span) -> Result<Val> {
+    fn compile(&self, _compiler: &mut Compiler, _expr_span: Span) -> Result<Val> {
         Ok(Val::Rt(self.0.clone()))
     }
 }
@@ -720,6 +706,6 @@ fn compile_args_list(
 ) -> Result<Vec<ast::FuncArg<Spanned<Val>>>> {
     args.iter()
         .cloned()
-        .map(|(k, v)| Ok((k, compiler.build_expr(v))))
+        .map(|(k, v)| Ok((k, compiler.build_expr(v)?)))
         .collect()
 }

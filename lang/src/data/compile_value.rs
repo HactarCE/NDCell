@@ -27,6 +27,49 @@ impl GetType for CpVal {
         }
     }
 }
+impl CpVal {
+    /// Returns the value as an [`llvm::BasicValueEnum`].
+    pub(crate) fn to_basic_value(&self) -> llvm::BasicValueEnum {
+        match self {
+            CpVal::Integer(x) => (*x).into(),
+            CpVal::Cell(x) => (*x).into(),
+            CpVal::Vector(x) => (*x).into(),
+            CpVal::CellArray(a) | CpVal::CellArrayMut(a) => match a.cells() {
+                None => llvm::cell_ndarray_type(a.ndim()).get_undef().into(),
+                Some(cells) => cells.struct_value.into(),
+            },
+            CpVal::CellSet(x) => (*x).into(),
+        }
+    }
+    /// Converts a basic value to a `CpVal`.
+    pub(crate) fn from_basic_value(ty: Type, v: llvm::BasicValueEnum) -> Result<CpVal> {
+        fn ndarray_from_basic_value(
+            shape: Arc<VectorSet>,
+            v: llvm::BasicValueEnum,
+        ) -> Option<llvm::NdArrayValue> {
+            Some(llvm::NdArrayValue {
+                bounds: shape.bounds()?,
+                struct_value: v.into_struct_value(),
+            })
+        }
+
+        match ty {
+            Type::Integer => Ok(CpVal::Integer(v.into_int_value())),
+            Type::Cell => Ok(CpVal::Cell(v.into_int_value())),
+            Type::Vector(_) => Ok(CpVal::Vector(v.into_vector_value())),
+            Type::CellArray(Some(shape)) => Ok(CpVal::CellArray(LlvmCellArray::new(
+                Arc::clone(&shape),
+                ndarray_from_basic_value(shape, v),
+            ))),
+            Type::CellArrayMut(Some(shape)) => Ok(CpVal::CellArrayMut(LlvmCellArray::new(
+                Arc::clone(&shape),
+                ndarray_from_basic_value(shape, v),
+            ))),
+            Type::CellSet => Ok(CpVal::CellSet(v.into_vector_value())),
+            _ => internal_error!("cannot create CpVal of type {}", ty),
+        }
+    }
+}
 
 pub trait SpannedCompileValueExt {
     /// Returns the value inside if this is an `Integer` or subtype of one;

@@ -1,3 +1,4 @@
+use codemap::Spanned;
 use itertools::Itertools;
 
 use super::{Expression, Identifier, Parser, StringLiteral, SyntaxRule, TryFromToken};
@@ -224,7 +225,10 @@ impl SyntaxRule for AssignStatement {
             let mut rhs = p.parse(ast, Expression)?;
 
             // Desugar assignment operator.
-            if let Some(op) = op {
+            let span = op.span;
+            if let Some(op) = op.node {
+                let node = ast::BinaryOp::from(op);
+                let op = Spanned { span, node };
                 let lhs_span = ast.get_node(lhs).span();
                 let rhs_span = ast.get_node(rhs).span();
                 rhs = ast.add_node(

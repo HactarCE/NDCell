@@ -72,8 +72,8 @@ impl Function for VecSetConstructor {
 pub struct VecSetWithLen(pub usize);
 impl Function for VecSetWithLen {
     fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
-        let span = call.span;
-        eval_vec_set_construct(call, span, self.0)
+        let len_span = call.span;
+        eval_vec_set_construct(call, len_span, self.0)
     }
 }
 
@@ -94,17 +94,15 @@ fn eval_vec_set_construct(
 pub struct SetLiteral;
 impl Function for SetLiteral {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
-        let span = call.span;
-        let expr_span = call.expr_span;
         call.args
             .into_iter()
             .try_fold(RtVal::EmptySet, |v1, v2| match (v1, set_of(v2)?) {
                 (RtVal::EmptySet, s2) => Ok(s2.node),
-                (RtVal::IntegerSet(s1), s2) => Err(Error::unimplemented(expr_span)),
-                (RtVal::CellSet(s1), s2) => Err(Error::unimplemented(expr_span)),
+                (RtVal::IntegerSet(s1), s2) => Err(Error::unimplemented(call.expr_span)),
+                (RtVal::CellSet(s1), s2) => Err(Error::unimplemented(call.expr_span)),
                 (RtVal::VectorSet(s1), s2) => {
                     let s2 = s2.as_vector_set(s1.vec_len())?;
-                    Ok(s1.union(span, &s2)?.into())
+                    Ok(s1.union(call.span, &s2)?.into())
                 }
                 _ => internal_error!("invalid fold type in set constructor"),
             })

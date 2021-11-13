@@ -120,14 +120,10 @@ impl Runtime {
         this
     }
 
-    /// Assigns a value to a variable or removes it.
-    pub fn assign_var(&mut self, name: &Arc<String>, value: Option<RtVal>) {
+    /// Assigns a value to a variable.
+    pub fn assign_var(&mut self, name: &Arc<String>, value: RtVal) {
         if &**name != crate::THROWAWAY_VARIABLE {
-            if let Some(value) = value {
-                self.vars.insert(Arc::clone(name), value)
-            } else {
-                self.vars.remove(name)
-            };
+            self.vars.insert(Arc::clone(name), value);
         }
     }
     /// Returns all variable values.
@@ -152,10 +148,11 @@ impl Runtime {
             ast::StmtData::Assign { lhs, rhs } => {
                 let lhs = ast.get_node(*lhs);
                 let rhs = ast.get_node(*rhs);
-                let span = lhs.span().merge(rhs.span());
+                let expr_span = lhs.span();
+                let stmt_span = lhs.span().merge(rhs.span());
                 let new_value = self.eval_expr(rhs)?;
                 let lhs_expression = Box::<dyn Expression>::from(lhs);
-                lhs_expression.eval_assign(self, lhs.span(), new_value)?;
+                lhs_expression.eval_assign(self, expr_span, stmt_span, new_value)?;
                 Ok(Flow::Proceed)
             }
 
@@ -197,7 +194,7 @@ impl Runtime {
             } => {
                 let iter_expr = ast.get_node(*iter_expr_id);
                 for it in self.eval_expr(iter_expr)?.iterate()? {
-                    self.assign_var(iter_var, Some(it.node));
+                    self.assign_var(iter_var, it.node);
                     match self.exec_stmt(ast.get_node(*block))? {
                         Flow::Proceed | Flow::Continue(_) => (),
                         Flow::Break(_) => break,

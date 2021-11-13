@@ -38,13 +38,13 @@ mod function;
 mod loops;
 mod param;
 
-use self::loops::VariablePhi;
+// use self::loops::VariablePhi;
 
 use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
-    CellArray, CellSet, CpVal, GetType, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt,
-    Type, Val, Var, VectorSet, INT_BITS,
+    CellArray, CellSet, CpVal, GetType, LangCell, LangInt, LlvmCellArray, RtVal,
+    SpannedCompileValueExt, Type, Val, Var, VarError, VarResult, VectorSet, INT_BITS,
 };
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait, Runtime};
@@ -71,13 +71,13 @@ pub struct Compiler {
     /// Context.
     ctx: Ctx,
     /// Variable values.
-    vars: HashMap<Arc<String>, Variable>,
+    vars: HashMap<Arc<String>, Var>,
     /// Stack of overwritten variable values (used for reconciling variables
     /// after conditionals and loops).
     ///
     /// There is one stack entry for every conditional statement or loop that we
     /// are currently inside of.
-    overwritten_vars_stack: Vec<HashMap<Arc<String>, Option<Variable>>>,
+    overwritten_vars_stack: Vec<HashMap<Arc<String>, Option<Var>>>,
     /// Stack of loops containing the statement currently being built. The
     /// innermost loop is at the top of the stack (end of the list).
     loop_stack: Vec<Loop>,
@@ -237,7 +237,15 @@ impl Compiler {
         let vars = runtime
             .vars
             .into_iter()
-            .map(|(k, v)| (k, v.map(Val::Rt)))
+            .map(|(k, v)| {
+                let initial_type = Some(v.ty());
+                let v = Var {
+                    value: Ok(Val::Rt(v)),
+                    initial_type,
+                    assign_spans: vec![],
+                };
+                (k, v)
+            })
             .collect();
 
         let mut this = Self {
@@ -399,51 +407,47 @@ impl Compiler {
  * TYPES AND VALUES
  */
 impl Compiler {
-    pub(crate) fn get_val_type(&mut self, v: &Spanned<Val>) -> Result<Spanned<Type>> {
-        let node = v.try_get_type()?;
-        let span = v.span;
-        Ok(Spanned { node, span })
-    }
-    pub(crate) fn get_rt_val(&mut self, v: &Spanned<Val>) -> Result<Spanned<RtVal>> {
-        let span = v.span;
-        match &v.node {
-            Val::Rt(v) => Ok(v.clone()),
-            Val::Cp(_) => Err(Error::must_be_constant(span)),
-            Val::Unknown(Some(ty)) => Err(Error::unknown_variable_value(span, ty)),
-            Val::Unknown(None) => Err(Error::ambiguous_variable_type(span)),
-            Val::MaybeUninit => Err(Error::maybe_uninitialized_variable(span)),
-            Val::Error => Err(Error::AlreadyReported),
-        }
-        .map(|node| Spanned { node, span })
-    }
-    // TODO: probably remove this
-    pub(crate) fn rt_val_to_cp_val(&mut self, v: &RtVal) -> Option<CpVal> {
-        match v {
-            RtVal::Integer(i) => Some(CpVal::Integer(llvm::const_int(*i))),
-            RtVal::Cell(i) => Some(CpVal::Cell(llvm::const_cell(*i))),
-            RtVal::Vector(v) => Some(CpVal::Vector(llvm::const_vector(v.iter().copied()))),
-            RtVal::CellArray(a) => Some(CpVal::CellArray(LlvmCellArray::new_const(
-                &mut self.module,
-                &a,
-            ))),
-            RtVal::CellSet(s) => Some(CpVal::CellSet(self.build_const_cell_set(s))),
-            _ => None,
-        }
+    pub(crate) fn try_get_cp_val(&mut self, v: &Val) -> Result<Option<CpVal>> {
+        Ok(match v {
+            Val::Rt(v) => match v {
+                RtVal::Integer(i) => Some(CpVal::Integer(llvm::const_int(*i))),
+                RtVal::Cell(i) => Some(CpVal::Cell(llvm::const_cell(*i))),
+                RtVal::Vector(v) => Some(CpVal::Vector(llvm::const_vector(v.iter().copied()))),
+                RtVal::CellArray(a) => {
+                    Some(CpVal::CellArray(self.build_const_immut_cell_array(a)?))
+                }
+                RtVal::CellSet(s) => Some(CpVal::CellSet(self.build_const_cell_set(s))),
+                _ => None,
+            },
+            Val::Cp(v) => Some(v.clone()),
+        })
     }
     // TODO: probably remove this
     pub(crate) fn get_cp_val(&mut self, v: &Spanned<Val>) -> Result<Spanned<CpVal>> {
-        let span = v.span;
-        match &v.node {
-            Val::Rt(v) => self
-                .rt_val_to_cp_val(v)
-                .ok_or_else(|| Error::cannot_compile(span)),
-            Val::Cp(v) => Ok(v.clone()),
-            Val::Unknown(Some(ty)) => Err(Error::unknown_variable_value(span, ty)),
-            Val::Unknown(None) => Err(Error::ambiguous_variable_type(span)),
-            Val::MaybeUninit => Err(Error::maybe_uninitialized_variable(span)),
-            Val::Error => Err(Error::AlreadyReported),
+        match self.try_get_cp_val(&v.node)? {
+            Some(node) => Ok(Spanned { span: v.span, node }),
+            None => Err(Error::cannot_compile(v.span)),
         }
-        .map(|node| Spanned { node, span })
+    }
+    pub(crate) fn undef_cp_val(ty: &Type) -> Option<CpVal> {
+        fn undef_cell_array(shape: &Arc<VectorSet>) -> LlvmCellArray {
+            let shape = Arc::clone(shape);
+            let ndim = shape.vec_len();
+            let cells = shape
+                .bounds()
+                .map(|bounds| llvm::NdArrayValue::get_undef(ndim, bounds, llvm::cell_type()));
+            LlvmCellArray::new(shape, cells)
+        }
+
+        match ty {
+            Type::Integer => Some(CpVal::Integer(llvm::int_type().get_undef())),
+            Type::Cell => Some(CpVal::Cell(llvm::cell_type().get_undef())),
+            Type::Vector(Some(len)) => Some(CpVal::Vector(llvm::vector_type(*len).get_undef())),
+            Type::CellArray(Some(shape)) => Some(CpVal::CellArray(undef_cell_array(shape))),
+            Type::CellArrayMut(Some(shape)) => Some(CpVal::CellArrayMut(undef_cell_array(shape))),
+            Type::CellSet => todo!("cell set type"),
+            _ => None,
+        }
     }
 
     /// Returns the LLVM type used for a JIT function parameter.
@@ -452,7 +456,9 @@ impl Compiler {
             ParamType::Integer => llvm::int_type().as_basic_type_enum(),
             ParamType::Cell => llvm::cell_type().as_basic_type_enum(),
             ParamType::Vector(len) => llvm::vector_type(*len).as_basic_type_enum(),
-            ParamType::CellArray(shape) => llvm::ndarray_type(shape.vec_len()).as_basic_type_enum(),
+            ParamType::CellArray(shape) => llvm::cell_type()
+                .ptr_type(llvm::AddressSpace::Generic)
+                .as_basic_type_enum(),
         }
     }
 
@@ -461,14 +467,16 @@ impl Compiler {
         todo!("cell set type, depends on max cell state ID")
     }
 
-    pub fn basic_type(&self, ty: Type) -> Option<llvm::BasicTypeEnum> {
+    /// Returns the LLVM type used for an NDCA type.
+    pub fn basic_type(&self, ty: &Type) -> Option<llvm::BasicTypeEnum> {
         Some(match ty {
             Type::Integer => llvm::int_type().into(),
             Type::Cell => llvm::cell_type().into(),
             Type::Tag => llvm::tag_type().into(),
-            Type::Vector(len) => llvm::vector_type(len),
-            Type::CellArray(a) | Type::CellArrayMut(a) => llvm::ndarray_type(a.ndim()),
-            Type::CellSet => self.cell_set_type(),
+            Type::Vector(Some(len)) => llvm::vector_type(*len).into(),
+            Type::CellArray(Some(shape)) => llvm::cell_ndarray_type(shape.vec_len()).into(),
+            Type::CellArrayMut(Some(shape)) => llvm::cell_ndarray_type(shape.vec_len()).into(),
+            Type::CellSet => self.cell_set_type().into(),
             _ => return None,
         })
     }
@@ -482,6 +490,23 @@ impl Compiler {
     pub fn build_const_cell_set(&mut self, s: &CellSet) -> llvm::VectorValue {
         let b = self.builder();
         todo!("cell set type")
+    }
+    /// Builds instructions to construct an immutable cell array with constant
+    /// contents.
+    pub fn build_const_immut_cell_array(&mut self, array: &CellArray) -> Result<LlvmCellArray> {
+        let array_contents = array.cells_iter().map(llvm::const_cell).collect_vec();
+        let array_value = llvm::cell_type().const_array(&array_contents);
+        let shape = Arc::clone(array.shape());
+        let ndarray = match shape.bounds() {
+            Some(bounds) => Some(self.build_const_ndarray(
+                array.ndim(),
+                bounds,
+                array_value,
+                "const_immut_cell_array",
+            )?),
+            None => None,
+        };
+        Ok(LlvmCellArray::new(shape, ndarray))
     }
 
     /// Returns the value inside if given an `Integer` value or subtype of one;
@@ -648,6 +673,38 @@ impl Compiler {
             .collect()
     }
 
+    /// Builds instructions to construct an N-dimensional array with constant
+    /// contents.
+    pub fn build_const_ndarray(
+        &mut self,
+        ndim: usize,
+        bounds: IRect6D,
+        array_value: llvm::ArrayValue,
+        name: &str,
+    ) -> Result<llvm::NdArrayValue> {
+        // Store the array as a global constant.
+        let array_global = self.module.add_global(
+            array_value.get_type(),
+            Some(llvm::AddressSpace::Generic),
+            &format!("{}_array", name),
+        );
+        array_global.set_initializer(&array_value);
+        // Mark this global as a constant; we don't ever intend to modify it.
+        array_global.set_constant(true);
+        // The address of the constant doesn't matter; please do merge it with
+        // other identical values!
+        array_global.set_unnamed_addr(true);
+
+        let strides = llvm::const_vector(crate::utils::ndarray_strides(ndim, bounds));
+
+        // Get a pointer to the array.
+        let ty = array_value.get_type().get_element_type();
+        let base_ptr = array_global
+            .as_pointer_value()
+            .const_cast(ty.ptr_type(llvm::AddressSpace::Generic));
+
+        self.build_construct_ndarray_from_base_ptr(bounds, base_ptr, strides, name)
+    }
     /// Builds instructions to construct an N-dimensional array from a pointer
     /// to the **base** of the array.
     pub fn build_construct_ndarray_from_base_ptr(
@@ -662,23 +719,19 @@ impl Compiler {
             bounds,
             base_ptr,
             strides,
-            "cell_array_from_base",
+            "array_from_base",
         );
 
         let negative_base = llvm::const_vector((0..ndim).map(|i| -bounds.min().0[i] as LangInt));
-        let origin_ptr = self.build_ndarray_gep_unchecked(
-            array_from_base,
-            negative_base,
-            "cell_array_origin_ptr",
-        )?;
+        let origin_ptr =
+            self.build_ndarray_gep_unchecked(array_from_base, negative_base, "array_origin_ptr")?;
         Ok(self.build_construct_ndarray_from_origin_ptr(
             bounds,
             origin_ptr,
             strides,
-            "cell_array_from_origin",
+            "array_from_origin",
         ))
     }
-
     /// Builds instructions to construct an N-dimensional array from a pointer
     /// to the origin in the array and strides.
     pub fn build_construct_ndarray_from_origin_ptr(
@@ -690,20 +743,36 @@ impl Compiler {
     ) -> llvm::NdArrayValue {
         let b = self.builder();
         let ndim = strides.get_type().get_size() as usize;
-        let mut array_ptr = llvm::ndarray_type(ndim).get_undef();
-        array_ptr = b.build_insert_value(array_ptr, origin_ptr, 0, "");
-        array_ptr = b.build_insert_value(array_ptr, strides, 1, name);
-        llvm::NdArrayValue { bounds, array_ptr }
+        let element_type = origin_ptr.get_type().get_element_type().into_int_type();
+        let mut struct_value = llvm::ndarray_type(ndim, element_type).get_undef();
+        struct_value = b
+            .build_insert_value(struct_value, origin_ptr, 0, "")
+            .unwrap()
+            .into_struct_value();
+        struct_value = b
+            .build_insert_value(struct_value, strides, 1, name)
+            .unwrap()
+            .into_struct_value();
+        llvm::NdArrayValue {
+            bounds,
+            struct_value,
+        }
     }
     /// Builds instructions to split an N-dimensional array into its origin
     /// pointer and strides.
     pub fn build_split_ndarray(
         &mut self,
-        array: &LlvmCellArray,
+        array: llvm::NdArrayValue,
     ) -> (llvm::PointerValue, llvm::VectorValue) {
         let b = self.builder();
-        let origin_ptr = b.build_extract_value(array, 0, "origin_ptr");
-        let strides = b.build_extract_value(array, 1, "strides");
+        let origin_ptr = b
+            .build_extract_value(array.struct_value, 0, "origin_ptr")
+            .unwrap()
+            .into_pointer_value();
+        let strides = b
+            .build_extract_value(array.struct_value, 1, "strides")
+            .unwrap()
+            .into_vector_value();
         (origin_ptr, strides)
     }
 
@@ -714,23 +783,30 @@ impl Compiler {
         bounds: IRect6D,
         ty: llvm::IntType,
         name: &str,
-    ) -> llvm::NdArrayValue {
+    ) -> Result<llvm::NdArrayValue> {
         let buffer_len = bounds.count();
         let array_base_ptr = self.builder().build_array_alloca(
             llvm::cell_type(),
             llvm::const_int(buffer_len as LangInt),
             "cell_array_buffer",
         );
-        let strides = llvm::const_vector(&crate::utils::ndarray_strides(ndim, bounds));
-        self.build_construct_ndarray_from_base_ptr(bounds, array_base_ptr, &strides, name)
+        let strides = llvm::const_vector(crate::utils::ndarray_strides(ndim, bounds));
+        self.build_construct_ndarray_from_base_ptr(bounds, array_base_ptr, strides, name)
     }
     /// Builds instructions to allocate a mutable cell array on the stack.
-    pub fn build_alloca_cell_array(&mut self, shape: Arc<VectorSet>, name: &str) -> LlvmCellArray {
+    pub fn build_alloca_cell_array(
+        &mut self,
+        shape: Arc<VectorSet>,
+        name: &str,
+    ) -> Result<LlvmCellArray> {
         let ndim = shape.vec_len();
-        let cells = shape
-            .bounds()
-            .map(|bounds| self.build_alloca_ndarray(ndim, bounds, llvm::cell_type(), name));
-        LlvmCellArray::new(&mut self.module, shape, cells)
+        let cells = match shape.bounds() {
+            Some(bounds) => {
+                Some(self.build_alloca_ndarray(ndim, bounds, llvm::cell_type(), name)?)
+            }
+            None => None,
+        };
+        Ok(LlvmCellArray::new(shape, cells))
     }
 
     /// Builds instructions to offset a cell array by a fixed delta vector.
@@ -741,24 +817,25 @@ impl Compiler {
         delta: &[LangInt],
         name: &str,
     ) -> Result<LlvmCellArray> {
-        if let Some(cells) = array.cells() {
+        if let Some(cells_ndarray) = array.cells() {
             let new_shape = Arc::new(array.shape().offset(error_span, delta)?);
             let new_bounds = new_shape.bounds().unwrap();
 
             let negative_delta = llvm::const_vector(delta.iter().map(|&i| -i));
             let new_origin_ptr = self.build_ndarray_gep_unchecked(
-                cells,
+                cells_ndarray,
                 negative_delta,
                 &format!("cell_array_origin_with_offset_{:?}", delta),
             )?;
+            let (_old_origin_ptr, strides) = self.build_split_ndarray(cells_ndarray);
             let new_cells = Some(self.build_construct_ndarray_from_origin_ptr(
                 new_bounds,
                 new_origin_ptr,
-                cells.strides(),
+                strides,
                 name,
             ));
 
-            Ok(LlvmCellArray::new(&mut self.module, new_shape, new_cells))
+            Ok(LlvmCellArray::new(new_shape, new_cells))
         } else {
             Ok(array) // empty
         }
@@ -772,7 +849,7 @@ impl Compiler {
         array: &LlvmCellArray,
         pos: llvm::VectorValue,
     ) -> Result<llvm::PointerValue> {
-        if let Some(mask) = array.mask() {
+        if let Some(mask) = self.get_cell_array_mask_constant(array.shape())? {
             let mask_cell_ptr = self.build_ndarray_gep(error_span, mask, pos, "mask_cell_ptr")?;
             let is_pos_in_mask = self
                 .builder()
@@ -841,43 +918,43 @@ impl Compiler {
         pos: llvm::VectorValue,
         name: &str,
     ) -> Result<llvm::PointerValue> {
+        let (origin_ptr, strides) = self.build_split_ndarray(ndarray);
         let pos = self.build_convert_vector_length(pos, ndarray.ndim());
-        let tmp = self
-            .builder()
-            .build_int_nsw_mul(ndarray.strides(), pos, name);
-        let ptr_offset = self.build_reduce("add", tmp)?;
+        let tmp = self.builder().build_int_nsw_mul(strides, pos, name);
+        let ptr_offset = self.build_reduce("add", tmp.into())?;
         let b = self.builder();
-        Ok(unsafe { b.build_gep(ndarray.origin_ptr(), &[ptr_offset], name) })
+        Ok(unsafe { b.build_gep(origin_ptr, &[ptr_offset], name) })
     }
 
     /// Returns a constant array with the specified contents.
     fn get_cell_array_mask_constant(
         &mut self,
-        shape: Arc<VectorSet>,
-    ) -> Option<llvm::NdArrayValue> {
-        self.cached_cell_array_masks
-            .entry(shape)
-            .or_insert_with_key(|shape| {
-                shape
-                    .bounds()
-                    .zip(shape.mask())
-                    .as_ref()
-                    .map(|(bounds, mask)| {
-                        llvm::NdArrayValue::new_const(
-                            &mut self.module,
-                            shape.vec_len(),
-                            bounds,
-                            llvm::bool_type(),
-                            &mask
-                                .as_flat_slice()
-                                .iter()
-                                .copied()
-                                .map(llvm::const_bool)
-                                .collect_vec(),
-                            "cell_array_mask",
-                        )
-                    })
-            })
+        shape: &Arc<VectorSet>,
+    ) -> Result<Option<llvm::NdArrayValue>> {
+        if !self.cached_cell_array_masks.contains_key(shape) {
+            let ndim = shape.vec_len();
+            let bounds = match shape.bounds() {
+                Some(b) => b,
+                None => return Ok(None),
+            };
+            let mask = match shape.mask() {
+                Some(m) => m,
+                None => return Ok(None),
+            };
+            let ndarray_contents = mask
+                // Convert to `&[T]`.
+                .as_flat_slice()
+                .iter()
+                .copied()
+                // Convert `bool` to LLVM constant.
+                .map(llvm::const_bool)
+                .collect_vec();
+            let array_value = llvm::bool_type().const_array(&ndarray_contents);
+            let ndarray = self.build_const_ndarray(ndim, bounds, array_value, "ndarray_mask")?;
+            self.cached_cell_array_masks
+                .insert(Arc::clone(shape), ndarray);
+        }
+        Ok(Some(self.cached_cell_array_masks[shape]))
     }
 }
 
@@ -965,9 +1042,6 @@ impl Compiler {
     where
         Self: BuildPhi<V>,
     {
-        // Save `overwritten_vars`.
-        let old_overwritten_vars = self.clear_overwritten_vars();
-
         // Create the destination blocks.
         let if_true_bb = self.append_basic_block("ifTrue");
         let if_false_bb = self.append_basic_block("ifFalse");
@@ -982,6 +1056,7 @@ impl Compiler {
         );
 
         // Build the instructions to execute if true.
+        self.push_overwritten_vars();
         self.builder().position_at_end(if_true_bb);
         let value_if_true = build_if_true(self)?;
         let if_true_end_bb = self.current_block();
@@ -989,9 +1064,10 @@ impl Compiler {
         if self.needs_terminator() {
             self.builder().build_unconditional_branch(merge_bb);
         }
-        let vars_from_if_true = self.restore_overwritten_vars();
+        let vars_from_if_true = self.pop_and_restore_overwritten_vars()?;
 
         // Build the instructions to execute if false.
+        self.push_overwritten_vars();
         self.builder().position_at_end(if_false_bb);
         let value_if_false = build_if_false(self)?;
         let if_false_end_bb = self.current_block();
@@ -999,24 +1075,17 @@ impl Compiler {
         if self.needs_terminator() {
             self.builder().build_unconditional_branch(merge_bb);
         }
-        let vars_from_if_false = self.restore_overwritten_vars();
-
-        // Restore `overwritten_vars`.
-        self.overwritten_vars = old_overwritten_vars;
+        let vars_from_if_false = self.pop_and_restore_overwritten_vars()?;
 
         // Merge values.
         self.builder().position_at_end(merge_bb);
         match (if_true_needs_terminator, if_false_needs_terminator) {
             (true, false) => {
-                for (name, value) in vars_from_if_true {
-                    self.assign_var(&name, value);
-                }
-                return Ok(value_if_true);
+                self.overwrite_vars(vars_from_if_true);
+                Ok(value_if_true)
             }
             (false, true) => {
-                for (name, value) in vars_from_if_false {
-                    self.assign_var(&name, value);
-                }
+                self.overwrite_vars(vars_from_if_false);
                 Ok(value_if_false)
             }
             _ => {
@@ -1026,49 +1095,45 @@ impl Compiler {
                 names.extend(vars_from_if_false.keys());
 
                 for name in names {
-                    let old_var_val = self.vars.get(name).unwrap_or(&Val::MaybeUninit);
-                    let var_val_if_true = vars_from_if_true.get(name).unwrap_or(old_var_val);
-                    let var_val_if_false = vars_from_if_false.get(name).unwrap_or(old_var_val);
-                    let merged_var_value = match (var_val_if_true, var_val_if_false) {
-                        (v @ Variable::Error, _) | (_, v @ Variable::Error) => v,
-                        (v @ Variable::MaybeUninit, _) | (_, v @ Variable::MaybeUninit) => v,
-                        (v @ Variable::UnknownType, _) | (_, v @ Variable::UnknownType) => v,
-                        (Variable::Val(v1), Variable::Val(v2)) => {
-                            if v1 == v2 {
-                                v1
-                            } else if v1.ty() == v2.ty() {
-                                let ty = v1.ty();
-                                if let (Ok(v1), Ok(v2)) = (self.get_cp_val(v1), self.get_cp_val(v2))
-                                {
-                                    let bv1 = v1.to_basic_value();
-                                    let bv2 = v2.to_basic_value();
-                                    let phi = self.builder().build_phi(bv1.get_type(), name);
-                                    phi.add_incoming(&[
-                                        (&bv1, if_true_end_bb),
-                                        (&bv2, if_false_end_bb),
-                                    ]);
-                                    Variable::Val(Val::Cp(CpVal::from_basic_value(
-                                        ty,
-                                        phi.as_basic_value(),
-                                    )))
-                                } else {
-                                    Variable::Val(Val::Unknown(ty))
-                                }
-                            } else {
-                                Variable::UnknownType
-                            }
-                        }
-                    };
-                    self.assign_var(name, Some(merged_var_value));
+                    let old_var = self.vars.get(name);
+
+                    let var_if_true = vars_from_if_true
+                        .get(name)
+                        .cloned()
+                        // If there was never anything assigned to the variable,
+                        // assume the old value.
+                        .unwrap_or(old_var.cloned())
+                        // If the variable never had a value to begin with,
+                        // assume it is undefined.
+                        .unwrap_or_default();
+
+                    let var_if_false = vars_from_if_false
+                        .get(name)
+                        .cloned()
+                        // If there was never anything assigned to the variable,
+                        // assume the old value.
+                        .unwrap_or(old_var.cloned())
+                        // If the variable never had a value to begin with,
+                        // assume it is undefined.
+                        .unwrap_or_default();
+
+                    let phi_incoming = [
+                        (var_if_true, if_true_end_bb),
+                        (var_if_false, if_false_end_bb),
+                    ];
+                    // TODO workaround for https://github.com/rust-lang/rust/issues/90841
+                    let merged_var_value = BuildPhi::<Var>::build_phi(self, &phi_incoming, name)?;
+                    self.set_var(name, Some(merged_var_value));
                 }
+
                 // Merge values provided by the closures.
-                Ok(PhiMergeable::merge(
-                    value_if_true,
-                    value_if_false,
-                    if_true_end_bb,
-                    if_false_end_bb,
-                    self,
-                ))
+                self.build_phi(
+                    &[
+                        (value_if_true, if_true_end_bb),
+                        (value_if_false, if_false_end_bb),
+                    ],
+                    "",
+                )
             }
         }
     }
@@ -1091,8 +1156,7 @@ impl Compiler {
             prelatch: self.append_basic_block("prelatch"),
             latch: self.append_basic_block("latch"),
             exit: self.append_basic_block("exit"),
-
-            var_phis: HashMap::new(),
+            // var_phis: HashMap::new(),
         };
         self.loop_stack.push(lööp);
 
@@ -1104,6 +1168,8 @@ impl Compiler {
 
         // Build header and loop contents.
         self.builder().position_at_end(lööp.header);
+        /*
+
         // Inside the header, build a phi node for any existing variable
         // modified by the loop.
         let placeholder_values: HashMap<Arc<String>, CpVal> = vars_assigned
@@ -1131,9 +1197,11 @@ impl Compiler {
                 }
             })
             .collect();
+
+        */
         build_contents(self, lööp)?;
         // `build_contents()` adds a branch to the prelatch or exit.
-        let old_overwritten_vars = self.clear_overwritten_vars();
+        self.push_overwritten_vars();
 
         // Build prelatch.
         self.builder().position_at_end(lööp.prelatch);
@@ -1144,13 +1212,12 @@ impl Compiler {
         self.builder().position_at_end(lööp.latch);
         self.builder().build_unconditional_branch(lööp.header);
 
-        for (name, placeholder) in placeholder_values {
-            // if placeholder
-            // self.first_var_uses
-            placeholder.replace_all_uses_with(self.get_var(name, span))
-        }
-        self.restore_overwritten_vars();
-        self.overwritten_vars = old_overwritten_vars;
+        // for (name, placeholder) in placeholder_values {
+        //     // if placeholder
+        //     // self.first_var_uses
+        //     placeholder.replace_all_uses_with(self.get_var(name, span));
+        // }
+        self.pop_and_restore_overwritten_vars()?; // TODO
 
         // Build exit.
         self.builder().position_at_end(lööp.exit);
@@ -1658,41 +1725,60 @@ impl Compiler {
     }
 
     /// Assigns a value to a variable or removes it.
-    pub fn assign_var(&mut self, name: &Arc<String>, value: Val, statement_span: Span) {
+    pub fn assign_var(&mut self, name: &Arc<String>, value: Result<Val>, statement_span: Span) {
+        let value = value.map_err(|e| {
+            self.report_error(e);
+            VarError::AlreadyReported
+        });
+        let assign_spans = match &value {
+            Ok(v) => vec![(statement_span, v.ty())],
+            Err(_) => vec![],
+        };
+        let var = Var {
+            value,
+            initial_type: None,
+            assign_spans,
+        };
+        self.set_var(name, Some(var));
+    }
+    /// Sets a variable value. Prefer `assign_var()` when possible.
+    pub fn set_var(&mut self, name: &Arc<String>, value: Option<Var>) {
         if &**name != crate::THROWAWAY_VARIABLE {
-            let old_val = self.vars.insert(
-                Arc::clone(name),
-                Varible {
-                    value,
-                    spans: vec![(Some(statement_span), value.ty())],
-                },
-            );
+            let old_var = match value {
+                Some(new_var) => self.vars.insert(Arc::clone(name), new_var),
+                None => self.vars.remove(name),
+            };
             if let Some(overwritten_vars) = self.overwritten_vars_stack.last_mut() {
-                overwritten_vars.entry(Arc::clone(&name)).or_insert(old_val);
+                overwritten_vars.entry(Arc::clone(name)).or_insert(old_var);
             }
         }
     }
-    /// Returns a variable value.
-    pub fn get_var(&mut self, name: &Arc<String>, span: Span) -> Option<&Variable<Val>> {
-        let ret = self.vars.get(name)?;
-        if let Some(ty) = ret.val.ty() {
-            for l in self.loop_stack.iter_mut().rev() {
-                if !l.first_var_uses.contains_key(name) {
-                    l.first_var_uses.insert(Arc::clone(name), (span,));
-                }
-            }
-        }
-        Some(ret)
+    /// Returns whether a variable exists.
+    pub fn has_var(&mut self, name: &Arc<String>) -> bool {
+        self.vars.contains_key(name)
+    }
+    /// Returns a variable value. Prefer `assign_var()` when assigning to a
+    /// variable.
+    pub fn get_var(&mut self, name: &Arc<String>, span: Span) -> &mut Var {
+        self.vars.entry(Arc::clone(name)).or_default()
+        // let ret = self.vars.get(name)?;
+        // if let Some(ty) = ret.val.ty() {
+        //     for l in self.loop_stack.iter_mut().rev() {
+        //         if !l.first_var_uses.contains_key(name) {
+        //             l.first_var_uses.insert(Arc::clone(name), (span,));
+        //         }
+        //     }
+        // }
+        // Some(ret)
     }
     /// Pushes a new blank entry to the overwritten variable stack.
     fn push_overwritten_vars(&mut self) {
         self.overwritten_vars_stack.push(HashMap::new());
     }
     /// Pops an entry off the overwritten variable stack.
-    fn pop_and_restore_overwritten_vars(
-        &mut self,
-    ) -> Result<HashMap<Arc<String>, Option<Variable<Val>>>> {
-        self.overwritten_vars_stack
+    fn pop_and_restore_overwritten_vars(&mut self) -> Result<HashMap<Arc<String>, Option<Var>>> {
+        Ok(self
+            .overwritten_vars_stack
             .pop()
             .ok_or_else(|| internal_error_value!("overwritten vars stack empty"))?
             .into_iter()
@@ -1703,7 +1789,13 @@ impl Compiler {
                 };
                 (name, old_value)
             })
-            .collect()
+            .collect())
+    }
+    /// Overwrites variables.
+    fn overwrite_vars(&mut self, vars_to_overwrite: HashMap<Arc<String>, Option<Var>>) {
+        for (name, value) in vars_to_overwrite {
+            self.set_var(&name, value)
+        }
     }
 
     /// Builds instructions to fetch a JIT function argument value.
@@ -1718,12 +1810,18 @@ impl Compiler {
             ParamType::Cell => CpVal::Cell(arg_value.into_int_value()),
             ParamType::Vector(_) => CpVal::Vector(arg_value.into_vector_value()),
             ParamType::CellArray(shape) => {
-                let cells_origin_ptr = arg_value.into_pointer_value();
-                CpVal::CellArrayMut(LlvmCellArray::from_cells_origin_ptr(
-                    &mut self.module,
-                    shape,
-                    cells_origin_ptr,
-                ))
+                let cells = shape.bounds().map(|bounds| {
+                    let cells_origin_ptr = arg_value.into_pointer_value();
+                    let strides =
+                        llvm::const_vector(crate::utils::ndarray_strides(shape.vec_len(), bounds));
+                    self.build_construct_ndarray_from_origin_ptr(
+                        bounds,
+                        cells_origin_ptr,
+                        strides,
+                        &format!("arg_{}_ndarray", idx.node),
+                    )
+                });
+                CpVal::CellArrayMut(LlvmCellArray::new(shape, cells))
             }
         })
     }
@@ -1737,7 +1835,7 @@ impl Compiler {
 
         // Typecheck.
         let expected_type = Type::from(arg_ty);
-        let got_type = new_arg_value.try_get_type()?;
+        let got_type = new_arg_value.ty();
         if got_type != expected_type {
             return Err(Error::type_error(
                 new_arg_value.span,
@@ -1779,10 +1877,14 @@ impl Compiler {
             ast::StmtData::Assign { lhs, rhs } => {
                 let lhs = ast.get_node(*lhs);
                 let rhs = ast.get_node(*rhs);
-                let span = lhs.span().merge(rhs.span());
-                let new_value = self.build_expr(rhs);
+                let expr_span = lhs.span();
+                let stmt_span = lhs.span().merge(rhs.span());
+                let new_value = self.build_expr(rhs).map_err(|e| {
+                    self.report_error(e);
+                    Error::AlreadyReported
+                });
                 let lhs_expression = Box::<dyn Expression>::from(lhs);
-                lhs_expression.compile_assign(self, span, op, new_value)?;
+                lhs_expression.compile_assign(self, expr_span, stmt_span, new_value)?;
             }
 
             ast::StmtData::IfElse {
@@ -1876,81 +1978,26 @@ impl Compiler {
     }
 
     /// Builds instructions to evaluate an expression.
-    pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Spanned<Val> {
+    pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Result<Spanned<Val>> {
         let span = expr.span();
         let expression = Box::<dyn Expression>::from(expr);
-        let node = expression.compile(self, span).unwrap_or_else(|e| {
-            self.report_error(e);
-            Val::Error
-        });
-        Spanned { node, span }
+        let node = expression.compile(self, span)?;
+        Ok(Spanned { node, span })
     }
     /// Builds instructions to evaluate an expression and convert the result to
     /// a boolean.
     pub fn build_bool_expr(&mut self, expr: ast::Expr<'_>) -> Result<llvm::IntValue> {
-        let value = self.build_expr(expr);
+        let value = self.build_expr(expr)?;
         self.build_convert_to_bool(&value)
     }
 }
 
 pub trait BuildPhi<V> {
-    type Type;
-    type PhiValue;
-
     /// Builds a phi node.
-    fn build_phi(
-        &mut self,
-        ty: Self::Type,
-        bb: llvm::BasicBlock,
-        name: &str,
-    ) -> Result<Self::PhiValue>;
-    /// Adds an incoming edge to a phi node.
-    fn add_incoming_to_phi(
-        &mut self,
-        value: V,
-        bb: llvm::BasicBlock,
-        phi: &mut Self::PhiValue,
-    ) -> Result<()>;
-    /// Returns the phi value.
-    fn value_from_phi(phi: &Self::PhiValue) -> Result<V>;
-
-    // /// Builds a phi node, adds incoming edges, and returns the resulting value.
-    // fn build_phi_with_incoming(
-    //     &mut self,
-    //     ty: Self::Type,
-    //     incomings: &[(V, llvm::BasicBlock)],
-    //     name: &str,
-    // ) -> Result<V> {
-    //     match incomings {
-    //         [] => internal_error!("phi node with no incoming edges"),
-    //         [(v, _bb)] => Ok(v),
-    //         [first, rest @ ..] => {
-    //             let (v, bb) = first;
-    //             let mut phi = self.build_phi(v, bb, name)?;
-    //             for (v, bb) in rest {
-    //                 self.add_incoming_to_phi(v, bb, &mut phi);
-    //             }
-    //             self.value_from_phi(phi)
-    //         }
-    //     }
-    // }
+    fn build_phi(&mut self, incoming: &[(V, llvm::BasicBlock)], name: &str) -> Result<V>;
 }
 impl BuildPhi<()> for Compiler {
-    type Type = ();
-    type PhiValue = ();
-
-    fn build_phi(&mut self, ty: (), bb: llvm::BasicBlock, name: &str) -> Result<Self::PhiValue> {
-        Ok(())
-    }
-    fn add_incoming_to_phi(
-        &mut self,
-        value: (),
-        bb: llvm::BasicBlock,
-        phi: &mut Self::PhiValue,
-    ) -> Result<()> {
-        Ok(())
-    }
-    fn value_from_phi(phi: &Self::PhiValue) -> Result<()> {
+    fn build_phi(&mut self, _incoming: &[((), llvm::BasicBlock)], _name: &str) -> Result<()> {
         Ok(())
     }
 }
@@ -1958,29 +2005,23 @@ macro_rules! impl_build_phi_for_basic_value_types {
     ( $($method:ident() -> $type_name:ty),+ $(,)? ) => {
         $(
             impl BuildPhi<$type_name> for Compiler {
-                type PhiValue = llvm::PhiValue;
-
                 fn build_phi(
                     &mut self,
-                    value: $type_name,
-                    bb: llvm::BasicBlock,
+                    incoming: &[($type_name, llvm::BasicBlock)],
                     name: &str,
-                ) -> Result<llvm::PhiValue> {
-                    let phi = self.builder().build_phi(value.get_type(), name);
-                    self.add_incoming_to_phi(value, bb, phi)?;
-                    Ok(phi)
-                }
-                fn add_incoming_to_phi(
-                    &mut self,
-                    value: $type_name,
-                    bb: llvm::BasicBlock,
-                    phi: &mut llvm::PhiValue,
-                ) -> Result<()> {
-                    phi.add_incoming(&[value.as_basic_value_enum(), bb]);
-                    Ok(())
-                }
-                fn value_from_phi(phi: &llvm::PhiValue, _span: Span) -> Result<$type_name> {
-                    Ok(phi.$method())
+                ) -> Result<$type_name> {
+                    let (first, _bb) = incoming
+                        .first()
+                        .ok_or_else(|| internal_error_value!("phi node has no incoming"))?;
+                    let basic_ty = first.get_type();
+                    let phi = self.builder().build_phi(basic_ty, name);
+                    phi.add_incoming(
+                        &incoming
+                            .iter()
+                            .map(|(v, bb)| (v as &dyn llvm::BasicValue, *bb))
+                            .collect_vec(),
+                    );
+                    Ok(phi.as_basic_value().$method())
                 }
             }
         )+
@@ -1991,240 +2032,106 @@ impl_build_phi_for_basic_value_types!(
     into_vector_value() -> llvm::VectorValue,
     into_pointer_value() -> llvm::PointerValue,
 );
-impl Compiler {
-    fn build_phi_for_variable(
+impl BuildPhi<VarResult> for Compiler {
+    fn build_phi(
         &mut self,
-        name: Spanned<Arc<String>>,
-        ty: Type,
-        bb: llvm::BasicBlock,
+        incoming: &[(VarResult, llvm::BasicBlock)],
         name: &str,
-    ) -> Result<(llvm::PhiValue, Variable<CpVal>)> {
-        let phi = self.builder().build_phi(ty.basic, bv.get_type(), name);
-        phi.add_incoming(&[(bv, bb)]);
-
-        let var = Variable {
-            val: CpVal::from_basic_value(&ty, phi.as_basic_value())?,
-            spans: vec![ty, value.span],
-        };
-
-        Ok((phi, var))
-    }
-    fn add_incoming_to_phi(
-        &mut self,
-        value: Spanned<CpVal>,
-        bb: llvm::BasicBlock,
-        (phi, var): &mut (llvm::PhiValue, Variable<CpVal>),
-    ) -> Result<()> {
-        if value.ty() == *ty {
-            Ok(phi.add_incoming(&[(value.to_basic_value(), bb)]))
-        } else {
-            todo!("phi error")
+    ) -> Result<VarResult> {
+        // This function assumes there is at least one incoming value.
+        if incoming.is_empty() {
+            internal_error!("phi node has no incoming values");
         }
-    }
-    fn value_from_phi(
-        (_phi, var): &(llvm::PhiValue, Variable<CpVal>),
-        span: Span,
-    ) -> Result<Spanned<CpVal>> {
-        CpVal::from_basic_value(ty, phi)
+
+        // Collect a list of all the incoming errors and values.
+        let mut errors = vec![];
+        let mut vals = vec![];
+        for (result, bb) in incoming {
+            match result {
+                Ok(v) => vals.push(v),
+                Err(e) => errors.push(e),
+            }
+        }
+
+        // If there are any incoming errors, return the most severe error.
+        let merged_error = errors.into_iter().cloned().fold1(VarError::merge);
+        match merged_error {
+            Some(VarError::Undefined) if !vals.is_empty() => {
+                // Replace Undefined with MaybeUninit if there is some value.
+                return Ok(Err(VarError::MaybeUninit));
+            }
+            Some(VarError::NonConstValue(ty)) if vals.iter().any(|v| v.ty() != ty) => {
+                // AmbiguousType takes precedence over NonConstValue, if it
+                // applies.
+                return Ok(Err(VarError::AmbiguousType));
+            }
+            Some(e) => return Ok(Err(e)),
+            None => (),
+        }
+
+        // There are no incoming errors; if all the values are the same, exit
+        // early by returning that value.
+        if vals.iter().map(|v| v.as_rt_val()).all_equal() {
+            if let Some(rt_val) = vals[0].as_rt_val() {
+                return Ok(Ok(Val::Rt(rt_val.clone())));
+            }
+        }
+
+        // There are no incoming errors; check that the types are all the same.
+        println!("all types: {:?}", vals.iter().map(|v| v.ty()).collect_vec());
+        if !vals.iter().map(|v| v.ty()).all_equal() {
+            return Ok(Err(VarError::AmbiguousType));
+        }
+
+        // All values are the same type; figure out what that type is.
+        let ty = vals[0].ty();
+
+        // Convert the incoming values (which we now know are all the same type
+        // type) to basic values.
+        let basic_type = match self.basic_type(&ty) {
+            Some(t) => t,
+            None => return Ok(Err(VarError::NonConstValue(ty))),
+        };
+        let basic_values = vals
+            .iter()
+            .map(|v| {
+                Ok(self
+                    .try_get_cp_val(v)?
+                    .ok_or_else(|| internal_error_value!("unable to convert value to cpval"))?
+                    .to_basic_value())
+            })
+            .collect::<Result<Vec<llvm::BasicValueEnum>>>()?;
+
+        // Build the phi node and add incoming values.
+        let dyn_basic_values = basic_values.iter().map(|v| v as &dyn llvm::BasicValue);
+        let basic_blocks = incoming.iter().map(|(_v, bb)| *bb);
+        let phi_incoming = dyn_basic_values.zip(basic_blocks).collect_vec();
+        let phi = self.builder().build_phi(basic_type, name);
+        phi.add_incoming(&phi_incoming);
+
+        Ok(Ok(Val::Cp(CpVal::from_basic_value(
+            ty,
+            phi.as_basic_value(),
+        )?)))
     }
 }
-
-// impl PhiMergeable for () {
-//     fn build_phi(
-//         &self,
-//         _compiler: &mut Compiler,
-//         _bb: llvm::BasicBlock,
-//         _name: &str,
-//     ) -> Result<llvm::PhiValue> {
-//         Ok(())
-//     }
-
-//     fn add_incoming(
-//         self,
-//         _compiler: &mut Compiler,
-//         _valuee: Self,
-//         _bb: llvm::BasicBlock,
-//     ) -> Result<()> {
-//         Ok(())
-//     }
-// }
-// impl PhiMergeable for llvm::BasicValueEnum {
-//     type PhiResult = Self;
-
-//     fn merge(
-//         self,
-//         other: Self,
-//         bb: llvm::BasicBlock,
-//         bb: llvm::BasicBlock,
-//         compiler: &mut Compiler,
-//     ) -> Self {
-//         let phi = compiler
-//             .builder()
-//             .build_phi(self.get_type(), "mergeValuesEndIf");
-//         phi.add_incoming(&[(&self, self_bb), (&other, other_bb)]);
-//         phi.as_basic_value()
-//     }
-
-//     fn build_phi(
-//         &self,
-//         compiler: &mut Compiler,
-//         bb: llvm::BasicBlock,
-//         name: &str,
-//     ) -> Result<llvm::PhiValue> {
-//         let phi = compiler
-//             .builder()
-//             .build_phi(self.get_type(), name)
-//             .as_basic_value();
-//         let value = std::mem::replace(self, phi);
-//         self.add_incoming(compiler, value, bb);
-//         phi.as_basic_value().add_incoming(self, bb, compiler)
-//     }
-
-//     fn add_incoming(
-//         self,
-//         compiler: &mut Compiler,
-//         value: Self,
-//         bb: llvm::BasicBlock,
-//     ) -> Result<()> {
-//         self.as_any_value_enum().into_phi_value()
-//     }
-// }
-
-// impl PhiMergeable for NdArrayValue {
-//     type PhiResult = Option<Self>;
-
-//     fn merge(
-//         self,
-//         other: Self,
-//         self_bb: llvm::BasicBlock,
-//         other_bb: llvm::BasicBlock,
-//         compiler: &mut Compiler,
-//     ) -> Option<Self> {
-//         if self.bounds() != other.bounds() {
-//             return None;
-//         }
-//         let origin_ptr = PhiMergeable::merge(
-//             self.origin_ptr(),
-//             other.origin_ptr(),
-//             self_bb,
-//             other_bb,
-//             compiler,
-//         );
-//         let strides =
-//             PhiMergeable::merge(self.strides(), other.strides(), self_bb, other_bb, compiler);
-//         Some(Self::from_origin_ptr(self.bounds(), origin_ptr, strides))
-//     }
-// }
-// impl PhiMergeable for LlvmCellArray {
-//     type PhiResult = Option<Self>;
-
-//     fn merge(
-//         self,
-//         other: Self,
-//         self_bb: llvm::BasicBlock,
-//         other_bb: llvm::BasicBlock,
-//         compiler: &mut Compiler,
-//     ) -> Option<Self> {
-//         if self.shape() != other.shape() {
-//             None
-//         } else if let (Some(a), Some(b)) = (self.cells(), other.cells()) {
-//             let shape = Arc::clone(self.shape());
-//             let new_cells = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
-//             Some(Self::new(&mut compiler.module, shape, Some(new_cells)))
-//         } else {
-//             Some(self) // empty
-//         }
-//     }
-// }
-// impl PhiMergeable for CpVal {
-//     type PhiResult = Option<Self>;
-
-//     fn merge(
-//         self,
-//         other: Self,
-//         self_bb: llvm::BasicBlock,
-//         other_bb: llvm::BasicBlock,
-//         compiler: &mut Compiler,
-//     ) -> Option<Self> {
-//         if self.ty() != other.ty() {
-//             return None;
-//         }
-//         match (self, other) {
-//             (CpVal::Integer(a), CpVal::Integer(b)) => {
-//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
-//                 Some(CpVal::Integer(x))
-//             }
-//             (CpVal::Cell(a), CpVal::Cell(b)) => {
-//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
-//                 Some(CpVal::Cell(x))
-//             }
-//             (CpVal::Vector(a), CpVal::Vector(b)) => {
-//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
-//                 Some(CpVal::Vector(x))
-//             }
-//             (CpVal::CellArray(a), CpVal::CellArray(b)) => {
-//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
-//                 Some(CpVal::CellArray(x))
-//             }
-//             (CpVal::CellArrayMut(a), CpVal::CellArrayMut(b)) => {
-//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler)?;
-//                 Some(CpVal::CellArrayMut(x))
-//             }
-//             (CpVal::CellSet(a), CpVal::CellSet(b)) => {
-//                 let x = PhiMergeable::merge(a, b, self_bb, other_bb, compiler);
-//                 Some(CpVal::CellSet(x))
-//             }
-//             (CpVal::Integer(_), _)
-//             | (CpVal::Cell(_), _)
-//             | (CpVal::Vector(_), _)
-//             | (CpVal::CellArray(_), _)
-//             | (CpVal::CellArrayMut(_), _)
-//             | (CpVal::CellSet(_), _) => None,
-//         }
-//     }
-// }
-// impl PhiMergeable for Val {
-//     type PhiResult = Self;
-
-//     fn merge(
-//         self,
-//         other: Self,
-//         self_bb: llvm::BasicBlock,
-//         other_bb: llvm::BasicBlock,
-//         compiler: &mut Compiler,
-//     ) -> Self {
-//         let (a, b) = match (&self, &other) {
-//             (Val::Error, _) | (_, Val::Error) => return Val::Error,
-//             (Val::MaybeUninit, _) | (_, Val::MaybeUninit) => return Val::MaybeUninit,
-//             (Val::Unknown(_), _) | (_, Val::Unknown(_)) => {
-//                 let self_ty = self.ty();
-//                 let other_ty = other.ty();
-//                 if self_ty == other_ty {
-//                     return Val::Unknown(self_ty);
-//                 } else {
-//                     return Val::Unknown(None);
-//                 }
-//             }
-
-//             (Val::Rt(a), Val::Rt(b)) if a == b => return self,
-//             (Val::Rt(a), Val::Rt(b)) => {
-//                 match (compiler.rt_val_to_cp_val(&a), compiler.rt_val_to_cp_val(&b)) {
-//                     (Some(a), Some(b)) => (a, b),
-//                     _ => return Val::Unknown((a.ty() == b.ty()).then(|| a.ty())),
-//                 }
-//             }
-//             (Val::Rt(a), Val::Cp(b)) | (Val::Cp(b), Val::Rt(a)) => {
-//                 match compiler.rt_val_to_cp_val(&a) {
-//                     Some(a) => (a, b.clone()),
-//                     None => return Val::Unknown(None),
-//                 }
-//             }
-//             (Val::Cp(a), Val::Cp(b)) => (a.clone(), b.clone()),
-//         };
-
-//         match PhiMergeable::merge(a, b, self_bb, other_bb, compiler) {
-//             Some(cp_val) => Val::Cp(cp_val),
-//             None => Val::Unknown(None),
-//         }
-//     }
-// }
+impl BuildPhi<Var> for Compiler {
+    fn build_phi(&mut self, incoming: &[(Var, llvm::BasicBlock)], name: &str) -> Result<Var> {
+        Ok(Var {
+            value: self.build_phi(
+                &incoming
+                    .iter()
+                    .map(|(var, bb)| (var.value.clone(), *bb))
+                    .collect_vec(),
+                name,
+            )?,
+            initial_type: incoming
+                .iter()
+                .find_map(|(var, _bb)| var.initial_type.clone()),
+            assign_spans: incoming
+                .iter()
+                .flat_map(|(var, _bb)| var.assign_spans.iter().cloned())
+                .collect(),
+        })
+    }
+}

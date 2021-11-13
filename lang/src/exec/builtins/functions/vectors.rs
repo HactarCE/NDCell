@@ -7,11 +7,11 @@ use ndcell_core::axis::Axis;
 use super::{CallInfo, Function};
 use crate::ast;
 use crate::data::{
-    self, CpVal, LangInt, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, Val,
+    self, CpVal, LangInt, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, SpannedValExt, Val,
 };
 use crate::errors::{Error, Result};
 use crate::exec::builtins::Expression;
-use crate::exec::{Compiler, Ctx, CtxTrait};
+use crate::exec::{Compiler, Ctx, CtxTrait, Runtime};
 use crate::llvm;
 
 /// Built-in function that constructs a vector from components.
@@ -77,8 +77,8 @@ impl Function for VecConstructor {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         let len = match call.kwarg("len") {
-            Some(x) => compiler
-                .get_rt_val(x)?
+            Some(x) => x
+                .try_rt_val()?
                 .as_integer()
                 .and_then(|n| data::check_vector_len(x.span, n))?,
             None => compiler.get_ndim(call.expr_span)?,
@@ -215,7 +215,7 @@ impl Function for IndexVector {
 
     fn eval_assign(
         &self,
-        runtime: &mut crate::exec::Runtime,
+        runtime: &mut Runtime,
         call: CallInfo<Spanned<RtVal>>,
         first_arg: ast::Expr<'_>,
         new_value: Spanned<RtVal>,
@@ -230,20 +230,23 @@ impl Function for IndexVector {
         };
 
         // Assign the new vector value.
-        let op = None;
-        Box::<dyn Expression>::from(first_arg).eval_assign(runtime, first_arg.span(), op, new_value)
+        let expr_span = first_arg.span();
+        let stmt_span = call
+            .stmt_span
+            .ok_or_else(|| internal_error_value!("missing statement span"))?;
+        Box::<dyn Expression>::from(first_arg).eval_assign(runtime, expr_span, stmt_span, new_value)
     }
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
         call: CallInfo<Spanned<Val>>,
         first_arg: ast::Expr<'_>,
-        new_value: Spanned<Val>,
+        new_value: Result<Spanned<Val>>,
     ) -> Result<()> {
         let (v, i) = self.compile_args(compiler, &call)?;
 
         // Assign the new component.
-        let new_component = compiler.get_cp_val(&new_value)?.as_integer()?;
+        let new_component = compiler.get_cp_val(&new_value?)?.as_integer()?;
         let v =
             compiler
                 .builder()
@@ -254,12 +257,15 @@ impl Function for IndexVector {
         };
 
         // Assign the new vector value.
-        let op = None;
+        let expr_span = first_arg.span();
+        let stmt_span = call
+            .stmt_span
+            .ok_or_else(|| internal_error_value!("missing statement span"))?;
         Box::<dyn Expression>::from(first_arg).compile_assign(
             compiler,
-            first_arg.span(),
-            op,
-            new_value,
+            expr_span,
+            stmt_span,
+            Ok(new_value),
         )
     }
 }

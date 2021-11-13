@@ -171,7 +171,6 @@ fn ivec6d_to_vec(vec_len: usize, v: IVec6D) -> Vec<LangInt> {
 pub struct LlvmCellArray {
     shape: Arc<VectorSet>,
     cells: Option<llvm::NdArrayValue>,
-    mask: Option<llvm::NdArrayValue>,
 }
 impl LlvmCellArray {
     /// Constructs an empty cell array.
@@ -179,78 +178,19 @@ impl LlvmCellArray {
         Ok(Self {
             shape: Arc::new(VectorSet::empty(span, ndim)?),
             cells: None,
-            mask: None,
         })
     }
     /// Constructs a new cell array.
-    pub fn new(
-        module: &mut llvm::Module,
-        shape: Arc<VectorSet>,
-        cells: Option<llvm::NdArrayValue>,
-    ) -> Self {
+    pub fn new(shape: Arc<VectorSet>, cells: Option<llvm::NdArrayValue>) -> Self {
         if cells.is_none() {
             assert!(shape.is_empty())
         }
-        let mask = shape.mask().as_ref().map(|m| {
-            llvm::NdArrayValue::new_const(
-                module,
-                shape.vec_len(),
-                shape.bounds().unwrap(),
-                llvm::bool_type(),
-                &m.as_flat_slice()
-                    .iter()
-                    .copied()
-                    .map(llvm::const_bool)
-                    .collect_vec(),
-                "cell_array_mask",
-            )
-        });
-        Self { shape, cells, mask }
-    }
-    /// Constructs a new cell array from a pointer to the origin in the cell
-    /// array.
-    pub fn from_cells_origin_ptr(
-        module: &mut llvm::Module,
-        shape: Arc<VectorSet>,
-        cells_origin_ptr: llvm::PointerValue,
-    ) -> Self {
-        let cells = shape.bounds().map(|bounds| {
-            let strides =
-                llvm::const_vector(crate::utils::ndarray_strides(shape.vec_len(), bounds));
-            llvm::NdArrayValue::from_origin_ptr(bounds, cells_origin_ptr, strides)
-        });
-        Self::new(module, shape, cells)
-    }
-    /// Builds instructions to construct a cell array with a constant value.
-    pub fn new_const(module: &mut llvm::Module, a: &CellArray) -> Self {
-        let shape = Arc::clone(a.shape());
-        let cells = shape.bounds().map(|bounds| {
-            let cell_values = &a
-                .cells_array()
-                .as_flat_slice()
-                .iter()
-                .map(|&i| llvm::const_cell(i))
-                .collect_vec();
-            llvm::NdArrayValue::new_const(
-                module,
-                a.ndim(),
-                bounds,
-                llvm::cell_type(),
-                cell_values,
-                "const_cell_array",
-            )
-        });
-        Self::new(module, shape, cells)
+        Self { shape, cells }
     }
 
     /// Returns the shape of the cell array.
     pub fn shape(&self) -> &Arc<VectorSet> {
         &self.shape
-    }
-    /// Returns the raw array of mask booleans, or `None` if a mask is not
-    /// necessary.
-    pub fn mask(&self) -> Option<llvm::NdArrayValue> {
-        self.mask
     }
     /// Returns the raw array of cell values.
     pub fn cells(&self) -> Option<llvm::NdArrayValue> {
@@ -273,6 +213,6 @@ impl LlvmCellArray {
         new_mask: &VectorSet,
     ) -> Result<Self> {
         let new_shape = Arc::new(self.shape.union(span, new_mask)?);
-        Ok(Self::new(module, new_shape, self.cells))
+        Ok(Self::new(new_shape, self.cells))
     }
 }

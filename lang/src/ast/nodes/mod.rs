@@ -107,7 +107,7 @@ macro_rules! match_any_node {
     (match $match_expr:expr; $node:ident => $result:expr) => {
         match_any_node!(match $match_expr; $node => $result;
             for Directive, Expr, Func, Stmt
-        );
+        )
     };
     (match $match_expr:expr; $node:ident => $result:expr; for $($variant:ident),+) => {
         match $match_expr { $( AnyNode::$variant($node) => $result ),+ }

@@ -1916,25 +1916,20 @@ impl Compiler {
             }
 
             ast::StmtData::Assert { condition, msg } => {
-                todo!("compile assert");
-                // let condition = ast.get_node(*condition);
-                // if self.eval_expr(condition)?.to_bool()? {
-                //     Err(match msg {
-                //         Some(msg) => Error::assertion_failed_with_msg(stmt.span(), msg),
-                //         None => Error::assertion_failed(stmt.span()),
-                //     }
-                //     .into())
-                // } else {
-                //     Ok(Flow::Proceed)
-                // }
+                let error_index = self.add_runtime_error(match msg {
+                    Some(msg) => Error::assertion_failed_with_msg(stmt.span(), msg),
+                    None => Error::assertion_failed(stmt.span()),
+                });
+                let condition = ast.get_node(*condition);
+                let condition_value = self.build_bool_expr(condition)?;
+                self.build_return_err_unless(condition_value, error_index)?;
             }
             ast::StmtData::Error { msg } => {
-                todo!("compile user error");
-                // Err(match msg {
-                //     Some(msg) => Error::user_error_with_msg(stmt.span(), msg),
-                //     None => Error::user_error(stmt.span()),
-                // }
-                // .into())
+                let error_index = self.add_runtime_error(match msg {
+                    Some(msg) => Error::user_error_with_msg(stmt.span(), msg),
+                    None => Error::user_error(stmt.span()),
+                });
+                self.build_return_err(error_index);
             }
 
             ast::StmtData::Break => todo!("compile break"),

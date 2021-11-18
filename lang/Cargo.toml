@@ -2,7 +2,7 @@
 name = "ndcell_lang"
 version = "0.2.0-dev"
 authors = ["HactarCE <6060305+HactarCE@users.noreply.github.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 codemap = "0.1"

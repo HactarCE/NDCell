@@ -24,7 +24,7 @@ impl Function for ToBool {
         call.check_args_len(1)?;
         let arg = call.arg(0)?;
         Ok(Val::Cp(CpVal::Integer(
-            compiler.build_convert_to_bool(arg)?,
+            compiler.build_convert_to_bool(arg)?.llvm_int_value(),
         )))
     }
 }
@@ -41,8 +41,12 @@ impl Function for LogicalXor {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         call.check_args_len(2)?;
-        let lhs = compiler.build_convert_to_bool(call.arg(0)?)?;
-        let rhs = compiler.build_convert_to_bool(call.arg(1)?)?;
+        let lhs = compiler
+            .build_convert_to_bool(call.arg(0)?)?
+            .llvm_int_value();
+        let rhs = compiler
+            .build_convert_to_bool(call.arg(1)?)?
+            .llvm_int_value();
         Ok(Val::Cp(CpVal::Integer(
             compiler.builder().build_xor(lhs, rhs, "xor"),
         )))
@@ -60,7 +64,9 @@ impl Function for LogicalNot {
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
         call.check_args_len(1)?;
-        let arg = compiler.build_convert_to_bool(call.arg(0)?)?;
+        let arg = compiler
+            .build_convert_to_bool(call.arg(0)?)?
+            .llvm_int_value();
         Ok(Val::Cp(CpVal::Integer(compiler.builder().build_xor(
             arg,
             llvm::const_int(1),

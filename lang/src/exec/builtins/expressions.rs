@@ -236,7 +236,7 @@ impl Expression for LogicalOrExpr<'_> {
                     // LHS is statically `false`; compile RHS, convert to bool,
                     // and return it.
                     false => Ok(Val::Cp(CpVal::Integer(
-                        compiler.build_bool_expr(self.args[1])?,
+                        compiler.build_bool_expr(self.args[1])?.llvm_int_value(),
                     ))),
                 }
             }
@@ -248,7 +248,7 @@ impl Expression for LogicalOrExpr<'_> {
                     |_| Ok(llvm::const_int(1)),
                     // RHS is dynamically `true`; compile RHS, convert to bool,
                     // and return it.
-                    |c| c.build_bool_expr(self.args[1]),
+                    |c| Ok(c.build_bool_expr(self.args[1])?.llvm_int_value()),
                 )?;
                 Ok(Val::Cp(CpVal::Integer(bool_result)))
             }
@@ -279,7 +279,7 @@ impl Expression for LogicalAndExpr<'_> {
                 // LHS is statically `true`; compile RHS, convert to bool,
                 // and return it.
                 true => Ok(Val::Cp(CpVal::Integer(
-                    compiler.build_bool_expr(self.args[1])?,
+                    compiler.build_bool_expr(self.args[1])?.llvm_int_value(),
                 ))),
                 // LHS is statically `false`; do not compile RHS.
                 false => Ok(Val::Rt(RtVal::Integer(0))),
@@ -290,7 +290,7 @@ impl Expression for LogicalAndExpr<'_> {
                 l_bool,
                 // LHS is dynamically `true`; compile RHS, convert to bool,
                 // and return it.
-                |c| c.build_bool_expr(self.args[1]),
+                |c| Ok(c.build_bool_expr(self.args[1])?.llvm_int_value()),
                 // RHS is dynamically `false`; do not evaluate RHS.
                 |_| Ok(llvm::const_int(0)),
             )?;

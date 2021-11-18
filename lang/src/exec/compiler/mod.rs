@@ -559,30 +559,32 @@ impl Compiler {
     }
 
     /// Builds instructions to cast a value to a boolean and zero-extend that
-    /// boolean to the width of an integer.
-    pub fn build_convert_to_bool(&mut self, value: &Spanned<Val>) -> Result<llvm::IntValue> {
-        let cp_val = self.get_cp_val(value)?;
-        self.build_convert_cp_val_to_bool(&cp_val)
-    }
-    /// Builds instructions to cast a value to a boolean and zero-extend that
-    /// boolean to the width of an integer.
-    pub fn build_convert_cp_val_to_bool(
-        &mut self,
-        value: &Spanned<CpVal>,
-    ) -> Result<llvm::IntValue> {
-        use llvm::IntPredicate::NE;
+    /// boolean to the width of an integer; returns a constant value if
+    /// possible.
+    pub fn build_convert_to_bool(&mut self, value: &Spanned<Val>) -> Result<BoolVal> {
+        match value.clone().into() {
+            SpannedVal::Rt(v) => Ok(BoolVal::Rt(v.to_bool()?)),
+            SpannedVal::Cp(v) => {
+                use llvm::IntPredicate::NE;
 
-        let bool_result = match value.node {
-            CpVal::Integer(i) | CpVal::Cell(i) => {
-                self.build_any_cmp(NE, i, i.same_type_const_zero())?
+                let bool_result = match v.node {
+                    CpVal::Integer(i) | CpVal::Cell(i) => {
+                        self.build_any_cmp(NE, i, i.same_type_const_zero())?
+                    }
+                    CpVal::Vector(v) => self.build_any_cmp(NE, v, v.same_type_const_zero())?,
+                    CpVal::CellArray(_) | CpVal::CellArrayMut(_) => {
+                        todo!("convert cell array to bool")
+                    }
+                    CpVal::CellSet(_) => todo!("convert cell set to bool"),
+                };
+
+                Ok(BoolVal::Cp(self.builder().build_int_z_extend(
+                    bool_result,
+                    llvm::int_type(),
+                    "zext_bool",
+                )))
             }
-            CpVal::Vector(v) => self.build_any_cmp(NE, v, v.same_type_const_zero())?,
-            CpVal::CellArray(_) | CpVal::CellArrayMut(_) => todo!("convert cell array to bool"),
-            CpVal::CellSet(_) => todo!("convert cell set to bool"),
-        };
-
-        let b = self.builder();
-        Ok(b.build_int_z_extend(bool_result, llvm::int_type(), "zext_bool"))
+        }
     }
 
     /// Builds instructions to cast a value to a vector.
@@ -1042,6 +1044,14 @@ impl Compiler {
     where
         Self: BuildPhi<V>,
     {
+        // If the condition value is known at compile-time, then only compile
+        // the branch that will execute.
+        let condition_value = match condition_value.into() {
+            BoolVal::Rt(true) => return build_if_true(self),
+            BoolVal::Rt(false) => return build_if_false(self),
+            BoolVal::Cp(v) => v,
+        };
+
         // Create the destination blocks.
         let if_true_bb = self.append_basic_block("ifTrue");
         let if_false_bb = self.append_basic_block("ifFalse");
@@ -1275,7 +1285,7 @@ impl Compiler {
     /// Builds instructions to return an error if some condition is false.
     pub fn build_return_err_unless(
         &mut self,
-        condition_value: llvm::IntValue,
+        condition_value: impl Into<BoolVal>,
         error_index: usize,
     ) -> Result<()> {
         self.build_conditional(
@@ -1889,25 +1899,11 @@ impl Compiler {
             } => {
                 let condition = ast.get_node(*condition);
                 let condition_value = self.build_bool_expr(condition)?;
-                if let Some(const_bool) = condition_value.get_zero_extended_constant() {
-                    // The condition value is compile-time constant, so only
-                    // compile the branch that will execute.
-                    if const_bool != 0 {
-                        if let Some(id) = if_true {
-                            self.build_stmt(ast.get_node(*id))?;
-                        }
-                    } else {
-                        if let Some(id) = if_false {
-                            self.build_stmt(ast.get_node(*id))?;
-                        }
-                    }
-                } else {
-                    self.build_conditional(
-                        condition_value,
-                        |c| if_true.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
-                        |c| if_false.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
-                    )?;
-                }
+                self.build_conditional(
+                    condition_value,
+                    |c| if_true.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
+                    |c| if_false.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
+                )?;
             }
 
             ast::StmtData::Assert { condition, msg } => {
@@ -1976,7 +1972,7 @@ impl Compiler {
     }
     /// Builds instructions to evaluate an expression and convert the result to
     /// a boolean.
-    pub fn build_bool_expr(&mut self, expr: ast::Expr<'_>) -> Result<llvm::IntValue> {
+    pub fn build_bool_expr(&mut self, expr: ast::Expr<'_>) -> Result<BoolVal> {
         let value = self.build_expr(expr)?;
         self.build_convert_to_bool(&value)
     }
@@ -2123,5 +2119,38 @@ impl BuildPhi<Var> for Compiler {
                 .flat_map(|(var, _bb)| var.assign_spans.iter().cloned())
                 .collect(),
         })
+    }
+}
+
+/// Boolean value that may be constant or compiled variable.
+#[derive(Debug, Copy, Clone)]
+pub enum BoolVal {
+    Rt(bool),
+    Cp(llvm::IntValue),
+}
+impl From<bool> for BoolVal {
+    fn from(b: bool) -> Self {
+        Self::Rt(b)
+    }
+}
+impl From<llvm::IntValue> for BoolVal {
+    fn from(i: llvm::IntValue) -> Self {
+        Self::Cp(i)
+    }
+}
+impl From<BoolVal> for Val {
+    fn from(v: BoolVal) -> Val {
+        match v {
+            BoolVal::Rt(b) => Val::Rt(RtVal::Integer(b as LangInt)),
+            BoolVal::Cp(i) => Val::Cp(CpVal::Integer(i)),
+        }
+    }
+}
+impl BoolVal {
+    pub fn llvm_int_value(self) -> llvm::IntValue {
+        match self {
+            BoolVal::Rt(b) => llvm::const_bool(b),
+            BoolVal::Cp(i) => i,
+        }
     }
 }

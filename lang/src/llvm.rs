@@ -159,6 +159,22 @@ pub fn intrinsic_type_name(ty: impl BasicType<'static>) -> String {
     }
 }
 
+pub fn replace_all_uses_of_basic_value(old: BasicValueEnum, new: BasicValueEnum) {
+    assert_eq!(
+        old.get_type(),
+        new.get_type(),
+        "cannot replace values with disparate types",
+    );
+    match old {
+        BasicValueEnum::ArrayValue(v) => v.replace_all_uses_with(new.into_array_value()),
+        BasicValueEnum::IntValue(v) => v.replace_all_uses_with(new.into_int_value()),
+        BasicValueEnum::FloatValue(v) => v.replace_all_uses_with(new.into_float_value()),
+        BasicValueEnum::PointerValue(v) => v.replace_all_uses_with(new.into_pointer_value()),
+        BasicValueEnum::StructValue(v) => v.replace_all_uses_with(new.into_struct_value()),
+        BasicValueEnum::VectorValue(v) => v.replace_all_uses_with(new.into_vector_value()),
+    }
+}
+
 /// Trait for [`IntValue`]s and [`VectorValue`]s that provides extra utility beyond
 /// [`inkwell::values::IntMathValue`].
 pub trait IntMathValue: inkwell::values::IntMathValue<'static> + Copy {
@@ -225,25 +241,8 @@ impl IntMathValue for VectorValue {
     }
 }
 
-/// Obtains a constant `VectorValue`'s sign-extended value.
-pub fn vector_value_as_constant(v: VectorValue) -> Option<Vec<LangInt>> {
-    if v.is_constant_vector() {
-        let len = v.get_type().get_size();
-        (0..len)
-            .map(|i| {
-                v.get_element_as_constant(i)
-                    .into_int_value()
-                    .get_sign_extended_constant()
-                    .map(|x| x as LangInt)
-            })
-            .collect()
-    } else {
-        None
-    }
-}
-
 /// LLVM representation of an N-dimensional array.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NdArrayValue {
     /// Array bounds.
     pub bounds: IRect6D,

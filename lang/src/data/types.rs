@@ -142,31 +142,6 @@ impl Type {
         }
     }
 
-    /// Returns true if this type can be converted to a boolean, or false
-    /// otherwise.
-    ///
-    /// When updating this, make sure to also update `ConstValue::to_bool()` and
-    /// `Compiler::build_convert_to_bool()`.
-    pub fn can_convert_to_bool(&self) -> bool {
-        match self {
-            Type::Null => true,
-            Type::Integer => true,
-            Type::Cell => true,
-            Type::Tag => false,
-            Type::String => true,
-            Type::Type => true,
-
-            Type::Vector(_) => true,
-            Type::CellArray(_) | Type::CellArrayMut(_) => true,
-
-            Type::EmptySet => false,
-            Type::IntegerSet => false,
-            Type::CellSet => false,
-            Type::VectorSet(_) => false,
-            Type::PatternMatcher(_) => false,
-            Type::Regex => false,
-        }
-    }
     /// Returns the type yielded by iteration over this type, or None if this
     /// type cannot be iterated over.
     pub fn iteration_type(&self) -> Option<Type> {

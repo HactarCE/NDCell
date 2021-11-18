@@ -38,6 +38,10 @@ pub enum StmtData {
         iter_expr: ExprId,
         block: StmtId,
     },
+    WhileLoop {
+        condition: ExprId,
+        block: StmtId,
+    },
 
     // Returns
     Become(ExprId),
@@ -82,6 +86,9 @@ impl Stmt<'_> {
                 names
                     .entry(Arc::clone(&iter_var.node))
                     .or_insert(iter_var.span);
+                self.ast.get_node(*block).find_all_assigned_vars(names);
+            }
+            StmtData::WhileLoop { block, .. } => {
                 self.ast.get_node(*block).find_all_assigned_vars(names);
             }
 

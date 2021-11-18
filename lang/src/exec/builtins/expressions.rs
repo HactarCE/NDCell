@@ -630,7 +630,7 @@ impl Expression for Identifier<'_> {
                 return constant.map(Val::Rt);
             }
         }
-        compiler.get_var(self.0, expr_span).get_value(expr_span)
+        compiler.access_var(self.0, expr_span)
     }
 
     fn eval_assign(

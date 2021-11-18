@@ -338,6 +338,7 @@ pub enum Keyword {
     Break,
     Continue,
     For,
+    While,
 
     // Returns
     Become,
@@ -368,6 +369,7 @@ impl fmt::Display for Keyword {
             Self::Break => "break",
             Self::Continue => "continue",
             Self::For => "for",
+            Self::While => "while",
 
             Self::Become => "become",
             Self::Remain => "remain",
@@ -400,6 +402,7 @@ impl FromStr for Keyword {
             "break" => Ok(Self::Break),
             "continue" => Ok(Self::Continue),
             "for" => Ok(Self::For),
+            "while" => Ok(Self::While),
 
             "become" => Ok(Self::Become),
             "remain" => Ok(Self::Remain),
@@ -424,6 +427,7 @@ impl Keyword {
         Self::Break,
         Self::Continue,
         Self::For,
+        Self::While,
         Self::Become,
         Self::Remain,
         Self::Return,
@@ -444,6 +448,7 @@ impl Keyword {
             Self::Break
             | Self::Continue
             | Self::For
+            | Self::While
             | Self::Become
             | Self::Remain
             | Self::Return

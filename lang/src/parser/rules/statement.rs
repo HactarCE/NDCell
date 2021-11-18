@@ -62,10 +62,8 @@ impl SyntaxRule for Statement {
                             p.parse(ast, Token::Keyword(Keyword::Continue))?;
                             Ok(ast::StmtData::Continue)
                         }),
-                        Keyword::For => {
-                            p.prev();
-                            p.parse(ast, ForLoop)
-                        }
+                        Keyword::For => p.parse(ast, ForLoop),
+                        Keyword::While => p.parse(ast, WhileLoop),
 
                         // Returns
                         Keyword::Become => p.parse_and_add_ast_node(ast, |p, ast| {
@@ -134,7 +132,7 @@ impl SyntaxRule for Statement {
 /// Matches a `for` loop.
 #[derive(Debug, Copy, Clone)]
 struct ForLoop;
-impl_display!(for ForLoop, "{} loop", Token::Keyword(Keyword::For));
+impl_display!(for ForLoop, "for loop");
 impl SyntaxRule for ForLoop {
     type Output = ast::StmtId;
 
@@ -142,14 +140,12 @@ impl SyntaxRule for ForLoop {
         p.next() == Some(Token::Keyword(Keyword::For))
     }
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
-        p.parse(ast, Token::Keyword(Keyword::For))?;
-
-        let iter_var = p.parse(ast, Identifier)?;
-        p.parse(ast, Token::Keyword(Keyword::In))?;
-        let iter_expr = p.parse(ast, Expression)?;
-        let block = p.parse(ast, StatementBlock)?;
-
-        p.parse_and_add_ast_node(ast, |_p, _ast| {
+        p.parse_and_add_ast_node(ast, |p, ast| {
+            p.parse(ast, Token::Keyword(Keyword::For))?;
+            let iter_var = p.parse(ast, Identifier)?;
+            p.parse(ast, Token::Keyword(Keyword::In))?;
+            let iter_expr = p.parse(ast, Expression)?;
+            let block = p.parse(ast, StatementBlock)?;
             Ok(ast::StmtData::ForLoop {
                 iter_var,
                 iter_expr,
@@ -159,10 +155,30 @@ impl SyntaxRule for ForLoop {
     }
 }
 
+/// Matches a `while` loop.
+#[derive(Debug, Copy, Clone)]
+struct WhileLoop;
+impl_display!(for WhileLoop, "while loop");
+impl SyntaxRule for WhileLoop {
+    type Output = ast::StmtId;
+
+    fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
+        p.next() == Some(Token::Keyword(Keyword::While))
+    }
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
+        p.parse_and_add_ast_node(ast, |p, ast| {
+            p.parse(ast, Token::Keyword(Keyword::While))?;
+            let condition = p.parse(ast, Expression)?;
+            let block = p.parse(ast, StatementBlock)?;
+            Ok(ast::StmtData::WhileLoop { condition, block })
+        })
+    }
+}
+
 /// Matches an `if` statement.
 #[derive(Debug, Copy, Clone)]
 struct IfStatement;
-impl_display!(for IfStatement, "{} statement", Token::Keyword(Keyword::If));
+impl_display!(for IfStatement, "if statement");
 impl SyntaxRule for IfStatement {
     type Output = ast::StmtId;
 
@@ -184,7 +200,7 @@ impl SyntaxRule for IfStatement {
 /// Matches an `else` block or `else if` statement.
 #[derive(Debug, Copy, Clone)]
 struct ElseStatement;
-impl_display!(for ElseStatement, "{} statement", Token::Keyword(Keyword::Else));
+impl_display!(for ElseStatement, "else statement");
 impl SyntaxRule for ElseStatement {
     type Output = ast::StmtId;
 

@@ -189,13 +189,25 @@ impl Runtime {
             ast::StmtData::Continue => Ok(Flow::Continue(stmt.span())),
             ast::StmtData::ForLoop {
                 iter_var,
-                iter_expr: iter_expr_id,
+                iter_expr,
                 block,
             } => {
-                let iter_expr = ast.get_node(*iter_expr_id);
+                let iter_expr = ast.get_node(*iter_expr);
                 for it in self.eval_expr(iter_expr)?.iterate()? {
                     self.assign_var(iter_var, it.node);
                     match self.exec_stmt(ast.get_node(*block))? {
+                        Flow::Proceed | Flow::Continue(_) => (),
+                        Flow::Break(_) => break,
+                        flow => return Ok(flow),
+                    }
+                }
+                Ok(Flow::Proceed)
+            }
+            ast::StmtData::WhileLoop { condition, block } => {
+                let condition = ast.get_node(*condition);
+                let block = ast.get_node(*block);
+                while self.eval_bool_expr(condition)? {
+                    match self.exec_stmt(block)? {
                         Flow::Proceed | Flow::Continue(_) => (),
                         Flow::Break(_) => break,
                         flow => return Ok(flow),

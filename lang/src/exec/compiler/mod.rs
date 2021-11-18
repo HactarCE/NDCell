@@ -37,22 +37,23 @@ mod config;
 mod function;
 mod loops;
 mod param;
-
-// use self::loops::VariablePhi;
+mod var;
 
 use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
     CellArray, CellSet, CpVal, GetType, LangCell, LangInt, LlvmCellArray, RtVal,
-    SpannedCompileValueExt, Type, Val, Var, VarError, VarResult, VectorSet, INT_BITS,
+    SpannedCompileValueExt, SpannedRuntimeValueExt, SpannedVal, SpannedValExt, Type, Val,
+    VectorSet, INT_BITS,
 };
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait, Runtime};
 use crate::llvm::{self, traits::*, NdArrayValue};
 pub use config::CompilerConfig;
 pub use function::CompiledFunction;
-use loops::Loop;
+use loops::{Loop, VarInLoop};
 pub use param::{Param, ParamType};
+use var::{Var, VarError, VarResult};
 
 #[derive(Debug)]
 pub struct Compiler {
@@ -243,6 +244,7 @@ impl Compiler {
                     value: Ok(Val::Rt(v)),
                     initial_type,
                     assign_spans: vec![],
+                    loop_placeholder_index: None,
                 };
                 (k, v)
             })
@@ -427,26 +429,6 @@ impl Compiler {
         match self.try_get_cp_val(&v.node)? {
             Some(node) => Ok(Spanned { span: v.span, node }),
             None => Err(Error::cannot_compile(v.span)),
-        }
-    }
-    pub(crate) fn undef_cp_val(ty: &Type) -> Option<CpVal> {
-        fn undef_cell_array(shape: &Arc<VectorSet>) -> LlvmCellArray {
-            let shape = Arc::clone(shape);
-            let ndim = shape.vec_len();
-            let cells = shape
-                .bounds()
-                .map(|bounds| llvm::NdArrayValue::get_undef(ndim, bounds, llvm::cell_type()));
-            LlvmCellArray::new(shape, cells)
-        }
-
-        match ty {
-            Type::Integer => Some(CpVal::Integer(llvm::int_type().get_undef())),
-            Type::Cell => Some(CpVal::Cell(llvm::cell_type().get_undef())),
-            Type::Vector(Some(len)) => Some(CpVal::Vector(llvm::vector_type(*len).get_undef())),
-            Type::CellArray(Some(shape)) => Some(CpVal::CellArray(undef_cell_array(shape))),
-            Type::CellArrayMut(Some(shape)) => Some(CpVal::CellArrayMut(undef_cell_array(shape))),
-            Type::CellSet => todo!("cell set type"),
-            _ => None,
         }
     }
 
@@ -984,8 +966,8 @@ impl Compiler {
 impl Compiler {
     /// Returns the basic block that the instruction builder is currently
     /// positioned in, or panics if there is none.
-    pub fn current_block(&mut self) -> llvm::BasicBlock {
-        self.builder()
+    pub fn current_block(&self) -> llvm::BasicBlock {
+        self.builder
             .get_insert_block()
             .expect("Tried to access current insert block, but there is none")
     }
@@ -1037,7 +1019,7 @@ impl Compiler {
     /// resulting from the closures.
     pub fn build_conditional<V>(
         &mut self,
-        condition_value: llvm::IntValue,
+        condition_value: impl Into<BoolVal>,
         build_if_true: impl FnOnce(&mut Self) -> Result<V>,
         build_if_false: impl FnOnce(&mut Self) -> Result<V>,
     ) -> Result<V>
@@ -1150,97 +1132,207 @@ impl Compiler {
 
     /// Builds a loop.
     ///
-    /// `build_contents()` starts at the header and must end with a branch to
-    /// either the prelatch or exit (via `continue` or `break` respectively).
-    /// `build_prelatch()` starts at the prelatch and must NOT end with a jump.
+    /// `build_contents()` starts at the header and may contain jumps to either
+    /// the prelatch or exit (via `continue` or `break` respectively).
+    /// `build_prelatch()` starts at the prelatch and must NOT contain a jump to
+    /// `continue` or `break`.
     pub fn build_loop(
         &mut self,
         vars_assigned: HashMap<Arc<String>, Span>,
-        build_contents: impl FnOnce(&mut Self, Loop) -> Result<()>,
-        build_prelatch: impl FnOnce(&mut Self, Loop) -> Result<()>,
+        build_contents: impl FnOnce(&mut Self) -> Result<()>,
+        build_prelatch: impl FnOnce(&mut Self) -> Result<()>,
     ) -> Result<()> {
-        // bröther may I have some `lööp`s
-        let lööp = Loop {
-            preheader: self.append_basic_block("preheader"),
-            header: self.append_basic_block("header"),
-            prelatch: self.append_basic_block("prelatch"),
-            latch: self.append_basic_block("latch"),
-            exit: self.append_basic_block("exit"),
-            // var_phis: HashMap::new(),
-        };
-        self.loop_stack.push(lööp);
+        let loop_depth = self.loop_stack.len();
 
-        self.builder().build_unconditional_branch(lööp.preheader);
+        let preheader = self.append_basic_block("preheader");
+        let header = self.append_basic_block("header");
+        let prelatch = self.append_basic_block("prelatch");
+        let latch = self.append_basic_block("latch");
+        let exit = self.append_basic_block("exit");
+
+        self.builder().build_unconditional_branch(preheader);
 
         // Build preheader.
-        self.builder().position_at_end(lööp.preheader);
-        self.builder().build_unconditional_branch(lööp.header);
+        self.builder().position_at_end(preheader);
 
-        // Build header and loop contents.
-        self.builder().position_at_end(lööp.header);
-        /*
-
-        // Inside the header, build a phi node for any existing variable
-        // modified by the loop.
-        let placeholder_values: HashMap<Arc<String>, CpVal> = vars_assigned
+        // Replace any variables modified within the loop with placeholder
+        // values, which we will later build proper phi nodes for.
+        let vars_modified: HashMap<Arc<String>, VarInLoop> = vars_assigned
             .iter()
-            .filter_map(|(name, span)| match self.get_var(&name, span) {
-                None => None,
-                Some(pre_loop_value) => {
-                    let ty = pre_loop_value.ty();
-                    let placeholder_loop_value = self.build_undef_val_of_type(&ty);
+            .filter_map(|(name, span_where_assigned)| {
+                let old_var_val = self.vars.get(name)?.value.as_ref().ok()?;
+                let ty = old_var_val.ty();
+                let placeholder_value = self.basic_type(&ty).and_then(|llvm_type| {
+                    let placeholder_phi_value = self
+                        .builder()
+                        .build_phi(llvm_type, &format!("{}_placeholder", name));
+                    CpVal::from_basic_value(ty, placeholder_phi_value.as_basic_value()).ok()
+                });
 
-                    if let Some(placeholder) = &placeholder_loop_value {
-                        let merged_value = PhiMergeable::merge(
-                            pre_loop_value,
-                            Val::Cp(placeholder.clone()),
-                            lööp.preheader,
-                            lööp.latch,
-                            self,
-                        );
-                        self.assign_var(&name, Some(merged_value));
-                    } else {
-                        self.assign_var(&name, Some(Val::MaybeUninit));
-                    }
+                let var = self.vars.get_mut(name)?;
+                let pre_loop_var = var.clone();
+                let val = var.value.as_mut().ok()?;
 
-                    Some((name, placeholder_loop_value?))
+                // Assign a placeholder value to the variable if it can be
+                // merged later with a phi.
+                if let Some(placeholder) = placeholder_value.clone() {
+                    var.value = Ok(Val::Cp(placeholder));
                 }
+                var.loop_placeholder_index = Some(loop_depth);
+
+                let var_in_loop = VarInLoop {
+                    pre_loop_var,
+                    placeholder_value,
+                    first_use: None,
+
+                    prelatch_phi_inputs: vec![],
+                    exit_phi_inputs: vec![],
+                };
+
+                Some((Arc::clone(name), var_in_loop))
             })
             .collect();
 
-        */
-        build_contents(self, lööp)?;
-        // `build_contents()` adds a branch to the prelatch or exit.
-        self.push_overwritten_vars();
+        self.loop_stack.push(Loop {
+            preheader,
+
+            header,
+            prelatch,
+
+            latch,
+            exit,
+
+            vars_modified,
+        });
+        self.builder().build_unconditional_branch(header);
+
+        // Build header and loop contents.
+        self.builder().position_at_end(header);
+
+        build_contents(self)?;
+        self.build_loop_continue()?;
+        unsafe { self.current_block().delete() }.expect("failed to delete basic block");
+
+        // bröther may I have some `lööp`s
+        let lööp = self
+            .loop_stack
+            .pop()
+            .ok_or_else(|| internal_error_value!("no loop"))?;
 
         // Build prelatch.
-        self.builder().position_at_end(lööp.prelatch);
-        build_prelatch(self, lööp)?;
-        self.builder().build_unconditional_branch(lööp.latch);
+        self.builder().position_at_end(prelatch);
+        for (name, var_in_loop) in &lööp.vars_modified {
+            let var_at_prelatch = self.build_phi(&var_in_loop.prelatch_phi_inputs, name)?;
+            self.set_var(name, Some(var_at_prelatch))
+        }
+        build_prelatch(self)?;
+        self.builder().build_unconditional_branch(latch);
 
         // Build latch.
-        self.builder().position_at_end(lööp.latch);
-        self.builder().build_unconditional_branch(lööp.header);
+        self.builder().position_at_end(latch);
+        self.builder().build_unconditional_branch(header);
 
-        // for (name, placeholder) in placeholder_values {
-        //     // if placeholder
-        //     // self.first_var_uses
-        //     placeholder.replace_all_uses_with(self.get_var(name, span));
-        // }
-        self.pop_and_restore_overwritten_vars()?; // TODO
+        // Build phi nodes at the beginning of the header.
+        self.builder().position_before(
+            &header
+                .get_first_instruction()
+                .ok_or_else(|| internal_error_value!("empty loop header"))?,
+        );
+        let mut replacements = vec![];
+        for (name, var_in_loop) in &lööp.vars_modified {
+            let var_at_preheader = var_in_loop.pre_loop_var.clone();
+            let var_at_latch = self.get_var(name);
+            let mut var_at_header = self.build_phi(
+                &[(var_at_preheader, preheader), (var_at_latch, latch)],
+                name,
+            )?;
+            // Replace the placeholder value, if it is used.
+            if let Some(first_use_span) = var_in_loop.first_use {
+                // If this was the first use of the variable in a bigger loop as
+                // well, this call to `get_value()` will record that.
+                let var_value_at_first_use = var_at_header.get_value(first_use_span)?;
+                let ty = var_value_at_first_use.ty();
+                let value_at_first_use = self
+                    .try_get_cp_val(&var_value_at_first_use)?
+                    .ok_or_else(|| Error::unknown_variable_value(first_use_span, &ty))?;
+                // If the variable at the header can be represented at
+                // compile-time, there should be a placeholder value.
+                let placeholder_value = var_in_loop
+                    .placeholder_value
+                    .as_ref()
+                    .ok_or_else(|| internal_error_value!("no placeholder value"))?;
+                if placeholder_value.ty() != value_at_first_use.ty() {
+                    internal_error!("loop placeholder type mismatch");
+                }
+                replacements.push((
+                    placeholder_value.to_basic_value(),
+                    value_at_first_use.to_basic_value(),
+                ));
+            } else if let Some(placeholder_value) = &var_in_loop.placeholder_value {
+                if placeholder_value.to_basic_value().get_first_use().is_some() {
+                    internal_error!("loop placeholder value is used but no span is recorded");
+                }
+            }
+        }
 
         // Build exit.
-        self.builder().position_at_end(lööp.exit);
+        self.builder().position_at_end(exit);
+
+        // Build phi nodes at exit.
+        for (name, var_in_loop) in &lööp.vars_modified {
+            let mut var_at_exit = self.build_phi(&var_in_loop.exit_phi_inputs, name)?;
+
+            // Restore loop placeholder index.
+            var_at_exit.loop_placeholder_index = var_in_loop.pre_loop_var.loop_placeholder_index;
+
+            self.set_var(name, Some(var_at_exit));
+        }
+
+        // Apply replacements.
+        for (placeholder_value, value_at_first_use) in replacements {
+            llvm::replace_all_uses_of_basic_value(placeholder_value, value_at_first_use);
+            placeholder_value
+                .as_instruction_value()
+                .unwrap()
+                .remove_from_basic_block();
+        }
+
         Ok(())
     }
 
     /// Builds an unconditional jump to the end of the inside of the loop.
-    pub fn build_loop_continue(&mut self, l: Loop) {
-        self.builder().build_unconditional_branch(l.prelatch);
+    pub fn build_loop_continue(&mut self) -> Result<()> {
+        let bb = self.current_block();
+        let lööp = self
+            .loop_stack
+            .last_mut()
+            .ok_or_else(|| internal_error_value!("not in loop"))?;
+        for (name, var_in_loop) in &mut lööp.vars_modified {
+            let var_at_bb = self.vars.get(name).cloned().unwrap_or_default();
+            var_in_loop.prelatch_phi_inputs.push((var_at_bb, bb));
+        }
+
+        let prelatch = lööp.prelatch;
+        self.builder().build_unconditional_branch(prelatch);
+        self.append_unreachable_basic_block();
+        Ok(())
     }
     /// Builds an unconditional jump to immediately after the loop.
-    pub fn build_loop_break(&mut self, l: Loop) {
-        self.builder().build_unconditional_branch(l.exit);
+    pub fn build_loop_break(&mut self) -> Result<()> {
+        let bb = self.current_block();
+        let lööp = self
+            .loop_stack
+            .last_mut()
+            .ok_or_else(|| internal_error_value!("not in loop"))?;
+        for (name, var_in_loop) in &mut lööp.vars_modified {
+            let var_at_bb = self.vars.get(name).cloned().unwrap_or_default();
+            var_in_loop.exit_phi_inputs.push((var_at_bb, bb));
+        }
+
+        let exit = lööp.exit;
+        self.builder().build_unconditional_branch(exit);
+        self.append_unreachable_basic_block();
+        Ok(())
     }
 
     /// Returns an LLVM intrinsic given its name and function signature.
@@ -1533,7 +1625,7 @@ impl Compiler {
             |c| {
                 c.build_loop(
                     HashMap::new(),
-                    |c, l| {
+                    |c| {
                         let b = c.builder();
                         let base_phi = b.build_phi(llvm::int_type(), "base");
                         let exp_phi = b.build_phi(llvm::int_type(), "exp");
@@ -1561,7 +1653,7 @@ impl Compiler {
 
                         // break out of the loop if `!(exp > 1)`
                         let exp_gt_1 = c.builder().build_int_compare(SGT, old_exp, one, "exp_gt_1");
-                        c.build_conditional(exp_gt_1, |_| Ok(()), |c| Ok(c.build_loop_break(l)))?;
+                        c.build_conditional(exp_gt_1, |_| Ok(()), |c| c.build_loop_break())?;
 
                         let new_exp = c
                             .builder()
@@ -1571,15 +1663,19 @@ impl Compiler {
                             .build_checked_int_arithmetic(error_span, "smul", old_base, old_base)?
                             .as_basic_value_enum();
 
-                        base_phi.add_incoming(&[(&base, l.preheader), (&new_base, l.latch)]);
-                        exp_phi.add_incoming(&[(&exp, l.preheader), (&new_exp, l.latch)]);
-                        acc_phi.add_incoming(&[(&acc, l.preheader), (&new_acc, l.latch)]);
+                        let lööp = c
+                            .loop_stack
+                            .last()
+                            .ok_or_else(|| internal_error_value!("not in loop"))?;
+                        base_phi.add_incoming(&[(&base, lööp.preheader), (&new_base, lööp.latch)]);
+                        exp_phi.add_incoming(&[(&exp, lööp.preheader), (&new_exp, lööp.latch)]);
+                        acc_phi.add_incoming(&[(&acc, lööp.preheader), (&new_acc, lööp.latch)]);
 
-                        c.build_loop_continue(l);
+                        c.build_loop_continue()?;
 
                         Ok(())
                     },
-                    |_, _| Ok(()),
+                    |_| Ok(()),
                 )?;
 
                 Ok(ret.unwrap())
@@ -1743,10 +1839,12 @@ impl Compiler {
             value,
             initial_type: None,
             assign_spans,
+            loop_placeholder_index: None,
         };
         self.set_var(name, Some(var));
     }
-    /// Sets a variable value. Prefer `assign_var()` when possible.
+    /// Sets a variable value. Prefer `assign_var()` when span information is
+    /// available.
     pub fn set_var(&mut self, name: &Arc<String>, value: Option<Var>) {
         if &**name != crate::THROWAWAY_VARIABLE {
             let old_var = match value {
@@ -1762,19 +1860,26 @@ impl Compiler {
     pub fn has_var(&mut self, name: &Arc<String>) -> bool {
         self.vars.contains_key(name)
     }
-    /// Returns a variable value. Prefer `assign_var()` when assigning to a
-    /// variable.
-    pub fn get_var(&mut self, name: &Arc<String>, span: Span) -> &mut Var {
-        self.vars.entry(Arc::clone(name)).or_default()
-        // let ret = self.vars.get(name)?;
-        // if let Some(ty) = ret.val.ty() {
-        //     for l in self.loop_stack.iter_mut().rev() {
-        //         if !l.first_var_uses.contains_key(name) {
-        //             l.first_var_uses.insert(Arc::clone(name), (span,));
-        //         }
-        //     }
-        // }
-        // Some(ret)
+    /// Returns a variable value and records the use of the variable if
+    /// necessary.
+    pub fn access_var(&mut self, name: &Arc<String>, span: Span) -> Result<Val> {
+        let var = self.vars.entry(Arc::clone(name)).or_default();
+        if let Some(loop_depth) = var.loop_placeholder_index {
+            self.loop_stack
+                .get_mut(loop_depth)
+                .ok_or_else(|| internal_error_value!("placeholder value outlasted loop"))?
+                .vars_modified
+                .get_mut(name)
+                .unwrap()
+                .first_use
+                .get_or_insert(span);
+        }
+        var.get_value(span)
+    }
+    /// Returns a variable value. Prefer `access_var()` when span information is
+    /// available.
+    pub fn get_var(&self, name: &Arc<String>) -> Var {
+        self.vars.get(name).cloned().unwrap_or_default()
     }
     /// Pushes a new blank entry to the overwritten variable stack.
     fn push_overwritten_vars(&mut self) {
@@ -1923,8 +2028,18 @@ impl Compiler {
                 self.build_return_err(error_index);
             }
 
-            ast::StmtData::Break => todo!("compile break"),
-            ast::StmtData::Continue => todo!("compile continue"),
+            ast::StmtData::Break => {
+                if self.loop_stack.is_empty() {
+                    return Err(Error::break_not_in_loop(stmt.span()));
+                }
+                self.build_loop_break()?;
+            }
+            ast::StmtData::Continue => {
+                if self.loop_stack.is_empty() {
+                    return Err(Error::continue_not_in_loop(stmt.span()));
+                }
+                self.build_loop_continue()?;
+            }
             ast::StmtData::ForLoop {
                 iter_var,
                 iter_expr: iter_expr_id,
@@ -1944,6 +2059,24 @@ impl Compiler {
                 //     }
                 // }
                 // Ok(Flow::Proceed)
+            }
+            ast::StmtData::WhileLoop { condition, block } => {
+                let condition = ast.get_node(*condition);
+                let block = ast.get_node(*block);
+                let mut vars_assigned = HashMap::new();
+                block.find_all_assigned_vars(&mut vars_assigned);
+                self.build_loop(
+                    vars_assigned,
+                    |c| {
+                        let condition_value = c.build_bool_expr(condition)?;
+                        c.build_conditional(
+                            condition_value,
+                            |c| c.build_stmt(block),
+                            |c| c.build_loop_break(),
+                        )
+                    },
+                    |_| Ok(()),
+                )?;
             }
 
             ast::StmtData::Become(expr_id) => {
@@ -2064,7 +2197,6 @@ impl BuildPhi<VarResult> for Compiler {
         }
 
         // There are no incoming errors; check that the types are all the same.
-        println!("all types: {:?}", vals.iter().map(|v| v.ty()).collect_vec());
         if !vals.iter().map(|v| v.ty()).all_equal() {
             return Ok(Err(VarError::AmbiguousType));
         }
@@ -2118,6 +2250,9 @@ impl BuildPhi<Var> for Compiler {
                 .iter()
                 .flat_map(|(var, _bb)| var.assign_spans.iter().cloned())
                 .collect(),
+            loop_placeholder_index: incoming
+                .iter()
+                .find_map(|(var, _bb)| var.loop_placeholder_index),
         })
     }
 }

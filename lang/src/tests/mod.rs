@@ -71,7 +71,7 @@ mod empty_set;
 // mod filters;
 // mod funcs;
 // mod is;
-// mod loops;
+mod loops;
 mod math;
 // mod ranges;
 mod values;

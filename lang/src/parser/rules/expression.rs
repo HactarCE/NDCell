@@ -206,6 +206,7 @@ impl SyntaxRule for ExpressionWithPrecedence {
                     Keyword::Break
                     | Keyword::Continue
                     | Keyword::For
+                    | Keyword::While
                     | Keyword::Become
                     | Keyword::Remain
                     | Keyword::Return

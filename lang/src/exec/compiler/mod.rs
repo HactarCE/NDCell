@@ -275,14 +275,12 @@ impl Compiler {
             .map(|param_type| this.llvm_param_type(param_type))
             .collect_vec();
         let params_struct_type = llvm::ctx().struct_type(&llvm_param_types, false);
-        let params_struct_ptr_type = params_struct_type
-            .ptr_type(llvm::AddressSpace::Generic)
-            .as_basic_type_enum();
+        let params_struct_ptr_type = params_struct_type.ptr_type(llvm::AddressSpace::Generic);
 
         // Declare the LLVM function. The actual return value just signals
         // whether there was an error.
         let fn_name = Self::MAIN_FUNCTION_NAME;
-        let fn_type = llvm::error_index_type().fn_type(&[params_struct_ptr_type], false);
+        let fn_type = llvm::error_index_type().fn_type(&[params_struct_ptr_type.into()], false);
         let fn_linkage = None;
         this.llvm_fn = Some(this.module.add_function(fn_name, fn_type, fn_linkage));
 
@@ -324,6 +322,8 @@ impl Compiler {
         // Here we take responsibility for the inherent unsafety of compiling
         // JITted code and turning it into a raw function pointer.
         let jit_fn = unsafe { self.finish_jit_function() }?;
+        // You won't find `raw_fn_ptr()` in the Inkwell docs because this
+        // project uses a custom version of Inkwell with it.
         let jit_fn_ptr = unsafe { jit_fn.raw_fn_ptr() };
         let llvm_source = self.llvm_fn().print_to_string().to_string();
 
@@ -1305,11 +1305,8 @@ impl Compiler {
         // LLVM has intrinsics that perform some math with overflow checks.
         // First, get the name of the intrinsic we want to use (e.g.,
         // "llvm.sadd.with.overflow.i64" for signed addition on i64).
-        let intrinsic_name = format!(
-            "llvm.{}.with.overflow.{}",
-            op,
-            llvm::intrinsic_type_name(arg_type),
-        );
+        let type_name = llvm::intrinsic_type_name(arg_type);
+        let intrinsic_name = format!("llvm.{}.with.overflow.{}", op, type_name);
         // That intrinsic will return a struct containing the result and a
         // boolean indicated whether overflow occurred. But if we're doing this
         // on a vector then the overflow flag will be a whole vector of booleans
@@ -1323,9 +1320,12 @@ impl Compiler {
             bool_type = llvm::bool_type().into();
         }
         let intrinsic_return_type = llvm::ctx().struct_type(&[arg_type, bool_type], false);
-        let intrinsic_fn_type = intrinsic_return_type.fn_type(&[arg_type; 2], false);
+        let intrinsic_fn_type = intrinsic_return_type.fn_type(&[arg_type.into(); 2], false);
         let intrinsic_fn = self.get_llvm_intrinisic(&intrinsic_name, intrinsic_fn_type)?;
-        let intrinsic_args = &[lhs.as_basic_value_enum(), rhs.as_basic_value_enum()];
+        let intrinsic_args = &[
+            lhs.as_basic_value_enum().into(),
+            rhs.as_basic_value_enum().into(),
+        ];
 
         // Build a call to an LLVM intrinsic to do the operation.
         let call_site_value =
@@ -1650,22 +1650,17 @@ impl Compiler {
             llvm::BasicValueEnum::PointerValue(_) => unimplemented!("cannot reduce PointerValue"),
             llvm::BasicValueEnum::StructValue(_) => unimplemented!("cannot reduce StructValue"),
             llvm::BasicValueEnum::VectorValue(v) => {
-                let fn_type = v
+                let type_name = llvm::intrinsic_type_name(value.get_type());
+                let intrinsic_name =
+                    format!("llvm.experimental.vector.reduce.{}.{}", op, type_name);
+                let intrinsic_fn_type = v
                     .get_type()
                     .get_element_type()
-                    .fn_type(&[value.get_type()], false);
-                let reduce_fn = self.get_llvm_intrinisic(
-                    &format!(
-                        "llvm.experimental.vector.reduce.{}.{}",
-                        op,
-                        // Get name of input type.
-                        llvm::intrinsic_type_name(value.get_type()),
-                    ),
-                    fn_type,
-                )?;
+                    .fn_type(&[value.get_type().into()], false);
+                let reduce_fn = self.get_llvm_intrinisic(&intrinsic_name, intrinsic_fn_type)?;
                 Ok(self
                     .builder()
-                    .build_call(reduce_fn, &[value], &format!("reduce_{}", op))
+                    .build_call(reduce_fn, &[value.into()], &format!("reduce_{}", op))
                     .try_as_basic_value()
                     .left()
                     .unwrap()

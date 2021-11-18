@@ -272,15 +272,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cloudabi"
-version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
-dependencies = [
- "bitflags",
-]
-
-[[package]]
 name = "cmake"
 version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -787,7 +778,7 @@ dependencies = [
  "log",
  "objc",
  "osmesa-sys",
- "parking_lot 0.11.1",
+ "parking_lot",
  "wayland-client",
  "wayland-egl",
  "winapi 0.3.9",
@@ -868,7 +859,7 @@ checksum = "24cfcf6e3326886321c5d637caf1ce217006651059015fae372b1c49c0e722b2"
 dependencies = [
  "bitflags",
  "imgui-sys",
- "parking_lot 0.11.1",
+ "parking_lot",
 ]
 
 [[package]]
@@ -904,21 +895,20 @@ dependencies = [
 [[package]]
 name = "inkwell"
 version = "0.1.0"
-source = "git+https://github.com/HactarCE/inkwell?branch=llvm10-0#ae48148f6ebf3b586527d3fe5ac43f2cf5757097"
+source = "git+https://github.com/HactarCE/inkwell?branch=llvm10-0#b641b4f8696ff8e9bf340e5992002ea87307d8b7"
 dependencies = [
  "either",
  "inkwell_internals",
  "libc",
  "llvm-sys",
  "once_cell",
- "parking_lot 0.10.2",
- "regex",
+ "parking_lot",
 ]
 
 [[package]]
 name = "inkwell_internals"
-version = "0.2.0"
-source = "git+https://github.com/HactarCE/inkwell?branch=llvm10-0#ae48148f6ebf3b586527d3fe5ac43f2cf5757097"
+version = "0.5.0"
+source = "git+https://github.com/HactarCE/inkwell?branch=llvm10-0#b641b4f8696ff8e9bf340e5992002ea87307d8b7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1052,15 +1042,6 @@ dependencies = [
  "libc",
  "regex",
  "semver",
-]
-
-[[package]]
-name = "lock_api"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4da24a77a3d8a6d4862d95f72e6fdb9c09a643ecdb402d754004a557f2bec75"
-dependencies = [
- "scopeguard",
 ]
 
 [[package]]
@@ -1213,7 +1194,7 @@ dependencies = [
  "ndcell_lang",
  "nfd2",
  "palette",
- "parking_lot 0.11.1",
+ "parking_lot",
  "png",
  "proptest",
  "send_wrapper",
@@ -1231,7 +1212,7 @@ dependencies = [
  "lazy_static 1.4.0",
  "noisy_float",
  "num",
- "parking_lot 0.11.1",
+ "parking_lot",
  "proptest",
  "rand 0.8.1",
  "regex",
@@ -1248,7 +1229,7 @@ dependencies = [
  "itertools 0.10.0",
  "lazy_static 1.4.0",
  "ndcell_core",
- "parking_lot 0.11.1",
+ "parking_lot",
  "parse_int",
  "paste",
  "regex",
@@ -1552,37 +1533,13 @@ dependencies = [
 
 [[package]]
 name = "parking_lot"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3a704eb390aafdc107b0e392f56a82b668e3a71366993b5340f5833fd62505e"
-dependencies = [
- "lock_api 0.3.4",
- "parking_lot_core 0.7.2",
-]
-
-[[package]]
-name = "parking_lot"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d7744ac029df22dca6284efe4e898991d28e3085c706c972bcd7da4a27a15eb"
 dependencies = [
  "instant",
- "lock_api 0.4.2",
- "parking_lot_core 0.8.2",
-]
-
-[[package]]
-name = "parking_lot_core"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d58c7c768d4ba344e3e8d72518ac13e259d7c7ade24167003b8488e10b6740a3"
-dependencies = [
- "cfg-if 0.1.10",
- "cloudabi",
- "libc",
- "redox_syscall",
- "smallvec",
- "winapi 0.3.9",
+ "lock_api",
+ "parking_lot_core",
 ]
 
 [[package]]
@@ -2499,7 +2456,7 @@ dependencies = [
  "ndk-glue",
  "ndk-sys",
  "objc",
- "parking_lot 0.11.1",
+ "parking_lot",
  "percent-encoding",
  "raw-window-handle",
  "smithay-client-toolkit",

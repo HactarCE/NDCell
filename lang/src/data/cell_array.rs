@@ -167,7 +167,7 @@ fn ivec6d_to_vec(vec_len: usize, v: IVec6D) -> Vec<LangInt> {
 }
 
 /// LLVM representation of a masked N-dimensional cell array.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LlvmCellArray {
     shape: Arc<VectorSet>,
     cells: Option<llvm::NdArrayValue>,

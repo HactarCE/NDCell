@@ -6,7 +6,7 @@ use crate::errors::{Error, Result};
 use crate::llvm;
 
 /// Compile-time variable value of any type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CpVal {
     Integer(llvm::IntValue),
     Cell(llvm::IntValue),

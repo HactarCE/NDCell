@@ -311,9 +311,11 @@ impl Compiler {
         // Build the LLVM IR for the function.
         let entry_bb = self.append_basic_block("entry");
         self.builder().position_at_end(entry_bb);
-        self.build_stmt(function_body)?;
-        if self.needs_terminator() {
-            self.build_return_ok();
+        match self.build_stmt(function_body)? {
+            IsTerminated::Unterminated => {
+                self.build_return_ok();
+            }
+            IsTerminated::Terminated => (),
         }
 
         // Don't compile the JIT function if there are any errors.
@@ -854,6 +856,7 @@ impl Compiler {
             // bounds!
             let error_index = self.add_runtime_error(Error::position_out_of_bounds(error_span));
             self.build_return_err(error_index);
+            self.append_and_build_at_unreachable_basic_block();
             // This code won't execute, so just return a null pointer.
             Ok(llvm::cell_type()
                 .ptr_type(llvm::AddressSpace::Generic)
@@ -978,38 +981,9 @@ impl Compiler {
     }
     /// Appends a new basic block intended to be unreachable and positions the
     /// builder at the end of it.
-    pub fn append_unreachable_basic_block(&mut self) {
+    pub fn append_and_build_at_unreachable_basic_block(&mut self) {
         let bb = self.append_basic_block("unreachableBlock");
         self.builder().position_at_end(bb);
-    }
-    /// Appends a new basic block with a phi node to the end of the current
-    /// function and returns the new [`llvm::BasicBlock`] and
-    /// [`llvm::PhiValue`].
-    ///
-    /// The instruction builder is placed at the end of the basic block it was
-    /// on before calling this function (so if it's already at the end of a
-    /// basic block, it will stay there).
-    pub fn append_basic_block_with_phi(
-        &mut self,
-        bb_name: &str,
-        ty: impl BasicType<'static>,
-        phi_name: &str,
-    ) -> (llvm::BasicBlock, llvm::PhiValue) {
-        let old_bb = self.current_block();
-        let new_bb = self.append_basic_block(bb_name);
-        self.builder().position_at_end(new_bb);
-        let phi = self.builder().build_phi(ty, phi_name);
-        self.builder().position_at_end(old_bb);
-        (new_bb, phi)
-    }
-    /// Returns whether the current LLVM BasicBlock still needs a terminator
-    /// instruction (i.e., whether it does NOT yet have one).
-    pub fn needs_terminator(&mut self) -> bool {
-        self.builder()
-            .get_insert_block()
-            .unwrap()
-            .get_terminator()
-            .is_none()
     }
 
     /// Builds a conditional expression, using an IntValue of any width. Any
@@ -1017,7 +991,7 @@ impl Compiler {
     ///
     /// This method will return the value of a phi node that merges the values
     /// resulting from the closures.
-    pub fn build_conditional<V>(
+    pub fn build_conditional_with_value<V>(
         &mut self,
         condition_value: impl Into<BoolVal>,
         build_if_true: impl FnOnce(&mut Self) -> Result<V>,
@@ -1026,6 +1000,37 @@ impl Compiler {
     where
         Self: BuildPhi<V>,
     {
+        let mut phi_incoming = vec![];
+        let mut phi_incoming_2 = vec![];
+
+        let is_terminated = self.build_conditional(
+            condition_value,
+            |c| {
+                phi_incoming.push((build_if_true(c)?, c.current_block()));
+                Ok(IsTerminated::Unterminated)
+            },
+            |c| {
+                phi_incoming_2.push((build_if_false(c)?, c.current_block()));
+                Ok(IsTerminated::Unterminated)
+            },
+        )?;
+        if is_terminated == IsTerminated::Terminated {
+            internal_error!("conditional with value is terminated");
+        }
+
+        phi_incoming.extend(phi_incoming_2);
+        self.build_phi(&phi_incoming, "")
+    }
+    /// Builds a conditional statement, using an IntValue of any width. Any
+    /// nonzero value is truthy, and zero is falsey.
+    ///
+    /// This method will return whether both branches are terminated.
+    pub fn build_conditional(
+        &mut self,
+        condition_value: impl Into<BoolVal>,
+        build_if_true: impl FnOnce(&mut Self) -> Result<IsTerminated>,
+        build_if_false: impl FnOnce(&mut Self) -> Result<IsTerminated>,
+    ) -> Result<IsTerminated> {
         // If the condition value is known at compile-time, then only compile
         // the branch that will execute.
         let condition_value = match condition_value.into() {
@@ -1037,7 +1042,6 @@ impl Compiler {
         // Create the destination blocks.
         let if_true_bb = self.append_basic_block("ifTrue");
         let if_false_bb = self.append_basic_block("ifFalse");
-        let merge_bb = self.append_basic_block("endIf");
 
         // Build the switch instruction (because condition_value might not be
         // 1-bit).
@@ -1050,83 +1054,89 @@ impl Compiler {
         // Build the instructions to execute if true.
         self.push_overwritten_vars();
         self.builder().position_at_end(if_true_bb);
-        let value_if_true = build_if_true(self)?;
-        let if_true_end_bb = self.current_block();
-        let if_true_needs_terminator = self.needs_terminator();
-        if self.needs_terminator() {
-            self.builder().build_unconditional_branch(merge_bb);
-        }
+        let if_true_end_bb = match build_if_true(self)? {
+            IsTerminated::Unterminated => Some(self.current_block()),
+            IsTerminated::Terminated => None,
+        };
         let vars_from_if_true = self.pop_and_restore_overwritten_vars()?;
 
         // Build the instructions to execute if false.
         self.push_overwritten_vars();
         self.builder().position_at_end(if_false_bb);
-        let value_if_false = build_if_false(self)?;
-        let if_false_end_bb = self.current_block();
-        let if_false_needs_terminator = self.needs_terminator();
-        if self.needs_terminator() {
-            self.builder().build_unconditional_branch(merge_bb);
-        }
+        let if_false_end_bb = match build_if_false(self)? {
+            IsTerminated::Unterminated => Some(self.current_block()),
+            IsTerminated::Terminated => None,
+        };
         let vars_from_if_false = self.pop_and_restore_overwritten_vars()?;
 
-        // Merge values.
-        self.builder().position_at_end(merge_bb);
-        match (if_true_needs_terminator, if_false_needs_terminator) {
-            (true, false) => {
-                self.overwrite_vars(vars_from_if_true);
-                Ok(value_if_true)
+        if if_true_end_bb.is_some() || if_false_end_bb.is_some() {
+            // Merge branches.
+            let merge_bb = self.append_basic_block("endIf");
+            let b = self.builder();
+            if let Some(bb) = if_true_end_bb {
+                b.position_at_end(bb);
+                b.build_unconditional_branch(merge_bb);
             }
-            (false, true) => {
-                self.overwrite_vars(vars_from_if_false);
-                Ok(value_if_false)
+            if let Some(bb) = if_false_end_bb {
+                b.position_at_end(bb);
+                b.build_unconditional_branch(merge_bb);
             }
-            _ => {
-                // Merge variable values.
-                let mut names = HashSet::new();
-                names.extend(vars_from_if_true.keys());
-                names.extend(vars_from_if_false.keys());
 
-                for name in names {
-                    let old_var = self.vars.get(name);
-
-                    let var_if_true = vars_from_if_true
-                        .get(name)
-                        .cloned()
-                        // If there was never anything assigned to the variable,
-                        // assume the old value.
-                        .unwrap_or(old_var.cloned())
-                        // If the variable never had a value to begin with,
-                        // assume it is undefined.
-                        .unwrap_or_default();
-
-                    let var_if_false = vars_from_if_false
-                        .get(name)
-                        .cloned()
-                        // If there was never anything assigned to the variable,
-                        // assume the old value.
-                        .unwrap_or(old_var.cloned())
-                        // If the variable never had a value to begin with,
-                        // assume it is undefined.
-                        .unwrap_or_default();
-
-                    let phi_incoming = [
-                        (var_if_true, if_true_end_bb),
-                        (var_if_false, if_false_end_bb),
-                    ];
-                    // TODO workaround for https://github.com/rust-lang/rust/issues/90841
-                    let merged_var_value = BuildPhi::<Var>::build_phi(self, &phi_incoming, name)?;
-                    self.set_var(name, Some(merged_var_value));
+            // Merge variables.
+            b.position_at_end(merge_bb);
+            match (if_true_end_bb, if_false_end_bb) {
+                (None, None) => unreachable!(),
+                (Some(_if_true_end_bb), None) => {
+                    self.overwrite_vars(vars_from_if_true);
                 }
+                (None, Some(_if_false_end_bb)) => {
+                    self.overwrite_vars(vars_from_if_false);
+                }
+                (Some(if_true_end_bb), Some(if_false_end_bb)) => {
+                    // Merge variable values.
+                    let mut names = HashSet::new();
+                    names.extend(vars_from_if_true.keys());
+                    names.extend(vars_from_if_false.keys());
 
-                // Merge values provided by the closures.
-                self.build_phi(
-                    &[
-                        (value_if_true, if_true_end_bb),
-                        (value_if_false, if_false_end_bb),
-                    ],
-                    "",
-                )
+                    for name in names {
+                        let old_var = self.vars.get(name);
+
+                        let var_if_true = vars_from_if_true
+                            .get(name)
+                            .cloned()
+                            // If there was never anything assigned to the variable,
+                            // assume the old value.
+                            .unwrap_or(old_var.cloned())
+                            // If the variable never had a value to begin with,
+                            // assume it is undefined.
+                            .unwrap_or_default();
+
+                        let var_if_false = vars_from_if_false
+                            .get(name)
+                            .cloned()
+                            // If there was never anything assigned to the variable,
+                            // assume the old value.
+                            .unwrap_or(old_var.cloned())
+                            // If the variable never had a value to begin with,
+                            // assume it is undefined.
+                            .unwrap_or_default();
+
+                        let phi_incoming = [
+                            (var_if_true, if_true_end_bb),
+                            (var_if_false, if_false_end_bb),
+                        ];
+                        // TODO workaround for https://github.com/rust-lang/rust/issues/90841
+                        let merged_var_value =
+                            BuildPhi::<Var>::build_phi(self, &phi_incoming, name)?;
+                        self.set_var(name, Some(merged_var_value));
+                    }
+                }
             }
+
+            self.builder().position_at_end(merge_bb);
+            Ok(IsTerminated::Unterminated)
+        } else {
+            Ok(IsTerminated::Terminated)
         }
     }
 
@@ -1139,8 +1149,8 @@ impl Compiler {
     pub fn build_loop(
         &mut self,
         vars_assigned: HashMap<Arc<String>, Span>,
-        build_contents: impl FnOnce(&mut Self) -> Result<()>,
-        build_prelatch: impl FnOnce(&mut Self) -> Result<()>,
+        build_contents: impl FnOnce(&mut Self) -> Result<IsTerminated>,
+        build_prelatch: impl FnOnce(&mut Self) -> Result<IsTerminated>,
     ) -> Result<()> {
         let loop_depth = self.loop_stack.len();
 
@@ -1301,12 +1311,13 @@ impl Compiler {
     }
 
     /// Builds an unconditional jump to the end of the inside of the loop.
-    pub fn build_loop_continue(&mut self) -> Result<()> {
+    pub fn build_loop_continue(&mut self) -> Result<IsTerminated> {
         let bb = self.current_block();
         let lööp = self
             .loop_stack
             .last_mut()
             .ok_or_else(|| internal_error_value!("not in loop"))?;
+        lööp.has_continue = true;
         for (name, var_in_loop) in &mut lööp.vars_modified {
             let var_at_bb = self.vars.get(name).cloned().unwrap_or_default();
             var_in_loop.prelatch_phi_inputs.push((var_at_bb, bb));
@@ -1314,16 +1325,16 @@ impl Compiler {
 
         let prelatch = lööp.prelatch;
         self.builder().build_unconditional_branch(prelatch);
-        self.append_unreachable_basic_block();
-        Ok(())
+        Ok(IsTerminated::Terminated)
     }
     /// Builds an unconditional jump to immediately after the loop.
-    pub fn build_loop_break(&mut self) -> Result<()> {
+    pub fn build_loop_break(&mut self) -> Result<IsTerminated> {
         let bb = self.current_block();
         let lööp = self
             .loop_stack
             .last_mut()
             .ok_or_else(|| internal_error_value!("not in loop"))?;
+        lööp.has_break = true;
         for (name, var_in_loop) in &mut lööp.vars_modified {
             let var_at_bb = self.vars.get(name).cloned().unwrap_or_default();
             var_in_loop.exit_phi_inputs.push((var_at_bb, bb));
@@ -1331,8 +1342,7 @@ impl Compiler {
 
         let exit = lööp.exit;
         self.builder().build_unconditional_branch(exit);
-        self.append_unreachable_basic_block();
-        Ok(())
+        Ok(IsTerminated::Terminated)
     }
 
     /// Returns an LLVM intrinsic given its name and function signature.
@@ -1354,24 +1364,25 @@ impl Compiler {
     }
 
     /// Builds instructions to return with no error.
-    pub fn build_return_ok(&mut self) {
-        self.build_return_err(llvm::MAX_ERROR_INDEX as usize);
+    pub fn build_return_ok(&mut self) -> IsTerminated {
+        self.build_return_err(llvm::MAX_ERROR_INDEX as usize)
     }
     /// Builds instructions to return an error.
-    pub fn build_return_err(&mut self, error_index: usize) {
+    pub fn build_return_err(&mut self, error_index: usize) -> IsTerminated {
         let llvm_return_value = llvm::error_index_type().const_int(error_index as u64, false);
         self.builder().build_return(Some(&llvm_return_value));
+        IsTerminated::Terminated
     }
     /// Builds instructions to return an error if some condition is true.
     pub fn build_return_err_if(
         &mut self,
         condition_value: llvm::IntValue,
         error_index: usize,
-    ) -> Result<()> {
+    ) -> Result<IsTerminated> {
         self.build_conditional(
             condition_value,
             |c| Ok(c.build_return_err(error_index)),
-            |_| Ok(()),
+            |_| Ok(IsTerminated::Unterminated),
         )
     }
     /// Builds instructions to return an error if some condition is false.
@@ -1379,10 +1390,10 @@ impl Compiler {
         &mut self,
         condition_value: impl Into<BoolVal>,
         error_index: usize,
-    ) -> Result<()> {
+    ) -> Result<IsTerminated> {
         self.build_conditional(
             condition_value,
-            |_| Ok(()),
+            |_| Ok(IsTerminated::Unterminated),
             |c| Ok(c.build_return_err(error_index)),
         )
     }
@@ -1619,7 +1630,7 @@ impl Compiler {
         let exp_eq_zero = b.build_int_compare(EQ, exp, llvm::const_int(0), "exp_eq_zero");
         let acc = one;
         let mut ret = None;
-        self.build_conditional(
+        self.build_conditional_with_value(
             exp_eq_zero,
             |_| Ok(one),
             |c| {
@@ -1638,7 +1649,7 @@ impl Compiler {
                         let exp_and_1 = b.build_and(old_exp, one, "exp_and_1");
                         let is_exp_odd = b.build_int_compare(EQ, exp_and_1, one, "is_exp_odd");
 
-                        let new_acc = c.build_conditional(
+                        let new_acc = c.build_conditional_with_value(
                             is_exp_odd,
                             |c| {
                                 Ok(c.build_checked_int_arithmetic(
@@ -1653,7 +1664,11 @@ impl Compiler {
 
                         // break out of the loop if `!(exp > 1)`
                         let exp_gt_1 = c.builder().build_int_compare(SGT, old_exp, one, "exp_gt_1");
-                        c.build_conditional(exp_gt_1, |_| Ok(()), |c| c.build_loop_break())?;
+                        c.build_conditional(
+                            exp_gt_1,
+                            |_| Ok(IsTerminated::Unterminated),
+                            |c| c.build_loop_break(),
+                        )?;
 
                         let new_exp = c
                             .builder()
@@ -1671,11 +1686,9 @@ impl Compiler {
                         exp_phi.add_incoming(&[(&exp, lööp.preheader), (&new_exp, lööp.latch)]);
                         acc_phi.add_incoming(&[(&acc, lööp.preheader), (&new_acc, lööp.latch)]);
 
-                        c.build_loop_continue()?;
-
-                        Ok(())
+                        Ok(IsTerminated::Unterminated)
                     },
-                    |_| Ok(()),
+                    |_| Ok(IsTerminated::Unterminated),
                 )?;
 
                 Ok(ret.unwrap())
@@ -1971,17 +1984,20 @@ impl Compiler {
     }
 
     /// Builds instructions to execute a statement.
-    pub fn build_stmt(&mut self, stmt: ast::Stmt<'_>) -> Result<()> {
+    pub fn build_stmt(&mut self, stmt: ast::Stmt<'_>) -> Result<IsTerminated> {
         let ast = stmt.ast;
         match stmt.data() {
             ast::StmtData::Block(stmt_ids) => {
                 for &stmt_id in stmt_ids {
                     // If there is an error while building a statement, keep
                     // going to see if there are more errors to report.
-                    if let Err(e) = self.build_stmt(ast.get_node(stmt_id)) {
-                        self.report_error(e);
+                    match self.build_stmt(ast.get_node(stmt_id)) {
+                        Ok(IsTerminated::Unterminated) => (),
+                        Ok(IsTerminated::Terminated) => return Ok(IsTerminated::Terminated),
+                        Err(e) => self.report_error(e),
                     }
                 }
+                Ok(IsTerminated::Unterminated)
             }
 
             ast::StmtData::Assign { lhs, rhs } => {
@@ -1995,6 +2011,7 @@ impl Compiler {
                 });
                 let lhs_expression = Box::<dyn Expression>::from(lhs);
                 lhs_expression.compile_assign(self, expr_span, stmt_span, new_value)?;
+                Ok(IsTerminated::Unterminated)
             }
 
             ast::StmtData::IfElse {
@@ -2006,9 +2023,15 @@ impl Compiler {
                 let condition_value = self.build_bool_expr(condition)?;
                 self.build_conditional(
                     condition_value,
-                    |c| if_true.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
-                    |c| if_false.map_or(Ok(()), |id| c.build_stmt(ast.get_node(id))),
-                )?;
+                    |c| match *if_true {
+                        None => Ok(IsTerminated::Unterminated),
+                        Some(id) => c.build_stmt(ast.get_node(id)),
+                    },
+                    |c| match *if_false {
+                        None => Ok(IsTerminated::Unterminated),
+                        Some(id) => c.build_stmt(ast.get_node(id)),
+                    },
+                )
             }
 
             ast::StmtData::Assert { condition, msg } => {
@@ -2018,27 +2041,27 @@ impl Compiler {
                 });
                 let condition = ast.get_node(*condition);
                 let condition_value = self.build_bool_expr(condition)?;
-                self.build_return_err_unless(condition_value, error_index)?;
+                self.build_return_err_unless(condition_value, error_index)
             }
             ast::StmtData::Error { msg } => {
                 let error_index = self.add_runtime_error(match msg {
                     Some(msg) => Error::user_error_with_msg(stmt.span(), msg),
                     None => Error::user_error(stmt.span()),
                 });
-                self.build_return_err(error_index);
+                Ok(self.build_return_err(error_index))
             }
 
             ast::StmtData::Break => {
                 if self.loop_stack.is_empty() {
                     return Err(Error::break_not_in_loop(stmt.span()));
                 }
-                self.build_loop_break()?;
+                self.build_loop_break()
             }
             ast::StmtData::Continue => {
                 if self.loop_stack.is_empty() {
                     return Err(Error::continue_not_in_loop(stmt.span()));
                 }
-                self.build_loop_continue()?;
+                self.build_loop_continue()
             }
             ast::StmtData::ForLoop {
                 iter_var,
@@ -2058,7 +2081,7 @@ impl Compiler {
                 //         flow => return Ok(flow),
                 //     }
                 // }
-                // Ok(Flow::Proceed)
+                // Ok(IsTerminated::Unterminated)
             }
             ast::StmtData::WhileLoop { condition, block } => {
                 let condition = ast.get_node(*condition);
@@ -2075,25 +2098,32 @@ impl Compiler {
                             |c| c.build_loop_break(),
                         )
                     },
-                    |_| Ok(()),
+                    |_| Ok(IsTerminated::Unterminated),
                 )?;
+                Ok(IsTerminated::Unterminated)
             }
 
             ast::StmtData::Become(expr_id) => {
                 todo!("compile become");
                 // let expr = ast.get_node(*expr_id);
                 // Ok(Flow::Become(stmt.span(), self.eval_expr(expr)?))
+                // Ok(IsTerminated::Terminated)
             }
-            ast::StmtData::Remain => todo!("compile remain"),
-            ast::StmtData::Return(None) => todo!("compile return"),
+            ast::StmtData::Remain => {
+                todo!("compile remain");
+                // Ok(IsTerminated::Terminated)
+            }
+            ast::StmtData::Return(None) => {
+                todo!("compile return");
+                // Ok(IsTerminated::Terminated)
+            }
             ast::StmtData::Return(Some(expr_id)) => {
                 let expr = ast.get_node(*expr_id);
                 todo!("compile return");
                 // Ok(Flow::Return(stmt.span(), Some(self.eval_expr(expr)?)))
+                // Ok(IsTerminated::Terminated)
             }
         }
-
-        Ok(())
     }
 
     /// Builds instructions to evaluate an expression.
@@ -2114,11 +2144,6 @@ impl Compiler {
 pub trait BuildPhi<V> {
     /// Builds a phi node.
     fn build_phi(&mut self, incoming: &[(V, llvm::BasicBlock)], name: &str) -> Result<V>;
-}
-impl BuildPhi<()> for Compiler {
-    fn build_phi(&mut self, _incoming: &[((), llvm::BasicBlock)], _name: &str) -> Result<()> {
-        Ok(())
-    }
 }
 macro_rules! impl_build_phi_for_basic_value_types {
     ( $($method:ident() -> $type_name:ty),+ $(,)? ) => {
@@ -2249,6 +2274,8 @@ impl BuildPhi<Var> for Compiler {
             assign_spans: incoming
                 .iter()
                 .flat_map(|(var, _bb)| var.assign_spans.iter().cloned())
+                .sorted_by_key(|(span, _ty)| (span.low(), span.high()))
+                .dedup()
                 .collect(),
             loop_placeholder_index: incoming
                 .iter()
@@ -2288,4 +2315,13 @@ impl BoolVal {
             BoolVal::Cp(i) => i,
         }
     }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum IsTerminated {
+    /// No unconditional termination built yet; continue building instructions.
+    Unterminated,
+    /// Unconditional terminator built (e.g., `return`, `break`, etc.); don't
+    /// build any more instructions.
+    Terminated,
 }

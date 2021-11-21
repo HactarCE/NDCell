@@ -9,6 +9,7 @@ use crate::data::{
     CpVal, GetType, LangInt, RtVal, SpannedRuntimeValueExt, SpannedVal, SpannedValExt, Type, Val,
 };
 use crate::errors::{Error, Result};
+use crate::exec::compiler::{BuildPhi, IsTerminated};
 use crate::exec::{Compiler, CtxTrait, Runtime};
 use crate::{ast, llvm};
 
@@ -242,7 +243,7 @@ impl Expression for LogicalOrExpr<'_> {
             }
             SpannedVal::Cp(_) => {
                 let l_bool = compiler.build_convert_to_bool(&lhs)?;
-                let bool_result = compiler.build_conditional(
+                let bool_result = compiler.build_conditional_with_value(
                     l_bool,
                     // LHS is dynamically `true`; do not evaluate RHS.
                     |_| Ok(llvm::const_int(1)),
@@ -286,7 +287,7 @@ impl Expression for LogicalAndExpr<'_> {
             }
         } else {
             let l_bool = compiler.build_convert_to_bool(&lhs)?;
-            let bool_result = compiler.build_conditional(
+            let bool_result = compiler.build_conditional_with_value(
                 l_bool,
                 // LHS is dynamically `true`; compile RHS, convert to bool,
                 // and return it.
@@ -333,11 +334,12 @@ impl Expression for CmpChain<'_> {
             internal_error!("CmpChain ops/args length mismatch");
         }
 
+        // If any comparison returns false, it will branch to `false_bb`.
         let mut false_bb = None;
         let mut build_cmp_return_false = |c: &mut Compiler| {
             let f_bb = *false_bb.get_or_insert_with(|| c.append_basic_block("cmp_false"));
             c.builder().build_unconditional_branch(f_bb);
-            Ok(())
+            Ok(IsTerminated::Terminated)
         };
 
         let mut lhs = compiler.build_expr(self.args[0])?;
@@ -353,10 +355,11 @@ impl Expression for CmpChain<'_> {
                         // Proceed to the next comparison.
                     }
                     false => {
-                        // Return false immediately.
+                        // Return false immediately; do not compile any other
+                        // comparisons.
                         build_cmp_return_false(compiler)?;
-                        // Do not compile any other comparisons.
-                        break;
+                        compiler.builder().position_at_end(false_bb.unwrap());
+                        return Ok(Val::Rt(RtVal::Integer(0)));
                     }
                 }
             } else {
@@ -368,8 +371,8 @@ impl Expression for CmpChain<'_> {
 
                 compiler.build_conditional(
                     cmp_result,
-                    |_| Ok(()),                  // Proceed to the next comparison.
-                    &mut build_cmp_return_false, // Return false immediately.
+                    |_| Ok(IsTerminated::Unterminated), // Proceed to the next comparison.
+                    &mut build_cmp_return_false,        // Return false immediately.
                 )?;
             }
 
@@ -377,35 +380,26 @@ impl Expression for CmpChain<'_> {
         }
 
         if let Some(false_bb) = false_bb {
-            if compiler.needs_terminator() {
-                let (end_bb, phi) =
-                    compiler.append_basic_block_with_phi("cmp_end", llvm::int_type(), "cmp_result");
+            let end_bb = compiler.append_basic_block("cmp_end");
 
-                // If we execute the current basic block, then all comparisons
-                // returned true.
-                let true_bb = compiler.current_block();
-                let b = compiler.builder();
-                b.build_unconditional_branch(end_bb);
+            // If we execute the current basic block, then all comparisons
+            // returned true.
+            let true_bb = compiler.current_block();
+            let b = compiler.builder();
+            b.build_unconditional_branch(end_bb);
 
-                // If we execute `false_bb`, then some comparison returned false.
-                b.position_at_end(false_bb);
-                b.build_unconditional_branch(end_bb);
+            // If we execute `false_bb`, then some comparison returned false.
+            b.position_at_end(false_bb);
+            b.build_unconditional_branch(end_bb);
 
-                b.position_at_end(end_bb);
-                phi.add_incoming(&[
-                    (&llvm::const_int(1), true_bb),
-                    (&llvm::const_int(0), false_bb),
-                ]);
-
-                Ok(Val::Cp(CpVal::Integer(
-                    phi.as_basic_value().into_int_value(),
-                )))
-            } else {
-                // The current basic block unconditionally jumps to `false_bb`,
-                // so the last comparison definitely returned false.
-                compiler.builder().position_at_end(false_bb);
-                Ok(Val::Rt(RtVal::Integer(0)))
-            }
+            b.position_at_end(end_bb);
+            let phi_incoming = [
+                (llvm::const_int(1), true_bb),
+                (llvm::const_int(0), false_bb),
+            ];
+            Ok(Val::Cp(CpVal::Integer(
+                compiler.build_phi(&phi_incoming, "cmp_result")?,
+            )))
         } else {
             // All comparisons returned true, so just return true.
             Ok(Val::Rt(RtVal::Integer(1)))

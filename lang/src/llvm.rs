@@ -2,6 +2,7 @@
 
 pub use inkwell::context::Context;
 pub use inkwell::targets::TargetData;
+use inkwell::values::InstructionOpcode;
 pub use inkwell::{AddressSpace, IntPredicate};
 use itertools::Itertools;
 use thread_local::ThreadLocal;
@@ -172,6 +173,17 @@ pub fn replace_all_uses_of_basic_value(old: BasicValueEnum, new: BasicValueEnum)
         BasicValueEnum::PointerValue(v) => v.replace_all_uses_with(new.into_pointer_value()),
         BasicValueEnum::StructValue(v) => v.replace_all_uses_with(new.into_struct_value()),
         BasicValueEnum::VectorValue(v) => v.replace_all_uses_with(new.into_vector_value()),
+    }
+}
+
+pub fn get_undef(ty: BasicTypeEnum) -> BasicValueEnum {
+    match ty {
+        BasicTypeEnum::ArrayType(t) => t.get_undef().into(),
+        BasicTypeEnum::FloatType(t) => t.get_undef().into(),
+        BasicTypeEnum::IntType(t) => t.get_undef().into(),
+        BasicTypeEnum::PointerType(t) => t.get_undef().into(),
+        BasicTypeEnum::StructType(t) => t.get_undef().into(),
+        BasicTypeEnum::VectorType(t) => t.get_undef().into(),
     }
 }
 

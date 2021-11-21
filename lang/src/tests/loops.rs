@@ -109,3 +109,19 @@ fn test_while_ambiguous_type() {
             .assert_compile_errors(test_errors!["this variable's type cannot be determined" @ "x"]);
     }
 }
+
+#[test]
+fn test_while_const_condition() {
+    TestProgram::new()
+        .with_exec("while 0 { this = is_an_error }")
+        .assert_compile_ok();
+    TestProgram::new()
+        .with_exec("x=1 while 0 { x=#1 } _=x")
+        .assert_compile_ok();
+    TestProgram::new()
+        .with_exec("while 1 { x=1 } _=x")
+        .assert_compile_ok();
+    TestProgram::new()
+        .with_exec("x=1 while 1 { x=#1 } _=x")
+        .assert_compile_ok();
+}

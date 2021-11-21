@@ -1265,46 +1265,45 @@ impl Compiler {
         for (name, var_in_loop) in &lööp.vars_modified {
             let var_at_preheader = var_in_loop.pre_loop_var.clone();
             let var_at_latch = self.get_var(name);
-            let phi_incoming = if lööp.has_continue {
-                vec![(var_at_preheader, preheader), (var_at_latch, latch)]
+            let mut var_at_header = if lööp.has_continue {
+                let phi_incoming = [(var_at_preheader, preheader), (var_at_latch, latch)];
+                self.build_phi(&phi_incoming, name)
             } else {
-                vec![(var_at_preheader, preheader)]
-            };
-            let mut var_at_header = self.build_phi(&phi_incoming, name)?;
-            // Replace the placeholder value, if it is used.
-            if let Some(first_use_span) = var_in_loop.first_use {
-                // If this was the first use of the variable in a bigger loop as
-                // well, this call to `get_value()` will record that.
-                let var_value_at_first_use = var_at_header.get_value(first_use_span)?;
-                let ty = var_value_at_first_use.ty();
-                let value_at_first_use = self
-                    .try_get_cp_val(&var_value_at_first_use)?
-                    .ok_or_else(|| Error::unknown_variable_value(first_use_span, &ty))?;
-                // If the variable at the header can be represented at
-                // compile-time, there should be a placeholder value.
-                let placeholder_phi = var_in_loop
-                    .placeholder_phi
-                    .as_ref()
-                    .ok_or_else(|| internal_error_value!("no placeholder value"))?;
-                let old_ty = var_in_loop.pre_loop_var.try_ty();
-                if old_ty != Some(ty) {
-                    internal_error!("loop placeholder type mismatch");
+                let phi_incoming = [(var_at_preheader, preheader)];
+                self.build_phi(&phi_incoming, name)
+            }?;
+            // Replace the placeholder value.
+            if let Some(placeholder_phi) = &var_in_loop.placeholder_phi {
+                if let Some(first_use_span) = var_in_loop.first_use {
+                    // If this is the first use of the variable in a bigger loop
+                    // as well, this call to `get_value()` will record that.
+                    let var_value_at_first_use = var_at_header.get_value(first_use_span)?;
+                    let ty = var_value_at_first_use.ty();
+                    let value_at_first_use = self
+                        .try_get_cp_val(&var_value_at_first_use)?
+                        .ok_or_else(|| Error::unknown_variable_value(first_use_span, &ty))?;
+                    let old_ty = var_in_loop.pre_loop_var.try_ty();
+                    if old_ty != Some(ty) {
+                        internal_error!("loop placeholder type mismatch");
+                    }
+                    replacements.push((
+                        placeholder_phi.as_basic_value(),
+                        value_at_first_use.to_basic_value(),
+                    ));
+                } else {
+                    // If there is any use of this phi node, it's not a "real"
+                    // use; it's just used in one or more other phi nodes that
+                    // go nowhere. The proper thing to do would be to remove all
+                    // those phi nodes, but I can't get recursive calls to
+                    // `remove_from_basic_block()` or `erase_from_basic_block()`
+                    // to work reliably, so just replace uses of this phi node
+                    // with an undefined value and hope it's never really used.
+                    let basic_type = placeholder_phi.as_basic_value().get_type();
+                    replacements.push((
+                        placeholder_phi.as_basic_value(),
+                        llvm::get_undef(basic_type),
+                    ));
                 }
-                replacements.push((
-                    placeholder_phi.as_basic_value(),
-                    value_at_first_use.to_basic_value(),
-                ));
-            } else if let Some(placeholder_phi) = &var_in_loop.placeholder_phi {
-                // If there is any use of this variable, it's not a "real" use;
-                // it's just used in one or more phi nodes that go nowhere. The
-                // proper thing to do would be to remove the placeholder phi,
-                // but LLVM segfaults if we call `remove_from_basic_block()` and
-                // `erase_from_basic_block()` does nothing, so we'll just feed
-                // undefined values into this phi and hope they're never really
-                // used.
-                let basic_type = placeholder_phi.as_basic_value().get_type();
-                let undef = llvm::get_undef(basic_type);
-                placeholder_phi.add_incoming(&[(&undef, preheader), (&undef, latch)]);
             }
         }
 

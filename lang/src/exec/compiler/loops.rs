@@ -50,6 +50,11 @@ pub struct Loop {
 
     /// Phi node for each variable that is modified in the loop.
     pub vars_modified: HashMap<Arc<String>, VarInLoop>,
+
+    /// Whether there is any `break` statement in the loop.
+    pub has_break: bool,
+    /// Whether there is any `continue` statement in the loop.
+    pub has_continue: bool,
 }
 
 /// Variable value modified in a loops, used to reconcile values at the
@@ -58,10 +63,10 @@ pub struct Loop {
 pub struct VarInLoop {
     /// Value in the variable before the loop begins.
     pub pre_loop_var: Var,
-    /// Placeholder value for this variable's initial value at the top of the
+    /// Placeholder phi node for this variable's initial value at the top of the
     /// loop. Iff the variable has a type with no compile-time represenation,
     /// this is `None`.
-    pub placeholder_value: Option<CpVal>,
+    pub placeholder_phi: Option<llvm::PhiValue>,
     /// Span of the first use of the placeholder value.
     pub first_use: Option<Span>,
 

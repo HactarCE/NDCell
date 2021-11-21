@@ -289,6 +289,11 @@ impl<'a> TestProgram<'a> {
         self
     }
 
+    /// Asserts that the program compiles.
+    pub fn assert_compile_ok(self) -> Self {
+        self.assert_compiled_test_cases::<&str>(vec![])
+    }
+
     /// Asserts that all test cases produce the specified output, both when
     /// interpreted and when compiled.
     pub fn assert_test_cases<'s, OK: Clone + ToString>(

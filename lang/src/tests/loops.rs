@@ -42,3 +42,70 @@ fn test_while_continue() {
                 .collect(),
         );
 }
+
+#[test]
+fn test_while_maybe_uninit() {
+    for (pre, inner, post) in [
+        ("", "x = 1", "_ = x"),
+        ("if x0 { x = 1 }", "x = 1", "_ = x"),
+    ] {
+        let prgm = format!("{}  while x1 {{  x1-=1 {}  }}  {}", pre, inner, post);
+        TestProgram::new()
+            .with_input_types(&[Type::Integer, Type::Integer])
+            .with_exec(&prgm)
+            .assert_compile_errors(
+                test_errors!["this variable might not have been assigned a value" @ "x"],
+            );
+    }
+}
+
+#[test]
+fn test_while_ambiguous_type() {
+    for (pre, inner, post) in [
+        ("if x0 { x=1 } else { x=#1 }", "", ""),
+        ("x=1", "x=#1", ""),
+        ("x=1", "x=#1 _=x", ""),
+        ("x=1", "if x0 { x=#1 }", ""),
+        ("x=1", "x=#1 x=1", "_=x"),
+        ("x=1", "if x0 { x=#1 _=x x=1 _=x }", "_=x"),
+        ("x=1", "if x0 { x=#1 _=x }", ""),
+        ("x=1", "if x0 { x=#1 continue x=1 }", ""),
+        ("x=1", "if x0 { x=#1 break x=1 }", ""),
+        ("x=1", "_=x x=1 continue x=#1", "_=x"),
+        ("x=1", "_=x x=1 break x=#1", "_=x"),
+        ("x=1", "_=x if x0 { x=1 continue x=#1 }", "_=x"),
+        ("x=1", "_=x if x0 { x=1 break x=#1 }", "_=x"),
+        ("x=1", "_=x==1 x=#1 _=x==#1 x=1", "_=x"),
+        ("x=1", "x=#1 _=x==#1", ""),
+        ("x=1", "if x0 { x=#1 break x=1 } _=x", ""),
+    ] {
+        let prgm = format!("{}  while x1 {{  x1-=1 {}  }}  {}", pre, inner, post);
+        println!("{:?}", prgm);
+        TestProgram::new()
+            .with_input_types(&[Type::Integer, Type::Integer])
+            .with_exec(&prgm)
+            .assert_compile_ok();
+    }
+
+    for (pre, inner, post) in [
+        ("if x0 { x=1 } else { x=#1 }", "", "_=x"),
+        ("if x0 { x=1 } else { x=#1 }", "_=x", ""),
+        ("x=1", "x=#1", "_=x"),
+        ("x=1", "_=x x=#1", ""),
+        ("x=1", "if x0 { x=#1 }", "_=x"),
+        ("x=1", "if x0 { x=#1 } _=x", ""),
+        ("x=1", "_=x if x0 { x=#1 }", ""),
+        ("x=1", "if x0 { x=#1 } _=x", ""),
+        ("x=1", "_=x if x0 { x=#1 continue x=1 }", ""),
+        ("x=1", "_=x if x0 { x=#1 break x=1 }", "_=x"),
+        ("x=1", "if x0 { x=#1 break x=1 }", "_=x"),
+        ("x=1", "if x0 { x=#1 continue x=1 } _=x", ""),
+    ] {
+        let prgm = format!("{}  while x1 {{  x1-=1 {}  }}  {}", pre, inner, post);
+        println!("{:?}", prgm);
+        TestProgram::new()
+            .with_input_types(&[Type::Integer, Type::Integer])
+            .with_exec(&prgm)
+            .assert_compile_errors(test_errors!["this variable's type cannot be determined" @ "x"]);
+    }
+}

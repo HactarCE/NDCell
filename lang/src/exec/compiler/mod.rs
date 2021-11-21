@@ -1164,35 +1164,40 @@ impl Compiler {
 
         // Build preheader.
         self.builder().position_at_end(preheader);
+        self.builder().build_unconditional_branch(header);
+
+        // Build header and loop contents.
+        self.builder().position_at_end(header);
 
         // Replace any variables modified within the loop with placeholder
         // values, which we will later build proper phi nodes for.
         let vars_modified: HashMap<Arc<String>, VarInLoop> = vars_assigned
             .iter()
             .filter_map(|(name, span_where_assigned)| {
-                let old_var_val = self.vars.get(name)?.value.as_ref().ok()?;
-                let ty = old_var_val.ty();
-                let placeholder_value = self.basic_type(&ty).and_then(|llvm_type| {
-                    let placeholder_phi_value = self
-                        .builder()
-                        .build_phi(llvm_type, &format!("{}_placeholder", name));
-                    CpVal::from_basic_value(ty, placeholder_phi_value.as_basic_value()).ok()
-                });
-
-                let var = self.vars.get_mut(name)?;
-                let pre_loop_var = var.clone();
-                let val = var.value.as_mut().ok()?;
+                let pre_loop_var = self.get_var(name);
 
                 // Assign a placeholder value to the variable if it can be
                 // merged later with a phi.
-                if let Some(placeholder) = placeholder_value.clone() {
-                    var.value = Ok(Val::Cp(placeholder));
-                }
-                var.loop_placeholder_index = Some(loop_depth);
+                self.vars
+                    .entry(Arc::clone(name))
+                    .or_default()
+                    .loop_placeholder_index = Some(loop_depth);
+                // IIFE in place of try block (TODO #[feature(try_block)])
+                let placeholder_phi = (|| {
+                    let ty = self.vars.get(name)?.value.as_ref().ok()?.ty();
+                    let llvm_type = self.basic_type(&ty)?;
+                    let placeholder_phi = self
+                        .builder()
+                        .build_phi(llvm_type, &format!("{}_placeholder", name));
+                    let placeholder_value =
+                        CpVal::from_basic_value(ty, placeholder_phi.as_basic_value()).ok()?;
+                    self.vars.get_mut(name)?.value = Ok(Val::Cp(placeholder_value));
+                    Some(placeholder_phi)
+                })();
 
                 let var_in_loop = VarInLoop {
                     pre_loop_var,
-                    placeholder_value,
+                    placeholder_phi,
                     first_use: None,
 
                     prelatch_phi_inputs: vec![],
@@ -1213,15 +1218,17 @@ impl Compiler {
             exit,
 
             vars_modified,
+
+            has_break: false,
+            has_continue: false,
         });
-        self.builder().build_unconditional_branch(header);
 
-        // Build header and loop contents.
-        self.builder().position_at_end(header);
-
-        build_contents(self)?;
-        self.build_loop_continue()?;
-        unsafe { self.current_block().delete() }.expect("failed to delete basic block");
+        match build_contents(self)? {
+            IsTerminated::Unterminated => {
+                self.build_loop_continue()?;
+            }
+            IsTerminated::Terminated => (),
+        }
 
         // bröther may I have some `lööp`s
         let lööp = self
@@ -1231,16 +1238,22 @@ impl Compiler {
 
         // Build prelatch.
         self.builder().position_at_end(prelatch);
-        for (name, var_in_loop) in &lööp.vars_modified {
-            let var_at_prelatch = self.build_phi(&var_in_loop.prelatch_phi_inputs, name)?;
-            self.set_var(name, Some(var_at_prelatch))
-        }
-        build_prelatch(self)?;
-        self.builder().build_unconditional_branch(latch);
+        if lööp.has_continue {
+            for (name, var_in_loop) in &lööp.vars_modified {
+                let var_at_prelatch = self.build_phi(&var_in_loop.prelatch_phi_inputs, name)?;
+                self.set_var(name, Some(var_at_prelatch))
+            }
+            match build_prelatch(self)? {
+                IsTerminated::Unterminated => {
+                    self.builder().build_unconditional_branch(latch);
+                }
+                IsTerminated::Terminated => (),
+            }
 
-        // Build latch.
-        self.builder().position_at_end(latch);
-        self.builder().build_unconditional_branch(header);
+            // Build latch.
+            self.builder().position_at_end(latch);
+            self.builder().build_unconditional_branch(header);
+        }
 
         // Build phi nodes at the beginning of the header.
         self.builder().position_before(
@@ -1252,10 +1265,12 @@ impl Compiler {
         for (name, var_in_loop) in &lööp.vars_modified {
             let var_at_preheader = var_in_loop.pre_loop_var.clone();
             let var_at_latch = self.get_var(name);
-            let mut var_at_header = self.build_phi(
-                &[(var_at_preheader, preheader), (var_at_latch, latch)],
-                name,
-            )?;
+            let phi_incoming = if lööp.has_continue {
+                vec![(var_at_preheader, preheader), (var_at_latch, latch)]
+            } else {
+                vec![(var_at_preheader, preheader)]
+            };
+            let mut var_at_header = self.build_phi(&phi_incoming, name)?;
             // Replace the placeholder value, if it is used.
             if let Some(first_use_span) = var_in_loop.first_use {
                 // If this was the first use of the variable in a bigger loop as
@@ -1267,35 +1282,64 @@ impl Compiler {
                     .ok_or_else(|| Error::unknown_variable_value(first_use_span, &ty))?;
                 // If the variable at the header can be represented at
                 // compile-time, there should be a placeholder value.
-                let placeholder_value = var_in_loop
-                    .placeholder_value
+                let placeholder_phi = var_in_loop
+                    .placeholder_phi
                     .as_ref()
                     .ok_or_else(|| internal_error_value!("no placeholder value"))?;
-                if placeholder_value.ty() != value_at_first_use.ty() {
+                let old_ty = var_in_loop.pre_loop_var.try_ty();
+                if old_ty != Some(ty) {
                     internal_error!("loop placeholder type mismatch");
                 }
                 replacements.push((
-                    placeholder_value.to_basic_value(),
+                    placeholder_phi.as_basic_value(),
                     value_at_first_use.to_basic_value(),
                 ));
-            } else if let Some(placeholder_value) = &var_in_loop.placeholder_value {
-                if placeholder_value.to_basic_value().get_first_use().is_some() {
-                    internal_error!("loop placeholder value is used but no span is recorded");
-                }
+            } else if let Some(placeholder_phi) = &var_in_loop.placeholder_phi {
+                // If there is any use of this variable, it's not a "real" use;
+                // it's just used in one or more phi nodes that go nowhere. The
+                // proper thing to do would be to remove the placeholder phi,
+                // but LLVM segfaults if we call `remove_from_basic_block()` and
+                // `erase_from_basic_block()` does nothing, so we'll just feed
+                // undefined values into this phi and hope they're never really
+                // used.
+                let basic_type = placeholder_phi.as_basic_value().get_type();
+                let undef = llvm::get_undef(basic_type);
+                placeholder_phi.add_incoming(&[(&undef, preheader), (&undef, latch)]);
             }
         }
+
+        // Delete latch if there is no `continue` statement.
+        if !lööp.has_continue {
+            unsafe { prelatch.delete() }.expect("failed to delete prelatch");
+            unsafe { latch.delete() }.expect("failed to delete prelatch");
+        }
+
+        // Build unreachable basic block used for phi node shenanigans.
+        self.append_and_build_at_unreachable_basic_block();
+        self.builder().build_unconditional_branch(exit);
+        let pre_exit_phantom = self.current_block();
 
         // Build exit.
         self.builder().position_at_end(exit);
 
         // Build phi nodes at exit.
-        for (name, var_in_loop) in &lööp.vars_modified {
-            let mut var_at_exit = self.build_phi(&var_in_loop.exit_phi_inputs, name)?;
+        for (name, mut var_in_loop) in lööp.vars_modified {
+            // If the variable has an error before the loop (e.g.,
+            // `VarError::Undefined`) but is assigned inside the loop (in which
+            // case the value should be `VarError::MaybeUninit`), we want to
+            // include the values at each `continue` statement in the error if
+            // it is relevant.
+            let var_at_latch = self.get_var(&name);
+            var_in_loop
+                .exit_phi_inputs
+                .push((var_at_latch, pre_exit_phantom));
+
+            let mut var_at_exit = self.build_phi(&var_in_loop.exit_phi_inputs, &name)?;
 
             // Restore loop placeholder index.
             var_at_exit.loop_placeholder_index = var_in_loop.pre_loop_var.loop_placeholder_index;
 
-            self.set_var(name, Some(var_at_exit));
+            self.set_var(&name, Some(var_at_exit));
         }
 
         // Apply replacements.

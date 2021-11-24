@@ -42,18 +42,7 @@ pub fn join_with_conjunction(conjunction: &str, items: &[impl fmt::Display]) -> 
 
 /// Formats a list surrounded by square brackets, but using `fmt::Display`.
 pub fn display_bracketed_list(items: &[impl fmt::Display]) -> String {
-    match items {
-        [] => format!("[]"),
-        [a] => format!("[{}]", a),
-        [a, etc @ ..] => {
-            let mut ret = format!("[{}", a);
-            for item in etc {
-                ret.push_str(&format!(", {}", item))
-            }
-            ret.push(']');
-            ret
-        }
-    }
+    format!("[{}]", items.iter().map(|x| x.to_string()).join(", "))
 }
 
 /// Wrapper around `i64::checked_pow()` that takes an `i64` exponent instead

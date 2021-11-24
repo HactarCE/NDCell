@@ -62,10 +62,9 @@ impl IntegerSet {
     pub fn range(span: Span, a: LangInt, b: LangInt) -> Result<Self> {
         let min = std::cmp::min(a, b);
         let max = std::cmp::max(a, b);
-        Ok(Self {
-            bounds: Some((min, max)),
-            mask: None,
-        })
+        let bounds = Some((min, max));
+        check_integer_set_bounds(span, bounds)?;
+        Ok(Self { bounds, mask: None })
     }
     /// Constructs an integer set using a predicate.
     pub fn with_mask_from_fn(

@@ -38,6 +38,10 @@ fn test_vector_set_construct() {
         ]);
 
     TestProgram::new()
+        .with_result_expressions(&[(Type::VectorSet(None), "{[1, 2], {{}, vec2(3)}, [2]}")])
+        .assert_interpreted_test_cases(test_cases![() => Ok("[1, 0]..[3, 3] & \".#....#....#\"")]);
+
+    TestProgram::new()
         .with_result_expressions(&[(Type::VectorSet(None), "vecset()")])
         .assert_interpreted_test_cases(test_cases![() => Ok("vec2set()")]);
     TestProgram::new()

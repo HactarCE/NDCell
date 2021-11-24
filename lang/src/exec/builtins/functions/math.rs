@@ -177,12 +177,13 @@ impl BinaryMathOp {
             (RtVal::IntegerSet(l), _) if self.is_set_op() => {
                 let r = rhs.as_integer_set()?;
                 match self {
-                    Self::Or => Err(Error::unimplemented(span)),
-                    Self::And => Err(Error::unimplemented(span)),
-                    Self::Sub => Err(Error::unimplemented(span)),
-                    Self::Xor => Err(Error::unimplemented(span)),
+                    Self::Or => l.union(span, &*r),
+                    Self::And => l.intersection(span, &*r),
+                    Self::Sub => l.difference(span, &*r),
+                    Self::Xor => l.symmetric_difference(span, &*r),
                     _ => internal_error!("invalid set op"),
                 }
+                .map(RtVal::from)
             }
             (RtVal::CellSet(l), _) => {
                 let r = rhs.as_cell_set()?;

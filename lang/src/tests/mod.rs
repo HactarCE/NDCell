@@ -68,14 +68,10 @@ mod constants;
 mod convert;
 mod debug;
 mod empty_set;
-// mod filters;
-// mod funcs;
-// mod is;
+mod integer_sets;
 mod loops;
 mod math;
-// mod ranges;
 mod values;
-// mod vars;
 mod vector_sets;
 mod vectors;
 

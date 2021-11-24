@@ -4,7 +4,7 @@ use codemap::{Span, Spanned};
 use std::sync::Arc;
 
 use super::{CallInfo, Function};
-use crate::data::{LangInt, RtVal, VectorSet};
+use crate::data::{IntegerSet, LangInt, RtVal, VectorSet};
 use crate::errors::{Error, Result};
 use crate::exec::Ctx;
 
@@ -17,7 +17,9 @@ impl Function for Range {
         let arg_a = call.arg(0)?;
         let arg_b = call.arg(1)?;
         match [&arg_a.node, &arg_b.node] {
-            [RtVal::Integer(a), RtVal::Integer(b)] => Err(Error::unimplemented(call.span)),
+            [RtVal::Integer(a), RtVal::Integer(b)] => {
+                IntegerSet::range(call.expr_span, *a, *b).map(RtVal::from)
+            }
             [RtVal::Vector(a), RtVal::Vector(b)] => {
                 make_vector_range(call.expr_span, a, arg_a.span, b, arg_b.span)
             }
@@ -39,5 +41,5 @@ fn make_vector_range(
     b: &[LangInt],
     b_span: Span,
 ) -> Result<RtVal> {
-    VectorSet::rect(call_span, a, a_span, b, b_span).map(|set| RtVal::VectorSet(Arc::new(set)))
+    VectorSet::rect(call_span, a, a_span, b, b_span).map(RtVal::from)
 }

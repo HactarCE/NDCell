@@ -4,7 +4,9 @@ use codemap::{Span, Spanned};
 use std::sync::Arc;
 
 use super::{CallInfo, Function};
-use crate::data::{self, CellSet, GetType, LangInt, RtVal, SpannedRuntimeValueExt, VectorSet};
+use crate::data::{
+    self, CellSet, GetType, IntegerSet, LangInt, RtVal, SpannedRuntimeValueExt, VectorSet,
+};
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait};
 
@@ -24,7 +26,7 @@ pub struct EmptyIntegerSet;
 impl Function for EmptyIntegerSet {
     fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(0)?;
-        Err(Error::unimplemented(call.expr_span))
+        Ok(IntegerSet::empty().into())
     }
 }
 
@@ -98,7 +100,10 @@ impl Function for SetLiteral {
             .into_iter()
             .try_fold(RtVal::EmptySet, |v1, v2| match (v1, set_of(v2)?) {
                 (RtVal::EmptySet, s2) => Ok(s2.node),
-                (RtVal::IntegerSet(s1), s2) => Err(Error::unimplemented(call.expr_span)),
+                (RtVal::IntegerSet(s1), s2) => {
+                    let s2 = s2.as_integer_set()?;
+                    Ok(s1.union(call.span, &s2)?.into())
+                }
                 (RtVal::CellSet(s1), s2) => Err(Error::unimplemented(call.expr_span)),
                 (RtVal::VectorSet(s1), s2) => {
                     let s2 = s2.as_vector_set(s1.vec_len())?;
@@ -126,7 +131,7 @@ fn set_of(x: Spanned<RtVal>) -> Result<Spanned<RtVal>> {
     let ret: RtVal = match &x.node {
         // If the value can be a member of a set, wrap it in a set and return
         // it.
-        RtVal::Integer(i) => Err(Error::unimplemented(span))?,
+        RtVal::Integer(i) => IntegerSet::single_integer(*i).into(),
         RtVal::Cell(i) => CellSet::single_cell(*i).into(),
         RtVal::Vector(v) => VectorSet::single_vector(span, v, span)?.into(),
 

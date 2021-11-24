@@ -58,7 +58,7 @@ impl fmt::Display for RtVal {
             RtVal::CellArray(a) => write!(f, "{}", a),
 
             RtVal::EmptySet => write!(f, "{{}}"),
-            RtVal::IntegerSet(_) => todo!("display IntegerSet"),
+            RtVal::IntegerSet(set) => write!(f, "{}", set),
             RtVal::CellSet(_) => todo!("display CellSet"),
             RtVal::VectorSet(set) => write!(f, "{}", set),
             RtVal::PatternMatcher(_) => todo!("display PatternMatcher"),

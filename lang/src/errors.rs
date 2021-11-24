@@ -9,7 +9,9 @@ use codemap_diagnostic::{Level, SpanLabel, SpanStyle};
 use itertools::Itertools;
 use std::fmt;
 
-use crate::data::{Type, MAX_VECTOR_LEN, MAX_VECTOR_SET_EXTENT, MAX_VECTOR_SET_SIZE};
+use crate::data::{
+    Type, MAX_INTEGER_SET_SIZE, MAX_VECTOR_LEN, MAX_VECTOR_SET_EXTENT, MAX_VECTOR_SET_SIZE,
+};
 use crate::{MAX_NDIM, MAX_RADIUS, MAX_STATE_COUNT};
 
 /// `Result` type alias for NDCA compile-time and runtime errors.
@@ -269,6 +271,10 @@ impl Error {
     error_fn!(Error; fn invalid_vector_set_size(
         "volume of vector set's bounding rectangle must not exceed {}",
         _ => MAX_VECTOR_SET_SIZE,
+    ));
+    error_fn!(Error; fn invalid_integer_set_size(
+        "length of integer set's bounding range must not exceed {}",
+        _ => MAX_INTEGER_SET_SIZE,
     ));
 
     error_fn!(Error; fn must_be_constant("must be a constant"));

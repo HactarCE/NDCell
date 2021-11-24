@@ -48,6 +48,8 @@ pub const MAX_VECTOR_LEN: usize = 256;
 pub const MAX_VECTOR_SET_SIZE: usize = 1 << 16;
 /// Maximum component value for a member of a vector set.
 pub const MAX_VECTOR_SET_EXTENT: isize = 1 << 16;
+/// Maximum number of integers for an integer set's bounding range.
+pub const MAX_INTEGER_SET_SIZE: usize = 1 << 16;
 
 /// Axis names.
 pub const AXES: &'static str = "xyzwuv";

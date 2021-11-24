@@ -383,7 +383,7 @@ impl VectorSet {
     pub fn intersection(&self, span: Span, other: &Self) -> Result<Self> {
         let vec_len = std::cmp::min(self.vec_len(), other.vec_len());
         let bounds = self.bounds_intersection(other);
-        VectorSet::with_mask_from_fn(span, vec_len, bounds, |pos| {
+        Self::with_mask_from_fn(span, vec_len, bounds, |pos| {
             self.contains(pos) && other.contains(pos)
         })
     }

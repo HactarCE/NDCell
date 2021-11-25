@@ -78,7 +78,7 @@ mod vectors;
 use crate::ast;
 use crate::data::{CellArray, GetType, LangCell, LangInt, LangUint, RtVal, Type};
 use crate::errors::{self, Error};
-use crate::exec::{Compiler, CompilerConfig, CtxTrait, Runtime};
+use crate::exec::{CompiledFunction, Compiler, CompilerConfig, CtxTrait, Runtime};
 use crate::utils;
 use values::*;
 
@@ -235,6 +235,108 @@ impl<'a> TestProgram<'a> {
         runtime
     }
 
+    fn call_interpreted_func(
+        self,
+        mut runtime: Runtime,
+        ast: &Arc<ast::Program>,
+        stmt_id: ast::StmtId,
+        expr_ids: &[ast::ExprId],
+        inputs: &[RtVal],
+    ) -> (String, Result<Vec<String>, Vec<Error>>) {
+        let task_str = format!("intepreting {:#?} with inputs {:?}", inputs, self);
+        for (i, value) in inputs.iter().enumerate() {
+            let var_name = Arc::new(format!("x{}", i));
+            runtime.assign_var(&var_name, value.clone());
+        }
+        let actual_result: Result<Vec<_>, _> = runtime
+            .exec_stmt(ast.get_node(stmt_id))
+            .map_err(|e| {
+                runtime.report_error(e);
+                runtime.ctx().errors.clone()
+            })
+            .and_then(|_| {
+                let mut ret = vec![];
+
+                // Return result expressions.
+                for &expr_id in expr_ids {
+                    ret.push(
+                        runtime
+                            .eval_expr(ast.get_node(expr_id))
+                            .map(|v| v.node.to_string())
+                            .map_err(|e| {
+                                runtime.report_error(e);
+                                runtime.ctx().errors.clone()
+                            })?,
+                    );
+                }
+
+                // Also return mutated cell arrays.
+                for i in 0..inputs.len() {
+                    let var_name = Arc::new(format!("x{}", i));
+                    if let Some(RtVal::CellArray(a)) = runtime.vars.remove(&var_name) {
+                        ret.push(a.to_string());
+                    }
+                }
+
+                Ok(ret)
+            });
+        (task_str, actual_result)
+    }
+    fn setup_compiled_func(self) -> (Arc<ast::Program>, CompiledFunction) {
+        let ast = self.ast_for_compiler_test();
+        let runtime = self.init_new_runtime(&ast);
+        let f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
+            Ok(ok) => ok,
+            Err(e) => {
+                let task_str = &format!("compiling {:#?}", self);
+                assert_results_eq(&ast, task_str, &Err(e), &Ok(()));
+                unreachable!();
+            }
+        };
+        (ast, f)
+    }
+    fn call_compiled_func(
+        self,
+        f: &mut CompiledFunction,
+        inputs: &[RtVal],
+    ) -> (String, Result<Vec<String>, Vec<Error>>) {
+        let task_str = format!("running compiled {:#?} with inputs {:?}", self, inputs);
+        let mut arg_values = inputs.to_vec();
+        for (ty, _expr) in self.result_expressions {
+            arg_values.push(match ty {
+                Type::Integer => RtVal::Integer(0),
+                Type::Cell => RtVal::Cell(0),
+                Type::Tag => todo!("tag default value"),
+                Type::Vector(Some(len)) => RtVal::Vector(vec![0; *len]),
+                Type::CellArray(Some(shape)) => RtVal::CellArray(Arc::new(
+                    CellArray::from_cell(Arc::clone(shape), 0_u8).into(),
+                )),
+                Type::CellSet => todo!("cell set default value"),
+                _ => panic!("no default for this type"),
+            });
+        }
+        let n = inputs.len();
+        let actual_result = match f.call(&mut arg_values) {
+            Ok(()) => Ok({
+                let mut ret = vec![];
+
+                // Return result expressions.
+                ret.extend(arg_values[n..].iter().map(|v| v.to_string()));
+
+                // Also return mutated cell arrays.
+                for arg in arg_values {
+                    if let RtVal::CellArray(a) = arg {
+                        ret.push(a.to_string());
+                    }
+                }
+
+                ret
+            }),
+            Err(e) => Err(vec![e]),
+        };
+        (task_str, actual_result)
+    }
+
     /// Asserts that attempting to parse the program produces a syntax error.
     pub fn assert_syntax_error(self, expected_error: TestError<'_>) -> Self {
         let name = "testfile.test".to_owned();
@@ -308,52 +410,18 @@ impl<'a> TestProgram<'a> {
         let (ast, stmt_id, expr_ids) = self.ast_for_interpreter_test();
         let clean_runtime = self.init_new_runtime(&ast);
         for case in test_cases {
-            let mut runtime = clean_runtime.clone();
-
-            let task_str = &format!("intepreting inputs {:?} on {:#?}", case.inputs, self);
-            // Set input variables.
-            for (i, value) in case.inputs.iter().enumerate() {
-                let var_name = Arc::new(format!("x{}", i));
-                runtime.assign_var(&var_name, value.clone());
-            }
-            // Execute statement and result expressions.
-            let actual_result: Result<Vec<_>, _> = runtime
-                .exec_stmt(ast.get_node(stmt_id))
-                .map_err(|e| {
-                    runtime.report_error(e);
-                    runtime.ctx().errors.clone()
-                })
-                .and_then(|_| {
-                    let mut ret = vec![];
-
-                    // Return result expressions.
-                    for &expr_id in &expr_ids {
-                        ret.push(
-                            runtime
-                                .eval_expr(ast.get_node(expr_id))
-                                .map(|v| v.node.to_string())
-                                .map_err(|e| {
-                                    runtime.report_error(e);
-                                    runtime.ctx().errors.clone()
-                                })?,
-                        );
-                    }
-
-                    // Also return mutated cell arrays.
-                    for i in 0..case.inputs.len() {
-                        let var_name = Arc::new(format!("x{}", i));
-                        if let Some(RtVal::CellArray(a)) = runtime.vars.remove(&var_name) {
-                            ret.push(a.to_string());
-                        }
-                    }
-
-                    Ok(ret)
-                });
+            let (task_str, actual_result) = self.call_interpreted_func(
+                clean_runtime.clone(),
+                &ast,
+                stmt_id,
+                &expr_ids,
+                &case.inputs,
+            );
             // Check results.
             let expected_result = case
                 .expected_result
                 .map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
-            assert_results_eq(&ast, task_str, &actual_result, &expected_result);
+            assert_results_eq(&ast, &task_str, &actual_result, &expected_result);
         }
         self
     }
@@ -362,64 +430,49 @@ impl<'a> TestProgram<'a> {
         self,
         test_cases: Vec<TestCase<'s, OK>>,
     ) -> Self {
-        let ast = self.ast_for_compiler_test();
-        let runtime = self.init_new_runtime(&ast);
-        let mut f = match Compiler::compile(Arc::clone(&ast), runtime, CompilerConfig::default()) {
-            Ok(ok) => ok,
-            Err(e) => {
-                let task_str = &format!("compiling {:#?}", self);
-                assert_results_eq(&ast, task_str, &Err(e), &Ok(()));
-                unreachable!();
-            }
-        };
-
+        let (ast, mut f) = self.setup_compiled_func();
         for case in test_cases {
-            let task_str = &format!(
-                "evaluating inputs {:?} on compiled {:#?}",
-                case.inputs, self,
-            );
-            // Set input parameters.
-            let mut arg_values = case.inputs.to_vec();
-            for (ty, _expr) in self.result_expressions {
-                arg_values.push(match ty {
-                    Type::Integer => RtVal::Integer(0),
-                    Type::Cell => RtVal::Cell(0),
-                    Type::Tag => todo!("tag default value"),
-                    Type::Vector(Some(len)) => RtVal::Vector(vec![0; *len]),
-                    Type::CellArray(Some(shape)) => RtVal::CellArray(Arc::new(
-                        CellArray::from_cell(Arc::clone(shape), 0_u8).into(),
-                    )),
-                    Type::CellSet => todo!("cell set default value"),
-                    _ => panic!("no default for this type"),
-                });
-            }
-            // Call function.
-            let n = case.inputs.len();
-            let actual_result = match f.call(&mut arg_values) {
-                Ok(()) => Ok({
-                    let mut ret = vec![];
-
-                    // Return result expressions.
-                    ret.extend(arg_values[n..].iter().map(|v| v.to_string()));
-
-                    // Also return mutated cell arrays.
-                    for arg in arg_values {
-                        if let RtVal::CellArray(a) = arg {
-                            ret.push(a.to_string());
-                        }
-                    }
-
-                    ret
-                }),
-                Err(e) => Err(vec![e]),
-            };
+            let (task_str, actual_result) = self.call_compiled_func(&mut f, &case.inputs);
             // Check result.
             let expected_result = case
                 .expected_result
                 .map(|oks| oks.iter().map(|s| s.to_string()).collect_vec());
-            assert_results_eq(&ast, task_str, &actual_result, &expected_result);
+            assert_results_eq(&ast, &task_str, &actual_result, &expected_result);
         }
         self
+    }
+    /// Asserts that the compiled and interpreted programs produce the same
+    /// outputs for each set of inputs.
+    pub fn assert_compiled_and_interpreted_agree(self, cases: Vec<Vec<RtVal>>) {
+        let (compiled_ast, mut compiled_f) = self.setup_compiled_func();
+        let (interpreted_ast, stmt_id, expr_ids) = self.ast_for_interpreter_test();
+        let clean_runtime = self.init_new_runtime(&interpreted_ast);
+        for inputs in cases {
+            let (_task_str, interpreted_result) = self.call_interpreted_func(
+                clean_runtime.clone(),
+                &interpreted_ast,
+                stmt_id,
+                &expr_ids,
+                &inputs,
+            );
+            let interpreted_result_str = match interpreted_result {
+                Ok(ok) => format!("{:?}", ok),
+                Err(e) => errors::format_errors(interpreted_ast.codemap(), &e),
+            };
+
+            let (_task_str, compiled_result) = self.call_compiled_func(&mut compiled_f, &inputs);
+            let compiled_result_str = match compiled_result {
+                Ok(ok) => format!("{:?}", ok),
+                Err(e) => errors::format_errors(compiled_ast.codemap(), &e),
+            };
+
+            if interpreted_result_str != compiled_result_str {
+                panic!(
+                    "Interpreted and compiled functions disagreed\n\nInterpreted function produces this:\n{:?}\nCompiled function produces this:\n{:?}\nwhen executing this program:\n{:#?}",
+                    interpreted_result_str, compiled_result_str, self,
+                );
+            }
+        }
     }
 }
 

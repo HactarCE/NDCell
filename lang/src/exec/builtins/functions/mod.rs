@@ -36,7 +36,7 @@ pub trait Function: fmt::Debug {
     /// The default implementation unconditionally returns an error stating that
     /// this expression cannot be compiled.
     fn compile(&self, _compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {
-        Err(Error::cannot_compile(call.expr_span))
+        Err(Error::cannot_compile(call.expr_span, "this function"))
     }
 
     /// Assigns to the expression.

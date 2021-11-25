@@ -215,7 +215,10 @@ impl Compiler {
                         Ok(ParamType::CellArray(shape))
                     }
                     Type::CellSet => todo!("cell set param"),
-                    _ => Err(Error::cannot_compile(span)),
+                    _ => Err(Error::cannot_compile(
+                        span,
+                        format!("parameter of type {}", ty),
+                    )),
                 }
                 .map(|ok| Spanned { node: ok, span }),
 
@@ -430,7 +433,10 @@ impl Compiler {
     pub(crate) fn get_cp_val(&mut self, v: &Spanned<Val>) -> Result<Spanned<CpVal>> {
         match self.try_get_cp_val(&v.node)? {
             Some(node) => Ok(Spanned { span: v.span, node }),
-            None => Err(Error::cannot_compile(v.span)),
+            None => Err(Error::cannot_compile(
+                v.span,
+                format!("non-constant use of type {}", v.ty()),
+            )),
         }
     }
 

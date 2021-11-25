@@ -278,7 +278,7 @@ impl Error {
     ));
 
     error_fn!(Error; fn must_be_constant("must be a constant"));
-    error_fn!(Error; fn cannot_compile("not allowed in compiled code"));
+    error_fn!(Error; fn cannot_compile("{} is not allowed in compiled code", what_cant_be_compiled: impl fmt::Display));
     error_fn!(Error; fn cannot_const_eval("cannot evaluate because evaluation depends on simulation contents"));
 
     error_fn!(Error; fn type_error(
@@ -297,6 +297,7 @@ impl Error {
             ""
         },
     ));
+    error_fn!(Error; fn iterate_type_error("type error: cannot iterate over {}", ty: &Type));
 
     error_fn!(Error; fn invalid_arguments(
         "'{}' cannot take arguments of types {}",

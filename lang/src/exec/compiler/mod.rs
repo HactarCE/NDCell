@@ -419,10 +419,8 @@ impl Compiler {
                 RtVal::Integer(i) => Some(CpVal::Integer(llvm::const_int(*i))),
                 RtVal::Cell(i) => Some(CpVal::Cell(llvm::const_cell(*i))),
                 RtVal::Vector(v) => Some(CpVal::Vector(llvm::const_vector(v.iter().copied()))),
-                RtVal::CellArray(a) => {
-                    Some(CpVal::CellArray(self.build_const_immut_cell_array(a)?))
-                }
-                RtVal::CellSet(s) => Some(CpVal::CellSet(self.build_const_cell_set(s))),
+                RtVal::CellArray(a) => Some(CpVal::CellArray(self.get_const_immut_cell_array(a)?)),
+                RtVal::CellSet(s) => Some(CpVal::CellSet(self.get_const_cell_set(s))),
                 _ => None,
             },
             Val::Cp(v) => Some(v.clone()),
@@ -471,23 +469,27 @@ impl Compiler {
     }
 
     /// Builds instructions to construct a tag with a constant value.
-    pub fn build_const_tag(&mut self, t: &str) -> llvm::VectorValue {
+    pub fn get_const_tag(&mut self, t: &str) -> llvm::VectorValue {
         let b = self.builder();
         todo!("build const tag")
     }
     /// Builds instructions to construct a cell set with a constant value.
-    pub fn build_const_cell_set(&mut self, s: &CellSet) -> llvm::VectorValue {
+    pub fn get_const_cell_set(&mut self, s: &CellSet) -> llvm::VectorValue {
         let b = self.builder();
         todo!("cell set type")
     }
-    /// Builds instructions to construct an immutable cell array with constant
-    /// contents.
-    pub fn build_const_immut_cell_array(&mut self, array: &CellArray) -> Result<LlvmCellArray> {
-        let array_contents = array.cells_iter().map(llvm::const_cell).collect_vec();
+    /// Returns an immutable cell array with constant contents.
+    pub fn get_const_immut_cell_array(&mut self, array: &CellArray) -> Result<LlvmCellArray> {
+        let array_contents = array
+            .cells_array()
+            .as_flat_slice()
+            .iter()
+            .map(|&c| llvm::const_cell(c))
+            .collect_vec();
         let array_value = llvm::cell_type().const_array(&array_contents);
         let shape = Arc::clone(array.shape());
         let ndarray = match shape.bounds() {
-            Some(bounds) => Some(self.build_const_ndarray(
+            Some(bounds) => Some(self.get_const_ndarray(
                 array.ndim(),
                 bounds,
                 array_value,
@@ -690,9 +692,8 @@ impl Compiler {
             .as_pointer_value()
             .const_cast(ty.ptr_type(llvm::AddressSpace::Generic))
     }
-    /// Builds instructions to construct an N-dimensional array with constant
-    /// contents.
-    pub fn build_const_ndarray(
+    /// Returns an N-dimensional array with constant contents.
+    pub fn get_const_ndarray(
         &mut self,
         ndim: usize,
         bounds: IRect6D,
@@ -701,7 +702,7 @@ impl Compiler {
     ) -> Result<llvm::NdArrayValue> {
         let base_ptr = self.add_const_array(array_value, &format!("{}_array", name));
         let strides = llvm::const_vector(crate::utils::ndarray_strides(ndim, bounds));
-        self.build_construct_ndarray_from_base_ptr(bounds, base_ptr, strides, name)
+        self.get_const_ndarray_from_base_ptr(bounds, base_ptr, strides)
     }
     /// Builds instructions to construct an N-dimensional array from a pointer
     /// to the **base** of the array.
@@ -733,6 +734,21 @@ impl Compiler {
             &format!("{}_from_origin", name),
         ))
     }
+    /// Returns an N-dimensional array from a constant pointer to the **base**
+    /// of the array.
+    pub fn get_const_ndarray_from_base_ptr(
+        &mut self,
+        bounds: IRect6D,
+        base_ptr: llvm::PointerValue,
+        strides: llvm::VectorValue,
+    ) -> Result<llvm::NdArrayValue> {
+        let ndim = strides.get_type().get_size() as usize;
+        let array_from_base = self.get_const_ndarray_from_origin_ptr(bounds, base_ptr, strides);
+
+        let negative_base = llvm::const_vector((0..ndim).map(|i| -bounds.min().0[i] as LangInt));
+        let origin_ptr = self.const_ndarray_gep_unchecked(array_from_base, negative_base)?;
+        Ok(self.get_const_ndarray_from_origin_ptr(bounds, origin_ptr, strides))
+    }
     /// Builds instructions to construct an N-dimensional array from a pointer
     /// to the origin in the array and strides.
     pub fn build_construct_ndarray_from_origin_ptr(
@@ -754,6 +770,26 @@ impl Compiler {
             .build_insert_value(struct_value, strides, 1, name)
             .unwrap()
             .into_struct_value();
+        llvm::NdArrayValue {
+            bounds,
+            struct_value,
+        }
+    }
+    /// Returns an N-dimensional array from a constant pointer to the origin in
+    /// the array and constant strides.
+    pub fn get_const_ndarray_from_origin_ptr(
+        &mut self,
+        bounds: IRect6D,
+        origin_ptr: llvm::PointerValue,
+        strides: llvm::VectorValue,
+    ) -> llvm::NdArrayValue {
+        let ndim = strides.get_type().get_size() as usize;
+        let element_type = origin_ptr.get_type().get_element_type().into_int_type();
+
+        let struct_value = llvm::ndarray_type(ndim, element_type).const_named_struct(&[
+            origin_ptr.as_basic_value_enum(),
+            strides.as_basic_value_enum(),
+        ]);
         llvm::NdArrayValue {
             bounds,
             struct_value,
@@ -927,8 +963,30 @@ impl Compiler {
         let b = self.builder();
         Ok(unsafe { b.build_gep(origin_ptr, &[ptr_offset], name) })
     }
+    /// Computes a constant GEP into an N-dimensional array WITHOUT checking
+    /// whether the position is out of bounds.
+    ///
+    /// # Panics
+    ///
+    /// This function may panic if `pos` and the array strides are not both
+    /// constant vectors of the same length.
+    pub fn const_ndarray_gep_unchecked(
+        &mut self,
+        ndarray: llvm::NdArrayValue,
+        pos: llvm::VectorValue,
+    ) -> Result<llvm::PointerValue> {
+        let (origin_ptr, strides) = self.build_split_ndarray(ndarray);
+        let ptr_offset = (0..ndarray.ndim() as u32)
+            .map(|i| {
+                let pos_elem = pos.get_element_as_constant(i).into_int_value();
+                let strides_elem = strides.get_element_as_constant(i).into_int_value();
+                pos_elem.const_mul(strides_elem)
+            })
+            .fold(llvm::const_int(0), llvm::IntValue::const_add);
+        Ok(unsafe { origin_ptr.const_gep(&[ptr_offset]) })
+    }
 
-    /// Returns a constant array with the specified contents.
+    /// Returns a constant cell array with the specified contents.
     fn get_cell_array_mask_constant(
         &mut self,
         shape: &Arc<VectorSet>,
@@ -952,7 +1010,7 @@ impl Compiler {
                 .map(llvm::const_bool)
                 .collect_vec();
             let array_value = llvm::bool_type().const_array(&ndarray_contents);
-            let ndarray = self.build_const_ndarray(ndim, bounds, array_value, "ndarray_mask")?;
+            let ndarray = self.get_const_ndarray(ndim, bounds, array_value, "ndarray_mask")?;
             self.cached_cell_array_masks
                 .insert(Arc::clone(shape), ndarray);
         }
@@ -1423,44 +1481,61 @@ impl Compiler {
         array_ptr: llvm::PointerValue,
         array_len: usize,
         vars_assigned: HashSet<Arc<String>>,
-        mut build_loop_body: impl FnMut(&mut Self, llvm::BasicValueEnum) -> Result<IsTerminated>,
+        mut build_loop_body: impl FnMut(
+            &mut Self,
+            llvm::IntValue,
+            llvm::BasicValueEnum,
+        ) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
+        if array_len == 0 {
+            // Don't even build the loop for an empty array.
+            return Ok(IsTerminated::Unterminated);
+        }
+
         self.build_iterate_range(0, array_len as LangInt - 1, vars_assigned, |c, i| {
             let ptr = unsafe { c.builder().build_in_bounds_gep(array_ptr, &[i], "iter_ptr") };
-            let iter_value = c.builder().build_load(ptr, "iter_value");
-            build_loop_body(c, iter_value)
+            let iter_array_elem = c.builder().build_load(ptr, "iter_array_elem");
+            build_loop_body(c, i, iter_array_elem)
         })
     }
     /// Builds a loop over a constant array of integers.
     pub fn build_iterate_const_int_array(
         &mut self,
-        int_type: llvm::IntType,
-        values: impl IntoIterator<Item = llvm::IntValue>,
+        values: impl IntoIterator<Item = LangInt>,
         vars_assigned: HashSet<Arc<String>>,
-        mut build_loop_body: impl FnMut(&mut Self, llvm::IntValue) -> Result<IsTerminated>,
+        mut build_loop_body: impl FnMut(
+            &mut Self,
+            llvm::IntValue,
+            llvm::IntValue,
+        ) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
-        let array_contents = values.into_iter().collect_vec();
-        let array_value = int_type.const_array(&array_contents);
+        let array_contents = values.into_iter().map(llvm::const_int).collect_vec();
+        let array_value = llvm::int_type().const_array(&array_contents);
         let array_ptr = self.add_const_array(array_value, "const_iter_array");
         let len = array_contents.len();
-        self.build_iterate_array(array_ptr, len, vars_assigned, |c, i| {
-            build_loop_body(c, i.into_int_value())
+        self.build_iterate_array(array_ptr, len, vars_assigned, |c, i, elem| {
+            build_loop_body(c, i, elem.into_int_value())
         })
     }
-    /// Builds a loop over a constant array of vectors.
-    pub fn build_iterate_const_vector_array(
+    /// Builds a loop over the vectors in a vector set.
+    pub fn build_iterate_vector_set(
         &mut self,
-        vector_type: llvm::VectorType,
-        values: impl IntoIterator<Item = llvm::VectorValue>,
+        vector_set: &VectorSet,
         vars_assigned: HashSet<Arc<String>>,
-        mut build_loop_body: impl FnMut(&mut Self, llvm::VectorValue) -> Result<IsTerminated>,
+        mut build_loop_body: impl FnMut(
+            &mut Self,
+            llvm::IntValue,
+            llvm::VectorValue,
+        ) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
-        let array_contents = values.into_iter().collect_vec();
+        let vector_type = llvm::vector_type(vector_set.vec_len());
+        let array_contents = vector_set.iter().map(llvm::const_vector).collect_vec();
+        debug_assert_eq!(array_contents.len(), vector_set.len());
         let array_value = vector_type.const_array(&array_contents);
         let array_ptr = self.add_const_array(array_value, "const_iter_array");
         let len = array_contents.len();
-        self.build_iterate_array(array_ptr, len, vars_assigned, |c, i| {
-            build_loop_body(c, i.into_vector_value())
+        self.build_iterate_array(array_ptr, len, vars_assigned, |c, i, elem| {
+            build_loop_body(c, i, elem.into_vector_value())
         })
     }
     /// Builds a loop over the elements in a vector.
@@ -2239,7 +2314,35 @@ impl Compiler {
                             c.build_stmt(block)
                         },
                     ),
-                    Val::Rt(RtVal::CellArray(a)) => Err(Error::unimplemented(stmt_span)),
+                    Val::Rt(RtVal::CellArray(a)) => {
+                        let cells = a.cells_iter().map(llvm::const_cell).collect_vec();
+                        debug_assert_eq!(cells.len(), a.shape().len());
+                        let flat_cells_array = self.add_const_array(
+                            llvm::cell_type().const_array(&cells),
+                            "cell_array_contents",
+                        );
+
+                        self.build_iterate_vector_set(a.shape(), vars_assigned, |c, i, pos| {
+                            if let Some(index_var) = index_var {
+                                let index = Ok(Val::Cp(CpVal::Vector(pos)));
+                                c.assign_var(index_var, index, stmt_span);
+                            }
+                            let cell_ptr = unsafe {
+                                c.builder().build_in_bounds_gep(
+                                    flat_cells_array,
+                                    &[i],
+                                    "iter_cell_ptr",
+                                )
+                            };
+                            let cell = c
+                                .builder()
+                                .build_load(cell_ptr, "iter_cell")
+                                .into_int_value();
+                            let it = Ok(Val::Cp(CpVal::Cell(cell)));
+                            c.assign_var(iter_var, it, stmt_span);
+                            c.build_stmt(block)
+                        })
+                    }
 
                     Val::Rt(RtVal::EmptySet) => Ok(IsTerminated::Unterminated),
                     Val::Rt(RtVal::IntegerSet(set)) if set.mask().is_none() => {
@@ -2263,11 +2366,10 @@ impl Compiler {
                         }
 
                         self.build_iterate_const_int_array(
-                            llvm::int_type(),
-                            set.iter().map(llvm::const_int),
+                            set.iter(),
                             vars_assigned,
-                            |c, i| {
-                                let it = Ok(Val::Cp(CpVal::Integer(i)));
+                            |c, _i, elem| {
+                                let it = Ok(Val::Cp(CpVal::Integer(elem)));
                                 c.assign_var(iter_var, it, stmt_span);
                                 c.build_stmt(block)
                             },
@@ -2279,16 +2381,11 @@ impl Compiler {
                             return Err(iterate_index_type_error);
                         }
 
-                        self.build_iterate_const_vector_array(
-                            llvm::vector_type(set.vec_len()),
-                            set.iter().map(llvm::const_vector),
-                            vars_assigned,
-                            |c, i| {
-                                let it = Ok(Val::Cp(CpVal::Vector(i)));
-                                c.assign_var(iter_var, it, stmt_span);
-                                c.build_stmt(block)
-                            },
-                        )
+                        self.build_iterate_vector_set(&set, vars_assigned, |c, _i, pos| {
+                            let it = Ok(Val::Cp(CpVal::Vector(pos)));
+                            c.assign_var(iter_var, it, stmt_span);
+                            c.build_stmt(block)
+                        })
                     }
 
                     Val::Cp(CpVal::Vector(v)) => {
@@ -2302,7 +2399,25 @@ impl Compiler {
                             c.build_stmt(block)
                         })
                     }
-                    Val::Cp(CpVal::CellArray(a) | CpVal::CellArrayMut(a)) => todo!(),
+                    Val::Cp(CpVal::CellArray(a) | CpVal::CellArrayMut(a)) => self
+                        .build_iterate_vector_set(a.shape(), vars_assigned, |c, i, pos| {
+                            if let Some(index_var) = index_var {
+                                let index = Ok(Val::Cp(CpVal::Vector(pos)));
+                                c.assign_var(index_var, index, stmt_span);
+                            }
+                            let cells_ndarray = a
+                                .cells()
+                                .ok_or_else(|| internal_error_value!("no cells array"))?;
+                            let cell_ptr =
+                                c.build_ndarray_gep_unchecked(cells_ndarray, pos, "iter_cell_ptr")?;
+                            let cell = c
+                                .builder()
+                                .build_load(cell_ptr, "iter_cell")
+                                .into_int_value();
+                            let it = Ok(Val::Cp(CpVal::Cell(cell)));
+                            c.assign_var(iter_var, it, stmt_span);
+                            c.build_stmt(block)
+                        }),
 
                     Val::Cp(CpVal::CellSet(set)) => Err(Error::unimplemented(stmt_span)),
 

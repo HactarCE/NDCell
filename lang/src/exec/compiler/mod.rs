@@ -1468,7 +1468,11 @@ impl Compiler {
         &mut self,
         vector: llvm::VectorValue,
         vars_assigned: HashMap<Arc<String>, Span>,
-        mut build_loop_body: impl FnMut(&mut Self, llvm::BasicValueEnum) -> Result<IsTerminated>,
+        mut build_loop_body: impl FnMut(
+            &mut Self,
+            llvm::IntValue,
+            llvm::BasicValueEnum,
+        ) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
         self.build_iterate_range(
             0,
@@ -1476,7 +1480,7 @@ impl Compiler {
             vars_assigned,
             |c, i| {
                 let it = c.builder().build_extract_element(vector, i, "iter_value");
-                build_loop_body(c, it)
+                build_loop_body(c, i, it)
             },
         )
     }
@@ -2200,75 +2204,107 @@ impl Compiler {
                 self.build_loop_continue()
             }
             ast::StmtData::ForLoop {
+                index_var,
                 iter_var,
                 iter_expr: iter_expr_id,
+                first_line_span,
                 block,
             } => {
+                let stmt_span = *first_line_span;
+
                 let iter_expr = ast.get_node(*iter_expr_id);
                 let iter_value = self.build_expr(iter_expr)?;
                 let block = ast.get_node(*block);
                 let mut vars_assigned = HashMap::new();
                 stmt.find_all_assigned_vars(&mut vars_assigned);
+                let iterate_index_type_error =
+                    Error::iterate_index_type_error(iter_expr.span(), &Type::IntegerSet);
                 match iter_value.node {
-                    Val::Rt(RtVal::Tag(t)) => Err(Error::unimplemented(stmt.span())),
+                    Val::Rt(RtVal::Tag(t)) => Err(Error::unimplemented(stmt_span)),
                     Val::Rt(RtVal::String(_)) => Err(Error::cannot_compile(
-                        stmt.span(),
+                        stmt_span,
                         "iteration over type String",
                     )),
 
-                    Val::Rt(RtVal::Vector(v)) => {
-                        self.build_iterate_vector(llvm::const_vector(v), vars_assigned, |c, i| {
-                            let it = Ok(Val::Cp(CpVal::Integer(i.into_int_value())));
-                            c.assign_var(iter_var, it, stmt.span());
+                    Val::Rt(RtVal::Vector(v)) => self.build_iterate_vector(
+                        llvm::const_vector(v),
+                        vars_assigned,
+                        |c, i, x| {
+                            if let Some(index_var) = index_var {
+                                let index = Ok(Val::Cp(CpVal::Integer(i)));
+                                c.assign_var(index_var, index, stmt_span);
+                            }
+                            let it = Ok(Val::Cp(CpVal::Integer(x.into_int_value())));
+                            c.assign_var(iter_var, it, stmt_span);
                             c.build_stmt(block)
-                        })
-                    }
-                    Val::Rt(RtVal::CellArray(a)) => Err(Error::unimplemented(stmt.span())),
+                        },
+                    ),
+                    Val::Rt(RtVal::CellArray(a)) => Err(Error::unimplemented(stmt_span)),
 
                     Val::Rt(RtVal::EmptySet) => Ok(IsTerminated::Unterminated),
                     Val::Rt(RtVal::IntegerSet(set)) if set.mask().is_none() => {
+                        if index_var.is_some() {
+                            return Err(iterate_index_type_error);
+                        }
+
                         if let Some((min, max)) = set.bounds() {
                             self.build_iterate_range(min, max, vars_assigned, |c, i| {
                                 let it = Ok(Val::Cp(CpVal::Integer(i)));
-                                c.assign_var(iter_var, it, stmt.span());
+                                c.assign_var(iter_var, it, stmt_span);
                                 c.build_stmt(block)
                             })
                         } else {
                             Ok(IsTerminated::Unterminated)
                         }
                     }
-                    Val::Rt(RtVal::IntegerSet(set)) => self.build_iterate_const_int_array(
-                        llvm::int_type(),
-                        set.iter().map(llvm::const_int),
-                        vars_assigned,
-                        |c, i| {
-                            let it = Ok(Val::Cp(CpVal::Integer(i)));
-                            c.assign_var(iter_var, it, stmt.span());
-                            c.build_stmt(block)
-                        },
-                    ),
-                    Val::Rt(RtVal::CellSet(set)) => Err(Error::unimplemented(stmt.span())),
-                    Val::Rt(RtVal::VectorSet(set)) => self.build_iterate_const_vector_array(
-                        llvm::vector_type(set.vec_len()),
-                        set.iter().map(llvm::const_vector),
-                        vars_assigned,
-                        |c, i| {
-                            let it = Ok(Val::Cp(CpVal::Vector(i)));
-                            c.assign_var(iter_var, it, stmt.span());
-                            c.build_stmt(block)
-                        },
-                    ),
+                    Val::Rt(RtVal::IntegerSet(set)) => {
+                        if index_var.is_some() {
+                            return Err(iterate_index_type_error);
+                        }
+
+                        self.build_iterate_const_int_array(
+                            llvm::int_type(),
+                            set.iter().map(llvm::const_int),
+                            vars_assigned,
+                            |c, i| {
+                                let it = Ok(Val::Cp(CpVal::Integer(i)));
+                                c.assign_var(iter_var, it, stmt_span);
+                                c.build_stmt(block)
+                            },
+                        )
+                    }
+                    Val::Rt(RtVal::CellSet(set)) => Err(Error::unimplemented(stmt_span)),
+                    Val::Rt(RtVal::VectorSet(set)) => {
+                        if index_var.is_some() {
+                            return Err(iterate_index_type_error);
+                        }
+
+                        self.build_iterate_const_vector_array(
+                            llvm::vector_type(set.vec_len()),
+                            set.iter().map(llvm::const_vector),
+                            vars_assigned,
+                            |c, i| {
+                                let it = Ok(Val::Cp(CpVal::Vector(i)));
+                                c.assign_var(iter_var, it, stmt_span);
+                                c.build_stmt(block)
+                            },
+                        )
+                    }
 
                     Val::Cp(CpVal::Vector(v)) => {
-                        self.build_iterate_vector(v, vars_assigned, |c, i| {
-                            let it = Ok(Val::Cp(CpVal::Integer(i.into_int_value())));
-                            c.assign_var(iter_var, it, stmt.span());
+                        self.build_iterate_vector(v, vars_assigned, |c, i, x| {
+                            if let Some(index_var) = index_var {
+                                let index = Ok(Val::Cp(CpVal::Integer(i)));
+                                c.assign_var(index_var, index, stmt_span);
+                            }
+                            let it = Ok(Val::Cp(CpVal::Integer(x.into_int_value())));
+                            c.assign_var(iter_var, it, stmt_span);
                             c.build_stmt(block)
                         })
                     }
                     Val::Cp(CpVal::CellArray(a) | CpVal::CellArrayMut(a)) => todo!(),
 
-                    Val::Cp(CpVal::CellSet(set)) => Err(Error::unimplemented(stmt.span())),
+                    Val::Cp(CpVal::CellSet(set)) => Err(Error::unimplemented(stmt_span)),
 
                     val => Err(Error::iterate_type_error(iter_value.span, &val.ty())),
                 }

@@ -34,8 +34,15 @@ pub enum StmtData {
     Break,
     Continue,
     ForLoop {
+        /// Name of the index iteration variable, if present.
+        index_var: Option<Spanned<Arc<String>>>,
+        /// Name of the main iteration variable.
         iter_var: Spanned<Arc<String>>,
+        /// Expression to iterate over.
         iter_expr: ExprId,
+        /// Span of just the first line (from `for` to before `{`)
+        first_line_span: Span,
+        /// Block of statements to execute in the loop.
         block: StmtId,
     },
     WhileLoop {
@@ -81,8 +88,16 @@ impl Stmt<'_> {
             StmtData::Break => (),
             StmtData::Continue => (),
             StmtData::ForLoop {
-                iter_var, block, ..
+                index_var,
+                iter_var,
+                block,
+                ..
             } => {
+                if let Some(index_var) = index_var {
+                    names
+                        .entry(Arc::clone(&index_var.node))
+                        .or_insert(index_var.span);
+                }
                 names
                     .entry(Arc::clone(&iter_var.node))
                     .or_insert(iter_var.span);

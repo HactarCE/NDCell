@@ -207,9 +207,12 @@ pub trait SpannedRuntimeValueExt {
     /// - Otherwise, returns an error.
     fn select_cell(&self) -> Result<LangCell>;
 
-    /// Returns an iterator for the value if it can be iterated over; otherwise
-    /// returns a type error.
-    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = RtVal>>>;
+    /// Returns an iterator for the value if it can be iterated over and its
+    /// indices if they can be iterated over; otherwise returns a type error.
+    ///
+    /// Each element of the iterator is `(index, value)` where `index` is
+    /// present either for all items or for none.
+    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = (Option<RtVal>, RtVal)>>>;
 }
 impl SpannedRuntimeValueExt for Spanned<RtVal> {
     fn as_null(&self) -> Result<()> {
@@ -352,18 +355,32 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
         }
     }
 
-    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = RtVal>>> {
+    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = (Option<RtVal>, RtVal)>>> {
         match &self.node {
             RtVal::Tag(_) => Err(Error::unimplemented(self.span)),
-            RtVal::String(s) => Ok(Box::new(
-                s.chars().map(|c| RtVal::String(Arc::new(c.to_string()))),
-            )),
-            RtVal::Vector(v) => Ok(Box::new(v.iter().map(|&i| RtVal::Integer(i)))),
-            RtVal::CellArray(a) => Ok(Box::new(a.cells_iter().map(RtVal::Cell))),
+            RtVal::String(s) => Ok(Box::new(s.chars().enumerate().map(|(i, c)| {
+                (
+                    Some(RtVal::Integer(i as LangInt)),
+                    RtVal::String(Arc::new(c.to_string())),
+                )
+            }))),
+
+            RtVal::Vector(v) => {
+                Ok(Box::new(v.iter().enumerate().map(|(i, &x)| {
+                    (Some(RtVal::Integer(i as LangInt)), RtVal::Integer(x))
+                })))
+            }
+            RtVal::CellArray(a) => {
+                Ok(Box::new(a.shape().iter().zip(a.cells_iter()).map(
+                    |(pos, c)| (Some(RtVal::Vector(pos)), RtVal::Cell(c)),
+                )))
+            }
+
             RtVal::EmptySet => Ok(Box::new(std::iter::empty())),
-            RtVal::IntegerSet(set) => Ok(Box::new(set.iter().map(RtVal::Integer))),
+            RtVal::IntegerSet(set) => Ok(Box::new(set.iter().map(|x| (None, RtVal::Integer(x))))),
             RtVal::CellSet(set) => Err(Error::unimplemented(self.span)),
-            RtVal::VectorSet(set) => Ok(Box::new(set.iter().map(RtVal::Vector))),
+            RtVal::VectorSet(set) => Ok(Box::new(set.iter().map(|x| (None, RtVal::Vector(x))))),
+
             _ => Err(Error::iterate_type_error(self.span, &self.ty())),
         }
     }

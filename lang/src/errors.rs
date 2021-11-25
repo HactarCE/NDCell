@@ -298,6 +298,7 @@ impl Error {
         },
     ));
     error_fn!(Error; fn iterate_type_error("type error: cannot iterate over {}", ty: &Type));
+    error_fn!(Error; fn iterate_index_type_error("type error: cannot iterate over {} with indices", ty: &Type));
 
     error_fn!(Error; fn invalid_arguments(
         "'{}' cannot take arguments of types {}",

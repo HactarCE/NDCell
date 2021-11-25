@@ -142,13 +142,22 @@ impl SyntaxRule for ForLoop {
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
             p.parse(ast, Token::Keyword(Keyword::For))?;
-            let iter_var = p.parse(ast, Identifier)?;
+            let span1 = p.span();
+            let mut index_var = None;
+            let mut iter_var = p.parse(ast, Identifier)?;
+            if p.try_parse(ast, Token::Comma).transpose()?.is_some() {
+                index_var = Some(iter_var);
+                iter_var = p.parse(ast, Identifier)?;
+            }
             p.parse(ast, Token::Keyword(Keyword::In))?;
             let iter_expr = p.parse(ast, Expression)?;
+            let span2 = p.span();
             let block = p.parse(ast, StatementBlock)?;
             Ok(ast::StmtData::ForLoop {
+                index_var,
                 iter_var,
                 iter_expr,
+                first_line_span: span1.merge(span2),
                 block,
             })
         })

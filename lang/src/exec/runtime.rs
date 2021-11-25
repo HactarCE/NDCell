@@ -188,12 +188,24 @@ impl Runtime {
             ast::StmtData::Break => Ok(Flow::Break(stmt.span())),
             ast::StmtData::Continue => Ok(Flow::Continue(stmt.span())),
             ast::StmtData::ForLoop {
+                index_var,
                 iter_var,
                 iter_expr,
+                first_line_span: _,
                 block,
             } => {
                 let iter_expr = ast.get_node(*iter_expr);
-                for it in self.eval_expr(iter_expr)?.iterate()? {
+                let iter_value = self.eval_expr(iter_expr)?;
+                let ty = iter_value.ty();
+                for (index, it) in iter_value.iterate()? {
+                    if let Some(index_var) = index_var {
+                        match index {
+                            Some(i) => self.assign_var(index_var, i),
+                            None => {
+                                return Err(Error::iterate_index_type_error(iter_expr.span(), &ty));
+                            }
+                        }
+                    }
                     self.assign_var(iter_var, it);
                     match self.exec_stmt(ast.get_node(*block))? {
                         Flow::Proceed | Flow::Continue(_) => (),

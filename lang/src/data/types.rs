@@ -141,29 +141,6 @@ impl Type {
             Type::Regex => "Regex",
         }
     }
-
-    /// Returns the type yielded by iteration over this type, or None if this
-    /// type cannot be iterated over.
-    pub fn iteration_type(&self) -> Option<Type> {
-        match self {
-            Type::Null => None,
-            Type::Integer => None,
-            Type::Cell => None,
-            Type::Tag => Some(Type::Cell),
-            Type::String => Some(Type::String),
-            Type::Type => None,
-
-            Type::Vector(_) => Some(Type::Integer),
-            Type::CellArray(_) | Type::CellArrayMut(_) => Some(Type::Cell),
-
-            Type::EmptySet => Some(Type::Null),
-            Type::IntegerSet => Some(Type::Integer),
-            Type::CellSet => Some(Type::Cell),
-            Type::VectorSet(len) => Some(Type::Vector(*len)),
-            Type::PatternMatcher(_) => None,
-            Type::Regex => None,
-        }
-    }
 }
 
 /// Value with a well-defined type.

@@ -18,15 +18,15 @@ fn test_for_loop_range() {
 fn test_integer_for_loop(iter_expr: &str) {
     let exec = format!(
         "
-        i = -9999
+        x = -9999
         count = 0
         sum = 0
         product = 1
-        for i in {} {{
+        for x in {0} {{
             count += 1
-            sum += i
-            if i {{ product *= i }}
-            else {{ i = -9999 }} // this should have no effect
+            sum += x
+            if x {{ product *= x }}
+            else {{ x = -9999 }} // this should have no effect
         }}
         ",
         iter_expr,
@@ -34,7 +34,7 @@ fn test_integer_for_loop(iter_expr: &str) {
     TestProgram::new()
         .with_exec(&exec)
         .with_result_expressions(&[
-            (Type::Integer, "i"),
+            (Type::Integer, "x"),
             (Type::Integer, "count"),
             (Type::Integer, "sum"),
             (Type::Integer, "product"),
@@ -45,7 +45,7 @@ fn test_integer_for_loop(iter_expr: &str) {
 #[test]
 fn test_for_loop_vector_set() {
     let exec = "
-        i = -9999
+        v = vec()
         count = vec(0)
         sum = vec(0)
         product = vec(1)
@@ -58,7 +58,7 @@ fn test_for_loop_vector_set() {
     TestProgram::new()
         .with_exec(&exec)
         .with_result_expressions(&[
-            (Type::Integer, "i"),
+            (Type::Vector(Some(2)), "v"),
             (Type::Vector(Some(2)), "count"),
             (Type::Vector(Some(2)), "sum"),
             (Type::Vector(Some(2)), "product"),
@@ -76,6 +76,10 @@ fn test_for_loop_vector() {
         for a in [10, 20, 30, 40] {
             i -= 1
             ret[i] = a
+        }
+
+        for j, a in [10, 20, 30, 40] {
+            assert j == a / 10 - 1
         }
         ";
     TestProgram::new()
@@ -97,6 +101,10 @@ fn test_for_loop_vector() {
         for a in x0 {
             i -= 1
             ret[i] = a
+        }
+
+        for j, a in x0 {
+            assert j == a / 10 - 1
         }
         ";
     TestProgram::new()

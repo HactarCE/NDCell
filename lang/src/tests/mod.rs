@@ -244,7 +244,7 @@ impl<'a> TestProgram<'a> {
         expr_ids: &[ast::ExprId],
         inputs: &[RtVal],
     ) -> (String, Result<Vec<String>, Vec<Error>>) {
-        let task_str = format!("intepreting {:#?} with inputs {:?}", inputs, self);
+        let task_str = format!("intepreting {:#?} with inputs {:?}", self, inputs);
         for (i, value) in inputs.iter().enumerate() {
             let var_name = Arc::new(format!("x{}", i));
             runtime.assign_var(&var_name, value.clone());

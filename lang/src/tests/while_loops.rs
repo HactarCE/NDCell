@@ -80,7 +80,6 @@ fn test_while_ambiguous_type() {
         ("x=1", "if x0 { x=#1 break x=1 } _=x", ""),
     ] {
         let prgm = format!("{}  while x1 {{  x1-=1 {}  }}  {}", pre, inner, post);
-        println!("{:?}", prgm);
         TestProgram::new()
             .with_input_types(&[Type::Integer, Type::Integer])
             .with_exec(&prgm)
@@ -102,7 +101,6 @@ fn test_while_ambiguous_type() {
         ("x=1", "if x0 { x=#1 continue x=1 } _=x", ""),
     ] {
         let prgm = format!("{}  while x1 {{  x1-=1 {}  }}  {}", pre, inner, post);
-        println!("{:?}", prgm);
         TestProgram::new()
             .with_input_types(&[Type::Integer, Type::Integer])
             .with_exec(&prgm)

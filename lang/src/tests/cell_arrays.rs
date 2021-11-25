@@ -38,7 +38,7 @@ fn test_cell_array_mutation() {
             .filter(span, |_| mask_iter.next().unwrap())
             .unwrap(),
     );
-    let zeros = CellArray::from_cell(Arc::clone(&shape), 3_u8);
+    let threes = CellArray::from_cell(Arc::clone(&shape), 3_u8);
     let ty = Type::CellArrayMut(Some(Arc::clone(&shape)));
 
     assert_eq!(shape.len(), 11);
@@ -47,17 +47,18 @@ fn test_cell_array_mutation() {
     let test_prgm_template = TestProgram::new().with_input_types(&input_types);
 
     test_prgm_template
+        .with_setup("@states 10")
         .with_exec("x0[x1, x2] = #1")
         .assert_compiled_test_cases(
             iproduct!(-2..=2, -2..=2, -2..=2)
                 .map(|(x, y, z)| {
                     let inputs = vec![
-                        RtVal::CellArray(Arc::new(zeros.clone())),
+                        RtVal::CellArray(Arc::new(threes.clone())),
                         Vector(vec![x, y]),
                         Integer(z),
                     ];
 
-                    let mut expected = zeros.clone();
+                    let mut expected = threes.clone();
                     let expected_result = if let Some(c) = expected.get_cell_mut(&[x, y, z]) {
                         *c = 1_u8;
                         Ok(vec![expected])
@@ -76,10 +77,11 @@ fn test_cell_array_mutation() {
         );
 
     TestProgram::new()
+        .with_setup("@states 10")
         .with_input_types(&[Type::CellArrayMut(Some(shape))])
         .with_exec("a = x0.as_immut    a[0] = #1")
         .assert_compile_or_interpreted_errors(
-            vec![RtVal::CellArray(Arc::new(zeros))],
+            vec![RtVal::CellArray(Arc::new(threes))],
             test_errors![
                 "cannot assign to this expression" @ "a[0]",
             ],

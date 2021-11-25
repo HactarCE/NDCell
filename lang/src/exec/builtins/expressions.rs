@@ -398,7 +398,7 @@ impl Expression for CmpChain<'_> {
                 (llvm::const_int(0), false_bb),
             ];
             Ok(Val::Cp(CpVal::Integer(
-                compiler.build_phi(&phi_incoming, "cmp_result")?,
+                compiler.build_and_populate_phi(&phi_incoming, "cmp_result")?,
             )))
         } else {
             // All comparisons returned true, so just return true.

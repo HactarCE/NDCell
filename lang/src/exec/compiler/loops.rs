@@ -63,10 +63,9 @@ pub struct Loop {
 pub struct VarInLoop {
     /// Value in the variable before the loop begins.
     pub pre_loop_var: Var,
-    /// Placeholder phi node for this variable's initial value at the top of the
-    /// loop. Iff the variable has a type with no compile-time represenation,
-    /// this is `None`.
-    pub placeholder_phi: Option<llvm::PhiValue>,
+    /// Phi node for this variable in the prelatch (may be `None` if a phi node
+    /// cannot be built).
+    pub header_phi: Option<llvm::PhiValue>,
     /// Span of the first use of the placeholder value.
     pub first_use: Option<Span>,
 

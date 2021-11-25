@@ -1019,7 +1019,7 @@ impl Compiler {
         }
 
         phi_incoming.extend(phi_incoming_2);
-        self.build_phi(&phi_incoming, "")
+        self.build_and_populate_phi(&phi_incoming, "")
     }
     /// Builds a conditional statement, using an IntValue of any width. Any
     /// nonzero value is truthy, and zero is falsey.
@@ -1127,7 +1127,7 @@ impl Compiler {
                         ];
                         // TODO workaround for https://github.com/rust-lang/rust/issues/90841
                         let merged_var_value =
-                            BuildPhi::<Var>::build_phi(self, &phi_incoming, name)?;
+                            BuildPhi::<Var>::build_and_populate_phi(self, &phi_incoming, name)?;
                         self.set_var(name, Some(merged_var_value));
                     }
                 }
@@ -1182,22 +1182,19 @@ impl Compiler {
                     .entry(Arc::clone(name))
                     .or_default()
                     .loop_placeholder_index = Some(loop_depth);
-                // IIFE in place of try block (TODO #[feature(try_block)])
-                let placeholder_phi = (|| {
-                    let ty = self.vars.get(name)?.value.as_ref().ok()?.ty();
-                    let llvm_type = self.basic_type(&ty)?;
-                    let placeholder_phi = self
-                        .builder()
-                        .build_phi(llvm_type, &format!("{}_placeholder", name));
-                    let placeholder_value =
-                        CpVal::from_basic_value(ty, placeholder_phi.as_basic_value()).ok()?;
-                    self.vars.get_mut(name)?.value = Ok(Val::Cp(placeholder_value));
-                    Some(placeholder_phi)
-                })();
+                let var = self.get_var(name);
+                let header_phi = self.build_phi(&var, name);
+                self.vars.get_mut(name)?.value = header_phi
+                    .and_then(|phi| {
+                        let ty = var.try_ty()?;
+                        let cp_val = CpVal::from_basic_value(ty, phi.as_basic_value()).ok()?;
+                        Some(Val::Cp(cp_val))
+                    })
+                    .ok_or(VarError::AlreadyReported); // not already reported, but we'll report it later in this function
 
                 let var_in_loop = VarInLoop {
                     pre_loop_var,
-                    placeholder_phi,
+                    header_phi,
                     first_use: None,
 
                     prelatch_phi_inputs: vec![],
@@ -1240,7 +1237,8 @@ impl Compiler {
         self.builder().position_at_end(prelatch);
         if lööp.has_continue {
             for (name, var_in_loop) in &lööp.vars_modified {
-                let var_at_prelatch = self.build_phi(&var_in_loop.prelatch_phi_inputs, name)?;
+                let var_at_prelatch =
+                    self.build_and_populate_phi(&var_in_loop.prelatch_phi_inputs, name)?;
                 self.set_var(name, Some(var_at_prelatch))
             }
             match build_prelatch(self)? {
@@ -1255,99 +1253,61 @@ impl Compiler {
             self.builder().build_unconditional_branch(header);
         }
 
-        // Build phi nodes at the beginning of the header.
-        self.builder().position_before(
-            &header
-                .get_first_instruction()
-                .ok_or_else(|| internal_error_value!("empty loop header"))?,
-        );
-        let mut replacements = vec![];
-        for (name, var_in_loop) in &lööp.vars_modified {
-            let var_at_preheader = var_in_loop.pre_loop_var.clone();
-            let var_at_latch = self.get_var(name);
-            let mut var_at_header = if lööp.has_continue {
-                let phi_incoming = [(var_at_preheader, preheader), (var_at_latch, latch)];
-                self.build_phi(&phi_incoming, name)
-            } else {
-                let phi_incoming = [(var_at_preheader, preheader)];
-                self.build_phi(&phi_incoming, name)
-            }?;
-            // Replace the placeholder value.
-            if let Some(placeholder_phi) = &var_in_loop.placeholder_phi {
-                if let Some(first_use_span) = var_in_loop.first_use {
-                    // If this is the first use of the variable in a bigger loop
-                    // as well, this call to `get_value()` will record that.
-                    let var_value_at_first_use = var_at_header.get_value(first_use_span)?;
-                    let ty = var_value_at_first_use.ty();
-                    let value_at_first_use = self
-                        .try_get_cp_val(&var_value_at_first_use)?
-                        .ok_or_else(|| Error::unknown_variable_value(first_use_span, &ty))?;
-                    let old_ty = var_in_loop.pre_loop_var.try_ty();
-                    if old_ty != Some(ty) {
-                        internal_error!("loop placeholder type mismatch");
-                    }
-                    replacements.push((
-                        placeholder_phi.as_basic_value(),
-                        value_at_first_use.to_basic_value(),
-                    ));
-                } else {
-                    // If there is any use of this phi node, it's not a "real"
-                    // use; it's just used in one or more other phi nodes that
-                    // go nowhere. The proper thing to do would be to remove all
-                    // those phi nodes, but I can't get recursive calls to
-                    // `remove_from_basic_block()` or `erase_from_basic_block()`
-                    // to work reliably, so just replace uses of this phi node
-                    // with an undefined value and hope it's never really used.
-                    let basic_type = placeholder_phi.as_basic_value().get_type();
-                    replacements.push((
-                        placeholder_phi.as_basic_value(),
-                        llvm::get_undef(basic_type),
-                    ));
-                }
-            }
-        }
-
-        // Delete latch if there is no `continue` statement.
         if !lööp.has_continue {
+            // Delete latch if there is no `continue` statement.
             unsafe { prelatch.delete() }.expect("failed to delete prelatch");
             unsafe { latch.delete() }.expect("failed to delete prelatch");
         }
 
-        // Build unreachable basic block used for phi node shenanigans.
-        self.append_and_build_at_unreachable_basic_block();
-        self.builder().build_unconditional_branch(exit);
-        let pre_exit_phantom = self.current_block();
-
-        // Build exit.
-        self.builder().position_at_end(exit);
-
-        // Build phi nodes at exit.
-        for (name, mut var_in_loop) in lööp.vars_modified {
-            // If the variable has an error before the loop (e.g.,
-            // `VarError::Undefined`) but is assigned inside the loop (in which
-            // case the value should be `VarError::MaybeUninit`), we want to
-            // include the values at each `continue` statement in the error if
-            // it is relevant.
-            let var_at_latch = self.get_var(&name);
-            var_in_loop
-                .exit_phi_inputs
-                .push((var_at_latch, pre_exit_phantom));
-
-            let mut var_at_exit = self.build_phi(&var_in_loop.exit_phi_inputs, &name)?;
-
-            // Restore loop placeholder index.
-            var_at_exit.loop_placeholder_index = var_in_loop.pre_loop_var.loop_placeholder_index;
-
-            self.set_var(&name, Some(var_at_exit));
+        if lööp.has_break {
+            // Build exit.
+            self.builder().position_at_end(exit);
+        } else {
+            // Delete exit if there is no `break` statement.
+            unsafe { exit.delete() }.expect("failed to delete exit");
         }
 
-        // Apply replacements.
-        for (placeholder_value, value_at_first_use) in replacements {
-            llvm::replace_all_uses_of_basic_value(placeholder_value, value_at_first_use);
-            placeholder_value
-                .as_instruction_value()
-                .unwrap()
-                .remove_from_basic_block();
+        for (name, mut var_in_loop) in lööp.vars_modified {
+            // Populate phi node at the beginning of the header.
+            let var_at_preheader = var_in_loop.pre_loop_var.clone();
+            let var_at_latch = self.get_var(&name);
+            let mut var_at_header = if lööp.has_continue {
+                let phi_incoming = [(var_at_preheader, preheader), (var_at_latch, latch)];
+                self.populate_phi(var_in_loop.header_phi, &phi_incoming)
+            } else {
+                let phi_incoming = [(var_at_preheader, preheader)];
+                self.populate_phi(var_in_loop.header_phi, &phi_incoming)
+            }?;
+            // If the variable was used inside the loop, make sure there's no
+            // error when it's used.
+            if let Some(first_use_span) = var_in_loop.first_use {
+                // If this is the first use of the variable in a bigger loop as
+                // well, this call to `get_value()` will record that.
+                let var_value_at_first_use = var_at_header.get_value(first_use_span)?;
+                let ty = var_value_at_first_use.ty();
+                self.try_get_cp_val(&var_value_at_first_use)?
+                    .ok_or_else(|| Error::unknown_variable_value(first_use_span, &ty))?;
+            }
+
+            if lööp.has_break {
+                // Replace uses of placeholder variable value with variable
+                // value at start of header.
+                for &mut (ref mut var, _bb) in &mut var_in_loop.exit_phi_inputs {
+                    if var.loop_placeholder_index == Some(loop_depth) {
+                        *var = var_at_header.clone();
+                    }
+                }
+
+                // Build phi node at exit.
+                let mut var_at_exit =
+                    self.build_and_populate_phi(&var_in_loop.exit_phi_inputs, &name)?;
+
+                // Restore loop placeholder index.
+                var_at_exit.loop_placeholder_index =
+                    var_in_loop.pre_loop_var.loop_placeholder_index;
+
+                self.set_var(&name, Some(var_at_exit));
+            }
         }
 
         Ok(())
@@ -2185,8 +2145,29 @@ impl Compiler {
 }
 
 pub trait BuildPhi<V> {
-    /// Builds a phi node.
-    fn build_phi(&mut self, incoming: &[(V, llvm::BasicBlock)], name: &str) -> Result<V>;
+    /// Builds a phi node but does not add any incoming values. (The first value
+    /// is merely used to determine the type.)
+    fn build_phi(&mut self, first_incoming: &V, name: &str) -> Option<llvm::PhiValue>;
+    /// Adds more incoming values to the phi node. Deletes the phi node if the
+    /// value cannot be constructed.
+    fn populate_phi(
+        &mut self,
+        phi: Option<llvm::PhiValue>,
+        incoming: &[(V, llvm::BasicBlock)],
+    ) -> Result<V>;
+    /// Builds and populates a phi node.
+    fn build_and_populate_phi(
+        &mut self,
+        incoming: &[(V, llvm::BasicBlock)],
+        name: &str,
+    ) -> Result<V> {
+        let first_incoming = &incoming
+            .first()
+            .ok_or_else(|| internal_error_value!("phi node has no incoming"))?
+            .0;
+        let phi = self.build_phi(first_incoming, name);
+        self.populate_phi(phi, incoming)
+    }
 }
 macro_rules! impl_build_phi_for_basic_value_types {
     ( $($method:ident() -> $type_name:ty),+ $(,)? ) => {
@@ -2194,14 +2175,17 @@ macro_rules! impl_build_phi_for_basic_value_types {
             impl BuildPhi<$type_name> for Compiler {
                 fn build_phi(
                     &mut self,
-                    incoming: &[($type_name, llvm::BasicBlock)],
+                    first_incoming: &$type_name,
                     name: &str,
+                ) -> Option<llvm::PhiValue> {
+                     Some(self.builder().build_phi(first_incoming.get_type(), name))
+                }
+                fn populate_phi(
+                    &mut self,
+                    phi: Option<llvm::PhiValue>,
+                    incoming: &[($type_name, llvm::BasicBlock)],
                 ) -> Result<$type_name> {
-                    let (first, _bb) = incoming
-                        .first()
-                        .ok_or_else(|| internal_error_value!("phi node has no incoming"))?;
-                    let basic_ty = first.get_type();
-                    let phi = self.builder().build_phi(basic_ty, name);
+                    let phi = phi.ok_or_else(|| internal_error_value!("phi is None"))?;
                     phi.add_incoming(
                         &incoming
                             .iter()
@@ -2220,14 +2204,22 @@ impl_build_phi_for_basic_value_types!(
     into_pointer_value() -> llvm::PointerValue,
 );
 impl BuildPhi<VarResult> for Compiler {
-    fn build_phi(
+    fn build_phi(&mut self, first_incoming: &VarResult, name: &str) -> Option<llvm::PhiValue> {
+        let ty = first_incoming.as_ref().ok()?.ty();
+        let basic_type = self.basic_type(&ty)?;
+        Some(self.builder().build_phi(basic_type, name))
+    }
+    fn populate_phi(
         &mut self,
+        phi: Option<llvm::PhiValue>,
         incoming: &[(VarResult, llvm::BasicBlock)],
-        name: &str,
     ) -> Result<VarResult> {
-        // This function assumes there is at least one incoming value.
-        if incoming.is_empty() {
-            internal_error!("phi node has no incoming values");
+        fn delete_phi(phi: Option<llvm::PhiValue>) {
+            if let Some(phi) = phi {
+                // erase_from_basic_block() would be more semantically correct,
+                // but it's much less memory-safe.
+                phi.as_instruction().remove_from_basic_block();
+            }
         }
 
         // Collect a list of all the incoming errors and values.
@@ -2242,6 +2234,9 @@ impl BuildPhi<VarResult> for Compiler {
 
         // If there are any incoming errors, return the most severe error.
         let merged_error = errors.into_iter().cloned().fold1(VarError::merge);
+        if merged_error.is_some() {
+            delete_phi(phi);
+        }
         match merged_error {
             Some(VarError::Undefined) if !vals.is_empty() => {
                 // Replace Undefined with MaybeUninit if there is some value.
@@ -2256,16 +2251,22 @@ impl BuildPhi<VarResult> for Compiler {
             None => (),
         }
 
-        // There are no incoming errors; if all the values are the same, exit
-        // early by returning that value.
-        if vals.iter().map(|v| v.as_rt_val()).all_equal() {
+        // There are no incoming errors; if all the values are the same (and the
+        // phi node hasn't been used yet), exit early by returning that value.
+        let phi_is_unused = match phi {
+            Some(phi) => phi.as_basic_value().get_first_use().is_none(),
+            None => true,
+        };
+        if vals.iter().map(|v| v.as_rt_val()).all_equal() && phi_is_unused {
             if let Some(rt_val) = vals[0].as_rt_val() {
+                delete_phi(phi);
                 return Ok(Ok(Val::Rt(rt_val.clone())));
             }
         }
 
         // There are no incoming errors; check that the types are all the same.
         if !vals.iter().map(|v| v.ty()).all_equal() {
+            delete_phi(phi);
             return Ok(Err(VarError::AmbiguousType));
         }
 
@@ -2276,14 +2277,17 @@ impl BuildPhi<VarResult> for Compiler {
         // type) to basic values.
         let basic_type = match self.basic_type(&ty) {
             Some(t) => t,
-            None => return Ok(Err(VarError::NonConstValue(ty))),
+            None => {
+                delete_phi(phi);
+                return Ok(Err(VarError::NonConstValue(ty)));
+            }
         };
         let basic_values = vals
             .iter()
             .map(|v| {
                 Ok(self
                     .try_get_cp_val(v)?
-                    .ok_or_else(|| internal_error_value!("unable to convert value to cpval"))?
+                    .ok_or_else(|| internal_error_value!("unable to convert value to CpVal"))?
                     .to_basic_value())
             })
             .collect::<Result<Vec<llvm::BasicValueEnum>>>()?;
@@ -2292,7 +2296,8 @@ impl BuildPhi<VarResult> for Compiler {
         let dyn_basic_values = basic_values.iter().map(|v| v as &dyn llvm::BasicValue);
         let basic_blocks = incoming.iter().map(|(_v, bb)| *bb);
         let phi_incoming = dyn_basic_values.zip(basic_blocks).collect_vec();
-        let phi = self.builder().build_phi(basic_type, name);
+
+        let phi = phi.ok_or_else(|| internal_error_value!("phi is None"))?;
         phi.add_incoming(&phi_incoming);
 
         Ok(Ok(Val::Cp(CpVal::from_basic_value(
@@ -2302,14 +2307,21 @@ impl BuildPhi<VarResult> for Compiler {
     }
 }
 impl BuildPhi<Var> for Compiler {
-    fn build_phi(&mut self, incoming: &[(Var, llvm::BasicBlock)], name: &str) -> Result<Var> {
+    fn build_phi(&mut self, first_incoming: &Var, name: &str) -> Option<llvm::PhiValue> {
+        self.build_phi(&first_incoming.value, name)
+    }
+    fn populate_phi(
+        &mut self,
+        phi: Option<llvm::PhiValue>,
+        incoming: &[(Var, llvm::BasicBlock)],
+    ) -> Result<Var> {
         Ok(Var {
-            value: self.build_phi(
+            value: self.populate_phi(
+                phi,
                 &incoming
                     .iter()
                     .map(|(var, bb)| (var.value.clone(), *bb))
                     .collect_vec(),
-                name,
             )?,
             initial_type: incoming
                 .iter()

@@ -68,12 +68,13 @@ mod constants;
 mod convert;
 mod debug;
 mod empty_set;
+mod for_loops;
 mod integer_sets;
-mod loops;
 mod math;
 mod values;
 mod vector_sets;
 mod vectors;
+mod while_loops;
 
 use crate::ast;
 use crate::data::{CellArray, GetType, LangCell, LangInt, LangUint, RtVal, Type};
@@ -443,7 +444,7 @@ impl<'a> TestProgram<'a> {
     }
     /// Asserts that the compiled and interpreted programs produce the same
     /// outputs for each set of inputs.
-    pub fn assert_compiled_and_interpreted_agree(self, cases: Vec<Vec<RtVal>>) {
+    pub fn assert_compiled_and_interpreted_agree(self, cases: Vec<Vec<RtVal>>) -> Self {
         let (compiled_ast, mut compiled_f) = self.setup_compiled_func();
         let (interpreted_ast, stmt_id, expr_ids) = self.ast_for_interpreter_test();
         let clean_runtime = self.init_new_runtime(&interpreted_ast);
@@ -473,6 +474,7 @@ impl<'a> TestProgram<'a> {
                 );
             }
         }
+        self
     }
 }
 

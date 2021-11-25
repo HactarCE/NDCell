@@ -28,10 +28,12 @@ use codemap::{Span, Spanned};
 use inkwell::module;
 use inkwell::values::AnyValue;
 use itertools::Itertools;
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::sync::{mpsc, Arc};
 
 use ndcell_core::ndrect::IRect6D;
+use ndcell_core::num::iter::RangeInclusive;
 
 mod config;
 mod function;
@@ -665,6 +667,32 @@ impl Compiler {
             .collect()
     }
 
+    /// Adds a constant array to the module and returns a pointer to the first
+    /// element.
+    pub fn add_const_array(
+        &mut self,
+        array_value: llvm::ArrayValue,
+        name: &str,
+    ) -> llvm::PointerValue {
+        // Store the array as a global constant.
+        let array_global = self.module.add_global(
+            array_value.get_type(),
+            Some(llvm::AddressSpace::Generic),
+            name,
+        );
+        array_global.set_initializer(&array_value);
+        // Mark this global as a constant; we don't ever intend to modify it.
+        array_global.set_constant(true);
+        // The address of the constant doesn't matter; please do merge it with
+        // other identical values!
+        array_global.set_unnamed_addr(true);
+
+        // Get a pointer to the array.
+        let ty = array_value.get_type().get_element_type();
+        array_global
+            .as_pointer_value()
+            .const_cast(ty.ptr_type(llvm::AddressSpace::Generic))
+    }
     /// Builds instructions to construct an N-dimensional array with constant
     /// contents.
     pub fn build_const_ndarray(
@@ -674,27 +702,8 @@ impl Compiler {
         array_value: llvm::ArrayValue,
         name: &str,
     ) -> Result<llvm::NdArrayValue> {
-        // Store the array as a global constant.
-        let array_global = self.module.add_global(
-            array_value.get_type(),
-            Some(llvm::AddressSpace::Generic),
-            &format!("{}_array", name),
-        );
-        array_global.set_initializer(&array_value);
-        // Mark this global as a constant; we don't ever intend to modify it.
-        array_global.set_constant(true);
-        // The address of the constant doesn't matter; please do merge it with
-        // other identical values!
-        array_global.set_unnamed_addr(true);
-
+        let base_ptr = self.add_const_array(array_value, &format!("{}_array", name));
         let strides = llvm::const_vector(crate::utils::ndarray_strides(ndim, bounds));
-
-        // Get a pointer to the array.
-        let ty = array_value.get_type().get_element_type();
-        let base_ptr = array_global
-            .as_pointer_value()
-            .const_cast(ty.ptr_type(llvm::AddressSpace::Generic));
-
         self.build_construct_ndarray_from_base_ptr(bounds, base_ptr, strides, name)
     }
     /// Builds instructions to construct an N-dimensional array from a pointer
@@ -1157,7 +1166,7 @@ impl Compiler {
         vars_assigned: HashMap<Arc<String>, Span>,
         build_contents: impl FnOnce(&mut Self) -> Result<IsTerminated>,
         build_prelatch: impl FnOnce(&mut Self) -> Result<IsTerminated>,
-    ) -> Result<()> {
+    ) -> Result<IsTerminated> {
         let loop_depth = self.loop_stack.len();
 
         let preheader = self.append_basic_block("preheader");
@@ -1316,7 +1325,11 @@ impl Compiler {
             }
         }
 
-        Ok(())
+        if lööp.has_break {
+            Ok(IsTerminated::Unterminated)
+        } else {
+            Ok(IsTerminated::Terminated)
+        }
     }
 
     /// Builds an unconditional jump to the end of the inside of the loop.
@@ -1352,6 +1365,120 @@ impl Compiler {
         let exit = lööp.exit;
         self.builder().build_unconditional_branch(exit);
         Ok(IsTerminated::Terminated)
+    }
+
+    /// Builds a loop over a range of integers.
+    pub fn build_iterate_range(
+        &mut self,
+        start: LangInt,
+        stop: LangInt,
+        vars_assigned: HashMap<Arc<String>, Span>,
+        mut build_loop_body: impl FnMut(&mut Self, llvm::IntValue) -> Result<IsTerminated>,
+    ) -> Result<IsTerminated> {
+        let phi_ = Cell::new(None);
+        let latch_ = Cell::new(None);
+        self.build_loop(
+            vars_assigned,
+            |c| {
+                let lööp = c.loop_stack.last().unwrap();
+                let preheader = lööp.preheader;
+                let latch = lööp.latch;
+
+                let phi = c.builder().build_phi(llvm::int_type(), "loop_index");
+                phi.add_incoming(&[(&llvm::const_int(start), preheader)]);
+                phi_.set(Some(phi));
+                latch_.set(Some(latch));
+                let loop_index = phi.as_basic_value().into_int_value();
+
+                let is_loop_end = c.builder().build_int_compare(
+                    llvm::IntPredicate::SGT,
+                    loop_index,
+                    llvm::const_int(stop),
+                    "is_loop_end",
+                );
+                c.build_conditional(
+                    is_loop_end,
+                    |c| c.build_loop_break(),
+                    |_| Ok(IsTerminated::Unterminated),
+                )?;
+
+                build_loop_body(c, loop_index)
+            },
+            |c| {
+                let phi = phi_.get().unwrap();
+                let latch = latch_.get().unwrap();
+                let old_loop_index = phi.as_basic_value().into_int_value();
+
+                let new_loop_index =
+                    c.builder()
+                        .build_int_add(old_loop_index, llvm::const_int(1), "new_loop_index");
+                phi.add_incoming(&[(&new_loop_index, latch)]);
+                Ok(IsTerminated::Unterminated)
+            },
+        )
+    }
+    /// Builds a loop over an array of values.
+    pub fn build_iterate_array(
+        &mut self,
+        array_ptr: llvm::PointerValue,
+        array_len: usize,
+        vars_assigned: HashMap<Arc<String>, Span>,
+        mut build_loop_body: impl FnMut(&mut Self, llvm::BasicValueEnum) -> Result<IsTerminated>,
+    ) -> Result<IsTerminated> {
+        self.build_iterate_range(0, array_len as LangInt - 1, vars_assigned, |c, i| {
+            let ptr = unsafe { c.builder().build_in_bounds_gep(array_ptr, &[i], "iter_ptr") };
+            let iter_value = c.builder().build_load(ptr, "iter_value");
+            build_loop_body(c, iter_value)
+        })
+    }
+    /// Builds a loop over a constant array of integers.
+    pub fn build_iterate_const_int_array(
+        &mut self,
+        int_type: llvm::IntType,
+        values: impl IntoIterator<Item = llvm::IntValue>,
+        vars_assigned: HashMap<Arc<String>, Span>,
+        mut build_loop_body: impl FnMut(&mut Self, llvm::IntValue) -> Result<IsTerminated>,
+    ) -> Result<IsTerminated> {
+        let array_contents = values.into_iter().collect_vec();
+        let array_value = int_type.const_array(&array_contents);
+        let array_ptr = self.add_const_array(array_value, "const_iter_array");
+        let len = array_contents.len();
+        self.build_iterate_array(array_ptr, len, vars_assigned, |c, i| {
+            build_loop_body(c, i.into_int_value())
+        })
+    }
+    /// Builds a loop over a constant array of vectors.
+    pub fn build_iterate_const_vector_array(
+        &mut self,
+        vector_type: llvm::VectorType,
+        values: impl IntoIterator<Item = llvm::VectorValue>,
+        vars_assigned: HashMap<Arc<String>, Span>,
+        mut build_loop_body: impl FnMut(&mut Self, llvm::VectorValue) -> Result<IsTerminated>,
+    ) -> Result<IsTerminated> {
+        let array_contents = values.into_iter().collect_vec();
+        let array_value = vector_type.const_array(&array_contents);
+        let array_ptr = self.add_const_array(array_value, "const_iter_array");
+        let len = array_contents.len();
+        self.build_iterate_array(array_ptr, len, vars_assigned, |c, i| {
+            build_loop_body(c, i.into_vector_value())
+        })
+    }
+    /// Builds a loop over the elements in a vector.
+    pub fn build_iterate_vector(
+        &mut self,
+        vector: llvm::VectorValue,
+        vars_assigned: HashMap<Arc<String>, Span>,
+        mut build_loop_body: impl FnMut(&mut Self, llvm::BasicValueEnum) -> Result<IsTerminated>,
+    ) -> Result<IsTerminated> {
+        self.build_iterate_range(
+            0,
+            vector.get_type().get_size() as LangInt - 1,
+            vars_assigned,
+            |c, i| {
+                let it = c.builder().build_extract_element(vector, i, "iter_value");
+                build_loop_body(c, it)
+            },
+        )
     }
 
     /// Returns an LLVM intrinsic given its name and function signature.
@@ -2078,25 +2205,79 @@ impl Compiler {
                 block,
             } => {
                 let iter_expr = ast.get_node(*iter_expr_id);
-                todo!("compile for loop");
-                // for it in self.eval_expr(iter_expr)?.iterate()? {
-                //     // TODO: when #[feature(hash_raw_entry)] stabalizes, use
-                //     // that here to avoid the extra `Arc::clone()` (and consider
-                //     // changing `vars` to a `HashMap<String, CpVal>`)
-                //     self.vars.insert(Arc::clone(&iter_var), it.node);
-                //     match self.exec_stmt(ast.get_node(*block))? {
-                //         Flow::Proceed | Flow::Continue(_) => (),
-                //         Flow::Break(_) => break,
-                //         flow => return Ok(flow),
-                //     }
-                // }
-                // Ok(IsTerminated::Unterminated)
+                let iter_value = self.build_expr(iter_expr)?;
+                let block = ast.get_node(*block);
+                let mut vars_assigned = HashMap::new();
+                stmt.find_all_assigned_vars(&mut vars_assigned);
+                match iter_value.node {
+                    Val::Rt(RtVal::Tag(t)) => Err(Error::unimplemented(stmt.span())),
+                    Val::Rt(RtVal::String(_)) => Err(Error::cannot_compile(
+                        stmt.span(),
+                        "iteration over type String",
+                    )),
+
+                    Val::Rt(RtVal::Vector(v)) => {
+                        self.build_iterate_vector(llvm::const_vector(v), vars_assigned, |c, i| {
+                            let it = Ok(Val::Cp(CpVal::Integer(i.into_int_value())));
+                            c.assign_var(iter_var, it, stmt.span());
+                            c.build_stmt(block)
+                        })
+                    }
+                    Val::Rt(RtVal::CellArray(a)) => Err(Error::unimplemented(stmt.span())),
+
+                    Val::Rt(RtVal::EmptySet) => Ok(IsTerminated::Unterminated),
+                    Val::Rt(RtVal::IntegerSet(set)) if set.mask().is_none() => {
+                        if let Some((min, max)) = set.bounds() {
+                            self.build_iterate_range(min, max, vars_assigned, |c, i| {
+                                let it = Ok(Val::Cp(CpVal::Integer(i)));
+                                c.assign_var(iter_var, it, stmt.span());
+                                c.build_stmt(block)
+                            })
+                        } else {
+                            Ok(IsTerminated::Unterminated)
+                        }
+                    }
+                    Val::Rt(RtVal::IntegerSet(set)) => self.build_iterate_const_int_array(
+                        llvm::int_type(),
+                        set.iter().map(llvm::const_int),
+                        vars_assigned,
+                        |c, i| {
+                            let it = Ok(Val::Cp(CpVal::Integer(i)));
+                            c.assign_var(iter_var, it, stmt.span());
+                            c.build_stmt(block)
+                        },
+                    ),
+                    Val::Rt(RtVal::CellSet(set)) => Err(Error::unimplemented(stmt.span())),
+                    Val::Rt(RtVal::VectorSet(set)) => self.build_iterate_const_vector_array(
+                        llvm::vector_type(set.vec_len()),
+                        set.iter().map(llvm::const_vector),
+                        vars_assigned,
+                        |c, i| {
+                            let it = Ok(Val::Cp(CpVal::Vector(i)));
+                            c.assign_var(iter_var, it, stmt.span());
+                            c.build_stmt(block)
+                        },
+                    ),
+
+                    Val::Cp(CpVal::Vector(v)) => {
+                        self.build_iterate_vector(v, vars_assigned, |c, i| {
+                            let it = Ok(Val::Cp(CpVal::Integer(i.into_int_value())));
+                            c.assign_var(iter_var, it, stmt.span());
+                            c.build_stmt(block)
+                        })
+                    }
+                    Val::Cp(CpVal::CellArray(a) | CpVal::CellArrayMut(a)) => todo!(),
+
+                    Val::Cp(CpVal::CellSet(set)) => Err(Error::unimplemented(stmt.span())),
+
+                    val => Err(Error::iterate_type_error(iter_value.span, &val.ty())),
+                }
             }
             ast::StmtData::WhileLoop { condition, block } => {
                 let condition = ast.get_node(*condition);
                 let block = ast.get_node(*block);
                 let mut vars_assigned = HashMap::new();
-                block.find_all_assigned_vars(&mut vars_assigned);
+                stmt.find_all_assigned_vars(&mut vars_assigned);
                 self.build_loop(
                     vars_assigned,
                     |c| {
@@ -2108,8 +2289,7 @@ impl Compiler {
                         )
                     },
                     |_| Ok(IsTerminated::Unterminated),
-                )?;
-                Ok(IsTerminated::Unterminated)
+                )
             }
 
             ast::StmtData::Become(expr_id) => {

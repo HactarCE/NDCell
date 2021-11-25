@@ -209,7 +209,7 @@ pub trait SpannedRuntimeValueExt {
 
     /// Returns an iterator for the value if it can be iterated over; otherwise
     /// returns a type error.
-    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = Self>>>;
+    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = RtVal>>>;
 }
 impl SpannedRuntimeValueExt for Spanned<RtVal> {
     fn as_null(&self) -> Result<()> {
@@ -352,7 +352,19 @@ impl SpannedRuntimeValueExt for Spanned<RtVal> {
         }
     }
 
-    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = Self>>> {
-        Err(Error::unimplemented(None))
+    fn iterate<'a>(&'a self) -> Result<Box<dyn 'a + Iterator<Item = RtVal>>> {
+        match &self.node {
+            RtVal::Tag(_) => Err(Error::unimplemented(self.span)),
+            RtVal::String(s) => Ok(Box::new(
+                s.chars().map(|c| RtVal::String(Arc::new(c.to_string()))),
+            )),
+            RtVal::Vector(v) => Ok(Box::new(v.iter().map(|&i| RtVal::Integer(i)))),
+            RtVal::CellArray(a) => Ok(Box::new(a.cells_iter().map(RtVal::Cell))),
+            RtVal::EmptySet => Ok(Box::new(std::iter::empty())),
+            RtVal::IntegerSet(set) => Ok(Box::new(set.iter().map(RtVal::Integer))),
+            RtVal::CellSet(set) => Err(Error::unimplemented(self.span)),
+            RtVal::VectorSet(set) => Ok(Box::new(set.iter().map(RtVal::Vector))),
+            _ => Err(Error::iterate_type_error(self.span, &self.ty())),
+        }
     }
 }

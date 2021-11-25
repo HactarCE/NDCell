@@ -194,7 +194,7 @@ impl Runtime {
             } => {
                 let iter_expr = ast.get_node(*iter_expr);
                 for it in self.eval_expr(iter_expr)?.iterate()? {
-                    self.assign_var(iter_var, it.node);
+                    self.assign_var(iter_var, it);
                     match self.exec_stmt(ast.get_node(*block))? {
                         Flow::Proceed | Flow::Continue(_) => (),
                         Flow::Break(_) => break,

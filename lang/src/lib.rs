@@ -1,6 +1,7 @@
 //! JIT-compiled cellular automaton description language for NDCell.
 
 #![allow(dead_code)]
+#![allow(unused_variables, unused_imports)] // TODO: remove this
 #![warn(missing_docs)]
 
 #[macro_use]

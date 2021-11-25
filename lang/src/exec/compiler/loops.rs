@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::Var;
-use crate::data::{CpVal, Type};
 use crate::llvm;
 
 /// Collection of basic blocks that specify a loop. All blocks in this struct

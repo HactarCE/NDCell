@@ -24,7 +24,7 @@ impl Function for EmptySet {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct EmptyIntegerSet;
 impl Function for EmptyIntegerSet {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(0)?;
         Ok(IntegerSet::empty().into())
     }
@@ -34,7 +34,7 @@ impl Function for EmptyIntegerSet {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct EmptyCellSet;
 impl Function for EmptyCellSet {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(0)?;
         Err(Error::unimplemented(call.expr_span))
     }
@@ -95,7 +95,7 @@ fn eval_vec_set_construct(
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct SetLiteral;
 impl Function for SetLiteral {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.args
             .into_iter()
             .try_fold(RtVal::EmptySet, |v1, v2| match (v1, set_of(v2)?) {

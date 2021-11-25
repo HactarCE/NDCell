@@ -2,7 +2,6 @@
 
 pub use inkwell::context::Context;
 pub use inkwell::targets::TargetData;
-use inkwell::values::InstructionOpcode;
 pub use inkwell::{AddressSpace, IntPredicate};
 use itertools::Itertools;
 use thread_local::ThreadLocal;
@@ -17,7 +16,7 @@ pub mod traits {
     pub use super::IntMathValue;
 }
 
-use crate::data::{LangCell, LangInt, Type, CELL_STATE_BITS, INT_BITS};
+use crate::data::{LangCell, LangInt, CELL_STATE_BITS, INT_BITS};
 pub use traits::*;
 
 /// Raw JIT-compiled function pointer.

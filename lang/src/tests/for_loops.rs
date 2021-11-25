@@ -1,6 +1,6 @@
 use super::*;
 
-use RtVal::{Integer, Vector};
+use RtVal::Vector;
 
 #[test]
 fn test_for_loop_empty_set() {

@@ -109,10 +109,9 @@ impl Ctx {
             return Err(Error::duplicate_directive(directive_span, "@ndim"));
         }
 
-        let span = ndim.span;
         let n = ndim.as_integer()?;
         if !(1 <= n && n <= crate::MAX_NDIM as LangInt) {
-            return Err(Error::invalid_dimension_count(span));
+            return Err(Error::invalid_dimension_count(ndim.span));
         }
 
         self.ndim = Some(n as usize);
@@ -125,7 +124,6 @@ impl Ctx {
             return Err(Error::duplicate_directive(directive_span, "@radius"));
         }
 
-        let span = radius.span;
         let r = radius.as_integer()?;
         if !(0 <= r && r <= crate::MAX_RADIUS as LangInt) {
             return Err(Error::invalid_radius(radius.span));

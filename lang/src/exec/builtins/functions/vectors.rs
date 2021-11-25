@@ -18,7 +18,7 @@ use crate::llvm;
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct VectorLiteral;
 impl Function for VectorLiteral {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         let ret = eval_vector_literal(call.expr_span, &call.args)?;
         Ok(RtVal::Vector(ret))
     }

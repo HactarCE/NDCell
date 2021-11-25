@@ -57,7 +57,7 @@ pub enum StmtData {
 }
 impl Stmt<'_> {
     /// Finds all variables assigned in this statement and its children.
-    pub fn find_all_assigned_vars(self, names: &mut HashMap<Arc<String>, Span>) {
+    pub fn find_all_assigned_vars(self, names: &mut HashSet<Arc<String>>) {
         match self.data() {
             StmtData::Block(ids) => {
                 for id in ids {
@@ -67,7 +67,7 @@ impl Stmt<'_> {
 
             StmtData::Assign { lhs, .. } => {
                 if let Some(var) = self.ast.get_node(*lhs).find_assigned_var() {
-                    names.entry(var.node).or_insert(var.span);
+                    names.insert(var.node);
                 }
             }
 
@@ -94,13 +94,9 @@ impl Stmt<'_> {
                 ..
             } => {
                 if let Some(index_var) = index_var {
-                    names
-                        .entry(Arc::clone(&index_var.node))
-                        .or_insert(index_var.span);
+                    names.insert(Arc::clone(&index_var.node));
                 }
-                names
-                    .entry(Arc::clone(&iter_var.node))
-                    .or_insert(iter_var.span);
+                names.insert(Arc::clone(&iter_var.node));
                 self.ast.get_node(*block).find_all_assigned_vars(names);
             }
             StmtData::WhileLoop { block, .. } => {

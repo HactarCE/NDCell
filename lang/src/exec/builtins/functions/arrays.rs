@@ -6,11 +6,10 @@ use std::sync::Arc;
 use super::{CallInfo, Function};
 use crate::ast;
 use crate::data::{
-    CellArray, CpVal, GetType, LangCell, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt,
-    SpannedRuntimeValueExt, SpannedValExt, Type, Val, VectorSet,
+    CellArray, CpVal, GetType, LangCell, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt,
+    SpannedValExt, Type, Val, VectorSet,
 };
 use crate::errors::{Error, Result};
-use crate::exec::builtins::Expression;
 use crate::exec::{Compiler, Ctx, CtxTrait, Runtime};
 use crate::llvm;
 use crate::parser;
@@ -82,7 +81,7 @@ impl Function for Shape {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct AsImmut;
 impl Function for AsImmut {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         call.check_args_len(1)?;
         call.arg(0)?.as_cell_array().map(RtVal::CellArray)
     }
@@ -144,7 +143,7 @@ impl IndexCellArray {
     }
 }
 impl Function for IndexCellArray {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         let array = call.arg(0)?.as_cell_array()?;
         let pos = super::vectors::eval_vector_literal(call.span, &call.args[1..])?;
         let cell = array
@@ -165,10 +164,10 @@ impl Function for IndexCellArray {
 
     fn eval_assign(
         &self,
-        runtime: &mut Runtime,
+        _runtime: &mut Runtime,
         call: CallInfo<Spanned<RtVal>>,
-        first_arg: ast::Expr<'_>,
-        new_value: Spanned<RtVal>,
+        _first_arg: ast::Expr<'_>,
+        _new_value: Spanned<RtVal>,
     ) -> Result<()> {
         Err(Error::cannot_assign_to(call.expr_span))
     }
@@ -176,7 +175,7 @@ impl Function for IndexCellArray {
         &self,
         compiler: &mut Compiler,
         call: CallInfo<Spanned<Val>>,
-        first_arg: ast::Expr<'_>,
+        _first_arg: ast::Expr<'_>,
         new_value: Result<Spanned<Val>>,
     ) -> Result<()> {
         if matches!(call.arg(0)?.ty(), Type::CellArray(_)) {
@@ -195,7 +194,7 @@ impl Function for IndexCellArray {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct NewBuffer;
 impl Function for NewBuffer {
-    fn eval(&self, ctx: &mut Ctx, call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
+    fn eval(&self, _ctx: &mut Ctx, _call: CallInfo<Spanned<RtVal>>) -> Result<RtVal> {
         internal_error!("cannot construct mutable cell array in interpreted code");
     }
     fn compile(&self, compiler: &mut Compiler, call: CallInfo<Spanned<Val>>) -> Result<Val> {

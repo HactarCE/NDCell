@@ -7,7 +7,6 @@ use RtVal::{Integer, Vector};
 fn test_cell_array_construction() {
     let span = crate::utils::dummy_span();
     let r2_moore = Arc::new(VectorSet::moore(span, 2, 1, span).unwrap());
-    let r2_moore_zeros = CellArray::from_cell(Arc::clone(&r2_moore), 0_u8);
     let exprs = [(
         Type::CellArrayMut(Some(r2_moore.clone())),
         "moore().fill('1 2 3 4 . 0 # 7 9')",
@@ -46,12 +45,6 @@ fn test_cell_array_mutation() {
 
     let input_types = [ty.clone(), Type::Vector(Some(2)), Type::Integer];
     let test_prgm_template = TestProgram::new().with_input_types(&input_types);
-
-    let gen_expected = |pos: &[LangInt]| {
-        let mut expected = zeros.clone();
-        *expected.get_cell_mut(&[-1, -1, -1]).unwrap() = 1_u8;
-        expected
-    };
 
     test_prgm_template
         .with_exec("x0[x1, x2] = #1")

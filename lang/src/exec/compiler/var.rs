@@ -1,7 +1,6 @@
-use codemap::{Span, Spanned};
-use itertools::Itertools;
+use codemap::Span;
 
-use crate::data::{CpVal, GetType, RtVal, Type, Val};
+use crate::data::{GetType, Type, Val};
 use crate::errors::{Error, Result};
 
 pub type VarResult = std::result::Result<Val, VarError>;

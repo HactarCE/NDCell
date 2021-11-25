@@ -1,11 +1,10 @@
 //! Range operator.
 
 use codemap::{Span, Spanned};
-use std::sync::Arc;
 
 use super::{CallInfo, Function};
 use crate::data::{IntegerSet, LangInt, RtVal, VectorSet};
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::exec::Ctx;
 
 /// Built-in function that constructs a range between two arguments.

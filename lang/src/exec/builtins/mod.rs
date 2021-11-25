@@ -150,7 +150,7 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
         Type::CellSet => match name {
             _ => None,
         },
-        Type::VectorSet(vec_len) => match name {
+        Type::VectorSet(_) => match name {
             "fill" => Some(functions::arrays::FillVectorSet.boxed()),
             "new_buffer" => Some(functions::arrays::NewBuffer.boxed()),
             _ => None,

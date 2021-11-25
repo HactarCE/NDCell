@@ -1,5 +1,4 @@
 use codemap::Spanned;
-use itertools::Itertools;
 
 use super::{Expression, Identifier, Parser, StringLiteral, SyntaxRule, TryFromToken};
 use crate::ast;

@@ -1,13 +1,13 @@
 use codemap::Span;
 use itertools::Itertools;
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 use crate::errors::{Error, Result};
 
 use super::{LangInt, MAX_INTEGER_SET_SIZE};
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct IntegerSet {
     bounds: Option<(LangInt, LangInt)>,
     mask: Option<Vec<bool>>,
@@ -23,11 +23,6 @@ impl fmt::Display for IntegerSet {
         } else {
             write!(f, "intset()")
         }
-    }
-}
-impl Hash for IntegerSet {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        todo!()
     }
 }
 impl IntegerSet {

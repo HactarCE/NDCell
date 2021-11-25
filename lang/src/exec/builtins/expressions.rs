@@ -601,7 +601,6 @@ impl Expression for CompiledArg<'_> {
         new_value: Result<Spanned<Val>>,
     ) -> Result<()> {
         let index = self.arg_index(compiler, expr_span)?;
-        let old_value_fn = |c: &mut Compiler| c.build_load_arg(index).map(Val::Cp);
         compiler.build_store_arg(index, &new_value?)
     }
 }
@@ -630,7 +629,7 @@ impl Expression for Identifier<'_> {
     fn eval_assign(
         &self,
         runtime: &mut Runtime,
-        expr_span: Span,
+        _expr_span: Span,
         _stmt_span: Span,
         new_value: Spanned<RtVal>,
     ) -> Result<()> {
@@ -640,7 +639,7 @@ impl Expression for Identifier<'_> {
     fn compile_assign(
         &self,
         compiler: &mut Compiler,
-        expr_span: Span,
+        _expr_span: Span,
         stmt_span: Span,
         new_value: Result<Spanned<Val>>,
     ) -> Result<()> {

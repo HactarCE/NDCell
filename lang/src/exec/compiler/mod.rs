@@ -25,7 +25,6 @@
 //! [`llvm::ExecutionEngine`]) will last as long as the [`CompiledFunction`].
 
 use codemap::{Span, Spanned};
-use inkwell::module;
 use inkwell::values::AnyValue;
 use itertools::Itertools;
 use std::cell::Cell;
@@ -33,7 +32,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{mpsc, Arc};
 
 use ndcell_core::ndrect::IRect6D;
-use ndcell_core::num::iter::RangeInclusive;
 
 mod config;
 mod function;
@@ -44,13 +42,12 @@ mod var;
 use super::builtins::Expression;
 use crate::ast;
 use crate::data::{
-    CellArray, CellSet, CpVal, GetType, LangCell, LangInt, LlvmCellArray, RtVal,
-    SpannedCompileValueExt, SpannedRuntimeValueExt, SpannedVal, SpannedValExt, Type, Val,
-    VectorSet, INT_BITS,
+    CellArray, CellSet, CpVal, GetType, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt,
+    SpannedRuntimeValueExt, SpannedVal, Type, Val, VectorSet, INT_BITS,
 };
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait, Runtime};
-use crate::llvm::{self, traits::*, NdArrayValue};
+use crate::llvm::{self, traits::*};
 pub use config::CompilerConfig;
 pub use function::CompiledFunction;
 use loops::{Loop, VarInLoop};
@@ -448,7 +445,7 @@ impl Compiler {
             ParamType::Integer => llvm::int_type().as_basic_type_enum(),
             ParamType::Cell => llvm::cell_type().as_basic_type_enum(),
             ParamType::Vector(len) => llvm::vector_type(*len).as_basic_type_enum(),
-            ParamType::CellArray(shape) => llvm::cell_type()
+            ParamType::CellArray(_shape) => llvm::cell_type()
                 .ptr_type(llvm::AddressSpace::Generic)
                 .as_basic_type_enum(),
         }
@@ -720,17 +717,20 @@ impl Compiler {
             bounds,
             base_ptr,
             strides,
-            "array_from_base",
+            &format!("{}_from_base", name),
         );
 
         let negative_base = llvm::const_vector((0..ndim).map(|i| -bounds.min().0[i] as LangInt));
-        let origin_ptr =
-            self.build_ndarray_gep_unchecked(array_from_base, negative_base, "array_origin_ptr")?;
+        let origin_ptr = self.build_ndarray_gep_unchecked(
+            array_from_base,
+            negative_base,
+            &format!("{}_origin_ptr", name),
+        )?;
         Ok(self.build_construct_ndarray_from_origin_ptr(
             bounds,
             origin_ptr,
             strides,
-            "array_from_origin",
+            &format!("{}_from_origin", name),
         ))
     }
     /// Builds instructions to construct an N-dimensional array from a pointer
@@ -782,12 +782,12 @@ impl Compiler {
         &mut self,
         ndim: usize,
         bounds: IRect6D,
-        ty: llvm::IntType,
+        int_type: llvm::IntType,
         name: &str,
     ) -> Result<llvm::NdArrayValue> {
         let buffer_len = bounds.count();
         let array_base_ptr = self.builder().build_array_alloca(
-            llvm::cell_type(),
+            int_type,
             llvm::const_int(buffer_len as LangInt),
             "cell_array_buffer",
         );
@@ -1163,7 +1163,7 @@ impl Compiler {
     /// `continue` or `break`.
     pub fn build_loop(
         &mut self,
-        vars_assigned: HashMap<Arc<String>, Span>,
+        vars_assigned: HashSet<Arc<String>>,
         build_contents: impl FnOnce(&mut Self) -> Result<IsTerminated>,
         build_prelatch: impl FnOnce(&mut Self) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
@@ -1188,7 +1188,7 @@ impl Compiler {
         // values, which we will later build proper phi nodes for.
         let vars_modified: HashMap<Arc<String>, VarInLoop> = vars_assigned
             .iter()
-            .filter_map(|(name, span_where_assigned)| {
+            .filter_map(|name| {
                 let pre_loop_var = self.get_var(name);
 
                 // Assign a placeholder value to the variable if it can be
@@ -1372,7 +1372,7 @@ impl Compiler {
         &mut self,
         start: LangInt,
         stop: LangInt,
-        vars_assigned: HashMap<Arc<String>, Span>,
+        vars_assigned: HashSet<Arc<String>>,
         mut build_loop_body: impl FnMut(&mut Self, llvm::IntValue) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
         let phi_ = Cell::new(None);
@@ -1422,7 +1422,7 @@ impl Compiler {
         &mut self,
         array_ptr: llvm::PointerValue,
         array_len: usize,
-        vars_assigned: HashMap<Arc<String>, Span>,
+        vars_assigned: HashSet<Arc<String>>,
         mut build_loop_body: impl FnMut(&mut Self, llvm::BasicValueEnum) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
         self.build_iterate_range(0, array_len as LangInt - 1, vars_assigned, |c, i| {
@@ -1436,7 +1436,7 @@ impl Compiler {
         &mut self,
         int_type: llvm::IntType,
         values: impl IntoIterator<Item = llvm::IntValue>,
-        vars_assigned: HashMap<Arc<String>, Span>,
+        vars_assigned: HashSet<Arc<String>>,
         mut build_loop_body: impl FnMut(&mut Self, llvm::IntValue) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
         let array_contents = values.into_iter().collect_vec();
@@ -1452,7 +1452,7 @@ impl Compiler {
         &mut self,
         vector_type: llvm::VectorType,
         values: impl IntoIterator<Item = llvm::VectorValue>,
-        vars_assigned: HashMap<Arc<String>, Span>,
+        vars_assigned: HashSet<Arc<String>>,
         mut build_loop_body: impl FnMut(&mut Self, llvm::VectorValue) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
         let array_contents = values.into_iter().collect_vec();
@@ -1467,7 +1467,7 @@ impl Compiler {
     pub fn build_iterate_vector(
         &mut self,
         vector: llvm::VectorValue,
-        vars_assigned: HashMap<Arc<String>, Span>,
+        vars_assigned: HashSet<Arc<String>>,
         mut build_loop_body: impl FnMut(
             &mut Self,
             llvm::IntValue,
@@ -1775,7 +1775,7 @@ impl Compiler {
             |_| Ok(one),
             |c| {
                 c.build_loop(
-                    HashMap::new(),
+                    HashSet::new(),
                     |c| {
                         let b = c.builder();
                         let base_phi = b.build_phi(llvm::int_type(), "base");
@@ -2215,7 +2215,7 @@ impl Compiler {
                 let iter_expr = ast.get_node(*iter_expr_id);
                 let iter_value = self.build_expr(iter_expr)?;
                 let block = ast.get_node(*block);
-                let mut vars_assigned = HashMap::new();
+                let mut vars_assigned = HashSet::new();
                 stmt.find_all_assigned_vars(&mut vars_assigned);
                 let iterate_index_type_error =
                     Error::iterate_index_type_error(iter_expr.span(), &Type::IntegerSet);
@@ -2312,7 +2312,7 @@ impl Compiler {
             ast::StmtData::WhileLoop { condition, block } => {
                 let condition = ast.get_node(*condition);
                 let block = ast.get_node(*block);
-                let mut vars_assigned = HashMap::new();
+                let mut vars_assigned = HashSet::new();
                 stmt.find_all_assigned_vars(&mut vars_assigned);
                 self.build_loop(
                     vars_assigned,
@@ -2447,7 +2447,7 @@ impl BuildPhi<VarResult> for Compiler {
         // Collect a list of all the incoming errors and values.
         let mut errors = vec![];
         let mut vals = vec![];
-        for (result, bb) in incoming {
+        for (result, _bb) in incoming {
             match result {
                 Ok(v) => vals.push(v),
                 Err(e) => errors.push(e),
@@ -2495,15 +2495,15 @@ impl BuildPhi<VarResult> for Compiler {
         // All values are the same type; figure out what that type is.
         let ty = vals[0].ty();
 
+        // If we weren't able to construct a phi node, it must be impossible to
+        // represent this value in compiled code.
+        let phi = match phi {
+            Some(phi) => phi,
+            None => return Ok(Err(VarError::NonConstValue(ty))),
+        };
+
         // Convert the incoming values (which we now know are all the same type
         // type) to basic values.
-        let basic_type = match self.basic_type(&ty) {
-            Some(t) => t,
-            None => {
-                delete_phi(phi);
-                return Ok(Err(VarError::NonConstValue(ty)));
-            }
-        };
         let basic_values = vals
             .iter()
             .map(|v| {
@@ -2518,8 +2518,6 @@ impl BuildPhi<VarResult> for Compiler {
         let dyn_basic_values = basic_values.iter().map(|v| v as &dyn llvm::BasicValue);
         let basic_blocks = incoming.iter().map(|(_v, bb)| *bb);
         let phi_incoming = dyn_basic_values.zip(basic_blocks).collect_vec();
-
-        let phi = phi.ok_or_else(|| internal_error_value!("phi is None"))?;
         phi.add_incoming(&phi_incoming);
 
         Ok(Ok(Val::Cp(CpVal::from_basic_value(

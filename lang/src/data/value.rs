@@ -1,9 +1,7 @@
-use codemap::{Span, Spanned};
-use itertools::Itertools;
+use codemap::Spanned;
 
 use super::{CpVal, GetType, RtVal, Type};
 use crate::errors::{Error, Result};
-use crate::llvm;
 
 /// Well-defined value that may be constant or compiled variable.
 #[derive(Debug, Clone, PartialEq, Eq)]

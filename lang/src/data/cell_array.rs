@@ -206,12 +206,7 @@ impl LlvmCellArray {
     /// Only positions included in the existing cell array and the new mask are
     /// included in the result, so the resulting cell array will contain the
     /// intersection of the two.
-    pub fn remask(
-        &self,
-        module: &mut llvm::Module,
-        span: Span,
-        new_mask: &VectorSet,
-    ) -> Result<Self> {
+    pub fn remask(&self, span: Span, new_mask: &VectorSet) -> Result<Self> {
         let new_shape = Arc::new(self.shape.union(span, new_mask)?);
         Ok(Self::new(new_shape, self.cells))
     }

@@ -136,7 +136,7 @@ impl VectorSet {
         // Find lower and upper bounds along each dimension. This is O(n^d)
         // where it could be O(d*n^(d-1)) in the best case by only checking
         // cells on the exterior, but oh well.
-        let new_bounds = bounds_from_list(self.iter());
+        let new_bounds = bounds_from_list(self.iter_ivec6d());
 
         let mut new_mask = if self.bounds() == new_bounds {
             // The bounds haven't changed, so use the old mask.
@@ -170,8 +170,7 @@ impl VectorSet {
         check_vector_set_vec_len(span, vec_len)?;
         // TODO: make (better-optimized) function to generate vector set from a
         // list and also use it for set literal
-        self.into_iter()
-            .map(|v| v.0[..vec_len].iter().map(|&i| i as LangInt).collect_vec())
+        self.iter()
             .map(|v| Self::single_vector(span, &v, span))
             .fold(VectorSet::empty(span, vec_len), |s1, s2| {
                 s1?.union(span, &s2?)
@@ -305,8 +304,29 @@ impl VectorSet {
     }
 
     /// Returns an iterator over all the vectors in the set.
-    pub fn iter<'a>(&'a self) -> impl 'a + Iterator<Item = IVec6D> {
-        (&self).into_iter()
+    pub fn iter<'a>(&'a self) -> impl 'a + Iterator<Item = Vec<LangInt>> {
+        self.iter_ivec6d().map(|v| {
+            v.0[..self.vec_len()]
+                .iter()
+                .map(|&i| i as LangInt)
+                .collect()
+        })
+    }
+    /// Returns an iterator over all the vectors in the set, represented using
+    /// `IVec6D`.
+    fn iter_ivec6d<'a>(&'a self) -> Box<dyn 'a + Iterator<Item = IVec6D>> {
+        match self.bounds() {
+            None => Box::new(std::iter::empty()),
+            Some(b) => match self.mask() {
+                None => Box::new(b.iter()),
+                Some(m) => Box::new(
+                    b.iter()
+                        .zip_eq(m.as_flat_slice())
+                        .filter(|(_pos, &in_set)| in_set)
+                        .map(|(pos, _in_set)| pos),
+                ),
+            },
+        }
     }
 
     /// Returns the length of each vector in the set.
@@ -437,26 +457,6 @@ impl VectorSet {
             *b += vec_to_ivec6d_unchecked(delta);
         }
         Ok(ret)
-    }
-}
-
-impl<'a> IntoIterator for &'a VectorSet {
-    type Item = IVec6D;
-    type IntoIter = Box<dyn 'a + Iterator<Item = Self::Item>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        match self.bounds() {
-            None => Box::new(std::iter::empty()),
-            Some(b) => match self.mask() {
-                None => Box::new(b.iter()),
-                Some(m) => Box::new(
-                    b.iter()
-                        .zip_eq(m.as_flat_slice())
-                        .filter(|(_pos, &in_set)| in_set)
-                        .map(|(pos, _in_set)| pos),
-                ),
-            },
-        }
     }
 }
 

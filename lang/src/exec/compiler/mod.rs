@@ -1431,11 +1431,18 @@ impl Compiler {
     /// Builds a loop over a range of integers.
     pub fn build_iterate_range(
         &mut self,
+        span: Span,
         start: LangInt,
         stop: LangInt,
         vars_assigned: HashSet<Arc<String>>,
         mut build_loop_body: impl FnMut(&mut Self, llvm::IntValue) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
+        let iter_count = (stop - start + 1) as usize;
+        if iter_count > crate::LOOP_COUNT_WARN_THRESHOLD && self.mode() == LangMode::User {
+            // Throw a warning to the user if the loop iterates too many times.
+            self.report_error(Error::loop_count_warning(span, iter_count));
+        }
+
         let phi_ = Cell::new(None);
         let latch_ = Cell::new(None);
         self.build_loop(
@@ -1481,6 +1488,7 @@ impl Compiler {
     /// Builds a loop over an array of values.
     pub fn build_iterate_array(
         &mut self,
+        span: Span,
         array_ptr: llvm::PointerValue,
         array_len: usize,
         vars_assigned: HashSet<Arc<String>>,
@@ -1495,7 +1503,7 @@ impl Compiler {
             return Ok(IsTerminated::Unterminated);
         }
 
-        self.build_iterate_range(0, array_len as LangInt - 1, vars_assigned, |c, i| {
+        self.build_iterate_range(span, 0, array_len as LangInt - 1, vars_assigned, |c, i| {
             let ptr = unsafe { c.builder().build_in_bounds_gep(array_ptr, &[i], "iter_ptr") };
             let iter_array_elem = c.builder().build_load(ptr, "iter_array_elem");
             build_loop_body(c, i, iter_array_elem)
@@ -1504,6 +1512,7 @@ impl Compiler {
     /// Builds a loop over a constant array of integers.
     pub fn build_iterate_const_int_array(
         &mut self,
+        span: Span,
         values: impl IntoIterator<Item = LangInt>,
         vars_assigned: HashSet<Arc<String>>,
         mut build_loop_body: impl FnMut(
@@ -1516,13 +1525,14 @@ impl Compiler {
         let array_value = llvm::int_type().const_array(&array_contents);
         let array_ptr = self.add_const_array(array_value, "const_iter_array");
         let len = array_contents.len();
-        self.build_iterate_array(array_ptr, len, vars_assigned, |c, i, elem| {
+        self.build_iterate_array(span, array_ptr, len, vars_assigned, |c, i, elem| {
             build_loop_body(c, i, elem.into_int_value())
         })
     }
     /// Builds a loop over the vectors in a vector set.
     pub fn build_iterate_vector_set(
         &mut self,
+        span: Span,
         vector_set: &VectorSet,
         vars_assigned: HashSet<Arc<String>>,
         mut build_loop_body: impl FnMut(
@@ -1537,13 +1547,14 @@ impl Compiler {
         let array_value = vector_type.const_array(&array_contents);
         let array_ptr = self.add_const_array(array_value, "const_iter_array");
         let len = array_contents.len();
-        self.build_iterate_array(array_ptr, len, vars_assigned, |c, i, elem| {
+        self.build_iterate_array(span, array_ptr, len, vars_assigned, |c, i, elem| {
             build_loop_body(c, i, elem.into_vector_value())
         })
     }
     /// Builds a loop over the elements in a vector.
     pub fn build_iterate_vector(
         &mut self,
+        span: Span,
         vector: llvm::VectorValue,
         vars_assigned: HashSet<Arc<String>>,
         mut build_loop_body: impl FnMut(
@@ -1552,15 +1563,12 @@ impl Compiler {
             llvm::BasicValueEnum,
         ) -> Result<IsTerminated>,
     ) -> Result<IsTerminated> {
-        self.build_iterate_range(
-            0,
-            vector.get_type().get_size() as LangInt - 1,
-            vars_assigned,
-            |c, i| {
-                let it = c.builder().build_extract_element(vector, i, "iter_value");
-                build_loop_body(c, i, it)
-            },
-        )
+        let start = 0;
+        let stop = vector.get_type().get_size() as LangInt - 1;
+        self.build_iterate_range(span, start, stop, vars_assigned, |c, i| {
+            let it = c.builder().build_extract_element(vector, i, "iter_value");
+            build_loop_body(c, i, it)
+        })
     }
 
     /// Returns an LLVM intrinsic given its name and function signature.
@@ -2305,6 +2313,7 @@ impl Compiler {
                     )),
 
                     Val::Rt(RtVal::Vector(v)) => self.build_iterate_vector(
+                        stmt_span,
                         llvm::const_vector(v),
                         vars_assigned,
                         |c, i, x| {
@@ -2325,26 +2334,31 @@ impl Compiler {
                             "cell_array_contents",
                         );
 
-                        self.build_iterate_vector_set(a.shape(), vars_assigned, |c, i, pos| {
-                            if let Some(index_var) = index_var {
-                                let index = Ok(Val::Cp(CpVal::Vector(pos)));
-                                c.assign_var(index_var, index, stmt_span);
-                            }
-                            let cell_ptr = unsafe {
-                                c.builder().build_in_bounds_gep(
-                                    flat_cells_array,
-                                    &[i],
-                                    "iter_cell_ptr",
-                                )
-                            };
-                            let cell = c
-                                .builder()
-                                .build_load(cell_ptr, "iter_cell")
-                                .into_int_value();
-                            let it = Ok(Val::Cp(CpVal::Cell(cell)));
-                            c.assign_var(iter_var, it, stmt_span);
-                            c.build_stmt(block)
-                        })
+                        self.build_iterate_vector_set(
+                            stmt_span,
+                            a.shape(),
+                            vars_assigned,
+                            |c, i, pos| {
+                                if let Some(index_var) = index_var {
+                                    let index = Ok(Val::Cp(CpVal::Vector(pos)));
+                                    c.assign_var(index_var, index, stmt_span);
+                                }
+                                let cell_ptr = unsafe {
+                                    c.builder().build_in_bounds_gep(
+                                        flat_cells_array,
+                                        &[i],
+                                        "iter_cell_ptr",
+                                    )
+                                };
+                                let cell = c
+                                    .builder()
+                                    .build_load(cell_ptr, "iter_cell")
+                                    .into_int_value();
+                                let it = Ok(Val::Cp(CpVal::Cell(cell)));
+                                c.assign_var(iter_var, it, stmt_span);
+                                c.build_stmt(block)
+                            },
+                        )
                     }
 
                     Val::Rt(RtVal::EmptySet) => Ok(IsTerminated::Unterminated),
@@ -2354,7 +2368,7 @@ impl Compiler {
                         }
 
                         if let Some((min, max)) = set.bounds() {
-                            self.build_iterate_range(min, max, vars_assigned, |c, i| {
+                            self.build_iterate_range(stmt_span, min, max, vars_assigned, |c, i| {
                                 let it = Ok(Val::Cp(CpVal::Integer(i)));
                                 c.assign_var(iter_var, it, stmt_span);
                                 c.build_stmt(block)
@@ -2369,6 +2383,7 @@ impl Compiler {
                         }
 
                         self.build_iterate_const_int_array(
+                            stmt_span,
                             set.iter(),
                             vars_assigned,
                             |c, _i, elem| {
@@ -2384,15 +2399,20 @@ impl Compiler {
                             return Err(iterate_index_type_error);
                         }
 
-                        self.build_iterate_vector_set(&set, vars_assigned, |c, _i, pos| {
-                            let it = Ok(Val::Cp(CpVal::Vector(pos)));
-                            c.assign_var(iter_var, it, stmt_span);
-                            c.build_stmt(block)
-                        })
+                        self.build_iterate_vector_set(
+                            stmt_span,
+                            &set,
+                            vars_assigned,
+                            |c, _i, pos| {
+                                let it = Ok(Val::Cp(CpVal::Vector(pos)));
+                                c.assign_var(iter_var, it, stmt_span);
+                                c.build_stmt(block)
+                            },
+                        )
                     }
 
                     Val::Cp(CpVal::Vector(v)) => {
-                        self.build_iterate_vector(v, vars_assigned, |c, i, x| {
+                        self.build_iterate_vector(stmt_span, v, vars_assigned, |c, i, x| {
                             if let Some(index_var) = index_var {
                                 let index = Ok(Val::Cp(CpVal::Integer(i)));
                                 c.assign_var(index_var, index, stmt_span);
@@ -2403,24 +2423,32 @@ impl Compiler {
                         })
                     }
                     Val::Cp(CpVal::CellArray(a) | CpVal::CellArrayMut(a)) => self
-                        .build_iterate_vector_set(a.shape(), vars_assigned, |c, i, pos| {
-                            if let Some(index_var) = index_var {
-                                let index = Ok(Val::Cp(CpVal::Vector(pos)));
-                                c.assign_var(index_var, index, stmt_span);
-                            }
-                            let cells_ndarray = a
-                                .cells()
-                                .ok_or_else(|| internal_error_value!("no cells array"))?;
-                            let cell_ptr =
-                                c.build_ndarray_gep_unchecked(cells_ndarray, pos, "iter_cell_ptr")?;
-                            let cell = c
-                                .builder()
-                                .build_load(cell_ptr, "iter_cell")
-                                .into_int_value();
-                            let it = Ok(Val::Cp(CpVal::Cell(cell)));
-                            c.assign_var(iter_var, it, stmt_span);
-                            c.build_stmt(block)
-                        }),
+                        .build_iterate_vector_set(
+                            stmt_span,
+                            a.shape(),
+                            vars_assigned,
+                            |c, i, pos| {
+                                if let Some(index_var) = index_var {
+                                    let index = Ok(Val::Cp(CpVal::Vector(pos)));
+                                    c.assign_var(index_var, index, stmt_span);
+                                }
+                                let cells_ndarray = a
+                                    .cells()
+                                    .ok_or_else(|| internal_error_value!("no cells array"))?;
+                                let cell_ptr = c.build_ndarray_gep_unchecked(
+                                    cells_ndarray,
+                                    pos,
+                                    "iter_cell_ptr",
+                                )?;
+                                let cell = c
+                                    .builder()
+                                    .build_load(cell_ptr, "iter_cell")
+                                    .into_int_value();
+                                let it = Ok(Val::Cp(CpVal::Cell(cell)));
+                                c.assign_var(iter_var, it, stmt_span);
+                                c.build_stmt(block)
+                            },
+                        ),
 
                     Val::Cp(CpVal::CellSet(set)) => Err(Error::unimplemented(stmt_span)),
 

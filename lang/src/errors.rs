@@ -12,7 +12,7 @@ use std::fmt;
 use crate::data::{
     Type, MAX_INTEGER_SET_SIZE, MAX_VECTOR_LEN, MAX_VECTOR_SET_EXTENT, MAX_VECTOR_SET_SIZE,
 };
-use crate::{MAX_NDIM, MAX_RADIUS, MAX_STATE_COUNT};
+use crate::{LOOP_COUNT_WARN_THRESHOLD, MAX_NDIM, MAX_RADIUS, MAX_STATE_COUNT};
 
 /// `Result` type alias for NDCA compile-time and runtime errors.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -329,6 +329,8 @@ impl Error {
 
     error_fn!(Error; fn break_not_in_loop("cannot 'break' when not in a loop"));
     error_fn!(Error; fn continue_not_in_loop("cannot 'continue' when not in a loop"));
+
+    error_fn!(Error; fn loop_count_warning("this loop may iterate many times (up to {})", iters: usize));
 
     error_fn!(Error; fn return_not_in_fn("cannot 'return' when not in a function"));
     error_fn!(Error; fn become_not_in_fn("cannot 'become' when not in the transition function"));

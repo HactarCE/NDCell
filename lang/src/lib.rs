@@ -61,6 +61,9 @@ pub const DEFAULT_NBHD_RADIUS: usize = 1;
 /// Number of states to use when the user doesn't specify.
 pub const DEFAULT_STATE_COUNT: usize = 2;
 
+/// Maximum number of loop iterations allowed before warning the user.
+pub const LOOP_COUNT_WARN_THRESHOLD: usize = 20;
+
 /// Reserved throwaway variable name.
 const THROWAWAY_VARIABLE: &'static str = "_";
 

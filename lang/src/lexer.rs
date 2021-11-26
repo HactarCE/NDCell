@@ -614,7 +614,7 @@ mod tests {
 
         assert_eq!(
             it.next().unwrap(),
-            ("match", Token::Keyword(Keyword::Match))
+            ("match", Token::Keyword(Keyword::Match)),
         );
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap(), ("this", Token::Ident));
@@ -630,7 +630,7 @@ mod tests {
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(
             it.next().unwrap(),
-            ("remain", Token::Keyword(Keyword::Remain))
+            ("remain", Token::Keyword(Keyword::Remain)),
         );
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap(), ("}", Token::RBrace));
@@ -648,7 +648,7 @@ mod tests {
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(
             it.next().unwrap(),
-            ("become", Token::Keyword(Keyword::Become))
+            ("become", Token::Keyword(Keyword::Become)),
         );
         assert_eq!(it.next().unwrap(), ("(", Token::LParen));
         assert_eq!(it.next().unwrap(), ("#", Token::Octothorpe));

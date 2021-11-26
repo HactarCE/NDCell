@@ -489,7 +489,7 @@ fn parse_or_panic<T>(
         Ok(x) => x,
         Err(e) => panic!(
             "NDCA syntax error:\n{}",
-            errors::format_errors(ast.codemap(), &[e])
+            errors::format_errors(ast.codemap(), &[e]),
         ),
     }
 }

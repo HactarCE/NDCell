@@ -191,7 +191,7 @@ impl Compiler {
             ast::DirectiveData::Compile { param_types, body } => (param_types, body),
             _ => {
                 runtime.report_error(internal_error_value!(
-                    "cannot compile non-@compile directive"
+                    "cannot compile non-@compile directive",
                 ));
                 return Err(runtime.ctx.errors);
             }

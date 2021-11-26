@@ -103,7 +103,6 @@ impl<'a> Parser<'a> {
             .windows(2)
             .map(|pair| [pair[0], pair[1]])
             .filter(|[t1, t2]| t1.node == Token::Octothorpe && t2.node == Token::Ident)
-            .filter(|[_, ident]| !file.source_slice(ident.span).starts_with('#'))
             .next()
         {
             return Err(Error::ambiguous_octothorpe(ident.span));
@@ -263,7 +262,7 @@ impl<'a> Parser<'a> {
         let span1 = self.peek_next_span();
         let node_data = f(self, ast)?;
         let span2 = self.span();
-        Ok(ast.add_node(span1.merge(span2), node_data))
+        Ok(ast.add_node(span1.merge(span2), self.mode, node_data))
     }
 
     /// Returns an error describing that `expected` was expected.

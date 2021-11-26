@@ -18,6 +18,7 @@ pub use statement::*;
 pub struct Node<D> {
     pub id: usize,
     pub span: Span,
+    pub mode: LangMode,
     pub data: D,
 }
 
@@ -55,6 +56,7 @@ impl<N> Hash for NodeId<N> {
 pub trait NodeTrait: Sized + fmt::Debug {
     fn id(&self) -> NodeId<Self>;
     fn span(&self) -> Span;
+    fn mode(&self) -> LangMode;
 
     fn from_any_node(any: AnyNode) -> Option<Self>;
     fn from_any_node_ref(any: &AnyNode) -> Option<&Self>;
@@ -69,6 +71,9 @@ macro_rules! impl_node_trait {
             }
             fn span(&self) -> Span {
                 self.span
+            }
+            fn mode(&self) -> LangMode {
+                self.mode
             }
 
             fn from_any_node(any: AnyNode) -> Option<Self> {
@@ -115,6 +120,9 @@ impl NodeTrait for AnyNode {
     }
     fn span(&self) -> Span {
         match_any_node!(match self; node => node.span)
+    }
+    fn mode(&self) -> LangMode {
+        match_any_node!(match self; node => node.mode)
     }
 
     fn from_any_node(any: AnyNode) -> Option<Self> {
@@ -168,6 +176,9 @@ impl<'ast, N: NodeTrait> AstNode<'ast, N> {
     }
     pub fn span(self) -> Span {
         self.node().span()
+    }
+    pub fn mode(self) -> LangMode {
+        self.node().mode()
     }
 }
 impl<'ast, D> AstNode<'ast, Node<D>>

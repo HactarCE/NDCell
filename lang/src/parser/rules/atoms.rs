@@ -2,10 +2,10 @@ use codemap::Spanned;
 use std::sync::Arc;
 
 use super::{Expression, List, Parser, SyntaxRule};
-use crate::ast;
 use crate::data::LangInt;
 use crate::errors::{Error, Result};
 use crate::lexer::Token;
+use crate::{ast, LangMode};
 
 /// Matches an identifier.
 #[derive(Debug, Copy, Clone)]
@@ -15,18 +15,23 @@ impl SyntaxRule for Identifier {
     type Output = Spanned<Arc<String>>;
 
     fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
-        matches!(p.next(), Some(Token::Ident) | Some(Token::Keyword(_)))
+        let next = p.next();
+        matches!(next, Some(Token::Ident) | Some(Token::Keyword(_)))
+            || (next == Some(Token::Dollar) && p.mode == LangMode::Internal)
     }
-    fn consume_match(
-        &self,
-        p: &mut Parser<'_>,
-        _ast: &'_ mut ast::Program,
-    ) -> Result<Self::Output> {
+    fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         match p.next() {
             Some(Token::Ident) => Ok(Spanned {
                 span: p.span(),
                 node: Arc::new(p.string().to_owned()),
             }),
+
+            Some(Token::Dollar) if p.mode == LangMode::Internal => {
+                let span = p.span().merge(p.peek_next_span());
+                p.parse(ast, Token::Ident)?;
+                let node = Arc::new(format!("${}", p.string()));
+                Ok(Spanned { span, node })
+            }
 
             Some(Token::Keyword(_)) => Err(Error::reserved_word(p.span())),
 

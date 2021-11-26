@@ -5,10 +5,10 @@ use super::{
     Epsilon, Identifier, IntegerLiteral, List, Parser, SetLiteral, StringLiteral, Surround,
     SyntaxRule, TryFromToken, VectorLiteral,
 };
-use crate::ast;
 use crate::data::RtVal;
 use crate::errors::{Error, Result};
 use crate::lexer::{Keyword, Token};
+use crate::{ast, LangMode};
 
 /// Operator precedence table.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -160,7 +160,9 @@ impl SyntaxRule for ExpressionWithPrecedence {
 
                 Token::Backtick => true,
 
-                Token::Colon | Token::Comma | Token::Period | Token::Semicolon => false,
+                Token::Colon | Token::Comma => false,
+                Token::Dollar => p.mode == LangMode::Internal,
+                Token::Period | Token::Semicolon => false,
                 Token::Eql | Token::Neq | Token::Lt | Token::Gt | Token::Lte | Token::Gte => false,
 
                 Token::Plus | Token::Minus => true,
@@ -222,10 +224,11 @@ impl SyntaxRule for ExpressionWithPrecedence {
 
                 Token::Comment | Token::UnterminatedBlockComment => false,
 
-                Token::StringLiteral
-                | Token::UnterminatedStringLiteral
-                | Token::IntegerLiteral
-                | Token::Ident => true,
+                Token::StringLiteral | Token::UnterminatedStringLiteral | Token::IntegerLiteral => {
+                    true
+                }
+                Token::DirectiveName => false,
+                Token::TagName | Token::Ident => true,
 
                 Token::Whitespace => false,
                 Token::Unknown => false,
@@ -306,7 +309,7 @@ fn parse_binary_ops_expr(
             let ret_span = ast.get_node(ret).span();
             let span = ret_span.merge(lhs_span);
 
-            ret = ast.add_node(span, ast::ExprData::BinaryOp(lhs, op, ret));
+            ret = ast.add_node(span, p.mode, ast::ExprData::BinaryOp(lhs, op, ret));
         }
     } else {
         // Take out the first/leftmost expression; that's the deepest
@@ -321,7 +324,7 @@ fn parse_binary_ops_expr(
             let rhs_span = ast.get_node(rhs).span();
             let span = ret_span.merge(rhs_span);
 
-            ret = ast.add_node(span, ast::ExprData::BinaryOp(ret, op, rhs));
+            ret = ast.add_node(span, p.mode, ast::ExprData::BinaryOp(ret, op, rhs));
         }
     }
     Ok(ret)
@@ -354,7 +357,7 @@ fn parse_prefix_ops(
     // Now pop the operators off the list from right to left.
     for op in ops {
         span = span.merge(op.span);
-        ret = ast.add_node(span, ast::ExprData::PrefixOp(op, ret));
+        ret = ast.add_node(span, p.mode, ast::ExprData::PrefixOp(op, ret));
     }
     Ok(ret)
 }
@@ -400,7 +403,11 @@ fn parse_cmp_chain_expr(p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result
         }
         let span1 = ast.get_node(exprs[0]).span();
         let span2 = ast.get_node(exprs[exprs.len() - 1]).span();
-        Ok(ast.add_node(span1.merge(span2), ast::ExprData::CmpChain(exprs, ops)))
+        Ok(ast.add_node(
+            span1.merge(span2),
+            p.mode,
+            ast::ExprData::CmpChain(exprs, ops),
+        ))
     } else {
         // Otherwise, just return the first expression.
         Ok(ret)
@@ -433,7 +440,7 @@ impl SyntaxRule for MethodCallSuffix {
         let obj_expr_span = ast.get_node(obj).span();
         let total_span = obj_expr_span.merge(args.span);
         let expr_data = ast::ExprData::MethodCall { obj, attr, args };
-        Ok(ast.add_node(total_span, expr_data))
+        Ok(ast.add_node(total_span, p.mode, expr_data))
     }
 }
 
@@ -464,7 +471,7 @@ impl SyntaxRule for FuncCallSuffix {
         let expr_data = ast::ExprData::FuncCall { func, args };
 
         let total_span = func_name_span.merge(args_list.span);
-        Ok(ast.add_node(total_span, expr_data))
+        Ok(ast.add_node(total_span, p.mode, expr_data))
     }
 }
 
@@ -510,7 +517,7 @@ impl SyntaxRule for IndexSuffix {
         let obj_expr_span = ast.get_node(obj).span();
         let total_span = obj_expr_span.merge(args.span);
         let expr_data = ast::ExprData::IndexOp { obj, args };
-        Ok(ast.add_node(total_span, expr_data))
+        Ok(ast.add_node(total_span, p.mode, expr_data))
     }
 }
 

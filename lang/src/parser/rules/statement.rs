@@ -261,6 +261,7 @@ impl SyntaxRule for AssignStatement {
                 let rhs_span = ast.get_node(rhs).span();
                 rhs = ast.add_node(
                     lhs_span.merge(rhs_span),
+                    p.mode,
                     ast::ExprData::BinaryOp(lhs, op, rhs),
                 );
             }

@@ -65,24 +65,22 @@ impl Runtime {
         };
 
         for directive in ast.directives() {
-            this.ctx().mode = LangMode::User;
+            this.ctx().mode = directive.mode();
 
             use ast::DirectiveData::*;
             let result = match directive.data() {
-                Init { mode, body } => {
-                    this.ctx().mode = *mode;
-                    this.exec_stmt(ast.get_node(*body))
-                        .and_then(|flow| match flow {
-                            Flow::Proceed => Ok(()),
+                Init(body) => this
+                    .exec_stmt(ast.get_node(*body))
+                    .and_then(|flow| match flow {
+                        Flow::Proceed => Ok(()),
 
-                            Flow::Break(span) => Err(Error::break_not_in_loop(span)),
-                            Flow::Continue(span) => Err(Error::continue_not_in_loop(span)),
+                        Flow::Break(span) => Err(Error::break_not_in_loop(span)),
+                        Flow::Continue(span) => Err(Error::continue_not_in_loop(span)),
 
-                            Flow::Return(span, _) => Err(Error::return_not_in_fn(span)),
-                            Flow::Remain(span) => Err(Error::remain_not_in_fn(span)),
-                            Flow::Become(span, _) => Err(Error::become_not_in_fn(span)),
-                        })
-                }
+                        Flow::Return(span, _) => Err(Error::return_not_in_fn(span)),
+                        Flow::Remain(span) => Err(Error::remain_not_in_fn(span)),
+                        Flow::Become(span, _) => Err(Error::become_not_in_fn(span)),
+                    }),
 
                 // `Ctx::new()` already handled all of these.
                 Function { .. } | Transition(_) | Compile { .. } => Ok(()),

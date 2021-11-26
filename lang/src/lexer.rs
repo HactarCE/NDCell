@@ -99,7 +99,7 @@ pub enum Token {
     RParen, RBracket, RBrace,
 
     // Other punctuation
-    Backtick, Colon, Comma, Period, Semicolon,
+    Backtick, Colon, Comma, Dollar, Period, Semicolon,
 
     // Comparison operators
     Eql, Neq, Lt, Gt, Lte, Gte,
@@ -131,6 +131,8 @@ pub enum Token {
     // Other special tokens
     StringLiteral, UnterminatedStringLiteral,
     IntegerLiteral,
+    DirectiveName,
+    TagName,
     Ident,
     Whitespace,
     Unknown,
@@ -148,6 +150,7 @@ impl fmt::Display for Token {
             Self::Backtick => "'`'",
             Self::Colon => "':'",
             Self::Comma => "','",
+            Self::Dollar => "'$'",
             Self::Period => "'.'",
             Self::Semicolon => "';'",
 
@@ -199,6 +202,8 @@ impl fmt::Display for Token {
             Token::StringLiteral => "string literal",
             Token::UnterminatedStringLiteral => "unterminated string literal",
             Token::IntegerLiteral => "integer literal",
+            Token::DirectiveName => "directive name",
+            Token::TagName => "tag name",
             Token::Ident => "identifier",
             Token::Whitespace => "whitespace",
             Token::Unknown => "unknown symbol",
@@ -228,6 +233,7 @@ impl Token {
                 "`" => Self::Backtick,
                 ":" => Self::Colon,
                 "," => Self::Comma,
+                "$" => Self::Dollar,
                 "." => Self::Period,
                 ";" => Self::Semicolon,
 
@@ -306,7 +312,11 @@ impl Token {
                 s if STRING_LITERAL_REGEX.is_match(s) => Self::StringLiteral,
                 s if UNTERMINATED_STRING_LITERAL_REGEX.is_match(s) => Self::StringLiteral,
                 s if INTEGER_LITERAL_REGEX.is_match(s) => Self::IntegerLiteral,
-                s if IDENT_REGEX.is_match(s) => Self::Ident,
+                s if IDENT_REGEX.is_match(s) => match s.chars().next() {
+                    Some('@') => Self::DirectiveName,
+                    Some('#') => Self::TagName,
+                    _ => Self::Ident,
+                },
                 s if s.trim().is_empty() => Self::Whitespace,
 
                 // Give up.
@@ -587,7 +597,7 @@ mod tests {
         let mut it = tokens.map(|Spanned { node, span }| (file.source_slice(span), node));
 
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
-        assert_eq!(it.next().unwrap(), ("@name", Token::Ident));
+        assert_eq!(it.next().unwrap(), ("@name", Token::DirectiveName));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(
             it.next().unwrap(),
@@ -595,7 +605,7 @@ mod tests {
         );
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
 
-        assert_eq!(it.next().unwrap(), ("@desc", Token::Ident));
+        assert_eq!(it.next().unwrap(), ("@desc", Token::DirectiveName));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(
             it.next().unwrap(),
@@ -603,16 +613,16 @@ mod tests {
         );
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
 
-        assert_eq!(it.next().unwrap(), ("@states", Token::Ident));
+        assert_eq!(it.next().unwrap(), ("@states", Token::DirectiveName));
         assert_eq!(it.next().unwrap(), ("[", Token::LBracket));
-        assert_eq!(it.next().unwrap(), ("#dead", Token::Ident));
+        assert_eq!(it.next().unwrap(), ("#dead", Token::TagName));
         assert_eq!(it.next().unwrap(), (",", Token::Comma));
-        assert_eq!(it.next().unwrap(), ("#live", Token::Ident));
+        assert_eq!(it.next().unwrap(), ("#live", Token::TagName));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap(), ("]", Token::RBracket));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
 
-        assert_eq!(it.next().unwrap(), ("@transition", Token::Ident));
+        assert_eq!(it.next().unwrap(), ("@transition", Token::DirectiveName));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap(), ("{", Token::LBrace));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
@@ -628,7 +638,7 @@ mod tests {
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
 
         assert_eq!(it.next().unwrap(), ("case", Token::Keyword(Keyword::Case)));
-        assert_eq!(it.next().unwrap(), ("#dead", Token::Ident));
+        assert_eq!(it.next().unwrap(), ("#dead", Token::TagName));
         assert_eq!(it.next().unwrap(), ("{", Token::LBrace));
         assert_eq!(it.next().unwrap().1, Token::Whitespace);
         assert_eq!(it.next().unwrap().1, Token::Comment);

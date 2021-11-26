@@ -121,9 +121,7 @@ pub fn from_ast_node<'ast>(
             let obj = ast.get_node(*obj);
             let args = ast.get_node_list(args);
             match obj.data() {
-                ast::ExprData::Identifier(s)
-                    if s.as_str() == "__compiled_arg__" && internal_mode =>
-                {
+                ast::ExprData::Identifier(s) if s.as_str() == "$compiled_arg" => {
                     Box::new(CompiledArg(args))
                 }
                 _ => Box::new(MethodCall {

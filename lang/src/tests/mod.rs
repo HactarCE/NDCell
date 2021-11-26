@@ -209,7 +209,7 @@ impl<'a> TestProgram<'a> {
         source.push_str(" {\n");
         let n = self.input_types.len();
         for i in 0..n {
-            source.push_str(&format!("x{} = __compiled_arg__[{}]\n", i, i));
+            source.push_str(&format!("x{} = $compiled_arg[{}]\n", i, i));
         }
         source.push_str(self.exec);
         source.push('\n');
@@ -221,7 +221,7 @@ impl<'a> TestProgram<'a> {
                 continue;
             } else {
                 // All other types use value semantics.
-                source.push_str(&format!("__compiled_arg__[{}] = {}\n", n + i, expr));
+                source.push_str(&format!("$compiled_arg[{}] = {}\n", n + i, expr));
             }
         }
         source.push_str("}\n");

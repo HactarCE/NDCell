@@ -14,19 +14,14 @@ impl SyntaxRule for Directive {
     type Output = ast::DirectiveId;
 
     fn prefix_matches(&self, mut p: Parser<'_>) -> bool {
-        p.next() == Some(Token::Ident) && p.string().starts_with('@')
+        p.next() == Some(Token::DirectiveName)
     }
 
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
-            if !(p.next() == Some(Token::Ident) && p.string().starts_with('@')) {
-                return p.expected(self);
-            }
+            p.parse(ast, Token::DirectiveName)?;
             match p.string() {
-                "@init" => Ok(ast::DirectiveData::Init {
-                    mode: p.mode,
-                    body: p.parse(ast, StatementBlock)?,
-                }),
+                "@init" => Ok(ast::DirectiveData::Init(p.parse(ast, StatementBlock)?)),
 
                 "@func" => {
                     let name = p.parse(ast, Identifier).or_else(|_| {
@@ -40,7 +35,6 @@ impl SyntaxRule for Directive {
                     let body = p.parse(ast, StatementBlock)?;
 
                     Ok(ast::DirectiveData::Function {
-                        mode: p.mode,
                         name,
                         params,
                         ret_type,

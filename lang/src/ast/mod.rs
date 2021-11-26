@@ -8,6 +8,7 @@ mod nodes;
 mod ops;
 
 use crate::errors::{Error, Result};
+use crate::LangMode;
 pub use cellstate::CellState;
 pub use nodes::*;
 pub use ops::*;
@@ -62,12 +63,20 @@ impl Program {
     }
 
     /// Adds a node to the AST.
-    pub(crate) fn add_node<D>(&mut self, span: Span, data: D) -> NodeId<Node<D>>
+    pub(crate) fn add_node<D>(&mut self, span: Span, mode: LangMode, data: D) -> NodeId<Node<D>>
     where
         Node<D>: NodeTrait,
     {
         let id = self.nodes.len();
-        self.nodes.push(Node { id, span, data }.into_any_node());
+        self.nodes.push(
+            Node {
+                id,
+                span,
+                mode,
+                data,
+            }
+            .into_any_node(),
+        );
         NodeId(id, PhantomData)
     }
     /// Adds a directive to the directives list.

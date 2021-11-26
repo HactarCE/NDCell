@@ -6,13 +6,9 @@ pub type DirectiveNode = Node<DirectiveData>;
 
 #[derive(Debug, Clone)]
 pub enum DirectiveData {
-    Init {
-        mode: LangMode,
-        body: StmtId,
-    },
+    Init(StmtId),
 
     Function {
-        mode: LangMode,
         name: Spanned<Arc<String>>,
         params: Vec<(Spanned<Arc<String>>, ExprId)>,
         ret_type: ExprId,

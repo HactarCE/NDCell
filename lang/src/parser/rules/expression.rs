@@ -516,7 +516,7 @@ impl SyntaxRule for IndexSuffix {
 /// Matches an identifier and wraps it in an expression.
 #[derive(Debug, Copy, Clone)]
 pub struct IdentifierExpression;
-impl_display!(for IdentifierExpression, "identifier, such as a variable or function name");
+impl_display!(for IdentifierExpression, "identifier, such as a variable name, function name, or tag name");
 impl SyntaxRule for IdentifierExpression {
     type Output = ast::ExprId;
 

@@ -199,7 +199,7 @@ impl fmt::Display for Token {
             Token::StringLiteral => "string literal",
             Token::UnterminatedStringLiteral => "unterminated string literal",
             Token::IntegerLiteral => "integer literal",
-            Token::Ident => "indentifier",
+            Token::Ident => "identifier",
             Token::Whitespace => "whitespace",
             Token::Unknown => "unknown symbol",
         };

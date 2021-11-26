@@ -14,6 +14,8 @@ pub enum ExprData {
 
     /// Identifier.
     Identifier(Arc<String>),
+    /// Tag name (without the leading `#`).
+    TagName(Arc<String>),
 
     /// Constant value.
     Constant(RtVal),
@@ -69,6 +71,7 @@ impl Expr<'_> {
                 node: Arc::clone(name),
                 span: self.span(),
             }),
+            ExprData::TagName(_) => None,
 
             ExprData::Constant(_) => None,
 

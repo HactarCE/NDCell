@@ -52,6 +52,7 @@ impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
             ast::ExprData::Paren(expr) => Box::new(Identity(ast.get_node(*expr))),
 
             ast::ExprData::Identifier(name) => Box::new(Identifier(name)),
+            ast::ExprData::TagName(name) => Box::new(TagName(name)),
 
             ast::ExprData::Constant(v) => Box::new(Constant(v)),
 
@@ -645,6 +646,17 @@ impl Expression for Identifier<'_> {
     ) -> Result<()> {
         compiler.assign_var(self.0, new_value.map(|v| v.node), stmt_span);
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TagName<'ast>(&'ast Arc<String>);
+impl Expression for TagName<'_> {
+    fn eval(&self, runtime: &mut Runtime, expr_span: Span) -> Result<RtVal> {
+        Err(Error::unimplemented(expr_span))
+    }
+    fn compile(&self, compiler: &mut Compiler, expr_span: Span) -> Result<Val> {
+        Err(Error::unimplemented(expr_span))
     }
 }
 

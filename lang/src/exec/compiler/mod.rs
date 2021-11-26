@@ -2455,7 +2455,17 @@ impl Compiler {
                     val => Err(Error::iterate_type_error(iter_value.span, &val.ty())),
                 }
             }
-            ast::StmtData::WhileLoop { condition, block } => {
+            ast::StmtData::WhileLoop {
+                condition,
+                first_line_span,
+                block,
+            } => {
+                let stmt_span = *first_line_span;
+
+                if self.mode() == LangMode::User {
+                    self.report_error(Error::cannot_compile(stmt_span, "'while' loop"))
+                }
+
                 let condition = ast.get_node(*condition);
                 let block = ast.get_node(*block);
                 let mut vars_assigned = HashSet::new();

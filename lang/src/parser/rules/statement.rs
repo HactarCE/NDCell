@@ -176,9 +176,15 @@ impl SyntaxRule for WhileLoop {
     fn consume_match(&self, p: &mut Parser<'_>, ast: &'_ mut ast::Program) -> Result<Self::Output> {
         p.parse_and_add_ast_node(ast, |p, ast| {
             p.parse(ast, Token::Keyword(Keyword::While))?;
+            let span1 = p.span();
             let condition = p.parse(ast, Expression)?;
+            let span2 = p.span();
             let block = p.parse(ast, StatementBlock)?;
-            Ok(ast::StmtData::WhileLoop { condition, block })
+            Ok(ast::StmtData::WhileLoop {
+                condition,
+                first_line_span: span1.merge(span2),
+                block,
+            })
         })
     }
 }

@@ -211,7 +211,11 @@ impl Runtime {
                 }
                 Ok(Flow::Proceed)
             }
-            ast::StmtData::WhileLoop { condition, block } => {
+            ast::StmtData::WhileLoop {
+                condition,
+                first_line_span: _,
+                block,
+            } => {
                 let condition = ast.get_node(*condition);
                 let block = ast.get_node(*block);
                 while self.eval_bool_expr(condition)? {

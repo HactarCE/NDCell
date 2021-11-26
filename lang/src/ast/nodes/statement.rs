@@ -40,13 +40,15 @@ pub enum StmtData {
         iter_var: Spanned<Arc<String>>,
         /// Expression to iterate over.
         iter_expr: ExprId,
-        /// Span of just the first line (from `for` to before `{`)
+        /// Span of just the first line (from `for` to before `{`).
         first_line_span: Span,
         /// Block of statements to execute in the loop.
         block: StmtId,
     },
     WhileLoop {
         condition: ExprId,
+        /// Span of jsut the first line (from `while` to before `{`).
+        first_line_span: Span,
         block: StmtId,
     },
 

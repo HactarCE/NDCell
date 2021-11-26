@@ -350,6 +350,7 @@ pub enum Keyword {
     Else,
     Unless,
     Case,
+    Default,
     Match,
 
     // Debugging
@@ -379,6 +380,7 @@ impl fmt::Display for Keyword {
             Self::Else => "else",
             Self::Unless => "unless",
             Self::Case => "case",
+            Self::Default => "default",
             Self::Match => "match",
 
             Self::Assert => "assert",
@@ -412,6 +414,7 @@ impl FromStr for Keyword {
             "else" => Ok(Self::Else),
             "unless" => Ok(Self::Unless),
             "case" => Ok(Self::Case),
+            "default" => Ok(Self::Default),
             "match" => Ok(Self::Match),
 
             "assert" => Ok(Self::Assert),
@@ -435,6 +438,7 @@ impl Keyword {
         Self::Else,
         Self::Unless,
         Self::Case,
+        Self::Default,
         Self::Match,
         Self::Assert,
         Self::Error,
@@ -456,6 +460,7 @@ impl Keyword {
             | Self::Else
             | Self::Unless
             | Self::Case
+            | Self::Default
             | Self::Match
             | Self::Assert
             | Self::Error => true,

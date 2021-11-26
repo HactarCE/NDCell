@@ -214,6 +214,7 @@ impl SyntaxRule for ExpressionWithPrecedence {
                     | Keyword::Else
                     | Keyword::Unless
                     | Keyword::Case
+                    | Keyword::Default
                     | Keyword::Match
                     | Keyword::Assert
                     | Keyword::Error => false,

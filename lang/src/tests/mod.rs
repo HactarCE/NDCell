@@ -76,12 +76,11 @@ mod vector_sets;
 mod vectors;
 mod while_loops;
 
-use crate::ast;
 use crate::data::{CellArray, GetType, LangCell, LangInt, LangUint, RtVal, Type};
 use crate::errors::{self, Error};
 use crate::exec::{CompiledFunction, Compiler, CompilerConfig, CtxTrait, Runtime};
 use crate::utils;
-use crate::LangMode;
+use crate::{ast, LangMode};
 use values::*;
 
 /// Input/output pair.

@@ -23,10 +23,9 @@ mod macros;
 pub mod rules;
 pub mod strings;
 
-use crate::ast;
 use crate::errors::{Error, Result};
 use crate::lexer::{self, Token};
-use crate::LangMode;
+use crate::{ast, LangMode};
 use rules::SyntaxRule;
 
 pub fn parse_file(

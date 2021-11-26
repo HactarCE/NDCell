@@ -2,11 +2,11 @@ use codemap::{Span, Spanned};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::builtins::Expression;
-use crate::ast;
+use super::builtins::expressions;
 use crate::data::{GetType, RtVal, SpannedRuntimeValueExt};
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait};
+use crate::{ast, LangMode};
 
 /// NDCA runtime state.
 #[derive(Debug, Clone)]
@@ -21,6 +21,9 @@ pub struct Runtime {
 impl CtxTrait for Runtime {
     fn ctx(&mut self) -> &mut Ctx {
         &mut self.ctx
+    }
+    fn mode(&self) -> LangMode {
+        self.ctx.mode
     }
 }
 
@@ -62,23 +65,24 @@ impl Runtime {
         };
 
         for directive in ast.directives() {
+            this.ctx().mode = LangMode::User;
+
             use ast::DirectiveData::*;
             let result = match directive.data() {
-                Init {
-                    mode: features,
-                    body,
-                } => this
-                    .exec_stmt(ast.get_node(*body))
-                    .and_then(|flow| match flow {
-                        Flow::Proceed => Ok(()),
+                Init { mode, body } => {
+                    this.ctx().mode = *mode;
+                    this.exec_stmt(ast.get_node(*body))
+                        .and_then(|flow| match flow {
+                            Flow::Proceed => Ok(()),
 
-                        Flow::Break(span) => Err(Error::break_not_in_loop(span)),
-                        Flow::Continue(span) => Err(Error::continue_not_in_loop(span)),
+                            Flow::Break(span) => Err(Error::break_not_in_loop(span)),
+                            Flow::Continue(span) => Err(Error::continue_not_in_loop(span)),
 
-                        Flow::Return(span, _) => Err(Error::return_not_in_fn(span)),
-                        Flow::Remain(span) => Err(Error::remain_not_in_fn(span)),
-                        Flow::Become(span, _) => Err(Error::become_not_in_fn(span)),
-                    }),
+                            Flow::Return(span, _) => Err(Error::return_not_in_fn(span)),
+                            Flow::Remain(span) => Err(Error::remain_not_in_fn(span)),
+                            Flow::Become(span, _) => Err(Error::become_not_in_fn(span)),
+                        })
+                }
 
                 // `Ctx::new()` already handled all of these.
                 Function { .. } | Transition(_) | Compile { .. } => Ok(()),
@@ -145,7 +149,7 @@ impl Runtime {
                 let expr_span = lhs.span();
                 let stmt_span = lhs.span().merge(rhs.span());
                 let new_value = self.eval_expr(rhs)?;
-                let lhs_expression = Box::<dyn Expression>::from(lhs);
+                let lhs_expression = expressions::from_ast_node(lhs, self);
                 lhs_expression.eval_assign(self, expr_span, stmt_span, new_value)?;
                 Ok(Flow::Proceed)
             }
@@ -238,7 +242,7 @@ impl Runtime {
     /// Evaluates an expression.
     pub fn eval_expr(&mut self, expr: ast::Expr<'_>) -> Result<Spanned<RtVal>> {
         let span = expr.span();
-        let expression = Box::<dyn Expression>::from(expr);
+        let expression = expressions::from_ast_node(expr, self);
         expression
             .eval(self, span)
             .map(|v| Spanned { node: v, span })

@@ -11,7 +11,7 @@ use crate::data::{
 use crate::errors::{Error, Result};
 use crate::exec::compiler::{BuildPhi, IsTerminated};
 use crate::exec::{Compiler, CtxTrait, Runtime};
-use crate::{ast, llvm};
+use crate::{ast, llvm, LangMode};
 
 /// Expression that can be evaluated and/or compiled, including any relevant
 /// arguments.
@@ -45,120 +45,124 @@ pub trait Expression: fmt::Debug {
     }
 }
 
-impl<'ast> From<ast::Expr<'ast>> for Box<dyn 'ast + Expression> {
-    fn from(expr: ast::Expr<'ast>) -> Self {
-        let ast = expr.ast;
-        match expr.data() {
-            ast::ExprData::Paren(expr) => Box::new(Identity(ast.get_node(*expr))),
+pub fn from_ast_node<'ast>(
+    expr: ast::Expr<'ast>,
+    ctx: &dyn CtxTrait,
+) -> Box<dyn 'ast + Expression> {
+    let ast = expr.ast;
+    let internal_mode = ctx.mode() == LangMode::Internal;
+    match expr.data() {
+        ast::ExprData::Paren(expr) => Box::new(Identity(ast.get_node(*expr))),
 
-            ast::ExprData::Identifier(name) => Box::new(Identifier(name)),
-            ast::ExprData::TagName(name) => Box::new(TagName(name)),
+        ast::ExprData::Identifier(name) => Box::new(Identifier(name)),
+        ast::ExprData::TagName(name) => Box::new(TagName(name)),
 
-            ast::ExprData::Constant(v) => Box::new(Constant(v)),
+        ast::ExprData::Constant(v) => Box::new(Constant(v)),
 
-            ast::ExprData::BinaryOp(lhs, op, rhs) => {
-                use crate::ast::BinaryOp::*;
-                let op_span = op.span;
-                let lhs = ast.get_node(*lhs);
-                let rhs = ast.get_node(*rhs);
-                let args = [lhs, rhs];
+        ast::ExprData::BinaryOp(lhs, op, rhs) => {
+            use crate::ast::BinaryOp::*;
+            let op_span = op.span;
+            let lhs = ast.get_node(*lhs);
+            let rhs = ast.get_node(*rhs);
+            let args = [lhs, rhs];
 
-                let make_func_call = |f: Option<Box<dyn Function>>| -> Box<FuncCall<'ast>> {
-                    Box::new(FuncCall {
-                        f,
-                        name: op.map_node(|op| Arc::new(op.to_string())),
-                        args: vec![(None, lhs), (None, rhs)],
-                    })
-                };
-
-                match op.node {
-                    Add | Sub | Mul | Div | Mod | Pow | Shl | ShrSigned | ShrUnsigned | And
-                    | Or | Xor => make_func_call(
-                        Option::<functions::math::BinaryMathOp>::from(op.node).map(|f| f.boxed()),
-                    ),
-                    LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),
-                    LogicalOr => Box::new(LogicalOrExpr { op_span, args }),
-                    LogicalXor => make_func_call(Some(functions::bools::LogicalXor.boxed())),
-                    Range => make_func_call(Some(functions::range::Range.boxed())),
-                    Is => todo!("'Is' func"),
-                }
-            }
-            ast::ExprData::PrefixOp(op, arg) => {
-                use crate::ast::PrefixOp::*;
-                let op_func: Box<dyn Function> = match op.node {
-                    Pos => functions::math::UnaryMathOp::Pos.boxed(),
-                    Neg => functions::math::UnaryMathOp::Neg.boxed(),
-                    BitwiseNot => functions::math::UnaryMathOp::BitwiseNot.boxed(),
-                    LogicalNot => functions::bools::LogicalNot.boxed(),
-                    IntToCell => functions::cells::IntToCell.boxed(),
-                };
+            let make_func_call = |f: Option<Box<dyn Function>>| -> Box<FuncCall<'ast>> {
                 Box::new(FuncCall {
-                    f: Some(op_func),
+                    f,
                     name: op.map_node(|op| Arc::new(op.to_string())),
-                    args: vec![(None, ast.get_node(*arg))],
+                    args: vec![(None, lhs), (None, rhs)],
                 })
-            }
-            ast::ExprData::CmpChain(args, ops) => {
-                let args = args.iter().map(|&id| ast.get_node(id)).collect();
-                Box::new(CmpChain { args, ops })
-            }
+            };
 
-            ast::ExprData::FuncCall { func, args } => Box::new(FuncCall {
-                f: super::resolve_function(&func.node),
-                name: func.clone(),
-                args: get_arg_nodes(ast, args),
-            }),
-            ast::ExprData::MethodCall { attr, obj, args } => Box::new(MethodCall {
-                obj: ast.get_node(*obj),
-                method: Method::MethodCall { name: attr.clone() },
-                args: get_arg_nodes(ast, &args.node),
-            }),
-            ast::ExprData::IndexOp { obj, args } => {
-                let bracket_span = args.span;
-                let obj = ast.get_node(*obj);
-                let args = ast.get_node_list(args);
-                match obj.data() {
-                    ast::ExprData::Identifier(s) if s.as_str() == "__compiled_arg__" => {
-                        Box::new(CompiledArg(args))
-                    }
-                    _ => Box::new(MethodCall {
-                        method: Method::Index { bracket_span },
-                        obj,
-                        args: args.into_iter().map(|arg| (None, arg)).collect(),
-                    }),
-                }
+            match op.node {
+                Add | Sub | Mul | Div | Mod | Pow | Shl | ShrSigned | ShrUnsigned | And | Or
+                | Xor => make_func_call(
+                    Option::<functions::math::BinaryMathOp>::from(op.node).map(|f| f.boxed()),
+                ),
+                LogicalAnd => Box::new(LogicalAndExpr { op_span, args }),
+                LogicalOr => Box::new(LogicalOrExpr { op_span, args }),
+                LogicalXor => make_func_call(Some(functions::bools::LogicalXor.boxed())),
+                Range => make_func_call(Some(functions::range::Range.boxed())),
+                Is => todo!("'Is' func"),
             }
-
-            ast::ExprData::VectorConstruct(components) => Box::new(FuncCall {
-                f: Some(functions::vectors::VectorLiteral.boxed()),
-                name: Spanned {
-                    node: Arc::new("vector literal".to_owned()),
-                    span: expr.span(),
-                },
-                args: ast
-                    .get_node_list(components)
-                    .into_iter()
-                    .map(|expr| (None, expr))
-                    .collect(),
-            }),
-            ast::ExprData::SetConstruct(members) => Box::new(FuncCall {
-                f: Some(functions::sets::SetLiteral.boxed()),
-                name: Spanned {
-                    node: Arc::new("set literal".to_owned()),
-                    span: expr.span(),
-                },
-                args: ast
-                    .get_node_list(members)
-                    .into_iter()
-                    .map(|expr| (None, expr))
-                    .collect(),
-            }),
         }
+        ast::ExprData::PrefixOp(op, arg) => {
+            use crate::ast::PrefixOp::*;
+            let op_func: Box<dyn Function> = match op.node {
+                Pos => functions::math::UnaryMathOp::Pos.boxed(),
+                Neg => functions::math::UnaryMathOp::Neg.boxed(),
+                BitwiseNot => functions::math::UnaryMathOp::BitwiseNot.boxed(),
+                LogicalNot => functions::bools::LogicalNot.boxed(),
+                IntToCell => functions::cells::IntToCell.boxed(),
+            };
+            Box::new(FuncCall {
+                f: Some(op_func),
+                name: op.map_node(|op| Arc::new(op.to_string())),
+                args: vec![(None, ast.get_node(*arg))],
+            })
+        }
+        ast::ExprData::CmpChain(args, ops) => {
+            let args = args.iter().map(|&id| ast.get_node(id)).collect();
+            Box::new(CmpChain { args, ops })
+        }
+
+        ast::ExprData::FuncCall { func, args } => Box::new(FuncCall {
+            f: super::resolve_function(&func.node),
+            name: func.clone(),
+            args: get_arg_nodes(ast, args),
+        }),
+        ast::ExprData::MethodCall { attr, obj, args } => Box::new(MethodCall {
+            obj: ast.get_node(*obj),
+            method: Method::MethodCall { name: attr.clone() },
+            args: get_arg_nodes(ast, &args.node),
+        }),
+        ast::ExprData::IndexOp { obj, args } => {
+            let bracket_span = args.span;
+            let obj = ast.get_node(*obj);
+            let args = ast.get_node_list(args);
+            match obj.data() {
+                ast::ExprData::Identifier(s)
+                    if s.as_str() == "__compiled_arg__" && internal_mode =>
+                {
+                    Box::new(CompiledArg(args))
+                }
+                _ => Box::new(MethodCall {
+                    method: Method::Index { bracket_span },
+                    obj,
+                    args: args.into_iter().map(|arg| (None, arg)).collect(),
+                }),
+            }
+        }
+
+        ast::ExprData::VectorConstruct(components) => Box::new(FuncCall {
+            f: Some(functions::vectors::VectorLiteral.boxed()),
+            name: Spanned {
+                node: Arc::new("vector literal".to_owned()),
+                span: expr.span(),
+            },
+            args: ast
+                .get_node_list(components)
+                .into_iter()
+                .map(|expr| (None, expr))
+                .collect(),
+        }),
+        ast::ExprData::SetConstruct(members) => Box::new(FuncCall {
+            f: Some(functions::sets::SetLiteral.boxed()),
+            name: Spanned {
+                node: Arc::new("set literal".to_owned()),
+                span: expr.span(),
+            },
+            args: ast
+                .get_node_list(members)
+                .into_iter()
+                .map(|expr| (None, expr))
+                .collect(),
+        }),
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Identity<'ast>(ast::Expr<'ast>);
+struct Identity<'ast>(ast::Expr<'ast>);
 impl Expression for Identity<'_> {
     fn eval(&self, runtime: &mut Runtime, _expr_span: Span) -> Result<RtVal> {
         Ok(runtime.eval_expr(self.0)?.node)
@@ -432,7 +436,7 @@ impl MethodCall<'_> {
         // Resolve the method based on the type of the method receiver.
         let obj_ty = obj.ty();
         let name = self.method.display_name(&obj_ty);
-        let f = self.method.resolve(&obj_ty, obj.span)?;
+        let f = self.method.resolve(&obj_ty, obj.span, runtime)?;
 
         // Add the method receiver as the first argument.
         args.insert(0, (None, obj));
@@ -453,7 +457,7 @@ impl MethodCall<'_> {
         // Resolve the method based on the type of the method receiver.
         let obj_ty = obj.ty();
         let name = self.method.display_name(&obj_ty);
-        let f = self.method.resolve(&obj_ty, obj.span)?;
+        let f = self.method.resolve(&obj_ty, obj.span, compiler)?;
 
         // Add the method receiver as the first argument.
         args.insert(0, (None, obj));
@@ -508,14 +512,19 @@ impl Expression for MethodCall<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Method {
+enum Method {
     MethodCall { name: Spanned<Arc<String>> },
     Index { bracket_span: Span },
 }
 impl Method {
-    pub fn resolve(&self, obj_type: &Type, obj_span: Span) -> Result<Box<dyn Function>> {
+    pub fn resolve(
+        &self,
+        obj_type: &Type,
+        obj_span: Span,
+        ctx: &dyn CtxTrait,
+    ) -> Result<Box<dyn Function>> {
         match self {
-            Method::MethodCall { name } => super::resolve_method(obj_type, &name)
+            Method::MethodCall { name } => super::resolve_method(obj_type, &name, ctx)
                 .ok_or(Error::no_such_method(name.span, &obj_type)),
             Method::Index { .. } => super::resolve_index_method(obj_type)
                 .ok_or_else(|| Error::cannot_index_type(obj_span, obj_type)),

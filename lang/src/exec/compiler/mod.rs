@@ -39,8 +39,7 @@ mod loops;
 mod param;
 mod var;
 
-use super::builtins::Expression;
-use crate::ast;
+use super::builtins::expressions;
 use crate::data::{
     CellArray, CellSet, CpVal, GetType, LangInt, LlvmCellArray, RtVal, SpannedCompileValueExt,
     SpannedRuntimeValueExt, SpannedVal, Type, Val, VectorSet, INT_BITS,
@@ -48,6 +47,7 @@ use crate::data::{
 use crate::errors::{Error, Result};
 use crate::exec::{Ctx, CtxTrait, Runtime};
 use crate::llvm::{self, traits::*};
+use crate::{ast, LangMode};
 pub use config::CompilerConfig;
 pub use function::CompiledFunction;
 use loops::{Loop, VarInLoop};
@@ -93,6 +93,9 @@ pub struct Compiler {
 impl CtxTrait for Compiler {
     fn ctx(&mut self) -> &mut Ctx {
         &mut self.ctx
+    }
+    fn mode(&self) -> LangMode {
+        self.ctx.mode
     }
 }
 
@@ -2224,7 +2227,7 @@ impl Compiler {
                     self.report_error(e);
                     Error::AlreadyReported
                 });
-                let lhs_expression = Box::<dyn Expression>::from(lhs);
+                let lhs_expression = expressions::from_ast_node(lhs, self);
                 lhs_expression.compile_assign(self, expr_span, stmt_span, new_value)?;
                 Ok(IsTerminated::Unterminated)
             }
@@ -2469,7 +2472,7 @@ impl Compiler {
     /// Builds instructions to evaluate an expression.
     pub fn build_expr(&mut self, expr: ast::Expr<'_>) -> Result<Spanned<Val>> {
         let span = expr.span();
-        let expression = Box::<dyn Expression>::from(expr);
+        let expression = expressions::from_ast_node(expr, self);
         let node = expression.compile(self, span)?;
         Ok(Spanned { node, span })
     }

@@ -5,12 +5,13 @@ use regex::Regex;
 
 use ndcell_core::axis::Axis;
 
-mod expressions;
+pub mod expressions;
 pub mod functions;
 
 use super::{Ctx, CtxTrait};
 use crate::data::{self, LangInt, RtVal, Type};
 use crate::errors::Result;
+use crate::LangMode;
 pub use expressions::Expression;
 pub use functions::Function;
 
@@ -105,7 +106,12 @@ fn resolve_type_keyword(name: &str) -> Option<Type> {
 }
 
 /// Returns a built-in method.
-pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Function>> {
+pub fn resolve_method(
+    receiving_type: &Type,
+    name: &str,
+    ctx: &dyn CtxTrait,
+) -> Option<Box<dyn Function>> {
+    let internal_mode = ctx.mode() == LangMode::Internal;
     match receiving_type {
         Type::Null => match name {
             _ => None,
@@ -136,7 +142,7 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
         },
         Type::CellArray(_) | Type::CellArrayMut(_) => match name {
             "shape" => Some(functions::arrays::Shape.boxed()),
-            "as_immut" => Some(functions::arrays::AsImmut.boxed()),
+            "as_immut" if internal_mode => Some(functions::arrays::AsImmut.boxed()),
             // "as_mut" => Some(functions::arrays::AsMut.boxed()),
             _ => None,
         },
@@ -151,8 +157,8 @@ pub fn resolve_method(receiving_type: &Type, name: &str) -> Option<Box<dyn Funct
             _ => None,
         },
         Type::VectorSet(_) => match name {
-            "fill" => Some(functions::arrays::FillVectorSet.boxed()),
-            "new_buffer" => Some(functions::arrays::NewBuffer.boxed()),
+            "fill" if internal_mode => Some(functions::arrays::FillVectorSet.boxed()),
+            "new_buffer" if internal_mode => Some(functions::arrays::NewBuffer.boxed()),
             _ => None,
         },
         Type::PatternMatcher(_) => match name {

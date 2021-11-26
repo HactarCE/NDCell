@@ -10,7 +10,7 @@ use crate::data::{
     self, CpVal, LangInt, RtVal, SpannedCompileValueExt, SpannedRuntimeValueExt, SpannedValExt, Val,
 };
 use crate::errors::{Error, Result};
-use crate::exec::builtins::Expression;
+use crate::exec::builtins::expressions;
 use crate::exec::{Compiler, Ctx, CtxTrait, Runtime};
 use crate::llvm;
 
@@ -234,7 +234,8 @@ impl Function for IndexVector {
         let stmt_span = call
             .stmt_span
             .ok_or_else(|| internal_error_value!("missing statement span"))?;
-        Box::<dyn Expression>::from(first_arg).eval_assign(runtime, expr_span, stmt_span, new_value)
+        expressions::from_ast_node(first_arg, runtime)
+            .eval_assign(runtime, expr_span, stmt_span, new_value)
     }
     fn compile_assign(
         &self,
@@ -261,7 +262,7 @@ impl Function for IndexVector {
         let stmt_span = call
             .stmt_span
             .ok_or_else(|| internal_error_value!("missing statement span"))?;
-        Box::<dyn Expression>::from(first_arg).compile_assign(
+        expressions::from_ast_node(first_arg, compiler).compile_assign(
             compiler,
             expr_span,
             stmt_span,

@@ -1,12 +1,11 @@
 use codemap::{Span, Spanned};
 use codemap_diagnostic::Level;
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::ast;
 use crate::data::{LangInt, RtVal, SpannedRuntimeValueExt};
 use crate::errors::{Error, Result};
+use crate::{ast, LangMode};
 
 /// Global initialization and compile-time execution context.
 ///
@@ -49,6 +48,9 @@ pub struct Ctx {
     /// but has not been reached yet; if there is no `@states` directive at all,
     /// this will be filled with a default value before initialization.
     pub states: Option<usize>,
+
+    /// "Language mode."
+    pub mode: LangMode,
 }
 impl Ctx {
     /// Constructs a new directive, with values missing where they will be
@@ -118,6 +120,8 @@ impl Ctx {
             ndim,
             radius,
             states,
+
+            mode: LangMode::Internal,
         }
     }
 
@@ -140,6 +144,8 @@ impl Ctx {
                 ndim: Some(_),
                 radius: Some(_),
                 states: Some(_),
+
+                mode: _,
             } => Ok(()),
             _ => internal_error!("context contains missing values: {:#?}", self),
         }
@@ -246,10 +252,16 @@ pub trait CtxTrait {
             .states
             .ok_or_else(|| Error::not_reached_directive(error_span, "'@states'"))
     }
+
+    /// Returns the current "language mode."
+    fn mode(&self) -> LangMode;
 }
 
 impl CtxTrait for Ctx {
     fn ctx(&mut self) -> &mut Ctx {
         self
+    }
+    fn mode(&self) -> LangMode {
+        self.mode
     }
 }

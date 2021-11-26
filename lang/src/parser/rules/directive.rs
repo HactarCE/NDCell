@@ -2,10 +2,9 @@ use codemap::Spanned;
 use std::sync::Arc;
 
 use super::{Expression, Identifier, List, Parser, StatementBlock, SyntaxRule};
-use crate::ast;
 use crate::errors::{Error, Result};
 use crate::lexer::Token;
-use crate::LangMode;
+use crate::{ast, LangMode};
 
 /// Matches a directive.
 #[derive(Debug, Copy, Clone)]

@@ -7,6 +7,7 @@ mod cellstate;
 mod nodes;
 mod ops;
 
+use crate::errors::{Error, Result};
 pub use cellstate::CellState;
 pub use nodes::*;
 pub use ops::*;
@@ -46,6 +47,18 @@ impl Program {
     /// Returns whether `f` returns `true` for any directive.
     pub(crate) fn has_directive(&self, f: fn(&DirectiveData) -> bool) -> bool {
         self.directives().map(|node| node.data()).any(f)
+    }
+    pub(crate) fn find_single_directive(
+        &self,
+        name: &str,
+        f: fn(&DirectiveData) -> bool,
+    ) -> Result<Option<DirectiveId>> {
+        let mut iter = self.directives().filter(|d| f(d.data()));
+        let first = iter.next().map(|d| d.id);
+        match iter.next() {
+            Some(d) => Err(Error::duplicate_directive(d.span(), name)),
+            None => Ok(first),
+        }
     }
 
     /// Adds a node to the AST.

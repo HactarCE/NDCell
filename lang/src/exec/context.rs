@@ -1,5 +1,6 @@
 use codemap::{Span, Spanned};
 use codemap_diagnostic::Level;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -29,6 +30,10 @@ pub struct Ctx {
     /// reached yet; if there is no `@compile` directive at all, then that will
     /// cause an error.
     pub compile_directive: Option<ast::DirectiveId>,
+    /// `@transition` directive.
+    pub transition_directive: Option<ast::DirectiveId>,
+    /// `@function` directives.
+    pub helper_functions: HashMap<Arc<String>, ast::DirectiveId>,
 
     /// Number of dimensions.
     ///
@@ -49,6 +54,8 @@ impl Ctx {
     /// Constructs a new directive, with values missing where they will be
     /// initialized in the future.
     pub fn new(ast: &ast::Program) -> Self {
+        let mut errors = vec![];
+
         // Infer ndim if there is no `@ndim` directive.
         let ndim = if ast.has_directive(|d| matches!(d, ast::DirectiveData::Ndim(_))) {
             None
@@ -70,12 +77,43 @@ impl Ctx {
             Some(crate::DEFAULT_STATE_COUNT)
         };
 
+        // Find `@compile` directive.
+        let compile_directive = ast
+            .find_single_directive("@compile", |d| {
+                matches!(d, ast::DirectiveData::Compile { .. })
+            })
+            .unwrap_or_else(|e| {
+                errors.push(e);
+                None
+            });
+
+        // Find `@transition` directive.
+        let transition_directive = ast
+            .find_single_directive("@transition", |d| {
+                matches!(d, ast::DirectiveData::Transition { .. })
+            })
+            .unwrap_or_else(|e| {
+                errors.push(e);
+                None
+            });
+
+        // Find `@function` directives.
+        let helper_functions = ast
+            .directives()
+            .filter_map(|d| match d.data() {
+                ast::DirectiveData::Function { name, .. } => Some((Arc::clone(name), d.id)),
+                _ => None,
+            })
+            .collect();
+
         Self {
-            errors: vec![],
+            errors,
 
             global_constants: HashMap::new(),
 
-            compile_directive: None,
+            compile_directive,
+            transition_directive,
+            helper_functions,
 
             ndim,
             radius,
@@ -92,8 +130,13 @@ impl Ctx {
         match self {
             Self {
                 errors: _,
+
                 global_constants: _,
-                compile_directive: _, // ok if no `@compile` directive
+
+                compile_directive: _,    // ok if no `@compile` directive
+                transition_directive: _, // ok if no `@transition` directive
+                helper_functions: _,
+
                 ndim: Some(_),
                 radius: Some(_),
                 states: Some(_),

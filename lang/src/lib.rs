@@ -26,10 +26,24 @@ mod llvm;
 mod parser;
 mod regex;
 
-// pub use crate::meta::{CellState, RuleMeta};
-// pub use constvalue::ConstValue;
 pub use data::Type;
 pub use errors::{Error, Result};
+
+/// "Language mode," which determines what features are available for use in
+/// NDCA code.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum LangMode {
+    /// Internal code; no restrictions.
+    Internal,
+    /// User code; do not allow unsafe operations or use of features that depend
+    /// on internal implementation details.
+    User,
+}
+impl Default for LangMode {
+    fn default() -> Self {
+        Self::Internal
+    }
+}
 
 /// Maximum number of dimensions.
 pub const MAX_NDIM: usize = 6;

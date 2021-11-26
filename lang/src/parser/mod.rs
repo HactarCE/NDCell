@@ -26,18 +26,28 @@ pub mod strings;
 use crate::ast;
 use crate::errors::{Error, Result};
 use crate::lexer::{self, Token};
+use crate::LangMode;
 use rules::SyntaxRule;
 
-pub fn parse_file(ast: &mut ast::Program, name: String, source: String) -> Result<()> {
+pub fn parse_file(
+    ast: &mut ast::Program,
+    name: String,
+    source: String,
+    mode: LangMode,
+) -> Result<()> {
     let file = ast.add_file(name, source);
-    parse_directives(ast, &file)?;
+    parse_directives(ast, &file, mode)?;
     Ok(())
 }
 
-pub fn parse_directives(ast: &mut ast::Program, file: &File) -> Result<Vec<ast::DirectiveId>> {
+pub fn parse_directives(
+    ast: &mut ast::Program,
+    file: &File,
+    mode: LangMode,
+) -> Result<Vec<ast::DirectiveId>> {
     let mut directives = vec![];
     let tokens = lexer::tokenize(file).filter(|t| !t.is_skip()).collect_vec();
-    let mut p = Parser::new(file, &tokens)?;
+    let mut p = Parser::new(file, &tokens, mode)?;
     while p.peek_next().is_some() {
         let directive = p.parse(ast, rules::Directive)?;
         ast.add_directive(directive);
@@ -46,21 +56,26 @@ pub fn parse_directives(ast: &mut ast::Program, file: &File) -> Result<Vec<ast::
     Ok(directives)
 }
 
-pub fn parse_statement(ast: &mut ast::Program, file: &File) -> Result<ast::StmtId> {
-    parse_exactly_one(ast, file, rules::Statement)
+pub fn parse_statement(ast: &mut ast::Program, file: &File, mode: LangMode) -> Result<ast::StmtId> {
+    parse_exactly_one(ast, file, mode, rules::Statement)
 }
 
-pub fn parse_expression(ast: &mut ast::Program, file: &File) -> Result<ast::ExprId> {
-    parse_exactly_one(ast, file, rules::Expression)
+pub fn parse_expression(
+    ast: &mut ast::Program,
+    file: &File,
+    mode: LangMode,
+) -> Result<ast::ExprId> {
+    parse_exactly_one(ast, file, mode, rules::Expression)
 }
 
 fn parse_exactly_one<R: SyntaxRule>(
     ast: &mut ast::Program,
     file: &File,
+    mode: LangMode,
     rule: R,
 ) -> Result<R::Output> {
     let tokens = lexer::tokenize(file).filter(|t| !t.is_skip()).collect_vec();
-    let mut p = Parser::new(file, &tokens)?;
+    let mut p = Parser::new(file, &tokens, mode)?;
     match p.parse(ast, rule) {
         Ok(_) if p.next().is_some() => p.expected("EOF"),
         result => result,
@@ -76,10 +91,12 @@ pub struct Parser<'a> {
     tokens: &'a [Spanned<Token>],
     /// Index of the "current" token (None = before start).
     pub cursor: Option<usize>,
+    /// Language mode for this file.
+    pub mode: LangMode,
 }
 impl<'a> Parser<'a> {
     /// Constructs a parser for a file.
-    pub fn new(file: &'a File, tokens: &'a [Spanned<Token>]) -> Result<Self> {
+    pub fn new(file: &'a File, tokens: &'a [Spanned<Token>], mode: LangMode) -> Result<Self> {
         // Check for ambiguous octothorpe, such as `# var_name`.
         if let Some([_octothorpe, ident]) = tokens
             // TODO: when #[feature(min_const_generics)] stabalizes, use
@@ -97,6 +114,7 @@ impl<'a> Parser<'a> {
             file,
             tokens,
             cursor: None,
+            mode,
         })
     }
 

@@ -5,17 +5,14 @@ use std::hash::{Hash, Hasher};
 
 mod directive;
 mod expression;
-mod function;
 mod statement;
-mod string;
 
 use super::*;
 use crate::data::RtVal;
+use crate::LangMode;
 pub use directive::*;
 pub use expression::*;
-pub use function::*;
 pub use statement::*;
-pub use string::*;
 
 #[derive(Debug)]
 pub struct Node<D> {
@@ -28,7 +25,6 @@ pub struct Node<D> {
 pub enum AnyNode {
     Directive(DirectiveNode),
     Expr(ExprNode),
-    Func(FuncNode),
     Stmt(StmtNode),
 }
 
@@ -101,12 +97,11 @@ macro_rules! impl_node_trait {
 }
 impl_node_trait!(for AnyNode::Directive(Node<DirectiveData>));
 impl_node_trait!(for AnyNode::Expr(Node<ExprData>));
-impl_node_trait!(for AnyNode::Func(Node<FuncData>));
 impl_node_trait!(for AnyNode::Stmt(Node<StmtData>));
 macro_rules! match_any_node {
     (match $match_expr:expr; $node:ident => $result:expr) => {
         match_any_node!(match $match_expr; $node => $result;
-            for Directive, Expr, Func, Stmt
+            for Directive, Expr, Stmt
         )
     };
     (match $match_expr:expr; $node:ident => $result:expr; for $($variant:ident),+) => {

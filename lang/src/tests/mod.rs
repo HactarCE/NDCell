@@ -81,6 +81,7 @@ use crate::data::{CellArray, GetType, LangCell, LangInt, LangUint, RtVal, Type};
 use crate::errors::{self, Error};
 use crate::exec::{CompiledFunction, Compiler, CompilerConfig, CtxTrait, Runtime};
 use crate::utils;
+use crate::LangMode;
 use values::*;
 
 /// Input/output pair.
@@ -114,6 +115,7 @@ impl<T: IntoIterator> MapCollectVec for T {}
 
 #[derive(Debug, Default, Copy, Clone)]
 struct TestProgram<'a> {
+    mode: LangMode,
     setup: &'a str,
     exec: &'a str,
     input_types: &'a [Type],
@@ -123,6 +125,7 @@ impl<'a> TestProgram<'a> {
     /// Creates a new blank test program.
     pub fn new() -> Self {
         Self {
+            mode: LangMode::Internal,
             setup: "/* no setup */",
             exec: "/* no exec */",
             input_types: &[],
@@ -156,10 +159,22 @@ impl<'a> TestProgram<'a> {
 
         let mut ast = ast::Program::new();
 
-        parse_or_panic(parser::parse_directives, &mut ast, "setup.test", self.setup);
+        parse_or_panic(
+            parser::parse_directives,
+            &mut ast,
+            "setup.test",
+            self.setup,
+            self.mode,
+        );
 
         let stmt_src = format!("{{\n{}\n}}", self.exec);
-        let stmt_id = parse_or_panic(parser::parse_statement, &mut ast, "exec.test", &stmt_src);
+        let stmt_id = parse_or_panic(
+            parser::parse_statement,
+            &mut ast,
+            "exec.test",
+            &stmt_src,
+            self.mode,
+        );
 
         let expr_ids = self
             .result_expressions
@@ -171,6 +186,7 @@ impl<'a> TestProgram<'a> {
                     &mut ast,
                     &format!("expression{}.test", i),
                     expr,
+                    self.mode,
                 )
             })
             .collect();
@@ -223,6 +239,7 @@ impl<'a> TestProgram<'a> {
             &mut ast,
             "compiled.test",
             &self.source_for_compiler_test(),
+            self.mode,
         );
         Arc::new(ast)
     }
@@ -343,7 +360,7 @@ impl<'a> TestProgram<'a> {
         let name = "testfile.test".to_owned();
         let source = self.source_for_compiler_test();
         let mut ast = ast::Program::new();
-        let actual_result = match crate::parser::parse_file(&mut ast, name, source) {
+        let actual_result = match crate::parser::parse_file(&mut ast, name, source, self.mode) {
             Ok(_) => Ok("parsed successfully"),
             Err(error) => Err(vec![error]),
         };
@@ -479,13 +496,14 @@ impl<'a> TestProgram<'a> {
 }
 
 fn parse_or_panic<T>(
-    f: fn(&mut ast::Program, &codemap::File) -> Result<T, Error>,
+    f: fn(&mut ast::Program, &codemap::File, LangMode) -> Result<T, Error>,
     ast: &mut ast::Program,
     file_name: &str,
     file_contents: &str,
+    mode: LangMode,
 ) -> T {
     let file = ast.add_file(file_name.to_owned(), file_contents.to_owned());
-    match f(ast, &file) {
+    match f(ast, &file, mode) {
         Ok(x) => x,
         Err(e) => panic!(
             "NDCA syntax error:\n{}",

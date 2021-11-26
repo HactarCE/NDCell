@@ -62,42 +62,36 @@ impl Runtime {
         };
 
         for directive in ast.directives() {
+            use ast::DirectiveData::*;
             let result = match directive.data() {
-                ast::DirectiveData::Compile { .. } => match this.ctx.compile_directive {
-                    Some(_) => {
-                        // Lie to the user; tell them this directive name is
-                        // invalid, because they shouldn't be using it!
-                        Err(Error::invalid_directive_name(directive.span()))
-                    }
-                    None => {
-                        this.ctx.compile_directive = Some(directive.id);
-                        Ok(())
-                    }
-                },
+                Init {
+                    mode: features,
+                    body,
+                } => this
+                    .exec_stmt(ast.get_node(*body))
+                    .and_then(|flow| match flow {
+                        Flow::Proceed => Ok(()),
 
-                ast::DirectiveData::Init(block) => {
-                    this.exec_stmt(ast.get_node(*block))
-                        .and_then(|flow| match flow {
-                            Flow::Proceed => Ok(()),
+                        Flow::Break(span) => Err(Error::break_not_in_loop(span)),
+                        Flow::Continue(span) => Err(Error::continue_not_in_loop(span)),
 
-                            Flow::Break(span) => Err(Error::break_not_in_loop(span)),
-                            Flow::Continue(span) => Err(Error::continue_not_in_loop(span)),
+                        Flow::Return(span, _) => Err(Error::return_not_in_fn(span)),
+                        Flow::Remain(span) => Err(Error::remain_not_in_fn(span)),
+                        Flow::Become(span, _) => Err(Error::become_not_in_fn(span)),
+                    }),
 
-                            Flow::Return(span, _) => Err(Error::return_not_in_fn(span)),
-                            Flow::Remain(span) => Err(Error::remain_not_in_fn(span)),
-                            Flow::Become(span, _) => Err(Error::become_not_in_fn(span)),
-                        })
-                }
+                // `Ctx::new()` already handled all of these.
+                Function { .. } | Transition(_) | Compile { .. } => Ok(()),
 
-                ast::DirectiveData::Ndim(expr) => this
+                Ndim(expr) => this
                     .eval_expr(ast.get_node(*expr))
                     .and_then(|ndim_value| this.ctx.set_ndim(directive.span(), &ndim_value)),
 
-                ast::DirectiveData::Radius(expr) => this
+                Radius(expr) => this
                     .eval_expr(ast.get_node(*expr))
                     .and_then(|radius_value| this.ctx.set_radius(directive.span(), &radius_value)),
 
-                ast::DirectiveData::States(expr) => this
+                States(expr) => this
                     .eval_expr(ast.get_node(*expr))
                     .and_then(|states_value| this.ctx.set_states(directive.span(), &states_value)),
             };

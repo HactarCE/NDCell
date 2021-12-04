@@ -162,6 +162,7 @@ impl IntegerSet {
             .map(|((min1, max1), (min2, max2))| {
                 (std::cmp::max(min1, min2), std::cmp::min(max1, max2))
             })
+            .filter(|(min, max)| min <= max)
     }
 
     /// Returns the set containing all integers present in `self` or `other`.

@@ -18,7 +18,7 @@ pub struct SetupWindow {
 impl SetupWindow {
     fn error(&mut self, ui: &Ui<'_>, error: anyhow::Error) {
         self.error_message = Some(format!("{:?}", error));
-        ui.open_popup(im_str!("Error"));
+        ui.open_popup("Error");
     }
 
     fn load_rule_from_clipboard(gridview: &mut GridView) -> Result<()> {
@@ -99,12 +99,12 @@ impl SetupWindow {
         let BuildParams { ui, gridview, .. } = params;
 
         if self.is_visible {
-            Window::new(im_str!("Setup"))
+            Window::new("Setup")
                 .size([300.0, 0.0], Condition::FirstUseEver)
                 .flags(WindowFlags::NO_RESIZE)
                 .build(&ui, || {
-                    if ui.button(
-                        im_str!("Load rule from clipboard"),
+                    if ui.button_with_size(
+                        "Load rule from clipboard",
                         [ui.window_content_region_width(), 60.0],
                     ) {
                         if let Err(e) = Self::load_rule_from_clipboard(gridview) {
@@ -112,8 +112,8 @@ impl SetupWindow {
                         }
                     }
 
-                    if ui.button(
-                        im_str!("Load cell pattern from clipboard"),
+                    if ui.button_with_size(
+                        "Load cell pattern from clipboard",
                         [ui.window_content_region_width(), 60.0],
                     ) {
                         if let Err(e) = Self::load_cell_pattern_from_clipboard(gridview) {
@@ -121,10 +121,8 @@ impl SetupWindow {
                         }
                     }
 
-                    if ui.button(
-                        im_str!(
-                            "Load colors from clipboard\n(one color per line, CSS color format)"
-                        ),
+                    if ui.button_with_size(
+                        "Load colors from clipboard\n(one color per line, CSS color format)",
                         [ui.window_content_region_width(), 60.0],
                     ) {
                         if let Err(e) = Self::load_colors_from_clipboard() {
@@ -132,20 +130,19 @@ impl SetupWindow {
                         }
                     }
 
-                    if ui.button(
-                        im_str!("Reset colors"),
-                        [ui.window_content_region_width(), 30.0],
-                    ) {
+                    if ui.button_with_size("Reset colors", [ui.window_content_region_width(), 30.0])
+                    {
                         CONFIG.lock().gfx.cell_colors = crate::default_colors();
                     }
 
-                    ui.popup_modal(im_str!("Error"))
+                    PopupModal::new("Error")
                         .flags(WindowFlags::NO_RESIZE | WindowFlags::NO_MOVE)
-                        .build(|| {
+                        .build(ui, || {
                             if let Some(e) = &self.error_message {
                                 ui.text(e);
                                 ui.text("");
-                                if ui.button(im_str!("OK"), [ui.window_content_region_width(), 0.0])
+                                if ui
+                                    .button_with_size("OK", [ui.window_content_region_width(), 0.0])
                                 {
                                     self.error_message = None;
                                     ui.close_current_popup();
@@ -154,7 +151,7 @@ impl SetupWindow {
                                 ui.close_current_popup();
                             }
                         });
-                })
+                });
         }
     }
 }

@@ -45,7 +45,7 @@ impl MainWindow {
             gridview,
         } = params;
 
-        Window::new(&ImString::new(crate::TITLE)).build(&ui, || {
+        Window::new(crate::TITLE).build(&ui, || {
             let config = CONFIG.lock();
 
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
@@ -53,7 +53,7 @@ impl MainWindow {
 
             let width = ui.window_content_region_width();
             let button_width = (width - 10.0) / 2.0;
-            if ui.button(im_str!("Load file"), [button_width, 40.0]) {
+            if ui.button_with_size("Load file", [button_width, 40.0]) {
                 if let Ok(response) = nfd2::open_file_dialog(Some("rle,mc"), None) {
                     if let nfd2::Response::Okay(path) = response {
                         let rule = gridview.rule();
@@ -71,8 +71,8 @@ impl MainWindow {
                     }
                 }
             }
-            ui.same_line(button_width + 18.0);
-            if ui.button(im_str!("Save file"), [button_width, 40.0]) {
+            ui.same_line_with_pos(button_width + 18.0);
+            if ui.button_with_size("Save file", [button_width, 40.0]) {
                 if let Ok(response) = nfd2::open_save_dialog(Some("rle;mc"), None) {
                     if let nfd2::Response::Okay(path) = response {
                         let ca_format = match path.extension() {
@@ -122,8 +122,8 @@ impl MainWindow {
                     2 => 3,
                     _ => 2,
                 };
-                if ui.button(
-                    &ImString::new(format!("Switch to {}D", new_ndim)),
+                if ui.button_with_size(
+                    &format!("Switch to {}D", new_ndim),
                     [ui.window_content_region_width(), 30.0],
                 ) {
                     **gridview = crate::make_default_gridview(new_ndim);
@@ -178,10 +178,7 @@ impl MainWindow {
                 gridview.memory_usage().div_ceil(&MEBIBYTE),
                 config.sim.max_memory.div_ceil(&MEBIBYTE),
             ));
-            if ui.button(
-                im_str!("Clear cache"),
-                [ui.window_content_region_width(), 30.0],
-            ) {
+            if ui.button_with_size("Clear cache", [ui.window_content_region_width(), 30.0]) {
                 gridview.enqueue(Cmd::ClearCache);
             }
             ui.text("");
@@ -190,10 +187,10 @@ impl MainWindow {
                 gridview.selected_cell_state(),
             ));
             ui.text("");
-            ui.checkbox(im_str!("Setup"), &mut self.setup.is_visible);
-            ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
+            ui.checkbox("Setup", &mut self.setup.is_visible);
+            ui.checkbox("Simulation", &mut self.simulation.is_visible);
             #[cfg(debug_assertions)]
-            ui.checkbox(im_str!("Debug values"), &mut self.debug.is_visible);
+            ui.checkbox("Debug values", &mut self.debug.is_visible);
         });
 
         #[cfg(debug_assertions)]

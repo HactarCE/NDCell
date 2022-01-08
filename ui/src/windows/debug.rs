@@ -12,13 +12,13 @@ impl DebugWindow {
         let BuildParams { ui, .. } = params;
 
         if self.is_visible {
-            Window::new(&ImString::new("Debug values"))
+            Window::new("Debug values")
                 .size([400.0, 300.0], Condition::FirstUseEver)
                 .build(&ui, || {
                     let mut debug_info = crate::debug::FRAME_DEBUG_INFO.lock();
                     ui.text(&*debug_info);
                     *debug_info = String::new();
-                })
+                });
         }
     }
 }

@@ -31,12 +31,12 @@ pub fn clipboard_set(new_contents: String) -> Result<()> {
 pub struct ClipboardCompat;
 
 impl imgui::ClipboardBackend for ClipboardCompat {
-    fn get(&mut self) -> Option<imgui::ImString> {
-        clipboard_get().ok().map(imgui::ImString::new)
+    fn get(&mut self) -> Option<String> {
+        clipboard_get().ok()
     }
-    fn set(&mut self, value: &imgui::ImStr) {
+    fn set(&mut self, value: &str) {
         if clipboard_set(value.to_string()).is_err() {
             warn!("Failed to set clipboard contents");
-        };
+        }
     }
 }

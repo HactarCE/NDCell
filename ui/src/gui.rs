@@ -46,7 +46,7 @@ pub fn show_gui() -> ! {
 
     // Initialize imgui.
     let mut imgui = imgui::Context::create();
-    imgui.set_clipboard_backend(Box::new(ClipboardCompat));
+    imgui.set_clipboard_backend(ClipboardCompat);
     imgui.set_ini_filename(None);
     let mut platform = WinitPlatform::init(&mut imgui);
     let gl_window = display.gl_window();
@@ -204,13 +204,14 @@ fn load_application_icon() -> Option<Icon> {
     let icon_png_data = include_bytes!("../resources/icon/ndcell_32x32.png");
     let png_decoder = png::Decoder::new(&icon_png_data[..]);
     match png_decoder.read_info() {
-        Ok((info, mut reader)) => match info.color_type {
-            png::ColorType::RGBA => {
-                let mut img_data = vec![0_u8; info.buffer_size()];
+        Ok(mut reader) => match reader.output_color_type() {
+            (png::ColorType::Rgba, png::BitDepth::Eight) => {
+                let mut img_data = vec![0_u8; reader.output_buffer_size()];
                 if let Err(err) = reader.next_frame(&mut img_data) {
-                    warn!("Failed to read icon data: {:?}", err);
+                    eprintln!("Failed to read icon data: {:?}", err);
                     return None;
                 };
+                let info = reader.info();
                 match Icon::from_rgba(img_data, info.width, info.height) {
                     Ok(icon) => Some(icon),
                     Err(err) => {
@@ -219,10 +220,10 @@ fn load_application_icon() -> Option<Icon> {
                     }
                 }
             }
-            _ => {
+            other => {
                 warn!(
                     "Failed to load icon data due to unknown color format: {:?}",
-                    info.color_type,
+                    other,
                 );
                 None
             }

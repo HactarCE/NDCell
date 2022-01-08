@@ -538,7 +538,7 @@ impl<D: Dim> NodePool<D> {
         }
     }
 
-    /// Safely extend the lifetime of a node reference from this pool.
+    /// Safely extends the lifetime of a node reference from this pool.
     pub fn extend_lifetime<'this, 'other>(
         &'this self,
         node: impl NodeRefTrait<'other, D = D>,
@@ -616,8 +616,29 @@ impl<D: Dim> NodePool<D> {
     ///
     /// This method blocks if other parameters are being used for simulation at
     /// the same time.
-    pub fn sim_with<'pool>(&'pool self, params: HashLifeResultParams) -> SimCacheGuard<'pool, D> {
+    pub fn sim_with<'guard>(
+        &'guard self,
+        params: HashLifeResultParams,
+    ) -> SimCacheGuard<'guard, D> {
         let lock = self.sim_lock.upgradable_read();
+        self._sim_with(lock, params)
+    }
+    /// Returns the simulation lock, invalidating the results cache partially or
+    /// fully if necessary.
+    ///
+    /// If the lock cannot be acquired, returns `Err` containing the current parameters.
+    pub fn try_sim_with<'guard>(
+        &'guard self,
+        params: HashLifeResultParams,
+    ) -> Option<SimCacheGuard<'guard, D>> {
+        let lock = self.sim_lock.try_upgradable_read()?;
+        Some(self._sim_with(lock, params))
+    }
+    fn _sim_with<'guard>(
+        &'guard self,
+        lock: RwLockUpgradableReadGuard<'guard, HashLifeResultParams>,
+        params: HashLifeResultParams,
+    ) -> SimCacheGuard<'guard, D> {
         let old_params = *lock;
         let lock = if old_params != params {
             let mut lock = RwLockUpgradableReadGuard::upgrade(lock);
@@ -630,29 +651,6 @@ impl<D: Dim> NodePool<D> {
             pool: self,
             sim_lock: lock,
         }
-    }
-
-    /// Returns the simulation lock, invalidating the results cache partially or
-    /// fully if necessary.
-    ///
-    /// If the lock cannot be acquired, returns `Err` containing the current parameters.
-    pub fn try_sim_with<'pool>(
-        &'pool self,
-        params: HashLifeResultParams,
-    ) -> Option<SimCacheGuard<'pool, D>> {
-        let lock = self.sim_lock.try_upgradable_read()?;
-        let old_params = *lock;
-        let lock = if old_params != params {
-            let mut lock = RwLockUpgradableReadGuard::try_upgrade(lock).ok()?;
-            self.set_sim_params(params, &mut lock);
-            RwLockWriteGuard::downgrade(lock)
-        } else {
-            RwLockUpgradableReadGuard::downgrade(lock)
-        };
-        Some(SimCacheGuard {
-            pool: self,
-            sim_lock: lock,
-        })
     }
 
     /// Sets the simulation parameters.

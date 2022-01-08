@@ -10,18 +10,14 @@ use crate::ndtree::{
     HashLifeResultParams, Layer, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, SimCacheGuard,
 };
 use crate::ndvec::UVec;
-use crate::num::{BigInt, Signed, Zero};
+use crate::num::{BigInt, Zero};
 
 // TODO: parallelize using threadpool and crossbeam_channel (call execute threadpool.max_count times with closures that just loop)
 
 /// Advances the given ND-tree by the given number of generations.
 pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
-    if gens.is_negative() {
-        panic!("Cannot simulate negative timestep");
-    }
     if gens.is_zero() {
-        // No need to simulate anything!
-        return;
+        return; // No need to simulate anything!
     }
 
     // TODO: consider being nicer to GC threads
@@ -31,7 +27,8 @@ pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
         HashLifeResultParams::new()
             .with_rule_radius(rule.radius())
             .with_step_size(gens)
-            .build(),
+            .build()
+            .unwrap(), // TODO handle error
     );
 
     // Prepare the transition function.

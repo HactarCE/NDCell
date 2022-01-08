@@ -1,4 +1,6 @@
-use std::convert::TryInto;
+use lazy_static::lazy_static;
+use num::Signed;
+use thiserror::Error;
 
 use super::Layer;
 use crate::num::{BigInt, BigUint, One, ToPrimitive, Zero};
@@ -20,17 +22,20 @@ pub struct HashLifeResultParams {
 }
 impl Default for HashLifeResultParams {
     fn default() -> Self {
-        Self::new().build()
+        Self::new().build().unwrap()
     }
 }
 impl HashLifeResultParams {
     /// Creates a `HashLifeResultParamsBuilder`, which is used to build a
     /// `HashLifeResultParams`.
-    pub fn new() -> HashLifeResultParamsBuilder {
+    pub fn new() -> HashLifeResultParamsBuilder<'static> {
+        lazy_static! {
+            static ref BIGINT_ONE: BigInt = BigInt::one();
+        }
+
         HashLifeResultParamsBuilder {
-            log2_rule_radius: 0,
-            log2_step_size: 0,
-            num_steps: 1,
+            rule_radius: 1,
+            step_size: &BIGINT_ONE,
         }
     }
 
@@ -103,48 +108,45 @@ impl HashLifeResultParams {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct HashLifeResultParamsBuilder {
-    log2_rule_radius: u32,
-    log2_step_size: u32,
-    num_steps: u32,
+pub struct HashLifeResultParamsBuilder<'a> {
+    rule_radius: usize,
+    step_size: &'a BigInt,
 }
-impl HashLifeResultParamsBuilder {
+impl<'a> HashLifeResultParamsBuilder<'a> {
+    /// Sets rule radius.
     pub fn with_rule_radius(mut self, rule_radius: usize) -> Self {
-        self.log2_rule_radius = rule_radius
-            .next_power_of_two()
-            .max(1) // Treat r=0 rules like r=1.
-            .trailing_zeros();
+        self.rule_radius = rule_radius;
+        self
+    }
+    /// Sets step size.
+    pub fn with_step_size(mut self, generations: &'a BigInt) -> Self {
+        self.step_size = generations;
         self
     }
 
-    pub fn with_step_size(mut self, generations: &BigInt) -> Self {
-        // TODO: return Result from this method so that bad step sizes don't
-        // panic.
+    /// Builds the HashLife parameters.
+    pub fn build(self) -> Result<HashLifeResultParams, BadStepSize> {
+        let log2_rule_radius = self
+            .rule_radius
+            .next_power_of_two() // Treat r=0 rules like r=1.
+            .trailing_zeros();
 
-        // The number of trailing zeros (i.e. index of the first `1` bit) gives
-        // the greatest power-of-2 multiple.
-        let log2_step_size = generations
+        if !self.step_size.is_positive() {
+            return Err(BadStepSize::NotPositive);
+        }
+
+        // The number of trailing zeros (i.e. index of the first `1` bit)
+        // gives the greatest power-of-2 multiple.
+        let log2_step_size = self
+            .step_size
             .trailing_zeros()
-            .unwrap()
-            .try_into()
-            .expect("Step size too large!");
+            .and_then(|x| x.to_u32())
+            .ok_or(BadStepSize::TooLarge)?;
 
         // If the number of generations is not a power of 2, we may have to
         // break this into multiple power-of-2-sized steps.
-        let num_steps: BigInt = generations >> log2_step_size;
-        let num_steps = num_steps.to_u32().expect(
-            "Simulation requires too many individual steps; try using a power of 2 step size",
-        );
-
-        self.log2_step_size = log2_step_size;
-        self.num_steps = num_steps;
-        self
-    }
-
-    pub fn build(self) -> HashLifeResultParams {
-        let log2_rule_radius = self.log2_rule_radius;
-        let log2_step_size = self.log2_step_size;
-        let num_steps = self.num_steps;
+        let big_num_steps = self.step_size >> log2_step_size;
+        let num_steps = big_num_steps.to_u32().ok_or(BadStepSize::TooManySteps)?;
 
         // Distance = velocity * time. `rule_radius` is the velocity (cells per
         // generation) and the step size is the time (number of generations).
@@ -156,14 +158,24 @@ impl HashLifeResultParamsBuilder {
 
         let min_layer = Layer(log2_rule_radius + 2);
 
-        HashLifeResultParams {
+        Ok(HashLifeResultParams {
             log2_rule_radius,
             log2_step_size,
             num_steps,
             sim_base_layer,
             min_layer,
-        }
+        })
     }
+}
+
+#[derive(Error, Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BadStepSize {
+    #[error("step size must be positive")]
+    NotPositive,
+    #[error("step size is too large")]
+    TooLarge,
+    #[error("step size requires too many individual steps; try using a power of 2 step size or a multiple of one")]
+    TooManySteps,
 }
 
 #[cfg(test)]
@@ -184,10 +196,11 @@ mod tests {
             println!("Testing max_log2_step_size={}", max_log2_step_size);
 
             let m = 1 << max_log2_step_size;
-            let b = HashLifeResultParams::new().with_step_size(&m.into());
+            let big_m = m.into();
+            let b = HashLifeResultParams::new().with_step_size(&big_m);
 
             for r in 0..=1 {
-                let p = b.with_rule_radius(r).build();
+                let p = b.with_rule_radius(r).build().unwrap();
                 assert_eq!(Some(m.min(0)), p.node_step_size(_1x1));
                 assert_eq!(Some(m.min(0)), p.node_step_size(_2x2));
                 assert_eq!(Some(m.min(1)), p.node_step_size(_4x4));
@@ -197,7 +210,7 @@ mod tests {
                 assert_eq!(Some(m.min(16)), p.node_step_size(_64x64));
             }
 
-            let p = b.with_rule_radius(2).build();
+            let p = b.with_rule_radius(2).build().unwrap();
             assert_eq!(Some(m.min(0)), p.node_step_size(_1x1));
             assert_eq!(Some(m.min(0)), p.node_step_size(_2x2));
             assert_eq!(Some(m.min(0)), p.node_step_size(_4x4));
@@ -207,7 +220,7 @@ mod tests {
             assert_eq!(Some(m.min(8)), p.node_step_size(_64x64));
 
             for r in 3..=4 {
-                let p = b.with_rule_radius(r).build();
+                let p = b.with_rule_radius(r).build().unwrap();
                 assert_eq!(Some(m.min(0)), p.node_step_size(_1x1));
                 assert_eq!(Some(m.min(0)), p.node_step_size(_2x2));
                 assert_eq!(Some(m.min(0)), p.node_step_size(_4x4));
@@ -217,7 +230,7 @@ mod tests {
                 assert_eq!(Some(m.min(4)), p.node_step_size(_64x64));
             }
 
-            let p = b.with_rule_radius(5).build();
+            let p = b.with_rule_radius(5).build().unwrap();
             assert_eq!(Some(m.min(0)), p.node_step_size(_1x1));
             assert_eq!(Some(m.min(0)), p.node_step_size(_2x2));
             assert_eq!(Some(m.min(0)), p.node_step_size(_4x4));

@@ -804,7 +804,7 @@ fn shrink_nonzero_bound<D: Dim, M: MinMax>(
                     // Only consider the axis we care about.
                     .map(|(pos, _cell)| pos[axis])
                     // Pick the "best" value.
-                    .fold1(M::pick_best)
+                    .reduce(M::pick_best)
             })
             // Pick the "best" value from all of those nodes.
             .fold(None, |a, b| match (a, b) {

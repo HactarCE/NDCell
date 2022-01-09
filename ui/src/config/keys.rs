@@ -1,7 +1,2 @@
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct KeyConfig {}
-impl Default for KeyConfig {
-    fn default() -> Self {
-        Self {}
-    }
-}

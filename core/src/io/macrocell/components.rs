@@ -64,8 +64,7 @@ impl fmt::Display for Macrocell {
         if let Some(ndim) = AXES
             .iter()
             .rev()
-            .filter(|&&ax| !self.offset[ax].is_zero())
-            .next()
+            .find(|&&ax| !self.offset[ax].is_zero())
             .map(|&ax| ax as usize + 1)
         {
             write!(f, "#O")?;
@@ -78,7 +77,7 @@ impl fmt::Display for Macrocell {
         for line in self.comments.lines() {
             let needs_prefix =
                 // '#' is required at beginning of comments
-                !line.starts_with("#")
+                !line.starts_with('#')
                 // '#R' indicates the rule name (not a valid comment)
                 || line.starts_with("#R")
                 // '#G' indicates the generation count (not a valid comment)
@@ -110,9 +109,9 @@ impl FromStr for Macrocell {
         let mut lines = s.trim().lines().map(|s| s.trim());
         {
             // Check header.
-            let header_line = lines.next().ok_or(MacrocellError::MissingHeader)?;
+            let header_line = lines.next().unwrap_or("");
             if !header_line.starts_with("[M2]") {
-                return Err(MacrocellError::MissingHeader)?;
+                return Err(MacrocellError::MissingHeader);
             }
         }
 
@@ -125,16 +124,16 @@ impl FromStr for Macrocell {
         for line in lines {
             if line.is_empty() {
                 continue;
-            } else if line.starts_with("#R") {
-                rule = Some(line[2..].trim().to_owned());
-            } else if line.starts_with("#G") {
-                gen = line[2..].trim().parse().unwrap_or(gen);
+            } else if let Some(rest) = line.strip_prefix("#R") {
+                rule = Some(rest.trim().to_owned());
+            } else if let Some(rest) = line.strip_prefix("#G") {
+                gen = rest.trim().parse().unwrap_or(gen);
             } else if line.starts_with("#O") {
                 let values_iter = line.split_ascii_whitespace().filter_map(|s| s.parse().ok());
                 for (&ax, axis_offset) in AXES.iter().zip(values_iter) {
                     offset[ax] = axis_offset;
                 }
-            } else if line.starts_with("#") {
+            } else if line.starts_with('#') {
                 comments.push_str(line);
                 comments.push('\n');
             } else {

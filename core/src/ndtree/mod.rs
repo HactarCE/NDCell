@@ -134,7 +134,7 @@ impl<D: Dim> NdTree<D> {
     }
     /// Returns the root node of the ND-tree.
     #[inline]
-    pub fn root_ref<'a>(&'a self) -> NodeRefWithGuard<'a, D> {
+    pub fn root_ref(&self) -> NodeRefWithGuard<'_, D> {
         self.root().as_ref_with_guard()
     }
     /// Sets the root node of the ND-tree, maintaining the center position.
@@ -243,7 +243,7 @@ impl<D: Dim> NdTree<D> {
     /// "Zooms out" the grid by calling `NdTree::expand()` as long as the given
     /// predicate returns `true`.
     pub fn expand_while(&mut self, mut predicate: impl FnMut(&Self) -> bool) {
-        while predicate(&self) {
+        while predicate(self) {
             self.expand();
         }
     }
@@ -312,7 +312,7 @@ impl<D: Dim> NdTree<D> {
 
     /// Returns an `NdTreeSlice` view into the grid.
     #[inline]
-    pub fn as_slice<'a>(&'a self) -> NdTreeSlice<'a, D> {
+    pub fn as_slice(&self) -> NdTreeSlice<'_, D> {
         NdTreeSlice {
             root: self.root_ref(),
             base_pos: self.base_pos().clone(),

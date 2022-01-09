@@ -114,6 +114,24 @@ where
         !self.as_history().redo_stack.is_empty()
     }
 }
+impl<T: HistoryBase> HistoryBase for Box<T> {
+    type Entry = T::Entry;
+
+    fn history_entry(&self) -> Self::Entry {
+        (**self).history_entry()
+    }
+
+    fn restore_history_entry(&mut self, entry: Self::Entry) -> Self::Entry {
+        (**self).restore_history_entry(entry)
+    }
+
+    fn as_history(&self) -> &HistoryManager<Self::Entry> {
+        (**self).as_history()
+    }
+    fn as_history_mut(&mut self) -> &mut HistoryManager<Self::Entry> {
+        (**self).as_history_mut()
+    }
+}
 
 #[cfg(test)]
 mod tests {

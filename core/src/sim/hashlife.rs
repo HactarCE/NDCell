@@ -7,31 +7,28 @@ use crate::dim::Dim;
 use crate::ndarray::NdArray;
 use crate::ndrect::{NdRect, URect};
 use crate::ndtree::{
-    HashLifeResultParams, Layer, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, SimCacheGuard,
+    HashLifeResultParamsBuilder, Layer, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, SimCacheGuard,
 };
 use crate::ndvec::UVec;
-use crate::num::{BigInt, Signed, Zero};
+use crate::num::{BigInt, Zero};
 
 // TODO: parallelize using threadpool and crossbeam_channel (call execute threadpool.max_count times with closures that just loop)
 
 /// Advances the given ND-tree by the given number of generations.
 pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
-    if gens.is_negative() {
-        panic!("cannot simulate negative timestep");
-    }
     if gens.is_zero() {
-        // No need to simulate anything!
-        return;
+        return; // No need to simulate anything!
     }
 
     // TODO: consider being nicer to GC threads
     let node_pool = tree.pool().new_ref();
     let node_pool_access = node_pool.access();
     let sim_guard = node_pool_access.sim_with(
-        HashLifeResultParams::new()
+        HashLifeResultParamsBuilder::new()
             .with_rule_radius(rule.radius())
             .with_step_size(gens)
-            .build(),
+            .build()
+            .unwrap(), // TODO handle error
     );
 
     // Prepare the transition function.
@@ -117,7 +114,7 @@ fn advance_inner_node<'pool, D: Dim>(
             NodeRefEnum::Leaf(n) => n.pool().get_empty(n.layer().child_layer()),
             // It's easier to get a reference to a child than to look up an
             // empty node.
-            NodeRefEnum::NonLeaf(n) => n.child_at_index(0).into(),
+            NodeRefEnum::NonLeaf(n) => n.child_at_index(0),
         }
     } else if node.layer() == sim_params.min_layer()
         || node.layer().child_layer() <= Layer::base::<D>()

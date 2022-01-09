@@ -1,3 +1,5 @@
+#![allow(clippy::suspicious_arithmetic_impl, clippy::suspicious_op_assign_impl)]
+
 use std::fmt;
 use std::ops::*;
 

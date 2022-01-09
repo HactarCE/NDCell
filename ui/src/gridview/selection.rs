@@ -12,16 +12,16 @@ pub struct Selection<D: Dim> {
 }
 impl<D: Dim> Selection<D> {
     pub fn restore_history_entry(
-        mut current: &mut Option<Self>,
-        entry: Option<Self>,
-    ) -> Option<Self> {
+        current: &mut Option<Box<Self>>,
+        entry: Option<Box<Self>>,
+    ) -> Option<Box<Self>> {
         let current_has_cells = current.as_ref().and_then(|s| s.cells.as_ref()).is_some();
         let entry_has_cells = entry.as_ref().and_then(|s| s.cells.as_ref()).is_some();
 
         if CONFIG.lock().hist.record_select || entry_has_cells {
-            std::mem::replace(&mut current, entry)
+            std::mem::replace(current, entry)
         } else if current_has_cells {
-            std::mem::replace(&mut current, None)
+            current.take()
         } else {
             current.clone()
         }
@@ -123,7 +123,7 @@ pub fn resize_selection_absolute<D: Dim>(
     // Closest corner varies.
     let mut pos2 = initial_selection.closest_corner(drag_start_pos);
 
-    let axes = absolute_selection_resize_axes(&initial_selection, drag_start_pos);
+    let axes = absolute_selection_resize_axes(initial_selection, drag_start_pos);
     let drag_end_min = drag_end_render_cell.min();
     let drag_end_max = drag_end_render_cell.max();
     for ax in axes {

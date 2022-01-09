@@ -7,6 +7,11 @@
 //! in implementing all the things that would be expected if this were its own
 //! crate.
 
+// Fixed-point arithmetic often involves suspicious operations, like
+// right-shifting when performing multiplication or left-shifting when
+// performing division.
+#![allow(clippy::suspicious_arithmetic_impl, clippy::suspicious_op_assign_impl)]
+
 use noisy_float::prelude::R64;
 use num::{BigInt, BigUint, FromPrimitive, Num, One, Signed, ToPrimitive, Zero};
 use std::convert::TryFrom;
@@ -45,7 +50,7 @@ impl FixedPoint {
     pub fn fract(&self) -> f64 {
         let mask = BigInt::from(FRACTIONAL_MASK);
         let ret = (self.0.abs() & mask).to_u64().unwrap() as f64 / INTEGRAL_ONE as f64;
-        assert!(0.0 <= ret && ret < 1.0);
+        assert!((0.0..1.0).contains(&ret));
         match self.0.sign() {
             num::bigint::Sign::Minus => -ret,
             num::bigint::Sign::NoSign => 0.0,
@@ -102,11 +107,7 @@ impl FixedPoint {
     #[inline]
     pub fn log2(&self) -> f64 {
         // Use the number of bits in the number as a rough approximation.
-        let i = self
-            .0
-            .bits()
-            .checked_sub(FRACTIONAL_BITS as u64)
-            .unwrap_or(0);
+        let i = self.0.bits().saturating_sub(FRACTIONAL_BITS as u64);
         // Divide by 2^i to get a number that's close to 1 or smaller.
         let f = (self >> i).to_f64().unwrap();
         // Delegate to floating-point implementation for the rest.

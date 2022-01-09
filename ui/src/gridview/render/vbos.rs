@@ -91,18 +91,15 @@ impl VboCache {
         &mut self.blit_quad
     }
 
-    pub fn quad_verts_2d<'a>(&'a mut self, quad_count: usize) -> VertexBufferSlice<'a, Vertex2D> {
+    pub fn quad_verts_2d(&mut self, quad_count: usize) -> VertexBufferSlice<'_, Vertex2D> {
         self.quad_verts_2d.slice(..(4 * quad_count)).unwrap()
     }
 
-    pub fn quad_verts_3d<'a>(&'a mut self, quad_count: usize) -> VertexBufferSlice<'a, Vertex3D> {
+    pub fn quad_verts_3d(&mut self, quad_count: usize) -> VertexBufferSlice<'_, Vertex3D> {
         self.quad_verts_3d.slice(..(4 * quad_count)).unwrap()
     }
 
-    pub fn mouse_target_verts<'a>(
-        &'a mut self,
-        count: usize,
-    ) -> VertexBufferSlice<'a, MouseTargetVertex> {
+    pub fn mouse_target_verts(&mut self, count: usize) -> VertexBufferSlice<'_, MouseTargetVertex> {
         self.mouse_target_verts.slice(..(3 * count)).unwrap()
     }
 }

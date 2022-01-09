@@ -45,7 +45,7 @@ impl MainWindow {
             gridview,
         } = params;
 
-        Window::new(&ImString::new(crate::TITLE)).build(&ui, || {
+        Window::new(crate::TITLE).build(ui, || {
             let config = CONFIG.lock();
 
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));
@@ -53,35 +53,33 @@ impl MainWindow {
 
             let width = ui.window_content_region_width();
             let button_width = (width - 10.0) / 2.0;
-            if ui.button(im_str!("Load file"), [button_width, 40.0]) {
-                if let Ok(response) = nfd2::open_file_dialog(Some("rle,mc"), None) {
-                    if let nfd2::Response::Okay(path) = response {
-                        let rule = gridview.rule();
-                        if let Ok(s) = std::fs::read_to_string(path) {
-                            if let Ok(automaton) =
-                                ndcell_core::io::import_automaton_from_string(&s, rule)
-                            {
-                                match automaton.unwrap() {
-                                    Automaton::Automaton2D(a) => **gridview = a.into(),
-                                    Automaton::Automaton3D(a) => **gridview = a.into(),
-                                    _ => (),
-                                }
+            if ui.button_with_size("Load file", [button_width, 40.0]) {
+                if let Ok(nfd2::Response::Okay(path)) = nfd2::open_file_dialog(Some("rle,mc"), None)
+                {
+                    let rule = gridview.rule();
+                    if let Ok(s) = std::fs::read_to_string(path) {
+                        if let Ok(automaton) =
+                            ndcell_core::io::import_automaton_from_string(&s, rule)
+                        {
+                            match automaton.unwrap() {
+                                Automaton::Automaton2D(a) => **gridview = (*a).into(),
+                                Automaton::Automaton3D(a) => **gridview = (*a).into(),
+                                _ => (),
                             }
                         }
                     }
                 }
             }
-            ui.same_line(button_width + 18.0);
-            if ui.button(im_str!("Save file"), [button_width, 40.0]) {
-                if let Ok(response) = nfd2::open_save_dialog(Some("rle;mc"), None) {
-                    if let nfd2::Response::Okay(path) = response {
-                        let ca_format = match path.extension() {
-                            Some(ext) if ext == "mc" => CaFormat::Macrocell,
-                            _ => CaFormat::Rle,
-                        };
-                        if let Ok(s) = gridview.export(ca_format) {
-                            let _ = std::fs::write(path, s);
-                        }
+            ui.same_line_with_pos(button_width + 18.0);
+            if ui.button_with_size("Save file", [button_width, 40.0]) {
+                if let Ok(nfd2::Response::Okay(path)) = nfd2::open_save_dialog(Some("rle;mc"), None)
+                {
+                    let ca_format = match path.extension() {
+                        Some(ext) if ext == "mc" => CaFormat::Macrocell,
+                        _ => CaFormat::Rle,
+                    };
+                    if let Ok(s) = gridview.export(ca_format) {
+                        let _ = std::fs::write(path, s);
                     }
                 }
             }
@@ -89,11 +87,7 @@ impl MainWindow {
             ui.text("");
             let fps = ui.io().framerate.round() as usize;
             ui.text_colored(fps_color(fps), format!("Framerate = {} FPS", fps));
-            let total_sim_time: Duration = gridview
-                .last_sim_times()
-                .iter()
-                .map(|duration| duration)
-                .sum();
+            let total_sim_time: Duration = gridview.last_sim_times().iter().sum();
             if total_sim_time.is_zero() {
                 ui.text("");
             } else {
@@ -121,8 +115,8 @@ impl MainWindow {
                     2 => 3,
                     _ => 2,
                 };
-                if ui.button(
-                    &ImString::new(format!("Switch to {}D", new_ndim)),
+                if ui.button_with_size(
+                    &format!("Switch to {}D", new_ndim),
                     [ui.window_content_region_width(), 30.0],
                 ) {
                     **gridview = crate::make_default_gridview(new_ndim);
@@ -136,7 +130,7 @@ impl MainWindow {
                     ui.text(format!("Scale = {}", vp.scale()));
                     for &ax in Dim2D::axes() {
                         let value = &vp.center()[ax];
-                        if format!("{:.1}", value).ends_with("0") {
+                        if format!("{:.1}", value).ends_with('0') {
                             ui.text(format!("{} = {:.0}", ax.name(), value));
                         } else {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
@@ -155,7 +149,7 @@ impl MainWindow {
                     ui.text(format!("Scale = {}", vp.scale()));
                     for &ax in Dim3D::axes() {
                         let value = &vp.center()[ax];
-                        if format!("{:.1}", value).ends_with("0") {
+                        if format!("{:.1}", value).ends_with('0') {
                             ui.text(format!("{} = {:.0}", ax.name(), value));
                         } else {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
@@ -177,10 +171,7 @@ impl MainWindow {
                 gridview.memory_usage().div_ceil(&MEBIBYTE),
                 config.sim.max_memory.div_ceil(&MEBIBYTE),
             ));
-            if ui.button(
-                im_str!("Clear cache"),
-                [ui.window_content_region_width(), 30.0],
-            ) {
+            if ui.button_with_size("Clear cache", [ui.window_content_region_width(), 30.0]) {
                 gridview.enqueue(Cmd::ClearCache);
             }
             ui.text("");
@@ -189,10 +180,10 @@ impl MainWindow {
                 gridview.selected_cell_state(),
             ));
             ui.text("");
-            ui.checkbox(im_str!("Setup"), &mut self.setup.is_visible);
-            ui.checkbox(im_str!("Simulation"), &mut self.simulation.is_visible);
+            ui.checkbox("Setup", &mut self.setup.is_visible);
+            ui.checkbox("Simulation", &mut self.simulation.is_visible);
             #[cfg(debug_assertions)]
-            ui.checkbox(im_str!("Debug values"), &mut self.debug.is_visible);
+            ui.checkbox("Debug values", &mut self.debug.is_visible);
         });
 
         #[cfg(debug_assertions)]

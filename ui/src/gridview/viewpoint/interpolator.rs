@@ -30,7 +30,7 @@ impl<D: Dim, V: Viewpoint<D>> From<V> for Interpolator<D, V> {
     fn from(viewpoint: V) -> Self {
         Self {
             current: viewpoint.clone(),
-            target: viewpoint.clone(),
+            target: viewpoint,
             state: (),
             _marker: PhantomData,
         }

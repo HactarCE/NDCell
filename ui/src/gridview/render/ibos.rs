@@ -24,7 +24,7 @@ impl Default for IboCache {
     }
 }
 impl IboCache {
-    pub fn quad_indices<'a>(&'a self, quad_count: usize) -> IndexBufferSlice<'a, u32> {
+    pub fn quad_indices(&self, quad_count: usize) -> IndexBufferSlice<'_, u32> {
         self.quad_indices.slice(0..(6 * quad_count)).unwrap()
     }
 }

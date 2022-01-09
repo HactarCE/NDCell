@@ -110,6 +110,7 @@ pub struct MouseBindings<T>([(T, T, T); 8]);
 impl<T> Index<ModifiersState> for MouseBindings<T> {
     type Output = (T, T, T);
 
+    #[allow(clippy::identity_op)]
     fn index(&self, mods: ModifiersState) -> &(T, T, T) {
         &self.0[((mods.shift() as usize) << 0)
             + ((mods.ctrl() as usize) << 1)
@@ -117,6 +118,7 @@ impl<T> Index<ModifiersState> for MouseBindings<T> {
     }
 }
 impl<T> IndexMut<ModifiersState> for MouseBindings<T> {
+    #[allow(clippy::identity_op)]
     fn index_mut(&mut self, mods: ModifiersState) -> &mut (T, T, T) {
         &mut self.0[((mods.shift() as usize) << 0)
             + ((mods.ctrl() as usize) << 1)

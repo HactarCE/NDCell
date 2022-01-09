@@ -359,7 +359,7 @@ impl GridViewRender2D<'_> {
     }
     /// Adds a highlight indicating how the selection will be resized.
     pub fn add_selection_resize_preview_overlay(&mut self, selection_preview_rect: &BigRect2D) {
-        let local_rect = self.clip_int_rect_to_visible(&selection_preview_rect);
+        let local_rect = self.clip_int_rect_to_visible(selection_preview_rect);
         let width = r64(SELECTION_HIGHLIGHT_WIDTH);
         use crate::colors::selection::*;
         self.add_rect_fill_overlay(local_rect, RESIZE_FILL);
@@ -526,15 +526,13 @@ fn gridline_alpha(cell_spacing_exponent: u32, scale: Scale) -> f64 {
         GRIDLINE_ALPHA_ZOOMED_OUT_MULT_2D,
         1.0,
     );
-    let alpha = clamped_interpolate(
+    clamped_interpolate(
         log2_pixel_spacing,
         GRIDLINE_ALPHA_GRADIENT_LOW_PIXEL_SPACING.log2(),
         GRIDLINE_ALPHA_GRADIENT_HIGH_PIXEL_SPACING.log2(),
         0.0,
         max_alpha,
-    );
-
-    alpha
+    )
 }
 
 fn clamped_interpolate(x: f64, min: f64, max: f64, min_result: f64, max_result: f64) -> f64 {

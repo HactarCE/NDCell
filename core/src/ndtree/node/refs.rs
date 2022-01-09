@@ -544,7 +544,7 @@ impl<'pool, D: Dim> NonLeafNodeRef<'pool, D> {
             // TODO: optimize by only creating the child requested, not all
             // 2^NDIM
             NodeRefEnum::Leaf(node) => node.subdivide().unwrap().remove(grandchild_index),
-            NodeRefEnum::NonLeaf(node) => node.child_at_index(grandchild_index).into(),
+            NodeRefEnum::NonLeaf(node) => node.child_at_index(grandchild_index),
         }
     }
 }
@@ -634,7 +634,7 @@ impl<'pool, D: Dim> NodeRef<'pool, D> {
 
     /// Returns a reference to the raw node structure.
     pub(super) fn as_raw(self) -> &'pool RawNode<D> {
-        &self.raw_node
+        self.raw_node
     }
 }
 
@@ -804,7 +804,7 @@ fn shrink_nonzero_bound<D: Dim, M: MinMax>(
                     // Only consider the axis we care about.
                     .map(|(pos, _cell)| pos[axis])
                     // Pick the "best" value.
-                    .fold1(M::pick_best)
+                    .reduce(M::pick_best)
             })
             // Pick the "best" value from all of those nodes.
             .fold(None, |a, b| match (a, b) {
@@ -844,6 +844,8 @@ fn shrink_nonzero_bound<D: Dim, M: MinMax>(
                     Either::Right((child, rect_within_child))
                 }
             });
+
+        #[allow(clippy::manual_map)] // Shut up clippy, I like it like this.
         if let Some(result) = shrink_nonzero_bound::<D, M>(better_set, axis) {
             Some(result + layer.child_layer().big_len() * M::pick_best(0, 1))
         } else if let Some(result) = shrink_nonzero_bound::<D, M>(worse_set, axis) {

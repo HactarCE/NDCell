@@ -116,10 +116,7 @@ impl<'pool, D: Dim, N: NodeRefTrait<'pool, D = D>> From<N> for NdArray<u8, D> {
             .expect("Cannot make NdArray using such a large node");
         let size = UVec::repeat(node.big_len().to_usize().unwrap());
 
-        // SAFETY: Uninitialized `u8` is safe because `u8` can be any byte
-        // value.
-        let data = vec![unsafe { std::mem::MaybeUninit::<u8>::uninit().assume_init() }; count]
-            .into_boxed_slice();
+        let data = vec![0_u8; count].into_boxed_slice();
         let mut ret = Self { size, data };
         ret.populate_from_node(0, node.as_ref());
         ret

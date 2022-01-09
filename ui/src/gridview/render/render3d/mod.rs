@@ -87,16 +87,16 @@ impl<'a> GridViewRenderDimension<'a> for RenderDim3D {
         let vbos = &mut cache.vbos;
         let ibos = &mut cache.ibos;
 
-        // `group_by()` is defined using an extension trait in this crate; it is
-        // semantically identical to `Itertools::group_by()`, but operates on a
-        // slice instead of an iterator. `chunks()` is part of the standard
+        // `group_slice_by()` is defined using an extension trait in this crate;
+        // it is semantically identical to `Itertools::group_by()`, but operates
+        // on a slice instead of an iterator. `chunks()` is part of the standard
         // library.
 
         let mut verts = vec![];
         // Group by what shader to use and whether the quad is opaque ...
         for ((shader_program, is_opaque), quads_group) in this
             .overlay_quads
-            .group_by(|quad| (quad.shader_program(), quad.is_opaque()))
+            .group_slice_by(|quad| (quad.shader_program(), quad.is_opaque()))
         {
             // ... and then process these in batches, because the VBO has
             // limited capacity.

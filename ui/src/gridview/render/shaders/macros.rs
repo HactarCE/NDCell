@@ -26,14 +26,14 @@ macro_rules! load_shader_dynamic {
                 vert: $vert_name,
                 frag: $frag_name,
             })),
-        };
+        }
     };
 }
 
 #[cfg(debug_assertions)]
 macro_rules! load_shader {
     ($($tok:tt)*) => {
-        load_shader_dynamic!($($tok)*);
+        load_shader_dynamic!($($tok)*)
     };
 }
 

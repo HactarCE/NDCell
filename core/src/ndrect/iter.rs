@@ -65,7 +65,7 @@ where
             // forever.
             self.next = None;
         }
-        return ret;
+        ret
     }
 }
 impl<D: DimFor<N>, N: NdVecNum + Integer> Iter<D, N>

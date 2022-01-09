@@ -8,6 +8,12 @@
 #![warn(rust_2018_idioms)]
 #![warn(clippy::all)]
 #![deny(clippy::correctness)]
+#![allow(
+    clippy::collapsible_match,
+    clippy::match_single_binding,
+    clippy::single_match,
+    clippy::unit_arg
+)]
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -108,7 +114,7 @@ fn make_default_gridview(ndim: usize) -> gridview::GridView {
     match ndim {
         2 => Rle::from_string_to_ndautomaton(
             GOSPER_GLIDER_GUN_SYNTH_RLE,
-            crate::load_custom_rule_2d().into(),
+            crate::load_custom_rule_2d(),
         )
         .unwrap_or_else(|_| {
             warn!("Failed to load default pattern; using empty pattern instead");
@@ -117,7 +123,7 @@ fn make_default_gridview(ndim: usize) -> gridview::GridView {
         .into(),
         3 => Rle::from_string_to_ndautomaton(
             GOSPER_GLIDER_GUN_SYNTH_RLE,
-            crate::load_custom_rule_3d().into(),
+            crate::load_custom_rule_3d(),
         )
         .unwrap_or_else(|_| {
             warn!("Failed to load default pattern; using empty pattern instead");
@@ -135,6 +141,7 @@ fn default_colors() -> [palette::Srgba; 256] {
     ret[0] = crate::colors::cells::DEAD;
     ret[1] = crate::colors::cells::LIVE;
 
+    #[allow(clippy::needless_range_loop)] // I think it's clearer this way.
     for i in 2..256 {
         let c = colorous::SPECTRAL.eval_rational(i as usize - 2, 255);
         ret[i] = Srgba::new(c.r, c.g, c.b, u8::MAX).into_format();

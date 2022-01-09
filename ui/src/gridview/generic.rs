@@ -45,8 +45,8 @@ macro_rules! ignore_command {
 /// Dimension-generic interactive cellular automaton interface.
 pub struct GenericGridView<D: GridViewDimension> {
     pub automaton: NdAutomaton<D>,
-    pub selection: Option<Selection<D>>,
-    pub viewpoint_interpolator: Interpolator<D, D::Viewpoint>,
+    pub selection: Option<Box<Selection<D>>>, // boxed to save memory in an enum
+    pub viewpoint_interpolator: Box<Interpolator<D, D::Viewpoint>>, // boxed to save memory in enum
     history: HistoryManager<HistoryEntry<D>>,
     /// Dimension-specific data.
     pub(super) dim_data: D::Data,
@@ -187,7 +187,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
         }
 
         // Execute commands.
-        let old_command_queue = std::mem::replace(self.command_queue.get_mut(), VecDeque::new());
+        let old_command_queue = std::mem::take(self.command_queue.get_mut());
         for cmd_msg in old_command_queue {
             self.do_command(cmd_msg)?;
         }
@@ -201,15 +201,13 @@ impl<D: GridViewDimension> GenericGridView<D> {
         }
 
         // Collect garbage if memory usage has gotten too high.
-        if !self.gc_in_progress() {
-            if self.as_sim().memory_usage() > CONFIG.lock().sim.max_memory {
-                trace!(
-                    "Memory usage reached {} bytes; max is {}",
-                    self.as_sim().memory_usage(),
-                    CONFIG.lock().sim.max_memory
-                );
-                self.schedule_gc();
-            }
+        if !self.gc_in_progress() && self.as_sim().memory_usage() > CONFIG.lock().sim.max_memory {
+            trace!(
+                "Memory usage reached {} bytes; max is {}",
+                self.as_sim().memory_usage(),
+                CONFIG.lock().sim.max_memory,
+            );
+            self.schedule_gc();
         }
 
         Ok(())
@@ -225,7 +223,6 @@ impl<D: GridViewDimension> GenericGridView<D> {
         const MISSING_CURSOR_POS_MSG: &str = "Missing cursor position for command that requires it";
 
         let screen_pos = cursor_pos
-            .clone()
             .context(MISSING_CURSOR_POS_MSG)
             .map(|p| self.screen_pos(p));
         let cursor_pos = cursor_pos.context(MISSING_CURSOR_POS_MSG);
@@ -426,13 +423,13 @@ impl<D: GridViewDimension> GenericGridView<D> {
         let result = Selection::from_str(&string_from_clipboard, self.automaton.ndtree.pool());
         match result {
             Ok(sel) => {
-                self.set_selection(sel);
+                self.set_selection(sel.map(Box::new));
                 self.ensure_selection_visible();
 
                 // If selection size is the same, preserve position.
                 if let Some((old_rect, new_sel)) = old_sel_rect.zip(self.selection.as_mut()) {
                     if old_rect.size() == new_sel.rect.size() {
-                        *new_sel = new_sel.move_by(old_rect.min() - new_sel.rect.min());
+                        **new_sel = new_sel.move_by(old_rect.min() - new_sel.rect.min());
                     }
                 }
             }
@@ -623,7 +620,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
 
         let mut pos1 = initial_cell;
         Some(Box::new(move |drag, this, new_screen_pos| {
-            if let Some(pos2) = drag.new_pos(&new_screen_pos).map(|p| p.into_cell()) {
+            if let Some(pos2) = drag.new_pos(new_screen_pos).map(|p| p.into_cell()) {
                 for pos in bresenham::line(pos1.clone(), pos2.clone()) {
                     this.automaton.ndtree.set_cell(&pos, new_cell_state);
                 }
@@ -637,7 +634,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
     fn make_drag_select_new_rect_update_fn(&self) -> Option<DragUpdateFn<D>> {
         Some(Box::new(move |drag, this, new_pos| {
             if let Some(resize_start) = drag.initial_render_cell_rect() {
-                if let Some(resize_end) = drag.new_render_cell_rect(&new_pos) {
+                if let Some(resize_end) = drag.new_render_cell_rect(new_pos) {
                     this.set_selection_rect(Some(NdRect::span_rects(&resize_start, &resize_end)));
                 }
                 Ok(DragOutcome::Continue)
@@ -655,12 +652,12 @@ impl<D: GridViewDimension> GenericGridView<D> {
         Some(Box::new(move |drag, this, new_pos| {
             initial_selection = initial_selection.take().or_else(|| this.deselect());
             if let Some(s) = &initial_selection {
-                if let Some(resize_end) = drag.new_render_cell_rect(&new_pos) {
+                if let Some(resize_end) = drag.new_render_cell_rect(new_pos) {
                     this.set_selection_rect(Some(D::resize_selection_to_cursor(
                         &s.rect,
                         &resize_start,
                         &resize_end,
-                        &drag,
+                        drag,
                     )));
                 } else {
                     this.set_selection_rect(Some(s.rect.clone()));
@@ -716,7 +713,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
                 if let Some(delta) =
                     new_pos.rect_move_delta(&s.rect.to_fixedrect(), &initial_pos, face)
                 {
-                    this.selection = Some(s.move_by(delta.round()));
+                    this.selection = Some(Box::new(s.move_by(delta.round())));
                 }
                 Ok(DragOutcome::Continue)
             } else {
@@ -911,33 +908,29 @@ impl<D: GridViewDimension> GenericGridView<D> {
         );
 
         self.set_selection(unsafe {
-            *std::mem::transmute::<Box<Option<Selection<D2>>>, Box<Option<Selection<D>>>>(Box::new(
-                new_selection,
-            ))
+            std::mem::transmute::<Option<Box<Selection<D2>>>, Option<Box<Selection<D>>>>(
+                new_selection.map(Box::new),
+            )
         });
         Ok(())
     }
     /// Deselects and sets a new selection.
-    pub(super) fn set_selection(&mut self, new_selection: Option<Selection<D>>) {
+    pub(super) fn set_selection(&mut self, new_selection: Option<Box<Selection<D>>>) {
         self.deselect();
         self.selection = new_selection;
     }
     /// Deselects and sets a new selection rectangle.
     pub(super) fn set_selection_rect(&mut self, new_selection_rect: Option<BigRect<D>>) {
-        self.set_selection(new_selection_rect.map(Selection::from))
+        self.set_selection(new_selection_rect.map(Selection::from).map(Box::new))
     }
     /// Selects all cells in the pattern.
     pub(super) fn select_all(&mut self) {
         self.deselect(); // Include pasted cells.
-        self.set_selection(self.automaton.ndtree.bounding_rect().map(Selection::from));
+        self.set_selection_rect(self.automaton.ndtree.bounding_rect());
     }
     /// Returns the selection rectangle.
     pub(super) fn selection_rect(&self) -> Option<BigRect<D>> {
-        if let Some(s) = &self.selection {
-            Some(s.rect.clone())
-        } else {
-            None
-        }
+        self.selection.as_ref().map(|s| s.rect.clone())
     }
     /// Deselects all and returns the old selection.
     pub(super) fn deselect(&mut self) -> Option<Selection<D>> {
@@ -962,7 +955,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
                 );
             }
         }
-        self.selection.take()
+        self.selection.take().map(|s| *s)
     }
     /// Moves the selection to the center of the screen along each axis for
     /// which it is outside the viewport.
@@ -992,7 +985,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
                     || visible_max[ax] < sel_min[ax].clone() + PADDING
                 {
                     // Move selection to center along this axis.
-                    sel =
+                    *sel =
                         sel.move_by(NdVec::unit(ax) * (view_center[ax].clone() - &sel_center[ax]));
                 }
             }
@@ -1203,6 +1196,6 @@ pub trait GridViewDimension: Dim {
 #[derive(Debug, Clone)]
 pub struct HistoryEntry<D: GridViewDimension> {
     automaton: NdAutomaton<D>,
-    selection: Option<Selection<D>>,
+    selection: Option<Box<Selection<D>>>,
     viewpoint: D::Viewpoint,
 }

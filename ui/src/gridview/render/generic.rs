@@ -105,7 +105,7 @@ impl<'a, R: GridViewRenderDimension<'a>> GenericGridViewRender<'a, R> {
             let count = tri_batch.len();
             // Put the data in a slice of the VBO.
             let vbo_slice = vbos.mouse_target_verts(count / 3);
-            vbo_slice.write(&tri_batch);
+            vbo_slice.write(tri_batch);
 
             picker_fbo
                 .draw(

@@ -337,10 +337,14 @@ impl FrameInProgress<'_> {
         let mods = self.state.modifiers;
         let (click_binding, drag_binding) = config.mouse.get_bindings(ndim, mods, button);
 
-        let maybe_mouse_target = self.gridview.last_render_result().mouse_target.as_ref();
-        if button == MouseButton::Left && maybe_mouse_target.is_some() {
+        let lmb_mouse_target = self
+            .gridview
+            .last_render_result()
+            .mouse_target
+            .as_ref()
+            .filter(|_| button == MouseButton::Left);
+        if let Some(mouse_target_data) = lmb_mouse_target {
             // Possibility #1: Drag mouse target (left mouse button only)
-            let mouse_target_data = maybe_mouse_target.unwrap();
             let binding = &mouse_target_data.binding;
             self.state.dragging_button = Some(button);
             self.state.mouse.display_mode = binding.mouse_display_mode();
@@ -383,8 +387,8 @@ impl FrameInProgress<'_> {
                 self.state.mouse.display_mode = mouse_target_data.binding.mouse_display_mode();
             } else {
                 self.state.mouse.display_mode = None
-                    .or(click_binding.as_ref().map(|b| b.mouse_display_mode()))
-                    .or(drag_binding.as_ref().map(|b| b.mouse_display_mode()))
+                    .or_else(|| click_binding.as_ref().map(|b| b.mouse_display_mode()))
+                    .or_else(|| drag_binding.as_ref().map(|b| b.mouse_display_mode()))
                     .unwrap_or(MouseDisplayMode::Normal);
             }
         }
@@ -416,10 +420,7 @@ impl FrameInProgress<'_> {
         } else {
             1.0
         };
-        let frame_duration = self
-            .gridview
-            .frame_duration()
-            .unwrap_or(Duration::default()); // .unwrap_or(Duration::zero());
+        let frame_duration = self.gridview.frame_duration().unwrap_or(Duration::ZERO);
         let speed = distance_per_second * frame_duration.as_secs_f64();
 
         let keys = &self.state.keys;

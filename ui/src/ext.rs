@@ -72,11 +72,17 @@ impl IVecConvertExt for IVec3D {
     }
 }
 
-pub trait SliceGroupByExt<'a, T> {
-    fn group_by<K: PartialEq, F: FnMut(&'a T) -> K>(&'a self, key: F) -> SliceGroupIter<'a, T, F>;
+pub trait GroupSliceByExt<'a, T> {
+    fn group_slice_by<K: PartialEq, F: FnMut(&'a T) -> K>(
+        &'a self,
+        key: F,
+    ) -> SliceGroupIter<'a, T, F>;
 }
-impl<'a, T> SliceGroupByExt<'a, T> for [T] {
-    fn group_by<K: PartialEq, F: FnMut(&'a T) -> K>(&'a self, key: F) -> SliceGroupIter<'a, T, F> {
+impl<'a, T> GroupSliceByExt<'a, T> for [T] {
+    fn group_slice_by<K: PartialEq, F: FnMut(&'a T) -> K>(
+        &'a self,
+        key: F,
+    ) -> SliceGroupIter<'a, T, F> {
         let remaining = self;
         SliceGroupIter { remaining, key }
     }
@@ -109,9 +115,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_slice_group_by() {
+    fn test_group_slice_by() {
         let xs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-        let mut groups = xs.group_by(|x| x / 5);
+        let mut groups = xs.group_slice_by(|x| x / 5);
         assert_eq!(groups.next(), Some((0, &xs[0..5])));
         assert_eq!(groups.next(), Some((1, &xs[5..10])));
         assert_eq!(groups.next(), Some((2, &xs[10..15])));

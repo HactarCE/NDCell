@@ -73,7 +73,7 @@ pub fn intersect_octree(
     // If we enter AFTER we exit, or exit at a negative `t` ...
     if max_t0 >= min_t1 || r64(0.0) > min_t1 {
         // ... then the ray does not intersect with the root node.
-        return None;
+        None
     } else {
         // Otherwise, the ray does intersect with the root node.
         raycast_node_child(start, delta, t0, t1, min_layer, node, invert_mask).map(|(t0, t1)| {
@@ -118,7 +118,8 @@ fn raycast_node_child(
     if *t1.min_component() < r64(0.0) {
         // This node is completely behind the ray; skip it.
         return None;
-    } else if *t0.max_component() < r64(0.0) && node.layer() <= min_layer {
+    }
+    if *t0.max_component() < r64(0.0) && node.layer() <= min_layer {
         // This is a leaf node and the ray starts inside it; skip it.
         return None;
     }
@@ -241,7 +242,7 @@ pub fn intersect_cuboid(start: FVec3D, mut delta: FVec3D, cuboid: FRect3D) -> Op
     // If we enter AFTER we exit, or exit at a negative `t` ...
     if max_t0 >= min_t1 || r64(0.0) > min_t1 {
         // ... then the ray does not intersect with the cuboid.
-        return None;
+        None
     } else {
         // Otherwise, the ray does intersect with the cuboid.
         let pos_int = (start + delta * (max_t0 + 0.5)).floor().to_ivec();
@@ -276,7 +277,7 @@ fn entry_child(t0: FVec3D, tm: FVec3D) -> usize {
             child_index |= ax.bit();
         }
     }
-    return child_index;
+    child_index
 }
 
 // Given the parameters `t0` at which the ray enters a node along each axis,

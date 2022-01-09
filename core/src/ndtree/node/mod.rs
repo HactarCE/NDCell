@@ -5,6 +5,8 @@
 //! nodes. Each node has a "layer," which is the base-2 log of the size of the
 //! node along each axis.
 
+#![allow(clippy::len_without_is_empty)] // ND-tree nodes never have len=0.
+
 pub mod cells;
 mod layer;
 mod pool;

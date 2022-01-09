@@ -39,7 +39,7 @@ impl MousePicker {
         fbo.clear_color_and_depth((0.0, 0.0, 0.0, 0.0), f32::INFINITY);
     }
 
-    pub fn fbo<'a>(&'a mut self) -> (SimpleFrameBuffer<'a>, glium::Rect) {
+    pub fn fbo(&mut self) -> (SimpleFrameBuffer<'_>, glium::Rect) {
         let (target_w, target_h) = self.attachments.desired_size().unwrap();
         let (texture, depth) = self.attachments.unwrap();
 

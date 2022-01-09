@@ -25,9 +25,8 @@ use crate::HashMap;
 /// `.new_ref()` for clarity.
 #[derive(Debug, Clone)]
 pub struct SharedNodePool<D: Dim>(Arc<RwLock<NodePool<D>>>);
-impl<D: Dim> SharedNodePool<D> {
-    /// Creates an empty node pool.
-    pub fn new() -> Self {
+impl<D: Dim> Default for SharedNodePool<D> {
+    fn default() -> Self {
         let ret = Arc::new(RwLock::new(NodePool {
             this: Weak::new(),
 
@@ -47,6 +46,12 @@ impl<D: Dim> SharedNodePool<D> {
 
         Self(ret)
     }
+}
+impl<D: Dim> SharedNodePool<D> {
+    /// Creates an empty node pool.
+    pub fn new() -> Self {
+        Self::default()
+    }
     /// Creates a new reference to the same node pool.
     ///
     /// This is equivalent to `.clone()` but is clearer.
@@ -57,13 +62,13 @@ impl<D: Dim> SharedNodePool<D> {
     /// Acquires access to find nodes in the pool and add missing ones, blocking
     /// only if another thread has total access to the pool.
     #[inline]
-    pub fn access<'a>(&'a self) -> RwLockReadGuard<'a, NodePool<D>> {
+    pub fn access(&self) -> RwLockReadGuard<'_, NodePool<D>> {
         self.0.read_recursive()
     }
     /// Acquires access to remove nodes from the pool, which is required for
     /// garbage collection, blocking if any threads have access to the pool.
     #[inline]
-    pub fn total_access<'a>(&'a self) -> RwLockWriteGuard<'a, NodePool<D>> {
+    pub fn total_access(&self) -> RwLockWriteGuard<'_, NodePool<D>> {
         self.0.write()
     }
 
@@ -260,11 +265,11 @@ impl<D: Dim> NodePool<D> {
     }
 
     /// Returns the largest possible canonical leaf node containing only state #0.
-    pub fn get_empty_base<'pool>(&'pool self) -> NodeRef<'pool, D> {
+    pub fn get_empty_base(&self) -> NodeRef<'_, D> {
         self.get_empty(Layer::base::<D>())
     }
     /// Returns the canonical node at the given layer containing only state #0.
-    pub fn get_empty<'pool>(&'pool self, layer: Layer) -> NodeRef<'pool, D> {
+    pub fn get_empty(&self, layer: Layer) -> NodeRef<'_, D> {
         let mut empty_nodes = self.empty_nodes.lock();
         // Add empty nodes until we have enough.
         while empty_nodes.len() <= layer.to_usize() {
@@ -285,7 +290,7 @@ impl<D: Dim> NodePool<D> {
 
     /// Returns the canonical instance of a node, adding it to the pool if one
     /// does not exist.
-    fn get<'pool>(&'pool self, raw_node: RawNode<D>) -> NodeRef<'pool, D> {
+    fn get(&self, raw_node: RawNode<D>) -> NodeRef<'_, D> {
         let (ret, already_present) = self.nodes.get_or_insert(raw_node);
         if !already_present {
             // Record the heap usage of this node.
@@ -336,7 +341,7 @@ impl<D: Dim> NodePool<D> {
         }
     }
     /// Creates a node containing the given cells.
-    pub fn get_from_cells<'pool>(&'pool self, cells: impl Into<Box<[u8]>>) -> NodeRef<'pool, D> {
+    pub fn get_from_cells(&self, cells: impl Into<Box<[u8]>>) -> NodeRef<'_, D> {
         let cells = cells.into();
         let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid cell count");
 
@@ -360,11 +365,11 @@ impl<D: Dim> NodePool<D> {
     /// # Panics
     ///
     /// This method panics if the size of the node does not fit in a `usize`.
-    pub fn get_from_fn<'pool>(
-        &'pool self,
+    pub fn get_from_fn(
+        &self,
         layer: Layer,
         mut generator: impl FnMut(UVec<D>) -> u8,
-    ) -> NodeRef<'pool, D> {
+    ) -> NodeRef<'_, D> {
         self._get_from_fn(UVec::zero(), layer, &mut generator)
     }
     fn _get_from_fn<'pool>(
@@ -490,7 +495,7 @@ impl<D: Dim> NodePool<D> {
             let big_cell_offset: BigVec<D> = offset & &(layer.big_len() - 1);
             let cell_offset = big_cell_offset.to_uvec();
             self.get_from_fn(layer, move |pos| {
-                let source_pos = pos.clone() + &cell_offset;
+                let source_pos = pos + &cell_offset;
                 let source_index = layer
                     .parent_layer()
                     .small_non_leaf_child_index(source_pos.clone());
@@ -538,7 +543,7 @@ impl<D: Dim> NodePool<D> {
         }
     }
 
-    /// Safely extend the lifetime of a node reference from this pool.
+    /// Safely extends the lifetime of a node reference from this pool.
     pub fn extend_lifetime<'this, 'other>(
         &'this self,
         node: impl NodeRefTrait<'other, D = D>,
@@ -616,8 +621,23 @@ impl<D: Dim> NodePool<D> {
     ///
     /// This method blocks if other parameters are being used for simulation at
     /// the same time.
-    pub fn sim_with<'pool>(&'pool self, params: HashLifeResultParams) -> SimCacheGuard<'pool, D> {
+    pub fn sim_with(&self, params: HashLifeResultParams) -> SimCacheGuard<'_, D> {
         let lock = self.sim_lock.upgradable_read();
+        self._sim_with(lock, params)
+    }
+    /// Returns the simulation lock, invalidating the results cache partially or
+    /// fully if necessary.
+    ///
+    /// If the lock cannot be acquired, returns `Err` containing the current parameters.
+    pub fn try_sim_with(&self, params: HashLifeResultParams) -> Option<SimCacheGuard<'_, D>> {
+        let lock = self.sim_lock.try_upgradable_read()?;
+        Some(self._sim_with(lock, params))
+    }
+    fn _sim_with<'guard>(
+        &'guard self,
+        lock: RwLockUpgradableReadGuard<'guard, HashLifeResultParams>,
+        params: HashLifeResultParams,
+    ) -> SimCacheGuard<'guard, D> {
         let old_params = *lock;
         let lock = if old_params != params {
             let mut lock = RwLockUpgradableReadGuard::upgrade(lock);
@@ -630,29 +650,6 @@ impl<D: Dim> NodePool<D> {
             pool: self,
             sim_lock: lock,
         }
-    }
-
-    /// Returns the simulation lock, invalidating the results cache partially or
-    /// fully if necessary.
-    ///
-    /// If the lock cannot be acquired, returns `Err` containing the current parameters.
-    pub fn try_sim_with<'pool>(
-        &'pool self,
-        params: HashLifeResultParams,
-    ) -> Option<SimCacheGuard<'pool, D>> {
-        let lock = self.sim_lock.try_upgradable_read()?;
-        let old_params = *lock;
-        let lock = if old_params != params {
-            let mut lock = RwLockUpgradableReadGuard::try_upgrade(lock).ok()?;
-            self.set_sim_params(params, &mut lock);
-            RwLockWriteGuard::downgrade(lock)
-        } else {
-            RwLockUpgradableReadGuard::downgrade(lock)
-        };
-        Some(SimCacheGuard {
-            pool: self,
-            sim_lock: lock,
-        })
     }
 
     /// Sets the simulation parameters.
@@ -781,7 +778,7 @@ impl<D: Dim> ArcNode<D> {
     }
     /// Returns a `NodeRefWithGuard` of the node.
     #[inline]
-    pub fn as_ref_with_guard<'a>(&'a self) -> NodeRefWithGuard<'a, D> {
+    pub fn as_ref_with_guard(&self) -> NodeRefWithGuard<'_, D> {
         unsafe { NodeRefWithGuard::from_ptr_with_guard(self.pool().access(), &*self.raw_node_ptr) }
     }
 }

@@ -346,7 +346,7 @@ impl<D: Dim> RawNode<D> {
                 self.layer().num_cells::<D>().unwrap(),
             )
         } else {
-            std::ptr::slice_from_raw_parts_mut(std::ptr::null_mut(), 0)
+            std::ptr::slice_from_raw_parts_mut(std::ptr::NonNull::dangling().as_ptr(), 0)
         }
     }
     /// Returns a pointer to the children slice if this is a non-leaf
@@ -379,7 +379,7 @@ impl<D: Dim> RawNode<D> {
     /// this node some fixed number of generations, or `None` if that result
     /// hasn't been computed yet.
     #[inline]
-    pub(super) fn result<'a>(&'a self) -> Option<&'a RawNode<D>> {
+    pub(super) fn result(&self) -> Option<&RawNode<D>> {
         unsafe { self.result_ptr.load(Relaxed).as_ref() }
     }
     /// Atomically sets the result of simulating this node for some fixed number
@@ -401,7 +401,7 @@ impl<D: Dim> RawNode<D> {
 
     /// Returns the population of the node, computing it if it has not yet been
     /// computed.
-    pub(super) fn calc_population<'a>(&'a self) -> MaybeBigUint<'a> {
+    pub(super) fn calc_population(&self) -> MaybeBigUint<'_> {
         // Return the population if we have already computed it.
         if let Some(p) = self.population() {
             return p;
@@ -413,7 +413,7 @@ impl<D: Dim> RawNode<D> {
         } else if self.single_state().is_some() {
             // We already handled the zero case, so all cells in the node are
             // the same nonzero state.
-            Err(self.layer().big_num_cells::<D>().into())
+            Err(self.layer().big_num_cells::<D>())
         } else if let Some(cells) = self.cell_slice() {
             // Count nonzero cells.
             Ok(cells.iter().filter(|&&x| x != 0).count())
@@ -421,6 +421,7 @@ impl<D: Dim> RawNode<D> {
             // Sum child population counts, converting from `usize` to `BigUint`
             // if necessary.
             let mut total = Ok(0);
+            #[allow(clippy::redundant_closure)] // Shut up clippy, I like it like this.
             for child in children {
                 total = total.as_ref().map_or_else(
                     |big| MaybeBigUint::Big(big),
@@ -441,7 +442,7 @@ impl<D: Dim> RawNode<D> {
     }
     /// Returns the population of the node, or `None` if it has not yet been
     /// computed.
-    pub(super) fn population<'a>(&'a self) -> Option<MaybeBigUint<'a>> {
+    pub(super) fn population(&self) -> Option<MaybeBigUint<'_>> {
         let pop = self.population.load(Relaxed);
         if pop == 0 {
             // If the whole value is 0, then it hasn't been computed yet.
@@ -502,7 +503,7 @@ impl<D: Dim> RawNode<D> {
                 std::mem::size_of::<BigUint>()
                 // Ceiling division; assume that `BigUint` allocates 64 bits at
                 // a time.
-                + ((i.bits() - 1) / 64 + 1 * 8) as usize
+                + (((i.bits() - 1) / 64 + 1) * 8) as usize
             } else {
                 0
             }

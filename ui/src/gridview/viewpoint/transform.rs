@@ -239,7 +239,7 @@ impl<D: Dim> NdCellTransform<D> {
     pub fn inv_gl_matrix(&self) -> [[f32; 4]; 4] {
         (self.projection_transform * self.render_cell_transform)
             .inverse_transform()
-            .unwrap_or(Matrix4::identity())
+            .unwrap_or_else(Matrix4::identity)
             .into()
     }
     /// Returns a GL-compatible matrix representing the transformation from
@@ -326,7 +326,7 @@ impl CellTransform2D {
         let local_pos =
             (self.pixel_transform * self.projection_transform * self.render_cell_transform)
                 .inverse_transform()
-                .unwrap_or(Matrix4::zero()) // Return zero in case of error.
+                .unwrap_or_else(Matrix4::zero) // Return zero in case of error.
                 .transform_point(pixel);
         NdVec([
             R64::try_new(local_pos.x as f64).unwrap_or_default(), // Return zero in case of error.
@@ -339,7 +339,7 @@ impl CellTransform2D {
         // Convert from pixels to NDC.
         let local_pos = (self.projection_transform * self.render_cell_transform)
             .inverse_transform()
-            .unwrap_or(Matrix4::zero()) // Return zero in case of error.
+            .unwrap_or_else(Matrix4::zero) // Return zero in case of error.
             .transform_point(ndc_pos);
         NdVec([
             R64::try_new(local_pos.x as f64).unwrap_or_default(), // Return zero in case of error.
@@ -372,7 +372,7 @@ impl CellTransform3D {
         let local_pos =
             (self.pixel_transform * self.projection_transform * self.render_cell_transform)
                 .inverse_transform()
-                .unwrap_or(Matrix4::zero()) // Return zero in case of error.
+                .unwrap_or_else(Matrix4::zero) // Return zero in case of error.
                 .transform_point(pixel);
         NdVec([
             R64::try_new(local_pos.x as f64).unwrap_or_default(), // Return zero in case of error.

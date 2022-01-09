@@ -634,7 +634,7 @@ impl<'pool, D: Dim> NodeRef<'pool, D> {
 
     /// Returns a reference to the raw node structure.
     pub(super) fn as_raw(self) -> &'pool RawNode<D> {
-        &self.raw_node
+        self.raw_node
     }
 }
 

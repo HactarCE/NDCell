@@ -20,7 +20,7 @@ impl SimulationWindow {
         } = params;
 
         if self.is_visible {
-            Window::new("Simulation").build(&ui, || {
+            Window::new("Simulation").build(ui, || {
                 let mut config = CONFIG.lock();
 
                 let mut width = ui.window_content_region_width();

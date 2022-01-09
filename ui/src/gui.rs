@@ -123,7 +123,7 @@ pub fn show_gui() -> ! {
                 last_frame_time = now;
 
                 // Prep the gridview for event handling.
-                let mut input_frame = input_state.frame(&gridview, &imgui_io, &platform);
+                let mut input_frame = input_state.frame(&gridview, imgui_io, &platform);
 
                 for ev in events_buffer.drain(..) {
                     // Let imgui handle events.

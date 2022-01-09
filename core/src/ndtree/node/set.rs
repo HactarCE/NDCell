@@ -93,7 +93,7 @@ impl<T: Eq + Hash> ShardedBoxedSet<T> {
     pub fn retain(&mut self, shrink: bool, mut f: impl FnMut(&T) -> bool) {
         for shard in &self.shards[..] {
             let mut shard = shard.lock();
-            shard.retain(|elem| f(&elem));
+            shard.retain(|elem| f(elem));
             if shrink {
                 shard.shrink_to_fit();
             }
@@ -104,7 +104,7 @@ impl<T: Eq + Hash> ShardedBoxedSet<T> {
     pub fn for_each(&self, mut f: impl FnMut(&T)) {
         for shard in &self.shards[..] {
             for elem in &*shard.lock() {
-                f(&elem);
+                f(elem);
             }
         }
     }

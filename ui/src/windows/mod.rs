@@ -45,7 +45,7 @@ impl MainWindow {
             gridview,
         } = params;
 
-        Window::new(crate::TITLE).build(&ui, || {
+        Window::new(crate::TITLE).build(ui, || {
             let config = CONFIG.lock();
 
             ui.text(format!("NDCell v{}", env!("CARGO_PKG_VERSION")));

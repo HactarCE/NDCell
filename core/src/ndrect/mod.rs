@@ -227,7 +227,7 @@ where
         let new_min = NdVec::max(&self.min(), &other.min());
         let new_max = NdVec::min(&self.max(), &other.max());
         for &ax in D::Dim::axes() {
-            if &new_max[ax] < &new_min[ax] {
+            if new_max[ax] < new_min[ax] {
                 return None;
             }
         }

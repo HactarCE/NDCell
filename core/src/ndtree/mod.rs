@@ -243,7 +243,7 @@ impl<D: Dim> NdTree<D> {
     /// "Zooms out" the grid by calling `NdTree::expand()` as long as the given
     /// predicate returns `true`.
     pub fn expand_while(&mut self, mut predicate: impl FnMut(&Self) -> bool) {
-        while predicate(&self) {
+        while predicate(self) {
             self.expand();
         }
     }

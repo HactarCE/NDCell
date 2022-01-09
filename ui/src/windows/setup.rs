@@ -102,7 +102,7 @@ impl SetupWindow {
             Window::new("Setup")
                 .size([300.0, 0.0], Condition::FirstUseEver)
                 .flags(WindowFlags::NO_RESIZE)
-                .build(&ui, || {
+                .build(ui, || {
                     if ui.button_with_size(
                         "Load rule from clipboard",
                         [ui.window_content_region_width(), 60.0],

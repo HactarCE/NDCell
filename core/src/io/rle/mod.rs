@@ -7,6 +7,8 @@
 //!
 //! See NDCell documentation for a description of this format.
 
+use thiserror::Error;
+
 mod components;
 mod convert;
 
@@ -28,54 +30,42 @@ lazy_static::lazy_static! {
 
 /// Error encountered during RLE import/export.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Error, Debug, Clone, Eq, PartialEq)]
 pub enum RleError {
+    #[error("unknown symbol: '{0}'")]
     UnknownSymbol(char),
+    #[error("unknown symbols: '{0}{1}'")]
     UnknownSymbolPair(char, char),
+    #[error("expected letter from 'A' to 'X' to follow '{0}'")]
     ExpectedABC(char),
+    #[error("expected 'W', 'U', or 'V' to follow '%'")]
     ExpectedWUV,
+    #[error("state out of range: #{0}")]
     StateOutOfRange(u32),
+    #[error("invalid size")]
     InvalidSize,
+    #[error("invalid count")]
     InvalidCount,
+    #[error("bad CXRLE header")]
     BadCxrleHeader,
+    #[error("duplicate RLE header")]
     DuplicateRleHeader,
+    #[error("duplicate CXRLE header")]
     DuplicateCxrleHeader,
+    #[error("missing RLE header")]
     MissingHeader,
+    #[error("invalid RLE item")]
     InvalidItem,
+    #[error("pattern is too big; try another format like Macrocell")]
     TooBig,
+    #[error("rLE contains non-ASCII characters")]
     NonAscii,
+    #[error("unknown rule {0:?}")]
     UnknownRule(String),
+    #[error("something is wrong with the rule {0:?}; try creating a new pattern with that rule to troubleshoot")]
     ErrorLoadingRule(String),
+    #[error("expected {expected}D rule; got {got}D rule")]
     BadRuleDimensionality { expected: usize, got: usize },
-}
-impl std::fmt::Display for RleError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RleError::UnknownSymbol(ch) => write!(f, "Unknown symbol: '{}'", ch),
-            RleError::UnknownSymbolPair(ch1, ch2) => write!(f, "Unknown symbols: '{}{}'", ch1, ch2),
-            RleError::ExpectedABC(ch) => {
-                write!(f, "Expected letter from 'A' to 'X' to follow '{}'", ch)
-            }
-            RleError::ExpectedWUV => write!(f, "Expected 'W', 'U', or 'V' to follow '%'"),
-            RleError::StateOutOfRange(state) => write!(f, "State out of range: #{}", state),
-            RleError::InvalidSize => write!(f, "Invalid size"),
-            RleError::InvalidCount => write!(f, "Invalid count"),
-            RleError::BadCxrleHeader => write!(f, "Bad CXRLE header"),
-            RleError::DuplicateRleHeader => write!(f, "Duplicate RLE header"),
-            RleError::DuplicateCxrleHeader => write!(f, "Duplicate CXRLE header"),
-            RleError::MissingHeader => write!(f, "Missing RLE header"),
-            RleError::InvalidItem => write!(f, "Invalid RLE item"),
-            RleError::TooBig => write!(f, "Pattern is too big; try another format like Macrocell"),
-            RleError::NonAscii => write!(f, "RLE contains non-ASCII characters"),
-            RleError::UnknownRule(name) => write!(f, "Unknown rule {:?}", name),
-            RleError::ErrorLoadingRule(name) => write!(
-                f,
-                "Something is wrong with the rule {:?}\nTry creating a new pattern with that rule to troubleshoot",
-                name
-            ),
-            RleError::BadRuleDimensionality{expected, got} => write!(f, "Expected {}D rule; got {}D rule", expected, got),
-        }
-    }
 }
 
 #[cfg(test)]

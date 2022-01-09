@@ -25,9 +25,8 @@ use crate::HashMap;
 /// `.new_ref()` for clarity.
 #[derive(Debug, Clone)]
 pub struct SharedNodePool<D: Dim>(Arc<RwLock<NodePool<D>>>);
-impl<D: Dim> SharedNodePool<D> {
-    /// Creates an empty node pool.
-    pub fn new() -> Self {
+impl<D: Dim> Default for SharedNodePool<D> {
+    fn default() -> Self {
         let ret = Arc::new(RwLock::new(NodePool {
             this: Weak::new(),
 
@@ -46,6 +45,12 @@ impl<D: Dim> SharedNodePool<D> {
         }
 
         Self(ret)
+    }
+}
+impl<D: Dim> SharedNodePool<D> {
+    /// Creates an empty node pool.
+    pub fn new() -> Self {
+        Self::default()
     }
     /// Creates a new reference to the same node pool.
     ///

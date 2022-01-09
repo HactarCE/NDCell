@@ -15,7 +15,7 @@ pub struct CmdMsg {
 }
 impl<T: Into<Cmd>> From<T> for CmdMsg {
     fn from(command: T) -> Self {
-        command.into().to_msg()
+        command.into().into_msg()
     }
 }
 
@@ -128,8 +128,8 @@ impl Cmd {
         }
     }
     /// Creates a `CmdMsg` for this command with no mouse cursor position. This
-    /// is invalid for some commands, and will log a warning!
-    pub fn to_msg(self) -> CmdMsg {
+    /// is invalid for some commands, and will log an error!
+    pub fn into_msg(self) -> CmdMsg {
         match &self {
             Cmd::BeginDrag(_)
             | Cmd::ContinueDrag
@@ -137,7 +137,7 @@ impl Cmd {
             | Cmd::SnapScaleToCursor
             | Cmd::FocusCursor => {
                 error!(
-                    ".to_msg() called on {:?}, which requires cursor position; use .at() instead",
+                    ".into_msg() called on {:?}, which requires cursor position; use .at() instead",
                     self,
                 );
             }

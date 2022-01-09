@@ -22,23 +22,10 @@ pub struct HashLifeResultParams {
 }
 impl Default for HashLifeResultParams {
     fn default() -> Self {
-        Self::new().build().unwrap()
+        HashLifeResultParamsBuilder::new().build().unwrap()
     }
 }
 impl HashLifeResultParams {
-    /// Creates a `HashLifeResultParamsBuilder`, which is used to build a
-    /// `HashLifeResultParams`.
-    pub fn new() -> HashLifeResultParamsBuilder<'static> {
-        lazy_static! {
-            static ref BIGINT_ONE: BigInt = BigInt::one();
-        }
-
-        HashLifeResultParamsBuilder {
-            rule_radius: 1,
-            step_size: &BIGINT_ONE,
-        }
-    }
-
     /// Returns the base-2 log of the rule radius (rounded up).
     #[inline]
     pub fn log2_rule_radius(&self) -> u32 {
@@ -107,12 +94,31 @@ impl HashLifeResultParams {
     }
 }
 
+/// Builder struct for `HashLifeResultParams`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct HashLifeResultParamsBuilder<'a> {
     rule_radius: usize,
     step_size: &'a BigInt,
 }
+impl Default for HashLifeResultParamsBuilder<'_> {
+    fn default() -> Self {
+        lazy_static! {
+            static ref BIGINT_ONE: BigInt = BigInt::one();
+        }
+
+        Self {
+            rule_radius: 1,
+            step_size: &BIGINT_ONE,
+        }
+    }
+}
 impl<'a> HashLifeResultParamsBuilder<'a> {
+    /// Creates a new `HashLifeResultParamsBuilder`, which is used to build a
+    /// `HashLifeResultParams`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Sets rule radius.
     pub fn with_rule_radius(mut self, rule_radius: usize) -> Self {
         self.rule_radius = rule_radius;
@@ -197,7 +203,7 @@ mod tests {
 
             let m = 1 << max_log2_step_size;
             let big_m = m.into();
-            let b = HashLifeResultParams::new().with_step_size(&big_m);
+            let b = HashLifeResultParamsBuilder::new().with_step_size(&big_m);
 
             for r in 0..=1 {
                 let p = b.with_rule_radius(r).build().unwrap();

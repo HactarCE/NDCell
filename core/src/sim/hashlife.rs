@@ -7,7 +7,7 @@ use crate::dim::Dim;
 use crate::ndarray::NdArray;
 use crate::ndrect::{NdRect, URect};
 use crate::ndtree::{
-    HashLifeResultParams, Layer, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, SimCacheGuard,
+    HashLifeResultParamsBuilder, Layer, NdTree, NodeRef, NodeRefEnum, NodeRefTrait, SimCacheGuard,
 };
 use crate::ndvec::UVec;
 use crate::num::{BigInt, Zero};
@@ -24,7 +24,7 @@ pub fn step<D: Dim>(tree: &mut NdTree<D>, rule: &dyn NdRule<D>, gens: &BigInt) {
     let node_pool = tree.pool().new_ref();
     let node_pool_access = node_pool.access();
     let sim_guard = node_pool_access.sim_with(
-        HashLifeResultParams::new()
+        HashLifeResultParamsBuilder::new()
             .with_rule_radius(rule.radius())
             .with_step_size(gens)
             .build()

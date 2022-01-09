@@ -5,6 +5,8 @@
 //! nodes. Each node has a "layer," which is the base-2 log of the size of the
 //! node along each axis.
 
+#![allow(clippy::len_without_is_empty)] // ND-tree nodes never have len=0.
+
 pub mod cells;
 mod layer;
 mod pool;
@@ -17,7 +19,7 @@ pub use layer::{Layer, LayerTooSmall};
 pub use pool::{ArcNode, NodePool, SharedNodePool, SimCacheGuard};
 use raw::RawNode;
 pub use refs::{LeafNodeRef, NodeRef, NodeRefEnum, NodeRefTrait, NodeRefWithGuard, NonLeafNodeRef};
-pub use results::HashLifeResultParams;
+pub use results::{HashLifeResultParams, HashLifeResultParamsBuilder};
 use set::ShardedBoxedSet;
 
 #[cfg(test)]

@@ -225,7 +225,6 @@ impl<D: GridViewDimension> GenericGridView<D> {
         const MISSING_CURSOR_POS_MSG: &str = "Missing cursor position for command that requires it";
 
         let screen_pos = cursor_pos
-            .clone()
             .context(MISSING_CURSOR_POS_MSG)
             .map(|p| self.screen_pos(p));
         let cursor_pos = cursor_pos.context(MISSING_CURSOR_POS_MSG);

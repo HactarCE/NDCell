@@ -490,7 +490,7 @@ impl<D: Dim> NodePool<D> {
             let big_cell_offset: BigVec<D> = offset & &(layer.big_len() - 1);
             let cell_offset = big_cell_offset.to_uvec();
             self.get_from_fn(layer, move |pos| {
-                let source_pos = pos.clone() + &cell_offset;
+                let source_pos = pos + &cell_offset;
                 let source_index = layer
                     .parent_layer()
                     .small_non_leaf_child_index(source_pos.clone());

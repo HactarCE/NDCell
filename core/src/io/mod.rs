@@ -238,27 +238,27 @@ pub trait CaFormatTrait: FromStr + ToString {
         match rule_resolver.resolve_rule(self.rule()) {
             Ok(Rule::Rule1D(rule)) => self
                 .to_ndautomaton(rule, SharedNodePool::new())
-                .map(Automaton::Automaton1D)
+                .map(Automaton::from)
                 .map(Ok),
             Ok(Rule::Rule2D(rule)) => self
                 .to_ndautomaton(rule, SharedNodePool::new())
-                .map(Automaton::Automaton2D)
+                .map(Automaton::from)
                 .map(Ok),
             Ok(Rule::Rule3D(rule)) => self
                 .to_ndautomaton(rule, SharedNodePool::new())
-                .map(Automaton::Automaton3D)
+                .map(Automaton::from)
                 .map(Ok),
             Ok(Rule::Rule4D(rule)) => self
                 .to_ndautomaton(rule, SharedNodePool::new())
-                .map(Automaton::Automaton4D)
+                .map(Automaton::from)
                 .map(Ok),
             Ok(Rule::Rule5D(rule)) => self
                 .to_ndautomaton(rule, SharedNodePool::new())
-                .map(Automaton::Automaton5D)
+                .map(Automaton::from)
                 .map(Ok),
             Ok(Rule::Rule6D(rule)) => self
                 .to_ndautomaton(rule, SharedNodePool::new())
-                .map(Automaton::Automaton6D)
+                .map(Automaton::from)
                 .map(Ok),
             Err(rule_resolution_error) => Ok(Err(rule_resolution_error)),
         }

@@ -28,36 +28,49 @@ pub use view2d::GridView2D;
 pub use view3d::GridView3D;
 pub use viewpoint::*;
 
+use self::generic::GridViewDimension;
+
 /// Abstraction over 2D and 3D gridviews.
+///
+/// Contents of each variant are `Box`ed to save memory.
 #[enum_dispatch(History)]
 pub enum GridView {
-    View2D(pub GridView2D),
-    View3D(pub GridView3D),
+    View2D(pub Box<GridView2D>),
+    View3D(pub Box<GridView3D>),
+}
+
+impl<D: GridViewDimension> From<GenericGridView<D>> for GridView
+where
+    Box<GenericGridView<D>>: Into<GridView>,
+{
+    fn from(t: GenericGridView<D>) -> Self {
+        Box::new(t).into()
+    }
 }
 
 // Conversions from an `NdAutomaton` to a `GridView`.
 impl From<Automaton2D> for GridView {
     fn from(automaton: Automaton2D) -> Self {
-        Self::View2D(GridView2D::from(automaton))
+        Self::View2D(Box::new(GridView2D::from(automaton)))
     }
 }
 impl From<Automaton3D> for GridView {
     fn from(automaton: Automaton3D) -> Self {
-        Self::View3D(GridView3D::from(automaton))
+        Self::View3D(Box::new(GridView3D::from(automaton)))
     }
 }
 
 impl AsSimulate for GridView {
     fn as_sim(&self) -> &dyn Simulate {
         match self {
-            Self::View2D(view2d) => view2d,
-            Self::View3D(view3d) => view3d,
+            Self::View2D(view2d) => &**view2d,
+            Self::View3D(view3d) => &**view3d,
         }
     }
     fn as_sim_mut(&mut self) -> &mut dyn Simulate {
         match self {
-            Self::View2D(view2d) => view2d,
-            Self::View3D(view3d) => view3d,
+            Self::View2D(view2d) => &mut **view2d,
+            Self::View3D(view3d) => &mut **view3d,
         }
     }
 }

@@ -12,16 +12,16 @@ pub struct Selection<D: Dim> {
 }
 impl<D: Dim> Selection<D> {
     pub fn restore_history_entry(
-        mut current: &mut Option<Self>,
-        entry: Option<Self>,
-    ) -> Option<Self> {
+        current: &mut Option<Box<Self>>,
+        entry: Option<Box<Self>>,
+    ) -> Option<Box<Self>> {
         let current_has_cells = current.as_ref().and_then(|s| s.cells.as_ref()).is_some();
         let entry_has_cells = entry.as_ref().and_then(|s| s.cells.as_ref()).is_some();
 
         if CONFIG.lock().hist.record_select || entry_has_cells {
-            std::mem::replace(&mut current, entry)
+            std::mem::replace(current, entry)
         } else if current_has_cells {
-            std::mem::replace(&mut current, None)
+            current.take()
         } else {
             current.clone()
         }

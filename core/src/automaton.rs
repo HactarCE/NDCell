@@ -23,30 +23,32 @@ pub type Automaton5D = NdAutomaton<Dim5D>;
 pub type Automaton6D = NdAutomaton<Dim6D>;
 
 /// Cellular automaton of any dimensionality.
+///
+/// Contents of each variant are `Box`ed to save memory.
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub enum Automaton {
-    Automaton1D(Automaton1D),
-    Automaton2D(Automaton2D),
-    Automaton3D(Automaton3D),
-    Automaton4D(Automaton4D),
-    Automaton5D(Automaton5D),
-    Automaton6D(Automaton6D),
+    Automaton1D(Box<Automaton1D>),
+    Automaton2D(Box<Automaton2D>),
+    Automaton3D(Box<Automaton3D>),
+    Automaton4D(Box<Automaton4D>),
+    Automaton5D(Box<Automaton5D>),
+    Automaton6D(Box<Automaton6D>),
 }
 impl Default for Automaton {
     fn default() -> Self {
-        Self::Automaton2D(Automaton2D::default())
+        Automaton2D::default().into()
     }
 }
 impl<D: Dim> From<NdAutomaton<D>> for Automaton {
     fn from(automaton: NdAutomaton<D>) -> Self {
         match_ndim!(match D {
-            1 => Self::Automaton1D(NdAutomaton::transmute(automaton)),
-            2 => Self::Automaton2D(NdAutomaton::transmute(automaton)),
-            3 => Self::Automaton3D(NdAutomaton::transmute(automaton)),
-            4 => Self::Automaton4D(NdAutomaton::transmute(automaton)),
-            5 => Self::Automaton5D(NdAutomaton::transmute(automaton)),
-            6 => Self::Automaton6D(NdAutomaton::transmute(automaton)),
+            1 => Self::Automaton1D(Box::new(NdAutomaton::transmute(automaton))),
+            2 => Self::Automaton2D(Box::new(NdAutomaton::transmute(automaton))),
+            3 => Self::Automaton3D(Box::new(NdAutomaton::transmute(automaton))),
+            4 => Self::Automaton4D(Box::new(NdAutomaton::transmute(automaton))),
+            5 => Self::Automaton5D(Box::new(NdAutomaton::transmute(automaton))),
+            6 => Self::Automaton6D(Box::new(NdAutomaton::transmute(automaton))),
         })
     }
 }
@@ -56,12 +58,12 @@ impl<D: Dim> TryFrom<Automaton> for NdAutomaton<D> {
     fn try_from(automaton: Automaton) -> Result<Self, Self::Error> {
         if D::NDIM == automaton.ndim() {
             Ok(match automaton {
-                Automaton::Automaton1D(a) => NdAutomaton::transmute(a),
-                Automaton::Automaton2D(a) => NdAutomaton::transmute(a),
-                Automaton::Automaton3D(a) => NdAutomaton::transmute(a),
-                Automaton::Automaton4D(a) => NdAutomaton::transmute(a),
-                Automaton::Automaton5D(a) => NdAutomaton::transmute(a),
-                Automaton::Automaton6D(a) => NdAutomaton::transmute(a),
+                Automaton::Automaton1D(a) => NdAutomaton::transmute(*a),
+                Automaton::Automaton2D(a) => NdAutomaton::transmute(*a),
+                Automaton::Automaton3D(a) => NdAutomaton::transmute(*a),
+                Automaton::Automaton4D(a) => NdAutomaton::transmute(*a),
+                Automaton::Automaton5D(a) => NdAutomaton::transmute(*a),
+                Automaton::Automaton6D(a) => NdAutomaton::transmute(*a),
             })
         } else {
             Err(automaton)
@@ -71,22 +73,22 @@ impl<D: Dim> TryFrom<Automaton> for NdAutomaton<D> {
 impl AsSimulate for Automaton {
     fn as_sim(&self) -> &dyn Simulate {
         match self {
-            Self::Automaton1D(a) => a,
-            Self::Automaton2D(a) => a,
-            Self::Automaton3D(a) => a,
-            Self::Automaton4D(a) => a,
-            Self::Automaton5D(a) => a,
-            Self::Automaton6D(a) => a,
+            Self::Automaton1D(a) => &**a,
+            Self::Automaton2D(a) => &**a,
+            Self::Automaton3D(a) => &**a,
+            Self::Automaton4D(a) => &**a,
+            Self::Automaton5D(a) => &**a,
+            Self::Automaton6D(a) => &**a,
         }
     }
     fn as_sim_mut(&mut self) -> &mut dyn Simulate {
         match self {
-            Self::Automaton1D(a) => a,
-            Self::Automaton2D(a) => a,
-            Self::Automaton3D(a) => a,
-            Self::Automaton4D(a) => a,
-            Self::Automaton5D(a) => a,
-            Self::Automaton6D(a) => a,
+            Self::Automaton1D(a) => &mut **a,
+            Self::Automaton2D(a) => &mut **a,
+            Self::Automaton3D(a) => &mut **a,
+            Self::Automaton4D(a) => &mut **a,
+            Self::Automaton5D(a) => &mut **a,
+            Self::Automaton6D(a) => &mut **a,
         }
     }
 }

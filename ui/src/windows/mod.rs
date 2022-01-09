@@ -131,7 +131,7 @@ impl MainWindow {
                     ui.text(format!("Scale = {}", vp.scale()));
                     for &ax in Dim2D::axes() {
                         let value = &vp.center()[ax];
-                        if format!("{:.1}", value).ends_with("0") {
+                        if format!("{:.1}", value).ends_with('0') {
                             ui.text(format!("{} = {:.0}", ax.name(), value));
                         } else {
                             ui.text(format!("{} = {:.1}", ax.name(), value));
@@ -150,7 +150,7 @@ impl MainWindow {
                     ui.text(format!("Scale = {}", vp.scale()));
                     for &ax in Dim3D::axes() {
                         let value = &vp.center()[ax];
-                        if format!("{:.1}", value).ends_with("0") {
+                        if format!("{:.1}", value).ends_with('0') {
                             ui.text(format!("{} = {:.0}", ax.name(), value));
                         } else {
                             ui.text(format!("{} = {:.1}", ax.name(), value));

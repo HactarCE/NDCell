@@ -117,10 +117,10 @@ impl FromStr for Rle {
                     return Err(RleError::DuplicateCxrleHeader);
                 }
                 cxrle_header = Some(line.parse()?);
-            } else if line.starts_with("#") {
+            } else if line.starts_with('#') {
                 comments.push_str(line);
                 comments.push('\n');
-            } else if line.starts_with("x") && header.is_none() {
+            } else if line.starts_with('x') && header.is_none() {
                 header = Some(line.parse()?);
             } else {
                 for run in RLE_RUN_REGEX.find_iter(line) {

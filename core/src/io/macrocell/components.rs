@@ -77,7 +77,7 @@ impl fmt::Display for Macrocell {
         for line in self.comments.lines() {
             let needs_prefix =
                 // '#' is required at beginning of comments
-                !line.starts_with("#")
+                !line.starts_with('#')
                 // '#R' indicates the rule name (not a valid comment)
                 || line.starts_with("#R")
                 // '#G' indicates the generation count (not a valid comment)
@@ -133,7 +133,7 @@ impl FromStr for Macrocell {
                 for (&ax, axis_offset) in AXES.iter().zip(values_iter) {
                     offset[ax] = axis_offset;
                 }
-            } else if line.starts_with("#") {
+            } else if line.starts_with('#') {
                 comments.push_str(line);
                 comments.push('\n');
             } else {

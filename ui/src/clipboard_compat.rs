@@ -2,7 +2,6 @@
 
 use anyhow::{anyhow, Context, Result};
 use clipboard::{ClipboardContext, ClipboardProvider};
-use imgui;
 use log::warn;
 use parking_lot::Mutex;
 

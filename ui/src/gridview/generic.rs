@@ -187,7 +187,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
         }
 
         // Execute commands.
-        let old_command_queue = std::mem::replace(self.command_queue.get_mut(), VecDeque::new());
+        let old_command_queue = std::mem::take(self.command_queue.get_mut());
         for cmd_msg in old_command_queue {
             self.do_command(cmd_msg)?;
         }
@@ -201,15 +201,13 @@ impl<D: GridViewDimension> GenericGridView<D> {
         }
 
         // Collect garbage if memory usage has gotten too high.
-        if !self.gc_in_progress() {
-            if self.as_sim().memory_usage() > CONFIG.lock().sim.max_memory {
-                trace!(
-                    "Memory usage reached {} bytes; max is {}",
-                    self.as_sim().memory_usage(),
-                    CONFIG.lock().sim.max_memory
-                );
-                self.schedule_gc();
-            }
+        if !self.gc_in_progress() && self.as_sim().memory_usage() > CONFIG.lock().sim.max_memory {
+            trace!(
+                "Memory usage reached {} bytes; max is {}",
+                self.as_sim().memory_usage(),
+                CONFIG.lock().sim.max_memory,
+            );
+            self.schedule_gc();
         }
 
         Ok(())

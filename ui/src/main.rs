@@ -78,10 +78,11 @@ fn load_custom_rule_2d() -> Rule2D {
             let mut source_code = String::new();
             file.read_to_string(&mut source_code)
                 .expect("Error reading file");
-            Arc::new(
-                ndcell_lang::compile_blocking(Arc::new(source_code), None)
-                    .expect("Error compiling rule"),
-            )
+            todo!("compile rule")
+            // Arc::new(
+            // ndcell_lang::compile_blocking(Arc::new(source_code), None)
+            //     .expect("Error compiling rule"),
+            // )
         })
         .unwrap_or_else(|_| Arc::new(ndcell_core::sim::rule::LIFE))
 }
@@ -94,10 +95,11 @@ fn load_custom_rule_3d() -> Rule3D {
             let mut source_code = String::new();
             file.read_to_string(&mut source_code)
                 .expect("Error reading file");
-            Arc::new(
-                ndcell_lang::compile_blocking(Arc::new(source_code), None)
-                    .expect("Error compiling rule"),
-            )
+            todo!("compile rule")
+            // Arc::new(
+            // ndcell_lang::compile_blocking(Arc::new(source_code), None)
+            //     .expect("Error compiling rule"),
+            // )
         })
         .unwrap_or_else(|_| Arc::new(ndcell_core::sim::rule::DummyRule))
 }

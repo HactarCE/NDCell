@@ -23,21 +23,22 @@ impl SetupWindow {
 
     fn load_rule_from_clipboard(gridview: &mut GridView) -> Result<()> {
         let source_code = Arc::new(crate::clipboard_compat::clipboard_get()?);
-        let rule = ndcell_lang::compile_blocking(Arc::clone(&source_code), None)
-            .map_err(|e| e.with_source(&source_code))
-            .context("Compiling rule")?;
-        println!("{:?}", rule.rule_meta());
-        if rule.rule_meta().ndim != gridview.ndim() {
-            *gridview = match rule.rule_meta().ndim {
-                2 => GridView2D::default().into(),
-                3 => GridView3D::default().into(),
-                d => bail!("Cannot display {}D simulation", d),
-            }
-        }
-        match gridview {
-            GridView::View2D(gv2d) => gv2d.automaton.rule = rule.into_arc(),
-            GridView::View3D(gv3d) => gv3d.automaton.rule = rule.into_arc(),
-        }
+        bail!("custom rules are not yet fully implemented");
+        // let rule = ndcell_lang::compile_blocking(Arc::clone(&source_code), None)
+        //     .map_err(|e| e.with_source(&source_code))
+        //     .context("Compiling rule")?;
+        // println!("{:?}", rule.rule_meta());
+        // if rule.rule_meta().ndim != gridview.ndim() {
+        //     *gridview = match rule.rule_meta().ndim {
+        //         2 => GridView2D::default().into(),
+        //         3 => GridView3D::default().into(),
+        //         d => bail!("Cannot display {}D simulation", d),
+        //     }
+        // }
+        // match gridview {
+        //     GridView::View2D(gv2d) => gv2d.automaton.rule = rule.into_arc(),
+        //     GridView::View3D(gv3d) => gv3d.automaton.rule = rule.into_arc(),
+        // }
 
         Ok(())
     }

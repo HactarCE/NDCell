@@ -124,10 +124,10 @@ impl FromStr for Macrocell {
         for line in lines {
             if line.is_empty() {
                 continue;
-            } else if line.starts_with("#R") {
-                rule = Some(line[2..].trim().to_owned());
-            } else if line.starts_with("#G") {
-                gen = line[2..].trim().parse().unwrap_or(gen);
+            } else if let Some(rest) = line.strip_prefix("#R") {
+                rule = Some(rest.trim().to_owned());
+            } else if let Some(rest) = line.strip_prefix("#G") {
+                gen = rest.trim().parse().unwrap_or(gen);
             } else if line.starts_with("#O") {
                 let values_iter = line.split_ascii_whitespace().filter_map(|s| s.parse().ok());
                 for (&ax, axis_offset) in AXES.iter().zip(values_iter) {

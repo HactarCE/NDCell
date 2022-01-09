@@ -298,9 +298,9 @@ impl Viewpoint<Dim3D> for Viewpoint3D {
             dyaw,
         } = movement;
         let delta = cgmath::vec3(dx, dy, dz);
-        let delta = delta.cast::<f32>().unwrap_or(cgmath::vec3(0.0, 0.0, 0.0));
+        let delta = delta.cast::<f32>().unwrap_or_else(cgmath::Vector3::zero);
         let delta = self.flat_orientation().invert().rotate_vector(delta);
-        let delta = delta.cast::<f64>().unwrap_or(cgmath::vec3(0.0, 0.0, 0.0));
+        let delta = delta.cast::<f64>().unwrap_or_else(cgmath::Vector3::zero);
         let delta: FVec3D = NdVec([
             r64(delta.x as f64),
             r64(delta.y as f64),

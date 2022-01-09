@@ -383,8 +383,8 @@ impl FrameInProgress<'_> {
                 self.state.mouse.display_mode = mouse_target_data.binding.mouse_display_mode();
             } else {
                 self.state.mouse.display_mode = None
-                    .or(click_binding.as_ref().map(|b| b.mouse_display_mode()))
-                    .or(drag_binding.as_ref().map(|b| b.mouse_display_mode()))
+                    .or_else(|| click_binding.as_ref().map(|b| b.mouse_display_mode()))
+                    .or_else(|| drag_binding.as_ref().map(|b| b.mouse_display_mode()))
                     .unwrap_or(MouseDisplayMode::Normal);
             }
         }
@@ -416,10 +416,7 @@ impl FrameInProgress<'_> {
         } else {
             1.0
         };
-        let frame_duration = self
-            .gridview
-            .frame_duration()
-            .unwrap_or(Duration::default()); // .unwrap_or(Duration::zero());
+        let frame_duration = self.gridview.frame_duration().unwrap_or(Duration::ZERO);
         let speed = distance_per_second * frame_duration.as_secs_f64();
 
         let keys = &self.state.keys;

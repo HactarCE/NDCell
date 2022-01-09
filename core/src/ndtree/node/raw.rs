@@ -346,7 +346,7 @@ impl<D: Dim> RawNode<D> {
                 self.layer().num_cells::<D>().unwrap(),
             )
         } else {
-            std::ptr::slice_from_raw_parts_mut(std::ptr::null_mut(), 0)
+            std::ptr::slice_from_raw_parts_mut(std::ptr::NonNull::dangling().as_ptr(), 0)
         }
     }
     /// Returns a pointer to the children slice if this is a non-leaf

@@ -123,12 +123,12 @@ impl<D: Dim> NdRule<D> for DummyRule {
 /// array of cells.
 pub fn transition_cell_array<D: Dim>(
     rect: URect<D>,
-    mut single_cell_transition_function: impl FnMut(UVec<D>) -> u8,
+    single_cell_transition_function: impl FnMut(UVec<D>) -> u8,
 ) -> NdArray<u8, D> {
     NdArray::from_flat_slice(
         rect.size(),
         rect.iter()
-            .map(|pos| single_cell_transition_function(pos))
+            .map(single_cell_transition_function)
             .collect_vec(),
     )
 }

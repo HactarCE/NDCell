@@ -421,6 +421,7 @@ impl<D: Dim> RawNode<D> {
             // Sum child population counts, converting from `usize` to `BigUint`
             // if necessary.
             let mut total = Ok(0);
+            #[allow(clippy::redundant_closure)] // Shut up clippy, I like it like this.
             for child in children {
                 total = total.as_ref().map_or_else(
                     |big| MaybeBigUint::Big(big),

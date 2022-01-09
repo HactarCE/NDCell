@@ -844,6 +844,8 @@ fn shrink_nonzero_bound<D: Dim, M: MinMax>(
                     Either::Right((child, rect_within_child))
                 }
             });
+
+        #[allow(clippy::manual_map)] // Shut up clippy, I like it like this.
         if let Some(result) = shrink_nonzero_bound::<D, M>(better_set, axis) {
             Some(result + layer.child_layer().big_len() * M::pick_best(0, 1))
         } else if let Some(result) = shrink_nonzero_bound::<D, M>(worse_set, axis) {

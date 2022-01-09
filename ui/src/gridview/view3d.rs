@@ -236,9 +236,8 @@ impl GridView3D {
         self.dim_data.grid_axis = None;
     }
     pub fn grid(&self) -> Option<(Axis, &BigInt)> {
-        match self.dim_data.grid_axis {
-            Some(axis) => Some((axis, &self.dim_data.grid_coord)),
-            None => None,
-        }
+        self.dim_data
+            .grid_axis
+            .map(|axis| (axis, &self.dim_data.grid_coord))
     }
 }

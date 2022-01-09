@@ -97,7 +97,7 @@ impl GlNdTree {
                     .map(u32::from_be_bytes) // `[u8; 4]` to `u32` (shader expects big-endian)
                     .collect_vec(),
                 FlatNdTreeNode::NonLeaf(indices, _) => {
-                    indices.into_iter().map(|&i| i as u32).collect_vec()
+                    indices.iter().map(|&i| i as u32).collect_vec()
                 }
             })
             .collect();

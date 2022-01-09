@@ -27,7 +27,7 @@ impl GridViewDimension for Dim2D {
         end: &BigRect2D,
         _drag: &Drag<Self>,
     ) -> BigRect2D {
-        super::selection::resize_selection_absolute(&rect, &start, &end)
+        super::selection::resize_selection_absolute(rect, start, end)
     }
 
     fn render(this: &mut GridView2D, params: RenderParams<'_>) -> Result<RenderResult> {

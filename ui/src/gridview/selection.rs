@@ -123,7 +123,7 @@ pub fn resize_selection_absolute<D: Dim>(
     // Closest corner varies.
     let mut pos2 = initial_selection.closest_corner(drag_start_pos);
 
-    let axes = absolute_selection_resize_axes(&initial_selection, drag_start_pos);
+    let axes = absolute_selection_resize_axes(initial_selection, drag_start_pos);
     let drag_end_min = drag_end_render_cell.min();
     let drag_end_max = drag_end_render_cell.max();
     for ax in axes {

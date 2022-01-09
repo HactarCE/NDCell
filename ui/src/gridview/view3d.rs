@@ -51,9 +51,9 @@ impl GridViewDimension for Dim3D {
         drag: &Drag<Self>,
     ) -> BigRect3D {
         super::selection::resize_selection_to_face(
-            &rect,
-            &start,
-            &end,
+            rect,
+            start,
+            end,
             drag.initial_pos().unwrap().face,
         )
     }
@@ -193,7 +193,7 @@ impl GridViewDimension for Dim3D {
         }
 
         let raycast_gridlines_hit = this.grid().and_then(|(grid_axis, grid_coord)| {
-            let grid_coord = xform.global_to_local_visible_coord(grid_axis, &grid_coord)?;
+            let grid_coord = xform.global_to_local_visible_coord(grid_axis, grid_coord)?;
             raycast::intersect_plane(start, delta, grid_axis, r64(grid_coord as f64))
                 .map(|h| RaycastHit::new(&xform, h, RaycastHitThing::Gridlines))
         });

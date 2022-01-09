@@ -623,7 +623,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
 
         let mut pos1 = initial_cell;
         Some(Box::new(move |drag, this, new_screen_pos| {
-            if let Some(pos2) = drag.new_pos(&new_screen_pos).map(|p| p.into_cell()) {
+            if let Some(pos2) = drag.new_pos(new_screen_pos).map(|p| p.into_cell()) {
                 for pos in bresenham::line(pos1.clone(), pos2.clone()) {
                     this.automaton.ndtree.set_cell(&pos, new_cell_state);
                 }
@@ -637,7 +637,7 @@ impl<D: GridViewDimension> GenericGridView<D> {
     fn make_drag_select_new_rect_update_fn(&self) -> Option<DragUpdateFn<D>> {
         Some(Box::new(move |drag, this, new_pos| {
             if let Some(resize_start) = drag.initial_render_cell_rect() {
-                if let Some(resize_end) = drag.new_render_cell_rect(&new_pos) {
+                if let Some(resize_end) = drag.new_render_cell_rect(new_pos) {
                     this.set_selection_rect(Some(NdRect::span_rects(&resize_start, &resize_end)));
                 }
                 Ok(DragOutcome::Continue)
@@ -655,12 +655,12 @@ impl<D: GridViewDimension> GenericGridView<D> {
         Some(Box::new(move |drag, this, new_pos| {
             initial_selection = initial_selection.take().or_else(|| this.deselect());
             if let Some(s) = &initial_selection {
-                if let Some(resize_end) = drag.new_render_cell_rect(&new_pos) {
+                if let Some(resize_end) = drag.new_render_cell_rect(new_pos) {
                     this.set_selection_rect(Some(D::resize_selection_to_cursor(
                         &s.rect,
                         &resize_start,
                         &resize_end,
-                        &drag,
+                        drag,
                     )));
                 } else {
                     this.set_selection_rect(Some(s.rect.clone()));

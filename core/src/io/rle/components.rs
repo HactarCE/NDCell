@@ -37,7 +37,7 @@ impl Rle {
             .as_ref()
             // Convert from 6D to ND.
             .map(|cxrle| BigVec::from_fn(|ax| cxrle.pos[ax].clone()))
-            .unwrap_or(BigVec::origin());
+            .unwrap_or_else(|| BigVec::origin());
         // Negate all axes except the X axis.
         for &ax in &D::axes()[1..] {
             first_run_start[ax] *= -1;
@@ -120,10 +120,7 @@ impl FromStr for Rle {
             } else if line.starts_with("#") {
                 comments.push_str(line);
                 comments.push('\n');
-            } else if line.starts_with("x") {
-                if header.is_some() {
-                    return Err(RleError::DuplicateRleHeader);
-                }
+            } else if line.starts_with("x") && header.is_none() {
                 header = Some(line.parse()?);
             } else {
                 for run in RLE_RUN_REGEX.find_iter(line) {
@@ -500,10 +497,10 @@ impl fmt::Display for RleItem {
                     // 49..=72   => "qA".."qX"
                     // ...
                     // 241..=255 => "yA".."yO"
-                    write!(f, "{}", ('p' as u8 + (state - 1) / 24 - 1) as char)?;
+                    write!(f, "{}", (b'p' + (state - 1) / 24 - 1) as char)?;
                 }
                 // 1..=24 => 'A'..'X'
-                write!(f, "{}", ('A' as u8 + (state - 1) % 24) as char)
+                write!(f, "{}", (b'A' + (state - 1) % 24) as char)
             }
 
             Self::Next(X) => Ok(()), // unused

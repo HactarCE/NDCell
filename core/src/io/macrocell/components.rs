@@ -109,9 +109,9 @@ impl FromStr for Macrocell {
         let mut lines = s.trim().lines().map(|s| s.trim());
         {
             // Check header.
-            let header_line = lines.next().ok_or(MacrocellError::MissingHeader)?;
+            let header_line = lines.next().unwrap_or("");
             if !header_line.starts_with("[M2]") {
-                return Err(MacrocellError::MissingHeader)?;
+                return Err(MacrocellError::MissingHeader);
             }
         }
 

@@ -136,8 +136,7 @@ impl<'pool, D: Dim, T, F: Fn(NodeRef<'pool, D>) -> T> FlatNdTreeBuilder<'pool, D
     /// Panics if `original_node` is layer 0 (single cell).
     fn add_node(&mut self, original_node: NodeRef<'pool, D>) -> usize {
         if original_node.is_empty() {
-            // Index 0 contains an empty node for all layers.
-            return 0;
+            0 // Index 0 contains an empty node for all layers.
         } else if let Some(&node_index) = self.node_indices.get(&original_node) {
             node_index
         } else {

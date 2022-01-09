@@ -97,7 +97,7 @@ impl HashLifeResultParams {
     pub fn log2_node_step_size(&self, layer: Layer) -> Option<u32> {
         let sim_base_layer = self.sim_base_layer();
         if sim_base_layer < layer {
-            return Some(self.log2_step_size);
+            Some(self.log2_step_size)
         } else {
             let log2_divisor = sim_base_layer.to_u32() - layer.to_u32();
             // If the result of this subtraction is negative, then we can't even

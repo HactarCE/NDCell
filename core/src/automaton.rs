@@ -164,13 +164,12 @@ impl<D: Dim> Simulate for NdAutomaton<D> {
         post_gc: Box<dyn Send + FnOnce(usize, usize, usize)>,
     ) -> std::thread::JoinHandle<()> {
         let node_pool = self.ndtree.pool().new_ref();
-        let ret = std::thread::spawn(move || {
+        std::thread::spawn(move || {
             let mut node_pool_access = node_pool.total_access();
             let (dropped, kept) = node_pool_access.strong_gc();
             let new_memory_usage = node_pool_access.memory_usage();
             post_gc(dropped, kept, new_memory_usage);
-        });
-        ret
+        })
     }
 }
 impl<D: Dim> NdAutomaton<D> {

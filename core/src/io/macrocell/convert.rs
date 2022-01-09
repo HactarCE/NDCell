@@ -11,7 +11,7 @@ use crate::HashMap;
 
 impl CaFormatTrait for Macrocell {
     fn rule(&self) -> Option<&str> {
-        self.rule.as_ref().map(|r| r.as_str())
+        self.rule.as_deref()
     }
     fn with_rule(mut self, rule: Option<impl ToString>) -> Self {
         self.rule = rule.map(|r| r.to_string());

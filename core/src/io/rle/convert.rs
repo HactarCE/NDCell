@@ -15,7 +15,7 @@ impl CaFormatTrait for Rle {
     }
 
     fn rule(&self) -> Option<&str> {
-        self.header.rule.as_ref().map(|r| r.as_str())
+        self.header.rule.as_deref()
     }
     fn with_rule(mut self, rule: Option<impl ToString>) -> Self {
         self.header.rule = rule.map(|r| r.to_string());

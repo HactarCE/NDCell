@@ -8,6 +8,12 @@
 #![warn(rust_2018_idioms)]
 #![warn(clippy::all)]
 #![deny(clippy::correctness)]
+#![allow(
+    clippy::collapsible_match,
+    clippy::match_single_binding,
+    clippy::single_match,
+    clippy::unit_arg
+)]
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -135,6 +141,7 @@ fn default_colors() -> [palette::Srgba; 256] {
     ret[0] = crate::colors::cells::DEAD;
     ret[1] = crate::colors::cells::LIVE;
 
+    #[allow(clippy::needless_range_loop)] // I think it's clearer this way.
     for i in 2..256 {
         let c = colorous::SPECTRAL.eval_rational(i as usize - 2, 255);
         ret[i] = Srgba::new(c.r, c.g, c.b, u8::MAX).into_format();

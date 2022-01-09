@@ -50,9 +50,8 @@ pub fn show_error_popup_on_error(
                 if ui.button_with_size("Copy CA contents to clipboard", [0.0, 0.0]) {
                     let fmt = ndcell_core::io::CaFormat::Macrocell;
                     if let Ok(s) = gridview.export(fmt) {
-                        if crate::clipboard_compat::clipboard_set(s).is_err() {
-                            *clipboard_error = true;
-                        }
+                        let result = crate::clipboard_compat::clipboard_set(s);
+                        *clipboard_error |= result.is_err();
                     } else {
                         *clipboard_error = true;
                     }
@@ -64,9 +63,8 @@ pub fn show_error_popup_on_error(
                 .read_only(true)
                 .build();
             if ui.button("Copy exception info") {
-                if crate::clipboard_compat::clipboard_set(error_string).is_err() {
-                    *clipboard_error = true;
-                }
+                let result = crate::clipboard_compat::clipboard_set(error_string);
+                *clipboard_error |= result.is_err();
             }
             ui.text("");
 

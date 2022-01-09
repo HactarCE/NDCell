@@ -337,10 +337,14 @@ impl FrameInProgress<'_> {
         let mods = self.state.modifiers;
         let (click_binding, drag_binding) = config.mouse.get_bindings(ndim, mods, button);
 
-        let maybe_mouse_target = self.gridview.last_render_result().mouse_target.as_ref();
-        if button == MouseButton::Left && maybe_mouse_target.is_some() {
+        let lmb_mouse_target = self
+            .gridview
+            .last_render_result()
+            .mouse_target
+            .as_ref()
+            .filter(|_| button == MouseButton::Left);
+        if let Some(mouse_target_data) = lmb_mouse_target {
             // Possibility #1: Drag mouse target (left mouse button only)
-            let mouse_target_data = maybe_mouse_target.unwrap();
             let binding = &mouse_target_data.binding;
             self.state.dragging_button = Some(button);
             self.state.mouse.display_mode = binding.mouse_display_mode();

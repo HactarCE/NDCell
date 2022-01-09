@@ -58,7 +58,7 @@ impl NdRule<Dim2D> for MooreTotalistic2D {
     fn radius(&self) -> usize {
         1
     }
-    fn transition_function<'a>(&'a self) -> TransitionFunction<'a, Dim2D> {
+    fn transition_function(&self) -> TransitionFunction<'_, Dim2D> {
         Box::new(move |nbhd, rect| {
             super::transition_cell_array(rect, |pos| {
                 // Count live neighbors.

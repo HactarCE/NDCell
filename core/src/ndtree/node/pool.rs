@@ -57,13 +57,13 @@ impl<D: Dim> SharedNodePool<D> {
     /// Acquires access to find nodes in the pool and add missing ones, blocking
     /// only if another thread has total access to the pool.
     #[inline]
-    pub fn access<'a>(&'a self) -> RwLockReadGuard<'a, NodePool<D>> {
+    pub fn access(&self) -> RwLockReadGuard<'_, NodePool<D>> {
         self.0.read_recursive()
     }
     /// Acquires access to remove nodes from the pool, which is required for
     /// garbage collection, blocking if any threads have access to the pool.
     #[inline]
-    pub fn total_access<'a>(&'a self) -> RwLockWriteGuard<'a, NodePool<D>> {
+    pub fn total_access(&self) -> RwLockWriteGuard<'_, NodePool<D>> {
         self.0.write()
     }
 
@@ -260,11 +260,11 @@ impl<D: Dim> NodePool<D> {
     }
 
     /// Returns the largest possible canonical leaf node containing only state #0.
-    pub fn get_empty_base<'pool>(&'pool self) -> NodeRef<'pool, D> {
+    pub fn get_empty_base(&self) -> NodeRef<'_, D> {
         self.get_empty(Layer::base::<D>())
     }
     /// Returns the canonical node at the given layer containing only state #0.
-    pub fn get_empty<'pool>(&'pool self, layer: Layer) -> NodeRef<'pool, D> {
+    pub fn get_empty(&self, layer: Layer) -> NodeRef<'_, D> {
         let mut empty_nodes = self.empty_nodes.lock();
         // Add empty nodes until we have enough.
         while empty_nodes.len() <= layer.to_usize() {
@@ -285,7 +285,7 @@ impl<D: Dim> NodePool<D> {
 
     /// Returns the canonical instance of a node, adding it to the pool if one
     /// does not exist.
-    fn get<'pool>(&'pool self, raw_node: RawNode<D>) -> NodeRef<'pool, D> {
+    fn get(&self, raw_node: RawNode<D>) -> NodeRef<'_, D> {
         let (ret, already_present) = self.nodes.get_or_insert(raw_node);
         if !already_present {
             // Record the heap usage of this node.
@@ -336,7 +336,7 @@ impl<D: Dim> NodePool<D> {
         }
     }
     /// Creates a node containing the given cells.
-    pub fn get_from_cells<'pool>(&'pool self, cells: impl Into<Box<[u8]>>) -> NodeRef<'pool, D> {
+    pub fn get_from_cells(&self, cells: impl Into<Box<[u8]>>) -> NodeRef<'_, D> {
         let cells = cells.into();
         let layer = Layer::from_num_cells::<D>(cells.len()).expect("Invalid cell count");
 
@@ -360,11 +360,11 @@ impl<D: Dim> NodePool<D> {
     /// # Panics
     ///
     /// This method panics if the size of the node does not fit in a `usize`.
-    pub fn get_from_fn<'pool>(
-        &'pool self,
+    pub fn get_from_fn(
+        &self,
         layer: Layer,
         mut generator: impl FnMut(UVec<D>) -> u8,
-    ) -> NodeRef<'pool, D> {
+    ) -> NodeRef<'_, D> {
         self._get_from_fn(UVec::origin(), layer, &mut generator)
     }
     fn _get_from_fn<'pool>(
@@ -616,10 +616,7 @@ impl<D: Dim> NodePool<D> {
     ///
     /// This method blocks if other parameters are being used for simulation at
     /// the same time.
-    pub fn sim_with<'guard>(
-        &'guard self,
-        params: HashLifeResultParams,
-    ) -> SimCacheGuard<'guard, D> {
+    pub fn sim_with(&self, params: HashLifeResultParams) -> SimCacheGuard<'_, D> {
         let lock = self.sim_lock.upgradable_read();
         self._sim_with(lock, params)
     }
@@ -627,10 +624,7 @@ impl<D: Dim> NodePool<D> {
     /// fully if necessary.
     ///
     /// If the lock cannot be acquired, returns `Err` containing the current parameters.
-    pub fn try_sim_with<'guard>(
-        &'guard self,
-        params: HashLifeResultParams,
-    ) -> Option<SimCacheGuard<'guard, D>> {
+    pub fn try_sim_with(&self, params: HashLifeResultParams) -> Option<SimCacheGuard<'_, D>> {
         let lock = self.sim_lock.try_upgradable_read()?;
         Some(self._sim_with(lock, params))
     }
@@ -779,7 +773,7 @@ impl<D: Dim> ArcNode<D> {
     }
     /// Returns a `NodeRefWithGuard` of the node.
     #[inline]
-    pub fn as_ref_with_guard<'a>(&'a self) -> NodeRefWithGuard<'a, D> {
+    pub fn as_ref_with_guard(&self) -> NodeRefWithGuard<'_, D> {
         unsafe { NodeRefWithGuard::from_ptr_with_guard(self.pool().access(), &*self.raw_node_ptr) }
     }
 }

@@ -57,7 +57,7 @@ impl<T: Eq + Hash> ShardedBoxedSet<T> {
     ///
     /// The second element of the return value is `true` if the element was
     /// newly inserted or `false` if the element was already present.
-    pub fn get_or_insert<'a>(&'a self, elem: T) -> (&'a T, bool) {
+    pub fn get_or_insert(&self, elem: T) -> (&T, bool) {
         let mut shard = self.get_shard(&elem);
         let mut already_present = true;
         // This is ugly, but there's just no API yet for inserting a key into a
@@ -90,7 +90,7 @@ impl<T: Eq + Hash> ShardedBoxedSet<T> {
     ///
     /// If `shrink` is `true`, call `shrink_to_fit()` on each shard after
     /// removing the elements.
-    pub fn retain<'a>(&'a mut self, shrink: bool, mut f: impl FnMut(&T) -> bool) {
+    pub fn retain(&mut self, shrink: bool, mut f: impl FnMut(&T) -> bool) {
         for shard in &self.shards[..] {
             let mut shard = shard.lock();
             shard.retain(|elem| f(&elem));

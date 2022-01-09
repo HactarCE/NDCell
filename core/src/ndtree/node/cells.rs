@@ -11,7 +11,7 @@ use crate::dim::Dim;
 /// # Panics
 ///
 /// This function panics if the length of `cells` is not (2^n)^NDIM for some n, or if `index` is greater than 2^NDIM-1.
-pub fn get_corner<'a, D: Dim>(cells: &'a [u8], index: usize) -> Result<Box<[u8]>, u8> {
+pub fn get_corner<D: Dim>(cells: &[u8], index: usize) -> Result<Box<[u8]>, u8> {
     // Return early if there is only one cell.
     if let [cell] = cells {
         return Err(*cell);
@@ -35,7 +35,7 @@ pub fn get_corner<'a, D: Dim>(cells: &'a [u8], index: usize) -> Result<Box<[u8]>
 /// # Panics
 ///
 /// This function panics if the length of `cells` is not (2^n)^NDIM for some n.
-pub fn subdivide<'a, D: Dim>(cells: &'a [u8]) -> Result<impl 'a + Iterator<Item = Box<[u8]>>, u8> {
+pub fn subdivide<D: Dim>(cells: &[u8]) -> Result<impl '_ + Iterator<Item = Box<[u8]>>, u8> {
     // Return early if there is only one cell.
     if let [cell] = cells {
         return Err(*cell);

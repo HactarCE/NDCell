@@ -39,11 +39,11 @@ pub struct TextureCache {
 impl TextureCache {
     /// Returns the 1:1 render cells texture, along with a framebuffer and the
     /// viewport rectangle within it.
-    pub fn cells_2d<'a>(
-        &'a mut self,
+    pub fn cells_2d(
+        &mut self,
         width: u32,
         height: u32,
-    ) -> (&'a SrgbTexture2d, SimpleFrameBuffer<'a>, glium::Rect) {
+    ) -> (&SrgbTexture2d, SimpleFrameBuffer<'_>, glium::Rect) {
         self.cells_2d.set_min_size(width, height);
 
         let texture = self.cells_2d.unwrap();
@@ -61,11 +61,11 @@ impl TextureCache {
 
     /// Returns the octree depth texture, along with a framebuffer and the
     /// viewport rectangle within it.
-    pub fn octree_init_t<'a>(
-        &'a mut self,
+    pub fn octree_init_t(
+        &mut self,
         width: u32,
         height: u32,
-    ) -> (&'a Texture2d, SimpleFrameBuffer<'a>, glium::Rect) {
+    ) -> (&Texture2d, SimpleFrameBuffer<'_>, glium::Rect) {
         self.octree_init_t.set_min_size(width, height);
 
         let texture = self.octree_init_t.unwrap();

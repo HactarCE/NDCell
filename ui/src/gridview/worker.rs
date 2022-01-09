@@ -227,9 +227,9 @@ impl WorkerThread {
             }
         }
     }
-    pub fn peek_progress<'a>(
-        &'a mut self,
-    ) -> Result<MappedMutexGuard<'a, Option<WorkerProgressReport>>, WorkerIdle> {
+    pub fn peek_progress(
+        &mut self,
+    ) -> Result<MappedMutexGuard<'_, Option<WorkerProgressReport>>, WorkerIdle> {
         let (lock, _condvar) = &*self.0;
         MutexGuard::try_map(lock.lock(), |state| match state {
             State::Working(progress) => Some(progress),

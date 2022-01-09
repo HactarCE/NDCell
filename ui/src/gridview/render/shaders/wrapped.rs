@@ -56,7 +56,7 @@ impl DynamicWrappedShader {
             error!("Falling back to statically linked shader");
         }
     }
-    pub fn load<'a>(&'a self) -> MappedMutexGuard<'a, Program> {
+    pub fn load(&self) -> MappedMutexGuard<'_, Program> {
         MutexGuard::map(self.program.lock(), |program| {
             program.get_or_insert_with(|| self._load().unwrap())
         })

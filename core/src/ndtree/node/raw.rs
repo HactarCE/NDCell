@@ -379,7 +379,7 @@ impl<D: Dim> RawNode<D> {
     /// this node some fixed number of generations, or `None` if that result
     /// hasn't been computed yet.
     #[inline]
-    pub(super) fn result<'a>(&'a self) -> Option<&'a RawNode<D>> {
+    pub(super) fn result(&self) -> Option<&RawNode<D>> {
         unsafe { self.result_ptr.load(Relaxed).as_ref() }
     }
     /// Atomically sets the result of simulating this node for some fixed number
@@ -401,7 +401,7 @@ impl<D: Dim> RawNode<D> {
 
     /// Returns the population of the node, computing it if it has not yet been
     /// computed.
-    pub(super) fn calc_population<'a>(&'a self) -> MaybeBigUint<'a> {
+    pub(super) fn calc_population(&self) -> MaybeBigUint<'_> {
         // Return the population if we have already computed it.
         if let Some(p) = self.population() {
             return p;
@@ -441,7 +441,7 @@ impl<D: Dim> RawNode<D> {
     }
     /// Returns the population of the node, or `None` if it has not yet been
     /// computed.
-    pub(super) fn population<'a>(&'a self) -> Option<MaybeBigUint<'a>> {
+    pub(super) fn population(&self) -> Option<MaybeBigUint<'_>> {
         let pop = self.population.load(Relaxed);
         if pop == 0 {
             // If the whole value is 0, then it hasn't been computed yet.

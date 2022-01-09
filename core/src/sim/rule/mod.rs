@@ -86,7 +86,7 @@ pub trait NdRule<D: Dim>: fmt::Debug + fmt::Display + Send + Sync {
     fn radius(&self) -> usize;
     /// Returns a function that computes a cell's next state, given its
     /// neighborhood.
-    fn transition_function<'a>(&'a self) -> TransitionFunction<'a, D>;
+    fn transition_function(&self) -> TransitionFunction<'_, D>;
     /// Returns the maximum cell state value, which is one less than the number
     /// of cell states.
     fn max_state(&self) -> u8;
@@ -111,7 +111,7 @@ impl<D: Dim> NdRule<D> for DummyRule {
     fn radius(&self) -> usize {
         0
     }
-    fn transition_function<'a>(&'a self) -> TransitionFunction<'a, D> {
+    fn transition_function(&self) -> TransitionFunction<'_, D> {
         Box::new(|nbhd, rect| transition_cell_array(rect, |pos| nbhd[pos]))
     }
     fn max_state(&self) -> u8 {

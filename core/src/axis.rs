@@ -43,7 +43,7 @@ impl Axis {
 }
 
 /// List of axes in order.
-pub const AXES: &'static [Axis] = &[Axis::X, Axis::Y, Axis::Z, Axis::W, Axis::U, Axis::V];
+pub const AXES: &[Axis] = &[Axis::X, Axis::Y, Axis::Z, Axis::W, Axis::U, Axis::V];
 
 /// Returns a list of axes up to some number of dimensions.
 #[inline]

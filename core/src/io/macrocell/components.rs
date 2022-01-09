@@ -64,8 +64,7 @@ impl fmt::Display for Macrocell {
         if let Some(ndim) = AXES
             .iter()
             .rev()
-            .filter(|&&ax| !self.offset[ax].is_zero())
-            .next()
+            .find(|&&ax| !self.offset[ax].is_zero())
             .map(|&ax| ax as usize + 1)
         {
             write!(f, "#O")?;

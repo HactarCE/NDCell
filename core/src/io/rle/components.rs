@@ -230,8 +230,7 @@ impl fmt::Display for CxrleHeader {
         if let Some(ndim) = AXES
             .iter()
             .rev()
-            .filter(|&&ax| !self.pos[ax].is_zero())
-            .next()
+            .find(|&&ax| !self.pos[ax].is_zero())
             .map(|&ax| ax as usize + 1)
         {
             write!(f, " Pos=")?;

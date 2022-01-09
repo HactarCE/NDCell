@@ -7,6 +7,11 @@
 //! in implementing all the things that would be expected if this were its own
 //! crate.
 
+// Fixed-point arithmetic often involves suspicious operations, like
+// right-shifting when performing multiplication or left-shifting when
+// performing division.
+#![allow(clippy::suspicious_arithmetic_impl, clippy::suspicious_op_assign_impl)]
+
 use noisy_float::prelude::R64;
 use num::{BigInt, BigUint, FromPrimitive, Num, One, Signed, ToPrimitive, Zero};
 use std::convert::TryFrom;

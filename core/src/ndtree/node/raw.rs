@@ -503,7 +503,7 @@ impl<D: Dim> RawNode<D> {
                 std::mem::size_of::<BigUint>()
                 // Ceiling division; assume that `BigUint` allocates 64 bits at
                 // a time.
-                + ((i.bits() - 1) / 64 + 1 * 8) as usize
+                + (((i.bits() - 1) / 64 + 1) * 8) as usize
             } else {
                 0
             }

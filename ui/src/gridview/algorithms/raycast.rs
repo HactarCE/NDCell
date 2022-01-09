@@ -118,7 +118,8 @@ fn raycast_node_child(
     if *t1.min_component() < r64(0.0) {
         // This node is completely behind the ray; skip it.
         return None;
-    } else if *t0.max_component() < r64(0.0) && node.layer() <= min_layer {
+    }
+    if *t0.max_component() < r64(0.0) && node.layer() <= min_layer {
         // This is a leaf node and the ray starts inside it; skip it.
         return None;
     }

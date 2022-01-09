@@ -544,7 +544,7 @@ impl<'pool, D: Dim> NonLeafNodeRef<'pool, D> {
             // TODO: optimize by only creating the child requested, not all
             // 2^NDIM
             NodeRefEnum::Leaf(node) => node.subdivide().unwrap().remove(grandchild_index),
-            NodeRefEnum::NonLeaf(node) => node.child_at_index(grandchild_index).into(),
+            NodeRefEnum::NonLeaf(node) => node.child_at_index(grandchild_index),
         }
     }
 }

@@ -114,7 +114,7 @@ fn advance_inner_node<'pool, D: Dim>(
             NodeRefEnum::Leaf(n) => n.pool().get_empty(n.layer().child_layer()),
             // It's easier to get a reference to a child than to look up an
             // empty node.
-            NodeRefEnum::NonLeaf(n) => n.child_at_index(0).into(),
+            NodeRefEnum::NonLeaf(n) => n.child_at_index(0),
         }
     } else if node.layer() == sim_params.min_layer()
         || node.layer().child_layer() <= Layer::base::<D>()

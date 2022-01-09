@@ -108,7 +108,7 @@ fn make_default_gridview(ndim: usize) -> gridview::GridView {
     match ndim {
         2 => Rle::from_string_to_ndautomaton(
             GOSPER_GLIDER_GUN_SYNTH_RLE,
-            crate::load_custom_rule_2d().into(),
+            crate::load_custom_rule_2d(),
         )
         .unwrap_or_else(|_| {
             warn!("Failed to load default pattern; using empty pattern instead");
@@ -117,7 +117,7 @@ fn make_default_gridview(ndim: usize) -> gridview::GridView {
         .into(),
         3 => Rle::from_string_to_ndautomaton(
             GOSPER_GLIDER_GUN_SYNTH_RLE,
-            crate::load_custom_rule_3d().into(),
+            crate::load_custom_rule_3d(),
         )
         .unwrap_or_else(|_| {
             warn!("Failed to load default pattern; using empty pattern instead");

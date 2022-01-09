@@ -413,7 +413,7 @@ impl<D: Dim> RawNode<D> {
         } else if self.single_state().is_some() {
             // We already handled the zero case, so all cells in the node are
             // the same nonzero state.
-            Err(self.layer().big_num_cells::<D>().into())
+            Err(self.layer().big_num_cells::<D>())
         } else if let Some(cells) = self.cell_slice() {
             // Count nonzero cells.
             Ok(cells.iter().filter(|&&x| x != 0).count())
